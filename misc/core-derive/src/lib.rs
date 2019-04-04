@@ -21,13 +21,10 @@
 #![recursion_limit = "256"]
 
 extern crate proc_macro;
-#[macro_use]
-extern crate syn;
-#[macro_use]
-extern crate quote;
 
-use self::proc_macro::TokenStream;
-use syn::{DeriveInput, Data, DataStruct, Ident};
+use quote::quote;
+use proc_macro::TokenStream;
+use syn::{parse_macro_input, DeriveInput, Data, DataStruct, Ident};
 
 /// The interface that satisfies Rust.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
@@ -49,11 +46,14 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
+    let multiaddr = quote!{::libp2p::core::Multiaddr};
     let trait_to_impl = quote!{::libp2p::core::swarm::NetworkBehaviour};
+    let net_behv_event_proc = quote!{::libp2p::core::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::core::swarm::NetworkBehaviourAction};
+    let into_protocols_handler = quote!{::libp2p::core::protocols_handler::IntoProtocolsHandler};
     let protocols_handler = quote!{::libp2p::core::protocols_handler::ProtocolsHandler};
-    let proto_select_ident = quote!{::libp2p::core::protocols_handler::ProtocolsHandlerSelect};
+    let into_proto_select_ident = quote!{::libp2p::core::protocols_handler::IntoProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
     let connected_point = quote!{::libp2p::core::swarm::ConnectedPoint};
 
@@ -68,25 +68,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{#n}
     };
 
-    // Name of the type parameter that represents the topology.
-    let topology_generic = {
-        let mut n = "TTopology".to_string();
-        // Avoid collisions.
-        while ast.generics.type_params().any(|tp| tp.ident.to_string() == n) {
-            n.push('1');
-        }
-        let n = Ident::new(&n, name.span());
-        quote!{#n}
-    };
-
-    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters<#topology_generic>};
+    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters};
 
     // Build the generics.
     let impl_generics = {
         let tp = ast.generics.type_params();
         let lf = ast.generics.lifetimes();
         let cst = ast.generics.const_params();
-        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #topology_generic, #substream_generic>}
+        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #substream_generic>}
     };
 
     // Build the `where ...` clause of the trait implementation.
@@ -96,11 +85,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .flat_map(|field| {
                 let ty = &field.ty;
                 vec![
-                    quote!{#ty: #trait_to_impl<#topology_generic>},
-                    quote!{<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
+                    quote!{#ty: #trait_to_impl},
+                    quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>},
+                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler: #protocols_handler<Substream = #substream_generic>},
                     // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                    quote!{<<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
-                    quote!{<<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic>},
+                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
+                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic>},
                 ]
             })
             .collect::<Vec<_>>();
@@ -109,7 +99,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});
 
         if let Some(where_clause) = where_clause {
-            Some(quote!{#where_clause #(#additional),*})
+            if where_clause.predicates.trailing_punct() {
+                Some(quote!{#where_clause #(#additional),*})
+            } else {
+                Some(quote!{#where_clause, #(#additional),*})
+            }
         } else {
             Some(quote!{where #(#additional),*})
         }
@@ -125,7 +119,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 match meta_item {
                     syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "out_event" => {
                         if let syn::Lit::Str(ref s) = m.lit {
-                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
+                            let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
                             out = quote!{#ident};
                         }
                     }
@@ -134,6 +128,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
         }
         out
+    };
+
+    // Build the list of statements to put in the body of `addresses_of_peer()`.
+    let addresses_of_peer_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ out.extend(self.#i.addresses_of_peer(peer_id)); },
+                None => quote!{ out.extend(self.#field_n.addresses_of_peer(peer_id)); },
+            })
+        })
     };
 
     // Build the list of statements to put in the body of `inject_connected()`.
@@ -180,6 +188,60 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_replaced()`.
+    let inject_replaced_stmts = {
+        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(if field_n == num_fields - 1 {
+                match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_replaced(peer_id, closed_endpoint, new_endpoint); },
+                    None => quote!{ self.#field_n.inject_replaced(peer_id, closed_endpoint, new_endpoint); },
+                }
+            } else {
+                match field.ident {
+                    Some(ref i) => quote!{
+                        self.#i.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone());
+                    },
+                    None => quote!{
+                        self.#field_n.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone());
+                    },
+                }
+            })
+        })
+    };
+
+    // Build the list of statements to put in the body of `inject_addr_reach_failure()`.
+    let inject_addr_reach_failure_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_addr_reach_failure(peer_id, addr, error); },
+                None => quote!{ self.#field_n.inject_addr_reach_failure(peer_id, addr, error); },
+            })
+        })
+    };
+
+    // Build the list of statements to put in the body of `inject_dial_failure()`.
+    let inject_dial_failure_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_dial_failure(peer_id); },
+                None => quote!{ self.#field_n.inject_dial_failure(peer_id); },
+            })
+        })
+    };
+
     // Build the list of variants to put in the body of `inject_node_event()`.
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
@@ -209,9 +271,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 continue;
             }
             let ty = &field.ty;
-            let field_info = quote!{ <#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler };
+            let field_info = quote!{ <#ty as #trait_to_impl>::ProtocolsHandler };
             match ph_ty {
-                Some(ev) => ph_ty = Some(quote!{ #proto_select_ident<#ev, #field_info> }),
+                Some(ev) => ph_ty = Some(quote!{ #into_proto_select_ident<#ev, #field_info> }),
                 ref mut ev @ None => *ev = Some(field_info),
             }
         }
@@ -276,27 +338,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             None => quote!{ self.#field_n },
         };
 
-        let mut handler_fn: Option<Ident> = None;
-        for meta_items in field.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    // Parse `#[behaviour(handler = "foo")]`
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "handler" => {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            handler_fn = Some(syn::parse_str(&s.value()).unwrap());
-                        }
-                    }
-                    _ => ()
-                }
-            }
-        }
-
-        let handling = if let Some(handler_fn) = handler_fn {
-            quote!{self.#handler_fn(event)}
-        } else {
-            quote!{}
-        };
-
         let mut wrapped_event = if enum_n != 0 {
             quote!{ #either_ident::Second(event) }
         } else {
@@ -310,7 +351,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #field_name.poll(poll_params) {
                     Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                        #handling
+                        #net_behv_event_proc::inject_event(self, event)
                     }
                     Async::Ready(#network_behaviour_action::DialAddress { address }) => {
                         return Async::Ready(#network_behaviour_action::DialAddress { address });
@@ -335,7 +376,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Now the magic happens.
     let final_quote = quote!{
-        impl #impl_generics #trait_to_impl<#topology_generic> for #name #ty_generics
+        impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
             type ProtocolsHandler = #protocols_handler_ty;
@@ -343,8 +384,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             #[inline]
             fn new_handler(&mut self) -> Self::ProtocolsHandler {
-                use #protocols_handler;
+                use #into_protocols_handler;
                 #new_handler
+            }
+
+            fn addresses_of_peer(&mut self, peer_id: &#peer_id) -> Vec<#multiaddr> {
+                let mut out = Vec::new();
+                #(#addresses_of_peer_stmts);*
+                out
             }
 
             #[inline]
@@ -358,20 +405,35 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
 
             #[inline]
+            fn inject_replaced(&mut self, peer_id: #peer_id, closed_endpoint: #connected_point, new_endpoint: #connected_point) {
+                #(#inject_replaced_stmts);*
+            }
+
+            #[inline]
+            fn inject_addr_reach_failure(&mut self, peer_id: Option<&#peer_id>, addr: &#multiaddr, error: &dyn std::error::Error) {
+                #(#inject_addr_reach_failure_stmts);*
+            }
+
+            #[inline]
+            fn inject_dial_failure(&mut self, peer_id: &#peer_id) {
+                #(#inject_dial_failure_stmts);*
+            }
+
+            #[inline]
             fn inject_node_event(
                 &mut self,
                 peer_id: #peer_id,
-                event: <Self::ProtocolsHandler as #protocols_handler>::OutEvent
+                event: <<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutEvent
             ) {
                 match event {
                     #(#inject_node_event_stmts),*
                 }
             }
 
-            fn poll(&mut self, poll_params: &mut #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> {
+            fn poll(&mut self, poll_params: &mut #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
-                let f: ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
+                let f: ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
                 f
             }
         }

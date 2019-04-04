@@ -22,15 +22,13 @@
 
 #![cfg(test)]
 
+use crate::ProtocolChoiceError;
+use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
+use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
+use crate::{dialer_select_proto, listener_select_proto};
+use futures::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio_tcp::{TcpListener, TcpStream};
-use bytes::Bytes;
-use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
-use futures::Future;
-use futures::{Sink, Stream};
-use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
-use crate::ProtocolChoiceError;
-use crate::{dialer_select_proto, listener_select_proto};
 
 /// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
 struct VecRefIntoIter<T>(Vec<T>);
@@ -54,7 +52,7 @@ fn negotiate_with_self_succeeds() {
         .incoming()
         .into_future()
         .map_err(|(e, _)| e.into())
-        .and_then(move |(connec, _)| Listener::new(connec.unwrap()))
+        .and_then(move |(connec, _)| Listener::listen(connec.unwrap()))
         .and_then(|l| l.into_future().map_err(|(e, _)| e))
         .and_then(|(msg, rest)| {
             let proto = match msg {
@@ -66,9 +64,9 @@ fn negotiate_with_self_succeeds() {
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
-        .and_then(move |stream| Dialer::new(stream))
+        .and_then(move |stream| Dialer::dial(stream))
         .and_then(move |dialer| {
-            let p = Bytes::from("/hello/1.0.0");
+            let p = b"/hello/1.0.0";
             dialer.send(DialerToListenerMessage::ProtocolRequest { name: p })
         })
         .and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e))

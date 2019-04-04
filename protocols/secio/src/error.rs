@@ -33,7 +33,7 @@ pub enum SecioError {
     IoError(IoError),
 
     /// Protocol buffer error.
-    Protobuf(ProtobufError),
+    ProtobufError(ProtobufError),
 
     /// Failed to parse one of the handshake protobuf messages.
     HandshakeParsingFailure,
@@ -76,10 +76,10 @@ pub enum SecioError {
 }
 
 impl error::Error for SecioError {
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             SecioError::IoError(ref err) => Some(err),
-            SecioError::Protobuf(ref err) => Some(err),
+            SecioError::ProtobufError(ref err) => Some(err),
             // TODO: The type doesn't implement `Error`
             /*SecioError::CipherError(ref err) => {
                 Some(err)
@@ -91,12 +91,12 @@ impl error::Error for SecioError {
 
 impl fmt::Display for SecioError {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             SecioError::IoError(e) =>
                 write!(f, "I/O error: {}", e),
-            SecioError::Protobuf(e) =>
-                write!(f, "protobuf error: {}", e),
+            SecioError::ProtobufError(e) =>
+                write!(f, "Protobuf error: {}", e),
             SecioError::HandshakeParsingFailure =>
                 f.write_str("Failed to parse one of the handshake protobuf messages"),
             SecioError::NoSupportIntersection =>
@@ -144,6 +144,6 @@ impl From<IoError> for SecioError {
 impl From<ProtobufError> for SecioError {
     #[inline]
     fn from(err: ProtobufError) -> SecioError {
-        SecioError::Protobuf(err)
+        SecioError::ProtobufError(err)
     }
 }

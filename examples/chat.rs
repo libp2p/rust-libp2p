@@ -20,7 +20,7 @@
 
 //! A basic chat application demonstrating libp2p and the mDNS and floodsub protocols.
 //!
-//! Using two terminal windows, start two instances. If you local network allows mDNS, 
+//! Using two terminal windows, start two instances. If you local network allows mDNS,
 //! they will automatically connect. Type a message in either terminal and hit return: the
 //! message is sent and printed in the other terminal. Close with Ctrl-c.
 //!
@@ -47,17 +47,13 @@
 //! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
-//! The two nodes then connect. 
-
-extern crate env_logger;
-extern crate futures;
-extern crate libp2p;
-extern crate tokio;
+//! The two nodes then connect.
 
 use futures::prelude::*;
 use libp2p::{
+    PeerId,
     NetworkBehaviour,
-    secio,
+    identity,
     tokio_codec::{FramedRead, LinesCodec}
 };
 
@@ -65,9 +61,9 @@ fn main() {
     env_logger::init();
 
     // Create a random PeerId
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_pub_key = local_key.to_public_key();
-    println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(local_key.public());
+    println!("Local peer id: {:?}", local_peer_id);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::build_development_transport(local_key);
@@ -79,29 +75,47 @@ fn main() {
     // In the future, we want to improve libp2p to make this easier to do.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
-        #[behaviour(handler = "on_floodsub")]
         floodsub: libp2p::floodsub::Floodsub<TSubstream>,
         mdns: libp2p::mdns::Mdns<TSubstream>,
     }
 
-    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> MyBehaviour<TSubstream> {
+    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::mdns::MdnsEvent> for MyBehaviour<TSubstream> {
+        fn inject_event(&mut self, event: libp2p::mdns::MdnsEvent) {
+            match event {
+                libp2p::mdns::MdnsEvent::Discovered(list) => {
+                    for (peer, _) in list {
+                        self.floodsub.add_node_to_partial_view(peer);
+                    }
+                },
+                libp2p::mdns::MdnsEvent::Expired(list) => {
+                    for (peer, _) in list {
+                        if !self.mdns.has_node(&peer) {
+                            self.floodsub.remove_node_from_partial_view(&peer);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::floodsub::FloodsubEvent> for MyBehaviour<TSubstream> {
         // Called when `floodsub` produces an event.
-        fn on_floodsub<TTopology>(&mut self, message: <libp2p::floodsub::Floodsub<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent)
-        where TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite
-        {
-            println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+        fn inject_event(&mut self, message: libp2p::floodsub::FloodsubEvent) {
+            if let libp2p::floodsub::FloodsubEvent::Message(message) = message {
+                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+            }
         }
     }
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::Floodsub::new(local_pub_key.clone().into_peer_id()),
+            floodsub: libp2p::floodsub::Floodsub::new(local_peer_id.clone()),
             mdns: libp2p::mdns::Mdns::new().expect("Failed to create mDNS service"),
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(local_pub_key))
+        libp2p::Swarm::new(transport, behaviour, local_peer_id)
     };
 
     // Listen on all interfaces and whatever port the OS assigns
@@ -139,7 +153,7 @@ fn main() {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(_)) => {
-                    
+
                 },
                 Async::Ready(None) | Async::NotReady => break,
             }

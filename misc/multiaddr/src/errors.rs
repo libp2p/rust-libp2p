@@ -1,7 +1,6 @@
 use std::{net, fmt, error, io, num, str, string};
 use bs58;
 use multihash;
-use byteorder;
 use unsigned_varint::decode;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -21,7 +20,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::DataLessThanLen => f.write_str("we have less data than indicated by length"),
             Error::InvalidMultiaddr => f.write_str("invalid multiaddr"),
@@ -66,12 +65,6 @@ impl From<bs58::decode::DecodeError> for Error {
 
 impl From<net::AddrParseError> for Error {
     fn from(err: net::AddrParseError) -> Error {
-        Error::ParsingError(err.into())
-    }
-}
-
-impl From<byteorder::Error> for Error {
-    fn from(err: byteorder::Error) -> Error {
         Error::ParsingError(err.into())
     }
 }

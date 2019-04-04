@@ -18,25 +18,43 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Once we are connected to a node, a *protocols handler* handles one or more specific protocols
+//! on this connection.
+//!
+//! This includes: how to handle incoming substreams, which protocols are supported, when to open
+//! a new outbound substream, and so on.
+//!
+//! Each implementation of the `ProtocolsHandler` trait handles one or more specific protocols.
+//! Two `ProtocolsHandler`s can be combined together with the `select()` method in order to build
+//! a `ProtocolsHandler` that combines both. This can be repeated multiple times in order to create
+//! a handler that handles all the protocols that you wish.
+//!
+//! > **Note**: A `ProtocolsHandler` handles one or more protocols in relation to a specific
+//! >           connection with a remote. In order to handle a protocol that requires knowledge of
+//! >           the network as a whole, see the `NetworkBehaviour` trait.
+
+use crate::PeerId;
 use crate::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
     UpgradeError,
 };
 use futures::prelude::*;
-use std::{error, fmt, io, time::Duration};
+use std::{cmp::Ordering, error, fmt, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;
 pub use self::map_out::MapOutEvent;
-pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder};
-pub use self::select::ProtocolsHandlerSelect;
+pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
+pub use self::one_shot::OneShotHandler;
+pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
 mod dummy;
 mod map_in;
 mod map_out;
 mod node_handler;
+mod one_shot;
 mod select;
 
 /// Handler for a set of protocols for a specific connection with a remote.
@@ -49,20 +67,22 @@ mod select;
 /// Communication with a remote over a set of protocols opened in two different ways:
 ///
 /// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
-///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a protocol.
+///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a
+///   protocol.
 /// - Listening, which is used to determine which protocols are supported when the remote wants
 ///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
 ///   listening.
 ///
 /// The upgrade when dialing and the upgrade when listening have to be of the same type, but you
-/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the upgrade
-/// you want depending on the situation.
+/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the
+/// upgrade you want depending on the situation.
 ///
 /// # Shutting down
 ///
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
-/// handler continues to be processed until it produces `None`. Only then the handler is destroyed.
+/// handler continues to be processed until it produces `ProtocolsHandlerEvent::Shutdown`. Only
+/// then the handler is destroyed.
 ///
 /// This makes it possible for the handler to finish delivering events even after knowing that it
 /// is shutting down.
@@ -71,24 +91,13 @@ mod select;
 /// might already be closed or unresponsive. They should therefore not rely on being able to
 /// deliver messages.
 ///
-/// # Relationship with `NodeHandler`.
-///
-/// This trait is very similar to the `NodeHandler` trait. The fundamental differences are:
-///
-/// - The `NodeHandler` trait gives you more control and is therefore more difficult to implement.
-/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection to a
-///   node, while the `ProtocolsHandler` trait is designed to handle only a specific set of
-///   protocols. Two or more implementations of `ProtocolsHandler` can be combined into one that
-///   supports all the protocols together, which is not possible with `NodeHandler`.
-///
-// TODO: add a "blocks connection closing" system, so that we can gracefully close a connection
-//       when it's no longer needed, and so that for example the periodic pinging system does not
-//       keep the connection alive forever
 pub trait ProtocolsHandler {
     /// Custom event that can be received from the outside.
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
     type OutEvent;
+    /// Error that can happen when polling.
+    type Error: error::Error;
     /// The type of the substream that contains the raw data.
     type Substream: AsyncRead + AsyncWrite;
     /// The upgrade for the protocol or protocols handled by this handler.
@@ -127,24 +136,26 @@ pub trait ProtocolsHandler {
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>);
 
-    /// Indicates to the handler that the inbound part of the muxer has been closed, and that
-    /// therefore no more inbound substreams will be produced.
-    fn inject_inbound_closed(&mut self);
-
-    /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
-    /// returns `Ready(None)` as soon as possible.
+    /// Returns until when the connection should be kept alive.
     ///
-    /// This method allows an implementation to perform a graceful shutdown of the substreams, and
-    /// send back various events.
-    fn shutdown(&mut self);
-
-    /// Should behave like `Stream::poll()`. Should close if no more event can be produced and the
-    /// node should be closed.
+    /// If returns `Until`, that indicates that this connection may be closed and this handler
+    /// destroyed after the returned `Instant` has elapsed if they think that they will no longer
+    /// need the connection in the future. Returning `Forever` is equivalent to "infinite".
+    /// Returning `Now` is equivalent to `Until(Instant::now())`.
     ///
-    /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
-    /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
-    /// >           `shutdown()` and will eventually be closed and destroyed.
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error>;
+    /// On the other hand, the return value is only an indication and doesn't mean that the user
+    /// will not close the connection.
+    ///
+    /// When multiple `ProtocolsHandler` are combined together, the largest `KeepAlive` should be
+    /// used.
+    ///
+    /// The result of this method should be checked every time `poll()` is invoked.
+    fn connection_keep_alive(&self) -> KeepAlive;
+
+    /// Should behave like `Stream::poll()`.
+    ///
+    /// Returning an error will close the connection to the remote.
+    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]
@@ -183,17 +194,19 @@ pub trait ProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
+        IntoProtocolsHandler::into_node_handler_builder(self)
     }
 
     /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.
     ///
     /// > **Note**: This is a shortcut for `self.into_node_handler_builder().build()`.
     #[inline]
+    #[deprecated(note = "Use into_node_handler_builder instead")]
     fn into_node_handler(self) -> NodeHandlerWrapper<Self>
     where
         Self: Sized,
     {
+        #![allow(deprecated)]
         self.into_node_handler_builder().build()
     }
 }
@@ -292,7 +305,7 @@ impl<TUpgrErr> fmt::Display for ProtocolsHandlerUpgrErr<TUpgrErr>
 where
     TUpgrErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProtocolsHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
@@ -318,6 +331,88 @@ where
             ProtocolsHandlerUpgrErr::Timer => None,
             ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
             ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
+        }
+    }
+}
+
+/// Prototype for a `ProtocolsHandler`.
+pub trait IntoProtocolsHandler {
+    /// The protocols handler.
+    type Handler: ProtocolsHandler;
+
+    /// Builds the protocols handler.
+    ///
+    /// The `PeerId` is the id of the node the handler is going to handle.
+    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler;
+
+    /// Builds an implementation of `IntoProtocolsHandler` that handles both this protocol and the
+    /// other one together.
+    #[inline]
+    fn select<TProto2>(self, other: TProto2) -> IntoProtocolsHandlerSelect<Self, TProto2>
+    where
+        Self: Sized,
+    {
+        IntoProtocolsHandlerSelect::new(self, other)
+    }
+
+    /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
+    /// exclusively.
+    #[inline]
+    fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
+    where
+        Self: Sized,
+    {
+        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
+    }
+}
+
+impl<T> IntoProtocolsHandler for T
+where T: ProtocolsHandler
+{
+    type Handler = Self;
+
+    #[inline]
+    fn into_handler(self, _: &PeerId) -> Self {
+        self
+    }
+}
+
+/// How long the connection should be kept alive.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KeepAlive {
+    /// If nothing new happens, the connection should be closed at the given `Instant`.
+    Until(Instant),
+    /// Keep the connection alive.
+    Forever,
+    /// Close the connection as soon as possible.
+    Now,
+}
+
+impl KeepAlive {
+    /// Returns true for `Forever`, false otherwise.
+    pub fn is_forever(&self) -> bool {
+        match *self {
+            KeepAlive::Forever => true,
+            _ => false,
+        }
+    }
+}
+
+impl PartialOrd for KeepAlive {
+    fn partial_cmp(&self, other: &KeepAlive) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for KeepAlive {
+    fn cmp(&self, other: &KeepAlive) -> Ordering {
+        use self::KeepAlive::*;
+
+        match (self, other) {
+            (Now, Now) | (Forever, Forever) => Ordering::Equal,
+            (Now, _) | (_, Forever) => Ordering::Less,
+            (_, Now) | (Forever, _) => Ordering::Greater,
+            (Until(expiration), Until(other_expiration)) => expiration.cmp(other_expiration),
         }
     }
 }

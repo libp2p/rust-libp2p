@@ -30,15 +30,6 @@ pub enum UpgradeError<E> {
     Apply(E),
 }
 
-impl<E> UpgradeError<E>
-where
-    E: std::error::Error + Send + Sync + 'static
-{
-    pub fn into_io_error(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, self)
-    }
-}
-
 impl<E> UpgradeError<E> {
     pub fn map_err<F, T>(self, f: F) -> UpgradeError<T>
     where
@@ -50,7 +41,7 @@ impl<E> UpgradeError<E> {
         }
     }
 
-    pub fn from_err<T>(self) -> UpgradeError<T>
+    pub fn into_err<T>(self) -> UpgradeError<T>
     where
         T: From<E>
     {
@@ -62,7 +53,7 @@ impl<E> fmt::Display for UpgradeError<E>
 where
     E: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UpgradeError::Select(e) => write!(f, "select error: {}", e),
             UpgradeError::Apply(e) => write!(f, "upgrade apply error: {}", e),
@@ -72,9 +63,9 @@ where
 
 impl<E> std::error::Error for UpgradeError<E>
 where
-    E: std::error::Error
+    E: std::error::Error + 'static
 {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             UpgradeError::Select(e) => Some(e),
             UpgradeError::Apply(e) => Some(e),

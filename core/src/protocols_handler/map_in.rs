@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
     }
 };
 use futures::prelude::*;
-use std::{io, marker::PhantomData};
+use std::marker::PhantomData;
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
@@ -54,6 +54,7 @@ where
 {
     type InEvent = TNewIn;
     type OutEvent = TProtoHandler::OutEvent;
+    type Error = TProtoHandler::Error;
     type Substream = TProtoHandler::Substream;
     type InboundProtocol = TProtoHandler::InboundProtocol;
     type OutboundProtocol = TProtoHandler::OutboundProtocol;
@@ -94,21 +95,16 @@ where
     }
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {
-        self.inner.inject_inbound_closed()
-    }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.inner.shutdown()
+    fn connection_keep_alive(&self) -> KeepAlive {
+        self.inner.connection_keep_alive()
     }
 
     #[inline]
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error,
     > {
         self.inner.poll()
     }

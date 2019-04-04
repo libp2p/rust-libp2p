@@ -21,11 +21,10 @@
 use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
 use smallvec::SmallVec;
-use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
@@ -35,10 +34,7 @@ pub struct IdentifyListenHandler<TSubstream> {
     config: IdentifyProtocolConfig,
 
     /// List of senders to yield to the user.
-    pending_result: SmallVec<[IdentifySender<TSubstream>; 4]>,
-
-    /// True if `shutdown` has been called.
-    shutdown: bool,
+    pending_result: SmallVec<[IdentifySender<Negotiated<TSubstream>>; 4]>,
 }
 
 impl<TSubstream> IdentifyListenHandler<TSubstream> {
@@ -48,7 +44,6 @@ impl<TSubstream> IdentifyListenHandler<TSubstream> {
         IdentifyListenHandler {
             config: IdentifyProtocolConfig,
             pending_result: SmallVec::new(),
-            shutdown: false,
         }
     }
 }
@@ -58,7 +53,8 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
-    type OutEvent = IdentifySender<TSubstream>;
+    type OutEvent = IdentifySender<Negotiated<TSubstream>>;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = IdentifyProtocolConfig;
     type OutboundProtocol = DeniedUpgrade;
@@ -84,38 +80,29 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
-    fn shutdown(&mut self) {
-        self.shutdown = true;
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::Now
     }
 
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::OutEvent,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
         >,
-        io::Error,
+        Self::Error,
     > {
         if !self.pending_result.is_empty() {
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
                 self.pending_result.remove(0),
-            ))));
+            )));
         }
 
-        if self.shutdown {
-            Ok(Async::Ready(None))
-        } else {
-            Ok(Async::NotReady)
-        }
+        Ok(Async::NotReady)
     }
 }

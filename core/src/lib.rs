@@ -42,8 +42,6 @@
 //! - Use the `NetworkBehaviour` trait to customize the behaviour of a `Swarm`. It is the
 //!   `NetworkBehaviour` that controls what happens on the network. Multiple types that implement
 //!   `NetworkBehaviour` can be composed into a single behaviour.
-//! - The `Topology` trait is implemented for types that hold the layout of a network. When other
-//!   components need the network layout to operate, they are passed an instance of a `Topology`.
 //! - The `StreamMuxer` trait is implemented on structs that hold a connection to a remote and can
 //!   subdivide this connection into multiple substreams. See the `muxing` module.
 //! - The `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` traits define how to upgrade each
@@ -52,55 +50,31 @@
 //!   how to handle incoming substreams, which protocols are supported, when to open a new
 //!   outbound substream, etc. See the `protocols_handler` trait.
 //!
+//! # High-level APIs vs low-level APIs
+//!
+//! This crate provides two sets of APIs:
+//!
+//! - The low-level APIs are contained within the `nodes` module. See the documentation for more
+//!   information.
+//! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler` and `NetworkBehaviour`.
 
-extern crate bs58;
-extern crate bytes;
-extern crate fnv;
-#[macro_use]
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate multihash;
-extern crate multistream_select;
-extern crate parking_lot;
-extern crate protobuf;
-#[macro_use]
-extern crate quick_error;
-extern crate rw_stream_sink;
-extern crate smallvec;
-extern crate tokio_executor;
-extern crate tokio_io;
-extern crate tokio_timer;
-extern crate void;
-
-#[cfg(test)]
-extern crate rand;
-#[cfg(test)]
-extern crate tokio;
-#[cfg(test)]
-extern crate tokio_codec;
-#[cfg(test)]
-#[macro_use]
-extern crate assert_matches;
-#[cfg(test)]
-extern crate tokio_mock_task;
 
 /// Multi-address re-export.
-pub extern crate multiaddr;
+pub use multiaddr;
+pub use multistream_select::Negotiated;
 
 mod keys_proto;
 mod peer_id;
-mod public_key;
 
 #[cfg(test)]
 mod tests;
 
 pub mod either;
+pub mod identity;
 pub mod muxing;
 pub mod nodes;
 pub mod protocols_handler;
 pub mod swarm;
-pub mod topology;
 pub mod transport;
 pub mod upgrade;
 
@@ -108,7 +82,7 @@ pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-pub use self::public_key::PublicKey;
+pub use self::identity::PublicKey;
 pub use self::swarm::Swarm;
 pub use self::transport::Transport;
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};

@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -19,9 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    PeerId,
     either::EitherError,
     either::EitherOutput,
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        KeepAlive,
+        IntoProtocolsHandler,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr,
+    },
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -31,13 +38,57 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::io;
+use std::cmp;
 use tokio_io::{AsyncRead, AsyncWrite};
+
+/// Implementation of `IntoProtocolsHandler` that combines two protocols into one.
+#[derive(Debug, Clone)]
+pub struct IntoProtocolsHandlerSelect<TProto1, TProto2> {
+    /// The first protocol.
+    proto1: TProto1,
+    /// The second protocol.
+    proto2: TProto2,
+}
+
+impl<TProto1, TProto2> IntoProtocolsHandlerSelect<TProto1, TProto2> {
+    /// Builds a `IntoProtocolsHandlerSelect`.
+    #[inline]
+    pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
+        IntoProtocolsHandlerSelect {
+            proto1,
+            proto2,
+        }
+    }
+}
+
+impl<TProto1, TProto2, TSubstream> IntoProtocolsHandler for IntoProtocolsHandlerSelect<TProto1, TProto2>
+where
+    TProto1: IntoProtocolsHandler,
+    TProto2: IntoProtocolsHandler,
+    TProto1::Handler: ProtocolsHandler<Substream = TSubstream>,
+    TProto2::Handler: ProtocolsHandler<Substream = TSubstream>,
+    TSubstream: AsyncRead + AsyncWrite,
+    <TProto1::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
+    <TProto2::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
+    <TProto1::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>,
+    <TProto2::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>
+{
+    type Handler = ProtocolsHandlerSelect<TProto1::Handler, TProto2::Handler>;
+
+    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+        ProtocolsHandlerSelect {
+            proto1: self.proto1.into_handler(remote_peer_id),
+            proto2: self.proto2.into_handler(remote_peer_id),
+        }
+    }
+}
 
 /// Implementation of `ProtocolsHandler` that combines two protocols into one.
 #[derive(Debug, Clone)]
 pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
+    /// The first protocol.
     proto1: TProto1,
+    /// The second protocol.
     proto2: TProto2,
 }
 
@@ -65,8 +116,9 @@ where
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type Error = EitherError<TProto1::Error, TProto2::Error>;
     type Substream = TSubstream;
-    type InboundProtocol = SelectUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
+    type InboundProtocol = SelectUpgrade<<TProto1 as ProtocolsHandler>::InboundProtocol, <TProto2 as ProtocolsHandler>::InboundProtocol>;
     type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
@@ -105,12 +157,6 @@ where
             EitherOutput::First(event) => self.proto1.inject_event(event),
             EitherOutput::Second(event) => self.proto2.inject_event(event),
         }
-    }
-
-    #[inline]
-    fn inject_inbound_closed(&mut self) {
-        self.proto1.inject_inbound_closed();
-        self.proto2.inject_inbound_closed();
     }
 
     #[inline]
@@ -156,39 +202,40 @@ where
     }
 
     #[inline]
-    fn shutdown(&mut self) {
-        self.proto1.shutdown();
-        self.proto2.shutdown();
+    fn connection_keep_alive(&self) -> KeepAlive {
+        cmp::max(self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive())
     }
 
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
-        match self.proto1.poll()? {
-            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
-            },
-            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade: EitherUpgrade::A(upgrade),
-                    info: EitherOutput::First(info),
-                })));
-            },
-            Async::Ready(None) => return Ok(Async::Ready(None)),
-            Async::NotReady => ()
-        };
+    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
+        loop {
+            match self.proto1.poll().map_err(EitherError::A)? {
+                Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event))));
+                },
+                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info}) => {
+                    return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                        upgrade: EitherUpgrade::A(upgrade),
+                        info: EitherOutput::First(info),
+                    }));
+                },
+                Async::NotReady => ()
+            };
 
-        match self.proto2.poll()? {
-            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
-            },
-            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade: EitherUpgrade::B(upgrade),
-                    info: EitherOutput::Second(info),
-                })));
-            },
-            Async::Ready(None) => return Ok(Async::Ready(None)),
-            Async::NotReady => ()
-        };
+            match self.proto2.poll().map_err(EitherError::B)? {
+                Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event))));
+                },
+                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }) => {
+                    return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                        upgrade: EitherUpgrade::B(upgrade),
+                        info: EitherOutput::Second(info),
+                    }));
+                },
+                Async::NotReady => ()
+            };
+
+            break;
+        }
 
         Ok(Async::NotReady)
     }

@@ -21,15 +21,15 @@
 //! Contains methods that handle the DNS encoding and decoding capabilities not available in the
 //! `dns_parser` library.
 
+use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
 use rand;
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
-use {META_QUERY_SERVICE, SERVICE_NAME};
 
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
-pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<[u8]>, ()> {
+pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
     if from.is_empty() {
         return Ok(Cow::Owned(Vec::new()));
     }
@@ -317,7 +317,7 @@ pub enum MdnsResponseError {
 }
 
 impl fmt::Display for MdnsResponseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MdnsResponseError::TxtRecordTooLong => {
                 write!(f, "TXT record invalid because it is too long")
@@ -337,7 +337,7 @@ impl error::Error for MdnsResponseError {}
 mod tests {
     use super::*;
     use dns_parser::Packet;
-    use libp2p_core::{PeerId, PublicKey};
+    use libp2p_core::identity;
     use std::time::Duration;
 
     #[test]
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn build_query_response_correct() {
-        let my_peer_id = PeerId::from_public_key(PublicKey::Rsa(vec![1, 2, 3, 4]));
+        let my_peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
         let query = build_query_response(

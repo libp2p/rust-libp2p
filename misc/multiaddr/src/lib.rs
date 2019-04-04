@@ -3,14 +3,7 @@
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr)
 ///! in Rust.
 
-#[macro_use]
-extern crate arrayref;
-extern crate bs58;
-extern crate byteorder;
-extern crate data_encoding;
-extern crate serde;
-extern crate unsigned_varint;
-pub extern crate multihash;
+pub use multihash;
 
 mod protocol;
 mod errors;
@@ -30,8 +23,8 @@ use std::{
     result::Result as StdResult,
     str::FromStr
 };
-pub use errors::{Result, Error};
-pub use protocol::Protocol;
+pub use self::errors::{Result, Error};
+pub use self::protocol::Protocol;
 
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]
@@ -43,9 +36,9 @@ impl Serialize for Multiaddr {
         S: Serializer,
     {
         if serializer.is_human_readable() {
-            self.to_string().serialize(serializer)
+            serializer.serialize_str(&self.to_string())
         } else {
-            self.to_bytes().serialize(serializer)
+            serializer.serialize_bytes(self.as_slice())
         }
     }
 }
@@ -55,13 +48,23 @@ impl<'de> Deserialize<'de> for Multiaddr {
     where
         D: Deserializer<'de>,
     {
-        struct Visitor;
+        struct Visitor { is_human_readable: bool };
 
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = Multiaddr;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("multiaddress")
+            }
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> StdResult<Self::Value, A::Error> {
+                let mut buf: Vec<u8> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(e) = seq.next_element()? { buf.push(e); }
+                if self.is_human_readable {
+                    let s = String::from_utf8(buf).map_err(DeserializerError::custom)?;
+                    s.parse().map_err(DeserializerError::custom)
+                } else {
+                    Multiaddr::from_bytes(buf).map_err(DeserializerError::custom)
+                }
             }
             fn visit_str<E: de::Error>(self, v: &str) -> StdResult<Self::Value, E> {
                 v.parse().map_err(DeserializerError::custom)
@@ -84,16 +87,16 @@ impl<'de> Deserialize<'de> for Multiaddr {
         }
 
         if deserializer.is_human_readable() {
-            deserializer.deserialize_str(Visitor)
+            deserializer.deserialize_str(Visitor { is_human_readable: true })
         } else {
-            deserializer.deserialize_bytes(Visitor)
+            deserializer.deserialize_bytes(Visitor { is_human_readable: false })
         }
     }
 }
 
 impl fmt::Debug for Multiaddr {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.to_string().fmt(f)
     }
 }
@@ -111,7 +114,7 @@ impl fmt::Display for Multiaddr {
     /// ```
     ///
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for s in self.iter() {
             s.to_string().fmt(f)?;
         }
@@ -185,7 +188,7 @@ impl Multiaddr {
     /// ```
     ///
     #[inline]
-    pub fn append(&mut self, p: Protocol) {
+    pub fn append(&mut self, p: Protocol<'_>) {
         let n = self.bytes.len();
         let mut w = io::Cursor::new(&mut self.bytes);
         w.set_position(n as u64);
@@ -267,7 +270,7 @@ impl Multiaddr {
     /// ```
     ///
     #[inline]
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter(&self.bytes)
     }
 
@@ -449,3 +452,34 @@ impl ToMultiaddr for Multiaddr {
     }
 }
 
+/// Easy way for a user to create a `Multiaddr`.
+///
+/// Example:
+///
+/// ```rust
+/// # use parity_multiaddr::multiaddr;
+/// # fn main() {
+/// let _addr = multiaddr![Ip4([127, 0, 0, 1]), Tcp(10500u16)];
+/// # }
+/// ```
+///
+/// Each element passed to `multiaddr![]` should be a variant of the `Protocol` enum. The
+/// optional parameter is casted into the proper type with the `Into` trait.
+///
+/// For example, `Ip4([127, 0, 0, 1])` works because `Ipv4Addr` implements `From<[u8; 4]>`.
+#[macro_export]
+macro_rules! multiaddr {
+    ($($comp:ident $(($param:expr))*),+) => {
+        {
+            use std::iter;
+            let elem = iter::empty::<$crate::Protocol>();
+            $(
+                let elem = {
+                    let cmp = $crate::Protocol::$comp $(( $param.into() ))*;
+                    elem.chain(iter::once(cmp))
+                };
+            )+
+            elem.collect::<$crate::Multiaddr>()
+        }
+    }
+}

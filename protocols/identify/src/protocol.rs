@@ -19,10 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::BytesMut;
+use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
+use futures::try_ready;
 use libp2p_core::{
     Multiaddr, PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
 };
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
@@ -30,7 +32,6 @@ use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use structs_proto;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
@@ -66,10 +67,12 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
             .map(|addr| addr.into_bytes())
             .collect();
 
+        let pubkey_bytes = info.public_key.into_protobuf_encoding();
+
         let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
         message.set_protocolVersion(info.protocol_version);
-        message.set_publicKey(info.public_key.into_protobuf_encoding());
+        message.set_publicKey(pubkey_bytes);
         message.set_listenAddrs(listen_addrs);
         message.set_observedAddr(observed_addr.to_bytes());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
@@ -112,7 +115,8 @@ where T: AsyncWrite
             }
         }
 
-        try_ready!(self.inner.poll_complete());
+        // A call to `close()` implies flushing.
+        try_ready!(self.inner.close());
         Ok(Async::Ready(()))
     }
 }
@@ -146,11 +150,11 @@ impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = IdentifySender<C>;
+    type Output = IdentifySender<Negotiated<C>>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -164,11 +168,12 @@ where
 {
     type Output = RemoteInfo;
     type Error = IoError;
-    type Future = IdentifyOutboundFuture<C>;
+    type Future = IdentifyOutboundFuture<Negotiated<C>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
+            shutdown: false,
         }
     }
 }
@@ -176,15 +181,22 @@ where
 /// Future returned by `OutboundUpgrade::upgrade_outbound`.
 pub struct IdentifyOutboundFuture<T> {
     inner: Framed<T, codec::UviBytes<BytesMut>>,
+    /// If true, we have finished shutting down the writing part of `inner`.
+    shutdown: bool,
 }
 
 impl<T> Future for IdentifyOutboundFuture<T>
-where T: AsyncRead
+where T: AsyncRead + AsyncWrite,
 {
     type Item = RemoteInfo;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if !self.shutdown {
+            try_ready!(self.inner.close());
+            self.shutdown = true;
+        }
+
         let msg = match try_ready!(self.inner.poll()) {
             Some(i) => i,
             None => {
@@ -199,7 +211,7 @@ where T: AsyncRead
             Ok(v) => v,
             Err(err) => {
                 debug!("Failed to parse protobuf message; error = {:?}", err);
-                return Err(err.into());
+                return Err(err)
             }
         };
 
@@ -234,12 +246,15 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 addrs
             };
 
+            let public_key = PublicKey::from_protobuf_encoding(msg.get_publicKey())
+                .map_err(|e| IoError::new(IoErrorKind::InvalidData, e))?;
+
             let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
             let info = IdentifyInfo {
-                public_key: PublicKey::from_protobuf_encoding(msg.get_publicKey())?,
+                public_key,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
-                listen_addrs: listen_addrs,
+                listen_addrs,
                 protocols: msg.take_protocols().into_vec(),
             };
 
@@ -252,21 +267,19 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-    extern crate tokio;
-
     use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::libp2p_tcp::TcpConfig;
+    use tokio::runtime::current_thread::Runtime;
+    use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
-    use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
-    use std::sync::mpsc;
-    use std::thread;
+    use libp2p_core::{identity, Transport, upgrade::{apply_outbound, apply_inbound}};
+    use std::{io, sync::mpsc, thread};
 
     #[test]
     fn correct_transfer() {
         // We open a server and a client, send info from the server to the client, and check that
         // they were successfully received.
+        let send_pubkey = identity::Keypair::generate_ed25519().public();
+        let recv_pubkey = send_pubkey.clone();
 
         let (tx, rx) = mpsc::channel();
 
@@ -284,12 +297,13 @@ mod tests {
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)
                 .and_then(|socket| {
-                    apply_inbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                    apply_inbound(socket, IdentifyProtocolConfig)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                 })
                 .and_then(|sender| {
                     sender.send(
                         IdentifyInfo {
-                            public_key: PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]),
+                            public_key: send_pubkey,
                             protocol_version: "proto_version".to_owned(),
                             agent_version: "agent_version".to_owned(),
                             listen_addrs: vec![
@@ -308,13 +322,14 @@ mod tests {
         let transport = TcpConfig::new();
 
         let future = transport.dial(rx.recv().unwrap())
-            .unwrap_or_else(|_| panic!())
+            .unwrap()
             .and_then(|socket| {
-                apply_outbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                apply_outbound(socket, IdentifyProtocolConfig)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
             })
             .and_then(|RemoteInfo { info, observed_addr, .. }| {
                 assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
-                assert_eq!(info.public_key, PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]));
+                assert_eq!(info.public_key, recv_pubkey);
                 assert_eq!(info.protocol_version, "proto_version");
                 assert_eq!(info.agent_version, "agent_version");
                 assert_eq!(info.listen_addrs,

@@ -1,11 +1,3 @@
-extern crate bs58;
-extern crate bincode;
-extern crate data_encoding;
-extern crate parity_multiaddr;
-extern crate multihash;
-extern crate quickcheck;
-extern crate rand;
-extern crate serde_json;
 
 use data_encoding::HEXUPPER;
 use multihash::Multihash;
@@ -70,7 +62,7 @@ impl Arbitrary for Proto {
              7 => Proto(P2pWebRtcDirect),
              8 => Proto(P2pWebRtcStar),
              9 => Proto(P2pWebSocketStar),
-            10 => Proto(Memory),
+            10 => Proto(Memory(g.gen())),
             // TODO: impl Arbitrary for Multihash:
             11 => Proto(P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))),
             12 => Proto(P2pCircuit),
@@ -108,7 +100,7 @@ impl Arbitrary for SubString {
 // other unit tests
 
 
-fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol>) {
+fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol<'_>>) {
     let parsed = source.parse::<Multiaddr>().unwrap();
     assert_eq!(HEXUPPER.encode(&parsed.to_bytes()[..]), target);
     assert_eq!(parsed.iter().collect::<Vec<_>>(), protocols);

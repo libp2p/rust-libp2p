@@ -18,12 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate futures;
-extern crate libp2p_core;
-extern crate void;
-
 use futures::future::{self, FutureResult};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated};
 use std::iter;
 use void::Void;
 
@@ -40,21 +36,21 @@ impl UpgradeInfo for PlainTextConfig {
 }
 
 impl<C> InboundUpgrade<C> for PlainTextConfig {
-    type Output = C;
+    type Output = Negotiated<C>;
     type Error = Void;
-    type Future = FutureResult<C, Self::Error>;
+    type Future = FutureResult<Negotiated<C>, Self::Error>;
 
-    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ok(i)
     }
 }
 
 impl<C> OutboundUpgrade<C> for PlainTextConfig {
-    type Output = C;
+    type Output = Negotiated<C>;
     type Error = Void;
-    type Future = FutureResult<C, Self::Error>;
+    type Future = FutureResult<Negotiated<C>, Self::Error>;
 
-    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ok(i)
     }
 }

@@ -98,12 +98,11 @@ where
         let mut data_buf = frame.to_vec();
         data_buf.truncate(content_length);
         self.cipher_state
-            .try_apply_keystream(&mut data_buf)
-            .map_err::<SecioError,_>(|e|e.into())?;
+            .decrypt(&mut data_buf);
 
         if !self.nonce.is_empty() {
             let n = min(data_buf.len(), self.nonce.len());
-            if &data_buf[.. n] != &self.nonce[.. n] {
+            if data_buf[.. n] != self.nonce[.. n] {
                 return Err(SecioError::NonceVerificationFailed)
             }
             self.nonce.drain(.. n);

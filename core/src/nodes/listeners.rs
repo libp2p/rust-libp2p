@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Manage listening on multiple multiaddresses at once.
+
+use crate::{Multiaddr, Transport, transport::TransportError};
 use futures::prelude::*;
-use std::fmt;
+use std::{collections::VecDeque, fmt};
 use void::Void;
-use {Multiaddr, Transport};
-use std::collections::VecDeque;
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
@@ -39,10 +40,6 @@ use std::collections::VecDeque;
 /// # Example
 ///
 /// ```no_run
-/// # extern crate futures;
-/// # extern crate libp2p_core;
-/// # extern crate libp2p_tcp;
-/// # extern crate tokio;
 /// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
@@ -149,15 +146,14 @@ where
     /// Start listening on a multiaddress.
     ///
     /// Returns an error if the transport doesn't support the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr>
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTrans::Error>>
     where
         TTrans: Clone,
     {
         let (listener, new_addr) = self
             .transport
             .clone()
-            .listen_on(addr)
-            .map_err(|(_, addr)| addr)?;
+            .listen_on(addr)?;
 
         self.listeners.push_back(Listener {
             listener,
@@ -238,7 +234,7 @@ impl<TTrans> fmt::Debug for ListenersStream<TTrans>
 where
     TTrans: Transport + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("ListenersStream")
             .field("transport", &self.transport)
             .field("listeners", &self.listeners().collect::<Vec<_>>())
@@ -251,7 +247,7 @@ where
     TTrans: Transport,
     <TTrans::Listener as Stream>::Error: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             ListenersEvent::Incoming {
                 ref listen_addr, ..
@@ -274,16 +270,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-
     use super::*;
-    use transport;
+    use crate::transport;
+    use assert_matches::assert_matches;
     use tokio::runtime::current_thread::Runtime;
     use std::io;
     use futures::{future::{self}, stream};
-    use tests::dummy_transport::{DummyTransport, ListenerState};
-    use tests::dummy_muxer::DummyMuxer;
-    use PeerId;
+    use crate::tests::dummy_transport::{DummyTransport, ListenerState};
+    use crate::tests::dummy_muxer::DummyMuxer;
+    use crate::PeerId;
 
     fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
         let l = &mut ls.listeners[idx];
@@ -293,8 +288,8 @@ mod tests {
                     let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
                     Box::new(stream)
                 }
-                ListenerState::Ok(async) => {
-                    match async {
+                ListenerState::Ok(r#async) => {
+                    match r#async {
                         Async::NotReady => {
                             let stream = stream::poll_fn(|| Ok(Async::NotReady));
                             Box::new(stream)
@@ -316,12 +311,12 @@ mod tests {
 
     #[test]
     fn incoming_event() {
-        let (tx, rx) = transport::connector();
+        let mem_transport = transport::MemoryTransport::default();
 
-        let mut listeners = ListenersStream::new(rx);
-        listeners.listen_on("/memory".parse().unwrap()).unwrap();
+        let mut listeners = ListenersStream::new(mem_transport);
+        let actual_addr = listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-        let dial = tx.dial("/memory".parse().unwrap()).unwrap_or_else(|_| panic!());
+        let dial = mem_transport.dial(actual_addr.clone()).unwrap();
 
         let future = listeners
             .into_future()
@@ -329,8 +324,8 @@ mod tests {
             .and_then(|(event, _)| {
                 match event {
                     Some(ListenersEvent::Incoming { listen_addr, upgrade, send_back_addr }) => {
-                        assert_eq!(listen_addr, "/memory".parse().unwrap());
-                        assert_eq!(send_back_addr, "/memory".parse().unwrap());
+                        assert_eq!(listen_addr, actual_addr);
+                        assert_eq!(send_back_addr, actual_addr);
                         upgrade.map(|_| ()).map_err(|_| panic!())
                     },
                     _ => panic!()

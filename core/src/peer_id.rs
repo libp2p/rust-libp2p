@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::PublicKey;
 use bs58;
+use quick_error::quick_error;
 use multihash;
 use std::{fmt, str::FromStr};
-use PublicKey;
 
 /// Identifier of a peer of the network.
 ///
@@ -33,17 +34,25 @@ pub struct PeerId {
 }
 
 impl fmt::Debug for PeerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PeerId({})", self.to_base58())
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("PeerId")
+            .field(&self.to_base58())
+            .finish()
+    }
+}
+
+impl fmt::Display for PeerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.to_base58().fmt(f)
     }
 }
 
 impl PeerId {
     /// Builds a `PeerId` from a public key.
     #[inline]
-    pub fn from_public_key(public_key: PublicKey) -> PeerId {
-        let protobuf = public_key.into_protobuf_encoding();
-        let multihash = multihash::encode(multihash::Hash::SHA2256, &protobuf)
+    pub fn from_public_key(key: PublicKey) -> PeerId {
+        let key_enc = key.into_protobuf_encoding();
+        let multihash = multihash::encode(multihash::Hash::SHA2256, &key_enc)
             .expect("sha2-256 is always supported");
         PeerId { multihash }
     }
@@ -119,9 +128,10 @@ impl PeerId {
     /// given public key, otherwise `Some` boolean as the result of an equality check.
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
         let alg = self.multihash.algorithm();
-        match multihash::encode(alg, &public_key.clone().into_protobuf_encoding()) {
-            Ok(compare) => Some(compare == self.multihash),
-            Err(multihash::EncodeError::UnsupportedType) => None,
+        let enc = public_key.clone().into_protobuf_encoding();
+        match multihash::encode(alg, &enc) {
+            Ok(h) => Some(h == self.multihash),
+            Err(multihash::EncodeError::UnsupportedType) => None
         }
     }
 }
@@ -151,6 +161,13 @@ impl AsRef<multihash::Multihash> for PeerId {
     #[inline]
     fn as_ref(&self) -> &multihash::Multihash {
         &self.multihash
+    }
+}
+
+impl AsRef<[u8]> for PeerId {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
     }
 }
 
@@ -187,26 +204,25 @@ impl FromStr for PeerId {
 
 #[cfg(test)]
 mod tests {
-    use rand::random;
-    use {PeerId, PublicKey};
+    use crate::{PeerId, identity};
 
     #[test]
     fn peer_id_is_public_key() {
-        let key = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect());
-        let peer_id = PeerId::from_public_key(key.clone());
+        let key = identity::Keypair::generate_ed25519().public();
+        let peer_id = key.clone().into_peer_id();
         assert_eq!(peer_id.is_public_key(&key), Some(true));
     }
 
     #[test]
     fn peer_id_into_bytes_then_from_bytes() {
-        let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
         let second = PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn peer_id_to_base58_then_back() {
-        let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
         assert_eq!(peer_id, second);
     }

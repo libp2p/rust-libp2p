@@ -19,14 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
     }
 };
 use futures::prelude::*;
-use std::io;
 
 /// Wrapper around a protocol handler that turns the output event into something else.
 pub struct MapOutEvent<TProtoHandler, TMap> {
@@ -52,6 +51,7 @@ where
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TNewOut;
+    type Error = TProtoHandler::Error;
     type Substream = TProtoHandler::Substream;
     type InboundProtocol = TProtoHandler::InboundProtocol;
     type OutboundProtocol = TProtoHandler::OutboundProtocol;
@@ -90,29 +90,24 @@ where
     }
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {
-        self.inner.inject_inbound_closed()
-    }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.inner.shutdown()
+    fn connection_keep_alive(&self) -> KeepAlive {
+        self.inner.connection_keep_alive()
     }
 
     #[inline]
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error,
     > {
         Ok(self.inner.poll()?.map(|ev| {
-            ev.map(|ev| match ev {
+            match ev {
                 ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
                     ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
                 }
-            })
+            }
         }))
     }
 }

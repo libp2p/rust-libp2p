@@ -18,15 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
-use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId};
-use multihash::Multihash;
-use protocol::{
+use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
-use std::{error, fmt, io};
+use futures::prelude::*;
+use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
+use multihash::Multihash;
+use std::{error, fmt, io, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that handles Kademlia communications with the remote.
@@ -42,10 +42,6 @@ where
     /// Configuration for the Kademlia protocol.
     config: KademliaProtocolConfig,
 
-    /// If true, we are trying to shut down the existing Kademlia substream and should refuse any
-    /// incoming connection.
-    shutting_down: bool,
-
     /// If false, we always refuse incoming Kademlia substreams.
     allow_listening: bool,
 
@@ -53,7 +49,10 @@ where
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active substreams with the state they are in.
-    substreams: Vec<SubstreamState<TSubstream, TUserData>>,
+    substreams: Vec<SubstreamState<Negotiated<TSubstream>, TUserData>>,
+
+    /// Until when to keep the connection alive.
+    keep_alive: KeepAlive,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -194,7 +193,7 @@ pub enum KademliaHandlerQueryErr {
 }
 
 impl fmt::Display for KademliaHandlerQueryErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             KademliaHandlerQueryErr::Upgrade(err) => {
                 write!(f, "Error while performing Kademlia query: {}", err)
@@ -318,10 +317,10 @@ where
     fn with_allow_listening(allow_listening: bool) -> Self {
         KademliaHandler {
             config: Default::default(),
-            shutting_down: false,
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
+            keep_alive: KeepAlive::Forever,
         }
     }
 }
@@ -343,6 +342,7 @@ where
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
+    type Error = io::Error; // TODO: better error type?
     type Substream = TSubstream;
     type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
@@ -363,10 +363,6 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
-        if self.shutting_down {
-            return;
-        }
-
         self.substreams
             .push(SubstreamState::OutPendingSend(protocol, msg, user_data));
     }
@@ -381,10 +377,6 @@ where
             EitherOutput::First(p) => p,
             EitherOutput::Second(p) => void::unreachable(p),
         };
-
-        if self.shutting_down {
-            return;
-        }
 
         debug_assert!(self.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
@@ -472,9 +464,6 @@ where
     }
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn inject_dial_upgrade_error(
         &mut self,
         (_, user_data): Self::OutboundOpenInfo,
@@ -489,34 +478,16 @@ where
     }
 
     #[inline]
-    fn shutdown(&mut self) {
-        self.shutting_down = true;
+    fn connection_keep_alive(&self) -> KeepAlive {
+        self.keep_alive
     }
 
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        >,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
-        // Special case if shutting down.
-        if self.shutting_down {
-            for n in (0..self.substreams.len()).rev() {
-                match self.substreams.swap_remove(n).try_close() {
-                    AsyncSink::Ready => (),
-                    AsyncSink::NotReady(stream) => self.substreams.push(stream),
-                }
-            }
-
-            if self.substreams.is_empty() {
-                return Ok(Async::Ready(None));
-            } else {
-                return Ok(Async::NotReady);
-            }
-        }
-
         // We remove each element from `substreams` one by one and add them back.
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
@@ -525,10 +496,10 @@ where
                 match advance_substream(substream, self.config) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
-                        return Ok(Async::Ready(Some(event)));
+                        return Ok(Async::Ready(event));
                     }
                     (None, Some(event), _) => {
-                        return Ok(Async::Ready(Some(event)));
+                        return Ok(Async::Ready(event));
                     }
                     (Some(new_state), None, false) => {
                         self.substreams.push(new_state);
@@ -543,6 +514,12 @@ where
                     }
                 }
             }
+        }
+
+        if self.substreams.is_empty() {
+            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+        } else {
+            self.keep_alive = KeepAlive::Forever;
         }
 
         Ok(Async::NotReady)

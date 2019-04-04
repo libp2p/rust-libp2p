@@ -22,21 +22,22 @@
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
 use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
-use log::error;
-use std::{io, iter};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use log::debug;
+use std::{io, iter, sync::atomic};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-
-pub struct Yamux<C>(yamux::Connection<C>);
+// TODO: add documentation and field names
+pub struct Yamux<C>(yamux::Connection<C>, atomic::AtomicBool);
 
 impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
-    pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        Yamux(yamux::Connection::new(c, cfg, mode))
+    pub fn new(c: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
+        cfg.set_read_after_close(false);
+        Yamux(yamux::Connection::new(c, cfg, mode), atomic::AtomicBool::new(false))
     }
 }
 
@@ -48,15 +49,18 @@ where
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
 
     #[inline]
-    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.0.poll() {
             Err(e) => {
-                error!("connection error: {}", e);
+                debug!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-            Ok(Async::Ready(Some(stream))) => Ok(Async::Ready(Some(stream)))
+            Ok(Async::Ready(None)) => Err(io::ErrorKind::BrokenPipe.into()),
+            Ok(Async::Ready(Some(stream))) => {
+                self.1.store(true, atomic::Ordering::Release);
+                Ok(Async::Ready(stream))
+            }
         }
     }
 
@@ -67,8 +71,12 @@ where
     }
 
     #[inline]
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
-        substream.poll()
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
+        match substream.poll()? {
+            Async::Ready(Some(s)) => Ok(Async::Ready(s)),
+            Async::Ready(None) => Err(io::ErrorKind::BrokenPipe.into()),
+            Async::NotReady => Ok(Async::NotReady),
+        }
     }
 
     #[inline]
@@ -77,7 +85,11 @@ where
 
     #[inline]
     fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
-        sub.poll_read(buf)
+        let result = sub.poll_read(buf);
+        if let Ok(Async::Ready(_)) = result {
+            self.1.store(true, atomic::Ordering::Release);
+        }
+        result
     }
 
     #[inline]
@@ -91,7 +103,7 @@ where
     }
 
     #[inline]
-    fn shutdown_substream(&self, sub: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
         sub.shutdown()
     }
 
@@ -100,8 +112,13 @@ where
     }
 
     #[inline]
-    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        self.0.shutdown()
+    fn is_remote_acknowledged(&self) -> bool {
+        self.1.load(atomic::Ordering::Acquire)
+    }
+
+    #[inline]
+    fn close(&self) -> Poll<(), IoError> {
+        self.0.close()
     }
 
     #[inline]
@@ -109,8 +126,6 @@ where
         self.0.flush()
     }
 }
-
-
 
 #[derive(Clone)]
 pub struct Config(yamux::Config);
@@ -140,11 +155,11 @@ impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
 {
-    type Output = Yamux<C>;
+    type Output = Yamux<Negotiated<C>>;
     type Error = io::Error;
-    type Future = FutureResult<Yamux<C>, io::Error>;
+    type Future = FutureResult<Yamux<Negotiated<C>>, io::Error>;
 
-    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
     }
 }
@@ -153,11 +168,11 @@ impl<C> OutboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
 {
-    type Output = Yamux<C>;
+    type Output = Yamux<Negotiated<C>>;
     type Error = io::Error;
-    type Future = FutureResult<Yamux<C>, io::Error>;
+    type Future = FutureResult<Yamux<Negotiated<C>>, io::Error>;
 
-    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }
