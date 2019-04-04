@@ -162,9 +162,6 @@ where
     #[inline]
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         match (info, error) {
-            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
-                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)
-            },
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timer) => {
                 self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)
             },
@@ -179,9 +176,6 @@ where
             },
             (EitherOutput::First(_), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(_)))) => {
                 panic!("Wrong API usage; the upgrade error doesn't match the outbound open info");
-            },
-            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
-                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)
             },
             (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Timeout) => {
                 self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout)
