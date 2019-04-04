@@ -107,7 +107,7 @@ fn successful_dial_reaches_a_node() {
             let mut swarm = swarm_fut.lock();
             let poll_res = swarm.poll();
             match poll_res {
-                Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => Ok(Async::Ready(Some(peer_id))),
+                Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
                 _ => Ok(Async::Ready(None))
             }
         })).expect("tokio works");
@@ -172,7 +172,7 @@ fn broadcasted_events_reach_active_nodes() {
             let mut swarm = swarm_fut.lock();
             let poll_res = swarm.poll();
             match poll_res {
-                Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => Ok(Async::Ready(Some(peer_id))),
+                Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
                 _ => Ok(Async::Ready(None))
             }
         })).expect("tokio works");
@@ -185,7 +185,7 @@ fn broadcasted_events_reach_active_nodes() {
             let mut swarm = swarm_fut.lock();
             match swarm.poll() {
                 Async::Ready(event) => {
-                    assert_matches!(event, RawSwarmEvent::NodeEvent { peer_id: _, event: inner_event } => {
+                    assert_matches!(event, RawSwarmEvent::NodeEvent { conn_info: _, event: inner_event } => {
                         // The event we sent reached the node and triggered sending the out event we told it to return
                         assert_matches!(inner_event, OutEvent::Custom("from handler 1"));
                     });
@@ -236,7 +236,7 @@ fn querying_for_connected_peer() {
             let mut swarm = swarm_fut.lock();
             let poll_res = swarm.poll();
             match poll_res {
-                Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => Ok(Async::Ready(Some(peer_id))),
+                Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
                 _ => Ok(Async::Ready(None))
             }
         })).expect("tokio works");
@@ -385,8 +385,8 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
     let expected_peer_id = peer_id.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut swarm = swarm_fut.lock();
-        assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::NodeClosed { peer_id, .. }) => {
-            assert_eq!(peer_id, expected_peer_id);
+        assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::NodeClosed { conn_info, .. }) => {
+            assert_eq!(conn_info, expected_peer_id);
         });
         Ok(Async::Ready(()))
     })).expect("tokio works");
