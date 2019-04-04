@@ -123,6 +123,21 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
+    #[deprecated(since = "0.2.1", note = "Use `Multiaddr::to_vec` instead.")]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.to_vec()
+    }
+
+    #[deprecated(since = "0.2.1", note = "Use `Multiaddr::to_vec` instead.")]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.to_vec()
+    }
+
+    #[deprecated(since = "0.2.1", note = "Use `Multiaddr::try_from_vec` instead.")]
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multiaddr> {
+        Self::try_from_vec(bytes)
+    }
+
     /// Create a new, empty multiaddress.
     pub fn empty() -> Multiaddr {
         Multiaddr { bytes: Bytes::new() }
