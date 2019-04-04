@@ -295,8 +295,6 @@ pub enum ProtocolsHandlerUpgrErr<TUpgrErr> {
     Timeout,
     /// There was an error in the timer used.
     Timer,
-    /// The remote muxer denied the attempt to open a substream.
-    MuxerDeniedSubstream,
     /// Error while upgrading the substream to the protocol we want.
     Upgrade(UpgradeError<TUpgrErr>),
 }
@@ -313,9 +311,6 @@ where
             ProtocolsHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             },
-            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => {
-                write!(f, "Remote muxer denied our attempt to open a substream")
-            },
             ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
         }
     }
@@ -329,7 +324,6 @@ where
         match self {
             ProtocolsHandlerUpgrErr::Timeout => None,
             ProtocolsHandlerUpgrErr::Timer => None,
-            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
             ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
         }
     }
