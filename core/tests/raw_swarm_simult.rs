@@ -135,19 +135,26 @@ fn raw_swarm_simultaneous_connect() {
         swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
         swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-        let swarm1_listen_addr =
-            if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
-                listen_addr
-            } else {
-                panic!("Was expecting the listen address to be reported")
-            };
+        let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) =
+            future::lazy(move || {
+                let swarm1_listen_addr =
+                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+                        listen_addr
+                    } else {
+                        panic!("Was expecting the listen address to be reported")
+                    };
 
-        let swarm2_listen_addr =
-            if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
-                listen_addr
-            } else {
-                panic!("Was expecting the listen address to be reported")
-            };
+                let swarm2_listen_addr =
+                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
+                        listen_addr
+                    } else {
+                        panic!("Was expecting the listen address to be reported")
+                    };
+
+                Ok::<_, void::Void>((swarm1_listen_addr, swarm2_listen_addr, swarm1, swarm2))
+            })
+            .wait()
+            .unwrap();
 
         let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
 

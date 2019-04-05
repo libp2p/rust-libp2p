@@ -179,6 +179,7 @@ pub struct Listener {
     addr: Multiaddr,
     /// Receives incoming connections.
     receiver: mpsc::Receiver<Channel<Bytes>>,
+    /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
     tell_listen_addr: bool
 }
 

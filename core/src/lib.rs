@@ -87,8 +87,6 @@ pub use self::swarm::{Swarm, SwarmEvent};
 pub use self::transport::Transport;
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
 
-use std::fmt;
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
     /// The socket comes from a dialer.
@@ -125,23 +123,6 @@ impl Endpoint {
         } else {
             false
         }
-    }
-}
-
-/// An opaque ID used for identification within a running process.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Id(usize);
-
-impl fmt::Display for Id {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl Id {
-    /// Return `Id` as a `usize`.
-    pub fn as_usize(&self) -> usize {
-        self.0
     }
 }
 

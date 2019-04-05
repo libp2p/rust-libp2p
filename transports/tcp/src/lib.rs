@@ -276,6 +276,7 @@ pub struct TcpListenStream {
     listen_addr: Multiaddr,
     /// Original configuration.
     config: TcpConfig,
+    /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
     tell_new_addr: bool
 }
 

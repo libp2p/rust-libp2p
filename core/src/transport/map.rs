@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, transport::{Transport, TransportError, ListenerEvent}};
+use crate::{
+    nodes::raw_swarm::ConnectedPoint,
+    transport::{Transport, TransportError, ListenerEvent}
+};
 use futures::{prelude::*, try_ready};
 use multiaddr::Multiaddr;
 
@@ -35,7 +38,7 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport,
-    F: FnOnce(T::Output, Endpoint) -> D + Clone
+    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
 {
     type Output = D;
     type Error = T::Error;
@@ -50,7 +53,8 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial(addr.clone())?;
-        Ok(MapFuture { inner: future, args: Some((self.fun, Endpoint::Dialer)) })
+        let p = ConnectedPoint::Dialer { address: addr };
+        Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -62,16 +66,13 @@ where
 ///
 /// Maps a function over every stream item.
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> {
-    stream: T,
-    fun: F
-}
+pub struct MapStream<T, F> { stream: T, fun: F }
 
 impl<T, F, A, B, X> Stream for MapStream<T, F>
 where
     T: Stream<Item = ListenerEvent<X>>,
     X: Future<Item = A>,
-    F: FnOnce(A, Endpoint) -> B + Clone
+    F: FnOnce(A, ConnectedPoint) -> B + Clone
 {
     type Item = ListenerEvent<MapFuture<X, F>>;
     type Error = T::Error;
@@ -79,12 +80,24 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.stream.poll()? {
             Async::Ready(Some(event)) => {
-                let event = event.map(|future| {
-                    MapFuture {
-                        inner: future,
-                        args: Some((self.fun.clone(), Endpoint::Listener))
+                let event = match event {
+                    ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
+                        let point = ConnectedPoint::Listener {
+                            listen_addr: listen_addr.clone(),
+                            send_back_addr: remote_addr.clone()
+                        };
+                        ListenerEvent::Upgrade {
+                            upgrade: MapFuture {
+                                inner: upgrade,
+                                args: Some((self.fun.clone(), point))
+                            },
+                            listen_addr,
+                            remote_addr
+                        }
                     }
-                });
+                    ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
+                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+                };
                 Ok(Async::Ready(Some(event)))
             }
             Async::Ready(None) => Ok(Async::Ready(None)),
@@ -99,13 +112,13 @@ where
 #[derive(Clone, Debug)]
 pub struct MapFuture<T, F> {
     inner: T,
-    args: Option<(F, Endpoint)>
+    args: Option<(F, ConnectedPoint)>
 }
 
 impl<T, A, F, B> Future for MapFuture<T, F>
 where
     T: Future<Item = A>,
-    F: FnOnce(A, Endpoint) -> B
+    F: FnOnce(A, ConnectedPoint) -> B
 {
     type Item = B;
     type Error = T::Error;

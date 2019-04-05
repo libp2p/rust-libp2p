@@ -41,7 +41,7 @@
 //!
 
 use crate::{
-    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName, Id,
+    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
         handled_node::NodeHandler,
@@ -157,7 +157,7 @@ where TBehaviour: NetworkBehaviour,
     /// Returns an error if the address is not supported.
     /// On success, returns the ID of the listener.
     #[inline]
-    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Id, TransportError<TTransport::Error>> {
+    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<(), TransportError<TTransport::Error>> {
         me.raw_swarm.listen_on(addr)
     }
 
@@ -226,16 +226,12 @@ where TBehaviour: NetworkBehaviour,
 pub enum SwarmEvent<T> {
     /// A listener reports a new [`Multiaddr`] it is listening on.
     NewListenerAddress {
-        /// The listener ID.
-        listener_id: Id,
-        /// The new address it is listening on.
+        /// The new address that is being listening on.
         listen_addr: Multiaddr
     },
     /// A listener reports it stopped listening on a [`Multiaddr`].
     ExpiredListenerAddress {
-        /// The listner ID.
-        listener_id: Id,
-        /// The address it is no longer listening on.
+        /// The address that is no longer being listening on.
         listen_addr: Multiaddr
     },
     /// A [`NetworkBehaviour`] event occurred.
@@ -298,21 +294,15 @@ where TBehaviour: NetworkBehaviour,
                     let handler = self.behaviour.new_handler();
                     incoming.accept(handler.into_node_handler_builder());
                 },
-                Async::Ready(RawSwarmEvent::NewListenerAddress { listener_id, listen_addr }) => {
+                Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr }) => {
                     if self.listened_addrs.iter().all(|a| a != &listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
-                    return Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress {
-                        listener_id,
-                        listen_addr
-                    })))
+                    return Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr })))
                 }
-                Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listener_id, listen_addr }) => {
+                Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr }) => {
                     self.listened_addrs.retain(|a| a != &listen_addr);
-                    return Ok(Async::Ready(Some(SwarmEvent::ExpiredListenerAddress {
-                        listener_id,
-                        listen_addr
-                    })))
+                    return Ok(Async::Ready(Some(SwarmEvent::ExpiredListenerAddress { listen_addr })))
                 }
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},

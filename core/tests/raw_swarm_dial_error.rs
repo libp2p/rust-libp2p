@@ -188,14 +188,18 @@ fn dial_self() {
         RawSwarm::new(transport, local_public_key.into())
     };
 
-    let listener = swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+    swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let address =
-        if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
-            listen_addr
-        } else {
-            panic!("Was expecting the listen address to be reported")
-        };
+    let (address, mut swarm) =
+        future::lazy(move || {
+            if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
+                Ok::<_, void::Void>((listen_addr, swarm))
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            }
+        })
+        .wait()
+        .unwrap();
 
     swarm.dial(address.clone(), TestHandler::default().into_node_handler_builder()).unwrap();
 
@@ -216,17 +220,11 @@ fn dial_self() {
                         return Ok(Async::Ready(()));
                     }
                 },
-                Async::Ready(RawSwarmEvent::NewListenerAddress { listener_id, listen_addr }) => {
-                    assert_eq!(listener, listener_id);
-                    assert_eq!(address, listen_addr);
-                },
                 Async::Ready(RawSwarmEvent::IncomingConnectionError {
-                    listener_id,
                     listen_addr,
                     send_back_addr: _,
                     error: IncomingError::FoundLocalPeerId
                 }) => {
-                    assert_eq!(listener, listener_id);
                     assert_eq!(address, listen_addr);
                     assert!(!got_inc_err);
                     got_inc_err = true;
@@ -236,7 +234,6 @@ fn dial_self() {
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
                     assert_eq!(*inc.listen_addr(), address);
-                    assert_eq!(inc.listener_id(), listener);
                     inc.accept(TestHandler::default().into_node_handler_builder());
                 },
                 Async::Ready(ev) => unreachable!("{:?}", ev),

@@ -79,8 +79,9 @@ fn basic_find_node() {
 
     // Connect second to first.
     {
+        let swarm_event = swarms[0].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -127,8 +128,9 @@ fn direct_query() {
 
     // Connect second to first.
     {
+        let swarm_event = swarms[0].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -139,8 +141,9 @@ fn direct_query() {
 
     // Connect third to second.
     {
+        let swarm_event = swarms[1].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[1].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -190,8 +193,9 @@ fn indirect_query() {
 
     // Connect second to first.
     {
+        let swarm_event = swarms[0].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -202,8 +206,9 @@ fn indirect_query() {
 
     // Connect third to second.
     {
+        let swarm_event = swarms[1].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[1].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -214,8 +219,9 @@ fn indirect_query() {
 
     // Connect fourth to third.
     {
+        let swarm_event = swarms[2].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[2].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -313,8 +319,9 @@ fn unresponsive_not_returned_indirect() {
 
     // Connect second to first.
     {
+        let swarm_event = swarms[0].by_ref().wait().next().expect("no error").expect("event");
         let listen_addr =
-            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+            if let SwarmEvent::NewListenerAddress { listen_addr, .. } = swarm_event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")

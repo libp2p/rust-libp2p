@@ -41,15 +41,6 @@ fn query_transport() {
 }
 
 #[test]
-fn starts_listening() {
-    let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
-    let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-    assert!(raw_swarm.listen_on(addr).is_ok());
-    let listeners = raw_swarm.listeners().collect::<Vec<_>>();
-    assert_eq!(listeners.len(), 1);
-}
-
-#[test]
 fn local_node_peer() {
     let peer_id = PeerId::random();
     let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), peer_id.clone());

@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::{InboundUpgrade, OutboundUpgrade, Endpoint};
+use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, fmt};
@@ -158,7 +158,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint) -> O + Clone
+        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
     {
         map::Map::new(self, map)
     }
@@ -214,7 +214,7 @@ pub trait Transport {
     fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, Endpoint) -> F + Clone,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
         F: IntoFuture<Item = O>
     {
         and_then::AndThen::new(self, upgrade)

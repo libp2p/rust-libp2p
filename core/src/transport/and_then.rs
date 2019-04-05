@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    Endpoint,
+    nodes::raw_swarm::ConnectedPoint,
     either::EitherError,
     transport::{Transport, TransportError, ListenerEvent}
 };
@@ -40,7 +40,7 @@ impl<T, C> AndThen<T, C> {
 impl<T, C, F, O> Transport for AndThen<T, C>
 where
     T: Transport,
-    C: FnOnce(T::Output, Endpoint) -> F + Clone,
+    C: FnOnce(T::Output, ConnectedPoint) -> F + Clone,
     F: IntoFuture<Item = O>,
     F::Error: error::Error,
 {
@@ -64,7 +64,7 @@ where
         let dialed_fut = self.transport.dial(addr.clone()).map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
             inner: Either::A(dialed_fut),
-            args: Some((self.fun, Endpoint::Dialer))
+            args: Some((self.fun, ConnectedPoint::Dialer { address: addr }))
         };
         Ok(future)
     }
@@ -87,7 +87,7 @@ impl<TListener, TMap, TTransOut, TMapOut, TListUpgr, TTransErr> Stream for AndTh
 where
     TListener: Stream<Item = ListenerEvent<TListUpgr>, Error = TTransErr>,
     TListUpgr: Future<Item = TTransOut, Error = TTransErr>,
-    TMap: FnOnce(TTransOut, Endpoint) -> TMapOut + Clone,
+    TMap: FnOnce(TTransOut, ConnectedPoint) -> TMapOut + Clone,
     TMapOut: IntoFuture
 {
     type Item = ListenerEvent<AndThenFuture<TListUpgr, TMap, TMapOut::Future>>;
@@ -96,12 +96,24 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.stream.poll().map_err(EitherError::A)? {
             Async::Ready(Some(event)) => {
-                let event = event.map(move |future| {
-                    AndThenFuture {
-                        inner: Either::A(future),
-                        args: Some((self.fun.clone(), Endpoint::Listener))
+                let event = match event {
+                    ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
+                        let point = ConnectedPoint::Listener {
+                            listen_addr: listen_addr.clone(),
+                            send_back_addr: remote_addr.clone()
+                        };
+                        ListenerEvent::Upgrade {
+                            upgrade: AndThenFuture {
+                                inner: Either::A(upgrade),
+                                args: Some((self.fun.clone(), point))
+                            },
+                            listen_addr,
+                            remote_addr
+                        }
                     }
-                });
+                    ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
+                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+                };
                 Ok(Async::Ready(Some(event)))
             }
             Async::Ready(None) => Ok(Async::Ready(None)),
@@ -116,13 +128,13 @@ where
 #[derive(Debug)]
 pub struct AndThenFuture<TFut, TMap, TMapOut> {
     inner: Either<TFut, TMapOut>,
-    args: Option<(TMap, Endpoint)>
+    args: Option<(TMap, ConnectedPoint)>
 }
 
 impl<TFut, TMap, TMapOut> Future for AndThenFuture<TFut, TMap, TMapOut::Future>
 where
     TFut: Future,
-    TMap: FnOnce(TFut::Item, Endpoint) -> TMapOut,
+    TMap: FnOnce(TFut::Item, ConnectedPoint) -> TMapOut,
     TMapOut: IntoFuture
 {
     type Item = <TMapOut::Future as Future>::Item;
