@@ -108,22 +108,35 @@ pub trait ProtocolsHandler {
     /// and will be passed back in `inject_substream` or `inject_outbound_closed`.
     type OutboundOpenInfo;
 
-    /// Produces a `ConnectionUpgrade` for the protocol or protocols to accept when listening.
+    /// The timeout for protocol negotiation on inbound substreams.
+    fn inbound_timeout(&self) -> Duration {
+        Duration::from_secs(10)
+    }
+
+    /// The timeout for protocol negotiation on outbound substreams.
+    fn outbound_timeout(&self) -> Duration {
+        Duration::from_secs(10)
+    }
+
+    /// The [`InboundUpgrade`] to apply on inbound substreams to negotiate the
+    /// desired protocols.
     ///
-    /// > **Note**: You should always accept all the protocols you support, even if in a specific
-    /// >           context you wouldn't accept one in particular (eg. only allow one substream at
-    /// >           a time for a given protocol). The reason is that remotes are allowed to put the
-    /// >           list of supported protocols in a cache in order to avoid spurious queries.
+    /// > **Note**: The returned `InboundUpgrade` should always accept all the generally
+    /// >           supported protocols, even if in a specific context a particular one is
+    /// >           not supported, (eg. when only allowing one substream at a time for a protocol).
+    /// >           This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> Self::InboundProtocol;
 
-    /// Injects a fully-negotiated substream in the handler.
-    ///
-    /// This method is called when a substream has been successfully opened and negotiated.
+    /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
     );
 
+    /// Injects the output of a successful upgrade on a new outbound substream.
+    ///
+    /// The second argument is the information that was previously passed to
+    /// [`ProtocolsHandlerEvent::OutboundSubstreamRequest`].
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
@@ -134,28 +147,41 @@ pub trait ProtocolsHandler {
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>);
+    fn inject_dial_upgrade_error(
+        &mut self,
+        info: Self::OutboundOpenInfo,
+        error: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error
+        >
+    );
 
     /// Returns until when the connection should be kept alive.
     ///
-    /// If returns `Until`, that indicates that this connection may be closed and this handler
-    /// destroyed after the returned `Instant` has elapsed if they think that they will no longer
-    /// need the connection in the future. Returning `Forever` is equivalent to "infinite".
-    /// Returning `Now` is equivalent to `Until(Instant::now())`.
+    /// This method is called by the `Swarm` after each invocation of
+    /// [`ProtocolsHandler::poll`] to determine if the connection and the associated
+    /// `ProtocolsHandler`s should be kept alive and if so, for how long.
     ///
-    /// On the other hand, the return value is only an indication and doesn't mean that the user
-    /// will not close the connection.
+    /// Returning [`KeepAlive::Now`] indicates that the connection should be
+    /// closed and this handler destroyed immediately.
     ///
-    /// When multiple `ProtocolsHandler` are combined together, the largest `KeepAlive` should be
-    /// used.
+    /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
+    /// and this handler destroyed after the specified `Instant`.
     ///
-    /// The result of this method should be checked every time `poll()` is invoked.
+    /// Returning [`KeepAlive::Forever`] indicates that the connection should
+    /// always be kept alive. The connection will only be closed if
+    /// [`ProtocolsHandler::poll`] returns an error.
+    ///
+    /// When multiple `ProtocolsHandler`s are combined, the largest `KeepAlive`
+    /// takes precedence.
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
+    fn poll(&mut self) -> Poll<
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error
+    >;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]
@@ -230,7 +256,8 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
 impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 {
-    /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a `TOutboundOpenInfo` to something else.
+    /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a
+    /// `TOutboundOpenInfo` to something else.
     #[inline]
     pub fn map_outbound_open_info<F, I>(
         self,
@@ -250,7 +277,8 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         }
     }
 
-    /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`) to something else.
+    /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`)
+    /// to something else.
     #[inline]
     pub fn map_protocol<F, I>(
         self,
@@ -356,7 +384,7 @@ pub trait IntoProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
+        NodeHandlerWrapperBuilder::new(self)
     }
 }
 

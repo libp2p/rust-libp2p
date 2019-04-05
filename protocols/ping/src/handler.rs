@@ -21,49 +21,140 @@
 use crate::protocol;
 use futures::prelude::*;
 use libp2p_core::ProtocolsHandlerEvent;
-use libp2p_core::protocols_handler::{KeepAlive, OneShotHandler, ProtocolsHandler, ProtocolsHandlerUpgrErr};
-use std::{io, time::Duration, time::Instant};
+use libp2p_core::protocols_handler::{
+    KeepAlive,
+    ProtocolsHandler,
+    ProtocolsHandlerUpgrErr,
+};
+use std::{io, num::NonZeroU32, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Delay;
+use void::Void;
 
-/// Protocol handler that handles pinging the remote at a regular period and answering ping
-/// queries.
+/// The configuration for outbound pings.
+#[derive(Clone)]
+pub struct PingConfig {
+    /// The timeout of an outbound ping.
+    timeout: Duration,
+    /// The duration between the last successful outbound or inbound ping
+    /// and the next outbound ping.
+    interval: Duration,
+    /// The maximum number of failed outbound pings before the associated
+    /// connection is deemed unhealthy, indicating to the `Swarm` that it
+    /// should be closed.
+    max_timeouts: NonZeroU32
+}
+
+impl PingConfig {
+    /// Creates a new `PingConfig` with the following default settings:
+    ///
+    ///   * [`PingConfig::with_interval`] 20s
+    ///   * [`PingConfig::with_timeout`] 10s
+    ///   * [`PingConfig::with_max_timeouts`] 3
+    ///
+    /// These settings have the following effect:
+    ///
+    ///   * A ping is sent every 20 seconds on a healthy connection
+    ///     (if no ping is received meanwhile).
+    ///   * Every ping sent must yield a response within 10 seconds.
+    ///   * If 3 subsequent outbound pings fail and no ping is received, i.e.
+    ///     no ping is successfully sent or received within 30 seconds, the
+    ///     connection is deemed unhealthy.
+    pub fn new() -> Self {
+        Self {
+            timeout: Duration::from_secs(10),
+            interval: Duration::from_secs(20),
+            max_timeouts: NonZeroU32::new(3).expect("3 != 0")
+        }
+    }
+
+    /// Sets the ping timeout.
+    pub fn with_timeout(mut self, d: Duration) -> Self {
+        self.timeout = d;
+        self
+    }
+
+    /// Sets the ping interval.
+    pub fn with_interval(mut self, d: Duration) -> Self {
+        self.interval = d;
+        self
+    }
+
+    /// Sets the number of successive ping timeouts upon which the remote
+    /// peer is considered unreachable and the connection closed.
+    ///
+    /// > **Note**: Successful inbound pings from the remote peer can keep
+    /// >           the connection alive, even if outbound pings fail. I.e.
+    /// >           the connection is closed after `ping_timeout * max_timeouts`
+    /// >           only if in addition to failing outbound pings no ping from
+    /// >           the remote is received within that time window.
+    pub fn with_max_timeouts(mut self, n: NonZeroU32) -> Self {
+        self.max_timeouts = n;
+        self
+    }
+}
+
+/// The result of an inbound or outbound ping.
+pub type PingResult = Result<PingSuccess, PingFailure>;
+
+/// The successful result of processing an inbound or outbound ping.
+#[derive(Debug)]
+pub enum PingSuccess {
+    /// Received a ping and sent back a pong.
+    Pong,
+    /// Sent a ping and received back a pong.
+    ///
+    /// Includes the round-trip time.
+    Ping { rtt: Duration },
+}
+
+/// An outbound ping failure.
+#[derive(Debug)]
+pub enum PingFailure {
+    /// The ping timed out, i.e. no response was received within the
+    /// configured ping timeout.
+    Timeout,
+    /// The ping failed for reasons other than a timeout.
+    Other { error: Box<dyn std::error::Error + Send + 'static> }
+}
+
+/// Protocol handler that handles pinging the remote at a regular period
+/// and answering ping queries.
 ///
 /// If the remote doesn't respond, produces an error that closes the connection.
-pub struct PingHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    /// The actual handler which we delegate the substreams handling to.
-    inner: OneShotHandler<TSubstream, protocol::Ping, protocol::Ping, protocol::PingOutput>,
-    /// After a ping succeeds, how long before the next ping.
-    delay_to_next_ping: Duration,
-    /// When the next ping triggers.
+pub struct PingHandler<TSubstream> {
+    /// Configuration options.
+    config: PingConfig,
+    /// The timer for when to send the next ping.
     next_ping: Delay,
+    /// The connection timeout.
+    connection_timeout: Duration,
+    /// The current keep-alive, i.e. until when the connection that
+    /// the handler operates on should be kept alive.
+    connection_keepalive: KeepAlive,
+    /// The last result from an inbound or outbound ping.
+    last_result: Option<PingResult>,
+    _marker: std::marker::PhantomData<TSubstream>
 }
 
 impl<TSubstream> PingHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Builds a new `PingHandler`.
-    pub fn new() -> Self {
-        // TODO: allow customizing timeout; depends on https://github.com/libp2p/rust-libp2p/issues/864
+    /// Builds a new `PingHandler` with the given configuration.
+    pub fn new(config: PingConfig) -> Self {
+        let now = Instant::now();
+        let connection_timeout = config.timeout * config.max_timeouts.get();
+        let connection_keepalive = KeepAlive::Until(now + connection_timeout);
+        let next_ping = Delay::new(now);
         PingHandler {
-            inner: OneShotHandler::default(),
-            next_ping: Delay::new(Instant::now()),
-            delay_to_next_ping: Duration::from_secs(15),
+            config,
+            next_ping,
+            connection_timeout,
+            connection_keepalive,
+            last_result: None,
+            _marker: std::marker::PhantomData
         }
-    }
-}
-
-impl<TSubstream> Default for PingHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    #[inline]
-    fn default() -> Self {
-        PingHandler::new()
     }
 }
 
@@ -71,57 +162,66 @@ impl<TSubstream> ProtocolsHandler for PingHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type InEvent = void::Void;
-    type OutEvent = protocol::PingOutput;
+    type InEvent = Void;
+    type OutEvent = PingResult;
     type Error = ProtocolsHandlerUpgrErr<io::Error>;
     type Substream = TSubstream;
     type InboundProtocol = protocol::Ping;
     type OutboundProtocol = protocol::Ping;
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        self.inner.listen_protocol()
+    /// The outbound ping timeout, as specified in the [`PingConfig`].
+    fn outbound_timeout(&self) -> Duration {
+        self.config.timeout
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, protocol: ()) {
-        self.inner.inject_fully_negotiated_inbound(protocol)
+    fn listen_protocol(&self) -> protocol::Ping {
+        protocol::Ping
     }
 
-    fn inject_fully_negotiated_outbound(&mut self, duration: Duration, info: Self::OutboundOpenInfo) {
-        self.inner.inject_fully_negotiated_outbound(duration, info)
+    fn inject_fully_negotiated_inbound(&mut self, _: ()) {
+        // A ping from a remote peer has been answered.
+        self.last_result = Some(Ok(PingSuccess::Pong));
     }
 
-    fn inject_event(&mut self, event: void::Void) {
-        void::unreachable(event)
+    fn inject_fully_negotiated_outbound(&mut self, rtt: Duration, _info: ()) {
+        // A ping initiated by the local peer was answered by the remote.
+        self.last_result = Some(Ok(PingSuccess::Ping { rtt }));
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<io::Error>) {
-        self.inner.inject_dial_upgrade_error(info, error)
+    fn inject_event(&mut self, _: Void) {}
+
+    fn inject_dial_upgrade_error(&mut self, _info: (), error: Self::Error) {
+        self.last_result = Some(Err(match error {
+            ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
+            e => PingFailure::Other { error: Box::new(e) }
+        }))
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.inner.connection_keep_alive()
+        self.connection_keepalive
     }
 
-    fn poll(
-        &mut self,
-    ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
-    > {
+    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
+        if let Some(res) = self.last_result.take() {
+            if res.is_ok() {
+                let now = Instant::now();
+                self.connection_keepalive = KeepAlive::Until(now + self.connection_timeout);
+                self.next_ping.reset(now + self.config.interval);
+            }
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(res)))
+        }
+
         match self.next_ping.poll() {
             Ok(Async::Ready(())) => {
-                self.inner.inject_event(protocol::Ping::default());
-                self.next_ping.reset(Instant::now() + Duration::from_secs(3600));
+                self.next_ping.reset(Instant::now() + self.config.timeout);
+                Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade: protocol::Ping,
+                    info: (),
+                }))
             },
-            Ok(Async::NotReady) => (),
-            Err(_) => (),
-        };
-
-        let event = self.inner.poll();
-        if let Ok(Async::Ready(ProtocolsHandlerEvent::Custom(protocol::PingOutput::Ping(_)))) = event {
-            self.next_ping.reset(Instant::now() + self.delay_to_next_ping);
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(_) => Err(ProtocolsHandlerUpgrErr::Timer)
         }
-        event
     }
 }
