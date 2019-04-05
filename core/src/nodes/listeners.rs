@@ -22,7 +22,8 @@
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
 use futures::prelude::*;
-use std::{collections::{HashSet, VecDeque}, fmt};
+use smallvec::SmallVec;
+use std::{collections::VecDeque, fmt};
 use void::Void;
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
@@ -94,7 +95,7 @@ where
     /// The object that actually listens.
     listener: TTrans::Listener,
     /// Addresses it is listening on.
-    addresses: HashSet<Multiaddr>
+    addresses: SmallVec<[Multiaddr; 4]>
 }
 
 /// Event that can happen on the `ListenersStream`.
@@ -161,7 +162,7 @@ where
         TTrans: Clone,
     {
         let listener = self.transport.clone().listen_on(addr)?;
-        self.listeners.push_back(Listener { listener, addresses: HashSet::new() });
+        self.listeners.push_back(Listener { listener, addresses: SmallVec::new() });
         Ok(())
     }
 
@@ -196,12 +197,14 @@ where
                     })
                 }
                 Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) => {
-                    listener.addresses.insert(a.clone());
+                    if !listener.addresses.contains(&a) {
+                        listener.addresses.push(a.clone());
+                    }
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::NewAddress { listen_addr: a })
                 }
                 Ok(Async::Ready(Some(ListenerEvent::AddressExpired(a)))) => {
-                    listener.addresses.remove(&a);
+                    listener.addresses.retain(|x| x != &a);
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::AddressExpired { listen_addr: a })
                 }
