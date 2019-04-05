@@ -76,7 +76,7 @@ pub enum CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerE
     ///
     /// Can only happen after a node has been successfully reached.
     NodeClosed {
-        /// Identifier of the node.
+        /// Information about the connection.
         conn_info: TConnInfo,
         /// The error that happened.
         error: HandledNodeError<THandlerErr>,
@@ -369,7 +369,7 @@ where
     ///
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
-    pub fn peer_mut(&mut self, id: &TConnInfo::PeerId) -> Option<PeerMut<'_, TInEvent, TUserData, TConnInfo, TPeerId>> {
+    pub fn peer_mut(&mut self, id: &TPeerId) -> Option<PeerMut<'_, TInEvent, TUserData, TConnInfo, TPeerId>> {
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
@@ -388,8 +388,8 @@ where
     ///
     /// This will return true only after a `NodeReached` event has been produced by `poll()`.
     #[inline]
-    pub fn has_connection(&self, id: &TConnInfo) -> bool {
-        self.nodes.contains_key(id.peer_id())
+    pub fn has_connection(&self, id: &TPeerId) -> bool {
+        self.nodes.contains_key(id)
     }
 
     /// Returns a list of all the active connections.

@@ -855,7 +855,7 @@ where
         self.reach_attempts
             .out_reach_attempts
             .keys()
-            .filter(move |p| !self.active_nodes.has_connection(&p))
+            .filter(move |p| !self.active_nodes.has_connection(p))
     }
 
     /// Returns the list of addresses we're currently dialing without knowing the `PeerId` of.
