@@ -83,7 +83,7 @@ pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use self::identity::PublicKey;
-pub use self::swarm::{Swarm, SwarmEvent};
+pub use self::swarm::Swarm;
 pub use self::transport::Transport;
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
 

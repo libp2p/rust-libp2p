@@ -195,23 +195,6 @@ where TBehaviour: NetworkBehaviour,
     }
 }
 
-/// Event returned by [`Swarm::poll`].
-#[derive(Debug)]
-pub enum SwarmEvent<T> {
-    /// A listener reports a new [`Multiaddr`] it is listening on.
-    NewListenerAddress {
-        /// The new address that is being listening on.
-        listen_addr: Multiaddr
-    },
-    /// A listener reports it stopped listening on a [`Multiaddr`].
-    ExpiredListenerAddress {
-        /// The address that is no longer being listening on.
-        listen_addr: Multiaddr
-    },
-    /// A [`NetworkBehaviour`] event occurred.
-    Behaviour(T)
-}
-
 impl<TTransport, TBehaviour, TMuxer> Stream for Swarm<TTransport, TBehaviour>
 where TBehaviour: NetworkBehaviour,
       TMuxer: StreamMuxer + Send + Sync + 'static,
@@ -242,7 +225,7 @@ where TBehaviour: NetworkBehaviour,
       <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
       <NodeHandlerWrapper<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
 {
-    type Item = SwarmEvent<TBehaviour::OutEvent>;
+    type Item = TBehaviour::OutEvent;
     type Error = io::Error;
 
     #[inline]
@@ -272,11 +255,9 @@ where TBehaviour: NetworkBehaviour,
                     if !self.listened_addrs.contains(&listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
-                    return Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr })))
                 }
                 Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr }) => {
-                    self.listened_addrs.retain(|a| a != &listen_addr);
-                    return Ok(Async::Ready(Some(SwarmEvent::ExpiredListenerAddress { listen_addr })))
+                    self.listened_addrs.retain(|a| a != &listen_addr)
                 }
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
@@ -307,7 +288,7 @@ where TBehaviour: NetworkBehaviour,
                 Async::NotReady if raw_swarm_not_ready => return Ok(Async::NotReady),
                 Async::NotReady => (),
                 Async::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
-                    return Ok(Async::Ready(Some(SwarmEvent::Behaviour(event))))
+                    return Ok(Async::Ready(Some(event)))
                 },
                 Async::Ready(NetworkBehaviourAction::DialAddress { address }) => {
                     let _ = Swarm::dial_addr(self, address);
