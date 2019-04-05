@@ -22,6 +22,7 @@ use crate::{
     Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
+        collection::ConnectionInfo,
         handled_node::NodeHandler,
         node::Substream,
         raw_swarm::{self, RawSwarm, RawSwarmEvent}
@@ -55,6 +56,8 @@ where
         TOutEvent,
         NodeHandlerWrapperBuilder<THandler>,
         NodeHandlerWrapperError<THandlerErr>,
+        PeerId,
+        PeerId,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
@@ -256,17 +259,17 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
             match self.raw_swarm.poll() {
                 Async::NotReady => raw_swarm_not_ready = true,
-                Async::Ready(RawSwarmEvent::NodeEvent { peer_id, event }) => {
-                    self.behaviour.inject_node_event(peer_id, event);
+                Async::Ready(RawSwarmEvent::NodeEvent { conn_info, event }) => {
+                    self.behaviour.inject_node_event(conn_info.peer_id().clone(), event);
                 },
-                Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
-                    self.behaviour.inject_connected(peer_id, endpoint);
+                Async::Ready(RawSwarmEvent::Connected { conn_info, endpoint }) => {
+                    self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
                 },
-                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint, .. }) => {
-                    self.behaviour.inject_disconnected(&peer_id, endpoint);
+                Async::Ready(RawSwarmEvent::NodeClosed { conn_info, endpoint, .. }) => {
+                    self.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
                 },
-                Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
-                    self.behaviour.inject_replaced(peer_id, closed_endpoint, endpoint);
+                Async::Ready(RawSwarmEvent::Replaced { new_info, closed_endpoint, endpoint, .. }) => {
+                    self.behaviour.inject_replaced(new_info.peer_id().clone(), closed_endpoint, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
                     let handler = self.behaviour.new_handler();

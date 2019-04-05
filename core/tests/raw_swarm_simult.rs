@@ -184,13 +184,13 @@ fn raw_swarm_simultaneous_connect() {
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
-                            Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => {
-                                assert_eq!(peer_id, *swarm2.local_peer_id());
+                            Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => {
+                                assert_eq!(conn_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 1);
                                 swarm1_step = 2;
                             },
-                            Async::Ready(RawSwarmEvent::Replaced { peer_id, .. }) => {
-                                assert_eq!(peer_id, *swarm2.local_peer_id());
+                            Async::Ready(RawSwarmEvent::Replaced { new_info, .. }) => {
+                                assert_eq!(new_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
@@ -208,13 +208,13 @@ fn raw_swarm_simultaneous_connect() {
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
-                            Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => {
-                                assert_eq!(peer_id, *swarm1.local_peer_id());
+                            Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => {
+                                assert_eq!(conn_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 1);
                                 swarm2_step = 2;
                             },
-                            Async::Ready(RawSwarmEvent::Replaced { peer_id, .. }) => {
-                                assert_eq!(peer_id, *swarm1.local_peer_id());
+                            Async::Ready(RawSwarmEvent::Replaced { new_info, .. }) => {
+                                assert_eq!(new_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
