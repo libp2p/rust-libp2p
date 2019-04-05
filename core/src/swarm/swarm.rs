@@ -269,7 +269,7 @@ where TBehaviour: NetworkBehaviour,
                     incoming.accept(handler.into_node_handler_builder());
                 },
                 Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr }) => {
-                    if self.listened_addrs.iter().all(|a| a != &listen_addr) {
+                    if !self.listened_addrs.contains(&listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
                     return Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr })))
