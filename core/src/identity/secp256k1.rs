@@ -92,6 +92,7 @@ impl SecretKey {
         let sk_bytes = sk.as_mut();
         let secret = secp256k1::SecretKey::parse_slice(&*sk_bytes)
             .map_err(|_| DecodingError::new("failed to parse secp256k1 secret key"))?;
+        sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
 
@@ -151,6 +152,21 @@ impl PublicKey {
         secp256k1::PublicKey::parse_slice(k, Some(secp256k1::PublicKeyFormat::Compressed))
             .map_err(|_| DecodingError::new("failed to parse secp256k1 public key"))
             .map(PublicKey)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn secp256k1_secret_from_bytes() {
+        let sk1 = SecretKey::generate();
+        let mut sk_bytes = [0; 32];
+        sk_bytes.copy_from_slice(&sk1.0.serialize()[..]);
+        let sk2 = SecretKey::from_bytes(&mut sk_bytes).unwrap();
+        assert_eq!(sk1.0.serialize(), sk2.0.serialize());
+        assert_eq!(sk_bytes, [0; 32]);
     }
 }
 

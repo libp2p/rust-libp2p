@@ -1,3 +1,16 @@
+# Version 0.6.0 (2019-03-29)
+
+- Replaced `NetworkBehaviour::inject_dial_failure` with `inject_dial_failure` and
+  `inject_addr_reach_failure`. The former is called when we have finished trying to dial a node
+  without success, while the latter is called when we have failed to reach a specific address.
+- Fixed Kademlia storing a different hash than the reference implementation.
+- Lots of bugfixes in Kademlia.
+- Modified the `InboundUpgrade` and `OutboundUpgrade` trait to take a `Negotiated<TSocket>` instead
+  of `TSocket`.
+- `PollParameters::external_addresses` now returns `Multiaddr`es as reference instead of by value.
+- Added `Swarm::external_addresses`.
+- Added a `core::swarm::toggle::Toggle` that allows having a disabled `NetworkBehaviour`.
+
 # Version 0.5.0 (2019-03-13)
 
 - Moved the `SecioKeypair` struct in `core/identity` and renamed it to `Keypair`.
