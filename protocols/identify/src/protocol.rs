@@ -64,7 +64,7 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
 
         let listen_addrs = info.listen_addrs
             .into_iter()
-            .map(|addr| addr.into_bytes())
+            .map(|addr| addr.to_vec())
             .collect();
 
         let pubkey_bytes = info.public_key.into_protobuf_encoding();
@@ -74,7 +74,7 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
         message.set_protocolVersion(info.protocol_version);
         message.set_publicKey(pubkey_bytes);
         message.set_listenAddrs(listen_addrs);
-        message.set_observedAddr(observed_addr.to_bytes());
+        message.set_observedAddr(observed_addr.to_vec());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
 
         let bytes = message
@@ -234,7 +234,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
             // an `IoError`.
             fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-                Multiaddr::from_bytes(bytes)
+                Multiaddr::try_from_vec(bytes)
                     .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
             }
 

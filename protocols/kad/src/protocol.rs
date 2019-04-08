@@ -103,7 +103,7 @@ impl KadPeer {
 
         let mut addrs = Vec::with_capacity(peer.get_addrs().len());
         for addr in peer.take_addrs().into_iter() {
-            let as_ma = Multiaddr::from_bytes(addr)
+            let as_ma = Multiaddr::try_from_vec(addr)
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
             addrs.push(as_ma);
         }
@@ -124,7 +124,7 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
         let mut out = protobuf_structs::dht::Message_Peer::new();
         out.set_id(self.node_id.into_bytes());
         for addr in self.multiaddrs {
-            out.mut_addrs().push(addr.into_bytes());
+            out.mut_addrs().push(addr.to_vec());
         }
         out.set_connection(self.connection_ty.into());
         out
