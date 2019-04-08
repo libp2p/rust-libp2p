@@ -115,6 +115,7 @@ pub fn agree(algorithm: KeyAgreement, key: AgreementPrivateKey, other_public_key
         let other_public_key = {
             // This unsafe is here because the lifetime of `other_public_key` must not outlive the
             // `tmp_view`. This is guaranteed by the fact that we clone this array right below.
+            // See also https://github.com/rustwasm/wasm-bindgen/issues/1303
             let tmp_view = unsafe { js_sys::Uint8Array::view(other_public_key) };
             js_sys::Uint8Array::new(tmp_view.as_ref())
         };
