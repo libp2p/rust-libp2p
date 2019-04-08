@@ -75,7 +75,7 @@ where
             .map_err(|(e, _): (io::Error, FramedRead<Negotiated<C>, UviBytes>)| e)
             .and_then(move |(bytes, _)| {
                 if let Some(b) = bytes {
-                    let ma = Multiaddr::from_bytes(b.to_vec())
+                    let ma = Multiaddr::try_from_vec(b.to_vec())
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                     Ok(ma)
                 } else {
@@ -94,7 +94,7 @@ pub struct Sender<C> {
 impl<C: AsyncWrite> Sender<C> {
     /// Send address `a` to remote as the observed address.
     pub fn send_address(self, a: Multiaddr) -> impl Future<Item=(), Error=io::Error> {
-        self.io.send(Bytes::from(a.into_bytes())).map(|_io| ())
+        self.io.send(Bytes::from(a.to_vec())).map(|_io| ())
     }
 }
 
