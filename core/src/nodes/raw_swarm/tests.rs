@@ -68,8 +68,14 @@ fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used
 
     raw_swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
 
-    assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
-    assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
+    let raw_swarm =
+        future::lazy(move || {
+            assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
+            assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
+            Ok::<_, void::Void>(raw_swarm)
+        })
+        .wait()
+        .unwrap();
 
     let natted = raw_swarm
         .nat_traversal(&outside_addr1)

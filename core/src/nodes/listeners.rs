@@ -315,12 +315,14 @@ mod tests {
         let mut listeners = ListenersStream::new(mem_transport);
         listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-        let address =
-            if let Async::Ready(ListenersEvent::NewAddress { listen_addr, .. }) = listeners.poll() {
+        let address = {
+            let event = listeners.by_ref().wait().next().expect("some event").expect("no error");
+            if let ListenersEvent::NewAddress { listen_addr, .. } = event {
                 listen_addr
             } else {
                 panic!("Was expecting the listen address to be reported")
-            };
+            }
+        };
 
         let dial = mem_transport.dial(address.clone()).unwrap();
 
@@ -366,10 +368,10 @@ mod tests {
         let mut ls = ListenersStream::new(t);
         ls.listen_on(tcp4([0, 0, 0, 0], 0)).expect("listen_on");
 
-        assert_matches!(ls.poll(), Async::Ready(ListenersEvent::NewAddress { listen_addr, .. }) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(ListenersEvent::NewAddress { listen_addr, .. })) => {
             assert_eq!(addr1, listen_addr)
         });
-        assert_matches!(ls.poll(), Async::Ready(ListenersEvent::NewAddress { listen_addr, .. }) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(ListenersEvent::NewAddress { listen_addr, .. })) => {
             assert_eq!(addr2, listen_addr)
         })
     }
@@ -423,25 +425,25 @@ mod tests {
         ls.listen_on(tcp4([127, 0, 0, 1], 4321)).expect("listen_on");
         assert_eq!(ls.listeners.len(), 2);
 
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::NewAddress { .. })
         });
 
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::NewAddress { .. })
         });
 
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming { mut upgrade, .. } => {
-                assert_matches!(upgrade.poll().unwrap(), Async::Ready(output) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming { upgrade, .. } => {
+                assert_matches!(upgrade.wait(), Ok(output) => {
                     assert_eq!(output, expected_output)
                 });
             })
         });
 
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming { mut upgrade, .. } => {
-                assert_matches!(upgrade.poll().unwrap(), Async::Ready(output) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming { upgrade, .. } => {
+                assert_matches!(upgrade.wait(), Ok(output) => {
                     assert_eq!(output, expected_output)
                 });
             })
@@ -449,9 +451,9 @@ mod tests {
 
         set_listener_state(&mut ls, 1, ListenerState::Ok(Async::NotReady));
 
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming { mut upgrade, .. } => {
-                assert_matches!(upgrade.poll().unwrap(), Async::Ready(output) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming { upgrade, .. } => {
+                assert_matches!(upgrade.wait(), Ok(output) => {
                     assert_eq!(output, expected_output)
                 });
             })
@@ -465,7 +467,7 @@ mod tests {
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
         set_listener_state(&mut ls, 0, ListenerState::Ok(Async::Ready(None)));
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
         assert_eq!(ls.listeners.len(), 0); // it's gone
@@ -486,7 +488,7 @@ mod tests {
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
         set_listener_state(&mut ls, 0, ListenerState::Error); // simulate an error on the socket
-        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
+        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
         assert_eq!(ls.listeners.len(), 0); // it's gone
