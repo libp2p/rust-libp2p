@@ -78,7 +78,7 @@ fn client_to_server_outbound() {
     let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
     let future = transport
-        .dial(rx.recv().unwrap().clone())
+        .dial(rx.recv().unwrap())
         .unwrap()
         .map_err(|err| panic!("{:?}", err))
         .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
@@ -142,7 +142,7 @@ fn client_to_server_inbound() {
     let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
     let future = transport
-        .dial(rx.recv().unwrap().clone())
+        .dial(rx.recv().unwrap())
         .unwrap()
         .map_err(|err| panic!("{:?}", err))
         .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))

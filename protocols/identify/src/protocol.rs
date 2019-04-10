@@ -335,7 +335,7 @@ mod tests {
 
         let transport = TcpConfig::new();
 
-        let future = transport.dial(rx.recv().unwrap().clone())
+        let future = transport.dial(rx.recv().unwrap())
             .unwrap()
             .and_then(|socket| {
                 apply_outbound(socket, IdentifyProtocolConfig)
