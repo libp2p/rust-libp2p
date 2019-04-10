@@ -356,7 +356,7 @@ pub struct TcpListenStream {
     /// Stream of incoming sockets.
     inner: Result<SleepOnError<Incoming>, Option<io::Error>>,
     /// The port which we use as our listen port in listener event addresses.
-    port:  u16,
+    port: u16,
     /// The set of known addresses.
     addrs: Addresses,
     /// Temporary buffer of listener events.
@@ -390,10 +390,8 @@ impl Stream for TcpListenStream {
             let sock_addr = match sock.peer_addr() {
                 Ok(addr) => addr,
                 Err(err) => {
-                    // If we can't get the address of the newly-opened socket, there's
-                    // nothing we can do except ignore this connection attempt.
                     error!("Failed to get peer address: {:?}", err);
-                    continue
+                    return Err(io::Error::new(io::ErrorKind::Other, err))
                 }
             };
 
@@ -433,18 +431,15 @@ impl Stream for TcpListenStream {
                 }
                 Err(err) => {
                     error!("Failed to get local address of incoming socket: {:?}", err);
-                    continue
+                    return Err(io::Error::new(io::ErrorKind::Other, err))
                 }
             };
 
             let remote_addr = match sock_addr.to_multiaddr() {
                 Ok(addr) => addr,
                 Err(err) => {
-                    // Socket addresses are supposed to be valid `Multiaddr`s.
-                    // If we fail to derive one from the peer address we can onlu
-                    // ignore this connection.
                     error!("Failed to create multiaddr from peer address: {:?}", err);
-                    continue
+                    return Err(io::Error::new(io::ErrorKind::Other, err))
                 }
             };
 
