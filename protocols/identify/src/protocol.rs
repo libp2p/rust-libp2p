@@ -24,7 +24,7 @@ use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink
 use futures::try_ready;
 use libp2p_core::{
     Multiaddr, PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
 };
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
@@ -64,15 +64,17 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
 
         let listen_addrs = info.listen_addrs
             .into_iter()
-            .map(|addr| addr.into_bytes())
+            .map(|addr| addr.to_vec())
             .collect();
+
+        let pubkey_bytes = info.public_key.into_protobuf_encoding();
 
         let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
         message.set_protocolVersion(info.protocol_version);
-        message.set_publicKey(info.public_key.into_protobuf_encoding());
+        message.set_publicKey(pubkey_bytes);
         message.set_listenAddrs(listen_addrs);
-        message.set_observedAddr(observed_addr.to_bytes());
+        message.set_observedAddr(observed_addr.to_vec());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
 
         let bytes = message
@@ -148,11 +150,11 @@ impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = IdentifySender<C>;
+    type Output = IdentifySender<Negotiated<C>>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -166,9 +168,9 @@ where
 {
     type Output = RemoteInfo;
     type Error = IoError;
-    type Future = IdentifyOutboundFuture<C>;
+    type Future = IdentifyOutboundFuture<Negotiated<C>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
             shutdown: false,
@@ -232,7 +234,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
             // an `IoError`.
             fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-                Multiaddr::from_bytes(bytes)
+                Multiaddr::try_from_vec(bytes)
                     .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
             }
 
@@ -244,9 +246,12 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 addrs
             };
 
+            let public_key = PublicKey::from_protobuf_encoding(msg.get_publicKey())
+                .map_err(|e| IoError::new(IoErrorKind::InvalidData, e))?;
+
             let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
             let info = IdentifyInfo {
-                public_key: PublicKey::from_protobuf_encoding(msg.get_publicKey())?,
+                public_key,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
                 listen_addrs,
@@ -266,26 +271,42 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
-    use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
+    use libp2p_core::{
+        identity,
+        Transport,
+        transport::ListenerEvent,
+        upgrade::{apply_outbound, apply_inbound}
+    };
     use std::{io, sync::mpsc, thread};
 
     #[test]
     fn correct_transfer() {
         // We open a server and a client, send info from the server to the client, and check that
         // they were successfully received.
+        let send_pubkey = identity::Keypair::generate_ed25519().public();
+        let recv_pubkey = send_pubkey.clone();
 
         let (tx, rx) = mpsc::channel();
 
         let bg_thread = thread::spawn(move || {
             let transport = TcpConfig::new();
 
-            let (listener, addr) = transport
+            let mut listener = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
+
+            let addr = listener.by_ref().wait()
+                .next()
+                .expect("some event")
+                .expect("no error")
+                .into_new_address()
+                .expect("listen address");
+
 
             tx.send(addr).unwrap();
 
             let future = listener
+                .filter_map(ListenerEvent::into_upgrade)
                 .into_future()
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)
@@ -296,7 +317,7 @@ mod tests {
                 .and_then(|sender| {
                     sender.send(
                         IdentifyInfo {
-                            public_key: PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]),
+                            public_key: send_pubkey,
                             protocol_version: "proto_version".to_owned(),
                             agent_version: "agent_version".to_owned(),
                             listen_addrs: vec![
@@ -314,7 +335,7 @@ mod tests {
 
         let transport = TcpConfig::new();
 
-        let future = transport.dial(rx.recv().unwrap())
+        let future = transport.dial(rx.recv().unwrap().clone())
             .unwrap()
             .and_then(|socket| {
                 apply_outbound(socket, IdentifyProtocolConfig)
@@ -322,7 +343,7 @@ mod tests {
             })
             .and_then(|RemoteInfo { info, observed_addr, .. }| {
                 assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
-                assert_eq!(info.public_key, PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]));
+                assert_eq!(info.public_key, recv_pubkey);
                 assert_eq!(info.protocol_version, "proto_version");
                 assert_eq!(info.agent_version, "agent_version");
                 assert_eq!(info.listen_addrs,

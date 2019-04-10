@@ -29,7 +29,7 @@
 use bytes::BytesMut;
 use crate::protobuf_structs;
 use futures::{future, sink, stream, Sink, Stream};
-use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo, upgrade::Negotiated};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -103,7 +103,7 @@ impl KadPeer {
 
         let mut addrs = Vec::with_capacity(peer.get_addrs().len());
         for addr in peer.take_addrs().into_iter() {
-            let as_ma = Multiaddr::from_bytes(addr)
+            let as_ma = Multiaddr::try_from_vec(addr)
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
             addrs.push(as_ma);
         }
@@ -124,7 +124,7 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
         let mut out = protobuf_structs::dht::Message_Peer::new();
         out.set_id(self.node_id.into_bytes());
         for addr in self.multiaddrs {
-            out.mut_addrs().push(addr.into_bytes());
+            out.mut_addrs().push(addr.to_vec());
         }
         out.set_connection(self.connection_ty.into());
         out
@@ -153,12 +153,12 @@ impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = KadInStreamSink<C>;
+    type Output = KadInStreamSink<Negotiated<C>>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
 
     #[inline]
-    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, incoming: Negotiated<C>, _: Self::Info) -> Self::Future {
         let mut codec = codec::UviBytes::default();
         codec.set_max_len(4096);
 
@@ -182,12 +182,12 @@ impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = KadOutStreamSink<C>;
+    type Output = KadOutStreamSink<Negotiated<C>>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
 
     #[inline]
-    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, incoming: Negotiated<C>, _: Self::Info) -> Self::Future {
         let mut codec = codec::UviBytes::default();
         codec.set_max_len(4096);
 

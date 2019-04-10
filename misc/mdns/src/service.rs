@@ -53,10 +53,11 @@ pub use dns::MdnsResponseError;
 ///
 /// ```rust
 /// # use futures::prelude::*;
+/// # use libp2p_core::{identity, PeerId};
 /// # use libp2p_mdns::service::{MdnsService, MdnsPacket};
 /// # use std::{io, time::Duration};
 /// # fn main() {
-/// # let my_peer_id = libp2p_core::PublicKey::Rsa(vec![1, 2, 3, 4]).into_peer_id();
+/// # let my_peer_id = PeerId::from(identity::Keypair::generate_ed25519().public());
 /// # let my_listened_addrs = Vec::new();
 /// let mut service = MdnsService::new().expect("Error while creating mDNS service");
 /// let _future_to_poll = futures::stream::poll_fn(move || -> Poll<Option<()>, io::Error> {
@@ -536,7 +537,7 @@ impl<'a> fmt::Debug for MdnsPeer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use libp2p_core::PublicKey;
+    use libp2p_core::PeerId;
     use std::{io, time::Duration};
     use tokio::{self, prelude::*};
     use crate::service::{MdnsPacket, MdnsService};
@@ -544,8 +545,7 @@ mod tests {
     #[test]
     fn discover_ourselves() {
         let mut service = MdnsService::new().unwrap();
-        let peer_id =
-            PublicKey::Rsa((0..32).map(|_| rand::random::<u8>()).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let stream = stream::poll_fn(move || -> Poll<Option<()>, io::Error> {
             loop {
                 let packet = match service.poll() {

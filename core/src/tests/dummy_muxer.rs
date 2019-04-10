@@ -23,7 +23,7 @@
 //! desired way when testing other components.
 
 use futures::prelude::*;
-use crate::muxing::{Shutdown, StreamMuxer};
+use crate::muxing::StreamMuxer;
 use std::io::Error as IoError;
 
 /// Substream type
@@ -39,8 +39,7 @@ pub struct DummyOutboundSubstream {}
 #[derive(Debug, PartialEq, Clone)]
 pub enum DummyConnectionState {
     Pending, // use this to trigger the Async::NotReady code path
-    Closed,  // use this to trigger the Async::Ready(None) code path
-    Opened,  // use this to trigger the Async::Ready(Some(_)) code path
+    Opened,  // use this to trigger the Async::Ready(_) code path
 }
 #[derive(Debug, PartialEq, Clone)]
 struct DummyConnection {
@@ -56,14 +55,14 @@ pub struct DummyMuxer{
 
 impl DummyMuxer {
     /// Create a new `DummyMuxer` where the inbound substream is set to `Pending`
-    /// and the (single) outbound substream to `Closed`.
+    /// and the (single) outbound substream to `Pending`.
     pub fn new() -> Self {
         DummyMuxer {
             in_connection: DummyConnection {
                 state: DummyConnectionState::Pending,
             },
             out_connection: DummyConnection {
-                state: DummyConnectionState::Closed,
+                state: DummyConnectionState::Pending,
             },
         }
     }
@@ -80,11 +79,10 @@ impl DummyMuxer {
 impl StreamMuxer for DummyMuxer {
     type Substream = DummySubstream;
     type OutboundSubstream = DummyOutboundSubstream;
-    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.in_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),
-            DummyConnectionState::Closed => Ok(Async::Ready(None)),
-            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream {}))),
+            DummyConnectionState::Opened => Ok(Async::Ready(Self::Substream {})),
         }
     }
     fn open_outbound(&self) -> Self::OutboundSubstream {
@@ -93,11 +91,10 @@ impl StreamMuxer for DummyMuxer {
     fn poll_outbound(
         &self,
         _substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Option<Self::Substream>, IoError> {
+    ) -> Poll<Self::Substream, IoError> {
         match self.out_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),
-            DummyConnectionState::Closed => Ok(Async::Ready(None)),
-            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream {}))),
+            DummyConnectionState::Opened => Ok(Async::Ready(Self::Substream {})),
         }
     }
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
@@ -110,12 +107,12 @@ impl StreamMuxer for DummyMuxer {
     fn flush_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> {
         unreachable!()
     }
-    fn shutdown_substream(&self, _: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> {
         unreachable!()
     }
     fn destroy_substream(&self, _: Self::Substream) {}
     fn is_remote_acknowledged(&self) -> bool { true }
-    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
+    fn close(&self) -> Poll<(), IoError> {
         Ok(Async::Ready(()))
     }
     fn flush_all(&self) -> Poll<(), IoError> {

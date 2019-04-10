@@ -67,6 +67,7 @@ mod transfer;
 
 use futures::future::Future;
 
+pub use multistream_select::Negotiated;
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
@@ -114,7 +115,7 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future;
+    fn upgrade_inbound(self, socket: Negotiated<C>, info: Self::Info) -> Self::Future;
 }
 
 /// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
@@ -154,7 +155,7 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
+    fn upgrade_outbound(self, socket: Negotiated<C>, info: Self::Info) -> Self::Future;
 }
 
 /// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement

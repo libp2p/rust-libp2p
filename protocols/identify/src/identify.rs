@@ -24,7 +24,7 @@ use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, PublicKey, either::EitherOutput};
+use libp2p_core::{Multiaddr, PeerId, PublicKey, either::EitherOutput, upgrade::Negotiated};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -42,9 +42,9 @@ pub struct Identify<TSubstream> {
     /// For each peer we're connected to, the observed address to send back to it.
     observed_addresses: HashMap<PeerId, Multiaddr>,
     /// List of senders to answer, with the observed multiaddr.
-    to_answer: SmallVec<[(PeerId, IdentifySender<TSubstream>, Multiaddr); 4]>,
+    to_answer: SmallVec<[(PeerId, IdentifySender<Negotiated<TSubstream>>, Multiaddr); 4]>,
     /// List of futures that send back information back to remotes.
-    futures: SmallVec<[(PeerId, IdentifySenderFuture<TSubstream>); 4]>,
+    futures: SmallVec<[(PeerId, IdentifySenderFuture<Negotiated<TSubstream>>); 4]>,
     /// Events that need to be produced outside when polling..
     events: VecDeque<NetworkBehaviourAction<EitherOutput<Void, Void>, IdentifyEvent>>,
 }
@@ -148,7 +148,7 @@ where
                 .map(|p| String::from_utf8_lossy(p).to_string())
                 .collect();
 
-            let mut listen_addrs: Vec<_> = params.external_addresses().collect();
+            let mut listen_addrs: Vec<_> = params.external_addresses().cloned().collect();
             listen_addrs.extend(params.listened_addresses().cloned());
 
             let send_back_info = IdentifyInfo {
@@ -221,15 +221,22 @@ pub enum IdentifyEvent {
 mod tests {
     use crate::{Identify, IdentifyEvent};
     use futures::prelude::*;
-    use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt, Swarm, Transport};
+    use libp2p_core::identity;
+    use libp2p_core::{
+        upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
+        Multiaddr,
+        Swarm,
+        Transport
+    };
+    use rand::Rng;
     use std::io;
 
     #[test]
     fn periodic_id_works() {
-        let node1_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let node1_public_key = node1_key.to_public_key();
-        let node2_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let node2_public_key = node2_key.to_public_key();
+        let node1_key = identity::Keypair::generate_ed25519();
+        let node1_public_key = node1_key.public();
+        let node2_key = identity::Keypair::generate_ed25519();
+        let node2_public_key = node2_key.public();
 
         let mut swarm1 = {
             // TODO: make creating the transport more elegant ; literaly half of the code of the test
@@ -253,7 +260,7 @@ mod tests {
         let mut swarm2 = {
             // TODO: make creating the transport more elegant ; literaly half of the code of the test
             //       is about creating the transport
-            let local_peer_id = node2_public_key.clone().into_peer_id();
+            let local_peer_id = node2_public_key.clone().into();
             let transport = libp2p_tcp::TcpConfig::new()
                 .with_upgrade(libp2p_secio::SecioConfig::new(node2_key))
                 .and_then(move |out, endpoint| {
@@ -269,8 +276,13 @@ mod tests {
             Swarm::new(transport, Identify::new("c".to_string(), "d".to_string(), node2_public_key.clone()), local_peer_id)
         };
 
-        let actual_addr = Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-        Swarm::dial_addr(&mut swarm2, actual_addr).unwrap();
+        let addr: Multiaddr = {
+            let port = rand::thread_rng().gen_range(49152, std::u16::MAX);
+            format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap()
+        };
+
+        Swarm::listen_on(&mut swarm1, addr.clone()).unwrap();
+        Swarm::dial_addr(&mut swarm2, addr).unwrap();
 
         let mut swarm1_good = false;
         let mut swarm2_good = false;
