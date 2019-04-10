@@ -22,13 +22,19 @@
 
 use crate::{Kademlia, KademliaOut};
 use futures::prelude::*;
-use libp2p_core::{upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt, PeerId, Swarm, Transport};
+use libp2p_core::{
+    multiaddr::Protocol,
+    upgrade::{self, InboundUpgradeExt, OutboundUpgradeExt},
+    PeerId,
+    Swarm,
+    Transport
+};
 use libp2p_core::{nodes::Substream, transport::boxed::Boxed, muxing::StreamMuxerBox};
 use std::io;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
 /// This is to be used only for testing, and a panic will happen if something goes wrong.
-fn build_nodes(num: usize)
+fn build_nodes(port_base: u64, num: usize)
     -> Vec<Swarm<Boxed<(PeerId, StreamMuxerBox), io::Error>, Kademlia<Substream<StreamMuxerBox>>>>
 {
     let mut result: Vec<Swarm<_, _>> = Vec::with_capacity(num);
@@ -38,7 +44,7 @@ fn build_nodes(num: usize)
         //       is about creating the transport
         let local_key = libp2p_core::identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
-        let transport = libp2p_tcp::TcpConfig::new()
+        let transport = libp2p_core::transport::MemoryTransport::default()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
                 let peer_id = out.remote_key.into_peer_id();
@@ -49,15 +55,17 @@ fn build_nodes(num: usize)
                 upgrade::apply(out.stream, upgrade, endpoint)
                     .map(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
             })
-            .map_err(|_| panic!())
+            .map_err(|e| panic!("Failed to create transport: {:?}", e))
             .boxed();
 
         let kad = Kademlia::without_init(local_public_key.clone().into_peer_id());
         result.push(Swarm::new(transport, kad, local_public_key.into_peer_id()));
     }
 
+    let mut i = 0;
     for s in result.iter_mut() {
-        Swarm::listen_on(s, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        Swarm::listen_on(s, Protocol::Memory(port_base + i).into()).unwrap();
+        i += 1
     }
 
     result
@@ -68,14 +76,12 @@ fn basic_find_node() {
     // Build two nodes. Node #2 only knows about node #1. Node #2 is asked for a random peer ID.
     // Node #2 must return the identity of node #1.
 
-    let mut swarms = build_nodes(2);
+    let port_base = rand::random();
+    let mut swarms = build_nodes(port_base, 2);
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
 
     // Connect second to first.
-    {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
-        swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
-    }
+    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
 
     let search_target = PeerId::random();
     swarms[1].find_node(search_target.clone());
@@ -108,22 +114,17 @@ fn direct_query() {
     // Build three nodes. Node #2 knows about node #1. Node #3 knows about node #2. Node #3 is
     // asked about a random peer and should return nodes #1 and #2.
 
-    let mut swarms = build_nodes(3);
+    let port_base = rand::random::<u64>() % (std::u64::MAX - 1);
+    let mut swarms = build_nodes(port_base, 3);
 
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
     let second_peer_id = Swarm::local_peer_id(&swarms[1]).clone();
 
     // Connect second to first.
-    {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
-        swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
-    }
+    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
 
     // Connect third to second.
-    {
-        let listen_addr = Swarm::listeners(&swarms[1]).next().unwrap().clone();
-        swarms[2].add_not_connected_address(&second_peer_id, listen_addr);
-    }
+    swarms[2].add_not_connected_address(&second_peer_id, Protocol::Memory(port_base + 1).into());
 
     // Ask third to search a random value.
     let search_target = PeerId::random();
@@ -158,29 +159,21 @@ fn indirect_query() {
     // Build four nodes. Node #2 knows about node #1. Node #3 knows about node #2. Node #4 knows
     // about node #3. Node #4 is asked about a random peer and should return nodes #1, #2 and #3.
 
-    let mut swarms = build_nodes(4);
+    let port_base = rand::random::<u64>() % (std::u64::MAX - 2);
+    let mut swarms = build_nodes(port_base, 4);
 
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
     let second_peer_id = Swarm::local_peer_id(&swarms[1]).clone();
     let third_peer_id = Swarm::local_peer_id(&swarms[2]).clone();
 
     // Connect second to first.
-    {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
-        swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
-    }
+    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
 
     // Connect third to second.
-    {
-        let listen_addr = Swarm::listeners(&swarms[1]).next().unwrap().clone();
-        swarms[2].add_not_connected_address(&second_peer_id, listen_addr);
-    }
+    swarms[2].add_not_connected_address(&second_peer_id, Protocol::Memory(port_base + 1).into());
 
     // Connect fourth to third.
-    {
-        let listen_addr = Swarm::listeners(&swarms[2]).next().unwrap().clone();
-        swarms[3].add_not_connected_address(&third_peer_id, listen_addr);
-    }
+    swarms[3].add_not_connected_address(&third_peer_id, Protocol::Memory(port_base + 2).into());
 
     // Ask fourth to search a random value.
     let search_target = PeerId::random();
@@ -216,7 +209,8 @@ fn unresponsive_not_returned_direct() {
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
-    let mut swarms = build_nodes(1);
+    let port_base = rand::random();
+    let mut swarms = build_nodes(port_base, 1);
 
     // Add fake addresses.
     for _ in 0 .. 10 {
@@ -258,7 +252,8 @@ fn unresponsive_not_returned_indirect() {
     // non-existing nodes. We ask node #1 to find a random peer. We make sure that no fake address
     // is returned.
 
-    let mut swarms = build_nodes(2);
+    let port_base = rand::random();
+    let mut swarms = build_nodes(port_base, 2);
 
     // Add fake addresses to first.
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
@@ -270,10 +265,7 @@ fn unresponsive_not_returned_indirect() {
     }
 
     // Connect second to first.
-    {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
-        swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
-    }
+    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
 
     // Ask second to search a random value.
     let search_target = PeerId::random();

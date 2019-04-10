@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core as swarm;
 use log::debug;
 use futures::{future, stream};
 use futures::stream::Then as StreamThen;
@@ -31,7 +30,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use stdweb::web::TypedArray;
 use stdweb::{self, Reference};
-use swarm::{Transport, transport::TransportError};
+use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a websocket transport capability for libp2p.
@@ -56,12 +55,12 @@ impl BrowserWsConfig {
 impl Transport for BrowserWsConfig {
     type Output = BrowserWsConn;
     type Error = IoError;   // TODO: better error type?
-    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), IoError>;
+    type Listener = stream::Empty<ListenerEvent<Self::ListenerUpgrade>, IoError>;
     type ListenerUpgrade = future::Empty<Self::Output, IoError>;
     type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
-    fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, a: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         // Listening is never supported.
         Err(TransportError::MultiaddrNotSupported(a))
     }

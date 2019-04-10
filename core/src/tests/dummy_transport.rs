@@ -28,13 +28,14 @@ use futures::{
     stream,
 };
 use std::io;
-use crate::{Multiaddr, PeerId, Transport, transport::TransportError};
+use crate::{Multiaddr, PeerId, Transport, transport::{ListenerEvent, TransportError}};
 use crate::tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
-    Ok(Async<Option<(PeerId, DummyMuxer)>>),
-    Error
+    Ok(Async<Option<ListenerEvent<(PeerId, DummyMuxer)>>>),
+    Error,
+    Events(Vec<ListenerEvent<(PeerId, DummyMuxer)>>)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -69,34 +70,25 @@ impl DummyTransport {
 impl Transport for DummyTransport {
     type Output = (PeerId, DummyMuxer);
     type Error = io::Error;
-    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type Listener = Box<dyn Stream<Item=ListenerEvent<Self::ListenerUpgrade>, Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = Box<dyn Future<Item = Self::Output, Error = io::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>>
     where
         Self: Sized,
     {
-        let addr2 = addr.clone();
         match self.listener_state {
-            ListenerState::Ok(r#async) => {
-                let tupelize = move |stream| (future::ok(stream), addr.clone());
-                Ok(match r#async {
-                    Async::NotReady => {
-                        let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
-                        (Box::new(stream), addr2)
-                    }
-                    Async::Ready(Some(tup)) => {
-                        let stream = stream::poll_fn(move || Ok( Async::Ready(Some(tup.clone()) ))).map(tupelize);
-                        (Box::new(stream), addr2)
-                    }
-                    Async::Ready(None) => {
-                        let stream = stream::empty();
-                        (Box::new(stream), addr2)
-                    }
-                })
-            }
+            ListenerState::Ok(state) => match state {
+                Async::NotReady => Ok(Box::new(stream::poll_fn(|| Ok(Async::NotReady)))),
+                Async::Ready(Some(event)) => Ok(Box::new(stream::poll_fn(move || {
+                    Ok(Async::Ready(Some(event.clone().map(future::ok))))
+                }))),
+                Async::Ready(None) => Ok(Box::new(stream::empty()))
+            },
             ListenerState::Error => Err(TransportError::MultiaddrNotSupported(addr)),
+            ListenerState::Events(events) =>
+                Ok(Box::new(stream::iter_ok(events.into_iter().map(|e| e.map(future::ok)))))
         }
     }
 

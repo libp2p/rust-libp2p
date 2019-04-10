@@ -39,14 +39,13 @@
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
-use libp2p_core as swarm;
+use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
 use log::{debug, error};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 use std::time::Duration;
-use swarm::{Transport, transport::TransportError};
 use tk_listen::{ListenExt, SleepOnError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
@@ -128,37 +127,34 @@ impl Transport for TcpConfig {
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = TcpDialFut;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
-            let new_addr = match listener {
+            let listen_addr = match listener {
                 Ok(ref l) => if let Ok(new_s_addr) = l.local_addr() {
-                    new_s_addr.to_multiaddr().expect(
-                        "multiaddr generated from socket addr is \
-                         always valid",
-                    )
+                    new_s_addr.to_multiaddr()
+                        .expect("multiaddr generated from socket addr is always valid")
                 } else {
                     addr
                 },
                 Err(_) => addr,
             };
 
-            debug!("Now listening on {}", new_addr);
+            debug!("Now listening on {}", listen_addr);
             let sleep_on_error = self.sleep_on_error;
             let inner = listener
                 .map_err(TransportError::Other)?
                 .incoming()
                 .sleep_on_error(sleep_on_error);
 
-            Ok((
-                TcpListenStream {
-                    inner: Ok(inner),
-                    config: self,
-                },
-                new_addr,
-            ))
+            Ok(TcpListenStream {
+                inner: Ok(inner),
+                listen_addr,
+                config: self,
+                tell_new_addr: true
+            })
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
@@ -277,20 +273,23 @@ impl Future for TcpDialFut {
 /// Stream that listens on an TCP/IP address.
 pub struct TcpListenStream {
     inner: Result<SleepOnError<Incoming>, Option<io::Error>>,
+    listen_addr: Multiaddr,
     /// Original configuration.
     config: TcpConfig,
+    /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
+    tell_new_addr: bool
 }
 
 impl Stream for TcpListenStream {
-    type Item = (FutureResult<TcpTransStream, io::Error>, Multiaddr);
+    type Item = ListenerEvent<FutureResult<TcpTransStream, io::Error>>;
     type Error = io::Error;
 
-    fn poll(
-        &mut self,
-    ) -> Poll<
-        Option<(FutureResult<TcpTransStream, io::Error>, Multiaddr)>,
-        io::Error,
-    > {
+    fn poll(&mut self) -> Poll<Option<Self::Item>, io::Error> {
+        if self.tell_new_addr {
+            self.tell_new_addr = false;
+            return Ok(Async::Ready(Some(ListenerEvent::NewAddress(self.listen_addr.clone()))))
+        }
+
         let inner = match self.inner {
             Ok(ref mut inc) => inc,
             Err(ref mut err) => {
@@ -317,12 +316,23 @@ impl Stream for TcpListenStream {
 
                     match apply_config(&self.config, &sock) {
                         Ok(()) => (),
-                        Err(err) => return Ok(Async::Ready(Some((future::err(err), addr)))),
+                        Err(err) => {
+                            let event = ListenerEvent::Upgrade {
+                                upgrade: future::err(err),
+                                listen_addr: self.listen_addr.clone(),
+                                remote_addr: addr
+                            };
+                            return Ok(Async::Ready(Some(event)))
+                        }
                     };
 
                     debug!("Incoming connection from {}", addr);
-                    let ret = future::ok(TcpTransStream { inner: sock });
-                    break Ok(Async::Ready(Some((ret, addr))))
+                    let event = ListenerEvent::Upgrade {
+                        upgrade: future::ok(TcpTransStream { inner: sock }),
+                        listen_addr: self.listen_addr.clone(),
+                        remote_addr: addr
+                    };
+                    break Ok(Async::Ready(Some(event)))
                 }
                 Ok(Async::Ready(None)) => break Ok(Async::Ready(None)),
                 Ok(Async::NotReady) => break Ok(Async::NotReady),
@@ -396,7 +406,7 @@ mod tests {
     use multiaddr::Multiaddr;
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use super::swarm::Transport;
+    use libp2p_core::{Transport, transport::ListenerEvent};
     use tokio_io;
 
     #[test]
@@ -457,20 +467,22 @@ mod tests {
             let tcp = TcpConfig::new();
             let mut rt = Runtime::new().unwrap();
             let handle = rt.handle();
-            let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
-                sock.and_then(|sock| {
-                    // Define what to do with the socket that just connected to us
-                    // Which in this case is read 3 bytes
-                    let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
-                        .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
-                        .map_err(|err| panic!("IO error {:?}", err));
+            let listener = tcp.listen_on(addr).unwrap()
+                .filter_map(ListenerEvent::into_upgrade)
+                .for_each(|(sock, _)| {
+                    sock.and_then(|sock| {
+                        // Define what to do with the socket that just connected to us
+                        // Which in this case is read 3 bytes
+                        let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
+                            .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
+                            .map_err(|err| panic!("IO error {:?}", err));
 
-                    // Spawn the future as a concurrent task
-                    handle.spawn(handle_conn).unwrap();
+                        // Spawn the future as a concurrent task
+                        handle.spawn(handle_conn).unwrap();
 
-                    Ok(())
-                })
-            });
+                        Ok(())
+                    })
+                });
 
             rt.block_on(listener).unwrap();
             rt.run().unwrap();
@@ -497,7 +509,13 @@ mod tests {
         let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
-        let (_, new_addr) = tcp.listen_on(addr).unwrap();
+        let new_addr = tcp.listen_on(addr).unwrap().wait()
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 
@@ -508,7 +526,13 @@ mod tests {
         let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
-        let (_, new_addr) = tcp.listen_on(addr).unwrap();
+        let new_addr = tcp.listen_on(addr).unwrap().wait()
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 

@@ -138,12 +138,22 @@ where
 {
     /// One of the listeners gracefully closed.
     ListenerClosed {
-        /// Address of the listener which closed.
-        listen_addr: Multiaddr,
         /// The listener which closed.
         listener: TTrans::Listener,
         /// The error that happened. `Ok` if gracefully closed.
         result: Result<(), <TTrans::Listener as Stream>::Error>,
+    },
+
+    /// One of the listeners is now listening on an additional address.
+    NewListenerAddress {
+        /// The new address the listener is now also listening on.
+        listen_addr: Multiaddr
+    },
+
+    /// One of the listeners is no longer listening on some address.
+    ExpiredListenerAddress {
+        /// The expired address.
+        listen_addr: Multiaddr
     },
 
     /// A new connection arrived on a listener.
@@ -154,7 +164,7 @@ where
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
     IncomingConnectionError {
-        /// Address of the listener which received the connection.
+        /// The address of the listener which received the connection.
         listen_addr: Multiaddr,
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
@@ -244,19 +254,32 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            RawSwarmEvent::ListenerClosed { ref listen_addr, ref result, .. } => {
-                f.debug_struct("ListenerClosed")
+            RawSwarmEvent::NewListenerAddress { ref listen_addr } => {
+                f.debug_struct("NewListenerAddress")
                     .field("listen_addr", listen_addr)
+                    .finish()
+            }
+            RawSwarmEvent::ExpiredListenerAddress { ref listen_addr } => {
+                f.debug_struct("ExpiredListenerAddress")
+                    .field("listen_addr", listen_addr)
+                    .finish()
+            }
+            RawSwarmEvent::ListenerClosed { ref result, .. } => {
+                f.debug_struct("ListenerClosed")
                     .field("result", result)
                     .finish()
             }
-            RawSwarmEvent::IncomingConnection( IncomingConnectionEvent { ref listen_addr, ref send_back_addr, .. } ) => {
+            RawSwarmEvent::IncomingConnection(ref event) => {
                 f.debug_struct("IncomingConnection")
-                    .field("listen_addr", listen_addr)
-                    .field("send_back_addr", send_back_addr)
+                    .field("listen_addr", &event.listen_addr)
+                    .field("send_back_addr", &event.send_back_addr)
                     .finish()
             }
-            RawSwarmEvent::IncomingConnectionError { ref listen_addr, ref send_back_addr, ref error} => {
+            RawSwarmEvent::IncomingConnectionError {
+                ref listen_addr,
+                ref send_back_addr,
+                ref error
+            } => {
                 f.debug_struct("IncomingConnectionError")
                     .field("listen_addr", listen_addr)
                     .field("send_back_addr", send_back_addr)
@@ -493,7 +516,7 @@ where TTrans: Transport
     upgrade: TTrans::ListenerUpgrade,
     /// PeerId of the local node.
     local_peer_id: TPeerId,
-    /// Address of the listener which received the connection.
+    /// Addresses of the listener which received the connection.
     listen_addr: Multiaddr,
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
@@ -647,7 +670,7 @@ impl ConnectedPoint {
 /// Information about an incoming connection currently being negotiated.
 #[derive(Debug, Copy, Clone)]
 pub struct IncomingInfo<'a> {
-    /// Address of the listener that received the connection.
+    /// Listener address that received the connection.
     pub listen_addr: &'a Multiaddr,
     /// Stack of protocols used to send back data to the remote.
     pub send_back_addr: &'a Multiaddr,
@@ -719,14 +742,13 @@ where
 
     /// Start listening on the given multiaddress.
     #[inline]
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTrans::Error>> {
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<(), TransportError<TTrans::Error>> {
         self.listeners.listen_on(addr)
     }
 
-    /// Returns an iterator that produces the list of addresses we're listening on.
-    #[inline]
-    pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.listeners.listeners()
+    /// Returns an iterator that produces the list of addresses we are listening on.
+    pub fn listen_addrs(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.listeners.listen_addrs()
     }
 
     /// Returns limit on incoming connections.
@@ -743,14 +765,13 @@ where
     ///
     /// For each listener, calls `nat_traversal` with the observed address and returns the outcome.
     #[inline]
-    pub fn nat_traversal<'a>(
-        &'a self,
-        observed_addr: &'a Multiaddr,
-    ) -> impl Iterator<Item = Multiaddr> + 'a
-        where TMuxer: 'a,
-              THandler: 'a,
+    pub fn nat_traversal<'a>(&'a self, observed_addr: &'a Multiaddr)
+        -> impl Iterator<Item = Multiaddr> + 'a
+    where
+        TMuxer: 'a,
+        THandler: 'a,
     {
-        self.listeners()
+        self.listen_addrs()
             .flat_map(move |server| self.transport().nat_traversal(server, observed_addr))
     }
 
@@ -819,10 +840,7 @@ where
             .filter_map(|&(_, ref endpoint)| {
                 match endpoint {
                     ConnectedPoint::Listener { listen_addr, send_back_addr } => {
-                        Some(IncomingInfo {
-                            listen_addr,
-                            send_back_addr,
-                        })
+                        Some(IncomingInfo { listen_addr, send_back_addr })
                     },
                     ConnectedPoint::Dialer { .. } => None,
                 }
@@ -986,30 +1004,26 @@ where
             _ => {
                 match self.listeners.poll() {
                     Async::NotReady => (),
-                    Async::Ready(ListenersEvent::Incoming {
-                        upgrade, listen_addr, send_back_addr }) =>
-                    {
+                    Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
                         let event = IncomingConnectionEvent {
                             upgrade,
-                            local_peer_id:
-                                self.reach_attempts.local_peer_id.clone(),
+                            local_peer_id: self.reach_attempts.local_peer_id.clone(),
                             listen_addr,
                             send_back_addr,
                             active_nodes: &mut self.active_nodes,
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
                         };
                         return Async::Ready(RawSwarmEvent::IncomingConnection(event));
-                     },
-                    Async::Ready(ListenersEvent::Closed {
-                        listen_addr, listener, result }) =>
-                    {
-                        return Async::Ready(RawSwarmEvent::ListenerClosed {
-                            listen_addr,
-                            listener,
-                            result,
-                        });
                     }
-
+                    Async::Ready(ListenersEvent::NewAddress { listen_addr }) => {
+                        return Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr })
+                    }
+                    Async::Ready(ListenersEvent::AddressExpired { listen_addr }) => {
+                        return Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr })
+                    }
+                    Async::Ready(ListenersEvent::Closed { listener, result }) => {
+                        return Async::Ready(RawSwarmEvent::ListenerClosed { listener, result })
+                    }
                 }
             }
         }

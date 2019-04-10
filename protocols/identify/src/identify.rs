@@ -222,7 +222,13 @@ mod tests {
     use crate::{Identify, IdentifyEvent};
     use futures::prelude::*;
     use libp2p_core::identity;
-    use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt, Swarm, Transport};
+    use libp2p_core::{
+        upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
+        Multiaddr,
+        Swarm,
+        Transport
+    };
+    use rand::Rng;
     use std::io;
 
     #[test]
@@ -270,8 +276,13 @@ mod tests {
             Swarm::new(transport, Identify::new("c".to_string(), "d".to_string(), node2_public_key.clone()), local_peer_id)
         };
 
-        let actual_addr = Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-        Swarm::dial_addr(&mut swarm2, actual_addr).unwrap();
+        let addr: Multiaddr = {
+            let port = rand::thread_rng().gen_range(49152, std::u16::MAX);
+            format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap()
+        };
+
+        Swarm::listen_on(&mut swarm1, addr.clone()).unwrap();
+        Swarm::dial_addr(&mut swarm2, addr).unwrap();
 
         let mut swarm1_good = false;
         let mut swarm2_good = false;

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Transport, transport::TransportError};
+use crate::{Transport, transport::{TransportError, ListenerEvent}};
 use bytes::{Bytes, IntoBuf};
 use fnv::FnvHashMap;
 use futures::{future::{self, FutureResult}, prelude::*, sync::mpsc, try_ready};
@@ -74,7 +74,7 @@ impl Transport for MemoryTransport {
     type ListenerUpgrade = FutureResult<Self::Output, Self::Error>;
     type Dial = DialFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -97,20 +97,22 @@ impl Transport for MemoryTransport {
             }
         };
 
-        let actual_addr = Protocol::Memory(port.get()).into();
 
         let (tx, rx) = mpsc::channel(2);
         match hub.entry(port) {
-            Entry::Occupied(_) => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
-            Entry::Vacant(e) => e.insert(tx),
+            Entry::Occupied(_) =>
+                return Err(TransportError::Other(MemoryTransportError::Unreachable)),
+            Entry::Vacant(e) => e.insert(tx)
         };
 
         let listener = Listener {
             port,
+            addr: Protocol::Memory(port.get()).into(),
             receiver: rx,
+            tell_listen_addr: true
         };
 
-        Ok((listener, actual_addr))
+        Ok(listener)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
@@ -173,23 +175,35 @@ impl error::Error for MemoryTransportError {}
 pub struct Listener {
     /// Port we're listening on.
     port: NonZeroU64,
+    /// The address we are listening on.
+    addr: Multiaddr,
     /// Receives incoming connections.
     receiver: mpsc::Receiver<Channel<Bytes>>,
+    /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
+    tell_listen_addr: bool
 }
 
 impl Stream for Listener {
-    type Item = (FutureResult<Channel<Bytes>, MemoryTransportError>, Multiaddr);
+    type Item = ListenerEvent<FutureResult<Channel<Bytes>, MemoryTransportError>>;
     type Error = MemoryTransportError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        if self.tell_listen_addr {
+            self.tell_listen_addr = false;
+            return Ok(Async::Ready(Some(ListenerEvent::NewAddress(self.addr.clone()))))
+        }
         let channel = try_ready!(Ok(self.receiver.poll()
             .expect("An unbounded receiver never panics; QED")));
         let channel = match channel {
             Some(c) => c,
-            None => return Ok(Async::Ready(None)),
+            None => return Ok(Async::Ready(None))
         };
-        let dialed_addr = Protocol::Memory(self.port.get()).into();
-        Ok(Async::Ready(Some((future::ok(channel), dialed_addr))))
+        let event = ListenerEvent::Upgrade {
+            upgrade: future::ok(channel),
+            listen_addr: self.addr.clone(),
+            remote_addr: Protocol::Memory(self.port.get()).into()
+        };
+        Ok(Async::Ready(Some(event)))
     }
 }
 

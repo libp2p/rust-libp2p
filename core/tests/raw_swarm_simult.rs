@@ -132,8 +132,29 @@ fn raw_swarm_simultaneous_connect() {
             RawSwarm::new(transport, local_public_key.into_peer_id())
         };
 
-        let swarm1_listen = swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-        let swarm2_listen = swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+
+        let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) =
+            future::lazy(move || {
+                let swarm1_listen_addr =
+                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+                        listen_addr
+                    } else {
+                        panic!("Was expecting the listen address to be reported")
+                    };
+
+                let swarm2_listen_addr =
+                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
+                        listen_addr
+                    } else {
+                        panic!("Was expecting the listen address to be reported")
+                    };
+
+                Ok::<_, void::Void>((swarm1_listen_addr, swarm2_listen_addr, swarm1, swarm2))
+            })
+            .wait()
+            .unwrap();
 
         let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
 
@@ -157,7 +178,7 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm1.peer(swarm2.local_peer_id().clone()).into_not_connected().unwrap()
-                                    .connect(swarm2_listen.clone(), handler);
+                                    .connect(swarm2_listen_addr.clone(), handler);
                                 swarm1_step = 1;
                                 swarm1_not_ready = false;
                             },
@@ -170,7 +191,7 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm2.peer(swarm1.local_peer_id().clone()).into_not_connected().unwrap()
-                                    .connect(swarm1_listen.clone(), handler);
+                                    .connect(swarm1_listen_addr.clone(), handler);
                                 swarm2_step = 1;
                                 swarm2_not_ready = false;
                             },
