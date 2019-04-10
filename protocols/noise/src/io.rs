@@ -282,7 +282,8 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                             self.write_state = WriteState::Eof;
                             return Err(io::ErrorKind::WriteZero.into())
                         }
-                        Ok(true) => ()                    }
+                        Ok(true) => ()
+                    }
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
