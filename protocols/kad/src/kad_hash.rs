@@ -41,6 +41,10 @@ impl KadHash {
         &self.peer_id
     }
 
+    pub fn into_peer_id(self) -> PeerId {
+        self.peer_id
+    }
+
     pub fn hash(&self) -> &[u8; 32] {
         &self.hash
     }

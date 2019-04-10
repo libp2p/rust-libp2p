@@ -20,7 +20,7 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KademliaOut, behaviour, kad_hash::KadHash, kbucket, kbucket::MAX_NODES_PER_BUCKET};
+use crate::{Kademlia, KademliaOut, KademliaEntry};
 use futures::prelude::*;
 use libp2p_core::{upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt, PeerId, Swarm, Transport};
 use libp2p_core::{nodes::Substream, transport::boxed::Boxed, muxing::StreamMuxerBox};
@@ -66,12 +66,23 @@ fn build_nodes(num: usize)
 #[test]
 fn peer_state_not_in_kademlia() {
     let local_peer_id = PeerId::random();
-    let mut k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id);
+    let k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id);
 
     let remote_peer_id = PeerId::random();
 
     match k.peer_state(&remote_peer_id) {
-        behaviour::Entry::NotInKademlia => assert!(true),
+        KademliaEntry::NotInKademlia => assert!(true),
+        _ => assert!(false)
+    }
+}
+
+#[test]
+fn self_entry_in_kademlia() {
+    let local_peer_id = PeerId::random();
+    let k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id.clone());
+
+    match k.peer_state(&local_peer_id) {
+        KademliaEntry::SelfEntry => assert!(true),
         _ => assert!(false)
     }
 }
@@ -86,7 +97,7 @@ fn peer_state_when_not_connected_then_in_kademlia_not_connected() {
     k.add_not_connected_address(&remote_peer_id, "/ip4/127.0.0.1/tcp/4001".parse().unwrap());
 
     match k.peer_state(&remote_peer_id) {
-        behaviour::Entry::InKademliaNotConnected => assert!(true),
+        KademliaEntry::InKademliaDisconnected(_) => assert!(true),
         _ => assert!(false)
     }
 }
@@ -101,20 +112,6 @@ fn peer_states_when_three_addresses_then_result_length_three() {
     k.add_not_connected_address(&PeerId::random(), "/ip4/127.0.0.1/tcp/4003".parse().unwrap());
 
     assert_eq!(k.peer_states().count(), 3);
-}
-
-#[test]
-fn peer_states_when_buckets_full_then_result_max_length() {
-    let local_peer_id = PeerId::random();
-    let mut k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id);
-
-    for port in 0..(256 * MAX_NODES_PER_BUCKET) {
-
-        k.add_not_connected_address(&PeerId::random(), format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap());
-    }
-
-    //assert_eq!(k.peer_states().count(), 256 * MAX_NODES_PER_BUCKET);
-    assert_eq!(k.kbuckets_entries().count(), 256 * MAX_NODES_PER_BUCKET);
 }
 
 #[test]

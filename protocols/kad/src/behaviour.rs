@@ -21,7 +21,7 @@
 use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::kad_hash::KadHash;
-use crate::kbucket::{self, KBucketsTable, KBucketsPeerId};
+use crate::kbucket::{self, KBucketsTable, KBucketsPeerId, PeerState};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -30,18 +30,39 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{convert::From, error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
+use std::{error, convert::From, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
 mod test;
 
-/// Represents an entry or a potential entry in the k-buckets.
-pub enum Entry<'a> {
-    InKademliaConnected{peer_id: &'a PeerId},
-    InKademliaNotConnected,
-    /// Entry is not present in any k-bucket.
+/// Represents an entry or a potential entry in the Kademlia DHT.
+pub enum KademliaEntry<'a> {
+    /// Entry in Kademlia that we're connected to.
+    InKademliaConnected(&'a PeerId),
+    /// Entry pending waiting for a free slot to enter a k-bucket. We're connected to it.
+    InKademliaConnectedPending(&'a PeerId),
+    /// Entry in Kademlia but that we're not connected to.
+    InKademliaDisconnected(&'a PeerId),
+    /// Entry pending waiting for a free slot to enter a k-bucket. We're not connected to it.
+    InKademliaDisconnectedPending(&'a PeerId),
+    /// Entry is not present in Kademlia.
     NotInKademlia,
+    /// Entry is the local peer ID.
+    SelfEntry,
+}
+
+impl<'a> From<PeerState<&'a KadHash>> for KademliaEntry<'a> {
+    fn from(peer_state: PeerState<&'a KadHash>) -> KademliaEntry<'a> {
+        match peer_state {
+            PeerState::InKbucketConnected(peer_kad_hash) => KademliaEntry::InKademliaConnected(peer_kad_hash.peer_id()),
+            PeerState::InKbucketConnectedPending(peer_kad_hash) => KademliaEntry::InKademliaConnectedPending(peer_kad_hash.peer_id()),
+            PeerState::InKbucketDisconnected(peer_kad_hash) => KademliaEntry::InKademliaDisconnected(peer_kad_hash.peer_id()),
+            PeerState::InKbucketDisconnectedPending(peer_kad_hash) => KademliaEntry::InKademliaDisconnectedPending(peer_kad_hash.peer_id()),
+            PeerState::NotInKbucket => KademliaEntry::NotInKademlia,
+            PeerState::SelfEntry => KademliaEntry::SelfEntry,
+        }
+    }
 }
 
 /// Network behaviour that handles Kademlia.
@@ -276,25 +297,18 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
-    pub fn kbuckets_entries(&self) -> impl Iterator<Item = &PeerId> {
-        self.kbuckets.entries_not_pending().map(|(kad_hash, _)| kad_hash.peer_id())
+    pub fn kbuckets_entries<'a>(&'a self) -> impl 'a + Iterator<Item = &PeerId> {
+        self.kbuckets.entries_not_pending().flat_map(|peer_state| peer_state.peer_id().map(|p| p.peer_id()))
     }
 
-    // TODO We're taking &mut self only because KBuckets::entry needs it.
-    // We should be able to query without mutability
-    pub fn peer_state<'a>(&mut self, peer_id: &'a PeerId) -> Entry<'a> {
+    pub fn peer_state<'a>(&'a self, peer_id: &PeerId) -> KademliaEntry {
         let kad_hash = KadHash::from(peer_id.clone());
 
-        match self.kbuckets.entry(&kad_hash) {
-            kbucket::Entry::NotInKbucket(_) => Entry::NotInKademlia,
-            kbucket::Entry::InKbucketConnected(_) => Entry::InKademliaConnected{peer_id: peer_id},
-            kbucket::Entry::InKbucketDisconnected(_) => Entry::InKademliaNotConnected,
-            _ => unimplemented!(),
-        }
+        KademliaEntry::from(self.kbuckets.entry_state_query(&kad_hash))
     }
 
-    pub fn peer_states(&mut self) -> impl Iterator<Item = Entry> {
-        self.kbuckets.entries().map(|(kad_hash, _)| Entry::InKademliaConnected{peer_id: kad_hash.peer_id()})
+    pub fn peer_states<'a>(&'a self) -> impl 'a + Iterator<Item = KademliaEntry> {
+        self.kbuckets.entries().map(KademliaEntry::from)
     }
 
     /// Starts an iterative `FIND_NODE` request.
