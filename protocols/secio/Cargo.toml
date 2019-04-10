@@ -28,12 +28,16 @@ tokio-io = "0.1.0"
 sha2 = "0.8.0"
 hmac = "0.7.0"
 
-[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.14", features = ["use_heap"], default-features = false }
 untrusted = { version = "0.6" }
 
-[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-stdweb = { version = "0.4", default-features = false }
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.10"
+send_wrapper = "0.2"
+wasm-bindgen = "0.2.33"
+wasm-bindgen-futures = "0.3.10"
+web-sys = { version = "0.3.10", features = ["Crypto", "CryptoKey", "SubtleCrypto", "Window"] }
 
 [features]
 default = ["secp256k1"]
