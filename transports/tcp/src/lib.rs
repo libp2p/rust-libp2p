@@ -46,7 +46,7 @@ use futures::{
 use get_if_addrs::get_if_addrs;
 use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
 use log::{debug, error};
-use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use std::{
     collections::{HashMap, VecDeque},
     fmt,
@@ -152,7 +152,7 @@ impl Transport for TcpConfig {
                 debug!("Listening on {:?}", addrs.values());
                 Addresses::Many(addrs)
             } else {
-                let ma = local_addr.to_multiaddr().expect("A socket address is a valid Multiaddr.");
+                let ma = sockaddr_to_multiaddr(local_addr.ip(), port);
                 debug!("Listening on {:?}", ma);
                 Addresses::One(ma)
             };
@@ -435,13 +435,7 @@ impl Stream for TcpListenStream {
                 }
             };
 
-            let remote_addr = match sock_addr.to_multiaddr() {
-                Ok(addr) => addr,
-                Err(err) => {
-                    error!("Failed to create multiaddr from peer address: {:?}", err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err))
-                }
-            };
+            let remote_addr = sockaddr_to_multiaddr(sock_addr.ip(), sock_addr.port());
 
             match apply_config(&self.config, &sock) {
                 Ok(()) => {
