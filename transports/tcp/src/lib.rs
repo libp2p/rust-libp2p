@@ -209,26 +209,6 @@ impl Transport for TcpConfig {
 
         Ok(future)
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut address = Multiaddr::empty();
-
-        // Use the observed IP address.
-        match server.iter().zip(observed.iter()).next() {
-            Some((Protocol::Ip4(_), x @ Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip4(_), x @ Protocol::Ip6(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip6(_))) => address.append(x),
-            _ => return None
-        }
-
-        // Carry over everything else from the server address.
-        for proto in server.iter().skip(1) {
-            address.append(proto)
-        }
-
-        Some(address)
-    }
 }
 
 // This type of logic should probably be moved into the multiaddr package
@@ -701,47 +681,5 @@ mod tests {
             .parse::<Multiaddr>()
             .unwrap();
         assert!(tcp.listen_on(addr).is_err());
-    }
-
-    #[test]
-    fn nat_traversal() {
-        let tcp = TcpConfig::new();
-
-        let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
-        let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
-
-        let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(
-            out.unwrap(),
-            "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap()
-        );
-    }
-
-    #[test]
-    fn nat_traversal_ipv6_to_ipv4() {
-        let tcp = TcpConfig::new();
-
-        let server = "/ip6/::1/tcp/10000".parse::<Multiaddr>().unwrap();
-        let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
-
-        let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(
-            out.unwrap(),
-            "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap()
-        );
-    }
-
-    #[test]
-    fn nat_traversal_ipv4_to_ipv6() {
-        let tcp = TcpConfig::new();
-
-        let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
-        let observed = "/ip6/2001:db8::1/tcp/25000".parse::<Multiaddr>().unwrap();
-
-        let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(
-            out.unwrap(),
-            "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap()
-        );
     }
 }

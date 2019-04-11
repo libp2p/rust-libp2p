@@ -140,15 +140,6 @@ impl Transport for MemoryTransport {
             Err(TransportError::Other(MemoryTransportError::Unreachable))
         }
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // TODO: NAT traversal for `/memory` addresses? how does that make sense?
-        if server == observed {
-            Some(server.clone())
-        } else {
-            None
-        }
-    }
 }
 
 /// Error that can be produced from the `MemoryTransport`.

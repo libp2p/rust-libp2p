@@ -56,10 +56,6 @@ where
         let p = ConnectedPoint::Dialer { address: addr };
         Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
-    }
 }
 
 /// Custom `Stream` implementation to avoid boxing.

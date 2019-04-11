@@ -219,7 +219,7 @@ where
                     );
                 },
                 MdnsPacket::Response(response) => {
-                    // We perform a call to `nat_traversal()` with the address we observe the
+                    // We replace the IP address with the address we observe the
                     // remote as and the address they listen on.
                     let obs_ip = Protocol::from(response.remote_addr().ip());
                     let obs_port = Protocol::Udp(response.remote_addr().port());
@@ -237,10 +237,10 @@ where
 
                         let mut addrs = Vec::new();
                         for addr in peer.addresses() {
-                            if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
-                                addrs.push(new_addr);
+                            if let Some(new_addr) = addr.replace_ip_addr(&observed) {
+                                addrs.push(new_addr)
                             }
-                            addrs.push(addr);
+                            addrs.push(addr)
                         }
 
                         for addr in addrs {

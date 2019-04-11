@@ -771,8 +771,7 @@ where
         TMuxer: 'a,
         THandler: 'a,
     {
-        self.listen_addrs()
-            .flat_map(move |server| self.transport().nat_traversal(server, observed_addr))
+        self.listen_addrs().flat_map(move |server| server.replace_ip_addr(observed_addr))
     }
 
     /// Returns the peer id of the local node.

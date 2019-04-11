@@ -73,10 +73,6 @@ where
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(ListenerStream { stream: inbound, upgrade: self.upgrade })
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.nat_traversal(server, observed)
-    }
 }
 
 /// Error produced by a transport upgrade.
