@@ -288,6 +288,15 @@ impl<T> ListenerEvent<T> {
         }
     }
 
+    /// Returns `true` if this is an `Upgrade` listener event.
+    pub fn is_upgrade(&self) -> bool {
+        if let ListenerEvent::Upgrade {..} = self {
+            true
+        } else {
+            false
+        }
+    }
+
     /// Try to turn this listener event into upgrade parts.
     ///
     /// Returns `None` if the event is not actually an upgrade,
@@ -300,6 +309,15 @@ impl<T> ListenerEvent<T> {
         }
     }
 
+    /// Returns `true` if this is a `NewAddress` listener event.
+    pub fn is_new_address(&self) -> bool {
+        if let ListenerEvent::NewAddress(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     /// Try to turn this listener event into the `NewAddress` part.
     ///
     /// Returns `None` if the event is not actually a `NewAddress`,
@@ -309,6 +327,15 @@ impl<T> ListenerEvent<T> {
             Some(a)
         } else {
             None
+        }
+    }
+
+    /// Returns `true` if this is an `AddressExpired` listener event.
+    pub fn is_address_expired(&self) -> bool {
+        if let ListenerEvent::AddressExpired(_) = self {
+            true
+        } else {
+            false
         }
     }
 
