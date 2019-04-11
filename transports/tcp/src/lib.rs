@@ -391,7 +391,7 @@ impl Stream for TcpListenStream {
                 Ok(addr) => addr,
                 Err(err) => {
                     error!("Failed to get peer address: {:?}", err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err))
+                    return Err(err)
                 }
             };
 
@@ -431,7 +431,7 @@ impl Stream for TcpListenStream {
                 }
                 Err(err) => {
                     error!("Failed to get local address of incoming socket: {:?}", err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err))
+                    return Err(err)
                 }
             };
 
