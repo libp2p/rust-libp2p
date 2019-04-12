@@ -136,7 +136,7 @@ impl Multiaddr {
     /// `by` will be applied to the current protocol, returning an optional replacement.
     ///
     /// If `at` is out of bounds or `by` does not yield a replacement value,
-    /// `None` will be returned. Otherwise a copy of this `Multiadd` with the
+    /// `None` will be returned. Otherwise a copy of this `Multiaddr` with the
     /// updated `Protocol` at position `at` will be returned.
     pub fn replace<'a, F>(&self, at: usize, by: F) -> Option<Multiaddr>
     where
