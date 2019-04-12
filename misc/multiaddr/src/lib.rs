@@ -130,30 +130,36 @@ impl Multiaddr {
         Iter(&self.bytes)
     }
 
-    /// Replace a leading IP address with a corresponding one from the given argument.
+    /// Replace a [`Protocol`] at some position in this `Multiaddr`.
     ///
-    /// This is a mixed-mode replacement, i.e. an IPv4 address may be replaced with
-    /// an IPv6 address and vice versa.
+    /// The parameter `at` denotes the index of the protocol at which the function
+    /// `by` will be applied to the current protocol, returning an optional replacement.
     ///
-    /// If the leading protocols are not IP addresses, `None` will be returned,
-    /// otherwise a copy of `self` with the replaced IP address.
-    pub fn replace_ip_addr(&self, other: &Multiaddr) -> Option<Multiaddr> {
+    /// If `at` is out of bounds or `by` does not yield a replacement value,
+    /// `None` will be returned. Otherwise a copy of this `Multiadd` with the
+    /// updated `Protocol` at position `at` will be returned.
+    pub fn replace<'a, F>(&self, at: usize, by: F) -> Option<Multiaddr>
+    where
+        F: FnOnce(&Protocol) -> Option<Protocol<'a>>
+    {
         let mut address = Multiaddr::with_capacity(self.len());
-        let mut iter = self.iter();
+        let mut fun = Some(by);
+        let mut replaced = false;
 
-        match iter.by_ref().zip(other.iter()).next() {
-            Some((Protocol::Ip4(_), x @ Protocol::Ip4(_))) => address = address.with(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip4(_))) => address = address.with(x),
-            Some((Protocol::Ip4(_), x @ Protocol::Ip6(_))) => address = address.with(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip6(_))) => address = address.with(x),
-            _ => return None
+        for (i, p) in self.iter().enumerate() {
+            if i == at {
+                let f = fun.take().expect("i == at only happens once");
+                if let Some(q) = f(&p) {
+                    address = address.with(q);
+                    replaced = true;
+                    continue
+                }
+                return None
+            }
+            address = address.with(p)
         }
 
-        for proto in iter {
-            address = address.with(proto)
-        }
-
-        Some(address)
+        if replaced { Some(address) } else { None }
     }
 }
 

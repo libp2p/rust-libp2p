@@ -296,36 +296,31 @@ fn append() {
     assert_eq!(None, i.next())
 }
 
+fn replace_ip_addr(a: &Multiaddr, p: Protocol) -> Option<Multiaddr> {
+    a.replace(0, move |x| match x {
+        Protocol::Ip4(_) | Protocol::Ip6(_) => Some(p),
+        _ => None
+    })
+}
 
 #[test]
 fn replace_ip4_with_ip4() {
     let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
-    let observed = multiaddr!(Ip4([80, 81, 82, 83]), Tcp(25000u16));
-    let result = server.replace_ip_addr(&observed).unwrap();
+    let result = replace_ip_addr(&server, Protocol::Ip4([80, 81, 82, 83].into())).unwrap();
     assert_eq!(result, multiaddr!(Ip4([80, 81, 82, 83]), Tcp(10000u16)))
 }
 
 #[test]
 fn replace_ip6_with_ip4() {
     let server = multiaddr!(Ip6(Ipv6Addr::LOCALHOST), Tcp(10000u16));
-    let observed = multiaddr!(Ip4([80, 81, 82, 83]), Tcp(25000u16));
-    let result = server.replace_ip_addr(&observed).unwrap();
+    let result = replace_ip_addr(&server, Protocol::Ip4([80, 81, 82, 83].into())).unwrap();
     assert_eq!(result, multiaddr!(Ip4([80, 81, 82, 83]), Tcp(10000u16)))
 }
 
 #[test]
 fn replace_ip4_with_ip6() {
     let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
-    let observed = "/ip6/2001:db8::1/tcp/25000".parse::<Multiaddr>().unwrap();
-    let result = server.replace_ip_addr(&observed).unwrap();
-    assert_eq!(result, "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap())
-}
-
-#[test]
-fn do_not_replace_other_protocols() {
-    let a = multiaddr!(Memory(34234u64));
-    let b = multiaddr!(Ip4([80, 81, 82, 83]), Tcp(25000u16));
-    assert!(a.replace_ip_addr(&b).is_none());
-    assert!(b.replace_ip_addr(&a).is_none())
+    let result = replace_ip_addr(&server, "2001:db8::1".parse::<Ipv6Addr>().unwrap().into());
+    assert_eq!(result.unwrap(), "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap())
 }
 

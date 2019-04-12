@@ -43,6 +43,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::{prelude::*, future};
+use multiaddr::Protocol;
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
     error,
@@ -771,7 +772,16 @@ where
         TMuxer: 'a,
         THandler: 'a,
     {
-        self.listen_addrs().flat_map(move |server| server.replace_ip_addr(observed_addr))
+        self.listen_addrs().flat_map(move |server| {
+            server.replace(0, move |proto| match proto {
+                Protocol::Ip4(_) | Protocol::Ip6(_) => match observed_addr.iter().next() {
+                    x@Some(Protocol::Ip4(_)) => x,
+                    x@Some(Protocol::Ip6(_)) => x,
+                    _ => None
+                }
+                _ => None
+            })
+        })
     }
 
     /// Returns the peer id of the local node.

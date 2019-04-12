@@ -237,7 +237,7 @@ where
 
                         let mut addrs = Vec::new();
                         for addr in peer.addresses() {
-                            if let Some(new_addr) = addr.replace_ip_addr(&observed) {
+                            if let Some(new_addr) = replace_ip_addr(&addr, &observed) {
                                 addrs.push(new_addr)
                             }
                             addrs.push(addr)
@@ -282,4 +282,15 @@ impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
             .field("service", &self.service)
             .finish()
     }
+}
+
+fn replace_ip_addr(a: &Multiaddr, b: &Multiaddr) -> Option<Multiaddr> {
+    a.replace(0, move |proto| match proto {
+        Protocol::Ip4(_) | Protocol::Ip6(_) => match b.iter().next() {
+            x@Some(Protocol::Ip4(_)) => x,
+            x@Some(Protocol::Ip6(_)) => x,
+            _ => None
+        }
+        _ => None
+    })
 }
