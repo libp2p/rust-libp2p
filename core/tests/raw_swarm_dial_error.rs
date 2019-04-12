@@ -116,12 +116,19 @@ fn deny_incoming_connec() {
         RawSwarm::new(transport, local_public_key.into())
     };
 
-    let listen = swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+    swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+
+    let address =
+        if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+            listen_addr
+        } else {
+            panic!("Was expecting the listen address to be reported")
+        };
 
     swarm2
         .peer(swarm1.local_peer_id().clone())
         .into_not_connected().unwrap()
-        .connect(listen.clone(), TestHandler::default().into_node_handler_builder());
+        .connect(address.clone(), TestHandler::default().into_node_handler_builder());
 
     let future = future::poll_fn(|| -> Poll<(), io::Error> {
         match swarm1.poll() {
@@ -138,7 +145,7 @@ fn deny_incoming_connec() {
                 error: RawSwarmReachError::Transport(_)
             }) => {
                 assert_eq!(peer_id, *swarm1.local_peer_id());
-                assert_eq!(multiaddr, listen);
+                assert_eq!(multiaddr, address);
                 return Ok(Async::Ready(()));
             },
             Async::Ready(_) => unreachable!(),
@@ -181,8 +188,20 @@ fn dial_self() {
         RawSwarm::new(transport, local_public_key.into())
     };
 
-    let listen = swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-    swarm.dial(listen.clone(), TestHandler::default().into_node_handler_builder()).unwrap();
+    swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+
+    let (address, mut swarm) =
+        future::lazy(move || {
+            if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
+                Ok::<_, void::Void>((listen_addr, swarm))
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            }
+        })
+        .wait()
+        .unwrap();
+
+    swarm.dial(address.clone(), TestHandler::default().into_node_handler_builder()).unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
@@ -194,7 +213,7 @@ fn dial_self() {
                     error: UnknownPeerDialErr::FoundLocalPeerId,
                     handler: _
                 }) => {
-                    assert_eq!(multiaddr, listen);
+                    assert_eq!(multiaddr, address);
                     assert!(!got_dial_err);
                     got_dial_err = true;
                     if got_inc_err {
@@ -206,7 +225,7 @@ fn dial_self() {
                     send_back_addr: _,
                     error: IncomingError::FoundLocalPeerId
                 }) => {
-                    assert_eq!(listen_addr, listen);
+                    assert_eq!(address, listen_addr);
                     assert!(!got_inc_err);
                     got_inc_err = true;
                     if got_dial_err {
@@ -214,7 +233,7 @@ fn dial_self() {
                     }
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
-                    assert_eq!(*inc.listen_addr(), listen);
+                    assert_eq!(*inc.listen_addr(), address);
                     inc.accept(TestHandler::default().into_node_handler_builder());
                 },
                 Async::Ready(ev) => unreachable!("{:?}", ev),

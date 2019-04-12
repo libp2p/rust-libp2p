@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
-use multiaddr::Multiaddr;
+use crate::transport::{Transport, TransportError, ListenerEvent};
+use crate::Multiaddr;
 use std::{fmt, io, marker::PhantomData};
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
@@ -55,12 +55,12 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type Listener = futures::stream::Empty<(Self::ListenerUpgrade, Multiaddr), io::Error>;
+    type Listener = futures::stream::Empty<ListenerEvent<Self::ListenerUpgrade>, io::Error>;
     type ListenerUpgrade = futures::future::Empty<Self::Output, io::Error>;
     type Dial = futures::future::Empty<Self::Output, io::Error>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

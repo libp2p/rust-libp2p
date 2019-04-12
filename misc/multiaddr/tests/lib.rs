@@ -16,8 +16,8 @@ use std::{
 #[test]
 fn to_from_bytes_identity() {
     fn prop(a: Ma) -> bool {
-        let b = a.0.to_bytes();
-        Some(a) == Multiaddr::from_bytes(b).ok().map(Ma)
+        let b = a.0.to_vec();
+        Some(a) == Multiaddr::try_from_vec(b).ok().map(Ma)
     }
     QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
 }
@@ -102,10 +102,10 @@ impl Arbitrary for SubString {
 
 fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol<'_>>) {
     let parsed = source.parse::<Multiaddr>().unwrap();
-    assert_eq!(HEXUPPER.encode(&parsed.to_bytes()[..]), target);
+    assert_eq!(HEXUPPER.encode(&parsed.to_vec()[..]), target);
     assert_eq!(parsed.iter().collect::<Vec<_>>(), protocols);
     assert_eq!(source.parse::<Multiaddr>().unwrap().to_string(), source);
-    assert_eq!(Multiaddr::from_bytes(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
+    assert_eq!(Multiaddr::try_from_vec(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
 }
 
 fn multihash(s: &str) -> Multihash {
@@ -252,7 +252,7 @@ fn to_multiaddr() {
 #[test]
 fn from_bytes_fail() {
     let bytes = vec![1, 2, 3, 4];
-    assert!(Multiaddr::from_bytes(bytes).is_err());
+    assert!(Multiaddr::try_from_vec(bytes).is_err());
 }
 
 

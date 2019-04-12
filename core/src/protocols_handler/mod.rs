@@ -138,20 +138,18 @@ pub trait ProtocolsHandler {
 
     /// Returns until when the connection should be kept alive.
     ///
-    /// If returns `Until`, that indicates that this connection may invoke `shutdown()` after the
-    /// returned `Instant` has elapsed if they think that they will no longer need the connection
-    /// in the future. Returning `Forever` is equivalent to "infinite". Returning `Now` is
-    /// equivalent to `Until(Instant::now())`.
+    /// If returns `Until`, that indicates that this connection may be closed and this handler
+    /// destroyed after the returned `Instant` has elapsed if they think that they will no longer
+    /// need the connection in the future. Returning `Forever` is equivalent to "infinite".
+    /// Returning `Now` is equivalent to `Until(Instant::now())`.
     ///
     /// On the other hand, the return value is only an indication and doesn't mean that the user
-    /// will not call `shutdown()`.
+    /// will not close the connection.
     ///
     /// When multiple `ProtocolsHandler` are combined together, the largest `KeepAlive` should be
     /// used.
     ///
     /// The result of this method should be checked every time `poll()` is invoked.
-    ///
-    /// After `shutdown()` is called, the result of this method doesn't matter anymore.
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
@@ -297,8 +295,6 @@ pub enum ProtocolsHandlerUpgrErr<TUpgrErr> {
     Timeout,
     /// There was an error in the timer used.
     Timer,
-    /// The remote muxer denied the attempt to open a substream.
-    MuxerDeniedSubstream,
     /// Error while upgrading the substream to the protocol we want.
     Upgrade(UpgradeError<TUpgrErr>),
 }
@@ -315,9 +311,6 @@ where
             ProtocolsHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             },
-            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => {
-                write!(f, "Remote muxer denied our attempt to open a substream")
-            },
             ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
         }
     }
@@ -331,7 +324,6 @@ where
         match self {
             ProtocolsHandlerUpgrErr::Timeout => None,
             ProtocolsHandlerUpgrErr::Timer => None,
-            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
             ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
         }
     }

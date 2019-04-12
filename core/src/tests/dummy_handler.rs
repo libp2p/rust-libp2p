@@ -53,7 +53,6 @@ impl Default for Handler {
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum HandlerState {
-    NotReady,
     Ready(NodeHandlerEvent<usize, OutEvent>),
     Err,
 }
@@ -117,7 +116,6 @@ impl NodeHandler for Handler {
     fn poll(&mut self) -> Poll<NodeHandlerEvent<usize, OutEvent>, IoError> {
         match self.state.take() {
             Some(ref state) => match state {
-                HandlerState::NotReady => Ok(Async::NotReady),
                 HandlerState::Ready(event) => Ok(Async::Ready(event.clone())),
                 HandlerState::Err => Err(io::Error::new(io::ErrorKind::Other, "oh noes")),
             },
