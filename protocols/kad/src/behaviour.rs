@@ -52,15 +52,15 @@ pub enum KademliaEntry<'a> {
     SelfEntry,
 }
 
-impl<'a> From<PeerState<&'a KadHash>> for KademliaEntry<'a> {
-    fn from(peer_state: PeerState<&'a KadHash>) -> KademliaEntry<'a> {
+impl<'a> From<kbucket::Entry<'a, KadHash, Addresses>> for KademliaEntry<'a> {
+    fn from(peer_state: kbucket::Entry<'a, KadHash, Addresses>) -> KademliaEntry<'a> {
         match peer_state {
-            PeerState::InKbucketConnected(peer_kad_hash) => KademliaEntry::InKademliaConnected(peer_kad_hash.peer_id()),
-            PeerState::InKbucketConnectedPending(peer_kad_hash) => KademliaEntry::InKademliaConnectedPending(peer_kad_hash.peer_id()),
-            PeerState::InKbucketDisconnected(peer_kad_hash) => KademliaEntry::InKademliaDisconnected(peer_kad_hash.peer_id()),
-            PeerState::InKbucketDisconnectedPending(peer_kad_hash) => KademliaEntry::InKademliaDisconnectedPending(peer_kad_hash.peer_id()),
-            PeerState::NotInKbucket => KademliaEntry::NotInKademlia,
-            PeerState::SelfEntry => KademliaEntry::SelfEntry,
+            kbucket::Entry::InKbucketConnected(entry) => KademliaEntry::InKademliaConnected(entry.peer_id()),
+            kbucket::Entry::InKbucketConnectedPending(entry) => KademliaEntry::InKademliaConnectedPending(entry.peer_id()),
+            kbucket::Entry::InKbucketDisconnected(entry) => KademliaEntry::InKademliaDisconnected(entry.peer_id()),
+            kbucket::Entry::InKbucketDisconnectedPending(entry) => KademliaEntry::InKademliaDisconnectedPending(entry.peer_id()),
+            kbucket::Entry::NotInKbucket(_) => KademliaEntry::NotInKademlia,
+            kbucket::Entry::SelfEntry => KademliaEntry::SelfEntry,
         }
     }
 }
