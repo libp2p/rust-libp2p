@@ -39,10 +39,8 @@
 //! and begin pinging each other.
 
 use futures::{prelude::*, future};
-use libp2p::{ identity, PeerId, ping::{Ping, PingConfig}, Swarm };
-use rand::Rng;
+use libp2p::{ identity, PeerId, ping::Ping, Swarm };
 use std::env;
-use std::time::Duration;
 
 fn main() {
     env_logger::init();
@@ -55,18 +53,16 @@ fn main() {
     // Create a transport.
     let transport = libp2p::build_development_transport(id_keys);
 
-    // Create a ping network behaviour with a somewhat randomized ping interval.
-    let int = Duration::from_secs(rand::thread_rng().gen_range(10, 21));
-    let cfg = PingConfig::new().with_interval(int);
-    let behaviour = Ping::new(cfg);
+    // Create a ping network behaviour.
+    let behaviour = Ping::default();
 
-    // Create a Swarm to manage connections established with
-    // the transport and supporting the ping behaviour.
+    // Create a Swarm that establishes connections through the given transport
+    // and applies the ping behaviour on each connection.
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     // Listen on all interfaces and a random, OS-assigned port.
     let listen_addr = Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-    println!("Listening on {:?} (ping interval: {:?})", listen_addr, int);
+    println!("Listening on {:?}", listen_addr);
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.

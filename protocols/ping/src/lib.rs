@@ -40,7 +40,7 @@
 pub mod protocol;
 pub mod handler;
 
-pub use handler::{PingConfig, PingResult, PingSuccess, PingFailure};
+pub use handler::{PingConfig, PingPolicy, PingResult, PingSuccess, PingFailure};
 use handler::PingHandler;
 
 use futures::prelude::*;

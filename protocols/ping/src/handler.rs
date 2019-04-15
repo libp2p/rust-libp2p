@@ -27,12 +27,13 @@ use libp2p_core::protocols_handler::{
     ProtocolsHandlerUpgrErr,
 };
 use std::{io, num::NonZeroU32, time::{Duration, Instant}};
+use std::collections::VecDeque;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Delay;
 use void::Void;
 
 /// The configuration for outbound pings.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PingConfig {
     /// The timeout of an outbound ping.
     timeout: Duration,
@@ -42,29 +43,46 @@ pub struct PingConfig {
     /// The maximum number of failed outbound pings before the associated
     /// connection is deemed unhealthy, indicating to the `Swarm` that it
     /// should be closed.
-    max_timeouts: NonZeroU32
+    max_timeouts: NonZeroU32,
+    /// The policy for outbound pings.
+    policy: PingPolicy
 }
 
 impl PingConfig {
     /// Creates a new `PingConfig` with the following default settings:
     ///
-    ///   * [`PingConfig::with_interval`] 20s
-    ///   * [`PingConfig::with_timeout`] 10s
-    ///   * [`PingConfig::with_max_timeouts`] 3
+    ///   * [`PingConfig::with_interval`] 15s
+    ///   * [`PingConfig::with_timeout`] 20s
+    ///   * [`PingConfig::with_max_timeouts`] 1
+    ///   * [`PingConfig::with_policy`] [`PingPolicy::Always`]
     ///
     /// These settings have the following effect:
     ///
-    ///   * A ping is sent every 20 seconds on a healthy connection
-    ///     (if no ping is received meanwhile).
-    ///   * Every ping sent must yield a response within 10 seconds.
-    ///   * If 3 subsequent outbound pings fail and no ping is received, i.e.
-    ///     no ping is successfully sent or received within 30 seconds, the
-    ///     connection is deemed unhealthy.
+    ///   * A ping is sent every 15 seconds on a healthy connection.
+    ///   * Every ping sent must yield a response within 20 seconds in order to
+    ///     be successful.
+    ///   * The duration of a single ping timeout without sending or receiving
+    ///     a pong is sufficient for the connection to be subject to being closed,
+    ///     i.e. the connection timeout is reset to 20 seconds from the current
+    ///     [`Instant`] upon a sent or received pong.
+    ///
+    /// In general, every successfully sent or received pong resets the connection
+    /// timeout, which is defined by
+    /// ```
+    /// max_timeouts * timeout
+    /// ```
+    /// relative to the current [`Instant`].
+    ///
+    /// A sensible configuration should thus obey the invariant:
+    /// ```
+    /// max_timeouts * timeout > interval
+    /// ```
     pub fn new() -> Self {
         Self {
-            timeout: Duration::from_secs(10),
-            interval: Duration::from_secs(20),
-            max_timeouts: NonZeroU32::new(3).expect("3 != 0")
+            timeout: Duration::from_secs(20),
+            interval: Duration::from_secs(15),
+            max_timeouts: NonZeroU32::new(1).expect("1 != 0"),
+            policy: PingPolicy::Always
         }
     }
 
@@ -86,12 +104,43 @@ impl PingConfig {
     /// > **Note**: Successful inbound pings from the remote peer can keep
     /// >           the connection alive, even if outbound pings fail. I.e.
     /// >           the connection is closed after `ping_timeout * max_timeouts`
-    /// >           only if in addition to failing outbound pings no ping from
+    /// >           only if in addition to failing outbound pings, no ping from
     /// >           the remote is received within that time window.
     pub fn with_max_timeouts(mut self, n: NonZeroU32) -> Self {
         self.max_timeouts = n;
         self
     }
+
+    /// Sets the [`PingPolicy`] to use for outbound pings.
+    pub fn with_policy(mut self, p: PingPolicy) -> Self {
+        self.policy = p;
+        self
+    }
+}
+
+/// The `PingPolicy` determines under what conditions an outbound ping
+/// is sent w.r.t. inbound pings.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PingPolicy {
+    /// Always send a ping in the configured interval, regardless
+    /// of received pings.
+    ///
+    /// This policy is appropriate e.g. if continuous measurement of
+    /// the RTT to the remote is desired.
+    Always,
+    /// Only sent a ping as necessary to keep the connection alive.
+    ///
+    /// This policy resets the local ping timer whenever an inbound ping
+    /// is received, effectively letting the peer with the lower ping
+    /// frequency drive the ping protocol. Hence, to avoid superfluous ping
+    /// traffic, the ping interval of the peers should ideally not be the
+    /// same when using this policy, e.g. through randomization.
+    ///
+    /// This policy is appropriate if the ping protocol is only used
+    /// as an application-layer connection keep-alive, without a need
+    /// for measuring the round-trip times on both peers, as it tries
+    /// to keep the ping traffic to a minimum.
+    KeepAlive
 }
 
 /// The result of an inbound or outbound ping.
@@ -132,8 +181,9 @@ pub struct PingHandler<TSubstream> {
     /// The current keep-alive, i.e. until when the connection that
     /// the handler operates on should be kept alive.
     connection_keepalive: KeepAlive,
-    /// The last result from an inbound or outbound ping.
-    last_result: Option<PingResult>,
+    /// The pending results from inbound or outbound pings, ready
+    /// to be `poll()`ed.
+    pending_results: VecDeque<(Instant, PingResult)>,
     _marker: std::marker::PhantomData<TSubstream>
 }
 
@@ -152,7 +202,7 @@ where
             next_ping,
             connection_timeout,
             connection_keepalive,
-            last_result: None,
+            pending_results: VecDeque::with_capacity(2),
             _marker: std::marker::PhantomData
         }
     }
@@ -181,21 +231,22 @@ where
 
     fn inject_fully_negotiated_inbound(&mut self, _: ()) {
         // A ping from a remote peer has been answered.
-        self.last_result = Some(Ok(PingSuccess::Pong));
+        self.pending_results.push_front((Instant::now(), Ok(PingSuccess::Pong)));
     }
 
     fn inject_fully_negotiated_outbound(&mut self, rtt: Duration, _info: ()) {
         // A ping initiated by the local peer was answered by the remote.
-        self.last_result = Some(Ok(PingSuccess::Ping { rtt }));
+        self.pending_results.push_front((Instant::now(), Ok(PingSuccess::Ping { rtt })));
     }
 
     fn inject_event(&mut self, _: Void) {}
 
     fn inject_dial_upgrade_error(&mut self, _info: (), error: Self::Error) {
-        self.last_result = Some(Err(match error {
-            ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
-            e => PingFailure::Other { error: Box::new(e) }
-        }))
+        self.pending_results.push_front(
+            (Instant::now(), Err(match error {
+                ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
+                e => PingFailure::Other { error: Box::new(e) }
+            })))
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -203,13 +254,19 @@ where
     }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
-        if let Some(res) = self.last_result.take() {
-            if res.is_ok() {
-                let now = Instant::now();
-                self.connection_keepalive = KeepAlive::Until(now + self.connection_timeout);
-                self.next_ping.reset(now + self.config.interval);
+        if let Some((instant, result)) = self.pending_results.pop_back() {
+            if result.is_ok() {
+                self.connection_keepalive = KeepAlive::Until(instant + self.connection_timeout);
+                let reset = match result {
+                    Ok(PingSuccess::Ping { .. }) => true,
+                    Ok(PingSuccess::Pong) => self.config.policy == PingPolicy::KeepAlive,
+                    _ => false
+                };
+                if reset {
+                    self.next_ping.reset(instant + self.config.interval);
+                }
             }
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(res)))
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(result)))
         }
 
         match self.next_ping.poll() {

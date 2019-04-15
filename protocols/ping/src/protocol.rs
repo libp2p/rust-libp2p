@@ -94,7 +94,7 @@ where
 
     #[inline]
     fn upgrade_outbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        let payload = thread_rng().sample(distributions::Standard);
+        let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
         debug!("Preparing ping payload {:?}", payload);
 
         PingDialer {
