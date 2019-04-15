@@ -34,6 +34,7 @@ use libp2p_secio::SecioConfig;
 use libp2p_tcp::TcpConfig;
 use futures::{future, prelude::*};
 use std::{fmt, time::Duration};
+use tokio::runtime::Runtime;
 
 #[test]
 fn ping() {
@@ -75,9 +76,8 @@ fn ping() {
         }
     });
 
-    let mut runtime = tokio::runtime::Runtime::new().unwrap();
     let result = peer1.select(peer2).map_err(|e| panic!(e));
-    let ((p1, p2, rtt), _) = runtime.block_on(result).unwrap();
+    let ((p1, p2, rtt), _) = Runtime::new().unwrap().block_on(result).unwrap();
     assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
     assert!(rtt < Duration::from_millis(15));
 }

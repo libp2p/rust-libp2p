@@ -18,18 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Once we are connected to a node, a *protocols handler* handles one or more specific protocols
-//! on this connection.
+//! Once a connection to a remote peer is established, a `ProtocolsHandler` negotiates
+//! and handles one or more specific protocols on the connection.
 //!
-//! This includes: how to handle incoming substreams, which protocols are supported, when to open
-//! a new outbound substream, and so on.
+//! Protocols are negotiated and used on individual substreams of the connection.
+//! Thus a `ProtocolsHandler` defines the inbound and outbound upgrades to apply
+//! when creating a new inbound or outbound substream, respectively, and is notified
+//! by a `Swarm` when these upgrades have been successfully applied, including the
+//! final output of the upgrade. A `ProtocolsHandler` can then continue communicating
+//! with the peer over the substream using the negotiated protocol(s).
 //!
-//! Each implementation of the `ProtocolsHandler` trait handles one or more specific protocols.
-//! Two `ProtocolsHandler`s can be combined together with the `select()` method in order to build
-//! a `ProtocolsHandler` that combines both. This can be repeated multiple times in order to create
-//! a handler that handles all the protocols that you wish.
+//! Two `ProtocolsHandler`s can be composed with [`ProtocolsHandler::select()`]
+//! in order to build a new handler supporting the combined set of protocols,
+//! with methods being dispatched to the appropriate handler according to the
+//! used protocol(s) determined by the associated types of the handlers.
 //!
-//! > **Note**: A `ProtocolsHandler` handles one or more protocols in relation to a specific
+//! > **Note**: A `ProtocolsHandler` handles one or more protocols in the context of a single
 //! >           connection with a remote. In order to handle a protocol that requires knowledge of
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
@@ -57,55 +61,52 @@ mod node_handler;
 mod one_shot;
 mod select;
 
-/// Handler for a set of protocols for a specific connection with a remote.
+/// A handler for a set of protocols used on a connection with a remote.
 ///
-/// This trait should be implemented on a struct that holds the state for a specific protocol
-/// behaviour with a specific remote.
+/// This trait should be implemented for a type that maintains the state for
+/// the execution of a specific protocol with a remote.
 ///
 /// # Handling a protocol
 ///
-/// Communication with a remote over a set of protocols opened in two different ways:
+/// Communication with a remote over a set of protocols is initiated in one of two ways:
 ///
-/// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
-///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a
-///   protocol.
-/// - Listening, which is used to determine which protocols are supported when the remote wants
-///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
-///   listening.
+///   1. Dialing by initiating a new outbound substream. In order to do so,
+///      [`ProtocolsHandler::poll()`] must return an [`OutboundSubstreamRequest`], providing an
+///      instance of [`ProtocolsHandler::OutboundUpgrade`] that is used to negotiate the
+///      protocol(s). Upon success, [`ProtocolsHandler::inject_fully_negotiated_outbound`]
+///      is called with the final output of the upgrade.
 ///
-/// The upgrade when dialing and the upgrade when listening have to be of the same type, but you
-/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the
-/// upgrade you want depending on the situation.
+///   2. Listening by accepting a new inbound substream. When a new inbound substream
+///      is created on a connection, [`ProtocolsHandler::listen_protocol`] is called
+///      to obtain an instance of [`ProtocolsHandler::InboundUpgrade`] that is used to
+///      negotiate the protocol(s). Upon success,
+///      [`ProtocolsHandler::inject_fully_negotiated_inbound`] is called with the final
+///      output of the upgrade.
 ///
-/// # Shutting down
+/// # Connection Keep-Alive
+///
+/// A `ProtocolsHandler` can influence the lifetime of the underlying connection
+/// through [`ProtocolsHandler::connection_keep_alive`]. That is, the protocol
+/// implemented by the handler can include conditions for terminating the connection.
+/// The lifetime of successfully negotiated substreams is fully controlled by the handler.
 ///
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
-/// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
-/// handler continues to be processed until it produces `ProtocolsHandlerEvent::Shutdown`. Only
-/// then the handler is destroyed.
-///
-/// This makes it possible for the handler to finish delivering events even after knowing that it
-/// is shutting down.
-///
-/// Implementors of this trait should keep in mind that when `shutdown()` is called, the connection
-/// might already be closed or unresponsive. They should therefore not rely on being able to
-/// deliver messages.
-///
+/// When a connection is closed gracefully, the substreams used by the handler may still
+/// continue reading data until the remote closes its side of the connection.
 pub trait ProtocolsHandler {
     /// Custom event that can be received from the outside.
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
     type OutEvent;
-    /// Error that can happen when polling.
+    /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error;
-    /// The type of the substream that contains the raw data.
+    /// The type of substreams on which the protocol(s) are negotiated.
     type Substream: AsyncRead + AsyncWrite;
-    /// The upgrade for the protocol or protocols handled by this handler.
+    /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgrade<Self::Substream>;
-    /// The upgrade for the protocol or protocols handled by this handler.
+    /// The outbound upgrade for the protocol(s) used by the handler.
     type OutboundProtocol: OutboundUpgrade<Self::Substream>;
-    /// Information about a substream. Can be sent to the handler through a `NodeHandlerEndpoint`,
-    /// and will be passed back in `inject_substream` or `inject_outbound_closed`.
+    /// The type of additional information passed to an `OutboundSubstreamRequest`.
     type OutboundOpenInfo;
 
     /// The timeout for protocol negotiation on inbound substreams.
@@ -168,11 +169,13 @@ pub trait ProtocolsHandler {
     /// and this handler destroyed after the specified `Instant`.
     ///
     /// Returning [`KeepAlive::Forever`] indicates that the connection should
-    /// always be kept alive. The connection will only be closed if
-    /// [`ProtocolsHandler::poll`] returns an error.
+    /// be kept alive until the next call to this method.
     ///
-    /// When multiple `ProtocolsHandler`s are combined, the largest `KeepAlive`
-    /// takes precedence.
+    /// > **Note**: The connection is always closed and the handler destroyed
+    /// > when [`ProtocolsHandler::poll`] returns an error. Furthermore, the
+    /// > connection may be closed for reasons outside of the control
+    /// > of the handler.
+    ///
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
@@ -203,8 +206,12 @@ pub trait ProtocolsHandler {
         MapOutEvent::new(self, map)
     }
 
-    /// Builds an implementation of `ProtocolsHandler` that handles both this protocol and the
-    /// other one together.
+    /// Creates a new `ProtocolsHandler` that selects either this handler or
+    /// `other` by delegating methods calls appropriately.
+    ///
+    /// > **Note**: The largest `KeepAlive` returned by the two handlers takes precedence,
+    /// > i.e. is returned from [`ProtocolsHandler::connection_keep_alive`] by the returned
+    /// > handler.
     #[inline]
     fn select<TProto2>(self, other: TProto2) -> ProtocolsHandlerSelect<Self, TProto2>
     where
@@ -213,8 +220,10 @@ pub trait ProtocolsHandler {
         ProtocolsHandlerSelect::new(self, other)
     }
 
-    /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
+    /// Creates a builder that allows creating a `NodeHandler` that handles this protocol
     /// exclusively.
+    ///
+    /// > **Note**: This method should not be redefined in a custom `ProtocolsHandler`.
     #[inline]
     fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
     where
