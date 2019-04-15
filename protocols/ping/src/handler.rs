@@ -23,6 +23,7 @@ use futures::prelude::*;
 use libp2p_core::ProtocolsHandlerEvent;
 use libp2p_core::protocols_handler::{
     KeepAlive,
+    ListenProtocol,
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
 };
@@ -68,13 +69,13 @@ impl PingConfig {
     ///
     /// In general, every successfully sent or received pong resets the connection
     /// timeout, which is defined by
-    /// ```
+    /// ```raw
     /// max_timeouts * timeout
-    /// ```
+    /// ```raw
     /// relative to the current [`Instant`].
     ///
     /// A sensible configuration should thus obey the invariant:
-    /// ```
+    /// ```raw
     /// max_timeouts * timeout > interval
     /// ```
     pub fn new() -> Self {
@@ -220,13 +221,8 @@ where
     type OutboundProtocol = protocol::Ping;
     type OutboundOpenInfo = ();
 
-    /// The outbound ping timeout, as specified in the [`PingConfig`].
-    fn outbound_timeout(&self) -> Duration {
-        self.config.timeout
-    }
-
-    fn listen_protocol(&self) -> protocol::Ping {
-        protocol::Ping
+    fn listen_protocol(&self) -> ListenProtocol<protocol::Ping, Self::Substream> {
+        ListenProtocol::new(protocol::Ping)
     }
 
     fn inject_fully_negotiated_inbound(&mut self, _: ()) {
@@ -275,6 +271,7 @@ where
                 Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     upgrade: protocol::Ping,
                     info: (),
+                    timeout: self.config.timeout
                 }))
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),

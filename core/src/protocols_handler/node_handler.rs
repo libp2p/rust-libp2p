@@ -31,7 +31,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{error, fmt, time::Instant};
+use std::{error, fmt, time::{Duration, Instant}};
 use tokio_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
@@ -169,7 +169,7 @@ where
     type Substream = TProtoHandler::Substream;
     // The first element of the tuple is the unique upgrade identifier
     // (see `unique_dial_upgrade_id`).
-    type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo);
+    type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo, Duration);
 
     fn inject_substream(
         &mut self,
@@ -179,12 +179,12 @@ where
         match endpoint {
             NodeHandlerEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
-                let upgrade = upgrade::apply_inbound(substream, protocol);
-                let timeout = self.handler.inbound_timeout();
+                let timeout = protocol.timeout().clone();
+                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade());
                 let with_timeout = Timeout::new(upgrade, timeout);
                 self.negotiating_in.push(with_timeout);
             }
-            NodeHandlerEndpoint::Dialer((upgrade_id, user_data)) => {
+            NodeHandlerEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
                 let pos = match self
                     .queued_dial_upgrades
                     .iter()
@@ -199,7 +199,6 @@ where
 
                 let (_, proto_upgrade) = self.queued_dial_upgrades.remove(pos);
                 let upgrade = upgrade::apply_outbound(substream, proto_upgrade);
-                let timeout = self.handler.outbound_timeout();
                 let with_timeout = Timeout::new(upgrade, timeout);
                 self.negotiating_out.push((user_data, with_timeout));
             }
@@ -271,12 +270,13 @@ where
             Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 upgrade,
                 info,
+                timeout
             }) => {
                 let id = self.unique_dial_upgrade_id;
                 self.unique_dial_upgrade_id += 1;
                 self.queued_dial_upgrades.push((id, upgrade));
                 return Ok(Async::Ready(
-                    NodeHandlerEvent::OutboundSubstreamRequest((id, info)),
+                    NodeHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));
             }
             Async::NotReady => (),

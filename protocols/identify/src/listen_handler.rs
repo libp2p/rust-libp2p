@@ -21,7 +21,13 @@
 use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        KeepAlive,
+        ListenProtocol,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr
+    },
     upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
 use smallvec::SmallVec;
@@ -61,8 +67,8 @@ where
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        self.config.clone()
+    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+        ListenProtocol::new(self.config.clone())
     }
 
     fn inject_fully_negotiated_inbound(

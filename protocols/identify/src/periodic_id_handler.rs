@@ -21,7 +21,13 @@
 use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        KeepAlive,
+        ListenProtocol,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr
+    },
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
@@ -91,8 +97,8 @@ where
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        DeniedUpgrade
+    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+        ListenProtocol::new(DeniedUpgrade)
     }
 
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
@@ -149,7 +155,11 @@ where
             Async::Ready(()) => {
                 self.next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
-                let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
+                let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade,
+                    info: (),
+                    timeout: Duration::from_secs(10)
+                };
                 Ok(Async::Ready(ev))
             }
         }

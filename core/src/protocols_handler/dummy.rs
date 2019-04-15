@@ -19,7 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        KeepAlive,
+        ListenProtocol,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr
+    },
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -58,8 +64,8 @@ where
     type OutboundOpenInfo = Void;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        DeniedUpgrade
+    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+        ListenProtocol::new(DeniedUpgrade)
     }
 
     #[inline]

@@ -23,7 +23,13 @@ use crate::protocol::{
     KademliaProtocolConfig,
 };
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use libp2p_core::protocols_handler::{
+    KeepAlive,
+    ListenProtocol,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
+};
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
 use std::{error, fmt, io, time::Duration, time::Instant};
@@ -350,11 +356,11 @@ where
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
+    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
         if self.allow_listening {
-            upgrade::EitherUpgrade::A(self.config)
+            ListenProtocol::new(self.config).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+            ListenProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
     }
 
@@ -552,6 +558,7 @@ where
             let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 upgrade,
                 info: (msg, user_data),
+                timeout: Duration::from_secs(10)
             };
             (None, Some(ev), false)
         }
