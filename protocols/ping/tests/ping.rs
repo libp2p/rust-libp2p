@@ -96,7 +96,7 @@ fn ping() {
     let result = peer1.select(peer2).map_err(|e| panic!(e));
     let ((p1, p2, rtt), _) = Runtime::new().unwrap().block_on(result).unwrap();
     assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
-    assert!(rtt < Duration::from_millis(15));
+    assert!(rtt < Duration::from_millis(50));
 }
 
 fn mk_transport() -> (PeerId, impl Transport<
