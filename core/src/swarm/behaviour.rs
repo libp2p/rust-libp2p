@@ -89,6 +89,10 @@ pub trait NetworkBehaviour {
     fn inject_expired_listen_addr(&mut self, _addr: &Multiaddr) {
     }
 
+    /// Indicates to the behaviour that we have discovered a new external address for us.
+    fn inject_new_external_addr(&mut self, _addr: &Multiaddr) {
+    }
+
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
