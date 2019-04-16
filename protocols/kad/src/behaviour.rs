@@ -21,7 +21,7 @@
 use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::kad_hash::KadHash;
-use crate::kbucket::{self, KBucketsTable, KBucketsPeerId};
+use crate::kbucket::{self, KBucketsTable, KBucketsPeerId, PeerState};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -52,13 +52,13 @@ pub enum KademliaEntry<'a> {
     SelfEntry,
 }
 
-impl<'a> From<kbucket::Entry<'a, &'a KBucketsTable<KadHash, Addresses>, KadHash>> for KademliaEntry<'a> {
-    fn from(peer_state: kbucket::Entry<'a, &'a KBucketsTable<KadHash, Addresses>, KadHash>) -> KademliaEntry<'a> {
+impl<'a> From<kbucket::Entry<'a, KadHash, Addresses>> for KademliaEntry<'a> {
+    fn from(peer_state: kbucket::Entry<'a, KadHash, Addresses>) -> KademliaEntry<'a> {
         match peer_state {
-            kbucket::Entry::InKbucketConnected(entry) => KademliaEntry::InKademliaConnected(entry.peer_id().peer_id()),
-            kbucket::Entry::InKbucketConnectedPending(entry) => KademliaEntry::InKademliaConnectedPending(entry.peer_id().peer_id()),
-            kbucket::Entry::InKbucketDisconnected(entry) => KademliaEntry::InKademliaDisconnected(entry.peer_id().peer_id()),
-            kbucket::Entry::InKbucketDisconnectedPending(entry) => KademliaEntry::InKademliaDisconnectedPending(entry.peer_id().peer_id()),
+            kbucket::Entry::InKbucketConnected(entry) => KademliaEntry::InKademliaConnected(entry.peer_id()),
+            kbucket::Entry::InKbucketConnectedPending(entry) => KademliaEntry::InKademliaConnectedPending(entry.peer_id()),
+            kbucket::Entry::InKbucketDisconnected(entry) => KademliaEntry::InKademliaDisconnected(entry.peer_id()),
+            kbucket::Entry::InKbucketDisconnectedPending(entry) => KademliaEntry::InKademliaDisconnectedPending(entry.peer_id()),
             kbucket::Entry::NotInKbucket(_) => KademliaEntry::NotInKademlia,
             kbucket::Entry::SelfEntry => KademliaEntry::SelfEntry,
         }
@@ -298,7 +298,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
     pub fn kbuckets_entries<'a>(&'a self) -> impl 'a + Iterator<Item = &PeerId> {
-        self.kbuckets.entries_not_pending().flat_map(|entry| entry.peer_id().map(|p| p.peer_id()))
+        self.kbuckets.entries_not_pending().flat_map(|peer_state| peer_state.peer_id().map(|p| p.peer_id()))
     }
 
     pub fn peer_state<'a>(&'a self, peer_id: &PeerId) -> KademliaEntry {
