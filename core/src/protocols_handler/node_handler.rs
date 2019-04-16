@@ -31,17 +31,13 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{error, fmt, time::Duration, time::Instant};
+use std::{error, fmt, time::{Duration, Instant}};
 use tokio_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
     /// The underlying handler.
     handler: TIntoProtoHandler,
-    /// Timeout for incoming substreams negotiation.
-    in_timeout: Duration,
-    /// Timeout for outgoing substreams negotiation.
-    out_timeout: Duration,
 }
 
 impl<TIntoProtoHandler> NodeHandlerWrapperBuilder<TIntoProtoHandler>
@@ -50,26 +46,10 @@ where
 {
     /// Builds a `NodeHandlerWrapperBuilder`.
     #[inline]
-    pub(crate) fn new(handler: TIntoProtoHandler, in_timeout: Duration, out_timeout: Duration) -> Self {
+    pub(crate) fn new(handler: TIntoProtoHandler) -> Self {
         NodeHandlerWrapperBuilder {
             handler,
-            in_timeout,
-            out_timeout,
         }
-    }
-
-    /// Sets the timeout to use when negotiating a protocol on an ingoing substream.
-    #[inline]
-    pub fn with_in_negotiation_timeout(mut self, timeout: Duration) -> Self {
-        self.in_timeout = timeout;
-        self
-    }
-
-    /// Sets the timeout to use when negotiating a protocol on an outgoing substream.
-    #[inline]
-    pub fn with_out_negotiation_timeout(mut self, timeout: Duration) -> Self {
-        self.out_timeout = timeout;
-        self
     }
 
     /// Builds the `NodeHandlerWrapper`.
@@ -82,8 +62,6 @@ where
             handler: self.handler,
             negotiating_in: Vec::new(),
             negotiating_out: Vec::new(),
-            in_timeout: self.in_timeout,
-            out_timeout: self.out_timeout,
             queued_dial_upgrades: Vec::new(),
             unique_dial_upgrade_id: 0,
             connection_shutdown: None,
@@ -105,8 +83,6 @@ where
             handler: self.handler.into_handler(remote_peer_id),
             negotiating_in: Vec::new(),
             negotiating_out: Vec::new(),
-            in_timeout: self.in_timeout,
-            out_timeout: self.out_timeout,
             queued_dial_upgrades: Vec::new(),
             unique_dial_upgrade_id: 0,
             connection_shutdown: None,
@@ -131,10 +107,6 @@ where
         TProtoHandler::OutboundOpenInfo,
         Timeout<OutboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::OutboundProtocol>>,
     )>,
-    /// Timeout for incoming substreams negotiation.
-    in_timeout: Duration,
-    /// Timeout for outgoing substreams negotiation.
-    out_timeout: Duration,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
     queued_dial_upgrades: Vec<(u64, TProtoHandler::OutboundProtocol)>,
@@ -197,7 +169,7 @@ where
     type Substream = TProtoHandler::Substream;
     // The first element of the tuple is the unique upgrade identifier
     // (see `unique_dial_upgrade_id`).
-    type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo);
+    type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo, Duration);
 
     fn inject_substream(
         &mut self,
@@ -207,11 +179,12 @@ where
         match endpoint {
             NodeHandlerEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
-                let upgrade = upgrade::apply_inbound(substream, protocol);
-                let with_timeout = Timeout::new(upgrade, self.in_timeout);
+                let timeout = protocol.timeout().clone();
+                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade());
+                let with_timeout = Timeout::new(upgrade, timeout);
                 self.negotiating_in.push(with_timeout);
             }
-            NodeHandlerEndpoint::Dialer((upgrade_id, user_data)) => {
+            NodeHandlerEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
                 let pos = match self
                     .queued_dial_upgrades
                     .iter()
@@ -226,7 +199,7 @@ where
 
                 let (_, proto_upgrade) = self.queued_dial_upgrades.remove(pos);
                 let upgrade = upgrade::apply_outbound(substream, proto_upgrade);
-                let with_timeout = Timeout::new(upgrade, self.out_timeout);
+                let with_timeout = Timeout::new(upgrade, timeout);
                 self.negotiating_out.push((user_data, with_timeout));
             }
         }
@@ -270,7 +243,7 @@ where
                     } else {
                         debug_assert!(err.is_inner());
                         let err = err.into_inner().expect("Timeout error is one of {elapsed, \
-                            timer, inner}; is_inner and is_elapsed are both false; error is \
+                            timer, inner}; is_elapsed and is_timer are both false; error is \
                             inner; QED");
                         ProtocolsHandlerUpgrErr::Upgrade(err)
                     };
@@ -280,8 +253,8 @@ where
             }
         }
 
-        // Poll the handler at the end so that we see the consequences of the method calls on
-        // `self.handler`.
+        // Poll the handler at the end so that we see the consequences of the method
+        // calls on `self.handler`.
         let poll_result = self.handler.poll()?;
 
         self.connection_shutdown = match self.handler.connection_keep_alive() {
@@ -295,14 +268,15 @@ where
                 return Ok(Async::Ready(NodeHandlerEvent::Custom(event)));
             }
             Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                upgrade,
+                protocol,
                 info,
             }) => {
                 let id = self.unique_dial_upgrade_id;
+                let timeout = protocol.timeout().clone();
                 self.unique_dial_upgrade_id += 1;
-                self.queued_dial_upgrades.push((id, upgrade));
+                self.queued_dial_upgrades.push((id, protocol.into_upgrade()));
                 return Ok(Async::Ready(
-                    NodeHandlerEvent::OutboundSubstreamRequest((id, info)),
+                    NodeHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));
             }
             Async::NotReady => (),

@@ -283,8 +283,8 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn new() -> CommonTransport {
-        let transport = tcp::TcpConfig::new();
-        let transport = dns::DnsConfig::new(transport);
+        let tcp = tcp::TcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp);
         #[cfg(feature = "libp2p-websocket")]
         let transport = {
             let trans_clone = transport.clone();

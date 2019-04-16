@@ -22,7 +22,13 @@ use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, IncomingError};
 use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
-use libp2p_core::protocols_handler::{ProtocolsHandler, KeepAlive, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use libp2p_core::protocols_handler::{
+    ProtocolsHandler,
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
+};
 use std::{io, time::Duration, time::Instant};
 use tokio_timer::Delay;
 
@@ -47,8 +53,8 @@ where
     type OutboundProtocol = upgrade::DeniedUpgrade;
     type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
 
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        upgrade::DeniedUpgrade
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+        SubstreamProtocol::new(upgrade::DeniedUpgrade)
     }
 
     fn inject_fully_negotiated_inbound(
