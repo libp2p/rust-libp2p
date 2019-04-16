@@ -325,6 +325,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
                         if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.behaviour.inject_new_external_addr(&addr);
                             self.external_addrs.push(addr);
                         }
                     }

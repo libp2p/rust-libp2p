@@ -270,6 +270,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_new_external_addr()`.
+    let inject_new_external_addr_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_new_external_addr(addr); },
+                None => quote!{ self.#field_n.inject_new_external_addr(addr); },
+            })
+        })
+    };
+
     // Build the list of variants to put in the body of `inject_node_event()`.
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
@@ -447,6 +461,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             fn inject_expired_listen_addr(&mut self, addr: &#multiaddr) {
                 #(#inject_expired_listen_addr_stmts);*
+            }
+
+            fn inject_new_external_addr(&mut self, addr: &#multiaddr) {
+                #(#inject_new_external_addr_stmts);*
             }
 
             fn inject_node_event(

@@ -115,7 +115,12 @@ where
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_expired_listen_addr(addr)
         }
+    }
 
+    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_new_external_addr(addr)
+        }
     }
 
     fn poll(&mut self, params: &mut PollParameters<'_>)
