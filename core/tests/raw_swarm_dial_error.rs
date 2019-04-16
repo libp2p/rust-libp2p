@@ -23,7 +23,14 @@ use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, RawSwarmReachError, PeerState, UnknownPeerDialErr, IncomingError};
 use libp2p_core::{PeerId, Transport, upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt};
-use libp2p_core::protocols_handler::{ProtocolsHandler, KeepAlive, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, NodeHandlerWrapperBuilder};
+use libp2p_core::protocols_handler::{
+    ProtocolsHandler,
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr,
+    NodeHandlerWrapperBuilder
+};
 use rand::seq::SliceRandom;
 use std::io;
 
@@ -48,8 +55,8 @@ where
     type OutboundProtocol = upgrade::DeniedUpgrade;
     type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
 
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        upgrade::DeniedUpgrade
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+        SubstreamProtocol::new(upgrade::DeniedUpgrade)
     }
 
     fn inject_fully_negotiated_inbound(
