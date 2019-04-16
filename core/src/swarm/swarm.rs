@@ -274,9 +274,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if !self.listened_addrs.contains(&listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
+                    self.behaviour.inject_new_listen_addr(&listen_addr);
                 }
                 Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr }) => {
-                    self.listened_addrs.retain(|a| a != &listen_addr)
+                    self.listened_addrs.retain(|a| a != &listen_addr);
+                    self.behaviour.inject_expired_listen_addr(&listen_addr);
                 }
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},

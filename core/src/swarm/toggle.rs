@@ -98,6 +98,19 @@ where
         }
     }
 
+    fn inject_new_listen_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_new_listen_addr(addr)
+        }
+    }
+
+    fn inject_expired_listen_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_expired_listen_addr(addr)
+        }
+
+    }
+
     fn poll(&mut self, params: &mut PollParameters<'_>)
         -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {

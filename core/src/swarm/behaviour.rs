@@ -80,6 +80,15 @@ pub trait NetworkBehaviour {
     fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
     }
 
+    /// Indicates to the behaviour that we have started listening on a new multiaddr.
+    fn inject_new_listen_addr(&mut self, _addr: &Multiaddr) {
+    }
+
+    /// Indicates to the behaviour that a new multiaddr we were listening on has expired,
+    /// which means that we are no longer listening in it.
+    fn inject_expired_listen_addr(&mut self, _addr: &Multiaddr) {
+    }
+
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
