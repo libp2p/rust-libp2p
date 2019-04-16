@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport, transport::TransportError};
+use crate::{
+    nodes::raw_swarm::ConnectedPoint,
+    transport::{Transport, TransportError, ListenerEvent}
+};
 use futures::{prelude::*, try_ready};
 use multiaddr::Multiaddr;
 
@@ -27,7 +30,6 @@ use multiaddr::Multiaddr;
 pub struct Map<T, F> { transport: T, fun: F }
 
 impl<T, F> Map<T, F> {
-    #[inline]
     pub(crate) fn new(transport: T, fun: F) -> Self {
         Map { transport, fun }
     }
@@ -44,26 +46,17 @@ where
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
     type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (stream, listen_addr) = self.transport.listen_on(addr)?;
-        let stream = MapStream {
-            stream,
-            listen_addr: listen_addr.clone(),
-            fun: self.fun
-        };
-        Ok((stream, listen_addr))
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let stream = self.transport.listen_on(addr)?;
+        Ok(MapStream { stream, fun: self.fun })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial(addr.clone())?;
         let p = ConnectedPoint::Dialer { address: addr };
-        Ok(MapFuture {
-            inner: future,
-            args: Some((self.fun, p))
-        })
+        Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
     }
 
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.nat_traversal(server, observed)
     }
@@ -73,30 +66,39 @@ where
 ///
 /// Maps a function over every stream item.
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> { stream: T, listen_addr: Multiaddr, fun: F }
+pub struct MapStream<T, F> { stream: T, fun: F }
 
 impl<T, F, A, B, X> Stream for MapStream<T, F>
 where
-    T: Stream<Item = (X, Multiaddr)>,
+    T: Stream<Item = ListenerEvent<X>>,
     X: Future<Item = A>,
     F: FnOnce(A, ConnectedPoint) -> B + Clone
 {
-    type Item = (MapFuture<X, F>, Multiaddr);
+    type Item = ListenerEvent<MapFuture<X, F>>;
     type Error = T::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.stream.poll()? {
-            Async::Ready(Some((future, addr))) => {
-                let f = self.fun.clone();
-                let p = ConnectedPoint::Listener {
-                    listen_addr: self.listen_addr.clone(),
-                    send_back_addr: addr.clone()
+            Async::Ready(Some(event)) => {
+                let event = match event {
+                    ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
+                        let point = ConnectedPoint::Listener {
+                            listen_addr: listen_addr.clone(),
+                            send_back_addr: remote_addr.clone()
+                        };
+                        ListenerEvent::Upgrade {
+                            upgrade: MapFuture {
+                                inner: upgrade,
+                                args: Some((self.fun.clone(), point))
+                            },
+                            listen_addr,
+                            remote_addr
+                        }
+                    }
+                    ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
+                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
                 };
-                let future = MapFuture {
-                    inner: future,
-                    args: Some((f, p))
-                };
-                Ok(Async::Ready(Some((future, addr))))
+                Ok(Async::Ready(Some(event)))
             }
             Async::Ready(None) => Ok(Async::Ready(None)),
             Async::NotReady => Ok(Async::NotReady)

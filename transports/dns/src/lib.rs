@@ -33,13 +33,11 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use libp2p_core as swarm;
-
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
+use libp2p_core::{Transport, transport::{TransportError, ListenerEvent}};
 use log::{debug, trace, log_enabled, Level};
 use multiaddr::{Protocol, Multiaddr};
 use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
-use swarm::{Transport, transport::TransportError};
 use tokio_dns::{CpuPoolResolver, Resolver};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
@@ -93,7 +91,7 @@ where
     type Error = DnsErr<T::Error>;
     type Listener = stream::MapErr<
         stream::Map<T::Listener,
-            fn((T::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr)>,
+            fn(ListenerEvent<T::ListenerUpgrade>) -> ListenerEvent<Self::ListenerUpgrade>>,
         fn(T::Error) -> Self::Error>;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = Either<future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
@@ -103,14 +101,14 @@ where
         >>
     >;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (listener, new_addr) = self.inner.listen_on(addr)
-            .map_err(|err| err.map(DnsErr::Underlying))?;
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let listener = self.inner.listen_on(addr).map_err(|err| err.map(DnsErr::Underlying))?;
         let listener = listener
-            .map::<_, fn(_) -> _>(|(upgr, multiaddr)| (upgr.map_err::<fn(_) -> _, _>(DnsErr::Underlying), multiaddr))
+            .map::<_, fn(_) -> _>(|event| event.map(|upgr| {
+                upgr.map_err::<fn(_) -> _, _>(DnsErr::Underlying)
+            }))
             .map_err::<_, fn(_) -> _>(DnsErr::Underlying);
-        Ok((listener, new_addr))
+        Ok(listener)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -318,7 +316,7 @@ where
 mod tests {
     use libp2p_tcp::TcpConfig;
     use futures::future;
-    use super::swarm::{Transport, transport::TransportError};
+    use libp2p_core::{Transport, transport::TransportError};
     use multiaddr::{Protocol, Multiaddr};
     use super::DnsConfig;
 
@@ -337,7 +335,7 @@ mod tests {
             fn listen_on(
                 self,
                 _addr: Multiaddr,
-            ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+            ) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
             }
 

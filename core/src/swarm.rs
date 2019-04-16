@@ -40,7 +40,6 @@
 //! behave. This includes which protocols are supported and which nodes to try to connect to.
 //!
 
-
 mod behaviour;
 mod swarm;
 

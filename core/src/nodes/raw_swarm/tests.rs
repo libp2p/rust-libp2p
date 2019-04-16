@@ -26,6 +26,7 @@ use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
 use crate::tests::dummy_transport::ListenerState;
 use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
 use crate::nodes::NodeHandlerEvent;
+use crate::transport::ListenerEvent;
 use assert_matches::assert_matches;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -40,17 +41,6 @@ fn query_transport() {
 }
 
 #[test]
-fn starts_listening() {
-    let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
-    let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-    let addr2 = addr.clone();
-    assert!(raw_swarm.listen_on(addr).is_ok());
-    let listeners = raw_swarm.listeners().collect::<Vec<&Multiaddr>>();
-    assert_eq!(listeners.len(), 1);
-    assert_eq!(listeners[0], &addr2);
-}
-
-#[test]
 fn local_node_peer() {
     let peer_id = PeerId::random();
     let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), peer_id.clone());
@@ -59,9 +49,6 @@ fn local_node_peer() {
 
 #[test]
 fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used() {
-    // the DummyTransport nat_traversal increments the port number by one for Ip4 addresses
-    let transport = DummyTransport::new();
-    let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
     let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
     // An unrelated outside address is returned as-is, no transform
     let outside_addr1 = "/memory/0".parse::<Multiaddr>().expect("bad multiaddr");
@@ -69,8 +56,26 @@ fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used
     let addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
     let outside_addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
 
-    raw_swarm.listen_on(addr1).unwrap();
-    raw_swarm.listen_on(addr2).unwrap();
+    // the DummyTransport nat_traversal increments the port number by one for Ip4 addresses
+    let mut transport = DummyTransport::new();
+    let events = vec![
+        ListenerEvent::NewAddress(addr1.clone()),
+        ListenerEvent::NewAddress(addr2.clone())
+    ];
+    transport.set_initial_listener_state(ListenerState::Events(events));
+
+    let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
+
+    raw_swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+
+    let raw_swarm =
+        future::lazy(move || {
+            assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
+            assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
+            Ok::<_, void::Void>(raw_swarm)
+        })
+        .wait()
+        .unwrap();
 
     let natted = raw_swarm
         .nat_traversal(&outside_addr1)
@@ -124,8 +129,15 @@ fn num_incoming_negotiated() {
     let peer_id = PeerId::random();
     let muxer = DummyMuxer::new();
 
-    // Set up listener to see an incoming connection
-    transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
+    let events = vec![
+        ListenerEvent::NewAddress("/ip4/127.0.0.1/tcp/1234".parse().unwrap()),
+        ListenerEvent::Upgrade {
+            upgrade: (peer_id.clone(), muxer.clone()),
+            listen_addr: "/ip4/127.0.0.1/tcp/1234".parse().unwrap(),
+            remote_addr: "/ip4/127.0.0.1/tcp/32111".parse().unwrap()
+        }
+    ];
+    transport.set_initial_listener_state(ListenerState::Events(events));
 
     let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
     swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
@@ -138,10 +150,10 @@ fn num_incoming_negotiated() {
     let swarm_fut = swarm.clone();
     let fut = future::poll_fn(move || -> Poll<_, ()> {
         let mut swarm_fut = swarm_fut.lock();
+        assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
         assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
             incoming.accept(Handler::default());
         });
-
         Ok(Async::Ready(()))
     });
     rt.block_on(fut).expect("tokio works");
@@ -407,10 +419,18 @@ fn limit_incoming_connections() {
     let peer_id = PeerId::random();
     let muxer = DummyMuxer::new();
     let limit = 1;
-    transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(
-        Some((peer_id, muxer)))));
-    let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(
-        transport, PeerId::random(), Some(limit));
+
+    let mut events = vec![ListenerEvent::NewAddress("/ip4/127.0.0.1/tcp/1234".parse().unwrap())];
+    events.extend(std::iter::repeat(
+        ListenerEvent::Upgrade {
+            upgrade: (peer_id.clone(), muxer.clone()),
+            listen_addr: "/ip4/127.0.0.1/tcp/1234".parse().unwrap(),
+            remote_addr: "/ip4/127.0.0.1/tcp/32111".parse().unwrap()
+        }
+    ).take(10));
+    transport.set_initial_listener_state(ListenerState::Events(events));
+
+    let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(transport, PeerId::random(), Some(limit));
     assert_eq!(swarm.incoming_limit(), Some(limit));
     swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
     assert_eq!(swarm.incoming_negotiated().count(), 0);
@@ -422,6 +442,7 @@ fn limit_incoming_connections() {
         let fut = future::poll_fn(move || -> Poll<_, ()> {
             let mut swarm_fut = swarm_fut.lock();
             if i <= limit {
+                assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
                 assert_matches!(swarm_fut.poll(),
                     Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
                         incoming.accept(Handler::default());
@@ -431,9 +452,11 @@ fn limit_incoming_connections() {
                     Async::NotReady => (),
                     Async::Ready(x) => {
                         match x {
-                            RawSwarmEvent::IncomingConnection(_) => (),
-                            RawSwarmEvent::Connected { .. } => (),
-                            _ => { panic!("Not expected event") },
+                            RawSwarmEvent::NewListenerAddress {..} => {}
+                            RawSwarmEvent::ExpiredListenerAddress {..} => {}
+                            RawSwarmEvent::IncomingConnection(_) => {}
+                            RawSwarmEvent::Connected {..} => {}
+                            e => panic!("Not expected event: {:?}", e)
                         }
                     },
                 }
