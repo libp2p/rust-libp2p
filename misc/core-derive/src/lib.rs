@@ -242,6 +242,34 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_new_listen_addr()`.
+    let inject_new_listen_addr_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_new_listen_addr(addr); },
+                None => quote!{ self.#field_n.inject_new_listen_addr(addr); },
+            })
+        })
+    };
+
+    // Build the list of statements to put in the body of `inject_expired_listen_addr()`.
+    let inject_expired_listen_addr_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_expired_listen_addr(addr); },
+                None => quote!{ self.#field_n.inject_expired_listen_addr(addr); },
+            })
+        })
+    };
+
     // Build the list of variants to put in the body of `inject_node_event()`.
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
@@ -382,7 +410,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             type ProtocolsHandler = #protocols_handler_ty;
             type OutEvent = #out_event;
 
-            #[inline]
             fn new_handler(&mut self) -> Self::ProtocolsHandler {
                 use #into_protocols_handler;
                 #new_handler
@@ -394,32 +421,34 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 out
             }
 
-            #[inline]
             fn inject_connected(&mut self, peer_id: #peer_id, endpoint: #connected_point) {
                 #(#inject_connected_stmts);*
             }
 
-            #[inline]
             fn inject_disconnected(&mut self, peer_id: &#peer_id, endpoint: #connected_point) {
                 #(#inject_disconnected_stmts);*
             }
 
-            #[inline]
             fn inject_replaced(&mut self, peer_id: #peer_id, closed_endpoint: #connected_point, new_endpoint: #connected_point) {
                 #(#inject_replaced_stmts);*
             }
 
-            #[inline]
             fn inject_addr_reach_failure(&mut self, peer_id: Option<&#peer_id>, addr: &#multiaddr, error: &dyn std::error::Error) {
                 #(#inject_addr_reach_failure_stmts);*
             }
 
-            #[inline]
             fn inject_dial_failure(&mut self, peer_id: &#peer_id) {
                 #(#inject_dial_failure_stmts);*
             }
 
-            #[inline]
+            fn inject_new_listen_addr(&mut self, addr: &#multiaddr) {
+                #(#inject_new_listen_addr_stmts);*
+            }
+
+            fn inject_expired_listen_addr(&mut self, addr: &#multiaddr) {
+                #(#inject_expired_listen_addr_stmts);*
+            }
+
             fn inject_node_event(
                 &mut self,
                 peer_id: #peer_id,
