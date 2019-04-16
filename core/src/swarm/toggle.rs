@@ -22,7 +22,7 @@ use crate::{
     either::EitherOutput,
     protocols_handler::{
         KeepAlive,
-        ListenProtocol,
+        SubstreamProtocol,
         ProtocolsHandler,
         ProtocolsHandlerEvent,
         ProtocolsHandlerUpgrErr,
@@ -162,11 +162,11 @@ where
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
 
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if let Some(inner) = self.inner.as_ref() {
             inner.listen_protocol().map_upgrade(EitherUpgrade::A)
         } else {
-            ListenProtocol::new(EitherUpgrade::B(DeniedUpgrade))
+            SubstreamProtocol::new(EitherUpgrade::B(DeniedUpgrade))
         }
     }
 

@@ -20,7 +20,7 @@
 
 use crate::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
-    ListenProtocol
+    SubstreamProtocol
 };
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
@@ -37,7 +37,7 @@ where
     TOutProto: OutboundUpgrade<TSubstream>,
 {
     /// The upgrade for inbound substreams.
-    listen_protocol: ListenProtocol<TInProto, TSubstream>,
+    listen_protocol: SubstreamProtocol<TInProto>,
     /// If `Some`, something bad happened and we should shut down the handler with an error.
     pending_error:
         Option<ProtocolsHandlerUpgrErr<<TOutProto as OutboundUpgrade<TSubstream>>::Error>>,
@@ -65,7 +65,7 @@ where
     /// Creates a `OneShotHandler`.
     #[inline]
     pub fn new(
-        listen_protocol: ListenProtocol<TInProto, TSubstream>,
+        listen_protocol: SubstreamProtocol<TInProto>,
         inactive_timeout: Duration
     ) -> Self {
         OneShotHandler {
@@ -92,7 +92,7 @@ where
     /// > **Note**: If you modify the protocol, modifications will only applies to future inbound
     /// >           substreams, not the ones already being negotiated.
     #[inline]
-    pub fn listen_protocol_ref(&self) -> &ListenProtocol<TInProto, TSubstream> {
+    pub fn listen_protocol_ref(&self) -> &SubstreamProtocol<TInProto> {
         &self.listen_protocol
     }
 
@@ -101,7 +101,7 @@ where
     /// > **Note**: If you modify the protocol, modifications will only applies to future inbound
     /// >           substreams, not the ones already being negotiated.
     #[inline]
-    pub fn listen_protocol_mut(&mut self) -> &mut ListenProtocol<TInProto, TSubstream> {
+    pub fn listen_protocol_mut(&mut self) -> &mut SubstreamProtocol<TInProto> {
         &mut self.listen_protocol
     }
 
@@ -121,7 +121,7 @@ where
 {
     #[inline]
     fn default() -> Self {
-        OneShotHandler::new(ListenProtocol::new(Default::default()), Duration::from_secs(10))
+        OneShotHandler::new(SubstreamProtocol::new(Default::default()), Duration::from_secs(10))
     }
 }
 
@@ -134,7 +134,7 @@ where
     TInProto::Output: Into<TOutEvent>,
     TOutProto::Output: Into<TOutEvent>,
     TOutProto::Error: error::Error + 'static,
-    ListenProtocol<TInProto, TSubstream>: Clone,
+    SubstreamProtocol<TInProto>: Clone,
 {
     type InEvent = TOutProto;
     type OutEvent = TOutEvent;
@@ -147,7 +147,7 @@ where
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.listen_protocol.clone()
     }
 
@@ -225,9 +225,8 @@ where
                 self.dial_negotiated += 1;
                 return Ok(Async::Ready(
                     ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        upgrade: self.dial_queue.remove(0),
+                        protocol: SubstreamProtocol::new(self.dial_queue.remove(0)),
                         info: (),
-                        timeout: Duration::from_secs(10)
                     },
                 ));
             }

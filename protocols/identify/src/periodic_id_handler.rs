@@ -23,7 +23,7 @@ use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{
         KeepAlive,
-        ListenProtocol,
+        SubstreamProtocol,
         ProtocolsHandler,
         ProtocolsHandlerEvent,
         ProtocolsHandlerUpgrErr
@@ -97,8 +97,8 @@ where
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
-        ListenProtocol::new(DeniedUpgrade)
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+        SubstreamProtocol::new(DeniedUpgrade)
     }
 
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
@@ -154,11 +154,9 @@ where
             Async::NotReady => Ok(Async::NotReady),
             Async::Ready(()) => {
                 self.next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
-                let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade,
+                    protocol: SubstreamProtocol::new(self.config.clone()),
                     info: (),
-                    timeout: Duration::from_secs(10)
                 };
                 Ok(Async::Ready(ev))
             }

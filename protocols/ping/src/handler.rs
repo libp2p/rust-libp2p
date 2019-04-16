@@ -23,7 +23,7 @@ use futures::prelude::*;
 use libp2p_core::ProtocolsHandlerEvent;
 use libp2p_core::protocols_handler::{
     KeepAlive,
-    ListenProtocol,
+    SubstreamProtocol,
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
 };
@@ -221,8 +221,8 @@ where
     type OutboundProtocol = protocol::Ping;
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> ListenProtocol<protocol::Ping, Self::Substream> {
-        ListenProtocol::new(protocol::Ping)
+    fn listen_protocol(&self) -> SubstreamProtocol<protocol::Ping> {
+        SubstreamProtocol::new(protocol::Ping)
     }
 
     fn inject_fully_negotiated_inbound(&mut self, _: ()) {
@@ -268,10 +268,11 @@ where
         match self.next_ping.poll() {
             Ok(Async::Ready(())) => {
                 self.next_ping.reset(Instant::now() + self.config.timeout);
+                let protocol = SubstreamProtocol::new(protocol::Ping)
+                    .with_timeout(self.config.timeout);
                 Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade: protocol::Ping,
+                    protocol,
                     info: (),
-                    timeout: self.config.timeout
                 }))
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),

@@ -25,7 +25,7 @@ use crate::protocol::{
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{
     KeepAlive,
-    ListenProtocol,
+    SubstreamProtocol,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
@@ -356,11 +356,11 @@ where
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
 
     #[inline]
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if self.allow_listening {
-            ListenProtocol::new(self.config).map_upgrade(upgrade::EitherUpgrade::A)
+            SubstreamProtocol::new(self.config).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
-            ListenProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
+            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
     }
 
@@ -556,9 +556,8 @@ where
     match state {
         SubstreamState::OutPendingOpen(msg, user_data) => {
             let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                upgrade,
+                protocol: SubstreamProtocol::new(upgrade),
                 info: (msg, user_data),
-                timeout: Duration::from_secs(10)
             };
             (None, Some(ev), false)
         }

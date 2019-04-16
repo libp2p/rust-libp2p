@@ -21,7 +21,7 @@
 use crate::{
     protocols_handler::{
         KeepAlive,
-        ListenProtocol,
+        SubstreamProtocol,
         ProtocolsHandler,
         ProtocolsHandlerEvent,
         ProtocolsHandlerUpgrErr
@@ -67,7 +67,7 @@ where
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
     #[inline]
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.inner.listen_protocol()
     }
 

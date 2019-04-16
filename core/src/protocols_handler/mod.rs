@@ -116,7 +116,7 @@ pub trait ProtocolsHandler {
     /// >           supported protocols, even if in a specific context a particular one is
     /// >           not supported, (eg. when only allowing one substream at a time for a protocol).
     /// >           This allows a remote to put the list of supported protocols in a cache.
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream>;
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol>;
 
     /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
@@ -236,48 +236,36 @@ pub trait ProtocolsHandler {
     }
 }
 
-pub struct ListenProtocol<TUpgrade, TSubstream> {
+/// Configuration of inbound or outbound substream protocol(s)
+/// for a [`ProtocolsHandler`].
+///
+/// The inbound substream protocol(s) are defined by [`ProtocolsHandler::listen_protocol`]
+/// and the outbound substream protocol(s) by [`ProtocolsHandlerEvent::OutboundSubstreamRequest`].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SubstreamProtocol<TUpgrade> {
     upgrade: TUpgrade,
     timeout: Duration,
-    _marker: std::marker::PhantomData<TSubstream>
 }
 
-impl<TUpgrade, TSubstream> Clone for ListenProtocol<TUpgrade, TSubstream>
-where
-    TUpgrade: Clone
-{
-    fn clone(&self) -> Self {
-        ListenProtocol {
-            upgrade: self.upgrade.clone(),
-            timeout: self.timeout,
-            _marker: std::marker::PhantomData
-        }
-    }
-}
-
-impl<TUpgrade, TSubstream> ListenProtocol<TUpgrade, TSubstream> {
-    pub fn new(upgrade: TUpgrade) -> ListenProtocol<TUpgrade, TSubstream> {
-        ListenProtocol {
+impl<TUpgrade> SubstreamProtocol<TUpgrade> {
+    /// Create a new `ListenProtocol` from the given upgrade.
+    ///
+    /// The default timeout for applying the given upgrade on a substream is
+    /// 10 seconds.
+    pub fn new(upgrade: TUpgrade) -> SubstreamProtocol<TUpgrade> {
+        SubstreamProtocol {
             upgrade,
             timeout: Duration::from_secs(10),
-            _marker: std::marker::PhantomData
         }
     }
-}
 
-impl<TUpgrade, TSubstream> ListenProtocol<TUpgrade, TSubstream>
-where
-    TUpgrade: InboundUpgrade<TSubstream>
-{
-    pub fn map_upgrade<U, F>(self, f: F) -> ListenProtocol<U, TSubstream>
+    pub fn map_upgrade<U, F>(self, f: F) -> SubstreamProtocol<U>
     where
         F: FnOnce(TUpgrade) -> U,
-        U: InboundUpgrade<TSubstream>
     {
-        ListenProtocol {
+        SubstreamProtocol {
             upgrade: f(self.upgrade),
             timeout: self.timeout,
-            _marker: std::marker::PhantomData,
         }
     }
 
@@ -294,8 +282,15 @@ where
         &self.timeout
     }
 
+    /// Converts the listen protocol configuration into the contained upgrade.
     pub fn into_upgrade(self) -> TUpgrade {
         self.upgrade
+    }
+}
+
+impl<TUpgrade> From<TUpgrade> for SubstreamProtocol<TUpgrade> {
+    fn from(upgrade: TUpgrade) -> SubstreamProtocol<TUpgrade> {
+        SubstreamProtocol::new(upgrade)
     }
 }
 
@@ -304,12 +299,10 @@ where
 pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
-        /// The upgrade to apply on the substream.
-        upgrade: TConnectionUpgrade,
+        /// The protocol(s) to apply on the substream.
+        protocol: SubstreamProtocol<TConnectionUpgrade>,
         /// User-defined information, passed back when the substream is open.
         info: TOutboundOpenInfo,
-        /// The timeout for the outbound upgrade.
-        timeout: Duration,
     },
 
     /// Other event.
@@ -331,11 +324,10 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         F: FnOnce(TOutboundOpenInfo) -> I,
     {
         match self {
-            ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info, timeout } => {
+            ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade,
+                    protocol,
                     info: map(info),
-                    timeout
                 }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
@@ -353,11 +345,10 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         F: FnOnce(TConnectionUpgrade) -> I,
     {
         match self {
-            ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info, timeout } => {
+            ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade: map(upgrade),
+                    protocol: protocol.map_upgrade(map),
                     info,
-                    timeout
                 }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
@@ -374,8 +365,8 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         F: FnOnce(TCustom) -> I,
     {
         match self {
-            ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info, timeout } => {
-                ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info, timeout }
+            ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(map(val)),
         }

@@ -25,7 +25,7 @@ use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::Inbo
 use libp2p_core::protocols_handler::{
     ProtocolsHandler,
     KeepAlive,
-    ListenProtocol,
+    SubstreamProtocol,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
@@ -53,8 +53,8 @@ where
     type OutboundProtocol = upgrade::DeniedUpgrade;
     type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
 
-    fn listen_protocol(&self) -> ListenProtocol<Self::InboundProtocol, Self::Substream> {
-        ListenProtocol::new(upgrade::DeniedUpgrade)
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+        SubstreamProtocol::new(upgrade::DeniedUpgrade)
     }
 
     fn inject_fully_negotiated_inbound(

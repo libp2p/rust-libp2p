@@ -268,13 +268,13 @@ where
                 return Ok(Async::Ready(NodeHandlerEvent::Custom(event)));
             }
             Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                upgrade,
+                protocol,
                 info,
-                timeout
             }) => {
                 let id = self.unique_dial_upgrade_id;
+                let timeout = protocol.timeout().clone();
                 self.unique_dial_upgrade_id += 1;
-                self.queued_dial_upgrades.push((id, upgrade));
+                self.queued_dial_upgrades.push((id, protocol.into_upgrade()));
                 return Ok(Async::Ready(
                     NodeHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));
