@@ -21,6 +21,7 @@
 //! Integration tests for the `Ping` network behaviour.
 
 use libp2p_core::{
+    Multiaddr,
     PeerId,
     Swarm,
     identity,
@@ -33,7 +34,7 @@ use libp2p_yamux as yamux;
 use libp2p_secio::SecioConfig;
 use libp2p_tcp::TcpConfig;
 use futures::{future, prelude::*};
-use std::{fmt, time::Duration};
+use std::{fmt, time::Duration, sync::mpsc::sync_channel};
 use tokio::runtime::Runtime;
 
 #[test]
@@ -44,11 +45,12 @@ fn ping() {
     let (peer2_id, trans) = mk_transport();
     let mut swarm2 = Swarm::new(trans, Ping::default(), peer2_id.clone());
 
-    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-    let peer1_listen_addr = Swarm::listen_on(&mut swarm1, addr).unwrap();
-    Swarm::dial_addr(&mut swarm2, peer1_listen_addr).unwrap();
+    let (tx, rx) = sync_channel::<Multiaddr>(1);
 
     let pid1 = peer1_id.clone();
+    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+    let mut listening = false;
+    Swarm::listen_on(&mut swarm1, addr).unwrap();
     let peer1 = future::poll_fn(move || -> Result<_, ()> {
         loop {
             match swarm1.poll().expect("Error while polling swarm") {
@@ -57,12 +59,21 @@ fn ping() {
                         return Ok(Async::Ready((pid1.clone(), peer, rtt))),
                     _ => {}
                 },
-                _ => return Ok(Async::NotReady)
+                _ => {
+                    if !listening {
+                        for l in Swarm::listeners(&swarm1) {
+                            tx.send(l.clone()).unwrap();
+                            listening = true;
+                        }
+                    }
+                    return Ok(Async::NotReady)
+                }
             }
         }
     });
 
     let pid2 = peer2_id.clone();
+    let mut dialing = false;
     let peer2 = future::poll_fn(move || -> Result<_, ()> {
         loop {
             match swarm2.poll().expect("Error while polling swarm") {
@@ -71,7 +82,13 @@ fn ping() {
                         return Ok(Async::Ready((pid2.clone(), peer, rtt))),
                     _ => {}
                 },
-                _ => return Ok(Async::NotReady)
+                _ => {
+                    if !dialing {
+                        Swarm::dial_addr(&mut swarm2, rx.recv().unwrap()).unwrap();
+                        dialing = true;
+                    }
+                    return Ok(Async::NotReady)
+                }
             }
         }
     });

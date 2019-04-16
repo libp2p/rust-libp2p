@@ -179,12 +179,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::Ping;
-    use futures::{Future, Stream};
+    use futures::prelude::*;
     use libp2p_core::{
         upgrade,
         multiaddr::multiaddr,
         transport::{
             Transport,
+            ListenerEvent,
             memory::MemoryTransport
         }
     };
@@ -194,14 +195,22 @@ mod tests {
     #[test]
     fn ping_pong() {
         let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
-        let (listener, listener_addr) = MemoryTransport.listen_on(mem_addr).unwrap();
+        let mut listener = MemoryTransport.listen_on(mem_addr).unwrap();
+
+        let listener_addr =
+            if let Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) = listener.poll() {
+                a
+            } else {
+                panic!("MemoryTransport not listening on an address!");
+            };
 
         let server = listener
             .into_future()
             .map_err(|(e, _)| e)
-            .and_then(|(c, _)| {
-                let c = c.unwrap().0.wait().unwrap();
-                upgrade::apply_inbound(c, Ping::default())
+            .and_then(|(listener_event, _)| {
+                let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
+                let conn = listener_upgrade.wait().unwrap();
+                upgrade::apply_inbound(conn, Ping::default())
                     .map_err(|e| panic!(e))
             });
 
