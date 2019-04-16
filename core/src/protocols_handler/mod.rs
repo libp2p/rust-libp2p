@@ -259,6 +259,7 @@ impl<TUpgrade> SubstreamProtocol<TUpgrade> {
         }
     }
 
+    /// Maps a function over the protocol upgrade.
     pub fn map_upgrade<U, F>(self, f: F) -> SubstreamProtocol<U>
     where
         F: FnOnce(TUpgrade) -> U,
@@ -269,20 +270,23 @@ impl<TUpgrade> SubstreamProtocol<TUpgrade> {
         }
     }
 
+    /// Sets a new timeout for the protocol upgrade.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
+    /// Borrows the contained protocol upgrade.
     pub fn upgrade(&self) -> &TUpgrade {
         &self.upgrade
     }
 
+    /// Borrows the timeout for the protocol upgrade.
     pub fn timeout(&self) -> &Duration {
         &self.timeout
     }
 
-    /// Converts the listen protocol configuration into the contained upgrade.
+    /// Converts the substream protocol configuration into the contained upgrade.
     pub fn into_upgrade(self) -> TUpgrade {
         self.upgrade
     }
