@@ -34,6 +34,7 @@ use crate::{
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}};
+use std::collections::HashSet;
 
 /// Contains the state of the network, plus the way it should behave.
 pub type Swarm<TTransport, TBehaviour> = ExpandedSwarm<
@@ -73,6 +74,8 @@ where
     /// List of multiaddresses we're listening on, after account for external IP addresses and
     /// similar mechanisms.
     external_addrs: SmallVec<[Multiaddr; 8]>,
+
+    banned_peers: HashSet<PeerId>,
 }
 
 impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr> Deref for
@@ -210,6 +213,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             me.external_addrs.push(addr);
         }
     }
+
+    pub fn ban_peer_id(&mut self, peer_id: PeerId) {
+        self.banned_peers.insert(peer_id);
+    }
 }
 
 impl<TTransport, TBehaviour, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr> Stream for
@@ -258,7 +265,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     self.behaviour.inject_node_event(conn_info.peer_id().clone(), event);
                 },
                 Async::Ready(RawSwarmEvent::Connected { conn_info, endpoint }) => {
-                    self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
+                    if self.banned_peers.contains(conn_info.peer_id()) {
+                        self.raw_swarm.peer(conn_info.peer_id().clone()).into_connected().unwrap().close();
+                    } else {
+                        self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
+                    }
                 },
                 Async::Ready(RawSwarmEvent::NodeClosed { conn_info, endpoint, .. }) => {
                     self.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
@@ -453,8 +464,10 @@ where TBehaviour: NetworkBehaviour,
             supported_protocols,
             listened_addrs: SmallVec::new(),
             external_addrs: SmallVec::new(),
+            banned_peers: HashSet::new(),
         }
     }
+
 }
 
 #[cfg(test)]
