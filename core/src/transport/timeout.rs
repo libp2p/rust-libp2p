@@ -45,7 +45,6 @@ pub struct TransportTimeout<InnerTrans> {
 
 impl<InnerTrans> TransportTimeout<InnerTrans> {
     /// Wraps around a `Transport` to add timeouts to all the sockets created by it.
-    #[inline]
     pub fn new(trans: InnerTrans, timeout: Duration) -> Self {
         TransportTimeout {
             inner: trans,
@@ -55,7 +54,6 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
     }
 
     /// Wraps around a `Transport` to add timeouts to the outgoing connections.
-    #[inline]
     pub fn with_outgoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
         TransportTimeout {
             inner: trans,
@@ -65,7 +63,6 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
     }
 
     /// Wraps around a `Transport` to add timeouts to the ingoing connections.
-    #[inline]
     pub fn with_ingoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
         TransportTimeout {
             inner: trans,
@@ -104,11 +101,6 @@ where
         Ok(TokioTimerMapErr {
             inner: Timeout::new(dial, self.outgoing_timeout),
         })
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.nat_traversal(server, observed)
     }
 }
 

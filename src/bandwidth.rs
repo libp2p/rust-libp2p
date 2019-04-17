@@ -78,10 +78,6 @@ where
             .dial(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.nat_traversal(server, observed)
-    }
 }
 
 /// Wraps around a `Stream` that produces connections. Wraps each connection around a bandwidth

@@ -74,14 +74,4 @@ where
 
         Err(TransportError::MultiaddrNotSupported(addr))
     }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let first = self.0.nat_traversal(server, observed);
-        if let Some(first) = first {
-            return Some(first);
-        }
-
-        self.1.nat_traversal(server, observed)
-    }
 }

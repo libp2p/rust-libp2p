@@ -59,7 +59,6 @@ impl Transport for BrowserWsConfig {
     type ListenerUpgrade = future::Empty<Self::Output, IoError>;
     type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
-    #[inline]
     fn listen_on(self, a: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         // Listening is never supported.
         Err(TransportError::MultiaddrNotSupported(a))
@@ -207,43 +206,6 @@ impl Transport for BrowserWsConfig {
                 Err(_) => unreachable!("the sending side will only close when we drop the future"),
             }
         })) as Box<_>)
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut address = Multiaddr::empty();
-
-        let mut iter = server.iter().zip(observed.iter());
-
-        // Use the observed IP address.
-        match iter.next() {
-            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
-            _ => return None
-        }
-
-        // Skip over next protocol (assumed to contain port information).
-        if iter.next().is_none() {
-            return None
-        }
-
-        // Check for WS/WSS.
-        //
-        // Note that it will still work if the server uses WSS while the client uses
-        // WS, or vice-versa.
-        match iter.next() {
-            Some((x@Protocol::Ws, Protocol::Ws)) => address.append(x),
-            Some((x@Protocol::Ws, Protocol::Wss)) => address.append(x),
-            Some((x@Protocol::Wss, Protocol::Ws)) => address.append(x),
-            Some((x@Protocol::Wss, Protocol::Wss)) => address.append(x),
-            _ => return None
-        }
-
-        // Carry over everything else from the server address.
-        for proto in server.iter().skip(3) {
-            address.append(proto)
-        }
-
-        Some(address)
     }
 }
 

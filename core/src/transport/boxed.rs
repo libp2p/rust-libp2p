@@ -44,7 +44,6 @@ pub type ListenerUpgrade<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
 trait Abstract<O, E> {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>>;
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>>;
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 }
 
 impl<T, O, E> Abstract<O, E> for T
@@ -66,10 +65,6 @@ where
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
         let fut = Transport::dial(self.clone(), addr)?;
         Ok(Box::new(fut) as Box<_>)
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        Transport::nat_traversal(self, server, observed)
     }
 }
 
@@ -107,9 +102,5 @@ where E: error::Error,
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.dial(addr)
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.nat_traversal(server, observed)
     }
 }

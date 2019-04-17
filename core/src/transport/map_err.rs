@@ -64,10 +64,6 @@ where
             Err(err) => Err(err.map(map)),
         }
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
-    }
 }
 
 /// Listening stream for `MapErr`.

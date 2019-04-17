@@ -107,14 +107,6 @@ impl Transport for UdsConfig {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if server == observed {
-            Some(observed.clone())
-        } else {
-            None
-        }
-    }
 }
 
 /// Turns a `Multiaddr` containing a single `Unix` component into a path.

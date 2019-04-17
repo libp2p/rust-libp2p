@@ -209,10 +209,6 @@ where
         let dial = self.value.dial(addr).map_err(|err| err.map(RateLimitedErr::Underlying))?;
         Ok(DialFuture { r, w, f: dial })
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.value.nat_traversal(server, observed)
-    }
 }
 
 /// Future to avoid boxing.
