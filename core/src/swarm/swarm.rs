@@ -221,7 +221,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         if let Some(connected) = self.raw_swarm.peer(peer_id).into_connected() {
             connected.close();
         }
-   }
+    }
+
+    /// Removes a peer from ban by it's peer ID
+    pub fn unban_peer_id(&mut self, peer_id: PeerId) {
+        self.banned_peers.remove(&peer_id);
+    }
 }
 
 impl<TTransport, TBehaviour, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr> Stream for
