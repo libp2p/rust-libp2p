@@ -118,13 +118,6 @@ fn main() {
         libp2p::Swarm::new(transport, behaviour, local_peer_id)
     };
 
-    if let Some(to_ban) = std::env::args().nth(1) {
-        let parsed = to_ban.parse();
-        if let Ok(to_ban) = parsed {
-            swarm.ban_peer_id(to_ban);
-        }
-    }
-
     // Listen on all interfaces and whatever port the OS assigns
     let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
     println!("Listening on {:?}", addr);
