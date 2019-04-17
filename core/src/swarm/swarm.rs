@@ -75,6 +75,7 @@ where
     /// similar mechanisms.
     external_addrs: SmallVec<[Multiaddr; 8]>,
 
+    /// List of nodes for which we deny any incoming connection.
     banned_peers: HashSet<PeerId>,
 }
 
