@@ -475,7 +475,6 @@ where TBehaviour: NetworkBehaviour,
             banned_peers: HashSet::new(),
         }
     }
-
 }
 
 #[cfg(test)]
