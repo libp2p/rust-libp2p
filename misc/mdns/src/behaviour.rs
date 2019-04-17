@@ -23,7 +23,7 @@ use futures::prelude::*;
 use log::warn;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
+use libp2p_core::{address_translation, Multiaddr, PeerId, multiaddr::Protocol};
 use smallvec::SmallVec;
 use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -237,7 +237,7 @@ where
 
                         let mut addrs = Vec::new();
                         for addr in peer.addresses() {
-                            if let Some(new_addr) = replace_ip_addr(&addr, &observed) {
+                            if let Some(new_addr) = address_translation(&addr, &observed) {
                                 addrs.push(new_addr)
                             }
                             addrs.push(addr)
@@ -284,13 +284,3 @@ impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
     }
 }
 
-fn replace_ip_addr(a: &Multiaddr, b: &Multiaddr) -> Option<Multiaddr> {
-    a.replace(0, move |proto| match proto {
-        Protocol::Ip4(_) | Protocol::Ip6(_) => match b.iter().next() {
-            x@Some(Protocol::Ip4(_)) => x,
-            x@Some(Protocol::Ip6(_)) => x,
-            _ => None
-        }
-        _ => None
-    })
-}
