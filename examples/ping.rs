@@ -60,10 +60,6 @@ fn main() {
     // and applies the ping behaviour on each connection.
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
-    // Listen on all interfaces and a random, OS-assigned port.
-    let listen_addr = Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-    println!("Listening on {:?}", listen_addr);
-
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
     if let Some(addr) = env::args().nth(1) {
@@ -79,12 +75,24 @@ fn main() {
         }
     }
 
+    // Tell the swarm to listen on all interfaces and a random, OS-assigned port.
+    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+
     // Use tokio to drive the `Swarm`.
+    let mut listening = false;
     tokio::run(future::poll_fn(move || -> Result<_, ()> {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(e)) => println!("{:?}", e),
-                Async::Ready(None) | Async::NotReady => return Ok(Async::NotReady),
+                Async::Ready(None) | Async::NotReady => {
+                    if !listening {
+                        if let Some(a) = Swarm::listeners(&swarm).next() {
+                            println!("Listening on {:?}", a);
+                            listening = true;
+                        }
+                    }
+                    return Ok(Async::NotReady)
+                }
             }
         }
     }));
