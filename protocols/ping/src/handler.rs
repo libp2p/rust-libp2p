@@ -62,22 +62,15 @@ impl PingConfig {
     ///   * A ping is sent every 15 seconds on a healthy connection.
     ///   * Every ping sent must yield a response within 20 seconds in order to
     ///     be successful.
-    ///   * The duration of a single ping timeout without sending or receiving
-    ///     a pong is sufficient for the connection to be subject to being closed,
-    ///     i.e. the connection timeout is reset to 20 seconds from the current
-    ///     [`Instant`] upon a sent or received pong.
+    ///   * A single ping timeout is sufficient for the connection to be subject
+    ///     to being closed, i.e. the connection timeout is reset to 20 seconds
+    ///     beyond the instant of the next ping upon receiving a pong.
     ///
-    /// In general, every successfully sent or received pong resets the connection
-    /// timeout, which is defined by
+    /// In general, the connection timeout is defined by
     /// ```raw
     /// max_timeouts * timeout
-    /// ```raw
-    /// relative to the current [`Instant`].
-    ///
-    /// A sensible configuration should thus obey the invariant:
-    /// ```raw
-    /// max_timeouts * timeout > interval
     /// ```
+    /// and the countdown begins from the instant of the next outbound ping.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),
@@ -101,12 +94,6 @@ impl PingConfig {
 
     /// Sets the number of successive ping timeouts upon which the remote
     /// peer is considered unreachable and the connection closed.
-    ///
-    /// > **Note**: Successful inbound pings from the remote peer can keep
-    /// >           the connection alive, even if outbound pings fail. I.e.
-    /// >           the connection is closed after `ping_timeout * max_timeouts`
-    /// >           only if in addition to failing outbound pings, no ping from
-    /// >           the remote is received within that time window.
     pub fn with_max_timeouts(mut self, n: NonZeroU32) -> Self {
         self.max_timeouts = n;
         self
@@ -126,16 +113,18 @@ pub enum PingPolicy {
     /// Always send a ping in the configured interval, regardless
     /// of received pings.
     ///
+    /// The connection [`KeepAlive`] is renewed on every received pong.
+    ///
     /// This policy is appropriate e.g. if continuous measurement of
     /// the RTT to the remote is desired.
     Always,
     /// Only sent a ping as necessary to keep the connection alive.
     ///
-    /// This policy resets the local ping timer whenever an inbound ping
-    /// is received, effectively letting the peer with the lower ping
-    /// frequency drive the ping protocol. Hence, to avoid superfluous ping
-    /// traffic, the ping interval of the peers should ideally not be the
-    /// same when using this policy, e.g. through randomization.
+    /// This policy also resets the local ping timer and renews the connection
+    /// [`KeepAlive`] whenever a pong is sent, effectively letting the peer
+    /// with the lower ping frequency drive the ping protocol. Hence, to avoid
+    /// superfluous ping protocol traffic, the ping interval of the peers should
+    /// ideally not be the same when using this policy, e.g. through randomization.
     ///
     /// This policy is appropriate if the ping protocol is only used
     /// as an application-layer connection keep-alive, without a need
@@ -188,10 +177,7 @@ pub struct PingHandler<TSubstream> {
     _marker: std::marker::PhantomData<TSubstream>
 }
 
-impl<TSubstream> PingHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
+impl<TSubstream> PingHandler<TSubstream> {
     /// Builds a new `PingHandler` with the given configuration.
     pub fn new(config: PingConfig) -> Self {
         let now = Instant::now();
@@ -252,14 +238,16 @@ where
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
         if let Some((instant, result)) = self.pending_results.pop_back() {
             if result.is_ok() {
-                self.connection_keepalive = KeepAlive::Until(instant + self.connection_timeout);
-                let reset = match result {
+                let keepalive = match result {
                     Ok(PingSuccess::Ping { .. }) => true,
                     Ok(PingSuccess::Pong) => self.config.policy == PingPolicy::KeepAlive,
                     _ => false
                 };
-                if reset {
-                    self.next_ping.reset(instant + self.config.interval);
+                if keepalive {
+                    let next_ping = instant + self.config.interval;
+                    let keep_until = next_ping + self.connection_timeout;
+                    self.connection_keepalive = KeepAlive::Until(keep_until);
+                    self.next_ping.reset(next_ping);
                 }
             }
             return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(result)))
@@ -277,6 +265,110 @@ where
             },
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(_) => Err(ProtocolsHandlerUpgrErr::Timer)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use futures::future;
+    use quickcheck::*;
+    use rand::Rng;
+    use tokio_tcp::TcpStream;
+    use tokio::runtime::current_thread::Runtime;
+
+    impl Arbitrary for PingConfig {
+        fn arbitrary<G: Gen>(g: &mut G) -> PingConfig {
+            PingConfig::new()
+                .with_timeout(Duration::from_secs(g.gen_range(0, 3600)))
+                .with_interval(Duration::from_secs(g.gen_range(0, 3600)))
+                .with_max_timeouts(NonZeroU32::new(g.gen_range(1, 100)).unwrap())
+                .with_policy(if g.gen() { PingPolicy::Always } else { PingPolicy::KeepAlive })
+        }
+    }
+
+    fn tick(h: &mut PingHandler<TcpStream>) -> ProtocolsHandlerEvent<protocol::Ping, (), PingResult> {
+        Runtime::new().unwrap().block_on(future::poll_fn(|| h.poll() )).unwrap()
+    }
+
+    fn check_connection_keepalive(now: Instant, h: &PingHandler<TcpStream>) {
+        match h.connection_keepalive {
+            KeepAlive::Until(t) => {
+                let next_ping = h.next_ping.deadline();
+                // The next ping must be scheduled no earlier than the ping interval
+                // and no later than the connection timeout.
+                // nb. next_ping == t iff timeout == interval == 0
+                assert!(now + h.config.interval <= next_ping && next_ping <= t);
+                // The "countdown" for the connection timeout starts on the next ping.
+                assert!(t - next_ping == h.connection_timeout)
+            }
+            k => panic!("Unexpected connection keepalive: {:?}", k)
+        }
+    }
+
+    #[test]
+    fn connection_timeout() {
+        fn prop(cfg: PingConfig, ping_rtt: Duration) -> bool {
+            let mut h = PingHandler::<TcpStream>::new(cfg);
+
+            // The first ping is scheduled "immediately".
+            let start = h.next_ping.deadline();
+            assert!(start <= Instant::now());
+
+            // Send ping
+            match tick(&mut h) {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info: _ } => {
+                    // The handler must use the configured timeout.
+                    assert_eq!(protocol.timeout(), &h.config.timeout);
+                    // The next ping must be scheduled no earlier than the ping timeout.
+                    assert!(h.next_ping.deadline() >= start + h.config.timeout);
+                }
+                e => panic!("Unexpected event: {:?}", e)
+            }
+
+            let now = Instant::now();
+
+            // Receive pong
+            h.inject_fully_negotiated_outbound(ping_rtt, ());
+            match tick(&mut h) {
+                ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { rtt })) => {
+                    // The handler must report the given RTT.
+                    assert_eq!(rtt, ping_rtt);
+                    check_connection_keepalive(now, &h);
+                }
+                e => panic!("Unexpected event: {:?}", e)
+            }
+            true
+        }
+
+        quickcheck(prop as fn(_,_) -> _);
+    }
+
+    #[test]
+    fn report_timeout() {
+        let cfg = PingConfig::arbitrary(&mut StdGen::new(rand::thread_rng(), 100));
+        let mut h = PingHandler::<TcpStream>::new(cfg);
+        h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
+        match tick(&mut h) {
+            ProtocolsHandlerEvent::Custom(Err(PingFailure::Timeout)) => {}
+            e => panic!("Unexpected event: {:?}", e)
+        }
+    }
+
+    #[test]
+    fn policy_keepalive_inbound() {
+        let cfg = PingConfig::arbitrary(&mut StdGen::new(rand::thread_rng(), 100))
+            .with_policy(PingPolicy::KeepAlive);
+        let mut h = PingHandler::<TcpStream>::new(cfg);
+        let now = Instant::now();
+        h.inject_fully_negotiated_inbound(());
+        match tick(&mut h) {
+            ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Pong)) => {
+                check_connection_keepalive(now, &h);
+            }
+            e => panic!("Unexpected event: {:?}", e)
         }
     }
 }
