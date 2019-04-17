@@ -24,6 +24,7 @@ use crate::{
     either::EitherOutput,
     protocols_handler::{
         KeepAlive,
+        SubstreamProtocol,
         IntoProtocolsHandler,
         ProtocolsHandler,
         ProtocolsHandlerEvent,
@@ -123,10 +124,12 @@ where
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         let proto1 = self.proto1.listen_protocol();
         let proto2 = self.proto2.listen_protocol();
-        SelectUpgrade::new(proto1, proto2)
+        let timeout = std::cmp::max(proto1.timeout(), proto2.timeout()).clone();
+        SubstreamProtocol::new(SelectUpgrade::new(proto1.into_upgrade(), proto2.into_upgrade()))
+            .with_timeout(timeout)
     }
 
     fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
@@ -206,9 +209,12 @@ where
                 Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
                     return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event))));
                 },
-                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info}) => {
+                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol,
+                    info,
+                }) => {
                     return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        upgrade: EitherUpgrade::A(upgrade),
+                        protocol: protocol.map_upgrade(EitherUpgrade::A),
                         info: EitherOutput::First(info),
                     }));
                 },
@@ -219,9 +225,12 @@ where
                 Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
                     return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event))));
                 },
-                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }) => {
+                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol,
+                    info,
+                }) => {
                     return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        upgrade: EitherUpgrade::B(upgrade),
+                        protocol: protocol.map_upgrade(EitherUpgrade::B),
                         info: EitherOutput::Second(info),
                     }));
                 },

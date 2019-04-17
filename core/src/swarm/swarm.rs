@@ -274,9 +274,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if !self.listened_addrs.contains(&listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
+                    self.behaviour.inject_new_listen_addr(&listen_addr);
                 }
                 Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr }) => {
-                    self.listened_addrs.retain(|a| a != &listen_addr)
+                    self.listened_addrs.retain(|a| a != &listen_addr);
+                    self.behaviour.inject_expired_listen_addr(&listen_addr);
                 }
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
@@ -321,6 +323,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
                         if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.behaviour.inject_new_external_addr(&addr);
                             self.external_addrs.push(addr);
                         }
                     }
@@ -427,6 +430,7 @@ where TBehaviour: NetworkBehaviour,
             .new_handler()
             .into_handler(&self.local_peer_id)
             .listen_protocol()
+            .into_upgrade()
             .protocol_info()
             .into_iter()
             .map(|info| info.protocol_name().to_vec())

@@ -22,7 +22,7 @@ use crate::PublicKey;
 use bs58;
 use quick_error::quick_error;
 use multihash;
-use std::{fmt, str::FromStr};
+use std::{convert::TryFrom, fmt, str::FromStr};
 
 /// Identifier of a peer of the network.
 ///
@@ -140,6 +140,22 @@ impl From<PublicKey> for PeerId {
     #[inline]
     fn from(key: PublicKey) -> PeerId {
         PeerId::from_public_key(key)
+    }
+}
+
+impl TryFrom<Vec<u8>> for PeerId {
+    type Error = Vec<u8>;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        PeerId::from_bytes(value)
+    }
+}
+
+impl TryFrom<multihash::Multihash> for PeerId {
+    type Error = multihash::Multihash;
+
+    fn try_from(value: multihash::Multihash) -> Result<Self, Self::Error> {
+        PeerId::from_multihash(value)
     }
 }
 
