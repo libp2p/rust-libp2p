@@ -221,7 +221,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         self.raw_swarm.peer(peer_id).into_connected().map(|c| c.close());
     }
 
-    /// Removes a peer from ban by it's peer ID
+    /// Unbans a peer.
     pub fn unban_peer_id(&mut self, peer_id: PeerId) {
         self.banned_peers.remove(&peer_id);
     }
