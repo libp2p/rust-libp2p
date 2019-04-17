@@ -40,4 +40,4 @@ pub fn address_translation(original: &Multiaddr, observed: &Multiaddr) -> Option
         _ => None
     })
 }
-
+// TODO: add tests
