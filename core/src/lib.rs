@@ -65,6 +65,7 @@ pub use multistream_select::Negotiated;
 
 mod keys_proto;
 mod peer_id;
+mod translation;
 
 #[cfg(test)]
 mod tests;
@@ -78,14 +79,15 @@ pub mod swarm;
 pub mod transport;
 pub mod upgrade;
 
-pub use self::multiaddr::Multiaddr;
-pub use self::muxing::StreamMuxer;
-pub use self::peer_id::PeerId;
-pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-pub use self::identity::PublicKey;
-pub use self::swarm::Swarm;
-pub use self::transport::Transport;
-pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
+pub use multiaddr::Multiaddr;
+pub use muxing::StreamMuxer;
+pub use peer_id::PeerId;
+pub use protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
+pub use identity::PublicKey;
+pub use swarm::Swarm;
+pub use transport::Transport;
+pub use translation::address_translation;
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {

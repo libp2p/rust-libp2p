@@ -6,8 +6,9 @@ use quickcheck::{Arbitrary, Gen, QuickCheck};
 use rand::Rng;
 use std::{
     borrow::Cow,
+    convert::TryFrom,
     iter::FromIterator,
-    net::{SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr},
     str::FromStr
 };
 
@@ -17,7 +18,7 @@ use std::{
 fn to_from_bytes_identity() {
     fn prop(a: Ma) -> bool {
         let b = a.0.to_vec();
-        Some(a) == Multiaddr::try_from_vec(b).ok().map(Ma)
+        Some(a) == Multiaddr::try_from(b).ok().map(Ma)
     }
     QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
 }
@@ -29,6 +30,26 @@ fn to_from_str_identity() {
         Some(a) == Multiaddr::from_str(&b).ok().map(Ma)
     }
     QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
+}
+
+#[test]
+fn byteswriter() {
+    fn prop(a: Ma, p: Proto) -> bool {
+        a.0.with(p.clone().0).pop() == Some(p.0)
+    }
+    QuickCheck::new().quickcheck(prop as fn(Ma, Proto) -> bool)
+}
+
+#[test]
+fn push_pop_identity() {
+    fn prop(a: Ma, p: Proto) -> bool {
+        let mut b = a.clone();
+        let q = p.clone();
+        b.0.push(q.0);
+        assert_ne!(a.0, b.0);
+        Some(p.0) == b.0.pop() && a.0 == b.0
+    }
+    QuickCheck::new().quickcheck(prop as fn(Ma, Proto) -> bool)
 }
 
 
@@ -105,7 +126,7 @@ fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol<'_>>) {
     assert_eq!(HEXUPPER.encode(&parsed.to_vec()[..]), target);
     assert_eq!(parsed.iter().collect::<Vec<_>>(), protocols);
     assert_eq!(source.parse::<Multiaddr>().unwrap().to_string(), source);
-    assert_eq!(Multiaddr::try_from_vec(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
+    assert_eq!(Multiaddr::try_from(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
 }
 
 fn multihash(s: &str) -> Multihash {
@@ -221,38 +242,24 @@ fn construct_fail() {
 
 #[test]
 fn to_multiaddr() {
-    assert_eq!(Ipv4Addr::new(127, 0, 0, 1).to_multiaddr().unwrap(),
-               "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap());
-    assert_eq!(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21)
-                   .to_multiaddr()
-                   .unwrap(),
-               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse::<Multiaddr>().unwrap());
-    assert_eq!("/ip4/127.0.0.1/tcp/1234".to_string().to_multiaddr().unwrap(),
+    assert_eq!(Multiaddr::from(Ipv4Addr::new(127, 0, 0, 1)), "/ip4/127.0.0.1".parse().unwrap());
+    assert_eq!(Multiaddr::from(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21)),
+               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse().unwrap());
+    assert_eq!(Multiaddr::try_from("/ip4/127.0.0.1/tcp/1234".to_string()).unwrap(),
                "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap());
-    assert_eq!("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".to_multiaddr().unwrap(),
+    assert_eq!(Multiaddr::try_from("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21").unwrap(),
                "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse::<Multiaddr>().unwrap());
-    assert_eq!(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 1234).to_multiaddr().unwrap(),
+    assert_eq!(Multiaddr::from(Ipv4Addr::new(127, 0, 0, 1)).with(Protocol::Tcp(1234)),
                "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap());
-    assert_eq!(SocketAddrV6::new(Ipv6Addr::new(0x2601,
-                                               0x9,
-                                               0x4f81,
-                                               0x9700,
-                                               0x803e,
-                                               0xca65,
-                                               0x66e8,
-                                               0xc21),
-                                 1234,
-                                 0,
-                                 0)
-                   .to_multiaddr()
-                   .unwrap(),
+    assert_eq!(Multiaddr::from(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21))
+                   .with(Protocol::Tcp(1234)),
                "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21/tcp/1234".parse::<Multiaddr>().unwrap());
 }
 
 #[test]
 fn from_bytes_fail() {
     let bytes = vec![1, 2, 3, 4];
-    assert!(Multiaddr::try_from_vec(bytes).is_err());
+    assert!(Multiaddr::try_from(bytes).is_err());
 }
 
 
@@ -279,8 +286,8 @@ fn ser_and_deser_bincode() {
 #[test]
 fn append() {
     let mut a: Multiaddr = Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4)).into();
-    a.append(Protocol::Tcp(80));
-    a.append(Protocol::Http);
+    a.push(Protocol::Tcp(80));
+    a.push(Protocol::Http);
 
     let mut i = a.iter();
     assert_eq!(Some(Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4))), i.next());
@@ -288,3 +295,32 @@ fn append() {
     assert_eq!(Some(Protocol::Http), i.next());
     assert_eq!(None, i.next())
 }
+
+fn replace_ip_addr(a: &Multiaddr, p: Protocol) -> Option<Multiaddr> {
+    a.replace(0, move |x| match x {
+        Protocol::Ip4(_) | Protocol::Ip6(_) => Some(p),
+        _ => None
+    })
+}
+
+#[test]
+fn replace_ip4_with_ip4() {
+    let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
+    let result = replace_ip_addr(&server, Protocol::Ip4([80, 81, 82, 83].into())).unwrap();
+    assert_eq!(result, multiaddr!(Ip4([80, 81, 82, 83]), Tcp(10000u16)))
+}
+
+#[test]
+fn replace_ip6_with_ip4() {
+    let server = multiaddr!(Ip6(Ipv6Addr::LOCALHOST), Tcp(10000u16));
+    let result = replace_ip_addr(&server, Protocol::Ip4([80, 81, 82, 83].into())).unwrap();
+    assert_eq!(result, multiaddr!(Ip4([80, 81, 82, 83]), Tcp(10000u16)))
+}
+
+#[test]
+fn replace_ip4_with_ip6() {
+    let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
+    let result = replace_ip_addr(&server, "2001:db8::1".parse::<Ipv6Addr>().unwrap().into());
+    assert_eq!(result.unwrap(), "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap())
+}
+

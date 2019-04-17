@@ -68,10 +68,6 @@ where
         };
         Ok(future)
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
-    }
 }
 
 /// Custom `Stream` to avoid boxing.

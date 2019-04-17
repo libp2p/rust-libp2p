@@ -214,10 +214,7 @@ fn unresponsive_not_returned_direct() {
 
     // Add fake addresses.
     for _ in 0 .. 10 {
-        swarms[0].add_not_connected_address(
-            &PeerId::random(),
-            libp2p_core::multiaddr::multiaddr![Udp(10u16)]
-        );
+        swarms[0].add_not_connected_address(&PeerId::random(), Protocol::Udp(10u16).into());
     }
 
     // Ask first to search a random value.

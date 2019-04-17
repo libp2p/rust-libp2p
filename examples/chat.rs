@@ -52,6 +52,7 @@
 use futures::prelude::*;
 use libp2p::{
     PeerId,
+    Swarm,
     NetworkBehaviour,
     identity,
     tokio_codec::{FramedRead, LinesCodec}
@@ -118,10 +119,6 @@ fn main() {
         libp2p::Swarm::new(transport, behaviour, local_peer_id)
     };
 
-    // Listen on all interfaces and whatever port the OS assigns
-    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-    println!("Listening on {:?}", addr);
-
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let dialing = to_dial.clone();
@@ -140,7 +137,11 @@ fn main() {
     let stdin = tokio_stdin_stdout::stdin(0);
     let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
 
+    // Listen on all interfaces and whatever port the OS assigns
+    libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+
     // Kick it off
+    let mut listening = false;
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match framed_stdin.poll().expect("Error while polling stdin") {
@@ -155,7 +156,15 @@ fn main() {
                 Async::Ready(Some(_)) => {
 
                 },
-                Async::Ready(None) | Async::NotReady => break,
+                Async::Ready(None) | Async::NotReady => {
+                    if !listening {
+                        if let Some(a) = Swarm::listeners(&swarm).next() {
+                            println!("Listening on {:?}", a);
+                            listening = true;
+                        }
+                    }
+                    break
+                }
             }
         }
 
