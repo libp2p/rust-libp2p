@@ -20,19 +20,23 @@
 
 //! This module implements the `/ipfs/ping/1.0.0` protocol.
 //!
-//! The ping protocol can be used as an application-layer keep-alive functionality
-//! for connections of any [`Transport`] as well as to measure round-trip times.
+//! The ping protocol can be used as a simple application-layer health check
+//! for connections of any [`Transport`] as well as to measure and record
+//! round-trip times.
 //!
 //! # Usage
 //!
 //! The [`Ping`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
 //! it will respond to inbound ping requests and as necessary periodically send outbound
-//! ping requests on every established connection. If no pings are received or
-//! successfully sent within a configurable time window, [`PingHandler::connection_keep_alive`]
-//! eventually indicates to the `Swarm` that the connection should be closed.
+//! ping requests on every established connection. If a configurable number of pings fail,
+//! the connection will be closed.
 //!
 //! The `Ping` network behaviour produces [`PingEvent`]s, which may be consumed from the `Swarm`
 //! by an application, e.g. to collect statistics.
+//!
+//! > **Note**: The ping protocol does not keep otherwise idle connections alive,
+//! > it only adds an additional condition for terminating the connection, namely
+//! > a certain number of failed ping requests.
 //!
 //! [`Swarm`]: libp2p_core::Swarm
 //! [`Transport`]: libp2p_core::Transport
@@ -40,7 +44,7 @@
 pub mod protocol;
 pub mod handler;
 
-pub use handler::{PingConfig, PingPolicy, PingResult, PingSuccess, PingFailure};
+pub use handler::{PingConfig, PingResult, PingSuccess, PingFailure};
 use handler::PingHandler;
 
 use futures::prelude::*;
