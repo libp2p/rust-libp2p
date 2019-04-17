@@ -334,7 +334,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     let _ = Swarm::dial_addr(self, address);
                 },
                 Async::Ready(NetworkBehaviourAction::DialPeer { peer_id }) => {
-                    Swarm::dial(self, peer_id)
+                    if self.banned_peers.contains(&peer_id) {
+                        self.behaviour.inject_dial_failure(&peer_id);
+                    } else {
+                        Swarm::dial(self, peer_id);
+                    }
                 },
                 Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
                     if let Some(mut peer) = self.raw_swarm.peer(peer_id).into_connected() {
