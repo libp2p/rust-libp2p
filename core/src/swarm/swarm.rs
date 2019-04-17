@@ -218,9 +218,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Bans a peer by it's peer ID
     pub fn ban_peer_id(&mut self, peer_id: PeerId) {
         self.banned_peers.insert(peer_id.clone());
-        if let Some(connected) = self.raw_swarm.peer(peer_id).into_connected() {
-            connected.close();
-        }
+        self.raw_swarm.peer(peer_id).into_connected().map(|c| c.close());
     }
 
     /// Removes a peer from ban by it's peer ID
@@ -276,9 +274,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 },
                 Async::Ready(RawSwarmEvent::Connected { conn_info, endpoint }) => {
                     if self.banned_peers.contains(conn_info.peer_id()) {
-                        if let Some(connected) = self.raw_swarm.peer(conn_info.peer_id().clone()).into_connected() {
-                            connected.close();
-                        }
+                        self.raw_swarm.peer(conn_info.peer_id().clone()).into_connected().map(|c| c.close());
                     } else {
                         self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
                     }
