@@ -266,7 +266,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 },
                 Async::Ready(RawSwarmEvent::Connected { conn_info, endpoint }) => {
                     if self.banned_peers.contains(conn_info.peer_id()) {
-                        self.raw_swarm.peer(conn_info.peer_id().clone()).into_connected().unwrap().close();
+                        self.raw_swarm.peer(conn_info.peer_id().clone())
+                            .into_connected()
+                            .expect("the RawSwarm just notified us that we were connected; QED")
+                            .close();
                     } else {
                         self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
                     }
