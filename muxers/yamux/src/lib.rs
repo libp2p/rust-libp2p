@@ -48,7 +48,6 @@ where
     type Substream = yamux::StreamHandle<C>;
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
 
-    #[inline]
     fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.0.poll() {
             Err(e) => {
@@ -64,13 +63,11 @@ where
         }
     }
 
-    #[inline]
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         future::result(stream)
     }
 
-    #[inline]
     fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
         match substream.poll()? {
             Async::Ready(Some(s)) => Ok(Async::Ready(s)),
@@ -79,11 +76,9 @@ where
         }
     }
 
-    #[inline]
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
     }
 
-    #[inline]
     fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
         let result = sub.poll_read(buf);
         if let Ok(Async::Ready(_)) = result {
@@ -92,38 +87,31 @@ where
         result
     }
 
-    #[inline]
     fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, IoError> {
         sub.poll_write(buf)
     }
 
-    #[inline]
     fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
         sub.poll_flush()
     }
 
-    #[inline]
     fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
         sub.shutdown()
     }
 
-    #[inline]
     fn destroy_substream(&self, _: Self::Substream) {
     }
 
-    #[inline]
     fn is_remote_acknowledged(&self) -> bool {
         self.1.load(atomic::Ordering::Acquire)
     }
 
-    #[inline]
     fn close(&self) -> Poll<(), IoError> {
-        self.0.close()
+        self.0.close().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    #[inline]
     fn flush_all(&self) -> Poll<(), IoError> {
-        self.0.flush()
+        self.0.flush().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 

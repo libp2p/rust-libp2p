@@ -34,10 +34,14 @@ fn to_from_str_identity() {
 
 #[test]
 fn byteswriter() {
-    fn prop(a: Ma, p: Proto) -> bool {
-        a.0.with(p.clone().0).pop() == Some(p.0)
+    fn prop(a: Ma, b: Ma) -> bool {
+        let mut x = a.0.clone();
+        for p in b.0.iter() {
+            x = x.with(p)
+        }
+        x.iter().zip(a.0.iter().chain(b.0.iter())).all(|(x, y)| x == y)
     }
-    QuickCheck::new().quickcheck(prop as fn(Ma, Proto) -> bool)
+    QuickCheck::new().quickcheck(prop as fn(Ma, Ma) -> bool)
 }
 
 #[test]
