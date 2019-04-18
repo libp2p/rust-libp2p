@@ -195,34 +195,6 @@ where
     }
 }
 
-impl<TPeerId, TVal> KBucket<TPeerId, TVal> {
-
-    pub fn entries<'a>(&'a self, parent: &'a mut KBucketsTable<TPeerId, TVal>) -> impl Iterator<Item = Entry<'a, TPeerId, TVal>> {
-        let disconnected = for node in self.nodes.iter().take(self.first_connected_pos) {
-            Entry::InKbucketDisconnected(EntryInKbucketDisc {
-                parent:  parent,
-                peer_id: &node.id,
-            })
-        };
-
-        self.nodes.iter()
-            .enumerate()
-            .map(move |(i, node)|
-                if i >= self.first_connected_pos {
-                    Entry::InKbucketConnected(EntryInKbucketConn::<'a, TPeerId, TVal> {
-                        parent:  parent,
-                        peer_id: &node.id,
-                    })
-                } else {
-                    Entry::InKbucketDisconnected(EntryInKbucketDisc {
-                        parent:  parent,
-                        peer_id: &node.id,
-                    })
-                }
-            )
-    }
-}
-
 impl<TPeerId, TVal> KBucketsTable<TPeerId, TVal>
 where
     TPeerId: KBucketsPeerId + Clone,
@@ -320,76 +292,18 @@ where
         }
     }
 
-    /// Returns the connection state of the given entry and whether it is pending or
-    /// already included in a k-bucket.
-    pub fn entry_state_query<'a>(&'a mut self, peer_id: &'a TPeerId) -> Entry<'a, TPeerId, TVal> {
-        //TODO: Shamelessly copied from entry(), but here we don't need a &mut. Maybe
-        //entry() could use this function?
-
-        let bucket_num = if let Some(num) = self.bucket_num(peer_id) {
-            num
-        } else {
-            return Entry::SelfEntry;
-        };
-
-        // Try to find the node in the bucket.
-        if let Some((pos, peer)) = self.tables[bucket_num].nodes.iter().enumerate().find(|(_, peer)| peer.id == *peer_id) {
-            if pos >= self.tables[bucket_num].first_connected_pos {
-                Entry::InKbucketConnected(EntryInKbucketConn {
-                    parent: self,
-                    peer_id,
-                })
-            } else {
-                Entry::InKbucketDisconnected(EntryInKbucketDisc {
-                    parent: self,
-                    peer_id,
-                })
-            }
-        } else if self.tables[bucket_num].pending_node.as_ref().map(|p| p.node.id == *peer_id).unwrap_or(false) {
-            let pending_peer_id = self.tables[bucket_num].pending_node.as_ref().map(|p| &p.node.id).expect("already checked it is Some");
-
-            // Node is pending.
-            if self.tables[bucket_num].pending_node.as_ref().map(|p| p.connected).unwrap_or(false) {
-                Entry::InKbucketConnectedPending(EntryInKbucketConnPending {
-                    parent: self,
-                    peer_id,
-                })
-            } else {
-                Entry::InKbucketDisconnectedPending(EntryInKbucketDiscPending {
-                    parent: self,
-                    peer_id,
-                })
-            }
-
-        } else {
-            Entry::NotInKbucket(EntryNotInKbucket {
-                parent: self,
-                peer_id,
-            })
-        }
-    }
-
-
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
-    pub fn entries_not_pending<'a>(&'a mut self) -> impl Iterator<Item = Entry<'a, TPeerId, TVal>> {
-        let myself = self;
-
+    pub fn entries_not_pending<'a>(&'a self) -> impl Iterator<Item = &'a TPeerId> {
         self.tables
             .iter()
-            .flat_map(|table| table.entries(self))
+            .flat_map(|table| table.nodes.iter().map(|node| &node.id))
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, including the pending nodes.
-    pub fn entries<'a>(&'a mut self) -> impl 'a + Iterator<Item = Entry<'a, TPeerId, TVal>>{
+    pub fn entries<'a>(&'a self) -> impl 'a + Iterator<Item = &'a TPeerId> {
         self.tables
             .iter()
-            .flat_map(|table| table.pending_node.as_ref().map(|p|
-                                                              if p.connected {
-                                                                  PeerState::InKbucketConnectedPending(&p.node.id)
-                                                              } else {
-                                                                  PeerState::InKbucketDisconnectedPending(&p.node.id)
-                                                              })
-                      )
+            .flat_map(|table| table.pending_node.as_ref().map(|n| &n.node.id))
             .chain(self.entries_not_pending())
     }
 
@@ -445,36 +359,6 @@ pub enum Entry<'a, TPeerId, TVal> {
     SelfEntry,
 }
 
-/// Represents the state of an entry or a potential entry in the k-buckets.
-/// Contrary to Entry it does not require a mutable reference to the
-/// k-buckets table
-pub enum PeerState<TPeerId> {
-    /// Entry in a k-bucket that we're connected to.
-    InKbucketConnected(TPeerId),
-    /// Entry pending waiting for a free slot to enter a k-bucket. We're connected to it.
-    InKbucketConnectedPending(TPeerId),
-    /// Entry in a k-bucket but that we're not connected to.
-    InKbucketDisconnected(TPeerId),
-    /// Entry pending waiting for a free slot to enter a k-bucket. We're not connected to it.
-    InKbucketDisconnectedPending(TPeerId),
-    /// Entry is not present in any k-bucket.
-    NotInKbucket,
-    /// Entry is the local peer ID.
-    SelfEntry,
-}
-
-impl <TPeerId> PeerState<TPeerId> {
-    pub fn peer_id(&self) -> Option<&TPeerId> {
-        match self {
-            PeerState::InKbucketConnected(peer_id) => Some(peer_id),
-            PeerState::InKbucketConnectedPending(peer_id) => Some(peer_id),
-            PeerState::InKbucketDisconnected(peer_id) => Some(peer_id),
-            PeerState::InKbucketDisconnectedPending(peer_id) => Some(peer_id),
-            PeerState::NotInKbucket => None,
-            PeerState::SelfEntry => None,
-        }
-    }
-}
 
 impl<'a, TPeerId, TVal> Entry<'a, TPeerId, TVal>
 where
@@ -543,7 +427,7 @@ where
             .value
     }
 
-    pub fn peer_id(&self) -> &TPeerId {
+    pub fn key(&self) -> &TPeerId {
         self.peer_id
     }
 
@@ -641,6 +525,10 @@ where
             .node.value
     }
 
+    pub fn key(&self) -> &TPeerId {
+        self.peer_id
+    }
+
     /// Reports that we are now disconnected from the given node.
     pub fn set_disconnected(self) -> EntryInKbucketDiscPending<'a, TPeerId, TVal> {
         {
@@ -686,6 +574,10 @@ where
             .as_mut()
             .expect("we can only build a EntryInKbucketDiscPending if the node is pending; QED")
             .node.value
+    }
+
+    pub fn key(&self) -> &TPeerId {
+        self.peer_id
     }
 
     /// Reports that we are now connected to the given node.
@@ -734,6 +626,10 @@ where
             .expect("We can only build a EntryInKbucketDisc if we know that the peer is in its \
                      bucket; QED")
             .value
+    }
+
+    pub fn key(&self) -> &TPeerId {
+        self.peer_id
     }
 
     /// Sets the node as connected. This moves the entry in the bucket.

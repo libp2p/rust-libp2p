@@ -74,7 +74,7 @@ fn build_nodes(port_base: u64, num: usize)
 #[test]
 fn peer_state_not_in_kademlia() {
     let local_peer_id = PeerId::random();
-    let k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id);
+    let mut k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id);
 
     let remote_peer_id = PeerId::random();
 
@@ -87,7 +87,7 @@ fn peer_state_not_in_kademlia() {
 #[test]
 fn self_entry_in_kademlia() {
     let local_peer_id = PeerId::random();
-    let k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id.clone());
+    let mut k = Kademlia::<libp2p_tcp::TcpTransStream>::new(local_peer_id.clone());
 
     match k.peer_state(&local_peer_id) {
         KademliaEntry::SelfEntry => assert!(true),
@@ -119,7 +119,7 @@ fn peer_states_when_three_addresses_then_result_length_three() {
     k.add_not_connected_address(&PeerId::random(), "/ip4/127.0.0.1/tcp/4002".parse().unwrap());
     k.add_not_connected_address(&PeerId::random(), "/ip4/127.0.0.1/tcp/4003".parse().unwrap());
 
-    assert_eq!(k.peer_states().count(), 3);
+    assert_eq!(k.kbuckets_entries().count(), 3);
 }
 
 #[test]
