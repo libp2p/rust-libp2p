@@ -26,8 +26,8 @@
 use crate::kbucket::KBucketsPeerId;
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{cmp::PartialEq, time::Duration, time::Instant};
-use tokio_timer::Delay;
+use std::{cmp::PartialEq, time::Duration};
+use wasm_timer::{Delay, Instant};
 
 /// State of a query iterative process.
 ///

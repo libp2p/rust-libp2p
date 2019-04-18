@@ -23,9 +23,9 @@ use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration};
 use tokio_reactor::Handle;
-use tokio_timer::Interval;
+use wasm_timer::{Instant, Interval};
 use tokio_udp::UdpSocket;
 
 pub use dns::MdnsResponseError;
@@ -169,7 +169,7 @@ impl MdnsService {
                 }
             }
             Ok(Async::NotReady) => (),
-            _ => unreachable!("A tokio_timer::Interval never errors"), // TODO: is that true?
+            _ => unreachable!("A wasm_timer::Interval never errors"), // TODO: is that true?
         };
 
         // Flush the send buffer of the main socket.

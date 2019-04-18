@@ -44,8 +44,9 @@ use crate::upgrade::{
     UpgradeError,
 };
 use futures::prelude::*;
-use std::{cmp::Ordering, error, fmt, time::Duration, time::Instant};
+use std::{cmp::Ordering, error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
+use wasm_timer::Instant;
 
 pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;

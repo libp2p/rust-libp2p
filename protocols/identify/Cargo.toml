@@ -21,7 +21,7 @@ protobuf = "2.3"
 smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1.0"
-tokio-timer = "0.2.6"
+wasm-timer = "0.1"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 

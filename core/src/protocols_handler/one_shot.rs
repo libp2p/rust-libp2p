@@ -25,8 +25,9 @@ use crate::protocols_handler::{
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData, time::Duration, time::Instant};
+use std::{error, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
+use wasm_timer::Instant;
 
 /// Implementation of `ProtocolsHandler` that opens a new substream for each individual message.
 ///
