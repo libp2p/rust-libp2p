@@ -414,6 +414,7 @@ where
             .value
     }
 
+    /// Returns the key associated with the entry in the bucket.
     pub fn key(&self) -> &TPeerId {
         self.peer_id
     }
@@ -512,6 +513,7 @@ where
             .node.value
     }
 
+    /// Returns the key associated with the entry in the bucket.
     pub fn key(&self) -> &TPeerId {
         self.peer_id
     }
@@ -563,6 +565,7 @@ where
             .node.value
     }
 
+    /// Returns the key associated with the entry in the bucket.
     pub fn key(&self) -> &TPeerId {
         self.peer_id
     }
@@ -615,6 +618,7 @@ where
             .value
     }
 
+    /// Returns the key associated with the entry in the bucket.
     pub fn key(&self) -> &TPeerId {
         self.peer_id
     }
