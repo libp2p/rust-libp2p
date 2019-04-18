@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,22 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Low-level networking primitives.
-//!
-//! Contains structs that are aiming at providing very precise control over what happens over the
-//! network.
-//!
-//! The more complete and highest-level struct is the `RawSwarm`. The `RawSwarm` directly or
-//! indirectly uses all the other structs of this module.
+use multiaddr::{Multiaddr, Protocol};
 
-pub mod collection;
-pub mod handled_node;
-pub mod handled_node_tasks;
-pub mod listeners;
-pub mod node;
-pub mod raw_swarm;
-
-pub use self::collection::ConnectionInfo;
-pub use self::node::Substream;
-pub use self::handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
-pub use self::raw_swarm::{ConnectedPoint, Peer, RawSwarm, RawSwarmEvent};
+/// Perform IP address translation.
+///
+/// Given an `original` [`Multiaddr`] and some `observed` [`Multiaddr`], return
+/// a translated [`Multiaddr`] which has the first IP address translated by the
+/// corresponding one from `observed`.
+///
+/// This is a mixed-mode translation, i.e. an IPv4 address may be replaced by
+/// an IPv6 address and vice versa.
+///
+/// If the first [`Protocol`]s are not IP addresses, `None` is returned instead.
+pub fn address_translation(original: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+    original.replace(0, move |proto| match proto {
+        Protocol::Ip4(_) | Protocol::Ip6(_) => match observed.iter().next() {
+            x@Some(Protocol::Ip4(_)) => x,
+            x@Some(Protocol::Ip6(_)) => x,
+            _ => None
+        }
+        _ => None
+    })
+}
+// TODO: add tests

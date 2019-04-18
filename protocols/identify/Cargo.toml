@@ -29,4 +29,5 @@ void = "1.0"
 libp2p-mplex = { version = "0.6.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.6.0", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.6.0", path = "../../transports/tcp" }
+rand = "0.6"
 tokio = "0.1"

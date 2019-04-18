@@ -9,7 +9,7 @@ mod errors;
 mod hashes;
 
 use sha2::Digest;
-use std::fmt::Write;
+use std::{convert::TryFrom, fmt::Write};
 use unsigned_varint::{decode, encode};
 
 pub use self::errors::{DecodeError, DecodeOwnedError, EncodeError};
@@ -162,6 +162,14 @@ impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
     #[inline]
     fn eq(&self, other: &MultihashRef<'a>) -> bool {
         &*self.bytes == other.bytes
+    }
+}
+
+impl TryFrom<Vec<u8>> for Multihash {
+    type Error = DecodeOwnedError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Multihash::from_bytes(value)
     }
 }
 
