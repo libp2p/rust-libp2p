@@ -25,5 +25,7 @@ void = "1.0"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.6.0", path = "../../transports/tcp" }
+libp2p-secio = { version = "0.6.0", path = "../../protocols/secio" }
+libp2p-yamux = { version = "0.6.0", path = "../../muxers/yamux" }
 tokio = "0.1"
 tokio-tcp = "0.1"

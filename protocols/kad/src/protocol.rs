@@ -32,6 +32,7 @@ use futures::{future, sink, stream, Sink, Stream};
 use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo, upgrade::Negotiated};
 use multihash::Multihash;
 use protobuf::{self, Message};
+use std::convert::TryFrom;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_codec::Framed;
@@ -103,7 +104,7 @@ impl KadPeer {
 
         let mut addrs = Vec::with_capacity(peer.get_addrs().len());
         for addr in peer.take_addrs().into_iter() {
-            let as_ma = Multiaddr::try_from_vec(addr)
+            let as_ma = Multiaddr::try_from(addr)
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
             addrs.push(as_ma);
         }

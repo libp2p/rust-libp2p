@@ -24,7 +24,7 @@
 use bytes::Bytes;
 use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}};
-use std::{io, iter};
+use std::{convert::TryFrom, io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec::UviBytes;
@@ -75,7 +75,7 @@ where
             .map_err(|(e, _): (io::Error, FramedRead<Negotiated<C>, UviBytes>)| e)
             .and_then(move |(bytes, _)| {
                 if let Some(b) = bytes {
-                    let ma = Multiaddr::try_from_vec(b.to_vec())
+                    let ma = Multiaddr::try_from(b)
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                     Ok(ma)
                 } else {

@@ -20,7 +20,7 @@
 
 use crate::muxing::StreamMuxer;
 use crate::{
-    Endpoint, Multiaddr, PeerId,
+    Endpoint, Multiaddr, PeerId, address_translation,
     nodes::{
         collection::{
             CollectionEvent,
@@ -38,8 +38,7 @@ use crate::{
         node::Substream
     },
     nodes::listeners::{ListenersEvent, ListenersStream},
-    transport::Transport,
-    transport::TransportError,
+    transport::{Transport, TransportError}
 };
 use fnv::FnvHashMap;
 use futures::{prelude::*, future};
@@ -771,8 +770,7 @@ where
         TMuxer: 'a,
         THandler: 'a,
     {
-        self.listen_addrs()
-            .flat_map(move |server| self.transport().nat_traversal(server, observed_addr))
+        self.listen_addrs().flat_map(move |server| address_translation(server, observed_addr))
     }
 
     /// Returns the peer id of the local node.

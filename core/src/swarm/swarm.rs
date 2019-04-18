@@ -274,9 +274,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if !self.listened_addrs.contains(&listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
+                    self.behaviour.inject_new_listen_addr(&listen_addr);
                 }
                 Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr }) => {
-                    self.listened_addrs.retain(|a| a != &listen_addr)
+                    self.listened_addrs.retain(|a| a != &listen_addr);
+                    self.behaviour.inject_expired_listen_addr(&listen_addr);
                 }
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
@@ -292,13 +294,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             }
 
             let behaviour_poll = {
-                let transport = self.raw_swarm.transport();
                 let mut parameters = PollParameters {
                     local_peer_id: &mut self.raw_swarm.local_peer_id(),
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
-                    external_addrs: &self.external_addrs,
-                    nat_traversal: &move |a, b| transport.nat_traversal(a, b),
+                    external_addrs: &self.external_addrs
                 };
                 self.behaviour.poll(&mut parameters)
             };
@@ -323,6 +323,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
                         if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.behaviour.inject_new_external_addr(&addr);
                             self.external_addrs.push(addr);
                         }
                     }
@@ -338,8 +339,7 @@ pub struct PollParameters<'a: 'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
-    external_addrs: &'a [Multiaddr],
-    nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
+    external_addrs: &'a [Multiaddr]
 }
 
 impl<'a> PollParameters<'a> {
@@ -370,12 +370,6 @@ impl<'a> PollParameters<'a> {
     #[inline]
     pub fn local_peer_id(&self) -> &PeerId {
         self.local_peer_id
-    }
-
-    /// Calls the `nat_traversal` method on the underlying transport of the `Swarm`.
-    #[inline]
-    pub fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        (self.nat_traversal)(server, observed)
     }
 }
 
@@ -436,6 +430,7 @@ where TBehaviour: NetworkBehaviour,
             .new_handler()
             .into_handler(&self.local_peer_id)
             .listen_protocol()
+            .into_upgrade()
             .protocol_info()
             .into_iter()
             .map(|info| info.protocol_name().to_vec())

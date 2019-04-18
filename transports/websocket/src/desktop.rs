@@ -87,17 +87,17 @@ where
         let listen = inner_listen.map_err(WsError::Underlying).map(|event| {
             match event {
                 ListenerEvent::NewAddress(mut a) => {
-                    a.append(Protocol::Ws);
+                    a = a.with(Protocol::Ws);
                     debug!("Listening on {}", a);
                     ListenerEvent::NewAddress(a)
                 }
                 ListenerEvent::AddressExpired(mut a) => {
-                    a.append(Protocol::Ws);
+                    a = a.with(Protocol::Ws);
                     ListenerEvent::AddressExpired(a)
                 }
                 ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
-                    listen_addr.append(Protocol::Ws);
-                    remote_addr.append(Protocol::Ws);
+                    listen_addr = listen_addr.with(Protocol::Ws);
+                    remote_addr = remote_addr.with(Protocol::Ws);
 
                     // Upgrade the listener to websockets like the websockets library requires us to do.
                     let upgraded = upgrade.map_err(WsError::Underlying).and_then(move |stream| {
@@ -205,10 +205,6 @@ where
             });
 
         Ok(Box::new(dial) as Box<_>)
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
     }
 }
 
@@ -351,62 +347,5 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(future).unwrap();
-    }
-
-    #[test]
-    fn nat_traversal() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/ws"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/ws"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/wss".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/wss"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/wss"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/wss"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/ws"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/wss".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/ws"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/wss"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
     }
 }

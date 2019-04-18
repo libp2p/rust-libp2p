@@ -11,15 +11,15 @@ cannot guarantee that this is the case considering the lack of a precise libp2p 
 
 ## Documentation
 
-This repository includes a façade crate named `libp2p`, which reexports the rest of the repository.
+How to use the library?
 
-For documentation, you are encouraged to clone this repository or add `libp2p` as a dependency in
-your Cargo.toml and run `cargo doc`.
+- Main documentation: https://docs.rs/libp2p
 
-```toml
-[dependencies]
-libp2p = "0.2.2"
-```
+Where to ask questions?
+
+- In the Rust section of https://discuss.libp2p.io.
+- In the #libp2p IRC channel on freenode.
+- By opening an issue in this repository.
 
 ## Notable users
 
