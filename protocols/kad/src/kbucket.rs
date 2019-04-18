@@ -293,14 +293,14 @@ where
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
-    pub fn entries_not_pending<'a>(&'a self) -> impl Iterator<Item = &'a TPeerId> {
+    pub fn entries_not_pending(&self) -> impl Iterator<Item = &TPeerId> {
         self.tables
             .iter()
             .flat_map(|table| table.nodes.iter().map(|node| &node.id))
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, including the pending nodes.
-    pub fn entries<'a>(&'a self) -> impl 'a + Iterator<Item = &'a TPeerId> {
+    pub fn entries(&self) -> impl Iterator<Item = &TPeerId> {
         self.tables
             .iter()
             .flat_map(|table| table.pending_node.as_ref().map(|n| &n.node.id))
@@ -359,7 +359,6 @@ pub enum Entry<'a, TPeerId, TVal> {
     SelfEntry,
 }
 
-
 impl<'a, TPeerId, TVal> Entry<'a, TPeerId, TVal>
 where
     TPeerId: KBucketsPeerId + Clone,
@@ -386,18 +385,6 @@ where
             Entry::NotInKbucket(_entry) => None,
             Entry::SelfEntry => None,
         }
-    }
-}
-
-struct EntryIterator<'a, TPeerId, TVal> {
-    parent: &'a mut KBucketsTable<TPeerId, TVal>,
-}
-
-impl<'a, TPeerId, TVal> Iterator for EntryIterator<'a, TPeerId, TVal> {
-    type Item = Entry<'a, TPeerId, TVal>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        None
     }
 }
 

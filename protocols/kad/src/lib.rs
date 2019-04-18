@@ -56,7 +56,7 @@
 //   `KademliaSystem`.
 //
 
-pub use self::behaviour::{KademliaEntry, Kademlia, KademliaOut};
+pub use self::behaviour::{Kademlia, KademliaEntry, KademliaOut};
 pub use self::kbucket::KBucketsPeerId;
 pub use self::protocol::KadConnectionType;
 
