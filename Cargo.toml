@@ -45,7 +45,10 @@ libp2p-noise = { version = "0.4.0", path = "./protocols/noise" }
 libp2p-tcp = { version = "0.6.0", path = "./transports/tcp" }
 
 [target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-stdweb = { version = "0.4", default-features = false }
+# TODO: while waiting for clang 8.0+ to be available on distributions (which is the first version
+#       that has wasm support built-in), we temporarily depend on clear_on_drop directly in order
+#       to enable the `no_cc` feature
+clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 
 [dev-dependencies]
 env_logger = "0.6.0"
