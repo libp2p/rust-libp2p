@@ -59,19 +59,12 @@ impl<TOut> Transport for DummyTransport<TOut> {
     type ListenerUpgrade = futures::future::Empty<Self::Output, io::Error>;
     type Dial = futures::future::Empty<Self::Output, io::Error>;
 
-    #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
-    #[inline]
-    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 }
 

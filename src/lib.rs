@@ -222,7 +222,6 @@ use std::{error, time::Duration};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[inline]
 pub fn build_development_transport(keypair: identity::Keypair)
     -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
@@ -280,7 +279,6 @@ struct CommonTransportInner {
 
 impl CommonTransport {
     /// Initializes the `CommonTransport`.
-    #[inline]
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn new() -> CommonTransport {
         let tcp = tcp::TcpConfig::new().nodelay(true);
@@ -297,7 +295,6 @@ impl CommonTransport {
     }
 
     /// Initializes the `CommonTransport`.
-    #[inline]
     #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
@@ -307,7 +304,6 @@ impl CommonTransport {
     }
 
     /// Initializes the `CommonTransport`.
-    #[inline]
     #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), not(feature = "libp2p-websocket")))]
     pub fn new() -> CommonTransport {
         let inner = core::transport::dummy::DummyTransport::new();
@@ -324,18 +320,11 @@ impl Transport for CommonTransport {
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
 
-    #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.inner.inner.listen_on(addr)
     }
 
-    #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.inner.dial(addr)
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.inner.nat_traversal(server, observed)
     }
 }

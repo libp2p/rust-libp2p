@@ -34,6 +34,7 @@ use crate::{
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}};
+use std::collections::HashSet;
 
 /// Contains the state of the network, plus the way it should behave.
 pub type Swarm<TTransport, TBehaviour> = ExpandedSwarm<
@@ -73,6 +74,9 @@ where
     /// List of multiaddresses we're listening on, after account for external IP addresses and
     /// similar mechanisms.
     external_addrs: SmallVec<[Multiaddr; 8]>,
+
+    /// List of nodes for which we deny any incoming connection.
+    banned_peers: HashSet<PeerId>,
 }
 
 impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr> Deref for
@@ -210,6 +214,20 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             me.external_addrs.push(addr);
         }
     }
+
+    /// Bans a peer by its peer ID.
+    ///
+    /// Any incoming connection and any dialing attempt will immediately be rejected.
+    /// This function has no effect is the peer is already banned.
+    pub fn ban_peer_id(&mut self, peer_id: PeerId) {
+        self.banned_peers.insert(peer_id.clone());
+        self.raw_swarm.peer(peer_id).into_connected().map(|c| c.close());
+    }
+
+    /// Unbans a peer.
+    pub fn unban_peer_id(&mut self, peer_id: PeerId) {
+        self.banned_peers.remove(&peer_id);
+    }
 }
 
 impl<TTransport, TBehaviour, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr> Stream for
@@ -258,7 +276,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     self.behaviour.inject_node_event(conn_info.peer_id().clone(), event);
                 },
                 Async::Ready(RawSwarmEvent::Connected { conn_info, endpoint }) => {
-                    self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
+                    if self.banned_peers.contains(conn_info.peer_id()) {
+                        self.raw_swarm.peer(conn_info.peer_id().clone())
+                            .into_connected()
+                            .expect("the RawSwarm just notified us that we were connected; QED")
+                            .close();
+                    } else {
+                        self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
+                    }
                 },
                 Async::Ready(RawSwarmEvent::NodeClosed { conn_info, endpoint, .. }) => {
                     self.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
@@ -294,13 +319,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             }
 
             let behaviour_poll = {
-                let transport = self.raw_swarm.transport();
                 let mut parameters = PollParameters {
                     local_peer_id: &mut self.raw_swarm.local_peer_id(),
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
-                    external_addrs: &self.external_addrs,
-                    nat_traversal: &move |a, b| transport.nat_traversal(a, b),
+                    external_addrs: &self.external_addrs
                 };
                 self.behaviour.poll(&mut parameters)
             };
@@ -315,7 +338,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     let _ = Swarm::dial_addr(self, address);
                 },
                 Async::Ready(NetworkBehaviourAction::DialPeer { peer_id }) => {
-                    Swarm::dial(self, peer_id)
+                    if self.banned_peers.contains(&peer_id) {
+                        self.behaviour.inject_dial_failure(&peer_id);
+                    } else {
+                        Swarm::dial(self, peer_id);
+                    }
                 },
                 Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
                     if let Some(mut peer) = self.raw_swarm.peer(peer_id).into_connected() {
@@ -341,8 +368,7 @@ pub struct PollParameters<'a: 'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
-    external_addrs: &'a [Multiaddr],
-    nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
+    external_addrs: &'a [Multiaddr]
 }
 
 impl<'a> PollParameters<'a> {
@@ -373,12 +399,6 @@ impl<'a> PollParameters<'a> {
     #[inline]
     pub fn local_peer_id(&self) -> &PeerId {
         self.local_peer_id
-    }
-
-    /// Calls the `nat_traversal` method on the underlying transport of the `Swarm`.
-    #[inline]
-    pub fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        (self.nat_traversal)(server, observed)
     }
 }
 
@@ -453,6 +473,7 @@ where TBehaviour: NetworkBehaviour,
             supported_protocols,
             listened_addrs: SmallVec::new(),
             external_addrs: SmallVec::new(),
+            banned_peers: HashSet::new(),
         }
     }
 }

@@ -30,6 +30,7 @@ use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
+use std::convert::TryFrom;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_codec::Framed;
@@ -234,7 +235,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
             // an `IoError`.
             fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-                Multiaddr::try_from_vec(bytes)
+                Multiaddr::try_from(bytes)
                     .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
             }
 

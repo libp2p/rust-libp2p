@@ -48,51 +48,6 @@ fn local_node_peer() {
 }
 
 #[test]
-fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used() {
-    let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-    // An unrelated outside address is returned as-is, no transform
-    let outside_addr1 = "/memory/0".parse::<Multiaddr>().expect("bad multiaddr");
-
-    let addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-    let outside_addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-
-    // the DummyTransport nat_traversal increments the port number by one for Ip4 addresses
-    let mut transport = DummyTransport::new();
-    let events = vec![
-        ListenerEvent::NewAddress(addr1.clone()),
-        ListenerEvent::NewAddress(addr2.clone())
-    ];
-    transport.set_initial_listener_state(ListenerState::Events(events));
-
-    let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
-
-    raw_swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-
-    let raw_swarm =
-        future::lazy(move || {
-            assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
-            assert_matches!(raw_swarm.poll(), Async::Ready(RawSwarmEvent::NewListenerAddress {..}));
-            Ok::<_, void::Void>(raw_swarm)
-        })
-        .wait()
-        .unwrap();
-
-    let natted = raw_swarm
-        .nat_traversal(&outside_addr1)
-        .map(|a| a.to_string())
-        .collect::<Vec<_>>();
-
-    assert!(natted.is_empty());
-
-    let natted = raw_swarm
-        .nat_traversal(&outside_addr2)
-        .map(|a| a.to_string())
-        .collect::<Vec<_>>();
-
-    assert_eq!(natted, vec!["/ip4/127.0.0.2/tcp/1234"])
-}
-
-#[test]
 fn successful_dial_reaches_a_node() {
     let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
     let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
