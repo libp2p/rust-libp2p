@@ -27,5 +27,6 @@ void = "1.0"
 libp2p-tcp = { version = "0.6.0", path = "../../transports/tcp" }
 libp2p-secio = { version = "0.6.0", path = "../../protocols/secio" }
 libp2p-yamux = { version = "0.6.0", path = "../../muxers/yamux" }
+quickcheck = "0.8"
 tokio = "0.1"
 tokio-tcp = "0.1"
