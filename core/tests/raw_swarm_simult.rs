@@ -76,7 +76,7 @@ where
 
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Now }
+    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Forever }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
         Ok(Async::NotReady)
