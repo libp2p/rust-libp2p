@@ -202,7 +202,7 @@ where
         // the connection may be closed. I.e. the ping handler does not keep
         // the connection alive, it merely adds another condition (failed pings)
         // for terminating it.
-        KeepAlive::Now
+        KeepAlive::No
     }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
