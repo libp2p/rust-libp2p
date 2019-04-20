@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::algo_support;
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use crate::codec::{full_codec, FullCodec, Hmac};
 use crate::stream_cipher::{Cipher, ctr};
 use crate::error::SecioError;
@@ -37,7 +37,7 @@ use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
-use tokio_io::codec::length_delimited;
+use tokio::codec::length_delimited::Builder;
 use tokio_io::{AsyncRead, AsyncWrite};
 use crate::{KeyAgreement, SecioConfig};
 
@@ -304,7 +304,7 @@ where
     S: AsyncRead + AsyncWrite + Send,
 {
     // The handshake messages all start with a 4-bytes message length prefix.
-    let socket = length_delimited::Builder::new()
+    let socket = Builder::new()
         .big_endian()
         .length_field_length(4)
         .new_framed(socket);
@@ -318,7 +318,7 @@ where
         })
         .and_then(|context| {
             trace!("sending proposition to remote");
-            socket.send(BytesMut::from(context.state.proposition_bytes.clone()))
+            socket.send(Bytes::from(context.state.proposition_bytes.clone()))
                 .from_err()
                 .map(|s| (s, context))
         })
@@ -368,7 +368,7 @@ where
         // Send our local `Exchange`.
         .and_then(|(local_exch, socket, context)| {
             trace!("sending exchange to remote");
-            socket.send(local_exch)
+            socket.send(local_exch.into())
                 .from_err()
                 .map(|s| (s, context))
         })

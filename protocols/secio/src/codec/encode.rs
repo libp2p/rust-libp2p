@@ -20,7 +20,7 @@
 
 //! Individual messages encoding.
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use super::{Hmac, StreamCipher};
 use futures::prelude::*;
 
@@ -51,15 +51,15 @@ impl<S> EncoderMiddleware<S> {
 
 impl<S> Sink for EncoderMiddleware<S>
 where
-    S: Sink<SinkItem = BytesMut>,
+    S: Sink<SinkItem = Bytes>,
 {
     type SinkItem = BytesMut;
     type SinkError = S::SinkError;
 
     fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data.into())? {
+                self.pending = Some(data.into());
                 return Ok(AsyncSink::NotReady(data_buf))
             }
         }
@@ -68,8 +68,8 @@ where
         self.cipher_state.encrypt(&mut data_buf[..]);
         let signature = self.hmac.sign(&data_buf[..]);
         data_buf.extend_from_slice(signature.as_ref());
-        if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf)? {
-            self.pending = Some(data)
+        if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf.into())? {
+            self.pending = Some(data.into())
         }
         Ok(AsyncSink::Ready)
     }
@@ -77,8 +77,8 @@ where
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data.into())? {
+                self.pending = Some(data.into());
                 return Ok(Async::NotReady)
             }
         }
@@ -88,8 +88,8 @@ where
     #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
         if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data.into())? {
+                self.pending = Some(data.into());
                 return Ok(Async::NotReady)
             }
         }

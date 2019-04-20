@@ -28,14 +28,14 @@ use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
-use tokio_io::codec::length_delimited;
+use tokio::codec::{Framed, LengthDelimitedCodec};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 mod decode;
 mod encode;
 
 /// Type returned by `full_codec`.
-pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
+pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<Framed<S, LengthDelimitedCodec>>>;
 
 pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
@@ -108,7 +108,7 @@ impl Hmac {
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
-    socket: length_delimited::Framed<S>,
+    socket: Framed<S, LengthDelimitedCodec>,
     cipher_encoding: StreamCipher,
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
@@ -133,18 +133,19 @@ mod tests {
     use super::Hmac;
     use crate::algo_support::Digest;
     use crate::error::SecioError;
-    use bytes::BytesMut;
+    use bytes::{Bytes, BytesMut};
     use futures::sync::mpsc::channel;
     use futures::{Future, Sink, Stream, stream};
     use rand;
     use std::io::Error as IoError;
-    use tokio_io::codec::length_delimited::Framed;
+    use tokio::codec::{Framed, LengthDelimitedCodec};
 
     const NULL_IV : [u8; 16] = [0;16];
 
     #[test]
     fn raw_encode_then_decode() {
-        let (data_tx, data_rx) = channel::<BytesMut>(256);
+        let (data_tx, data_rx) = channel::<Bytes>(256);
+        let data_rx = data_rx.map(|x| BytesMut::from(x));
         let data_tx = data_tx.sink_map_err::<_, IoError>(|_| panic!());
         let data_rx = data_rx.map_err::<IoError, _>(|_| panic!());
 
@@ -195,7 +196,7 @@ mod tests {
             .map_err(|(e, _)| e)
             .map(move |(connec, _)| {
                 full_codec(
-                    Framed::new(connec.unwrap()),
+                    Framed::new(connec.unwrap(), LengthDelimitedCodec::new()),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
@@ -209,7 +210,7 @@ mod tests {
             .map_err(|e| e.into())
             .map(move |stream| {
                 full_codec(
-                    Framed::new(stream),
+                    Framed::new(stream, LengthDelimitedCodec::new()),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),

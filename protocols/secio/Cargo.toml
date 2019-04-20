@@ -25,6 +25,7 @@ ctr = "0.3"
 lazy_static = "1.2.0"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
+tokio = "0.1.1"
 sha2 = "0.8.0"
 hmac = "0.7.0"
 
