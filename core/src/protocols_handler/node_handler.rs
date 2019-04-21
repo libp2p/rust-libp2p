@@ -276,10 +276,14 @@ where
 
         // Ask the handler whether it wants the connection (and the handler itself)
         // to be kept alive, which determines the planned shutdown, if any.
-        self.shutdown = match self.handler.connection_keep_alive() {
-            KeepAlive::Until(t) => Shutdown::Later(Delay::new(t)),
-            KeepAlive::Now => Shutdown::Asap,
-            KeepAlive::Forever => Shutdown::None
+        match (&mut self.shutdown, self.handler.connection_keep_alive()) {
+            (Shutdown::Later(d), KeepAlive::Until(t)) =>
+                if d.deadline() != t {
+                    d.reset(t)
+                },
+            (_, KeepAlive::Until(t)) => self.shutdown = Shutdown::Later(Delay::new(t)),
+            (_, KeepAlive::Now) => self.shutdown = Shutdown::Asap,
+            (_, KeepAlive::Forever) => self.shutdown = Shutdown::None
         };
 
         match poll_result {

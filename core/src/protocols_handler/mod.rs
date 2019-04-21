@@ -150,10 +150,10 @@ pub trait ProtocolsHandler {
     ///
     /// This method is called by the `Swarm` after each invocation of
     /// [`ProtocolsHandler::poll`] to determine if the connection and the associated
-    /// `ProtocolsHandler`s should be kept alive as far as this handler is concernced
+    /// `ProtocolsHandler`s should be kept alive as far as this handler is concerned
     /// and if so, for how long.
     ///
-    /// Returning [`KeepAlive::Now`] indicates that the connection can be
+    /// Returning [`KeepAlive::Now`] indicates that the connection should be
     /// closed and this handler destroyed immediately.
     ///
     /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
