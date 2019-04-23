@@ -61,9 +61,9 @@ pub mod ffi {
 
         /// Start listening on the given multiaddress.
         ///
-        /// The returned `Promise` must yield the first [`ListenEvent`] on success.
+        /// The returned `Iterator` must yield `Promise`s to [`ListenEvent`] events.
         #[wasm_bindgen(method, catch)]
-        pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Promise, JsValue>;
+        pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
         /// Reads data from the connection. Returns a `Promise` containing the data in an
         /// `ArrayBuffer`, or `null` to indicate EOF.
@@ -162,11 +162,12 @@ impl Transport for ExtTransport {
     type Dial = Dial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let promise = self.inner.listen_on(&addr.to_string())
+        let iter = self.inner.listen_on(&addr.to_string())
             .map_err(|err| TransportError::Other(JsErr::from(err)))?;   // TODO: how to report not supported?
 
         Ok(Listen {
-            inner: SendWrapper::new(promise.into()),
+            iterator: SendWrapper::new(iter),
+            next_event: None,
             pending_events: VecDeque::new(),
         })
     }
@@ -210,8 +211,10 @@ impl Future for Dial {
 /// Stream that listens for incoming connections through an external transport.
 #[must_use = "futures do nothing unless polled"]
 pub struct Listen {
+    /// Iterator of `ListenEvent`s.
+    iterator: SendWrapper<js_sys::Iterator>,
     /// Promise that will yield the next `ListenEvent`.
-    inner: SendWrapper<wasm_bindgen_futures::JsFuture>,
+    next_event: Option<SendWrapper<wasm_bindgen_futures::JsFuture>>,
     /// List of events that we are waiting to propagate.
     pending_events: VecDeque<ListenerEvent<FutureResult<Connection, JsErr>>>,
 }
@@ -232,8 +235,20 @@ impl Stream for Listen {
                 return Ok(Async::Ready(Some(ev)));
             }
 
-            let event = ffi::ListenEvent::from(try_ready!(self.inner.poll().map_err(JsErr::from)));
-            self.inner = SendWrapper::new(js_sys::Promise::from(event.next_event()).into());
+            if self.next_event.is_none() {
+                let ev = self.iterator.next()?;
+                if !ev.done() {
+                    self.next_event = Some(SendWrapper::new(js_sys::Promise::from(ev.value()).into()));
+                }
+            }
+
+            let event = if let Some(next_event) = self.next_event.as_mut() {
+                let e = ffi::ListenEvent::from(try_ready!(next_event.poll().map_err(JsErr::from)));
+                self.next_event = None;
+                e
+            } else {
+                return Ok(Async::Ready(None));
+            };
 
             for addr in event.new_addrs().into_iter().flat_map(|e| e.to_vec().into_iter()) {
                 let addr = js_value_to_addr(&addr)?;
