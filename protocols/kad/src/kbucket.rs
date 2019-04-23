@@ -293,18 +293,19 @@ where
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
-    pub fn entries_not_pending(&self) -> impl Iterator<Item = &TPeerId> {
+    pub fn entries(&self) -> impl Iterator<Item = (&TPeerId, &TVal)> {
         self.tables
             .iter()
-            .flat_map(|table| table.nodes.iter().map(|node| &node.id))
+            .flat_map(|table| table.nodes.iter())
+            .map(|node| (&node.id, &node.value))
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, including the pending nodes.
-    pub fn entries(&self) -> impl Iterator<Item = &TPeerId> {
+    pub fn entries_pending(&self) -> impl Iterator<Item = (&TPeerId, &TVal)> {
         self.tables
             .iter()
-            .flat_map(|table| table.pending_node.as_ref().map(|n| &n.node.id))
-            .chain(self.entries_not_pending())
+            .flat_map(|table| table.pending_node.as_ref().map(|n| (&n.node.id, &n.node.value)))
+            .chain(self.entries())
     }
 
     /// Returns an iterator to all the buckets of this table.

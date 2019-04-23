@@ -301,12 +301,12 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
     pub fn kbuckets_entries_not_pending<'a>(&'a self) -> impl 'a + Iterator<Item = &PeerId> {
-        self.kbuckets.entries_not_pending().map(|k| k.peer_id())
+        self.kbuckets.entries().map(|(k, _)| k.peer_id())
     }
 
     /// Returns an iterator to all the peer IDs in the bucket, including the pending nodes.
     pub fn kbuckets_entries<'a>(&'a self) -> impl 'a + Iterator<Item = &PeerId> {
-        self.kbuckets.entries().map(|k| k.peer_id())
+        self.kbuckets.entries().map(|(k, _)| k.peer_id())
     }
 
     /// Given a peer_id, return whether it is in Kademlia or not and whether
