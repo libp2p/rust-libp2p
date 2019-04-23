@@ -33,7 +33,7 @@
 //!
 
 use futures::{future::FutureResult, prelude::*, stream::Stream, try_ready};
-use libp2p_core::{Multiaddr, Transport, transport::ListenerEvent, transport::TransportError};
+use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
 use send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem};
 use wasm_bindgen::prelude::*;
@@ -135,7 +135,7 @@ impl ExtTransport {
     /// Creates a new `ExtTransport` that uses the given external `Transport`.
     pub fn new(transport: ffi::Transport) -> Self {
         ExtTransport {
-            inner: SendWrapper::new(transport)
+            inner: SendWrapper::new(transport),
         }
     }
 }
@@ -162,8 +162,10 @@ impl Transport for ExtTransport {
     type Dial = Dial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let iter = self.inner.listen_on(&addr.to_string())
-            .map_err(|err| TransportError::Other(JsErr::from(err)))?;   // TODO: how to report not supported?
+        let iter = self
+            .inner
+            .listen_on(&addr.to_string())
+            .map_err(|err| TransportError::Other(JsErr::from(err)))?; // TODO: how to report not supported?
 
         Ok(Listen {
             iterator: SendWrapper::new(iter),
@@ -173,11 +175,13 @@ impl Transport for ExtTransport {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let promise = self.inner.dial(&addr.to_string())
-            .map_err(|err| TransportError::Other(JsErr::from(err)))?;   // TODO: how to report not supported?
+        let promise = self
+            .inner
+            .dial(&addr.to_string())
+            .map_err(|err| TransportError::Other(JsErr::from(err)))?; // TODO: how to report not supported?
 
         Ok(Dial {
-            inner: SendWrapper::new(promise.into())
+            inner: SendWrapper::new(promise.into()),
         })
     }
 }
@@ -238,7 +242,8 @@ impl Stream for Listen {
             if self.next_event.is_none() {
                 let ev = self.iterator.next()?;
                 if !ev.done() {
-                    self.next_event = Some(SendWrapper::new(js_sys::Promise::from(ev.value()).into()));
+                    let promise: js_sys::Promise = ev.value().into();
+                    self.next_event = Some(SendWrapper::new(promise.into()));
                 }
             }
 
@@ -250,12 +255,21 @@ impl Stream for Listen {
                 return Ok(Async::Ready(None));
             };
 
-            for addr in event.new_addrs().into_iter().flat_map(|e| e.to_vec().into_iter()) {
+            for addr in event
+                .new_addrs()
+                .into_iter()
+                .flat_map(|e| e.to_vec().into_iter())
+            {
                 let addr = js_value_to_addr(&addr)?;
-                self.pending_events.push_back(ListenerEvent::NewAddress(addr));
+                self.pending_events
+                    .push_back(ListenerEvent::NewAddress(addr));
             }
 
-            for upgrade in event.new_connections().into_iter().flat_map(|e| e.to_vec().into_iter()) {
+            for upgrade in event
+                .new_connections()
+                .into_iter()
+                .flat_map(|e| e.to_vec().into_iter())
+            {
                 let upgrade: ffi::ConnectionEvent = upgrade.into();
                 self.pending_events.push_back(ListenerEvent::Upgrade {
                     listen_addr: upgrade.local_addr().parse()?,
@@ -264,9 +278,14 @@ impl Stream for Listen {
                 });
             }
 
-            for addr in event.expired_addrs().into_iter().flat_map(|e| e.to_vec().into_iter()) {
+            for addr in event
+                .expired_addrs()
+                .into_iter()
+                .flat_map(|e| e.to_vec().into_iter())
+            {
                 let addr = js_value_to_addr(&addr)?;
-                self.pending_events.push_back(ListenerEvent::AddressExpired(addr));
+                self.pending_events
+                    .push_back(ListenerEvent::AddressExpired(addr));
             }
         }
     }
@@ -323,9 +342,7 @@ impl io::Read for Connection {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         loop {
             match mem::replace(&mut self.read_state, ConnectionReadState::Finished) {
-                ConnectionReadState::Finished => {
-                    break Err(io::ErrorKind::BrokenPipe.into())
-                }
+                ConnectionReadState::Finished => break Err(io::ErrorKind::BrokenPipe.into()),
 
                 ConnectionReadState::PendingData(ref data) if data.is_empty() => {
                     let iter_next = self.read_iterator.next().map_err(JsErr::from)?;
@@ -343,7 +360,8 @@ impl io::Read for Connection {
                     debug_assert!(!data.is_empty());
                     if buf.len() <= data.len() {
                         buf.copy_from_slice(&data[..buf.len()]);
-                        self.read_state = ConnectionReadState::PendingData(data.split_off(buf.len()));
+                        self.read_state =
+                            ConnectionReadState::PendingData(data.split_off(buf.len()));
                         break Ok(buf.len());
                     } else {
                         let len = data.len();
@@ -393,12 +411,14 @@ impl io::Write for Connection {
                 Async::NotReady => {
                     self.previous_write_promise = Some(promise);
                     return Err(io::ErrorKind::WouldBlock.into());
-                },
+                }
             }
         }
 
         debug_assert!(self.previous_write_promise.is_none());
-        self.previous_write_promise = Some(SendWrapper::new(self.inner.write(buf).map_err(JsErr::from)?.into()));
+        self.previous_write_promise = Some(SendWrapper::new(
+            self.inner.write(buf).map_err(JsErr::from)?.into(),
+        ));
         Ok(buf.len())
     }
 
@@ -469,5 +489,4 @@ impl fmt::Display for JsErr {
     }
 }
 
-impl error::Error for JsErr {
-}
+impl error::Error for JsErr {}
