@@ -60,9 +60,9 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-pub use self::one_substream::OneSubstreamMuxer;
+pub use self::singleton::SingletonMuxer;
 
-mod one_substream;
+mod singleton;
 
 /// Implemented on objects that can open and manage substreams.
 ///
