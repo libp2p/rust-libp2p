@@ -6,7 +6,7 @@
 - Added `NetworkBehaviour::inject_new_listen_addr`, `NetworkBehaviour::inject_expired_listen_addr` and `NetworkBehaviour::inject_new_external_addr`.
 - `ProtocolsHandler::listen_protocol` and `ProtocolsHandlerEvent::OutboundSubstreamRequest` must now return a `SubstreamProtocol` struct containing a timeout for the upgrade.
 - `Ping::new` now requires a `PingConfig`, which can be created with `PingConfig::new`.
-- Removed `Multiaddr::nat_traversal` in favour of a stand-alone `address_translation` function in `libp2p-core`.
+- Removed `Transport::nat_traversal` in favour of a stand-alone `address_translation` function in `libp2p-core`.
 - Reworked the API of `Multiaddr`.
 - Removed the `ToMultiaddr` trait in favour of `TryFrom`.
 - Added `Swarm::ban_peer_id` and `Swarm::unban_peer_id`.
