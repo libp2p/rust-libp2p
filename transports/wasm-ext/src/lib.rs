@@ -243,7 +243,7 @@ impl Stream for Listen {
             }
 
             let event = if let Some(next_event) = self.next_event.as_mut() {
-                let e = ffi::ListenEvent::from(try_ready!(next_event.poll().map_err(JsErr::from)));
+                let e = ffi::ListenEvent::from(try_ready!(next_event.poll()));
                 self.next_event = None;
                 e
             } else {
@@ -328,7 +328,7 @@ impl io::Read for Connection {
                 }
 
                 ConnectionReadState::PendingData(ref data) if data.is_empty() => {
-                    let iter_next = self.read_iterator.next().map_err(JsErr::from)?;      // TODO: remove map_err
+                    let iter_next = self.read_iterator.next().map_err(JsErr::from)?;
                     if iter_next.done() {
                         self.read_state = ConnectionReadState::Finished;
                     } else {
