@@ -219,14 +219,16 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     ///
     /// Any incoming connection and any dialing attempt will immediately be rejected.
     /// This function has no effect is the peer is already banned.
-    pub fn ban_peer_id(&mut self, peer_id: PeerId) {
-        self.banned_peers.insert(peer_id.clone());
-        self.raw_swarm.peer(peer_id).into_connected().map(|c| c.close());
+    pub fn ban_peer_id(me: &mut Self, peer_id: PeerId) {
+        me.banned_peers.insert(peer_id.clone());
+        if let Some(c) = me.raw_swarm.peer(peer_id).into_connected() {
+            c.close();
+        }
     }
 
     /// Unbans a peer.
-    pub fn unban_peer_id(&mut self, peer_id: PeerId) {
-        self.banned_peers.remove(&peer_id);
+    pub fn unban_peer_id(me: &mut Self, peer_id: PeerId) {
+        me.banned_peers.remove(&peer_id);
     }
 }
 
