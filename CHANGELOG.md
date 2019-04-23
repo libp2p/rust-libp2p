@@ -12,6 +12,7 @@
 - Added `Swarm::ban_peer_id` and `Swarm::unban_peer_id`.
 - The `TPeerId` generic parameter of `RawSwarm` is now `TConnInfo` and must now implement a `ConnectionInfo` trait.
 - Reworked the `PingEvent`.
+- Renamed `KeepAlive::Forever` to `Yes` and `KeepAlive::Now` to `No`.
 
 # Version 0.6.0 (2019-03-29)
 
