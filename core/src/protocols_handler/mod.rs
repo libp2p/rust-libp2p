@@ -150,7 +150,8 @@ pub trait ProtocolsHandler {
     ///
     /// This method is called by the `Swarm` after each invocation of
     /// [`ProtocolsHandler::poll`] to determine if the connection and the associated
-    /// `ProtocolsHandler`s should be kept alive and if so, for how long.
+    /// `ProtocolsHandler`s should be kept alive as far as this handler is concerned
+    /// and if so, for how long.
     ///
     /// Returning [`KeepAlive::Now`] indicates that the connection should be
     /// closed and this handler destroyed immediately.
@@ -165,7 +166,6 @@ pub trait ProtocolsHandler {
     /// > when [`ProtocolsHandler::poll`] returns an error. Furthermore, the
     /// > connection may be closed for reasons outside of the control
     /// > of the handler.
-    ///
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
