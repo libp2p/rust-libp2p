@@ -156,6 +156,7 @@ where
 impl<TMuxer, THandler> HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
+    TMuxer::Error: Into<io::Error>,
     THandler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Builds a new `HandledNode`.

@@ -63,6 +63,7 @@ where
     TTrans::Error: 'static,
     TMuxer: muxing::StreamMuxer + Send + Sync + 'static,      // TODO: remove unnecessary bounds
     TMuxer::Substream: Send + Sync + 'static,      // TODO: remove unnecessary bounds
+    TMuxer::Error: Into<IoError>,
 {
     type Output = (PeerId, TMuxer);
     type Error = TransportUpgradeError<TTrans::Error, IoError>;     // TODO: better than IoError
@@ -93,6 +94,7 @@ where
 pub struct IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
+      TMuxer::Error: Into<IoError>,
 {
     /// Internal state.
     state: IdRetrieverState<TMuxer>
@@ -101,6 +103,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
 enum IdRetrieverState<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
+      TMuxer::Error: Into<IoError>,
 {
     /// We are in the process of opening a substream with the remote.
     OpeningSubstream(Arc<TMuxer>, muxing::OutboundSubstreamRefWrapFuture<Arc<TMuxer>>, IdentifyProtocolConfig),
@@ -115,6 +118,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
 impl<TMuxer> IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
+      TMuxer::Error: Into<IoError>,
 {
     /// Creates a new `IdRetriever` ready to be polled.
     fn new(muxer: TMuxer, config: IdentifyProtocolConfig) -> Self {
@@ -130,6 +134,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
 impl<TMuxer> Future for IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
+      TMuxer::Error: Into<IoError>,
 {
     type Item = (PeerId, TMuxer);
     type Error = UpgradeError<IoError>;
@@ -150,7 +155,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                             self.state = IdRetrieverState::OpeningSubstream(muxer, opening, config);
                             return Ok(Async::NotReady);
                         },
-                        Err(err) => return Err(UpgradeError::Apply(err))
+                        Err(err) => return Err(UpgradeError::Apply(err.into()))
                     }
                 },
                 IdRetrieverState::NegotiatingIdentify(muxer, mut nego) => {

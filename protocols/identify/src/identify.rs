@@ -238,7 +238,7 @@ mod tests {
     use tokio::runtime::current_thread;
 
     fn transport() -> (identity::PublicKey, impl Transport<
-        Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send>),
+        Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
         Listener = impl Send,
         ListenerUpgrade = impl Send,
         Dial = impl Send,
