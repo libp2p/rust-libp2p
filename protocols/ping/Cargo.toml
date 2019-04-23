@@ -2,7 +2,7 @@
 name = "libp2p-ping"
 edition = "2018"
 description = "Ping protocol for libp2p"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,9 +12,9 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 arrayvec = "0.4"
 bytes = "0.4"
-libp2p-core = { version = "0.6.0", path = "../../core" }
+libp2p-core = { version = "0.7.0", path = "../../core" }
 log = "0.4.1"
-multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", version = "0.4.0", path = "../../misc/multiaddr" }
 futures = "0.1"
 parking_lot = "0.7"
 rand = "0.6"
@@ -24,9 +24,9 @@ tokio-timer = "0.2.6"
 void = "1.0"
 
 [dev-dependencies]
-libp2p-tcp = { version = "0.6.0", path = "../../transports/tcp" }
-libp2p-secio = { version = "0.6.0", path = "../../protocols/secio" }
-libp2p-yamux = { version = "0.6.0", path = "../../muxers/yamux" }
+libp2p-tcp = { version = "0.7.0", path = "../../transports/tcp" }
+libp2p-secio = { version = "0.7.0", path = "../../protocols/secio" }
+libp2p-yamux = { version = "0.7.0", path = "../../muxers/yamux" }
 quickcheck = "0.8"
 tokio = "0.1"
 tokio-tcp = "0.1"
