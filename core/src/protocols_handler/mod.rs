@@ -153,13 +153,13 @@ pub trait ProtocolsHandler {
     /// `ProtocolsHandler`s should be kept alive as far as this handler is concerned
     /// and if so, for how long.
     ///
-    /// Returning [`KeepAlive::Now`] indicates that the connection should be
+    /// Returning [`KeepAlive::No`] indicates that the connection should be
     /// closed and this handler destroyed immediately.
     ///
     /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
     /// and this handler destroyed after the specified `Instant`.
     ///
-    /// Returning [`KeepAlive::Forever`] indicates that the connection should
+    /// Returning [`KeepAlive::Yes`] indicates that the connection should
     /// be kept alive until the next call to this method.
     ///
     /// > **Note**: The connection is always closed and the handler destroyed
@@ -466,16 +466,16 @@ pub enum KeepAlive {
     /// If nothing new happens, the connection should be closed at the given `Instant`.
     Until(Instant),
     /// Keep the connection alive.
-    Forever,
+    Yes,
     /// Close the connection as soon as possible.
-    Now,
+    No,
 }
 
 impl KeepAlive {
-    /// Returns true for `Forever`, false otherwise.
-    pub fn is_forever(&self) -> bool {
+    /// Returns true for `Yes`, false otherwise.
+    pub fn is_yes(&self) -> bool {
         match *self {
-            KeepAlive::Forever => true,
+            KeepAlive::Yes => true,
             _ => false,
         }
     }
@@ -492,10 +492,10 @@ impl Ord for KeepAlive {
         use self::KeepAlive::*;
 
         match (self, other) {
-            (Now, Now) | (Forever, Forever) => Ordering::Equal,
-            (Now, _) | (_, Forever) => Ordering::Less,
-            (_, Now) | (Forever, _) => Ordering::Greater,
-            (Until(expiration), Until(other_expiration)) => expiration.cmp(other_expiration),
+            (No, No) | (Yes, Yes)  => Ordering::Equal,
+            (No,  _) | (_,   Yes)  => Ordering::Less,
+            (_,  No) | (Yes,   _)  => Ordering::Greater,
+            (Until(t1), Until(t2)) => t1.cmp(t2),
         }
     }
 }

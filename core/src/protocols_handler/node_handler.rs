@@ -282,8 +282,8 @@ where
                     d.reset(t)
                 },
             (_, KeepAlive::Until(t)) => self.shutdown = Shutdown::Later(Delay::new(t)),
-            (_, KeepAlive::Now) => self.shutdown = Shutdown::Asap,
-            (_, KeepAlive::Forever) => self.shutdown = Shutdown::None
+            (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
+            (_, KeepAlive::Yes) => self.shutdown = Shutdown::None
         };
 
         match poll_result {
