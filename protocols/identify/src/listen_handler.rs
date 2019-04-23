@@ -90,7 +90,7 @@ where
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::Now
+        KeepAlive::No
     }
 
     fn poll(

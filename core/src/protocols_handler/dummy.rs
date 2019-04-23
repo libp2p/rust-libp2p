@@ -90,7 +90,7 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Now }
+    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
 
     #[inline]
     fn poll(

@@ -222,7 +222,7 @@ where
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.as_ref().map(|h| h.connection_keep_alive())
-            .unwrap_or(KeepAlive::Now)
+            .unwrap_or(KeepAlive::No)
     }
 
     fn poll(
