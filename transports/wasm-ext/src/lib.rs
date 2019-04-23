@@ -78,9 +78,8 @@ pub mod ffi {
         ) -> Result<js_sys::Iterator, JsValue>;
 
         /// Reads data from the connection. Returns an `Iterator` yielding `Promise`s containing
-        /// the data as an `ArrayBuffer`, or `null`/`undefined` to indicate EOF.
-        ///
-        /// If `null` is returned (on EOF), then `read` will no longer be called.
+        /// the data as an `ArrayBuffer`, or `null`/`undefined` to indicate EOF. One can also
+        /// indicate EOF by making the `Iterator` finish.
         ///
         /// If the `Promise` returns an error, the reading side of the connection is considered
         /// unrecoverable and the connection should be closed as soon as possible.
