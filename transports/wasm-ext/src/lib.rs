@@ -65,8 +65,8 @@ pub mod ffi {
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
-        /// Reads data from the connection. Returns a `Promise` containing the data in an
-        /// `ArrayBuffer`, or `null` to indicate EOF.
+        /// Reads data from the connection. Returns an `Iterator` yielding `Promise`s containing
+        /// the data as an `ArrayBuffer`, or `null`/`undefined` to indicate EOF.
         ///
         /// If `null` is returned (on EOF), then `read` will no longer be called.
         ///
@@ -74,8 +74,8 @@ pub mod ffi {
         /// unrecoverable and the connection should be closed as soon as possible.
         ///
         /// Guaranteed to only be called after the previous read promise has resolved.
-        #[wasm_bindgen(method, catch)]
-        pub fn read(this: &Connection) -> Result<js_sys::Promise, JsValue>;
+        #[wasm_bindgen(method)]
+        pub fn read(this: &Connection) -> js_sys::Iterator;
 
         /// Writes data to the connection. Returns a `Promise` that resolves when the connection is
         /// ready for writing again.
@@ -277,6 +277,9 @@ pub struct Connection {
     /// The FFI object.
     inner: SendWrapper<ffi::Connection>,
 
+    /// The iterator that was returned by `read()`.
+    read_iterator: SendWrapper<js_sys::Iterator>,
+
     /// Reading part of the connection.
     read_state: ConnectionReadState,
 
@@ -289,8 +292,11 @@ pub struct Connection {
 impl Connection {
     /// Initializes a `Connection` object from the FFI connection.
     fn new(inner: ffi::Connection) -> Self {
+        let read_iterator = inner.read();
+
         Connection {
             inner: SendWrapper::new(inner),
+            read_iterator: SendWrapper::new(read_iterator),
             read_state: ConnectionReadState::PendingData(Vec::new()),
             previous_write_promise: None,
         }
@@ -322,8 +328,14 @@ impl io::Read for Connection {
                 }
 
                 ConnectionReadState::PendingData(ref data) if data.is_empty() => {
-                    let promise = self.inner.read().map_err(JsErr::from)?;
-                    self.read_state = ConnectionReadState::Waiting(SendWrapper::new(promise.into()));
+                    let iter_next = self.read_iterator.next().map_err(JsErr::from)?;      // TODO: remove map_err
+                    if iter_next.done() {
+                        self.read_state = ConnectionReadState::Finished;
+                    } else {
+                        let promise: js_sys::Promise = iter_next.value().into();
+                        let promise = SendWrapper::new(promise.into());
+                        self.read_state = ConnectionReadState::Waiting(promise);
+                    }
                     continue;
                 }
 
