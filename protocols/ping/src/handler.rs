@@ -138,6 +138,8 @@ impl Error for PingFailure {
 pub struct PingHandler<TSubstream> {
     /// Configuration options.
     config: PingConfig,
+    /// Beginning of time for this `PingHandler`.
+    epoch: Instant,
     /// The timer for when to send the next ping.
     next_ping: Delay,
     /// The pending results from inbound or outbound pings, ready
@@ -151,9 +153,11 @@ pub struct PingHandler<TSubstream> {
 impl<TSubstream> PingHandler<TSubstream> {
     /// Builds a new `PingHandler` with the given configuration.
     pub fn new(config: PingConfig) -> Self {
+        let now = Instant::now();
         PingHandler {
             config,
-            next_ping: Delay::new(Instant::now()),
+            epoch: now,
+            next_ping: Delay::new(now),
             pending_results: VecDeque::with_capacity(2),
             failures: 0,
             _marker: std::marker::PhantomData
@@ -198,11 +202,11 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // Returning `Now` indicates that, as far as this handler is concerned,
-        // the connection may be closed. I.e. the ping handler does not keep
-        // the connection alive, it merely adds another condition (failed pings)
-        // for terminating it.
-        KeepAlive::No
+        // We need to keep the connection open for at least 1 millisecond (the resolution
+        // of `Delay`). Otherwise the node handler may close the connection before we
+        // even issued our first `OutboundSubstreamRequest`.
+        // As an additional safety margin we use 1 second.
+        KeepAlive::Until(self.epoch + Duration::from_secs(1))
     }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
