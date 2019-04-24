@@ -1,3 +1,19 @@
+# Version 0.7.0 (2019-04-23)
+
+- Fixed the inactive connections shutdown mechanism not working.
+- `Transport::listen_on` must now return a `Stream` that produces `ListenEvent`s. This makes it possible to notify about listened addresses at a later point in time.
+- `Transport::listen_on` no longer returns an address we're listening on. This is done through `ListenEvent`s. All other `listen_on` methods have been updated accordingly.
+- Added `NetworkBehaviour::inject_new_listen_addr`, `NetworkBehaviour::inject_expired_listen_addr` and `NetworkBehaviour::inject_new_external_addr`.
+- `ProtocolsHandler::listen_protocol` and `ProtocolsHandlerEvent::OutboundSubstreamRequest` must now return a `SubstreamProtocol` struct containing a timeout for the upgrade.
+- `Ping::new` now requires a `PingConfig`, which can be created with `PingConfig::new`.
+- Removed `Transport::nat_traversal` in favour of a stand-alone `address_translation` function in `libp2p-core`.
+- Reworked the API of `Multiaddr`.
+- Removed the `ToMultiaddr` trait in favour of `TryFrom`.
+- Added `Swarm::ban_peer_id` and `Swarm::unban_peer_id`.
+- The `TPeerId` generic parameter of `RawSwarm` is now `TConnInfo` and must now implement a `ConnectionInfo` trait.
+- Reworked the `PingEvent`.
+- Renamed `KeepAlive::Forever` to `Yes` and `KeepAlive::Now` to `No`.
+
 # Version 0.6.0 (2019-03-29)
 
 - Replaced `NetworkBehaviour::inject_dial_failure` with `inject_dial_failure` and

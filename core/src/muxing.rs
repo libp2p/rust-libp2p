@@ -60,6 +60,10 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+pub use self::singleton::SingletonMuxer;
+
+mod singleton;
+
 /// Implemented on objects that can open and manage substreams.
 ///
 /// The state of a muxer, as exposed by this API, is the following:

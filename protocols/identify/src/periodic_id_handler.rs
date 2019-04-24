@@ -127,9 +127,9 @@ where
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         if self.first_id_happened {
-            KeepAlive::Now
+            KeepAlive::No
         } else {
-            KeepAlive::Forever
+            KeepAlive::Yes
         }
     }
 

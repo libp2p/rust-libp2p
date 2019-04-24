@@ -76,7 +76,7 @@ where
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             max_dial_negotiated: 8,
-            keep_alive: KeepAlive::Forever,
+            keep_alive: KeepAlive::Yes,
             inactive_timeout,
             marker: PhantomData,
         }
@@ -109,7 +109,7 @@ where
     /// Opens an outbound substream with `upgrade`.
     #[inline]
     pub fn send_request(&mut self, upgrade: TOutProto) {
-        self.keep_alive = KeepAlive::Forever;
+        self.keep_alive = KeepAlive::Yes;
         self.dial_queue.push(upgrade);
     }
 }
@@ -158,7 +158,7 @@ where
         out: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
     ) {
         // If we're shutting down the connection for inactivity, reset the timeout.
-        if !self.keep_alive.is_forever() {
+        if !self.keep_alive.is_yes() {
             self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
         }
 
