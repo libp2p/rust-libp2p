@@ -32,7 +32,6 @@ use smallvec::SmallVec;
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
     error,
-    io,
     fmt,
     mem
 };
@@ -221,7 +220,6 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
         <TIntoHandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
-        TMuxer:: Error: Into<io::Error>,
         TConnInfo: Send + 'static,
     {
         let task_id = self.next_task_id;
@@ -554,7 +552,6 @@ impl<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TConnInfo> Futu
     NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TConnInfo>
 where
     TMuxer: StreamMuxer,
-    TMuxer::Error: Into<io::Error>,
     TFut: Future<Item = (TConnInfo, TMuxer), Error = TReachErr>,
     TIntoHandler: IntoNodeHandler<TConnInfo>,
     TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,

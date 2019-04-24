@@ -30,7 +30,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{error, io, fmt, hash::Hash, mem};
+use std::{error, fmt, hash::Hash, mem};
 
 mod tests;
 
@@ -332,7 +332,6 @@ where
         TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
-        TMuxer::Error: Into<io::Error>,
         TConnInfo: Send + 'static,
     {
         ReachAttemptId(self.inner.add_reach_attempt(future, TaskState::Pending, handler))

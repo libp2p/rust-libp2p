@@ -96,7 +96,6 @@ pub struct OutboundSubstreamId(usize);
 impl<TMuxer, TUserData> NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
-    TMuxer::Error: Into<IoError>,
 {
     /// Creates a new node events stream.
     #[inline]
@@ -212,7 +211,6 @@ where
 impl<TMuxer> Future for Close<TMuxer>
 where
     TMuxer: muxing::StreamMuxer,
-    TMuxer::Error: Into<IoError>,
 {
     type Item = ();
     type Error = IoError;

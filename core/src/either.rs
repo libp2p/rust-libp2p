@@ -131,8 +131,6 @@ impl<A, B> StreamMuxer for EitherOutput<A, B>
 where
     A: StreamMuxer,
     B: StreamMuxer,
-    A::Error: Into<IoError>,
-    B::Error: Into<IoError>,
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type OutboundSubstream = EitherOutbound<A, B>;

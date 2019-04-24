@@ -84,7 +84,7 @@ pub trait StreamMuxer {
     type OutboundSubstream;
 
     /// Error type of the muxer
-    type Error;
+    type Error: Into<io::Error>;
 
     /// Polls for an inbound substream.
     ///
@@ -353,7 +353,6 @@ impl<P> Read for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
-    <P::Target as StreamMuxer>::Error: Into<io::Error>,
 {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
@@ -369,7 +368,6 @@ impl<P> AsyncRead for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
-    <P::Target as StreamMuxer>::Error: Into<io::Error>,
 {
     #[inline]
     fn poll_read(&mut self, buf: &mut [u8]) -> Poll<usize, io::Error> {
@@ -382,7 +380,6 @@ impl<P> Write for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
-    <P::Target as StreamMuxer>::Error: Into<io::Error>,
 {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
@@ -407,7 +404,6 @@ impl<P> AsyncWrite for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
-    <P::Target as StreamMuxer>::Error: Into<io::Error>,
 {
     #[inline]
     fn poll_write(&mut self, buf: &[u8]) -> Poll<usize, io::Error> {
@@ -452,7 +448,6 @@ impl StreamMuxerBox {
         T: StreamMuxer + Send + Sync + 'static,
         T::OutboundSubstream: Send,
         T::Substream: Send,
-        T::Error: Into<io::Error>,
     {
         let wrap = Wrap {
             inner: muxer,
@@ -545,7 +540,6 @@ struct Wrap<T> where T: StreamMuxer {
 impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
-    T::Error: Into<io::Error>,
 {
     type Substream = usize; // TODO: use a newtype
     type OutboundSubstream = usize; // TODO: use a newtype
