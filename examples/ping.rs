@@ -39,7 +39,7 @@
 //! and begin pinging each other.
 
 use futures::{prelude::*, future};
-use libp2p::{ identity, PeerId, ping::Ping, Swarm };
+use libp2p::{ identity, PeerId, ping::{Ping, PingConfig}, Swarm };
 use std::env;
 
 fn main() {
@@ -54,7 +54,11 @@ fn main() {
     let transport = libp2p::build_development_transport(id_keys);
 
     // Create a ping network behaviour.
-    let behaviour = Ping::default();
+    //
+    // For illustrative purposes, the ping protocol is configured to
+    // keep the connection alive, so a continuous sequence of pings
+    // can be observed.
+    let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
 
     // Create a Swarm that establishes connections through the given transport
     // and applies the ping behaviour on each connection.
