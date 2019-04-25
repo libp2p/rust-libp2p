@@ -56,12 +56,18 @@ pub mod ffi {
         /// Start attempting to dial the given multiaddress.
         ///
         /// The returned `Promise` must yield a [`Connection`] on success.
+        ///
+        /// If the multiaddress is not supported, you should return an instance of `Error` whose
+        /// `name` property has been set to the string `"NotSupportedError"`.
         #[wasm_bindgen(method, catch)]
         pub fn dial(this: &Transport, multiaddr: &str) -> Result<js_sys::Promise, JsValue>;
 
         /// Start listening on the given multiaddress.
         ///
         /// The returned `Iterator` must yield `Promise`s to [`ListenEvent`] events.
+        ///
+        /// If the multiaddress is not supported, you should return an instance of `Error` whose
+        /// `name` property has been set to the string `"NotSupportedError"`.
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
@@ -157,7 +163,13 @@ impl Transport for ExtTransport {
         let iter = self
             .inner
             .listen_on(&addr.to_string())
-            .map_err(|err| TransportError::Other(JsErr::from(err)))?; // TODO: how to report not supported?
+            .map_err(|err| {
+                if is_not_supported_error(&err) {
+                    TransportError::MultiaddrNotSupported(addr)
+                } else {
+                    TransportError::Other(JsErr::from(err))
+                }
+            })?;
 
         Ok(Listen {
             iterator: SendWrapper::new(iter),
@@ -170,7 +182,13 @@ impl Transport for ExtTransport {
         let promise = self
             .inner
             .dial(&addr.to_string())
-            .map_err(|err| TransportError::Other(JsErr::from(err)))?; // TODO: how to report not supported?
+            .map_err(|err| {
+                if is_not_supported_error(&err) {
+                    TransportError::MultiaddrNotSupported(addr)
+                } else {
+                    TransportError::Other(JsErr::from(err))
+                }
+            })?;
 
         Ok(Dial {
             inner: SendWrapper::new(promise.into()),
@@ -431,6 +449,19 @@ impl tokio_io::AsyncWrite for Connection {
 impl Drop for Connection {
     fn drop(&mut self) {
         self.inner.close();
+    }
+}
+
+/// Returns true if `err` is an error about an address not being supported.
+fn is_not_supported_error(err: &JsValue) -> bool {
+    if let Some(err) = err.dyn_ref::<js_sys::Error>() {
+        if String::from(err.name()) == "NotSupportedError" {
+            true
+        } else {
+            false
+        }
+    } else {
+        false
     }
 }
 
