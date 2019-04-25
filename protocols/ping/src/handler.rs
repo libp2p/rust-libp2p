@@ -45,6 +45,9 @@ pub struct PingConfig {
     /// connection is deemed unhealthy, indicating to the `Swarm` that it
     /// should be closed.
     max_failures: NonZeroU32,
+    /// Whether the connection should generally be kept alive unless
+    /// `max_failures` occur.
+    keep_alive: bool,
 }
 
 impl PingConfig {
@@ -53,6 +56,7 @@ impl PingConfig {
     ///   * [`PingConfig::with_interval`] 15s
     ///   * [`PingConfig::with_timeout`] 20s
     ///   * [`PingConfig::with_max_failures`] 1
+    ///   * [`PingConfig::with_keep_alive`] false
     ///
     /// These settings have the following effect:
     ///
@@ -61,11 +65,15 @@ impl PingConfig {
     ///     be successful.
     ///   * A single ping failure is sufficient for the connection to be subject
     ///     to being closed.
+    ///   * The connection may be closed at any time as far as the ping protocol
+    ///     is concerned, i.e. the ping protocol itself does not keep the
+    ///     connection alive.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),
             interval: Duration::from_secs(15),
             max_failures: NonZeroU32::new(1).expect("1 != 0"),
+            keep_alive: false
         }
     }
 
@@ -85,6 +93,21 @@ impl PingConfig {
     /// peer is considered unreachable and the connection closed.
     pub fn with_max_failures(mut self, n: NonZeroU32) -> Self {
         self.max_failures = n;
+        self
+    }
+
+    /// Sets whether the ping protocol itself should keep the connection alive,
+    /// apart from the maximum allowed failures.
+    ///
+    /// By default, the ping protocol itself allows the connection to be closed
+    /// at any time, i.e. in the absence of ping failures the connection lifetime
+    /// is determined by other protocol handlers.
+    ///
+    /// If the maximum  number of allowed ping failures is reached, the
+    /// connection is always terminated as a result of [`PingHandler::poll`]
+    /// returning an error, regardless of the keep-alive setting.
+    pub fn with_keep_alive(mut self, b: bool) -> Self {
+        self.keep_alive = b;
         self
     }
 }
@@ -198,11 +221,11 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // Returning `Now` indicates that, as far as this handler is concerned,
-        // the connection may be closed. I.e. the ping handler does not keep
-        // the connection alive, it merely adds another condition (failed pings)
-        // for terminating it.
-        KeepAlive::No
+        if self.config.keep_alive {
+            KeepAlive::Yes
+        } else {
+            KeepAlive::No
+        }
     }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
