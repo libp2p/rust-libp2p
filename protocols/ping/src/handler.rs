@@ -27,10 +27,10 @@ use libp2p_core::protocols_handler::{
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
 };
-use std::{error::Error, io, fmt, num::NonZeroU32, time::{Duration, Instant}};
+use std::{error::Error, io, fmt, num::NonZeroU32, time::Duration};
 use std::collections::VecDeque;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use wasm_timer::{Delay, Instant};
 use void::Void;
 
 /// The configuration for outbound pings.

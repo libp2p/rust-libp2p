@@ -37,15 +37,13 @@ smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"
+wasm-timer = "0.1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-dns = { version = "0.7.0", path = "./transports/dns" }
 libp2p-mdns = { version = "0.7.0", path = "./misc/mdns" }
 libp2p-noise = { version = "0.5.0", path = "./protocols/noise" }
 libp2p-tcp = { version = "0.7.0", path = "./transports/tcp" }
-
-[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-stdweb = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.6.0"
