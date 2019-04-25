@@ -36,7 +36,7 @@ use futures::{future::FutureResult, prelude::*, stream::Stream, try_ready};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
 use send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem};
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{JsCast, prelude::*};
 
 /// Contains the definition that one must match on the JavaScript side.
 pub mod ffi {
@@ -65,15 +65,8 @@ pub mod ffi {
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
-        /// Reads data from the connection. Returns an `Iterator` yielding `Promise`s containing
-        /// the data as an `ArrayBuffer`, or `null`/`undefined` to indicate EOF. One can also
-        /// indicate EOF by making the `Iterator` finish.
-        ///
-        /// If the `Promise` returns an error, the reading side of the connection is considered
-        /// unrecoverable and the connection should be closed as soon as possible.
-        ///
-        /// Guaranteed to only be called after the previous read promise has resolved.
-        #[wasm_bindgen(method)]
+        /// Returns a `Readable​Stream​` that .
+        #[wasm_bindgen(method, getter)]
         pub fn read(this: &Connection) -> js_sys::Iterator;
 
         /// Writes data to the connection. Returns a `Promise` that resolves when the connection is
@@ -481,8 +474,11 @@ impl fmt::Display for JsErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(s) = self.0.as_string() {
             write!(f, "{}", s)
+        } else if let Some(err) = self.0.dyn_ref::<js_sys::Error>() {
+            write!(f, "{}", String::from(err.message()))
+        } else if let Some(obj) = self.0.dyn_ref::<js_sys::Object>() {
+            write!(f, "{}", String::from(obj.to_string()))
         } else {
-            // TODO: better introspect what the value actually is? don't know how to do that
             write!(f, "{:?}", &*self.0)
         }
     }
