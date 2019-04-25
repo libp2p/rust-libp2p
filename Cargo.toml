@@ -30,6 +30,7 @@ libp2p-core = { version = "0.7.0", path = "./core" }
 libp2p-core-derive = { version = "0.7.0", path = "./misc/core-derive" }
 libp2p-secio = { version = "0.7.0", path = "./protocols/secio", default-features = false }
 libp2p-uds = { version = "0.7.0", path = "./transports/uds" }
+libp2p-wasm-ext = { version = "0.1.0", path = "./transports/wasm-ext" }
 libp2p-websocket = { version = "0.7.0", path = "./transports/websocket", optional = true }
 libp2p-yamux = { version = "0.7.0", path = "./muxers/yamux" }
 parking_lot = "0.7"
@@ -76,5 +77,6 @@ members = [
     "transports/ratelimit",
     "transports/tcp",
     "transports/uds",
-    "transports/websocket"
+    "transports/websocket",
+    "transports/wasm-ext"
 ]
