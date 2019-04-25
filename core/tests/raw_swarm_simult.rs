@@ -29,8 +29,8 @@ use libp2p_core::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use std::{io, time::Duration, time::Instant};
-use tokio_timer::Delay;
+use std::{io, time::Duration};
+use wasm_timer::{Delay, Instant};
 
 // TODO: replace with DummyProtocolsHandler after https://github.com/servo/rust-smallvec/issues/139 ?
 struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>);

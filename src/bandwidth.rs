@@ -23,7 +23,8 @@ use futures::{prelude::*, try_ready};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use smallvec::{smallvec, SmallVec};
-use std::{cmp, io, io::Read, io::Write, sync::Arc, time::Duration, time::Instant};
+use std::{cmp, io, io::Read, io::Write, sync::Arc, time::Duration};
+use wasm_timer::Instant;
 
 /// Wraps around a `Transport` and logs the bandwidth that goes through all the opened connections.
 #[derive(Clone)]
