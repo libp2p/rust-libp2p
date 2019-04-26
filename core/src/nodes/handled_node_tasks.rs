@@ -60,7 +60,7 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
     /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
-    tasks: FnvHashMap<TaskId, (mpsc::UnboundedSender<ExtToInMessage<TInEvent>>, TUserData)>,
+    tasks: FnvHashMap<TaskId, (mpsc::Sender<ExtToInMessage<TInEvent>>, TUserData)>,
 
     /// Identifier for the next task to spawn.
     next_task_id: TaskId,
@@ -73,9 +73,9 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
     local_spawns: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)>,
+    events_tx: mpsc::Sender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)>,
     /// Receiver side for the events.
-    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)>,
+    events_rx: mpsc::Receiver<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)>,
 }
 
 impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo> fmt::Debug for
@@ -192,7 +192,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
     /// Creates a new empty collection.
     #[inline]
     pub fn new() -> Self {
-        let (events_tx, events_rx) = mpsc::unbounded();
+        let (events_tx, events_rx) = mpsc::channel(4096);
 
         HandledNodesTasks {
             tasks: Default::default(),
@@ -225,7 +225,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
-        let (tx, rx) = mpsc::unbounded();
+        let (tx, rx) = mpsc::channel(4096);
         self.tasks.insert(task_id, (tx, user_data));
 
         let task = Box::new(NodeTask {
@@ -248,11 +248,11 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
     pub fn broadcast_event(&mut self, event: &TInEvent)
     where TInEvent: Clone,
     {
-        for (sender, _) in self.tasks.values() {
+        for (sender, _) in self.tasks.values_mut() {
             // Note: it is possible that sending an event fails if the background task has already
             // finished, but the local state hasn't reflected that yet because it hasn't been
             // polled. This is not an error situation.
-            let _ = sender.unbounded_send(ExtToInMessage::HandlerEvent(event.clone()));
+            let _ = sender.try_send(ExtToInMessage::HandlerEvent(event.clone()));
         }
     }
 
@@ -366,7 +366,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
 
 /// Access to a task in the collection.
 pub struct Task<'a, TInEvent, TUserData> {
-    inner: OccupiedEntry<'a, TaskId, (mpsc::UnboundedSender<ExtToInMessage<TInEvent>>, TUserData)>,
+    inner: OccupiedEntry<'a, TaskId, (mpsc::Sender<ExtToInMessage<TInEvent>>, TUserData)>,
 }
 
 impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
@@ -377,7 +377,7 @@ impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
-        let _ = self.inner.get_mut().0.unbounded_send(ExtToInMessage::HandlerEvent(event));
+        let _ = self.inner.get_mut().0.try_send(ExtToInMessage::HandlerEvent(event));
     }
 
     /// Returns the user data associated with the task.
@@ -412,7 +412,7 @@ impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
-        let _ = self.inner.get_mut().0.unbounded_send(ExtToInMessage::TakeOver(other.channel));
+        let _ = self.inner.get_mut().0.try_send(ExtToInMessage::TakeOver(other.channel));
         other.user_data
     }
 }
@@ -437,7 +437,7 @@ pub struct ClosedTask<TInEvent, TUserData> {
     id: TaskId,
     /// The channel to the task. The task will continue to work for as long as this channel is
     /// alive, but events produced by it are ignored.
-    channel: mpsc::UnboundedSender<ExtToInMessage<TInEvent>>,
+    channel: mpsc::Sender<ExtToInMessage<TInEvent>>,
     /// The data provided by the user.
     user_data: TUserData,
 }
@@ -486,7 +486,7 @@ enum ExtToInMessage<TInEvent> {
     HandlerEvent(TInEvent),
     /// When received, stores the parameter inside the task and keeps it alive until we have an
     /// acknowledgment that the remote has accepted our handshake.
-    TakeOver(mpsc::UnboundedSender<ExtToInMessage<TInEvent>>),
+    TakeOver(mpsc::Sender<ExtToInMessage<TInEvent>>),
 }
 
 /// Message to transmit from a task to the public API.
@@ -509,15 +509,15 @@ where
     TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Sender to transmit events to the outside.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, <TIntoHandler::Handler as NodeHandler>::Error, TConnInfo>, TaskId)>,
+    events_tx: mpsc::Sender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, <TIntoHandler::Handler as NodeHandler>::Error, TConnInfo>, TaskId)>,
     /// Receiving end for events sent from the main `HandledNodesTasks`.
-    in_events_rx: stream::Fuse<mpsc::UnboundedReceiver<ExtToInMessage<TInEvent>>>,
+    in_events_rx: stream::Fuse<mpsc::Receiver<ExtToInMessage<TInEvent>>>,
     /// Inner state of the `NodeTask`.
     inner: NodeTaskInner<TFut, TMuxer, TIntoHandler, TInEvent, TConnInfo>,
     /// Identifier of the attempt.
     id: TaskId,
     /// Channels to keep alive for as long as we don't have an acknowledgment from the remote.
-    taken_over: SmallVec<[mpsc::UnboundedSender<ExtToInMessage<TInEvent>>; 1]>,
+    taken_over: SmallVec<[mpsc::Sender<ExtToInMessage<TInEvent>>; 1]>,
 }
 
 enum NodeTaskInner<TFut, TMuxer, TIntoHandler, TInEvent, TConnInfo>
@@ -575,7 +575,7 @@ where
                                 self.taken_over.push(take_over);
                             },
                             Ok(Async::NotReady) => break,
-                            Err(_) => unreachable!("An UnboundedReceiver never errors"),
+                            Err(_) => unreachable!("An Receiver never errors"),
                         }
                     }
                     // Check whether dialing succeeded.
@@ -586,7 +586,7 @@ where
                             for event in events_buffer {
                                 node.inject_event(event);
                             }
-                            let _ = self.events_tx.unbounded_send((event, self.id));
+                            let _ = self.events_tx.try_send((event, self.id));
                             self.inner = NodeTaskInner::Node(node);
                         }
                         Ok(Async::NotReady) => {
@@ -596,7 +596,7 @@ where
                         Err(err) => {
                             // End the task
                             let event = InToExtMessage::TaskClosed(TaskClosedEvent::Reach(err), Some(handler));
-                            let _ = self.events_tx.unbounded_send((event, self.id));
+                            let _ = self.events_tx.try_send((event, self.id));
                             return Ok(Async::Ready(()));
                         }
                     }
@@ -638,11 +638,11 @@ where
                             },
                             Ok(Async::Ready(event)) => {
                                 let event = InToExtMessage::NodeEvent(event);
-                                let _ = self.events_tx.unbounded_send((event, self.id));
+                                let _ = self.events_tx.try_send((event, self.id));
                             }
                             Err(err) => {
                                 let event = InToExtMessage::TaskClosed(TaskClosedEvent::Node(err), None);
-                                let _ = self.events_tx.unbounded_send((event, self.id));
+                                let _ = self.events_tx.try_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                         }
