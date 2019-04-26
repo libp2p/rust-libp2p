@@ -30,9 +30,9 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
+use std::{error, marker::PhantomData, num::NonZeroUsize, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Interval;
+use wasm_timer::{Instant, Interval};
 
 mod test;
 

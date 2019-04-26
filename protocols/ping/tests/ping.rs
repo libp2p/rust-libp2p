@@ -39,11 +39,13 @@ use tokio::runtime::Runtime;
 
 #[test]
 fn ping() {
+    let cfg = PingConfig::new().with_keep_alive(true);
+
     let (peer1_id, trans) = mk_transport();
-    let mut swarm1 = Swarm::new(trans, Ping::default(), peer1_id.clone());
+    let mut swarm1 = Swarm::new(trans, Ping::new(cfg.clone()), peer1_id.clone());
 
     let (peer2_id, trans) = mk_transport();
-    let mut swarm2 = Swarm::new(trans, Ping::default(), peer2_id.clone());
+    let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
 
     let (tx, rx) = sync_channel::<Multiaddr>(1);
 

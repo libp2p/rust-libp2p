@@ -25,9 +25,9 @@ use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{address_translation, Multiaddr, PeerId, multiaddr::Protocol};
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration, time::Instant};
+use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use wasm_timer::{Delay, Instant};
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.

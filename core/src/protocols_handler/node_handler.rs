@@ -32,7 +32,7 @@ use crate::{
 };
 use futures::prelude::*;
 use std::{error, fmt, time::Duration};
-use tokio_timer::{Delay, Timeout};
+use wasm_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
