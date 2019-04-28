@@ -76,28 +76,28 @@ where
 
     fn listen_on(self, original_addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
-        match inner_addr.pop() {
-            Some(Protocol::Ws) => {}
+        let ws_path = match inner_addr.pop() {
+            Some(Protocol::Ws(path)) => path.into_owned(),
             _ => return Err(TransportError::MultiaddrNotSupported(original_addr)),
         };
 
         let inner_listen = self.transport.listen_on(inner_addr)
             .map_err(|err| err.map(WsError::Underlying))?;
 
-        let listen = inner_listen.map_err(WsError::Underlying).map(|event| {
+        let listen = inner_listen.map_err(WsError::Underlying).map(move |event| {
             match event {
                 ListenerEvent::NewAddress(mut a) => {
-                    a = a.with(Protocol::Ws);
+                    a = a.with(Protocol::Ws(ws_path.clone().into()));
                     debug!("Listening on {}", a);
                     ListenerEvent::NewAddress(a)
                 }
                 ListenerEvent::AddressExpired(mut a) => {
-                    a = a.with(Protocol::Ws);
+                    a = a.with(Protocol::Ws(ws_path.clone().into()));
                     ListenerEvent::AddressExpired(a)
                 }
                 ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
-                    listen_addr = listen_addr.with(Protocol::Ws);
-                    remote_addr = remote_addr.with(Protocol::Ws);
+                    listen_addr = listen_addr.with(Protocol::Ws(ws_path.clone().into()));
+                    remote_addr = remote_addr.with(Protocol::Ws(From::from("/")));
 
                     // Upgrade the listener to websockets like the websockets library requires us to do.
                     let upgraded = upgrade.map_err(WsError::Underlying).and_then(move |stream| {
@@ -154,9 +154,9 @@ where
 
     fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
-        let is_wss = match inner_addr.pop() {
-            Some(Protocol::Ws) => false,
-            Some(Protocol::Wss) => true,
+        let (ws_path, is_wss) = match inner_addr.pop() {
+            Some(Protocol::Ws(path)) => (path.into_owned(), false),
+            Some(Protocol::Wss(path)) => (path.into_owned(), true),
             _ => {
                 trace!(
                     "Ignoring dial attempt for {} because it is not a websocket multiaddr",
@@ -168,7 +168,7 @@ where
 
         debug!("Dialing {} through inner transport", inner_addr);
 
-        let ws_addr = client_addr_to_ws(&inner_addr, is_wss);
+        let ws_addr = client_addr_to_ws(&inner_addr, &ws_path, is_wss);
 
         let inner_dial = self.transport.dial(inner_addr)
             .map_err(|err| err.map(WsError::Underlying))?;
@@ -239,7 +239,7 @@ where TErr: error::Error + 'static
     }
 }
 
-fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
+fn client_addr_to_ws(client_addr: &Multiaddr, ws_path: &str, is_wss: bool) -> String {
     let inner = {
         let protocols: Vec<_> = client_addr.iter().collect();
 
@@ -265,9 +265,9 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
     };
 
     if is_wss {
-        format!("wss://{}", inner)
+        format!("wss://{}{}", inner, ws_path)
     } else {
-        format!("ws://{}", inner)
+        format!("ws://{}{}", inner, ws_path)
     }
 }
 
@@ -276,7 +276,7 @@ mod tests {
     use libp2p_tcp as tcp;
     use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
-    use multiaddr::{Multiaddr, Protocol};
+    use multiaddr::Protocol;
     use libp2p_core::{Transport, transport::ListenerEvent};
     use super::WsConfig;
 
@@ -295,7 +295,7 @@ mod tests {
             .into_new_address()
             .expect("listen address");
 
-        assert_eq!(Some(Protocol::Ws), addr.iter().nth(2));
+        assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
         assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
 
         let listener = listener
@@ -329,7 +329,7 @@ mod tests {
             .into_new_address()
             .expect("listen address");
 
-        assert_eq!(Some(Protocol::Ws), addr.iter().nth(2));
+        assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
         assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
 
         let listener = listener
