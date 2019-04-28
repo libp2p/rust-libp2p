@@ -23,14 +23,17 @@ use futures::{future, stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
 use futures::{Async, Future, Poll, Stream};
-use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use stdweb::web::TypedArray;
 use stdweb::{self, Reference};
-use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a websocket transport capability for libp2p.
