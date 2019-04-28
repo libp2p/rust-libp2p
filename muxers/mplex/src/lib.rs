@@ -350,6 +350,7 @@ where C: AsyncRead + AsyncWrite
 {
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
+    type Error = IoError;
 
     fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         let mut inner = self.inner.lock();

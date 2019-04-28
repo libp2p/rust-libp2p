@@ -66,6 +66,7 @@ where
 {
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
+    type Error = io::Error;
 
     fn poll_inbound(&self) -> Poll<Self::Substream, io::Error> {
         match self.endpoint {

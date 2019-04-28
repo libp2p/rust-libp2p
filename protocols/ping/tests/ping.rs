@@ -34,7 +34,7 @@ use libp2p_yamux as yamux;
 use libp2p_secio::SecioConfig;
 use libp2p_tcp::TcpConfig;
 use futures::{future, prelude::*};
-use std::{fmt, time::Duration, sync::mpsc::sync_channel};
+use std::{fmt, io, time::Duration, sync::mpsc::sync_channel};
 use tokio::runtime::Runtime;
 
 #[test]
@@ -102,7 +102,7 @@ fn ping() {
 }
 
 fn mk_transport() -> (PeerId, impl Transport<
-    Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send>),
+    Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
     Listener = impl Send,
     ListenerUpgrade = impl Send,
     Dial = impl Send,
