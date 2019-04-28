@@ -83,6 +83,9 @@ pub trait StreamMuxer {
     /// Future that will be resolved when the outgoing substream is open.
     type OutboundSubstream;
 
+    /// Error type of the muxer
+    type Error: Into<io::Error>;
+
     /// Polls for an inbound substream.
     ///
     /// This function behaves the same as a `Stream`.
@@ -92,7 +95,7 @@ pub trait StreamMuxer {
     /// Only the latest task that was used to call this method may be notified.
     ///
     /// An error can be generated if the connection has been closed.
-    fn poll_inbound(&self) -> Poll<Self::Substream, io::Error>;
+    fn poll_inbound(&self) -> Poll<Self::Substream, Self::Error>;
 
     /// Opens a new outgoing substream, and produces the equivalent to a future that will be
     /// resolved when it becomes available.
@@ -110,7 +113,7 @@ pub trait StreamMuxer {
     ///
     /// May panic or produce an undefined result if an earlier polling of the same substream
     /// returned `Ready` or `Err`.
-    fn poll_outbound(&self, s: &mut Self::OutboundSubstream) -> Poll<Self::Substream, io::Error>;
+    fn poll_outbound(&self, s: &mut Self::OutboundSubstream) -> Poll<Self::Substream, Self::Error>;
 
     /// Destroys an outbound substream future. Use this after the outbound substream has finished,
     /// or if you want to interrupt it.
@@ -127,7 +130,7 @@ pub trait StreamMuxer {
     ///
     /// An error can be generated if the connection has been closed, or if a protocol misbehaviour
     /// happened.
-    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, io::Error>;
+    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error>;
 
     /// Write data to a substream. The behaviour is the same as `tokio_io::AsyncWrite::poll_write`.
     ///
@@ -140,7 +143,7 @@ pub trait StreamMuxer {
     ///
     /// It is incorrect to call this method on a substream if you called `shutdown_substream` on
     /// this substream earlier.
-    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, io::Error>;
+    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, Self::Error>;
 
     /// Flushes a substream. The behaviour is the same as `tokio_io::AsyncWrite::poll_flush`.
     ///
@@ -152,7 +155,7 @@ pub trait StreamMuxer {
     /// call this method may be notified.
     ///
     /// > **Note**: This method may be implemented as a call to `flush_all`.
-    fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), io::Error>;
+    fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error>;
 
     /// Attempts to shut down the writing side of a substream. The behaviour is similar to
     /// `tokio_io::AsyncWrite::shutdown`.
@@ -165,7 +168,7 @@ pub trait StreamMuxer {
     ///
     /// An error can be generated if the connection has been closed, or if a protocol misbehaviour
     /// happened.
-    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), io::Error>;
+    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error>;
 
     /// Destroys a substream.
     fn destroy_substream(&self, s: Self::Substream);
@@ -190,14 +193,14 @@ pub trait StreamMuxer {
     /// >           that the remote is properly informed of the shutdown. However, apart from
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
-    fn close(&self) -> Poll<(), io::Error>;
+    fn close(&self) -> Poll<(), Self::Error>;
 
     /// Flush this `StreamMuxer`.
     ///
     /// This drains any write buffers of substreams and delivers any pending shutdown notifications
     /// due to `shutdown_substream` or `close`. One may thus shutdown groups of substreams
     /// followed by a final `flush_all` instead of having to do `flush_substream` for each.
-    fn flush_all(&self) -> Poll<(), io::Error>;
+    fn flush_all(&self) -> Poll<(), Self::Error>;
 }
 
 /// Polls for an inbound from the muxer but wraps the output in an object that
@@ -205,7 +208,7 @@ pub trait StreamMuxer {
 #[inline]
 pub fn inbound_from_ref_and_wrap<P>(
     muxer: P,
-) -> impl Future<Item = SubstreamRef<P>, Error = io::Error>
+) -> impl Future<Item = SubstreamRef<P>, Error = <P::Target as StreamMuxer>::Error>
 where
     P: Deref + Clone,
     P::Target: StreamMuxer,
@@ -242,7 +245,7 @@ where
     P::Target: StreamMuxer,
 {
     type Item = SubstreamRef<P>;
-    type Error = io::Error;
+    type Error = <P::Target as StreamMuxer>::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll() {
@@ -286,7 +289,7 @@ where
     P::Target: StreamMuxer,
 {
     type Item = <P::Target as StreamMuxer>::Substream;
-    type Error = io::Error;
+    type Error = <P::Target as StreamMuxer>::Error;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -354,7 +357,7 @@ where
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        match self.muxer.read_substream(s, buf)? {
+        match self.muxer.read_substream(s, buf).map_err(|e| e.into())? {
             Async::Ready(n) => Ok(n),
             Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
         }
@@ -369,7 +372,7 @@ where
     #[inline]
     fn poll_read(&mut self, buf: &mut [u8]) -> Poll<usize, io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        self.muxer.read_substream(s, buf)
+        self.muxer.read_substream(s, buf).map_err(|e| e.into())
     }
 }
 
@@ -381,7 +384,7 @@ where
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        match self.muxer.write_substream(s, buf)? {
+        match self.muxer.write_substream(s, buf).map_err(|e| e.into())? {
             Async::Ready(n) => Ok(n),
             Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
         }
@@ -390,7 +393,7 @@ where
     #[inline]
     fn flush(&mut self) -> Result<(), io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        match self.muxer.flush_substream(s)? {
+        match self.muxer.flush_substream(s).map_err(|e| e.into())? {
             Async::Ready(()) => Ok(()),
             Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
         }
@@ -405,20 +408,20 @@ where
     #[inline]
     fn poll_write(&mut self, buf: &[u8]) -> Poll<usize, io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        self.muxer.write_substream(s, buf)
+        self.muxer.write_substream(s, buf).map_err(|e| e.into())
     }
 
     #[inline]
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        self.muxer.shutdown_substream(s)?;
+        self.muxer.shutdown_substream(s).map_err(|e| e.into())?;
         Ok(Async::Ready(()))
     }
 
     #[inline]
     fn poll_flush(&mut self) -> Poll<(), io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        self.muxer.flush_substream(s)
+        self.muxer.flush_substream(s).map_err(|e| e.into())
     }
 }
 
@@ -435,7 +438,7 @@ where
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Box<dyn StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
+    inner: Box<dyn StreamMuxer<Substream = usize, OutboundSubstream = usize, Error = io::Error> + Send + Sync>,
 }
 
 impl StreamMuxerBox {
@@ -463,9 +466,10 @@ impl StreamMuxerBox {
 impl StreamMuxer for StreamMuxerBox {
     type Substream = usize; // TODO: use a newtype
     type OutboundSubstream = usize; // TODO: use a newtype
+    type Error = io::Error;
 
     #[inline]
-    fn poll_inbound(&self) -> Poll<Self::Substream, io::Error> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, Self::Error> {
         self.inner.poll_inbound()
     }
 
@@ -475,7 +479,7 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn poll_outbound(&self, s: &mut Self::OutboundSubstream) -> Poll<Self::Substream, io::Error> {
+    fn poll_outbound(&self, s: &mut Self::OutboundSubstream) -> Poll<Self::Substream, Self::Error> {
         self.inner.poll_outbound(s)
     }
 
@@ -485,22 +489,22 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, io::Error> {
+    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error> {
         self.inner.read_substream(s, buf)
     }
 
     #[inline]
-    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, io::Error> {
+    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, Self::Error> {
         self.inner.write_substream(s, buf)
     }
 
     #[inline]
-    fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), io::Error> {
+    fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error> {
         self.inner.flush_substream(s)
     }
 
     #[inline]
-    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), io::Error> {
+    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error> {
         self.inner.shutdown_substream(s)
     }
 
@@ -510,7 +514,7 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn close(&self) -> Poll<(), io::Error> {
+    fn close(&self) -> Poll<(), Self::Error> {
         self.inner.close()
     }
 
@@ -520,7 +524,7 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn flush_all(&self) -> Poll<(), io::Error> {
+    fn flush_all(&self) -> Poll<(), Self::Error> {
         self.inner.flush_all()
     }
 }
@@ -533,13 +537,17 @@ struct Wrap<T> where T: StreamMuxer {
     next_outbound: AtomicUsize,
 }
 
-impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
+impl<T> StreamMuxer for Wrap<T>
+where
+    T: StreamMuxer,
+{
     type Substream = usize; // TODO: use a newtype
     type OutboundSubstream = usize; // TODO: use a newtype
+    type Error = io::Error;
 
     #[inline]
-    fn poll_inbound(&self) -> Poll<Self::Substream, io::Error> {
-        let substream = try_ready!(self.inner.poll_inbound());
+    fn poll_inbound(&self) -> Poll<Self::Substream, Self::Error> {
+        let substream = try_ready!(self.inner.poll_inbound().map_err(|e| e.into()));
         let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
         self.substreams.lock().insert(id, substream);
         Ok(Async::Ready(id))
@@ -557,9 +565,9 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     fn poll_outbound(
         &self,
         substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Self::Substream, io::Error> {
+    ) -> Poll<Self::Substream, Self::Error> {
         let mut list = self.outbound.lock();
-        let substream = try_ready!(self.inner.poll_outbound(list.get_mut(substream).unwrap()));
+        let substream = try_ready!(self.inner.poll_outbound(list.get_mut(substream).unwrap()).map_err(|e| e.into()));
         let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
         self.substreams.lock().insert(id, substream);
         Ok(Async::Ready(id))
@@ -572,27 +580,27 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     }
 
     #[inline]
-    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, io::Error> {
+    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.read_substream(list.get_mut(s).unwrap(), buf)
+        self.inner.read_substream(list.get_mut(s).unwrap(), buf).map_err(|e| e.into())
     }
 
     #[inline]
-    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, io::Error> {
+    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.write_substream(list.get_mut(s).unwrap(), buf)
+        self.inner.write_substream(list.get_mut(s).unwrap(), buf).map_err(|e| e.into())
     }
 
     #[inline]
-    fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), io::Error> {
+    fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.flush_substream(list.get_mut(s).unwrap())
+        self.inner.flush_substream(list.get_mut(s).unwrap()).map_err(|e| e.into())
     }
 
     #[inline]
-    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), io::Error> {
+    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.shutdown_substream(list.get_mut(s).unwrap())
+        self.inner.shutdown_substream(list.get_mut(s).unwrap()).map_err(|e| e.into())
     }
 
     #[inline]
@@ -602,8 +610,8 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     }
 
     #[inline]
-    fn close(&self) -> Poll<(), io::Error> {
-        self.inner.close()
+    fn close(&self) -> Poll<(), Self::Error> {
+        self.inner.close().map_err(|e| e.into())
     }
 
     #[inline]
@@ -612,7 +620,7 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     }
 
     #[inline]
-    fn flush_all(&self) -> Poll<(), io::Error> {
-        self.inner.flush_all()
+    fn flush_all(&self) -> Poll<(), Self::Error> {
+        self.inner.flush_all().map_err(|e| e.into())
     }
 }

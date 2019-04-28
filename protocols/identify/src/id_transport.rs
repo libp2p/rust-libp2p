@@ -150,7 +150,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                             self.state = IdRetrieverState::OpeningSubstream(muxer, opening, config);
                             return Ok(Async::NotReady);
                         },
-                        Err(err) => return Err(UpgradeError::Apply(err))
+                        Err(err) => return Err(UpgradeError::Apply(err.into()))
                     }
                 },
                 IdRetrieverState::NegotiatingIdentify(muxer, mut nego) => {

@@ -216,14 +216,14 @@ pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
 use futures::prelude::*;
-use std::{error, time::Duration};
+use std::{error, io, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 pub fn build_development_transport(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
      build_tcp_ws_secio_mplex_yamux(keypair)
 }
@@ -235,7 +235,7 @@ pub fn build_development_transport(keypair: identity::Keypair)
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
 pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(keypair))
