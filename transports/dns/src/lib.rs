@@ -34,9 +34,12 @@
 //!
 
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
-use libp2p_core::{Transport, transport::{TransportError, ListenerEvent}};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{TransportError, ListenerEvent}
+};
 use log::{debug, trace, log_enabled, Level};
-use multiaddr::{Protocol, Multiaddr};
 use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
 use tokio_dns::{CpuPoolResolver, Resolver};
 
@@ -306,8 +309,11 @@ where
 mod tests {
     use libp2p_tcp::TcpConfig;
     use futures::future;
-    use libp2p_core::{Transport, transport::TransportError};
-    use multiaddr::{Protocol, Multiaddr};
+    use libp2p_core::{
+        Transport,
+        multiaddr::{Protocol, Multiaddr},
+        transport::TransportError
+    };
     use super::DnsConfig;
 
     #[test]
