@@ -33,12 +33,8 @@
 //! >           connection with a remote. In order to handle a protocol that requires knowledge of
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
 use crate::PeerId;
-use crate::upgrade::{
-    InboundUpgrade,
-    OutboundUpgrade,
-    UpgradeError,
-};
 use futures::prelude::*;
 use std::{cmp::Ordering, error, fmt, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -46,7 +42,9 @@ use tokio_io::{AsyncRead, AsyncWrite};
 pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;
 pub use self::map_out::MapOutEvent;
-pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
+pub use self::node_handler::{
+    NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError,
+};
 pub use self::one_shot::OneShotHandler;
 pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
@@ -79,7 +77,7 @@ mod select;
 ///
 /// # Shutting down
 ///
-/// Implementors of this trait should keep in mind that the connection can be closed at any time.
+/// Implementers of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
 /// handler continues to be processed until it produces `ProtocolsHandlerEvent::Shutdown`. Only
 /// then the handler is destroyed.
@@ -87,7 +85,7 @@ mod select;
 /// This makes it possible for the handler to finish delivering events even after knowing that it
 /// is shutting down.
 ///
-/// Implementors of this trait should keep in mind that when `shutdown()` is called, the connection
+/// Implementers of this trait should keep in mind that when `shutdown()` is called, the connection
 /// might already be closed or unresponsive. They should therefore not rely on being able to
 /// deliver messages.
 ///
@@ -121,20 +119,26 @@ pub trait ProtocolsHandler {
     /// This method is called when a substream has been successfully opened and negotiated.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
     );
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     );
 
     /// Injects an event coming from the outside in the handler.
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>);
+    fn inject_dial_upgrade_error(
+        &mut self,
+        info: Self::OutboundOpenInfo,
+        error: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    );
 
     /// Returns until when the connection should be kept alive.
     ///
@@ -155,7 +159,12 @@ pub trait ProtocolsHandler {
     /// Should behave like `Stream::poll()`.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
+    fn poll(
+        &mut self,
+    ) -> Poll<
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error,
+    >;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]
@@ -252,10 +261,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 
     /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`) to something else.
     #[inline]
-    pub fn map_protocol<F, I>(
-        self,
-        map: F,
-    ) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom>
+    pub fn map_protocol<F, I>(self, map: F) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom>
     where
         F: FnOnce(TConnectionUpgrade) -> I,
     {
@@ -309,13 +315,11 @@ where
         match self {
             ProtocolsHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
-            },
-            ProtocolsHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
-            },
+            }
+            ProtocolsHandlerUpgrErr::Timer => write!(f, "Timer error while opening a substream"),
             ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => {
                 write!(f, "Remote muxer denied our attempt to open a substream")
-            },
+            }
             ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
         }
     }
@@ -323,7 +327,7 @@ where
 
 impl<TUpgrErr> error::Error for ProtocolsHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: error::Error + 'static
+    TUpgrErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -367,7 +371,8 @@ pub trait IntoProtocolsHandler {
 }
 
 impl<T> IntoProtocolsHandler for T
-where T: ProtocolsHandler
+where
+    T: ProtocolsHandler,
 {
     type Handler = Self;
 

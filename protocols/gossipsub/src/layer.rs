@@ -436,12 +436,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
         let mut to_prune_topics = HashSet::new();
         for topic_hash in topics {
             if let Some(peers) = self.mesh.get_mut(&topic_hash) {
-                // if we are subscribed, add peer to the mesh
+                // if we are subscribed, add peer to the mesh, if not already added
                 info!(
                     "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
                     peer_id, topic_hash
                 );
-                peers.push(peer_id.clone());
+                // ensure peer is not already added
+                if !peers.contains(peer_id) {
+                    peers.push(peer_id.clone());
+                }
             //TODO: tagPeer
             } else {
                 to_prune_topics.insert(topic_hash.clone());
@@ -628,20 +631,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 );
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = self.config.mesh_n - peers.len();
-                let peer_list = self
+                let mut peer_list = self
                     .get_random_peers(topic_hash, desired_peers, { |peer| !peers.contains(peer) });
-                for peer in peer_list {
-                    // exclude potential duplicates
-                    if !peers.contains(&peer) {
-                        peers.push(peer.clone());
-                    }
+                for peer in &peer_list {
                     // TODO: tagPeer
-                    let current_topic = to_graft.entry(peer).or_insert_with(|| vec![]);
+                    let current_topic = to_graft.entry(peer.clone()).or_insert_with(|| vec![]);
                     current_topic.push(topic_hash.clone());
                 }
-                debug!("Updating mesh, new mesh: {:?}", peers);
                 // update the mesh
-                self.mesh.insert(topic_hash.clone(), peers.clone());
+                peer_list.extend(peers.clone());
+                debug!("Updating mesh, new mesh: {:?}", peer_list);
+                self.mesh.insert(topic_hash.clone(), peer_list);
             }
 
             // too many peers - remove some
@@ -721,12 +721,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 let needed_peers = self.config.mesh_n - peers.len();
                 let mut new_peers =
                     self.get_random_peers(topic_hash, needed_peers, |peer| !peers.contains(peer));
-                // check for duplicates before adding
-                for new_peer in new_peers {
-                    if !peers.contains(&new_peer) {
-                        peers.push(new_peer);
-                    }
-                }
+                new_peers.extend(peers.clone());
+                self.fanout.insert(topic_hash.clone(), new_peers);
             }
             // update the entry
             self.fanout.insert(topic_hash.clone(), peers.to_vec());
