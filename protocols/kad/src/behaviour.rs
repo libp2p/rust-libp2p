@@ -293,7 +293,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     ///
     /// The actual meaning of *providing* the value of a key is not defined, and is specific to
     /// the value whose key is the hash.
-    pub fn add_providing(&mut self, key: &Multihash) {
+    pub fn add_providing(&mut self, key: Multihash) {
         self.providing_keys.insert(key.clone());
         let providers = self.values_providers.entry(key.clone()).or_insert_with(Default::default);
         let my_id = self.kbuckets.my_id();
