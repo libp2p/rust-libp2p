@@ -26,7 +26,7 @@ use libp2p_core::swarm::{
     ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use libp2p_core::{
-    protocols_handler::{OneShotHandler, ProtocolsHandler},
+    protocols_handler::{OneShotHandler, ProtocolsHandler, SubstreamProtocol},
     Multiaddr, PeerId,
 };
 use libp2p_floodsub::{Topic, TopicHash};
@@ -921,7 +921,7 @@ where
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         OneShotHandler::new(
-            ProtocolConfig::new(self.config.max_gossip_size),
+            SubstreamProtocol::new(ProtocolConfig::new(self.config.max_gossip_size)),
             self.config.inactivity_timeout,
         )
     }

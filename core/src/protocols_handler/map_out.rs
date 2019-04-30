@@ -19,7 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        KeepAlive,
+        SubstreamProtocol,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr
+    },
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -58,7 +64,7 @@ where
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.inner.listen_protocol()
     }
 
@@ -104,8 +110,8 @@ where
         Ok(self.inner.poll()?.map(|ev| {
             match ev {
                 ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
-                ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
-                    ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
+                    ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
                 }
             }
         }))

@@ -20,7 +20,14 @@
 
 use crate::{
     either::EitherOutput,
-    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, IntoProtocolsHandler},
+    protocols_handler::{
+        KeepAlive,
+        SubstreamProtocol,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr,
+        IntoProtocolsHandler
+    },
     swarm::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess},
     upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade},
     PeerId, Multiaddr, nodes::ConnectedPoint, swarm::PollParameters,
@@ -98,6 +105,24 @@ where
         }
     }
 
+    fn inject_new_listen_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_new_listen_addr(addr)
+        }
+    }
+
+    fn inject_expired_listen_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_expired_listen_addr(addr)
+        }
+    }
+
+    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_new_external_addr(addr)
+        }
+    }
+
     fn poll(&mut self, params: &mut PollParameters<'_>)
         -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
@@ -155,11 +180,11 @@ where
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
 
-    fn listen_protocol(&self) -> Self::InboundProtocol {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(inner.listen_protocol())
+            inner.listen_protocol().map_upgrade(EitherUpgrade::A)
         } else {
-            EitherUpgrade::B(DeniedUpgrade)
+            SubstreamProtocol::new(EitherUpgrade::B(DeniedUpgrade))
         }
     }
 
@@ -197,7 +222,7 @@ where
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.as_ref().map(|h| h.connection_keep_alive())
-            .unwrap_or(KeepAlive::Now)
+            .unwrap_or(KeepAlive::No)
     }
 
     fn poll(

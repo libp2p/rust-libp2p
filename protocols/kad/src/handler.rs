@@ -23,11 +23,18 @@ use crate::protocol::{
     KademliaProtocolConfig,
 };
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use libp2p_core::protocols_handler::{
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
+};
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
-use std::{error, fmt, io, time::Duration, time::Instant};
+use std::{error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
+use wasm_timer::Instant;
 
 /// Protocol handler that handles Kademlia communications with the remote.
 ///
@@ -320,7 +327,7 @@ where
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Forever,
+            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -350,11 +357,11 @@ where
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if self.allow_listening {
-            upgrade::EitherUpgrade::A(self.config)
+            SubstreamProtocol::new(self.config).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
     }
 
@@ -519,7 +526,7 @@ where
         if self.substreams.is_empty() {
             self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
         } else {
-            self.keep_alive = KeepAlive::Forever;
+            self.keep_alive = KeepAlive::Yes;
         }
 
         Ok(Async::NotReady)
@@ -550,7 +557,7 @@ where
     match state {
         SubstreamState::OutPendingOpen(msg, user_data) => {
             let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                upgrade,
+                protocol: SubstreamProtocol::new(upgrade),
                 info: (msg, user_data),
             };
             (None, Some(ev), false)

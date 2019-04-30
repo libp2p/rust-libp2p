@@ -145,7 +145,7 @@ where
     /// Provides an API similar to `Future`.
     pub fn poll(&mut self) -> Poll<NodeEvent<TMuxer, TUserData>, IoError> {
         // Polling inbound substream.
-        match self.muxer.poll_inbound()? {
+        match self.muxer.poll_inbound().map_err(|e| e.into())? {
             Async::Ready(substream) => {
                 let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                 return Ok(Async::Ready(NodeEvent::InboundSubstream {
@@ -173,7 +173,7 @@ where
                 }
                 Err(err) => {
                     self.muxer.destroy_outbound(outbound);
-                    return Err(err);
+                    return Err(err.into());
                 }
             }
         }
@@ -216,7 +216,7 @@ where
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.muxer.close()
+        self.muxer.close().map_err(|e| e.into())
     }
 }
 
