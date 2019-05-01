@@ -764,9 +764,11 @@ fn process_kad_response<TUserData>(
                 user_data,
             }
         }
-        KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
-            closer_peers,
-            user_data,
+        KadResponseMsg::FindNode { closer_peers } => {
+            KademliaHandlerEvent::FindNodeRes {
+                closer_peers,
+                user_data,
+            }
         },
         KadResponseMsg::GetProviders {
             closer_peers,

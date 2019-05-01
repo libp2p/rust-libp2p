@@ -165,6 +165,8 @@ where
             }
         }
 
+        let num_closest = self.closest_peers.len();
+
         // Add the entries in `closest_peers`.
         if let QueryStage::Iterating {
             ref mut no_closer_in_a_row,
@@ -190,10 +192,11 @@ where
                         });
 
                     // Make sure we don't insert duplicates.
+                    let mut iter_start = self.closest_peers.iter().skip(insert_pos_start);
                     let duplicate = if let Some(insert_pos_size) = insert_pos_size {
-                        self.closest_peers.iter().skip(insert_pos_start).take(insert_pos_size).any(|e| e.0 == elem_to_add)
+                        iter_start.take(insert_pos_size).any(|e| e.0 == elem_to_add)
                     } else {
-                        self.closest_peers.iter().skip(insert_pos_start).any(|e| e.0 == elem_to_add)
+                        iter_start.any(|e| e.0 == elem_to_add)
                     };
 
                     if !duplicate {
@@ -204,7 +207,7 @@ where
                         self.closest_peers
                             .insert(insert_pos_start, (elem_to_add, QueryPeerState::NotContacted));
                     }
-                } else if self.closest_peers.len() < self.num_results {
+                } else if num_closest < self.num_results {
                     debug_assert!(self.closest_peers.iter().all(|e| e.0 != elem_to_add));
                     self.closest_peers
                         .push((elem_to_add, QueryPeerState::NotContacted));
@@ -215,14 +218,19 @@ where
         // Check for duplicates in `closest_peers`.
         debug_assert!(self.closest_peers.windows(2).all(|w| w[0].0 != w[1].0));
 
-        // Handle if `no_closer_in_a_row` is too high.
-        let freeze = if let QueryStage::Iterating { no_closer_in_a_row } = self.stage {
-            no_closer_in_a_row >= self.parallelism
-        } else {
-            false
-        };
-        if freeze {
-            self.stage = QueryStage::Frozen;
+        let num_closest_new = self.closest_peers.len();
+
+        // Termination condition: If at least `self.parallelism` consecutive
+        // responses yield no peer closer to the target and either no new peers
+        // were discovered or the number of discovered peers reached the desired
+        // number of results, then the query is considered complete.
+        if let QueryStage::Iterating { no_closer_in_a_row } = self.stage {
+            if no_closer_in_a_row >= self.parallelism &&
+                (num_closest == num_closest_new ||
+                     num_closest_new >= self.num_results)
+            {
+                self.stage = QueryStage::Frozen;
+            }
         }
     }
 
@@ -351,8 +359,8 @@ where
             }
         }
 
-        // If we don't have any query in progress, return `Finished` as we don't have anything more
-        // we can do.
+        // If we don't have any query in progress, return `Finished` as we don't have
+        // anything more we can do.
         if active_counter > 0 {
             Async::NotReady
         } else {
