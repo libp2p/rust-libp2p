@@ -250,7 +250,7 @@ impl<TSubstream> Kademlia<TSubstream> {
         let parallelism = 3;
 
         Kademlia {
-            kbuckets: KBucketsTable::new(KadHash::from(local_peer_id), Duration::from_secs(60)),   // TODO: constant
+            kbuckets: KBucketsTable::new(local_peer_id.into(), Duration::from_secs(60)),   // TODO: constant
             queued_events: SmallVec::new(),
             active_queries: Default::default(),
             connected_peers: Default::default(),
@@ -348,6 +348,33 @@ impl<TSubstream> Kademlia<TSubstream> {
                 known_closest_peers,
             })
         );
+    }
+
+    /// Processes discovered peers from a query.
+    fn discovered<'a, I>(&'a mut self, query_id: &QueryId, source: &PeerId, peers: I)
+    where
+        I: Iterator<Item=&'a KadPeer> + Clone
+    {
+        let local_id = self.kbuckets.my_id().peer_id().clone();
+        let others_iter = peers.filter(|p| p.node_id != local_id);
+
+        for peer in others_iter.clone() {
+            self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
+                KademliaOut::Discovered {
+                    peer_id: peer.node_id.clone(),
+                    addresses: peer.multiaddrs.clone(),
+                    ty: peer.connection_ty,
+                }
+            ));
+        }
+
+        if let Some(query) = self.active_queries.get_mut(query_id) {
+            for peer in others_iter.clone() {
+                query.target_mut().untrusted_addresses
+                    .insert(peer.node_id.clone(), peer.multiaddrs.iter().cloned().collect());
+            }
+            query.inject_rpc_result(source, others_iter.cloned().map(|kp| kp.node_id))
+        }
     }
 }
 
@@ -551,22 +578,7 @@ where
                 closer_peers,
                 user_data,
             } => {
-                // It is possible that we obtain a response for a query that has finished, which is
-                // why we may not find an entry in `self.active_queries`.
-                for peer in closer_peers.iter() {
-                    self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
-                        peer_id: peer.node_id.clone(),
-                        addresses: peer.multiaddrs.clone(),
-                        ty: peer.connection_ty,
-                    }));
-                }
-                if let Some(query) = self.active_queries.get_mut(&user_data) {
-                    for peer in closer_peers.iter() {
-                        query.target_mut().untrusted_addresses
-                            .insert(peer.node_id.clone(), peer.multiaddrs.iter().cloned().collect());
-                    }
-                    query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
-                }
+                self.discovered(&user_data, &source, closer_peers.iter());
             }
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let closer_peers = self.kbuckets
@@ -599,27 +611,16 @@ where
                 provider_peers,
                 user_data,
             } => {
-                for peer in closer_peers.iter().chain(provider_peers.iter()) {
-                    self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
-                        peer_id: peer.node_id.clone(),
-                        addresses: peer.multiaddrs.clone(),
-                        ty: peer.connection_ty,
-                    }));
-                }
-
-                // It is possible that we obtain a response for a query that has finished, which is
-                // why we may not find an entry in `self.active_queries`.
+                let peers = closer_peers.iter().chain(provider_peers.iter());
+                self.discovered(&user_data, &source, peers);
                 if let Some(query) = self.active_queries.get_mut(&user_data) {
-                    if let QueryInfoInner::GetProviders { pending_results, .. } = &mut query.target_mut().inner {
+                    if let QueryInfoInner::GetProviders {
+                        pending_results, ..
+                    } = &mut query.target_mut().inner {
                         for peer in provider_peers {
                             pending_results.push(peer.node_id);
                         }
                     }
-                    for peer in closer_peers.iter() {
-                        query.target_mut().untrusted_addresses
-                            .insert(peer.node_id.clone(), peer.multiaddrs.iter().cloned().collect());
-                    }
-                    query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
                 }
             }
             KademliaHandlerEvent::QueryError { user_data, .. } => {
@@ -702,7 +703,7 @@ where
                                     peer_id: peer_id.clone(),
                                     event: rpc,
                                 });
-                            } else {
+                            } else if peer_id != self.kbuckets.my_id().peer_id() {
                                 self.pending_rpcs.push((peer_id.clone(), rpc));
                                 return Async::Ready(NetworkBehaviourAction::DialPeer {
                                     peer_id: peer_id.clone(),
