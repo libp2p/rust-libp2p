@@ -49,9 +49,12 @@
 use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
 use log::debug;
-use multiaddr::{Protocol, Multiaddr};
 use std::{io, path::PathBuf};
-use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -171,9 +174,12 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_path, UdsConfig};
     use futures::prelude::*;
-    use multiaddr::{Protocol, Multiaddr};
     use std::{self, borrow::Cow, path::Path};
-    use libp2p_core::{Transport, transport::ListenerEvent};
+    use libp2p_core::{
+        Transport,
+        multiaddr::{Protocol, Multiaddr},
+        transport::ListenerEvent
+    };
     use tempfile;
     use tokio_io;
 

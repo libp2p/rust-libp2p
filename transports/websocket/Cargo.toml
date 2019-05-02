@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 libp2p-core = { version = "0.7.0", path = "../../core" }
 futures = "0.1"
-multiaddr = { package = "parity-multiaddr", version = "0.4.0", path = "../../misc/multiaddr" }
 log = "0.4.1"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1"

@@ -14,7 +14,6 @@ get_if_addrs = "0.5.3"
 libp2p-core = { version = "0.7.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = { package = "parity-multiaddr", version = "0.4.0", path = "../../misc/multiaddr" }
 tk-listen = "0.2.0"
 tokio-io = "0.1"
 tokio-tcp = "0.1"
