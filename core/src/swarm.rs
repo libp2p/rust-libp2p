@@ -42,6 +42,7 @@
 
 mod behaviour;
 mod swarm;
+mod registry;
 
 pub mod toggle;
 

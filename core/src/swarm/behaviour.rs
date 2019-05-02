@@ -147,7 +147,9 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     /// Informs the `Swarm` about a multi-address observed by a remote for
     /// the local node.
     ///
-    /// The swarm will pass this address through the transport's NAT traversal.
+    /// It is advisable to issue `ReportObservedAddr` actions at a fixed frequency
+    /// per node. This way address information will be more accurate over time
+    /// and individual outliers carry less weight.
     ReportObservedAddr {
         /// The observed address of the local node.
         address: Multiaddr,
