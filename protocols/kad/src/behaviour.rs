@@ -350,6 +350,7 @@ impl<TSubstream> Kademlia<TSubstream> {
         );
     }
 
+    /// Processes discovered peers from a query.
     fn discovered<'a, I>(&'a mut self, query_id: &QueryId, source: &PeerId, peers: I)
     where
         I: Iterator<Item=&'a KadPeer> + Clone
