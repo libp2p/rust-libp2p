@@ -193,6 +193,8 @@ pub use libp2p_secio as secio;
 pub use libp2p_tcp as tcp;
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[doc(inline)]
+pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "libp2p-websocket")]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
