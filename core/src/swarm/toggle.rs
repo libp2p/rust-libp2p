@@ -161,6 +161,14 @@ where
             inner: self.inner.map(|h| h.into_handler(remote_peer_id))
         }
     }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        if let Some(inner) = self.inner.as_ref() {
+            EitherUpgrade::A(inner.inbound_protocol())
+        } else {
+            EitherUpgrade::B(DeniedUpgrade)
+        }
+    }
 }
 
 /// Implementation of `ProtocolsHandler` that can be in the disabled state.
