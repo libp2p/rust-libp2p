@@ -562,6 +562,7 @@ where
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.kbuckets
                     .find_closest(&KadHash::from(key.clone()))
+                    .filter(|p| p.peer_id() != &source)
                     .take(self.num_results)
                     .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
                     .collect();
@@ -583,6 +584,7 @@ where
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let closer_peers = self.kbuckets
                     .find_closest(&key)
+                    .filter(|p| p.peer_id() != &source)
                     .take(self.num_results)
                     .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
                     .collect();
@@ -593,6 +595,7 @@ where
                         .get(&key)
                         .into_iter()
                         .flat_map(|peers| peers)
+                        .filter(|p| *p != &source)
                         .map(move |peer_id| build_kad_peer(&KadHash::from(peer_id.clone()), kbuckets))
                         .collect()
                 };
