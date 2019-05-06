@@ -20,7 +20,7 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KademliaOut, kbucket::KBucketsPeerId};
+use crate::{Kademlia, KademliaOut, kbucket::{self, Distance}};
 use futures::{future, prelude::*};
 use libp2p_core::{
     PeerId,
@@ -80,6 +80,13 @@ fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
 
 #[test]
 fn query_iter() {
+    fn distances(key: &kbucket::Key<PeerId>, peers: Vec<PeerId>) -> Vec<Distance> {
+        peers.into_iter()
+            .map(kbucket::Key::from)
+            .map(|k| k.distance(key))
+            .collect()
+    }
+
     fn run(n: usize) {
         // Build `n` nodes. Node `n` knows about node `n-1`, node `n-1` knows about node `n-2`, etc.
         // Node `n` is queried for a random peer and should return nodes `1..n-1` sorted by
@@ -96,14 +103,13 @@ fn query_iter() {
         // Ask the last peer in the list to search a random peer. The search should
         // propagate backwards through the list of peers.
         let search_target = PeerId::random();
+        let search_target_key = kbucket::Key::from(search_target.clone());
         swarms.last_mut().unwrap().find_node(search_target.clone());
 
         // Set up expectations.
         let expected_swarm_id = swarm_ids.last().unwrap().clone();
-        let expected_peer_ids: Vec<_> = swarm_ids
-            .iter().cloned().take(n - 1).collect();
-        let mut expected_distances: Vec<_> = expected_peer_ids
-            .iter().map(|p| p.distance_with(&search_target)).collect();
+        let expected_peer_ids: Vec<_> = swarm_ids.iter().cloned().take(n - 1).collect();
+        let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
         expected_distances.sort();
 
         // Run test
@@ -118,10 +124,8 @@ fn query_iter() {
                                 assert_eq!(key, search_target);
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert!(expected_peer_ids.iter().all(|p| closer_peers.contains(p)));
-                                assert_eq!(expected_distances,
-                                    closer_peers.iter()
-                                        .map(|p| p.distance_with(&key))
-                                        .collect::<Vec<_>>());
+                                let key = kbucket::Key::from(key);
+                                assert_eq!(expected_distances, distances(&key, closer_peers));
                                 return Ok(Async::Ready(()));
                             }
                             Async::Ready(_) => (),
