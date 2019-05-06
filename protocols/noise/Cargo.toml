@@ -8,16 +8,13 @@ repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
 [dependencies]
-curve25519-dalek = "1"
 futures = "0.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.7.0", path = "../../core" }
 log = "0.4"
+noiseexplorer = { version = "0.1.1", path = "./noiseexplorer" }
 rand = "0.6.5"
-ring = { version = "0.14", features = ["use_heap"], default-features = false }
-snow = { version = "0.5.1", features = ["ring-resolver"], default-features = false }
 tokio-io = "0.1"
-x25519-dalek = "0.5"
 zeroize = "0.5"
 
 [dev-dependencies]
@@ -26,3 +23,4 @@ libp2p-tcp = { version = "0.7.0", path = "../../transports/tcp" }
 quickcheck = "0.8"
 tokio = "0.1"
 sodiumoxide = "0.2"
+

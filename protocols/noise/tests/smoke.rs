@@ -19,8 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future::Either, prelude::*};
-use libp2p_core::{Transport, transport::ListenerEvent, upgrade::{apply_inbound, apply_outbound}};
-use libp2p_noise::{Keypair, X25519, NoiseConfig};
+use libp2p_core::{
+    transport::ListenerEvent,
+    upgrade::{apply_inbound, apply_outbound},
+    Transport,
+};
+use libp2p_noise::{Keypair, IK, IX, XX};
 use libp2p_tcp::TcpConfig;
 use log::info;
 use quickcheck::QuickCheck;
@@ -30,65 +34,70 @@ use tokio::{self, io};
 fn xx() {
     let _ = env_logger::try_init();
     fn prop(message: Vec<u8>) -> bool {
+        let server_keypair = Keypair::new();
+        let server_transport = TcpConfig::new().with_upgrade(XX::new(server_keypair));
 
-        let server_keypair = Keypair::<X25519>::new();
-        let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(server_keypair));
-
-        let client_keypair = Keypair::<X25519>::new();
-        let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(client_keypair));
+        let client_keypair = Keypair::new();
+        let client_transport = TcpConfig::new().with_upgrade(XX::new(client_keypair));
 
         run(server_transport, client_transport, message);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 #[test]
 fn ix() {
     let _ = env_logger::try_init();
     fn prop(message: Vec<u8>) -> bool {
+        let server_keypair = Keypair::new();
+        let server_transport = TcpConfig::new().with_upgrade(IX::new(server_keypair));
 
-        let server_keypair = Keypair::<X25519>::new();
-        let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(server_keypair));
-
-        let client_keypair = Keypair::<X25519>::new();
-        let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(client_keypair));
+        let client_keypair = Keypair::new();
+        let client_transport = TcpConfig::new().with_upgrade(IX::new(client_keypair));
 
         run(server_transport, client_transport, message);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 #[test]
 fn ik_xx() {
     let _ = env_logger::try_init();
     fn prop(message: Vec<u8>) -> bool {
-        let server_keypair = Keypair::<X25519>::new();
-        let server_public = server_keypair.public().clone();
-        let server_transport = TcpConfig::new()
-            .and_then(move |output, endpoint| {
-                if endpoint.is_listener() {
-                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_keypair)))
-                } else {
-                    Either::B(apply_outbound(output, NoiseConfig::xx(server_keypair)))
-                }
-            });
+        let server_keypair = Keypair::new();
+        let server_public = server_keypair.get_public_key();
+        let server_transport = TcpConfig::new().and_then(move |output, endpoint| {
+            if endpoint.is_listener() {
+                Either::A(apply_inbound(output, IK::new_listener(server_keypair)))
+            } else {
+                Either::B(apply_outbound(output, XX::new(server_keypair)))
+            }
+        });
 
-        let client_keypair = Keypair::<X25519>::new();
-        let client_transport = TcpConfig::new()
-            .and_then(move |output, endpoint| {
-                if endpoint.is_dialer() {
-                    Either::A(apply_outbound(output, NoiseConfig::ik_dialer(client_keypair, server_public)))
-                } else {
-                    Either::B(apply_inbound(output, NoiseConfig::xx(client_keypair)))
-                }
-            });
+        let client_keypair = Keypair::new();
+        let client_transport = TcpConfig::new().and_then(move |output, endpoint| {
+            if endpoint.is_dialer() {
+                Either::A(apply_outbound(
+                    output,
+                    IK::new_dialer(client_keypair, server_public),
+                ))
+            } else {
+                Either::B(apply_inbound(output, XX::new(client_keypair)))
+            }
+        });
 
         run(server_transport, client_transport, message);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 fn run<T, A, U, B, P>(server_transport: T, client_transport: U, message1: Vec<u8>)
@@ -102,7 +111,7 @@ where
     U::Dial: Send + 'static,
     U::Listener: Send + 'static,
     U::ListenerUpgrade: Send + 'static,
-    B: io::AsyncRead + io::AsyncWrite + Send + 'static
+    B: io::AsyncRead + io::AsyncWrite + Send + 'static,
 {
     let message2 = message1.clone();
 
@@ -110,14 +119,17 @@ where
         .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
         .unwrap();
 
-    let server_address = server.by_ref().wait()
+    let server_address = server
+        .by_ref()
+        .wait()
         .next()
         .expect("some event")
         .expect("no error")
         .into_new_address()
         .expect("listen address");
 
-    let server = server.take(1)
+    let server = server
+        .take(1)
         .filter_map(ListenerEvent::into_upgrade)
         .and_then(|client| client.0)
         .map_err(|e| panic!("server error: {}", e))
@@ -130,17 +142,19 @@ where
             Ok(())
         });
 
-    let client = client_transport.dial(server_address.clone()).unwrap()
+    let client = client_transport
+        .dial(server_address.clone())
+        .unwrap()
         .map_err(|e| panic!("client error: {}", e))
         .and_then(move |(_, server)| {
             io::write_all(server, message2).and_then(|(client, _)| io::flush(client))
         })
         .map(|_| ());
 
-    let future = client.join(server)
+    let future = client
+        .join(server)
         .map_err(|e| panic!("{:?}", e))
         .map(|_| ());
 
     tokio::run(future)
 }
-
