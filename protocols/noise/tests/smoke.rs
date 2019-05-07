@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future::{self, Either}, prelude::*};
-use libp2p_core::{identity, Transport, upgrade::{Negotiated, apply_inbound, apply_outbound}};
+use libp2p_core::identity;
+use libp2p_core::upgrade::{Negotiated, apply_inbound, apply_outbound};
+use libp2p_core::transport::{Transport, ListenerEvent};
 use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;

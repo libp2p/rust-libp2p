@@ -217,13 +217,8 @@ pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
-<<<<<<< HEAD
-use futures::{future, prelude::*};
-use std::{error, time::Duration};
-=======
 use futures::prelude::*;
 use std::{error, io, time::Duration};
->>>>>>> master
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
@@ -245,7 +240,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(id_keys))
+        .with_upgrade(secio::SecioConfig::new(keypair))
         .and_then(move |output, endpoint| {
             let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();
