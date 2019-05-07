@@ -2,7 +2,7 @@
 name = "libp2p-secio"
 edition = "2018"
 description = "Secio encryption protocol for libp2p"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 asn1_der = "0.6.1"
 bytes = "0.4"
 futures = "0.1"
-libp2p-core = { version = "0.6.0", path = "../../core" }
+libp2p-core = { version = "0.7.0", path = "../../core" }
 log = "0.4.6"
 protobuf = "2.3"
 rand = "0.6.5"
@@ -28,12 +28,16 @@ tokio-io = "0.1.0"
 sha2 = "0.8.0"
 hmac = "0.7.0"
 
-[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.14", features = ["use_heap"], default-features = false }
 untrusted = { version = "0.6" }
 
-[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-stdweb = { version = "0.4", default-features = false }
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.10"
+send_wrapper = "0.2"
+wasm-bindgen = "0.2.33"
+wasm-bindgen-futures = "0.3.10"
+web-sys = { version = "0.3.10", features = ["Crypto", "CryptoKey", "SubtleCrypto", "Window"] }
 
 [features]
 default = ["secp256k1"]
@@ -41,7 +45,7 @@ aes-all = ["aesni"]
 
 [dev-dependencies]
 criterion = "0.2"
-libp2p-tcp = { version = "0.6.0", path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.7.0", path = "../../transports/tcp" }
 tokio = "0.1"
 tokio-tcp = "0.1"
 

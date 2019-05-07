@@ -193,6 +193,8 @@ pub use libp2p_secio as secio;
 pub use libp2p_tcp as tcp;
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[doc(inline)]
+pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "libp2p-websocket")]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
@@ -215,35 +217,33 @@ pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
+<<<<<<< HEAD
 use futures::{future, prelude::*};
 use std::{error, time::Duration};
+=======
+use futures::prelude::*;
+use std::{error, io, time::Duration};
+>>>>>>> master
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-pub fn build_development_transport(keypair: identity::Keypair) -> impl Transport<
-    Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
-    Error = impl error::Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send
-> + Clone {
-     build_tcp_ws_mplex_yamux(keypair)
+pub fn build_development_transport(keypair: identity::Keypair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+     build_tcp_ws_secio_mplex_yamux(keypair)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///
 /// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
-    Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
-    Error = impl error::Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send
-> + Clone {
+///
+/// > **Note**: If you ever need to express the type of this `Transport`.
+pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(id_keys))
         .and_then(move |output, endpoint| {
@@ -254,43 +254,6 @@ pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
                 .map_inbound(move |muxer| (peer_id, muxer))
                 .map_outbound(move |muxer| (peer_id2, muxer));
             core::upgrade::apply(output.stream, upgrade, endpoint)
-                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
-        })
-        .with_timeout(Duration::from_secs(20))
-}
-
-/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
-///
-/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
-/// and mplex or yamux as the multiplexing layer.
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
-    Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
-    Error = impl error::Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send
-> + Clone {
-    let dh_keys = noise::Keypair::<noise::X25519>::from_identity(&id_keys)
-        .unwrap_or_else(||
-            noise::Keypair::new().into_authentic(&id_keys).expect("X25519 keypair"));
-    CommonTransport::new()
-        .with_upgrade(noise::NoiseConfig::xx(dh_keys))
-        .and_then(move |(remote_id, stream), _endpoint| {
-            match remote_id {
-                noise::RemoteIdentity::IdentityKey(id_pk) =>
-                    future::Either::A(future::ok((PeerId::from(id_pk), stream))),
-                _ =>
-                    future::Either::B(future::err(noise::NoiseError::InvalidKey))
-            }
-        })
-        .and_then(move |(peer_id, stream), endpoint| {
-            let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
-                // TODO: use a single `.map` instead of two maps
-                .map_inbound(move |muxer| (peer_id, muxer))
-                .map_outbound(move |muxer| (peer_id2, muxer));
-            core::upgrade::apply(stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })
         .with_timeout(Duration::from_secs(20))
@@ -322,11 +285,10 @@ struct CommonTransportInner {
 
 impl CommonTransport {
     /// Initializes the `CommonTransport`.
-    #[inline]
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn new() -> CommonTransport {
-        let transport = tcp::TcpConfig::new();
-        let transport = dns::DnsConfig::new(transport);
+        let tcp = tcp::TcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp);
         #[cfg(feature = "libp2p-websocket")]
         let transport = {
             let trans_clone = transport.clone();
@@ -339,7 +301,6 @@ impl CommonTransport {
     }
 
     /// Initializes the `CommonTransport`.
-    #[inline]
     #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
@@ -349,7 +310,6 @@ impl CommonTransport {
     }
 
     /// Initializes the `CommonTransport`.
-    #[inline]
     #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), not(feature = "libp2p-websocket")))]
     pub fn new() -> CommonTransport {
         let inner = core::transport::dummy::DummyTransport::new();
@@ -366,18 +326,11 @@ impl Transport for CommonTransport {
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.inner.inner.listen_on(addr)
     }
 
-    #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.inner.dial(addr)
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.inner.nat_traversal(server, observed)
     }
 }

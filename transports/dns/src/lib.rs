@@ -33,13 +33,14 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use libp2p_core as swarm;
-
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{TransportError, ListenerEvent}
+};
 use log::{debug, trace, log_enabled, Level};
-use multiaddr::{Protocol, Multiaddr};
 use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
-use swarm::{Transport, transport::TransportError};
 use tokio_dns::{CpuPoolResolver, Resolver};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
@@ -57,13 +58,11 @@ pub struct DnsConfig<T> {
 
 impl<T> DnsConfig<T> {
     /// Creates a new configuration object for DNS.
-    #[inline]
     pub fn new(inner: T) -> DnsConfig<T> {
         DnsConfig::with_resolve_threads(inner, 1)
     }
 
     /// Same as `new`, but allows specifying a number of threads for the resolving.
-    #[inline]
     pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
         trace!("Created a CpuPoolResolver");
 
@@ -78,7 +77,6 @@ impl<T> fmt::Debug for DnsConfig<T>
 where
     T: fmt::Debug,
 {
-    #[inline]
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_tuple("DnsConfig").field(&self.inner).finish()
     }
@@ -93,7 +91,7 @@ where
     type Error = DnsErr<T::Error>;
     type Listener = stream::MapErr<
         stream::Map<T::Listener,
-            fn((T::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr)>,
+            fn(ListenerEvent<T::ListenerUpgrade>) -> ListenerEvent<Self::ListenerUpgrade>>,
         fn(T::Error) -> Self::Error>;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = Either<future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
@@ -103,14 +101,14 @@ where
         >>
     >;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (listener, new_addr) = self.inner.listen_on(addr)
-            .map_err(|err| err.map(DnsErr::Underlying))?;
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let listener = self.inner.listen_on(addr).map_err(|err| err.map(DnsErr::Underlying))?;
         let listener = listener
-            .map::<_, fn(_) -> _>(|(upgr, multiaddr)| (upgr.map_err::<fn(_) -> _, _>(DnsErr::Underlying), multiaddr))
+            .map::<_, fn(_) -> _>(|event| event.map(|upgr| {
+                upgr.map_err::<fn(_) -> _, _>(DnsErr::Underlying)
+            }))
             .map_err::<_, fn(_) -> _>(DnsErr::Underlying);
-        Ok((listener, new_addr))
+        Ok(listener)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -160,13 +158,6 @@ where
 
         let new_addr = JoinFuture { addr, future: future::join_all(resolve_iters) };
         Ok(Either::B(DialFuture { trans: Some(self.inner), future: Either::A(new_addr) }))
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // Since `listen_on` doesn't perform any resolution, we just pass through `nat_traversal`
-        // as well.
-        self.inner.nat_traversal(server, observed)
     }
 }
 
@@ -318,14 +309,18 @@ where
 mod tests {
     use libp2p_tcp::TcpConfig;
     use futures::future;
-    use super::swarm::{Transport, transport::TransportError};
-    use multiaddr::{Protocol, Multiaddr};
+    use libp2p_core::{
+        Transport,
+        multiaddr::{Protocol, Multiaddr},
+        transport::TransportError
+    };
     use super::DnsConfig;
 
     #[test]
     fn basic_resolve() {
         #[derive(Clone)]
         struct CustomTransport;
+
         impl Transport for CustomTransport {
             type Output = <TcpConfig as Transport>::Output;
             type Error = <TcpConfig as Transport>::Error;
@@ -333,11 +328,7 @@ mod tests {
             type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
             type Dial = future::Empty<Self::Output, Self::Error>;
 
-            #[inline]
-            fn listen_on(
-                self,
-                _addr: Multiaddr,
-            ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
             }
 
@@ -354,11 +345,6 @@ mod tests {
                     _ => panic!(),
                 };
                 Ok(future::empty())
-            }
-
-            #[inline]
-            fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-                panic!()
             }
         }
 

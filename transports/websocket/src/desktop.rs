@@ -19,13 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{Future, IntoFuture, Sink, Stream};
-use libp2p_core as swarm;
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
 use log::{debug, trace};
-use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::{error, fmt};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use swarm::{Transport, transport::TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
@@ -71,76 +73,86 @@ where
 {
     type Output = Box<dyn AsyncStream + Send>;
     type Error = WsError<T::Error>;
-    type Listener = Box<dyn Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = Self::Error> + Send>;
+    type Listener = Box<dyn Stream<Item = ListenerEvent<Self::ListenerUpgrade>, Error = Self::Error> + Send>;
     type ListenerUpgrade = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
     type Dial = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn listen_on(
-        self,
-        original_addr: Multiaddr,
-    ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, original_addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
             Some(Protocol::Ws) => {}
             _ => return Err(TransportError::MultiaddrNotSupported(original_addr)),
         };
 
-        let (inner_listen, mut new_addr) = self.transport.listen_on(inner_addr)
+        let inner_listen = self.transport.listen_on(inner_addr)
             .map_err(|err| err.map(WsError::Underlying))?;
-        new_addr.append(Protocol::Ws);
-        debug!("Listening on {}", new_addr);
 
-        let listen = inner_listen.map_err(WsError::Underlying).map(|(stream, mut client_addr)| {
-            // Need to suffix `/ws` to each client address.
-            client_addr.append(Protocol::Ws);
+        let listen = inner_listen.map_err(WsError::Underlying).map(|event| {
+            match event {
+                ListenerEvent::NewAddress(mut a) => {
+                    a = a.with(Protocol::Ws);
+                    debug!("Listening on {}", a);
+                    ListenerEvent::NewAddress(a)
+                }
+                ListenerEvent::AddressExpired(mut a) => {
+                    a = a.with(Protocol::Ws);
+                    ListenerEvent::AddressExpired(a)
+                }
+                ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
+                    listen_addr = listen_addr.with(Protocol::Ws);
+                    remote_addr = remote_addr.with(Protocol::Ws);
 
-            // Upgrade the listener to websockets like the websockets library requires us to do.
-            let upgraded = stream.map_err(WsError::Underlying).and_then(move |stream| {
-                debug!("Incoming connection");
+                    // Upgrade the listener to websockets like the websockets library requires us to do.
+                    let upgraded = upgrade.map_err(WsError::Underlying).and_then(move |stream| {
+                        debug!("Incoming connection");
+                        stream.into_ws()
+                            .map_err(|e| WsError::WebSocket(Box::new(e.3)))
+                            .and_then(|stream| {
+                                // Accept the next incoming connection.
+                                stream
+                                    .accept()
+                                    .map_err(|e| WsError::WebSocket(Box::new(e)))
+                                    .map(|(client, _http_headers)| {
+                                        debug!("Upgraded incoming connection to websockets");
 
-                stream
-                    .into_ws()
-                    .map_err(|e| WsError::WebSocket(Box::new(e.3)))
-                    .and_then(|stream| {
-                        // Accept the next incoming connection.
-                        stream
-                            .accept()
-                            .map_err(|e| WsError::WebSocket(Box::new(e)))
-                            .map(|(client, _http_headers)| {
-                                debug!("Upgraded incoming connection to websockets");
+                                        // Plug our own API on top of the `websockets` API.
+                                        let framed_data = client
+                                            .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                                            .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
+                                            .with(|data| Ok(OwnedMessage::Binary(data)))
+                                            .and_then(|recv| {
+                                                match recv {
+                                                    OwnedMessage::Binary(data) => Ok(Some(data)),
+                                                    OwnedMessage::Text(data) => Ok(Some(data.into_bytes())),
+                                                    OwnedMessage::Close(_) => Ok(None),
+                                                    // TODO: handle pings and pongs, which is freaking hard
+                                                    //         for now we close the socket when that happens
+                                                    _ => Ok(None)
+                                                }
+                                            })
+                                        // TODO: is there a way to merge both lines into one?
+                                        .take_while(|v| Ok(v.is_some()))
+                                            .map(|v| v.expect("we only take while this is Some"));
 
-                                // Plug our own API on top of the `websockets` API.
-                                let framed_data = client
-                                    .map_err(|err| IoError::new(IoErrorKind::Other, err))
-                                    .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
-                                    .with(|data| Ok(OwnedMessage::Binary(data)))
-                                    .and_then(|recv| {
-                                        match recv {
-                                            OwnedMessage::Binary(data) => Ok(Some(data)),
-                                            OwnedMessage::Text(data) => Ok(Some(data.into_bytes())),
-                                            OwnedMessage::Close(_) => Ok(None),
-                                            // TODO: handle pings and pongs, which is freaking hard
-                                            //         for now we close the socket when that happens
-                                            _ => Ok(None)
-                                        }
+                                        let read_write = RwStreamSink::new(framed_data);
+                                        Box::new(read_write) as Box<dyn AsyncStream + Send>
                                     })
-                                    // TODO: is there a way to merge both lines into one?
-                                    .take_while(|v| Ok(v.is_some()))
-                                    .map(|v| v.expect("we only take while this is Some"));
-
-                                let read_write = RwStreamSink::new(framed_data);
-                                Box::new(read_write) as Box<dyn AsyncStream + Send>
                             })
-                    })
-                    .map(|s| Box::new(Ok(s).into_future()) as Box<dyn Future<Item = _, Error = _> + Send>)
-                    .into_future()
-                    .flatten()
-            });
+                        .map(|s| Box::new(Ok(s).into_future()) as Box<dyn Future<Item = _, Error = _> + Send>)
+                            .into_future()
+                            .flatten()
+                    });
 
-            (Box::new(upgraded) as Box<dyn Future<Item = _, Error = _> + Send>, client_addr)
+                    ListenerEvent::Upgrade {
+                        upgrade: Box::new(upgraded) as Box<dyn Future<Item = _, Error = _> + Send>,
+                        listen_addr,
+                        remote_addr
+                    }
+                }
+            }
         });
 
-        Ok((Box::new(listen) as Box<_>, new_addr))
+        Ok(Box::new(listen) as Box<_>)
     }
 
     fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -196,10 +208,6 @@ where
             });
 
         Ok(Box::new(dial) as Box<_>)
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
     }
 }
 
@@ -271,25 +279,38 @@ mod tests {
     use libp2p_tcp as tcp;
     use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
-    use multiaddr::Multiaddr;
-    use super::swarm::Transport;
+    use libp2p_core::{
+        Transport,
+        multiaddr::Protocol,
+        transport::ListenerEvent
+    };
     use super::WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
         let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
-        let (listener, addr) = ws_config
-            .clone()
+        let mut listener = ws_config.clone()
             .listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap())
             .unwrap();
-        assert!(addr.to_string().ends_with("/ws"));
-        assert!(!addr.to_string().ends_with("/0/ws"));
+
+        let addr = listener.by_ref().wait()
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
+        assert_eq!(Some(Protocol::Ws), addr.iter().nth(2));
+        assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
+
         let listener = listener
+            .filter_map(ListenerEvent::into_upgrade)
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
-        let dialer = ws_config.clone().dial(addr).unwrap();
+
+        let dialer = ws_config.clone().dial(addr.clone()).unwrap();
 
         let future = listener
             .select(dialer)
@@ -303,17 +324,27 @@ mod tests {
     fn dialer_connects_to_listener_ipv6() {
         let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
-        let (listener, addr) = ws_config
-            .clone()
+        let mut listener = ws_config.clone()
             .listen_on("/ip6/::1/tcp/0/ws".parse().unwrap())
             .unwrap();
-        assert!(addr.to_string().ends_with("/ws"));
-        assert!(!addr.to_string().ends_with("/0/ws"));
+
+        let addr = listener.by_ref().wait()
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
+        assert_eq!(Some(Protocol::Ws), addr.iter().nth(2));
+        assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
+
         let listener = listener
+            .filter_map(ListenerEvent::into_upgrade)
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
-        let dialer = ws_config.clone().dial(addr).unwrap();
+
+        let dialer = ws_config.clone().dial(addr.clone()).unwrap();
 
         let future = listener
             .select(dialer)
@@ -322,62 +353,5 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(future).unwrap();
-    }
-
-    #[test]
-    fn nat_traversal() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/ws"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/ws"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/wss".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/wss"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/wss"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/wss"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/ws"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
-
-        {
-            let server = "/ip4/127.0.0.1/tcp/10000/wss".parse::<Multiaddr>().unwrap();
-            let observed = "/ip4/80.81.82.83/tcp/25000/ws"
-                .parse::<Multiaddr>()
-                .unwrap();
-            assert_eq!(
-                ws_config.nat_traversal(&server, &observed).unwrap(),
-                "/ip4/80.81.82.83/tcp/10000/wss"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            );
-        }
     }
 }

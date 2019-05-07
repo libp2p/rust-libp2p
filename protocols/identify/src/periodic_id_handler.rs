@@ -21,12 +21,18 @@
 use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        KeepAlive,
+        SubstreamProtocol,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr
+    },
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
-use std::{io, marker::PhantomData, time::{Duration, Instant}};
+use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::{self, Delay};
+use wasm_timer::{Delay, Instant};
 use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
@@ -84,15 +90,15 @@ where
 {
     type InEvent = Void;
     type OutEvent = PeriodicIdHandlerEvent;
-    type Error = tokio_timer::Error;
+    type Error = wasm_timer::Error;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = IdentifyProtocolConfig;
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        DeniedUpgrade
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+        SubstreamProtocol::new(DeniedUpgrade)
     }
 
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
@@ -121,9 +127,9 @@ where
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         if self.first_id_happened {
-            KeepAlive::Now
+            KeepAlive::No
         } else {
-            KeepAlive::Forever
+            KeepAlive::Yes
         }
     }
 
@@ -148,8 +154,10 @@ where
             Async::NotReady => Ok(Async::NotReady),
             Async::Ready(()) => {
                 self.next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
-                let upgrade = self.config.clone();
-                let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
+                let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(self.config.clone()),
+                    info: (),
+                };
                 Ok(Async::Ready(ev))
             }
         }

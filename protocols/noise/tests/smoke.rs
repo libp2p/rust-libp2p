@@ -134,11 +134,19 @@ where
 {
     let message2 = message1.clone();
 
-    let (server, server_address) = server_transport
+    let mut server = server_transport
         .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
         .unwrap();
 
+    let server_address = server.by_ref().wait()
+        .next()
+        .expect("some event")
+        .expect("no error")
+        .into_new_address()
+        .expect("listen address");
+
     let server = server.take(1)
+        .filter_map(ListenerEvent::into_upgrade)
         .and_then(|client| client.0)
         .map_err(|e| panic!("server error: {}", e))
         .and_then(|(_, client)| {
@@ -150,7 +158,7 @@ where
             Ok(())
         });
 
-    let client = client_transport.dial(server_address).unwrap()
+    let client = client_transport.dial(server_address.clone()).unwrap()
         .map_err(|e| panic!("client error: {}", e))
         .and_then(move |(_, server)| {
             io::write_all(server, message2).and_then(|(client, _)| io::flush(client))

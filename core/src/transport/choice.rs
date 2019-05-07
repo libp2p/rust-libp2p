@@ -43,15 +43,15 @@ where
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let addr = match self.0.listen_on(addr) {
-            Ok((connec, addr)) => return Ok((EitherListenStream::First(connec), addr)),
+            Ok(listener) => return Ok(EitherListenStream::First(listener)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
         };
 
         let addr = match self.1.listen_on(addr) {
-            Ok((connec, addr)) => return Ok((EitherListenStream::Second(connec), addr)),
+            Ok(listener) => return Ok(EitherListenStream::Second(listener)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
         };
@@ -73,15 +73,5 @@ where
         };
 
         Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let first = self.0.nat_traversal(server, observed);
-        if let Some(first) = first {
-            return Some(first);
-        }
-
-        self.1.nat_traversal(server, observed)
     }
 }

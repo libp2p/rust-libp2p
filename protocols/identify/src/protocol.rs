@@ -30,6 +30,7 @@ use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
+use std::convert::TryFrom;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_codec::Framed;
@@ -64,7 +65,7 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
 
         let listen_addrs = info.listen_addrs
             .into_iter()
-            .map(|addr| addr.into_bytes())
+            .map(|addr| addr.to_vec())
             .collect();
 
         let pubkey_bytes = info.public_key.into_protobuf_encoding();
@@ -74,7 +75,7 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
         message.set_protocolVersion(info.protocol_version);
         message.set_publicKey(pubkey_bytes);
         message.set_listenAddrs(listen_addrs);
-        message.set_observedAddr(observed_addr.to_bytes());
+        message.set_observedAddr(observed_addr.to_vec());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
 
         let bytes = message
@@ -234,7 +235,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
             // an `IoError`.
             fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-                Multiaddr::from_bytes(bytes)
+                Multiaddr::try_from(bytes)
                     .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
             }
 
@@ -271,7 +272,12 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
-    use libp2p_core::{identity, Transport, upgrade::{apply_outbound, apply_inbound}};
+    use libp2p_core::{
+        identity,
+        Transport,
+        transport::ListenerEvent,
+        upgrade::{apply_outbound, apply_inbound}
+    };
     use std::{io, sync::mpsc, thread};
 
     #[test]
@@ -286,13 +292,22 @@ mod tests {
         let bg_thread = thread::spawn(move || {
             let transport = TcpConfig::new();
 
-            let (listener, addr) = transport
+            let mut listener = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
+
+            let addr = listener.by_ref().wait()
+                .next()
+                .expect("some event")
+                .expect("no error")
+                .into_new_address()
+                .expect("listen address");
+
 
             tx.send(addr).unwrap();
 
             let future = listener
+                .filter_map(ListenerEvent::into_upgrade)
                 .into_future()
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)

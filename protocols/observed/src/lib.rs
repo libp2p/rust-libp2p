@@ -24,7 +24,7 @@
 use bytes::Bytes;
 use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}};
-use std::{io, iter};
+use std::{convert::TryFrom, io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec::UviBytes;
@@ -75,7 +75,7 @@ where
             .map_err(|(e, _): (io::Error, FramedRead<Negotiated<C>, UviBytes>)| e)
             .and_then(move |(bytes, _)| {
                 if let Some(b) = bytes {
-                    let ma = Multiaddr::from_bytes(b.to_vec())
+                    let ma = Multiaddr::try_from(b)
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                     Ok(ma)
                 } else {
@@ -94,7 +94,7 @@ pub struct Sender<C> {
 impl<C: AsyncWrite> Sender<C> {
     /// Send address `a` to remote as the observed address.
     pub fn send_address(self, a: Multiaddr) -> impl Future<Item=(), Error=io::Error> {
-        self.io.send(Bytes::from(a.into_bytes())).map(|_io| ())
+        self.io.send(Bytes::from(a.to_vec())).map(|_io| ())
     }
 }
 

@@ -71,14 +71,6 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
-#![recursion_limit = "128"]
-
-// TODO: unfortunately the `js!` macro of stdweb depends on tons of "private" macros, which we
-//       don't want to import manually
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-#[macro_use]
-extern crate stdweb;
-
 pub use self::error::SecioError;
 
 use bytes::BytesMut;
