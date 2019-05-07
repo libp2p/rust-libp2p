@@ -237,7 +237,7 @@ impl AsyncRead for BrowserWsConn {
         self.incoming_data.prepare_uninitialized_buffer(buf)
     }
 
-    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, IoError> {
         self.incoming_data.read_buf(buf)
     }
 }

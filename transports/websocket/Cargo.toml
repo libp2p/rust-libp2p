@@ -20,6 +20,7 @@ tokio-io = "0.1"
 websocket = { version = "0.22.2", default-features = false, features = ["async", "async-ssl"] }
 
 [target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
+bytes = "0.4"
 stdweb = { version = "0.4", default-features = false }
 wasm-bindgen = "0.2.42"
 
