@@ -171,6 +171,13 @@ impl<TInner> Read for BandwidthConnecLogging<TInner>
 impl<TInner> tokio_io::AsyncRead for BandwidthConnecLogging<TInner>
     where TInner: tokio_io::AsyncRead
 {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.inner.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.inner.read_buf(buf)
+    }
 }
 
 impl<TInner> Write for BandwidthConnecLogging<TInner>

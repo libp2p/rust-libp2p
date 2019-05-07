@@ -68,11 +68,17 @@ where
     A: AsyncRead,
     B: AsyncRead,
 {
-    #[inline]
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         match self {
             EitherOutput::First(a) => a.prepare_uninitialized_buffer(buf),
             EitherOutput::Second(b) => b.prepare_uninitialized_buffer(buf),
+        }
+    }
+
+    fn read_buf<Bu: bytes::BufMut>(&mut self, buf: &mut Bu) -> Poll<usize, IoError> {
+        match self {
+            EitherOutput::First(a) => a.read_buf(buf),
+            EitherOutput::Second(b) => b.read_buf(buf),
         }
     }
 }
@@ -176,6 +182,13 @@ where
                     _ => panic!("Wrong API usage")
                 }
             },
+        }
+    }
+
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        match self {
+            EitherOutput::First(ref inner) => inner.prepare_uninitialized_buffer(buf),
+            EitherOutput::Second(ref inner) => inner.prepare_uninitialized_buffer(buf),
         }
     }
 

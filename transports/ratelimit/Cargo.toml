@@ -11,6 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 aio-limited = "0.1"
+bytes = "0.4"
 futures = "0.1"
 libp2p-core = { version = "0.7.0", path = "../../core" }
 log = "0.4"

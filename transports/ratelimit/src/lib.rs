@@ -132,7 +132,15 @@ impl<C: AsyncRead + AsyncWrite> io::Write for Connection<C> {
     }
 }
 
-impl<C: AsyncRead + AsyncWrite> AsyncRead for Connection<C> {}
+impl<C: AsyncRead + AsyncWrite> AsyncRead for Connection<C> {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.reader.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.reader.read_buf(buf)
+    }
+}
 
 impl<C: AsyncRead + AsyncWrite> AsyncWrite for Connection<C> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {

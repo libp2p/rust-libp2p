@@ -335,7 +335,11 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncRead> AsyncRead for NoiseOutput<T> {}
+impl<T: AsyncRead> AsyncRead for NoiseOutput<T> {
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
+    }
+}
 
 impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {

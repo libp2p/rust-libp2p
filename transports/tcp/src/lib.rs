@@ -464,7 +464,15 @@ impl Read for TcpTransStream {
     }
 }
 
-impl AsyncRead for TcpTransStream {}
+impl AsyncRead for TcpTransStream {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.inner.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.inner.read_buf(buf)
+    }
+}
 
 impl Write for TcpTransStream {
     #[inline]
