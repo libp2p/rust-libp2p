@@ -994,8 +994,8 @@ where
         TConnInfo: Clone,
         TPeerId: AsRef<[u8]> + Send + 'static,
     {
-        // Start by polling the listeners for events, but only
-        // if numer of incoming connection does not exceed the limit.
+        // Start by polling the listeners for events, but only if the number
+        // of incoming connections does not exceed the limit.
         match self.incoming_limit {
             Some(x) if self.incoming_negotiated().count() >= (x as usize)
                 => (),
