@@ -20,6 +20,9 @@
 
 //! [Noise protocol framework][noise] support for libp2p.
 //!
+//! > **Note**: This crate is still experimental and subject to major breaking changes
+//! >           both on the API and the wire protocol.
+//!
 //! This crate provides `libp2p_core::InboundUpgrade` and `libp2p_core::OutboundUpgrade`
 //! implementations for various noise handshake patterns (currently `IK`, `IX`, and `XX`)
 //! over a particular choice of DH key agreement (currently only X25519).
