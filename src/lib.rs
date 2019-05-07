@@ -241,15 +241,14 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(keypair))
-        .and_then(move |out, endpoint| {
-            let peer_id = PeerId::from(out.remote_key);
+        .and_then(move |output, endpoint| {
+            let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();
             let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
                 // TODO: use a single `.map` instead of two maps
                 .map_inbound(move |muxer| (peer_id, muxer))
                 .map_outbound(move |muxer| (peer_id2, muxer));
-
-            core::upgrade::apply(out.stream, upgrade, endpoint)
+            core::upgrade::apply(output.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })
         .with_timeout(Duration::from_secs(20))

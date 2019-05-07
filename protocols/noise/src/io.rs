@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{NoiseError, Protocol, PublicKey};
+//! Noise protocol I/O.
+
+pub mod handshake;
+
 use futures::Poll;
 use log::{debug, trace};
 use snow;
@@ -34,7 +37,7 @@ struct Buffer {
     inner: Box<[u8; TOTAL_BUFFER_LEN]>
 }
 
-/// A mutable borrow of all byte byffers, backed by `Buffer`.
+/// A mutable borrow of all byte buffers, backed by `Buffer`.
 struct BufferBorrow<'a> {
     read: &'a mut [u8],
     read_crypto: &'a mut [u8],
@@ -49,47 +52,6 @@ impl Buffer {
         let (read, read_crypto) = r.split_at_mut(MAX_NOISE_PKG_LEN);
         let (write, write_crypto) = w.split_at_mut(MAX_WRITE_BUF_LEN);
         BufferBorrow { read, read_crypto, write, write_crypto }
-    }
-}
-
-/// A type used during the handshake phase, exchanging key material with the remote.
-pub(super) struct Handshake<T>(NoiseOutput<T>);
-
-impl<T> Handshake<T> {
-    pub(super) fn new(io: T, session: snow::Session) -> Self {
-        Handshake(NoiseOutput::new(io, session))
-    }
-}
-
-impl<T: AsyncRead + AsyncWrite> Handshake<T> {
-    /// Send handshake message to remote.
-    pub(super) fn send(&mut self) -> Poll<(), io::Error> {
-        Ok(self.0.poll_write(&[])?.map(|_| ()))
-    }
-
-    /// Flush handshake message to remote.
-    pub(super) fn flush(&mut self) -> Poll<(), io::Error> {
-        self.0.poll_flush()
-    }
-
-    /// Receive handshake message from remote.
-    pub(super) fn receive(&mut self) -> Poll<(), io::Error> {
-        Ok(self.0.poll_read(&mut [])?.map(|_| ()))
-    }
-
-    /// Finish the handshake.
-    ///
-    /// This turns the noise session into transport mode and returns the remote's static
-    /// public key as well as the established session for further communication.
-    pub(super) fn finish<C>(self) -> Result<(PublicKey<C>, NoiseOutput<T>), NoiseError>
-    where
-        C: Protocol<C>
-    {
-        let s = self.0.session.into_transport_mode()?;
-        let p = s.get_remote_static()
-            .ok_or(NoiseError::InvalidKey)
-            .and_then(C::public_from_bytes)?;
-        Ok((p, NoiseOutput { session: s, .. self.0 }))
     }
 }
 
@@ -388,6 +350,8 @@ impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
 /// When [`io::ErrorKind::WouldBlock`] is returned, the given buffer and offset
 /// may have been updated (i.e. a byte may have been read) and must be preserved
 /// for the next invocation.
+///
+/// Returns `None` if EOF has been encountered.
 fn read_frame_len<R: io::Read>(io: &mut R, buf: &mut [u8; 2], off: &mut usize)
     -> io::Result<Option<u16>>
 {
@@ -410,6 +374,8 @@ fn read_frame_len<R: io::Read>(io: &mut R, buf: &mut [u8; 2], off: &mut usize)
 /// When [`io::ErrorKind::WouldBlock`] is returned, the given offset
 /// may have been updated (i.e. a byte may have been written) and must
 /// be preserved for the next invocation.
+///
+/// Returns `false` if EOF has been encountered.
 fn write_frame_len<W: io::Write>(io: &mut W, buf: &[u8; 2], off: &mut usize)
     -> io::Result<bool>
 {
