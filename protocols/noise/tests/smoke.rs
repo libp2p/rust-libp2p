@@ -18,10 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::Either, prelude::*};
-use libp2p_core::{Transport, transport::ListenerEvent, upgrade::{apply_inbound, apply_outbound}};
-use libp2p_noise::{Keypair, X25519, NoiseConfig};
-use libp2p_tcp::TcpConfig;
+use futures::{future::{self, Either}, prelude::*};
+use libp2p_core::identity;
+use libp2p_core::upgrade::{Negotiated, apply_inbound, apply_outbound};
+use libp2p_core::transport::{Transport, ListenerEvent};
+use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
+use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
 use tokio::{self, io};
@@ -30,12 +32,21 @@ use tokio::{self, io};
 fn xx() {
     let _ = env_logger::try_init();
     fn prop(message: Vec<u8>) -> bool {
+        let server_id = identity::Keypair::generate_ed25519();
+        let client_id = identity::Keypair::generate_ed25519();
 
-        let server_keypair = Keypair::<X25519>::new();
-        let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(server_keypair));
+        let server_id_public = server_id.public();
+        let client_id_public = client_id.public();
 
-        let client_keypair = Keypair::<X25519>::new();
-        let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(client_keypair));
+        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
+        let server_transport = TcpConfig::new()
+            .with_upgrade(NoiseConfig::xx(server_dh))
+            .and_then(move |out, _| expect_identity(out, &client_id_public));
+
+        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
+        let client_transport = TcpConfig::new()
+            .with_upgrade(NoiseConfig::xx(client_dh))
+            .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, message);
         true
@@ -47,12 +58,21 @@ fn xx() {
 fn ix() {
     let _ = env_logger::try_init();
     fn prop(message: Vec<u8>) -> bool {
+        let server_id = identity::Keypair::generate_ed25519();
+        let client_id = identity::Keypair::generate_ed25519();
 
-        let server_keypair = Keypair::<X25519>::new();
-        let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(server_keypair));
+        let server_id_public = server_id.public();
+        let client_id_public = client_id.public();
 
-        let client_keypair = Keypair::<X25519>::new();
-        let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(client_keypair));
+        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
+        let server_transport = TcpConfig::new()
+            .with_upgrade(NoiseConfig::ix(server_dh))
+            .and_then(move |out, _| expect_identity(out, &client_id_public));
+
+        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
+        let client_transport = TcpConfig::new()
+            .with_upgrade(NoiseConfig::ix(client_dh))
+            .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, message);
         true
@@ -64,26 +84,36 @@ fn ix() {
 fn ik_xx() {
     let _ = env_logger::try_init();
     fn prop(message: Vec<u8>) -> bool {
-        let server_keypair = Keypair::<X25519>::new();
-        let server_public = server_keypair.public().clone();
+        let server_id = identity::Keypair::generate_ed25519();
+        let server_id_public = server_id.public();
+
+        let client_id = identity::Keypair::generate_ed25519();
+        let client_id_public = client_id.public();
+
+        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
+        let server_dh_public = server_dh.public().clone();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
-                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_keypair)))
+                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
                 } else {
-                    Either::B(apply_outbound(output, NoiseConfig::xx(server_keypair)))
+                    Either::B(apply_outbound(output, NoiseConfig::xx(server_dh)))
                 }
-            });
+            })
+            .and_then(move |out, _| expect_identity(out, &client_id_public));
 
-        let client_keypair = Keypair::<X25519>::new();
+        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
+        let server_id_public2 = server_id_public.clone();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
-                    Either::A(apply_outbound(output, NoiseConfig::ik_dialer(client_keypair, server_public)))
+                    Either::A(apply_outbound(output,
+                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public)))
                 } else {
-                    Either::B(apply_inbound(output, NoiseConfig::xx(client_keypair)))
+                    Either::B(apply_inbound(output, NoiseConfig::xx(client_dh)))
                 }
-            });
+            })
+            .and_then(move |out, _| expect_identity(out, &server_id_public2));
 
         run(server_transport, client_transport, message);
         true
@@ -91,18 +121,18 @@ fn ik_xx() {
     QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
-fn run<T, A, U, B, P>(server_transport: T, client_transport: U, message1: Vec<u8>)
+type Output = (RemoteIdentity<X25519>, NoiseOutput<Negotiated<TcpTransStream>>);
+
+fn run<T, U>(server_transport: T, client_transport: U, message1: Vec<u8>)
 where
-    T: Transport<Output = (P, A)>,
+    T: Transport<Output = Output>,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    A: io::AsyncRead + io::AsyncWrite + Send + 'static,
-    U: Transport<Output = (P, B)>,
+    U: Transport<Output = Output>,
     U::Dial: Send + 'static,
     U::Listener: Send + 'static,
     U::ListenerUpgrade: Send + 'static,
-    B: io::AsyncRead + io::AsyncWrite + Send + 'static
 {
     let message2 = message1.clone();
 
@@ -144,3 +174,11 @@ where
     tokio::run(future)
 }
 
+fn expect_identity(output: Output, pk: &identity::PublicKey)
+    -> impl Future<Item = Output, Error = NoiseError>
+{
+    match output.0 {
+        RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),
+        _ => panic!("Unexpected remote identity")
+    }
+}

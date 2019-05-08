@@ -267,16 +267,12 @@ where
         let state = self
             .closest_peers
             .iter_mut()
-            .filter_map(
-                |(peer_id, state)| {
-                    if peer_id == id {
-                        Some(state)
-                    } else {
-                        None
-                    }
-                },
-            )
-            .next();
+            .find_map(|(peer_id, state)|
+                if peer_id == id {
+                    Some(state)
+                } else {
+                    None
+                });
 
         match state {
             Some(state @ &mut QueryPeerState::InProgress(_)) => *state = QueryPeerState::Failed,
@@ -295,67 +291,47 @@ where
         let mut active_counter = 0;
 
         // While iterating over peers, count the number of queries in a row (from closer to further
-        // away from target) that are in the succeeded in state.
-        // Contains `None` if the chain is broken.
-        let mut succeeded_counter = Some(0);
+        // away from target) that are in the succeeded state.
+        let mut succeeded_counter = 0;
 
         // Extract `self.num_results` to avoid borrowing errors with closures.
         let num_results = self.num_results;
 
         for &mut (ref peer_id, ref mut state) in self.closest_peers.iter_mut() {
             // Start by "killing" the query if it timed out.
-            {
-                let timed_out = match state {
-                    QueryPeerState::InProgress(timeout) => match timeout.poll() {
-                        Ok(Async::Ready(_)) | Err(_) => true,
-                        Ok(Async::NotReady) => false,
-                    },
-                    _ => false,
-                };
-                if timed_out {
-                    *state = QueryPeerState::Failed;
-                    return Async::Ready(QueryStatePollOut::CancelRpc { peer_id });
-                }
-            }
-
-            // Increment the local counters.
-            match state {
-                QueryPeerState::InProgress(_) => {
-                    active_counter += 1;
-                }
-                QueryPeerState::Succeeded => {
-                    if let Some(ref mut c) = succeeded_counter {
-                        *c += 1;
+            if let QueryPeerState::InProgress(timeout) = state {
+                match timeout.poll() {
+                    Ok(Async::Ready(_)) | Err(_) => {
+                        *state = QueryPeerState::Failed;
+                        return Async::Ready(QueryStatePollOut::CancelRpc { peer_id });
+                    }
+                    Ok(Async::NotReady) => {
+                        active_counter += 1
                     }
                 }
-                _ => (),
-            };
-
-            // We have enough results; the query is done.
-            if succeeded_counter
-                .as_ref()
-                .map(|&c| c >= num_results)
-                .unwrap_or(false)
-            {
-                return Async::Ready(QueryStatePollOut::Finished);
             }
 
-            // Dial the node if it needs dialing.
-            let need_connect = match state {
-                QueryPeerState::NotContacted => match self.stage {
-                    QueryStage::Iterating { .. } => active_counter < self.parallelism,
-                    QueryStage::Frozen => true,     // TODO: as an optimization, could be false if we're not trying to find peers
-                },
-                _ => false,
-            };
+            if let QueryPeerState::Succeeded = state {
+                succeeded_counter += 1;
+                // If we have enough results; the query is done.
+                if succeeded_counter >= num_results {
+                    return Async::Ready(QueryStatePollOut::Finished)
+                }
+            }
 
-            if need_connect {
-                let delay = Delay::new(Instant::now() + self.rpc_timeout);
-                *state = QueryPeerState::InProgress(delay);
-                return Async::Ready(QueryStatePollOut::SendRpc {
-                    peer_id,
-                    query_target: &self.target,
-                });
+            if let QueryPeerState::NotContacted = state {
+                let connect = match self.stage {
+                    QueryStage::Frozen => true,
+                    QueryStage::Iterating {..} => active_counter < self.parallelism,
+                };
+                if connect {
+                    let delay = Delay::new(Instant::now() + self.rpc_timeout);
+                    *state = QueryPeerState::InProgress(delay);
+                    return Async::Ready(QueryStatePollOut::SendRpc {
+                        peer_id,
+                        query_target: &self.target,
+                    });
+                }
             }
         }
 
