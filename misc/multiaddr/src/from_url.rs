@@ -145,4 +145,10 @@ mod tests {
             _ => panic!()
         }
     }
+
+    #[test]
+    fn dns_and_port() {
+        let addr = from_url("http://example.com:1000").unwrap();
+        assert_eq!(addr, "/dns4/example.com/tcp/1000/http".parse().unwrap());
+    }
 }
