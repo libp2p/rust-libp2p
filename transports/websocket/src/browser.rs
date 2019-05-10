@@ -232,7 +232,15 @@ impl Drop for BrowserWsConn {
     }
 }
 
-impl AsyncRead for BrowserWsConn {}
+impl AsyncRead for BrowserWsConn {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.incoming_data.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, IoError> {
+        self.incoming_data.read_buf(buf)
+    }
+}
 
 impl Read for BrowserWsConn {
     #[inline]
