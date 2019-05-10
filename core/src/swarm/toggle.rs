@@ -156,9 +156,9 @@ where
 {
     type Handler = ToggleProtoHandler<TInner::Handler>;
 
-    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler {
         ToggleProtoHandler {
-            inner: self.inner.map(|h| h.into_handler(remote_peer_id))
+            inner: self.inner.map(|h| h.into_handler(remote_peer_id, connected_point))
         }
     }
 
