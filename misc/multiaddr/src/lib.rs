@@ -4,8 +4,8 @@ pub use multihash;
 
 mod protocol;
 mod errors;
+mod from_url;
 mod util;
-mod ws_parse;
 
 use bytes::{Bytes, BytesMut};
 use serde::{
@@ -24,8 +24,8 @@ use std::{
     str::FromStr
 };
 pub use self::errors::{Result, Error};
+pub use self::from_url::{FromUrlErr, from_url};
 pub use self::protocol::Protocol;
-pub use self::ws_parse::{FromWsParseErr, from_websockets_url};
 
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]
