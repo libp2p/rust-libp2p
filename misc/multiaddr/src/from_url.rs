@@ -11,9 +11,9 @@ use std::{error, fmt, iter, net::IpAddr};
 /// ```
 ///
 pub fn from_url(url: &str) -> std::result::Result<Multiaddr, FromUrlErr> {
-    let url = urlparse::urlparse(url);
+    let url = url::Url::parse(url).map_err(|_| FromUrlErr::BadUrl)?;
 
-    let (protocol, default_port) = match url.scheme.as_str() {
+    let (protocol, default_port) = match url.scheme() {
         "ws" => (Protocol::Ws, 80),
         "wss" => (Protocol::Wss, 443),
         "http" => (Protocol::Http, 80),
@@ -21,15 +21,15 @@ pub fn from_url(url: &str) -> std::result::Result<Multiaddr, FromUrlErr> {
         _ => return Err(FromUrlErr::WrongScheme)
     };
 
-    let port = Protocol::Tcp(url.port.unwrap_or(default_port));
-    let ip = if let Some(hostname) = url.hostname.as_ref() {
+    let port = Protocol::Tcp(url.port().unwrap_or(default_port));
+    let ip = if let Some(hostname) = url.host_str() {
         if let Ok(ip) = hostname.parse::<IpAddr>() {
             Protocol::from(ip)
         } else {
-            Protocol::Dns4(url.netloc.into())
+            Protocol::Dns4(hostname.into())
         }
     } else {
-        Protocol::Dns4(url.netloc.into())
+        return Err(FromUrlErr::BadUrl);
     };
 
     Ok(iter::once(ip)
@@ -38,9 +38,11 @@ pub fn from_url(url: &str) -> std::result::Result<Multiaddr, FromUrlErr> {
         .collect())
 }
 
-/// Error while parsing a WebSockets URL.
+/// Error while parsing an URL.
 #[derive(Debug)]
 pub enum FromUrlErr {
+    /// Failed to parse the URL.
+    BadUrl,
     /// The URL scheme was not recognized.
     WrongScheme,
 }
@@ -48,6 +50,7 @@ pub enum FromUrlErr {
 impl fmt::Display for FromUrlErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            FromUrlErr::BadUrl => write!(f, "Bad URL"),
             FromUrlErr::WrongScheme => write!(f, "Unrecognized URL scheme"),
         }
     }
