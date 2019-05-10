@@ -82,6 +82,10 @@ where
             proto2: self.proto2.into_handler(remote_peer_id),
         }
     }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        SelectUpgrade::new(self.proto1.inbound_protocol(), self.proto2.inbound_protocol())
+    }
 }
 
 /// Implementation of `ProtocolsHandler` that combines two protocols into one.

@@ -429,9 +429,11 @@ pub trait IntoProtocolsHandler {
     /// The `PeerId` is the id of the node the handler is going to handle.
     fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler;
 
+    /// Return the handler's inbound protocol.
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol;
+
     /// Builds an implementation of `IntoProtocolsHandler` that handles both this protocol and the
     /// other one together.
-    #[inline]
     fn select<TProto2>(self, other: TProto2) -> IntoProtocolsHandlerSelect<Self, TProto2>
     where
         Self: Sized,
@@ -441,7 +443,6 @@ pub trait IntoProtocolsHandler {
 
     /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
     /// exclusively.
-    #[inline]
     fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
     where
         Self: Sized,
@@ -455,9 +456,12 @@ where T: ProtocolsHandler
 {
     type Handler = Self;
 
-    #[inline]
     fn into_handler(self, _: &PeerId) -> Self {
         self
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        self.listen_protocol().into_upgrade()
     }
 }
 

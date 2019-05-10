@@ -442,9 +442,7 @@ where TBehaviour: NetworkBehaviour,
     pub fn build(mut self) -> Swarm<TTransport, TBehaviour> {
         let supported_protocols = self.behaviour
             .new_handler()
-            .into_handler(&self.local_peer_id)
-            .listen_protocol()
-            .into_upgrade()
+            .inbound_protocol()
             .protocol_info()
             .into_iter()
             .map(|info| info.protocol_name().to_vec())
