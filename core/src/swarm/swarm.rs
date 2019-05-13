@@ -377,7 +377,7 @@ impl<'a> PollParameters<'a> {
     }
 
     /// Returns the list of the addresses nodes can use to reach us.
-    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> + Clone {
+    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
         self.external_addrs.clone()
     }
 

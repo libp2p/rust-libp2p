@@ -350,7 +350,7 @@ where
         }
     }
 
-    /// Consumes the query and returns the targe tand known closest peers.
+    /// Consumes the query and returns the target and known closest peers.
     ///
     /// > **Note**: This can be called at any time, but you normally only do that once the query
     /// >           is finished.

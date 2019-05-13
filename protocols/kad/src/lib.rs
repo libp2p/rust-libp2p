@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Kademlia protocol. Allows peer discovery, records store and records fetch.
+//! Implementation of the Kademlia protocol for libp2p.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store
