@@ -9,10 +9,11 @@ use std::{error, fmt, iter, net::IpAddr};
 ///
 /// The supported URL schemes are:
 ///
-/// - `ws://`
-/// - `wss://`
-/// - `http://`
-/// - `https://`
+/// - `ws://example.com/`
+/// - `wss://example.com/`
+/// - `http://example.com/`
+/// - `https://example.com/`
+/// - `unix:/foo/bar`
 ///
 /// # Example
 ///
@@ -46,13 +47,22 @@ pub fn from_url_lossy(url: &str) -> std::result::Result<Multiaddr, FromUrlErr> {
 fn from_url_inner(url: &str, lossy: bool) -> std::result::Result<Multiaddr, FromUrlErr> {
     let url = url::Url::parse(url).map_err(|_| FromUrlErr::BadUrl)?;
 
-    let (protocol, default_port) = match url.scheme() {
+    match url.scheme() {
         // Note: if you add support for a new scheme, please update the documentation as well.
+        "ws" | "wss" | "http" | "https" => from_url_inner_http_ws(url, lossy),
+        "unix" => from_url_inner_path(url, lossy),
+        _ => Err(FromUrlErr::UnsupportedScheme)
+    }
+}
+
+/// Called when `url.scheme()` is an Internet-like URL.
+fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Multiaddr, FromUrlErr> {
+    let (protocol, default_port) = match url.scheme() {
         "ws" => (Protocol::Ws, 80),
         "wss" => (Protocol::Wss, 443),
         "http" => (Protocol::Http, 80),
         "https" => (Protocol::Https, 443),
-        _ => return Err(FromUrlErr::UnsupportedScheme)
+        _ => unreachable!("We only call this function for one of the given schemes; qed")
     };
 
     let port = Protocol::Tcp(url.port().unwrap_or(default_port));
@@ -79,6 +89,24 @@ fn from_url_inner(url: &str, lossy: bool) -> std::result::Result<Multiaddr, From
         .chain(iter::once(port))
         .chain(iter::once(protocol))
         .collect())
+}
+
+/// Called when `url.scheme()` is a path-like URL.
+fn from_url_inner_path(url: url::Url, lossy: bool) -> std::result::Result<Multiaddr, FromUrlErr> {
+    let protocol = match url.scheme() {
+        "unix" => Protocol::Unix(url.path().to_owned().into()),
+        _ => unreachable!("We only call this function for one of the given schemes; qed")
+    };
+
+    if !lossy {
+        if !url.username().is_empty() || url.password().is_some() ||
+            url.query().is_some() || url.fragment().is_some()
+        {
+            return Err(FromUrlErr::InformationLoss);
+        }
+    }
+
+    Ok(Multiaddr::from(protocol))
 }
 
 /// Error while parsing an URL.
@@ -225,5 +253,11 @@ mod tests {
         let addr = "http://example.com:1000/#foo";
         assert!(from_url(addr).is_err());
         assert!(from_url_lossy(addr).is_ok());
+    }
+
+    #[test]
+    fn unix() {
+        let addr = from_url("unix:/foo/bar").unwrap();
+        assert_eq!(addr, Multiaddr::from(Protocol::Unix("/foo/bar".into())));
     }
 }
