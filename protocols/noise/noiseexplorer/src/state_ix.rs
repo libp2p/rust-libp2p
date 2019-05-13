@@ -249,14 +249,18 @@ impl HandshakeState {
 	pub(crate) fn clear(&mut self,) {
 		self.s.clear();
 		self.e.clear();
-		self.rs.clear();
 		self.re.clear();
 		self.psk.clear();
 	}
 
+    pub fn get_remote_static_public_key(&self) -> PublicKey {
+         self.rs
+    }
+
 	pub(crate) fn set_ephemeral_keypair(&mut self, e: Keypair,) {
 		self.e = e;
 	}
+
 	pub(crate) fn initialize_initiator(prologue: &[u8], s: Keypair, rs: PublicKey, psk: Psk) -> HandshakeState {
 		let protocol_name = b"Noise_IX_25519_ChaChaPoly_BLAKE2s";
 		let mut ss: SymmetricState = SymmetricState::initialize_symmetric(&protocol_name[..]);

@@ -86,7 +86,6 @@ impl NoiseSession {
                 let plaintext = a.recv_message(ciphertext)?;
                 Ok((plaintext.as_bytes().clone(), plaintext.as_bytes().len()))
             }
-            _ => Err(NoiseError::__Nonexhaustive),
         }
     }
     pub fn write_message(&mut self, input: &[u8]) -> Result<(Vec<u8>, usize), NoiseError> {
@@ -106,7 +105,6 @@ impl NoiseSession {
                 let ciphertext = a.send_message(plaintext)?;
                 Ok((ciphertext.as_bytes().clone(), ciphertext.as_bytes().len()))
             }
-            _ => Err(NoiseError::__Nonexhaustive),
         }
     }
     fn get_remote_static(&self) -> Result<[u8; 32], NoiseError> {
@@ -114,7 +112,6 @@ impl NoiseSession {
             NoiseSession::ik(a) => Ok(a.get_remote_static_public_key().as_bytes()),
             NoiseSession::ix(a) => Ok(a.get_remote_static_public_key().as_bytes()),
             NoiseSession::xx(a) => Ok(a.get_remote_static_public_key().as_bytes()),
-            _ => Err(NoiseError::__Nonexhaustive),
         }
     }
 }
@@ -149,7 +146,7 @@ where
     type Future = rt1::NoiseInboundFuture<Negotiated<T>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        if let Ok(prologue) = Message::from_bytes(b"Noise_IX_25519_ChaChaPoly_Blake2s") {
+        let prologue = Message::from_bytes(b"Noise_IX_25519_ChaChaPoly_Blake2s").unwrap();
             let session = NoiseSession::ix(noisesession_ix::NoiseSession::init_session(
                 false,
                 prologue,
@@ -157,8 +154,6 @@ where
                 PublicKey::empty(),
             ));
             return rt1::NoiseInboundFuture::new(socket, session);
-        }
-        panic!("Should not panic");
     }
 }
 
@@ -172,7 +167,7 @@ where
     type Future = rt1::NoiseOutboundFuture<Negotiated<T>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        if let Ok(prologue) = Message::from_bytes(b"Noise_IX_25519_ChaChaPoly_Blake2s") {
+        let prologue = Message::from_bytes(b"Noise_IX_25519_ChaChaPoly_Blake2s").unwrap();
             let session = NoiseSession::ix(noisesession_ix::NoiseSession::init_session(
                 true,
                 prologue,
@@ -180,8 +175,6 @@ where
                 PublicKey::empty(),
             ));
             return rt1::NoiseOutboundFuture::new(socket, session);
-        }
-        panic!("Should not panic");
     }
 }
 
@@ -215,7 +208,7 @@ where
     type Future = rt15::NoiseInboundFuture<Negotiated<T>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        if let Ok(prologue) = Message::from_bytes(b"Noise_XX_25519_ChaChaPoly_Blake2s") {
+        let prologue = Message::from_bytes(b"Noise_IX_25519_ChaChaPoly_Blake2s").unwrap();
             let session = NoiseSession::xx(noisesession_xx::NoiseSession::init_session(
                 false,
                 prologue,
@@ -223,8 +216,6 @@ where
                 PublicKey::empty(),
             ));
             return rt15::NoiseInboundFuture::new(socket, session);
-        }
-        panic!("Should not panic");
     }
 }
 
@@ -238,7 +229,7 @@ where
     type Future = rt15::NoiseOutboundFuture<Negotiated<T>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        if let Ok(prologue) = Message::from_bytes(b"Noise_XX_25519_ChaChaPoly_Blake2s") {
+        let prologue = Message::from_bytes(b"Noise_XX_25519_ChaChaPoly_Blake2s").unwrap();
             let session = NoiseSession::xx(noisesession_xx::NoiseSession::init_session(
                 true,
                 prologue,
@@ -246,8 +237,6 @@ where
                 PublicKey::empty(),
             ));
             return rt15::NoiseOutboundFuture::new(socket, session);
-        }
-        panic!("Should not panic");
     }
 }
 
@@ -285,7 +274,7 @@ where
     type Future = rt1::NoiseInboundFuture<Negotiated<T>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        if let Ok(prologue) = Message::from_bytes(b"Noise_IK_25519_ChaChaPoly_Blake2s") {
+        let prologue = Message::from_bytes(b"Noise_IK_25519_ChaChaPoly_Blake2s").unwrap();
             let session = NoiseSession::ik(noisesession_ik::NoiseSession::init_session(
                 false,
                 prologue,
@@ -293,8 +282,6 @@ where
                 PublicKey::from_bytes(self.1),
             ));
             return rt1::NoiseInboundFuture::new(socket, session);
-        }
-        panic!("Should not panic");
     }
 }
 
@@ -308,7 +295,7 @@ where
     type Future = rt1::NoiseOutboundFuture<Negotiated<T>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        if let Ok(prologue) = Message::from_bytes(b"Noise_IK_25519_ChaChaPoly_Blake2s") {
+        let prologue = Message::from_bytes(b"Noise_IK_25519_ChaChaPoly_Blake2s").unwrap();
             let session = NoiseSession::ik(noisesession_ik::NoiseSession::init_session(
                 true,
                 prologue,
@@ -316,7 +303,5 @@ where
                 PublicKey::from_bytes(self.1),
             ));
             return rt1::NoiseOutboundFuture::new(socket, session);
-        }
-        panic!("Should not panic");
     }
 }

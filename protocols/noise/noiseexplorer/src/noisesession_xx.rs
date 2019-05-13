@@ -62,6 +62,10 @@ impl NoiseSession {
 		self.hs.set_ephemeral_keypair(e,);
 	}
 
+      pub fn get_remote_static_public_key(&self) -> PublicKey {
+         self.hs.get_remote_static_public_key()
+     }
+
 	/// Instantiates a `NoiseSession` object. Takes the following as parameters:
 	/// - `initiator`: `bool` variable. To be set as `true` when initiating a handshake with a remote party, or `false` otherwise.
 	/// - `prologue`: `Message` object. Could optionally contain the name of the protocol to be used.
