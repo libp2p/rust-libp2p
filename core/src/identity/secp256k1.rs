@@ -124,9 +124,7 @@ impl SecretKey {
     ///
     /// [RFC3278]: https://tools.ietf.org/html/rfc3278#section-8.2
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        let m = Message::from_slice(Sha256::digest(&msg).as_ref())
-            .expect("digest output length doesn't match secp256k1 input length");
-        SECP.sign(&m, &self.0).serialize_der()
+        self.sign_hash(Sha256::digest(&msg).as_ref()).expect("digest output length doesn't match secp256k1 input length")
     }
 
     /// Sign a raw message of length 256 bits with this secret key, produces a DER-encoded
@@ -144,9 +142,7 @@ pub struct PublicKey(secp::key::PublicKey);
 impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        Message::from_slice(&Sha256::digest(msg))
-            .and_then(|m| Signature::from_der(sig)
-                .and_then(|s| SECP.verify(&m, &s, &self.0))).is_ok()
+        self.verify_hash(&Sha256::digest(msg), sig)
     }
 
     /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
@@ -160,6 +156,11 @@ impl PublicKey {
     /// represented by a single bit.
     pub fn encode(&self) -> [u8; 33] {
         self.0.serialize()
+    }
+
+    /// Encode the public key in uncompressed form. 
+    pub fn encode_uncompressed(&self) -> [u8; 65] {
+        self.0.serialize_uncompressed()
     }
 
     /// Decode a public key from a byte slice in the the format produced
