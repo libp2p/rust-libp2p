@@ -20,12 +20,12 @@
 
 //! Secp256k1 keys.
 
-use super::error::{DecodingError, SigningError};
-use asn1_der::{DerObject, FromDerObject};
+use asn1_der::{FromDerObject, DerObject};
 use lazy_static::lazy_static;
-use secp::{Message, Signature};
-use secp256k1 as secp;
 use sha2::{Digest as ShaDigestTrait, Sha256};
+use secp256k1 as secp;
+use secp::{Message, Signature};
+use super::error::{DecodingError, SigningError};
 use zeroize::Zeroize;
 
 // Cached `Secp256k1` context, to avoid recreating it every time.
@@ -37,7 +37,7 @@ lazy_static! {
 #[derive(Clone)]
 pub struct Keypair {
     secret: SecretKey,
-    public: PublicKey,
+    public: PublicKey
 }
 
 impl Keypair {
@@ -110,12 +110,10 @@ impl SecretKey {
         let obj: Vec<DerObject> = FromDerObject::deserialize((&*der_obj).iter())
             .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey", e))?;
         der_obj.zeroize();
-        let sk_obj = obj
-            .into_iter()
-            .nth(1)
+        let sk_obj = obj.into_iter().nth(1)
             .ok_or_else(|| "Not enough elements in DER".to_string())?;
-        let mut sk_bytes: Vec<u8> =
-            FromDerObject::from_der_object(sk_obj).map_err(|e| e.to_string())?;
+        let mut sk_bytes: Vec<u8> = FromDerObject::from_der_object(sk_obj)
+            .map_err(|e| e.to_string())?;
         let sk = SecretKey::from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
         Ok(sk)
@@ -147,8 +145,8 @@ impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         Message::from_slice(&Sha256::digest(msg))
-            .and_then(|m| Signature::from_der(sig).and_then(|s| SECP.verify(&m, &s, &self.0)))
-            .is_ok()
+            .and_then(|m| Signature::from_der(sig)
+                .and_then(|s| SECP.verify(&m, &s, &self.0))).is_ok()
     }
 
     /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
@@ -187,3 +185,4 @@ mod tests {
         assert_eq!(sk_bytes, [0; 32]);
     }
 }
+

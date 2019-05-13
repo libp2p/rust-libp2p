@@ -113,6 +113,13 @@ impl PublicKey {
         ed25519::Signature::from_bytes(sig).map(|s| self.0.verify(msg, &s)).is_ok()
     }
 
+    /// Verify the Ed25519 signature on a pre-hashed message with an optional context using the public key.
+    pub fn verify_prehashed<D>(&self, prehashed_msg: D, context: Option<&[u8]>, sig: &[u8]) -> bool 
+        where D: Digest<OutputSize = U64>
+    {
+        ed25519::Signature::from_bytes(sig).map(|s| self.0.verify_prehashed(prehashed_msg, context, &s)).is_ok()
+    }
+
     /// Encode the public key into a byte array in compressed form, i.e.
     /// where one coordinate is represented by a single bit.
     pub fn encode(&self) -> [u8; 32] {
