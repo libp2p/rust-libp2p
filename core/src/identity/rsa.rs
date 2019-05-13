@@ -24,7 +24,7 @@ use asn1_der::{Asn1Der, FromDerObject, IntoDerObject, DerObject, DerTag, DerValu
 use lazy_static::lazy_static;
 use super::error::*;
 use ring::rand::SystemRandom;
-use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
+use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256, RsaEncoding, VerificationAlgorithm};
 use ring::signature::KeyPair;
 use std::sync::Arc;
 use untrusted::Input;
@@ -60,6 +60,16 @@ impl Keypair {
             Err(e) => Err(SigningError::new("RSA", e))
         }
     }
+
+    /// Sign a message with this keypair using a custom digest algorithm.
+    pub fn sign_custom(&self, data: &[u8], algorithm: &'static dyn RsaEncoding) -> Result<Vec<u8>, SigningError> {
+        let mut signature = vec![0; self.0.public_modulus_len()];
+        let rng = SystemRandom::new();
+        match self.0.sign(algorithm, &rng, &data, &mut signature) {
+            Ok(()) => Ok(signature),
+            Err(e) => Err(SigningError::new("RSA", e))
+        }
+    }
 }
 
 /// An RSA public key.
@@ -70,6 +80,15 @@ impl PublicKey {
     /// Verify an RSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         signature::verify(&RSA_PKCS1_2048_8192_SHA256,
+                          Input::from(&self.0),
+                          Input::from(msg),
+                          Input::from(sig)).is_ok()
+    }
+
+    /// Verify an RSA signature on a message using the public key and a custom verification
+    /// algorithm.
+    pub fn verify_custom(&self, msg: &[u8], sig: &[u8], algorithm: &dyn VerificationAlgorithm) -> bool {
+        signature::verify(algorithm,
                           Input::from(&self.0),
                           Input::from(msg),
                           Input::from(sig)).is_ok()

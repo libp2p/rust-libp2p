@@ -133,7 +133,7 @@ impl SecretKey {
 
     /// Sign a raw message of length 256 bits with this secret key, produces a DER-encoded
     /// ECDSA signature.
-    pub fn sign_raw(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
+    pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         let m = Message::from_slice(&msg).map_err(|e| SigningError::new("Secp256k1 Message", e))?;
         Ok(SECP.sign(&m, &self.0).serialize_der())
     }
@@ -152,7 +152,7 @@ impl PublicKey {
     }
 
     /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
-    pub fn verify_raw(&self, msg: &[u8], sig: &[u8]) -> bool {
+    pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
         Message::from_slice(&msg)
             .and_then(|m| Signature::from_der(sig).and_then(|s| SECP.verify(&m, &s, &self.0)))
             .is_ok()
