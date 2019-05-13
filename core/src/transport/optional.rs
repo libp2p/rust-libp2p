@@ -22,6 +22,11 @@ use crate::transport::{Transport, TransportError};
 use multiaddr::Multiaddr;
 
 /// Transport that is possibly disabled.
+///
+/// An `OptionalTransport<T>` is a wrapper around an `Option<T>`. If it is disabled (read: contains
+/// `None`), then any attempt to dial or listen will return `MultiaddrNotSupported`. If it is
+/// enabled (read: contains `Some`), then dialing and listening will be handled by the inner
+/// transport.
 #[derive(Debug, Copy, Clone)]
 pub struct OptionalTransport<T>(Option<T>);
 
