@@ -24,7 +24,7 @@ use std::{
     str::FromStr
 };
 pub use self::errors::{Result, Error};
-pub use self::from_url::{FromUrlErr, from_url};
+pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 pub use self::protocol::Protocol;
 
 /// Representation of a Multiaddr.
