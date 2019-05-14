@@ -44,7 +44,7 @@ jobs:
 
   test-wasm:
     docker:
-      - image: tomaka/cargo-web
+      - image: parity/rust-builder:latest
     steps:
       - checkout
       - restore_cache:
@@ -56,8 +56,9 @@ jobs:
       - save_cache:
           key: test-wasm-cache
           paths:
-            - "~/.cargo"
             - "./target"
+            - "/usr/local/cargo"
+            - "/root/.cache/sccache"
 
   test-win32:
     docker:
