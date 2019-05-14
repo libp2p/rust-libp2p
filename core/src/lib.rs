@@ -81,6 +81,7 @@ pub mod upgrade;
 
 pub use multiaddr::Multiaddr;
 pub use muxing::StreamMuxer;
+pub use nodes::raw_swarm::ConnectedPoint;
 pub use peer_id::PeerId;
 pub use protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use identity::PublicKey;
