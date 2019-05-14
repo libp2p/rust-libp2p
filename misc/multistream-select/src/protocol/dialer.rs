@@ -27,7 +27,7 @@ use crate::protocol::ListenerToDialerMessage;
 use crate::protocol::MultistreamSelectError;
 use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use futures::{prelude::*, sink, Async, StartSend, try_ready};
-use std::io;
+use std::{io, marker::PhantomData};
 use tokio_codec::Encoder;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::{decode, codec::Uvi};
@@ -37,6 +37,30 @@ use unsigned_varint::{decode, codec::Uvi};
 pub struct Dialer<R, N> {
     inner: LengthDelimited<R, MessageEncoder<N>>,
     handshake_finished: bool
+}
+
+impl<R, N> Dialer<R, N> {
+    /// Grants access to the socket. You should only ever use this if you're not going to send
+    /// anything anymore using the `Sink` API.
+    ///
+    /// Be extra careful when you use this method in order to not trigger logic errors.
+    pub fn get_ref(&self) -> &R {
+        self.inner.get_ref()
+    }
+
+    /// Grants access to the socket. You should only ever use this if you're not going to send
+    /// anything anymore using the `Sink` API.
+    ///
+    /// This method is only ever intended to be used for writing. Be extra careful when you use it
+    /// in order to not trigger logic errors.
+    pub fn get_mut(&mut self) -> &mut R {
+        self.inner.get_mut()
+    }
+
+    /// Grants back the socket. Typically used after a `ProtocolAck` has been received.
+    pub fn into_inner(self) -> R {
+        self.inner.into_inner()
+    }
 }
 
 impl<R, N> Dialer<R, N>
@@ -52,10 +76,13 @@ where
         }
     }
 
-    /// Grants back the socket. Typically used after a `ProtocolAck` has been received.
-    #[inline]
-    pub fn into_inner(self) -> R {
-        self.inner.into_inner()
+    /// Changes the `N` type parameter.
+    pub fn map_param<N2: AsRef<[u8]>>(self) -> Dialer<R, N2> {
+        let handshake_finished = self.handshake_finished;
+        Dialer {
+            inner: LengthDelimited::new(self.into_inner(), MessageEncoder(PhantomData)),
+            handshake_finished,
+        }
     }
 }
 
@@ -89,7 +116,7 @@ where
 
 impl<R, N> Stream for Dialer<R, N>
 where
-    R: AsyncRead + AsyncWrite
+    R: AsyncRead
 {
     type Item = ListenerToDialerMessage<Bytes>;
     type Error = MultistreamSelectError;

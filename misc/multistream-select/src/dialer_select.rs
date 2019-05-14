@@ -51,8 +51,13 @@ where
     I::Item: AsRef<[u8]>
 {
     let iter = protocols.into_iter();
-    // We choose between the "serial" and "parallel" strategies based on the number of protocols.
-    if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
+
+    // We choose which negotiation strategy to use based on the number of protocols.
+    if iter.size_hint().0 == 1 && iter.size_hint().1.map(|n| n == 1).unwrap_or(false) {
+        let protocol = iter.into_iter().next()
+            .expect("iterator hint returns a minimum length of 1 but its actual length is 0");
+        DialerSelectFuture::One(dialer_select_proto_one(inner, protocol))
+    } else if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
         DialerSelectFuture::Serial(dialer_select_proto_serial(inner, iter))
     } else {
         DialerSelectFuture::Parallel(dialer_select_proto_parallel(inner, iter))
@@ -67,6 +72,8 @@ where
     I: Iterator,
     I::Item: AsRef<[u8]>
 {
+    /// We try a single protocol.
+    One(DialerSelectOne<R, I::Item>),
     /// We try protocols one by one.
     Serial(DialerSelectSeq<R, I>),
     /// We try protocols in parallel.
@@ -84,8 +91,118 @@ where
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
+            DialerSelectFuture::One(fut) => fut.poll(),
             DialerSelectFuture::Serial(fut) => fut.poll(),
             DialerSelectFuture::Parallel(fut) => fut.poll(),
+        }
+    }
+}
+
+/// Tries to negotiate a specific protocol on the substream. Assumes that the negotiation will
+/// succeed and immediately returns after starting the negotiation. If it turns out that the
+/// negotiation did not succeed, the stream will return an error.
+pub fn dialer_select_proto_one<R, P>(inner: R, protocol: P) -> DialerSelectOne<R, P>
+where
+    R: AsyncRead + AsyncWrite,
+    P: AsRef<[u8]>
+{
+    DialerSelectOne {
+        inner: DialerSelectOneState::AwaitDialer { dialer_fut: Dialer::dial(inner), proto_name: protocol }
+    }
+}
+
+/// Future returned by `dialer_select_proto_one`.
+pub struct DialerSelectOne<R, P>
+where
+    R: AsyncRead + AsyncWrite,
+    P: AsRef<[u8]>
+{
+    inner: DialerSelectOneState<R, P>
+}
+
+enum DialerSelectOneState<R, P>
+where
+    R: AsyncRead + AsyncWrite,
+    P: AsRef<[u8]>
+{
+    AwaitDialer {
+        dialer_fut: DialerFuture<R, P>,
+        proto_name: P
+    },
+    SendProtocol {
+        dialer: Dialer<R, P>,
+        proto_name: P,
+    },
+    FlushProtocol {
+        dialer: Dialer<R, P>,
+        proto_name: P,
+    },
+    Undefined
+}
+
+impl<R, P> Future for DialerSelectOne<R, P>
+where
+    R: AsyncRead + AsyncWrite,
+    P: AsRef<[u8]> + Clone
+{
+    type Item = (P, Negotiated<R>);
+    type Error = ProtocolChoiceError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            match mem::replace(&mut self.inner, DialerSelectOneState::Undefined) {
+                DialerSelectOneState::AwaitDialer { mut dialer_fut, proto_name } => {
+                    let dialer = match dialer_fut.poll()? {
+                        Async::Ready(d) => d,
+                        Async::NotReady => {
+                            self.inner = DialerSelectOneState::AwaitDialer { dialer_fut, proto_name };
+                            return Ok(Async::NotReady)
+                        }
+                    };
+                    self.inner = DialerSelectOneState::SendProtocol {
+                        dialer,
+                        proto_name
+                    }
+                }
+                DialerSelectOneState::SendProtocol { mut dialer, proto_name } => {
+                    trace!("sending {:?}", proto_name.as_ref());
+                    let req = DialerToListenerMessage::ProtocolRequest {
+                        name: proto_name.clone()
+                    };
+                    match dialer.start_send(req)? {
+                        AsyncSink::Ready => {
+                            self.inner = DialerSelectOneState::FlushProtocol {
+                                dialer,
+                                proto_name
+                            }
+                        }
+                        AsyncSink::NotReady(_) => {
+                            self.inner = DialerSelectOneState::SendProtocol {
+                                dialer,
+                                proto_name
+                            };
+                            return Ok(Async::NotReady)
+                        }
+                    }
+                }
+                DialerSelectOneState::FlushProtocol { mut dialer, proto_name } => {
+                    match dialer.poll_complete()? {
+                        Async::Ready(()) => {
+                            let stream = Negotiated::negotiating(dialer, proto_name.as_ref().to_vec());
+                            return Ok(Async::Ready((proto_name, stream)));
+                        }
+                        Async::NotReady => {
+                            self.inner = DialerSelectOneState::FlushProtocol {
+                                dialer,
+                                proto_name,
+                            };
+                            return Ok(Async::NotReady)
+                        }
+                    }
+                }
+                DialerSelectOneState::Undefined =>
+                    panic!("DialerSelectOneState::poll called after completion")
+            }
         }
     }
 }

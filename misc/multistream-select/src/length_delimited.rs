@@ -52,6 +52,40 @@ enum State {
     ReadingData { frame_len: u16 },
 }
 
+impl<R, C> LengthDelimited<R, C> {
+    /// Grants access to the underlying socket.
+    ///
+    /// Be extra careful when you use this method in order to not trigger logic errors.
+    pub fn get_ref(&self) -> &R {
+        self.inner.get_ref()
+    }
+
+    /// Grants access to the underlying socket.
+    ///
+    /// This method is only ever intended to be used for writing. Be extra careful when you use it
+    /// in order to not trigger logic errors.
+    pub fn get_mut(&mut self) -> &mut R {
+        self.inner.get_mut()
+    }
+
+    /// Destroys the `LengthDelimited` and returns the underlying socket.
+    ///
+    /// Contrary to its equivalent `tokio_io::codec::length_delimited::FramedRead`, this method is
+    /// guaranteed not to skip any data from the socket.
+    ///
+    /// # Panic
+    ///
+    /// Will panic if called while there is data inside the buffer. **This can only happen if
+    /// you call `poll()` manually**. Using this struct as it is intended to be used (i.e. through
+    /// the modifiers provided by the `futures` crate) will always leave the object in a state in
+    /// which `into_inner()` will not panic.
+    pub fn into_inner(self) -> R {
+        assert_eq!(self.state, State::ReadingLength);
+        assert_eq!(self.internal_buffer_pos, 0);
+        self.inner.into_inner()
+    }
+}
+
 impl<R, C> LengthDelimited<R, C>
 where
     R: AsyncWrite,
@@ -68,24 +102,6 @@ where
             internal_buffer_pos: 0,
             state: State::ReadingLength
         }
-    }
-
-    /// Destroys the `LengthDelimited` and returns the underlying socket.
-    ///
-    /// Contrary to its equivalent `tokio_io::codec::length_delimited::FramedRead`, this method is
-    /// guaranteed not to skip any data from the socket.
-    ///
-    /// # Panic
-    ///
-    /// Will panic if called while there is data inside the buffer. **This can only happen if
-    /// you call `poll()` manually**. Using this struct as it is intended to be used (i.e. through
-    /// the modifiers provided by the `futures` crate) will always leave the object in a state in
-    /// which `into_inner()` will not panic.
-    #[inline]
-    pub fn into_inner(self) -> R {
-        assert_eq!(self.state, State::ReadingLength);
-        assert_eq!(self.internal_buffer_pos, 0);
-        self.inner.into_inner()
     }
 }
 
