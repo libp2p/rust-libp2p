@@ -171,7 +171,7 @@ where
                         }
                     };
                     if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, Negotiated(listener.into_inner()), protocols)))
+                        return Ok(Async::Ready((p, Negotiated::finished(listener.into_inner()), protocols)))
                     } else {
                         let stream = listener.into_future();
                         self.inner = ListenerSelectState::Incoming { stream, protocols }
