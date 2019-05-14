@@ -24,7 +24,7 @@ use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use lazy_static::lazy_static;
 use libp2p_core::UpgradeInfo;
-use libp2p_core::identity::ed25519;
+use libp2p_core::{identity, identity::ed25519};
 use rand::Rng;
 use ring::digest::{SHA512, digest};
 use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
@@ -92,7 +92,7 @@ impl UpgradeInfo for NoiseConfig<IK, X25519> {
     }
 }
 
-impl UpgradeInfo for NoiseConfig<IK, X25519, PublicKey<X25519>> {
+impl UpgradeInfo for NoiseConfig<IK, X25519, (PublicKey<X25519>, identity::PublicKey)> {
     type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;
 
@@ -123,6 +123,14 @@ impl Protocol<X25519> for X25519 {
         pk.copy_from_slice(bytes);
         Ok(PublicKey(X25519(pk)))
     }
+
+    fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<X25519>) -> bool {
+        if let identity::PublicKey::Ed25519(ref p) = id_pk {
+            PublicKey::from_ed25519(p).as_ref() == dh_pk.as_ref()
+        } else {
+            false
+        }
+    }
 }
 
 impl Keypair<X25519> {
@@ -142,6 +150,38 @@ impl Keypair<X25519> {
         let sk = SecretKey(X25519(sk_bytes)); // Copy
         sk_bytes.zeroize();
         Self::from(sk)
+    }
+
+    /// Creates an X25519 `Keypair` from an [`identity::Keypair`], if possible.
+    ///
+    /// The returned keypair will be [associated with](KeypairIdentity) the
+    /// given identity keypair.
+    ///
+    /// Returns `None` if the given identity keypair cannot be used as an X25519 keypair.
+    ///
+    /// > **Note**: If the identity keypair is already used in the context
+    /// > of other cryptographic protocols outside of Noise, e.g. for
+    /// > signing in the `secio` protocol, it should be preferred to
+    /// > create a new static X25519 keypair for use in the Noise protocol.
+    /// >
+    /// > See also:
+    /// >
+    /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
+    pub fn from_identity(id_keys: &identity::Keypair) -> Option<AuthenticKeypair<X25519>> {
+        match id_keys {
+            identity::Keypair::Ed25519(p) => {
+                let kp = Keypair::from(SecretKey::from_ed25519(&p.secret()));
+                let id = KeypairIdentity {
+                    public: id_keys.public(),
+                    signature: None
+                };
+                Some(AuthenticKeypair {
+                    keypair: kp,
+                    identity: id
+                })
+            }
+            _ => None
+        }
     }
 }
 
@@ -166,15 +206,15 @@ impl PublicKey<X25519> {
 impl SecretKey<X25519> {
     /// Construct a X25519 secret key from a Ed25519 secret key.
     ///
-    /// *Note*: If the Ed25519 secret key is already used in the context
-    /// of other cryptographic protocols outside of Noise, e.g. for
-    /// signing in the `secio` protocol, it should be preferred to
-    /// create a new keypair for use in the Noise protocol.
-    ///
-    /// See also:
-    ///
-    /// [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
-    /// [Ed25519 to Curve25519](https://libsodium.gitbook.io/doc/advanced/ed25519-curve25519)
+    /// > **Note**: If the Ed25519 secret key is already used in the context
+    /// > of other cryptographic protocols outside of Noise, e.g. for
+    /// > signing in the `secio` protocol, it should be preferred to
+    /// > create a new keypair for use in the Noise protocol.
+    /// >
+    /// > See also:
+    /// >
+    /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
+    /// >  * [Ed25519 to Curve25519](https://libsodium.gitbook.io/doc/advanced/ed25519-curve25519)
     pub fn from_ed25519(ed25519_sk: &ed25519::SecretKey) -> Self {
         // An Ed25519 public key is derived off the left half of the SHA512 of the
         // secret scalar, hence a matching conversion of the secret key must do

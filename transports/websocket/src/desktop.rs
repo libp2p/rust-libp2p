@@ -19,9 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{Future, IntoFuture, Sink, Stream};
-use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
 use log::{debug, trace};
-use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::{error, fmt};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -276,8 +279,11 @@ mod tests {
     use libp2p_tcp as tcp;
     use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
-    use multiaddr::{Multiaddr, Protocol};
-    use libp2p_core::{Transport, transport::ListenerEvent};
+    use libp2p_core::{
+        Transport,
+        multiaddr::Protocol,
+        transport::ListenerEvent
+    };
     use super::WsConfig;
 
     #[test]

@@ -68,11 +68,17 @@ where
     A: AsyncRead,
     B: AsyncRead,
 {
-    #[inline]
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         match self {
             EitherOutput::First(a) => a.prepare_uninitialized_buffer(buf),
             EitherOutput::Second(b) => b.prepare_uninitialized_buffer(buf),
+        }
+    }
+
+    fn read_buf<Bu: bytes::BufMut>(&mut self, buf: &mut Bu) -> Poll<usize, IoError> {
+        match self {
+            EitherOutput::First(a) => a.read_buf(buf),
+            EitherOutput::Second(b) => b.read_buf(buf),
         }
     }
 }
@@ -134,11 +140,12 @@ where
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type OutboundSubstream = EitherOutbound<A, B>;
+    type Error = IoError;
 
-    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, Self::Error> {
         match self {
-            EitherOutput::First(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::First)),
-            EitherOutput::Second(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::Second)),
+            EitherOutput::First(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::First)).map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into()),
         }
     }
 
@@ -149,13 +156,13 @@ where
         }
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, Self::Error> {
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::First))
+                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::First)).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::Second))
+                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
@@ -178,49 +185,56 @@ where
         }
     }
 
-    fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        match self {
+            EitherOutput::First(ref inner) => inner.prepare_uninitialized_buffer(buf),
+            EitherOutput::Second(ref inner) => inner.prepare_uninitialized_buffer(buf),
+        }
+    }
+
+    fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.read_substream(sub, buf)
+                inner.read_substream(sub, buf).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.read_substream(sub, buf)
+                inner.read_substream(sub, buf).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, IoError> {
+    fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, Self::Error> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.write_substream(sub, buf)
+                inner.write_substream(sub, buf).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.write_substream(sub, buf)
+                inner.write_substream(sub, buf).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
+    fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), Self::Error> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.flush_substream(sub)
+                inner.flush_substream(sub).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.flush_substream(sub)
+                inner.flush_substream(sub).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), Self::Error> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.shutdown_substream(sub)
+                inner.shutdown_substream(sub).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.shutdown_substream(sub)
+                inner.shutdown_substream(sub).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
@@ -250,17 +264,17 @@ where
         }
     }
 
-    fn close(&self) -> Poll<(), IoError> {
+    fn close(&self) -> Poll<(), Self::Error> {
         match self {
-            EitherOutput::First(inner) => inner.close(),
-            EitherOutput::Second(inner) => inner.close()
+            EitherOutput::First(inner) => inner.close().map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.close().map_err(|e| e.into()),
         }
     }
 
-    fn flush_all(&self) -> Poll<(), IoError> {
+    fn flush_all(&self) -> Poll<(), Self::Error> {
         match self {
-            EitherOutput::First(inner) => inner.flush_all(),
-            EitherOutput::Second(inner) => inner.flush_all()
+            EitherOutput::First(inner) => inner.flush_all().map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.flush_all().map_err(|e| e.into()),
         }
     }
 }

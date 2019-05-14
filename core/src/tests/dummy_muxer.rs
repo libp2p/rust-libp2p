@@ -79,6 +79,7 @@ impl DummyMuxer {
 impl StreamMuxer for DummyMuxer {
     type Substream = DummySubstream;
     type OutboundSubstream = DummyOutboundSubstream;
+    type Error = IoError;
     fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.in_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),

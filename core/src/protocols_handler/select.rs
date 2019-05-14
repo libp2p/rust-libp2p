@@ -30,6 +30,7 @@ use crate::{
         ProtocolsHandlerEvent,
         ProtocolsHandlerUpgrErr,
     },
+    nodes::raw_swarm::ConnectedPoint,
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -76,11 +77,15 @@ where
 {
     type Handler = ProtocolsHandlerSelect<TProto1::Handler, TProto2::Handler>;
 
-    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler {
         ProtocolsHandlerSelect {
-            proto1: self.proto1.into_handler(remote_peer_id),
-            proto2: self.proto2.into_handler(remote_peer_id),
+            proto1: self.proto1.into_handler(remote_peer_id, connected_point),
+            proto2: self.proto2.into_handler(remote_peer_id, connected_point),
         }
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        SelectUpgrade::new(self.proto1.inbound_protocol(), self.proto2.inbound_protocol())
     }
 }
 

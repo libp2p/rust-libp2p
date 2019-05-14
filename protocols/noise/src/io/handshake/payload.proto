@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+// Payloads for Noise handshake messages.
+
+message Identity {
+	bytes pubkey = 1;
+	bytes signature = 2;
+}
+

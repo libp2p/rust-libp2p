@@ -32,8 +32,9 @@ use libp2p_core::protocols_handler::{
 };
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
-use std::{error, fmt, io, time::Duration, time::Instant};
+use std::{error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
+use wasm_timer::Instant;
 
 /// Protocol handler that handles Kademlia communications with the remote.
 ///
@@ -69,9 +70,6 @@ where
     /// We haven't started opening the outgoing substream yet.
     /// Contains the request we want to send, and the user data if we expect an answer.
     OutPendingOpen(KadRequestMsg, Option<TUserData>),
-    /// We are waiting for the outgoing substream to be upgraded.
-    /// Contains the request we want to send, and the user data if we expect an answer.
-    OutPendingUpgrade(KadRequestMsg, Option<TUserData>),
     /// Waiting to send a message to the remote.
     OutPendingSend(
         KadOutStreamSink<TSubstream>,
@@ -110,7 +108,6 @@ where
     fn try_close(self) -> AsyncSink<Self> {
         match self {
             SubstreamState::OutPendingOpen(_, _)
-            | SubstreamState::OutPendingUpgrade(_, _)
             | SubstreamState::OutReportError(_, _) => AsyncSink::Ready,
             SubstreamState::OutPendingSend(mut stream, _, _)
             | SubstreamState::OutPendingFlush(mut stream, _)
@@ -326,7 +323,7 @@ where
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Forever,
+            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -404,11 +401,8 @@ where
                 request_id,
             } => {
                 let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _)
-                        if conn_id == &request_id.connec_unique_id =>
-                    {
-                        true
-                    }
+                    SubstreamState::InWaitingUser(ref conn_id, _) =>
+                        conn_id == &request_id.connec_unique_id,
                     _ => false,
                 });
 
@@ -525,7 +519,7 @@ where
         if self.substreams.is_empty() {
             self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
         } else {
-            self.keep_alive = KeepAlive::Forever;
+            self.keep_alive = KeepAlive::Yes;
         }
 
         Ok(Async::NotReady)
@@ -561,11 +555,6 @@ where
             };
             (None, Some(ev), false)
         }
-        SubstreamState::OutPendingUpgrade(msg, user_data) => (
-            Some(SubstreamState::OutPendingUpgrade(msg, user_data)),
-            None,
-            false,
-        ),
         SubstreamState::OutPendingSend(mut substream, msg, user_data) => {
             match substream.start_send(msg) {
                 Ok(AsyncSink::Ready) => (
@@ -763,9 +752,11 @@ fn process_kad_response<TUserData>(
                 user_data,
             }
         }
-        KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
-            closer_peers,
-            user_data,
+        KadResponseMsg::FindNode { closer_peers } => {
+            KademliaHandlerEvent::FindNodeRes {
+                closer_peers,
+                user_data,
+            }
         },
         KadResponseMsg::GetProviders {
             closer_peers,

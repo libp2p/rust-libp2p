@@ -22,6 +22,7 @@ use crate::{
     PeerId,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     nodes::handled_node_tasks::IntoNodeHandler,
+    nodes::raw_swarm::ConnectedPoint,
     protocols_handler::{KeepAlive, ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
@@ -32,7 +33,7 @@ use crate::{
 };
 use futures::prelude::*;
 use std::{error, fmt, time::Duration};
-use tokio_timer::{Delay, Timeout};
+use wasm_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
@@ -69,7 +70,8 @@ where
     }
 }
 
-impl<TIntoProtoHandler, TProtoHandler> IntoNodeHandler for NodeHandlerWrapperBuilder<TIntoProtoHandler>
+impl<TIntoProtoHandler, TProtoHandler> IntoNodeHandler<(PeerId, ConnectedPoint)>
+    for NodeHandlerWrapperBuilder<TIntoProtoHandler>
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
     TProtoHandler: ProtocolsHandler,
@@ -78,9 +80,9 @@ where
 {
     type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
 
-    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+    fn into_handler(self, remote_info: &(PeerId, ConnectedPoint)) -> Self::Handler {
         NodeHandlerWrapper {
-            handler: self.handler.into_handler(remote_peer_id),
+            handler: self.handler.into_handler(&remote_info.0, &remote_info.1),
             negotiating_in: Vec::new(),
             negotiating_out: Vec::new(),
             queued_dial_upgrades: Vec::new(),
@@ -282,8 +284,8 @@ where
                     d.reset(t)
                 },
             (_, KeepAlive::Until(t)) => self.shutdown = Shutdown::Later(Delay::new(t)),
-            (_, KeepAlive::Now) => self.shutdown = Shutdown::Asap,
-            (_, KeepAlive::Forever) => self.shutdown = Shutdown::None
+            (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
+            (_, KeepAlive::Yes) => self.shutdown = Shutdown::None
         };
 
         match poll_result {

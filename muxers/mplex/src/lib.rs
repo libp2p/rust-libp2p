@@ -350,6 +350,7 @@ where C: AsyncRead + AsyncWrite
 {
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
+    type Error = IoError;
 
     fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         let mut inner = self.inner.lock();
@@ -457,6 +458,10 @@ where C: AsyncRead + AsyncWrite
     #[inline]
     fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
         // Nothing to do.
+    }
+
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
     }
 
     fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {

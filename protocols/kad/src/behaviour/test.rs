@@ -20,45 +20,52 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KademliaOut};
-use futures::prelude::*;
+use crate::{Kademlia, KademliaOut, kbucket::KBucketsPeerId};
+use futures::{future, prelude::*};
 use libp2p_core::{
-    multiaddr::Protocol,
-    upgrade::{self, InboundUpgradeExt, OutboundUpgradeExt},
     PeerId,
     Swarm,
-    Transport
+    Transport,
+    identity,
+    transport::{MemoryTransport, boxed::Boxed},
+    nodes::Substream,
+    multiaddr::{Protocol, multiaddr},
+    muxing::StreamMuxerBox,
+    upgrade,
 };
-use libp2p_core::{nodes::Substream, transport::boxed::Boxed, muxing::StreamMuxerBox};
-use std::io;
+use libp2p_secio::SecioConfig;
+use libp2p_yamux as yamux;
+use rand::random;
+use std::{io, u64};
+use tokio::runtime::Runtime;
+
+type TestSwarm = Swarm<
+    Boxed<(PeerId, StreamMuxerBox), io::Error>,
+    Kademlia<Substream<StreamMuxerBox>>
+>;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-/// This is to be used only for testing, and a panic will happen if something goes wrong.
-fn build_nodes(port_base: u64, num: usize)
-    -> Vec<Swarm<Boxed<(PeerId, StreamMuxerBox), io::Error>, Kademlia<Substream<StreamMuxerBox>>>>
-{
+fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
+    let port_base = 1 + random::<u64>() % (u64::MAX - num as u64);
     let mut result: Vec<Swarm<_, _>> = Vec::with_capacity(num);
 
-    for _ in 0..num {
+    for _ in 0 .. num {
         // TODO: make creating the transport more elegant ; literaly half of the code of the test
         //       is about creating the transport
-        let local_key = libp2p_core::identity::Keypair::generate_ed25519();
+        let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
-        let transport = libp2p_core::transport::MemoryTransport::default()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
+        let transport = MemoryTransport::default()
+            .with_upgrade(SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
                 let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = libp2p_yamux::Config::default()
-                    .map_inbound(move |muxer| (peer_id, muxer))
-                    .map_outbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-                    .map(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
+                let yamux = yamux::Config::default();
+                upgrade::apply(out.stream, yamux, endpoint)
+                    .map(|muxer| (peer_id, StreamMuxerBox::new(muxer)))
             })
             .map_err(|e| panic!("Failed to create transport: {:?}", e))
             .boxed();
 
-        let kad = Kademlia::without_init(local_public_key.clone().into_peer_id());
+        let kad = Kademlia::new(local_public_key.clone().into_peer_id());
         result.push(Swarm::new(transport, kad, local_public_key.into_peer_id()));
     }
 
@@ -68,140 +75,66 @@ fn build_nodes(port_base: u64, num: usize)
         i += 1
     }
 
-    result
+    (port_base, result)
 }
 
 #[test]
-fn basic_find_node() {
-    // Build two nodes. Node #2 only knows about node #1. Node #2 is asked for a random peer ID.
-    // Node #2 must return the identity of node #1.
+fn query_iter() {
+    fn run(n: usize) {
+        // Build `n` nodes. Node `n` knows about node `n-1`, node `n-1` knows about node `n-2`, etc.
+        // Node `n` is queried for a random peer and should return nodes `1..n-1` sorted by
+        // their distances to that peer.
 
-    let port_base = rand::random();
-    let mut swarms = build_nodes(port_base, 2);
-    let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
+        let (port_base, mut swarms) = build_nodes(n);
+        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
-    // Connect second to first.
-    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
+        // Connect each swarm in the list to its predecessor in the list.
+        for (i, (swarm, peer)) in &mut swarms.iter_mut().skip(1).zip(swarm_ids.clone()).enumerate() {
+            swarm.add_not_connected_address(&peer, Protocol::Memory(port_base + i as u64).into())
+        }
 
-    let search_target = PeerId::random();
-    swarms[1].find_node(search_target.clone());
+        // Ask the last peer in the list to search a random peer. The search should
+        // propagate backwards through the list of peers.
+        let search_target = PeerId::random();
+        swarms.last_mut().unwrap().find_node(search_target.clone());
 
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
-                            assert_eq!(key, search_target);
-                            assert_eq!(closer_peers.len(), 1);
-                            assert_eq!(closer_peers[0], first_peer_id);
-                            return Ok(Async::Ready(()));
+        // Set up expectations.
+        let expected_swarm_id = swarm_ids.last().unwrap().clone();
+        let expected_peer_ids: Vec<_> = swarm_ids
+            .iter().cloned().take(n - 1).collect();
+        let mut expected_distances: Vec<_> = expected_peer_ids
+            .iter().map(|p| p.distance_with(&search_target)).collect();
+        expected_distances.sort();
+
+        // Run test
+        Runtime::new().unwrap().block_on(
+            future::poll_fn(move || -> Result<_, io::Error> {
+                for (i, swarm) in swarms.iter_mut().enumerate() {
+                    loop {
+                        match swarm.poll().unwrap() {
+                            Async::Ready(Some(KademliaOut::FindNodeResult {
+                                key, closer_peers
+                            })) => {
+                                assert_eq!(key, search_target);
+                                assert_eq!(swarm_ids[i], expected_swarm_id);
+                                assert!(expected_peer_ids.iter().all(|p| closer_peers.contains(p)));
+                                assert_eq!(expected_distances,
+                                    closer_peers.iter()
+                                        .map(|p| p.distance_with(&key))
+                                        .collect::<Vec<_>>());
+                                return Ok(Async::Ready(()));
+                            }
+                            Async::Ready(_) => (),
+                            Async::NotReady => break,
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
                     }
                 }
-            }
+                Ok(Async::NotReady)
+            }))
+            .unwrap()
+    }
 
-            Ok(Async::NotReady)
-        }))
-        .unwrap();
-}
-
-#[test]
-fn direct_query() {
-    // Build three nodes. Node #2 knows about node #1. Node #3 knows about node #2. Node #3 is
-    // asked about a random peer and should return nodes #1 and #2.
-
-    let port_base = rand::random::<u64>() % (std::u64::MAX - 1);
-    let mut swarms = build_nodes(port_base, 3);
-
-    let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
-    let second_peer_id = Swarm::local_peer_id(&swarms[1]).clone();
-
-    // Connect second to first.
-    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
-
-    // Connect third to second.
-    swarms[2].add_not_connected_address(&second_peer_id, Protocol::Memory(port_base + 1).into());
-
-    // Ask third to search a random value.
-    let search_target = PeerId::random();
-    swarms[2].find_node(search_target.clone());
-
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
-                            assert_eq!(key, search_target);
-                            assert_eq!(closer_peers.len(), 2);
-                            assert!((closer_peers[0] == first_peer_id) != (closer_peers[1] == first_peer_id));
-                            assert!((closer_peers[0] == second_peer_id) != (closer_peers[1] == second_peer_id));
-                            return Ok(Async::Ready(()));
-                        }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
-                    }
-                }
-            }
-
-            Ok(Async::NotReady)
-        }))
-        .unwrap();
-}
-
-#[test]
-fn indirect_query() {
-    // Build four nodes. Node #2 knows about node #1. Node #3 knows about node #2. Node #4 knows
-    // about node #3. Node #4 is asked about a random peer and should return nodes #1, #2 and #3.
-
-    let port_base = rand::random::<u64>() % (std::u64::MAX - 2);
-    let mut swarms = build_nodes(port_base, 4);
-
-    let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
-    let second_peer_id = Swarm::local_peer_id(&swarms[1]).clone();
-    let third_peer_id = Swarm::local_peer_id(&swarms[2]).clone();
-
-    // Connect second to first.
-    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
-
-    // Connect third to second.
-    swarms[2].add_not_connected_address(&second_peer_id, Protocol::Memory(port_base + 1).into());
-
-    // Connect fourth to third.
-    swarms[3].add_not_connected_address(&third_peer_id, Protocol::Memory(port_base + 2).into());
-
-    // Ask fourth to search a random value.
-    let search_target = PeerId::random();
-    swarms[3].find_node(search_target.clone());
-
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
-                            assert_eq!(key, search_target);
-                            assert_eq!(closer_peers.len(), 3);
-                            assert_eq!(closer_peers.iter().filter(|p| **p == first_peer_id).count(), 1);
-                            assert_eq!(closer_peers.iter().filter(|p| **p == second_peer_id).count(), 1);
-                            assert_eq!(closer_peers.iter().filter(|p| **p == third_peer_id).count(), 1);
-                            return Ok(Async::Ready(()));
-                        }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
-                    }
-                }
-            }
-
-            Ok(Async::NotReady)
-        }))
-        .unwrap();
+    for n in 2..=8 { run(n) }
 }
 
 #[test]
@@ -209,8 +142,7 @@ fn unresponsive_not_returned_direct() {
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
-    let port_base = rand::random();
-    let mut swarms = build_nodes(port_base, 1);
+    let (_, mut swarms) = build_nodes(1);
 
     // Add fake addresses.
     for _ in 0 .. 10 {
@@ -221,9 +153,8 @@ fn unresponsive_not_returned_direct() {
     let search_target = PeerId::random();
     swarms[0].find_node(search_target.clone());
 
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
@@ -246,18 +177,17 @@ fn unresponsive_not_returned_direct() {
 #[test]
 fn unresponsive_not_returned_indirect() {
     // Build two nodes. Node #2 knows about node #1. Node #1 contains fake addresses to
-    // non-existing nodes. We ask node #1 to find a random peer. We make sure that no fake address
+    // non-existing nodes. We ask node #2 to find a random peer. We make sure that no fake address
     // is returned.
 
-    let port_base = rand::random();
-    let mut swarms = build_nodes(port_base, 2);
+    let (port_base, mut swarms) = build_nodes(2);
 
     // Add fake addresses to first.
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
     for _ in 0 .. 10 {
         swarms[0].add_not_connected_address(
             &PeerId::random(),
-            libp2p_core::multiaddr::multiaddr![Udp(10u16)]
+            multiaddr![Udp(10u16)]
         );
     }
 
@@ -268,9 +198,8 @@ fn unresponsive_not_returned_indirect() {
     let search_target = PeerId::random();
     swarms[1].find_node(search_target.clone());
 
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {

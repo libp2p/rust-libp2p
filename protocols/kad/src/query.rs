@@ -26,8 +26,8 @@
 use crate::kbucket::KBucketsPeerId;
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{cmp::PartialEq, time::Duration, time::Instant};
-use tokio_timer::Delay;
+use std::{cmp::PartialEq, time::Duration};
+use wasm_timer::{Delay, Instant};
 
 /// State of a query iterative process.
 ///
@@ -165,6 +165,8 @@ where
             }
         }
 
+        let num_closest = self.closest_peers.len();
+
         // Add the entries in `closest_peers`.
         if let QueryStage::Iterating {
             ref mut no_closer_in_a_row,
@@ -190,10 +192,11 @@ where
                         });
 
                     // Make sure we don't insert duplicates.
+                    let mut iter_start = self.closest_peers.iter().skip(insert_pos_start);
                     let duplicate = if let Some(insert_pos_size) = insert_pos_size {
-                        self.closest_peers.iter().skip(insert_pos_start).take(insert_pos_size).any(|e| e.0 == elem_to_add)
+                        iter_start.take(insert_pos_size).any(|e| e.0 == elem_to_add)
                     } else {
-                        self.closest_peers.iter().skip(insert_pos_start).any(|e| e.0 == elem_to_add)
+                        iter_start.any(|e| e.0 == elem_to_add)
                     };
 
                     if !duplicate {
@@ -204,7 +207,7 @@ where
                         self.closest_peers
                             .insert(insert_pos_start, (elem_to_add, QueryPeerState::NotContacted));
                     }
-                } else if self.closest_peers.len() < self.num_results {
+                } else if num_closest < self.num_results {
                     debug_assert!(self.closest_peers.iter().all(|e| e.0 != elem_to_add));
                     self.closest_peers
                         .push((elem_to_add, QueryPeerState::NotContacted));
@@ -215,14 +218,19 @@ where
         // Check for duplicates in `closest_peers`.
         debug_assert!(self.closest_peers.windows(2).all(|w| w[0].0 != w[1].0));
 
-        // Handle if `no_closer_in_a_row` is too high.
-        let freeze = if let QueryStage::Iterating { no_closer_in_a_row } = self.stage {
-            no_closer_in_a_row >= self.parallelism
-        } else {
-            false
-        };
-        if freeze {
-            self.stage = QueryStage::Frozen;
+        let num_closest_new = self.closest_peers.len();
+
+        // Termination condition: If at least `self.parallelism` consecutive
+        // responses yield no peer closer to the target and either no new peers
+        // were discovered or the number of discovered peers reached the desired
+        // number of results, then the query is considered complete.
+        if let QueryStage::Iterating { no_closer_in_a_row } = self.stage {
+            if no_closer_in_a_row >= self.parallelism &&
+                (num_closest == num_closest_new ||
+                     num_closest_new >= self.num_results)
+            {
+                self.stage = QueryStage::Frozen;
+            }
         }
     }
 
@@ -259,16 +267,12 @@ where
         let state = self
             .closest_peers
             .iter_mut()
-            .filter_map(
-                |(peer_id, state)| {
-                    if peer_id == id {
-                        Some(state)
-                    } else {
-                        None
-                    }
-                },
-            )
-            .next();
+            .find_map(|(peer_id, state)|
+                if peer_id == id {
+                    Some(state)
+                } else {
+                    None
+                });
 
         match state {
             Some(state @ &mut QueryPeerState::InProgress(_)) => *state = QueryPeerState::Failed,
@@ -287,72 +291,52 @@ where
         let mut active_counter = 0;
 
         // While iterating over peers, count the number of queries in a row (from closer to further
-        // away from target) that are in the succeeded in state.
-        // Contains `None` if the chain is broken.
-        let mut succeeded_counter = Some(0);
+        // away from target) that are in the succeeded state.
+        let mut succeeded_counter = 0;
 
         // Extract `self.num_results` to avoid borrowing errors with closures.
         let num_results = self.num_results;
 
         for &mut (ref peer_id, ref mut state) in self.closest_peers.iter_mut() {
             // Start by "killing" the query if it timed out.
-            {
-                let timed_out = match state {
-                    QueryPeerState::InProgress(timeout) => match timeout.poll() {
-                        Ok(Async::Ready(_)) | Err(_) => true,
-                        Ok(Async::NotReady) => false,
-                    },
-                    _ => false,
-                };
-                if timed_out {
-                    *state = QueryPeerState::Failed;
-                    return Async::Ready(QueryStatePollOut::CancelRpc { peer_id });
-                }
-            }
-
-            // Increment the local counters.
-            match state {
-                QueryPeerState::InProgress(_) => {
-                    active_counter += 1;
-                }
-                QueryPeerState::Succeeded => {
-                    if let Some(ref mut c) = succeeded_counter {
-                        *c += 1;
+            if let QueryPeerState::InProgress(timeout) = state {
+                match timeout.poll() {
+                    Ok(Async::Ready(_)) | Err(_) => {
+                        *state = QueryPeerState::Failed;
+                        return Async::Ready(QueryStatePollOut::CancelRpc { peer_id });
+                    }
+                    Ok(Async::NotReady) => {
+                        active_counter += 1
                     }
                 }
-                _ => (),
-            };
-
-            // We have enough results; the query is done.
-            if succeeded_counter
-                .as_ref()
-                .map(|&c| c >= num_results)
-                .unwrap_or(false)
-            {
-                return Async::Ready(QueryStatePollOut::Finished);
             }
 
-            // Dial the node if it needs dialing.
-            let need_connect = match state {
-                QueryPeerState::NotContacted => match self.stage {
-                    QueryStage::Iterating { .. } => active_counter < self.parallelism,
-                    QueryStage::Frozen => true,     // TODO: as an optimization, could be false if we're not trying to find peers
-                },
-                _ => false,
-            };
+            if let QueryPeerState::Succeeded = state {
+                succeeded_counter += 1;
+                // If we have enough results; the query is done.
+                if succeeded_counter >= num_results {
+                    return Async::Ready(QueryStatePollOut::Finished)
+                }
+            }
 
-            if need_connect {
-                let delay = Delay::new(Instant::now() + self.rpc_timeout);
-                *state = QueryPeerState::InProgress(delay);
-                return Async::Ready(QueryStatePollOut::SendRpc {
-                    peer_id,
-                    query_target: &self.target,
-                });
+            if let QueryPeerState::NotContacted = state {
+                let connect = match self.stage {
+                    QueryStage::Frozen => true,
+                    QueryStage::Iterating {..} => active_counter < self.parallelism,
+                };
+                if connect {
+                    let delay = Delay::new(Instant::now() + self.rpc_timeout);
+                    *state = QueryPeerState::InProgress(delay);
+                    return Async::Ready(QueryStatePollOut::SendRpc {
+                        peer_id,
+                        query_target: &self.target,
+                    });
+                }
             }
         }
 
-        // If we don't have any query in progress, return `Finished` as we don't have anything more
-        // we can do.
+        // If we don't have any query in progress, return `Finished` as we don't have
+        // anything more we can do.
         if active_counter > 0 {
             Async::NotReady
         } else {

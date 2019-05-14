@@ -22,8 +22,9 @@ use futures::{prelude::*, future, try_ready};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated};
 use log::debug;
 use rand::{distributions, prelude::*};
-use std::{io, iter, time::Duration, time::Instant};
+use std::{io, iter, time::Duration};
 use tokio_io::{io as nio, AsyncRead, AsyncWrite};
+use wasm_timer::Instant;
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
 ///

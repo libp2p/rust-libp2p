@@ -47,6 +47,7 @@ where
 {
     type Substream = yamux::StreamHandle<C>;
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
+    type Error = IoError;
 
     fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.0.poll() {
@@ -77,6 +78,10 @@ where
     }
 
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
+    }
+
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
     }
 
     fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
