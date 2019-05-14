@@ -411,7 +411,11 @@ impl io::Read for Connection {
     }
 }
 
-impl tokio_io::AsyncRead for Connection {}
+impl tokio_io::AsyncRead for Connection {
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
+    }
+}
 
 impl io::Write for Connection {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {

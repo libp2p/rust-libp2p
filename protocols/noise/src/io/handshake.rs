@@ -266,7 +266,14 @@ impl<T: io::Write> io::Write for State<T> {
     }
 }
 
-impl<T: AsyncRead> AsyncRead for State<T> {}
+impl<T: AsyncRead> AsyncRead for State<T> {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.io.prepare_uninitialized_buffer(buf)
+    }
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.io.read_buf(buf)
+    }
+}
 
 impl<T: AsyncWrite> AsyncWrite for State<T> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {

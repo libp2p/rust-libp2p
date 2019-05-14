@@ -91,6 +91,9 @@ where
     S: Stream<Error = IoError>,
     S::Item: IntoBuf,
 {
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
+    }
 }
 
 impl<S> Write for RwStreamSink<S>
