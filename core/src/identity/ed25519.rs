@@ -46,7 +46,7 @@ impl Keypair {
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
             .map(|k| { kp.zeroize(); Keypair(k) })
-            .map_err(|e| DecodingError::new("Ed25519 keypair", e.compat()))
+            .map_err(|e| DecodingError::new("Ed25519 keypair").source(e.compat()))
     }
 
     /// Sign a message using the private key of this keypair.
@@ -112,7 +112,7 @@ impl PublicKey {
     /// Decode a public key from a byte array as produced by `encode`.
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
-            .map_err(|e| DecodingError::new("Ed25519 public key", e.compat()))
+            .map_err(|e| DecodingError::new("Ed25519 public key").source(e.compat()))
             .map(PublicKey)
     }
 }
@@ -147,7 +147,7 @@ impl SecretKey {
     pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk_bytes.as_mut();
         let secret = ed25519::SecretKey::from_bytes(&*sk_bytes)
-            .map_err(|e| DecodingError::new("Ed25519 secret key", e.compat()))?;
+            .map_err(|e| DecodingError::new("Ed25519 secret key").source(e.compat()))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
