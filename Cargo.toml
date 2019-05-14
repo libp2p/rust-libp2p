@@ -10,8 +10,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-default = ["secio-secp256k1", "libp2p-websocket"]
-secio-secp256k1 = ["libp2p-secio/secp256k1"]
+default = ["secp256k1", "libp2p-websocket"]
+secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 
 [dependencies]
 bytes = "0.4"
