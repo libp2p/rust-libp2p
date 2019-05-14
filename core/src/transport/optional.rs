@@ -33,12 +33,12 @@ pub struct OptionalTransport<T>(Option<T>);
 impl<T> OptionalTransport<T> {
     /// Builds an `OptionalTransport` with the given transport in an enabled
     /// state.
-    pub fn new(inner: T) -> OptionalTransport<T> {
+    pub fn some(inner: T) -> OptionalTransport<T> {
         OptionalTransport(Some(inner))
     }
 
     /// Builds a disabled `OptionalTransport`.
-    pub fn empty() -> OptionalTransport<T> {
+    pub fn none() -> OptionalTransport<T> {
         OptionalTransport(None)
     }
 }
