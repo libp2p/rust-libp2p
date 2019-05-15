@@ -49,7 +49,7 @@ use libp2p_core::{
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
-use log::{debug, error};
+use log::{debug, error, trace};
 use std::{
     collections::{HashMap, VecDeque},
     fmt,
@@ -422,7 +422,7 @@ impl Stream for TcpListenStream {
 
             match apply_config(&self.config, &sock) {
                 Ok(()) => {
-                    debug!("Incoming connection from {}", remote_addr);
+                    trace!("Incoming connection from {} on {}", remote_addr, listen_addr);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::ok(TcpTransStream { inner: sock }),
                         listen_addr,
@@ -430,6 +430,7 @@ impl Stream for TcpListenStream {
                     })
                 }
                 Err(err) => {
+                    debug!("Error upgrading incoming connection from {}: {:?}", remote_addr, err);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::err(err),
                         listen_addr,
