@@ -422,7 +422,7 @@ impl Stream for TcpListenStream {
 
             match apply_config(&self.config, &sock) {
                 Ok(()) => {
-                    debug!("Incoming connection from {}", remote_addr);
+                    debug!("Incoming connection from {} on {}", remote_addr, listen_addr);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::ok(TcpTransStream { inner: sock }),
                         listen_addr,
