@@ -1,3 +1,19 @@
+# Version 0.8.0 (2019-05-15)
+
+- Crate now successfully runs from within the browser when compiled to WASM.
+- Modified the constructors of `NoiseConfig` to accept any type of public key. The Noise handshake has consequently been modified.
+- Changed the `StreamMuxer` trait to have an `Error` associated type.
+- The `Swarm` now ranks externally-visible multiaddresses by how often they have been reported, ensuring that weird or malicious reports don't affect connectivity too much.
+- Added `IntoProtocolsHandler::inbound_protocol`. Must return the same value as what `ProtocolsHandler::listen_protocol` would return.
+- `IntoProtocolsHandler::into_handler` now takes a second parameter with the `&ConnectedPoint` to the node we are connected to.
+- Replaced the `secp256k1` crate with `libsecp256k1`.
+- Fixed `Kademlia::add_providing` taking a `PeerId` instead of a `Multihash`.
+- Fixed various bugs in the implementation of `Kademlia`.
+- Added `OneSubstreamMuxer`.
+- Added the `libp2p-wasm-ext` crate.
+- Added `multiaddr::from_url`.
+- Added `OptionalTransport`.
+
 # Version 0.7.0 (2019-04-23)
 
 - Fixed the inactive connections shutdown mechanism not working.
