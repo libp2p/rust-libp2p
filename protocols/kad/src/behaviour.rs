@@ -30,7 +30,7 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData, num::NonZeroUsize, time::Duration};
+use std::{borrow::Cow, error, marker::PhantomData, num::NonZeroUsize, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::{Instant, Interval};
 
@@ -40,6 +40,9 @@ mod test;
 pub struct Kademlia<TSubstream> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
     kbuckets: KBucketsTable<KadHash, Addresses>,
+
+    /// If `Some`, we overwrite the Kademlia protocol name with this one.
+    protocol_name_override: Option<Cow<'static, [u8]>>,
 
     /// All the iterative queries we are currently performing, with their ID. The last parameter
     /// is the list of accumulated providers for `GET_PROVIDERS` queries.
@@ -189,6 +192,16 @@ impl<TSubstream> Kademlia<TSubstream> {
         Self::new_inner(local_peer_id)
     }
 
+    /// The same as `new`, but using a custom protocol name.
+    ///
+    /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
+    /// custom name therefore allows to segregate the DHT from others, if that is desired.
+    pub fn with_protocol_name(local_peer_id: PeerId, name: impl Into<Cow<'static, [u8]>>) -> Self {
+        let mut me = Kademlia::new_inner(local_peer_id);
+        me.protocol_name_override = Some(name.into());
+        me
+    }
+
     /// Creates a `Kademlia`.
     ///
     /// Contrary to `new`, doesn't perform the initialization queries that store our local ID into
@@ -251,6 +264,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
         Kademlia {
             kbuckets: KBucketsTable::new(local_peer_id.into(), Duration::from_secs(60)),   // TODO: constant
+            protocol_name_override: None,
             queued_events: SmallVec::new(),
             active_queries: Default::default(),
             connected_peers: Default::default(),
@@ -386,7 +400,11 @@ where
     type OutEvent = KademliaOut;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        KademliaHandler::dial_and_listen()
+        let mut handler = KademliaHandler::dial_and_listen();
+        if let Some(name) = self.protocol_name_override.as_ref() {
+            handler = handler.with_protocol_name(name.clone());
+        }
+        handler
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
