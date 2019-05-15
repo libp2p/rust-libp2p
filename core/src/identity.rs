@@ -100,7 +100,7 @@ impl Keypair {
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(ref pair) => Ok(pair.secret().sign(msg)),
+            Secp256k1(ref pair) => pair.secret().sign(msg)
         }
     }
 
@@ -178,7 +178,7 @@ impl PublicKey {
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         #[allow(unused_mut)] // Due to conditional compilation.
         let mut pubkey = protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes)
-            .map_err(|e| DecodingError::new("Protobuf", e))?;
+            .map_err(|e| DecodingError::new("Protobuf").source(e))?;
 
         match pubkey.get_Type() {
             keys_proto::KeyType::Ed25519 => {
@@ -193,7 +193,7 @@ impl PublicKey {
             #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
             keys_proto::KeyType::RSA => {
                 log::debug!("support for RSA was disabled at compile-time");
-                Err("Unsupported".to_string().into())
+                Err(DecodingError::new("Unsupported"))
             },
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
