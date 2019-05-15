@@ -189,7 +189,7 @@ where
                 }
                 Ok(Async::Ready(Some(ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr }))) => {
                     debug_assert!(listener.addresses.contains(&listen_addr),
-                        "Transport reported connection from {} not in the list: {:?}",
+                        "Transport reported listen address {} not in the list: {:?}",
                         listen_addr, listener.addresses);
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::Incoming {
