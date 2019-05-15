@@ -2,7 +2,7 @@
 name = "libp2p-secio"
 edition = "2018"
 description = "Secio encryption protocol for libp2p"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 asn1_der = "0.6.1"
 bytes = "0.4"
 futures = "0.1"
-libp2p-core = { version = "0.7.0", path = "../../core" }
+libp2p-core = { version = "0.8.0", path = "../../core" }
 log = "0.4.6"
 protobuf = "2.3"
 rand = "0.6.5"
@@ -45,7 +45,7 @@ aes-all = ["aesni"]
 
 [dev-dependencies]
 criterion = "0.2"
-libp2p-tcp = { version = "0.7.0", path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.8.0", path = "../../transports/tcp" }
 tokio = "0.1"
 tokio-tcp = "0.1"
 
