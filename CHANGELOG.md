@@ -1,3 +1,7 @@
+# Version 0.8.1 (2019-05-15)
+
+- Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
+
 # Version 0.8.0 (2019-05-15)
 
 - Crate now successfully runs from within the browser when compiled to WASM.
@@ -13,6 +17,10 @@
 - Added the `libp2p-wasm-ext` crate.
 - Added `multiaddr::from_url`.
 - Added `OptionalTransport`.
+
+# Version 0.7.1 (2019-05-15)
+
+- Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
 
 # Version 0.7.0 (2019-04-23)
 
