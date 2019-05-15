@@ -126,6 +126,11 @@ impl SecretKey {
             .map(|s| s.0.serialize_der().as_ref().into())
             .map_err(|_| SigningError::new("failed to create secp256k1 signature"))
     }
+
+    /// Returns the raw bytes of the secret key.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.serialize()
+    }
 }
 
 /// A Secp256k1 public key.
