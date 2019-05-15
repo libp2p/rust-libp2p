@@ -430,6 +430,7 @@ impl Stream for TcpListenStream {
                     })
                 }
                 Err(err) => {
+                    debug!("Error upgrading incoming connection from {}: {:?}", remote_addr, err);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::err(err),
                         listen_addr,
