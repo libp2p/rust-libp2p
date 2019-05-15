@@ -42,8 +42,11 @@ pub mod memory;
 pub mod timeout;
 pub mod upgrade;
 
+mod optional;
+
 pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
+pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
 /// A transport provides connection-oriented communication between two peers

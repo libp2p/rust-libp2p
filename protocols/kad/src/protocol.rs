@@ -34,7 +34,7 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use multihash::Multihash;
 use protobuf::{self, Message};
-use std::convert::TryFrom;
+use std::{borrow::Cow, convert::TryFrom};
 use std::{io, iter};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -138,16 +138,34 @@ impl Into<proto::Message_Peer> for KadPeer {
 // TODO: if, as suspected, we can confirm with Protocol Labs that each open Kademlia substream does
 //       only one request, then we can change the output of the `InboundUpgrade` and
 //       `OutboundUpgrade` to be just a single message
-#[derive(Debug, Default, Copy, Clone)]
-pub struct KademliaProtocolConfig;
+#[derive(Debug, Clone)]
+pub struct KademliaProtocolConfig {
+    protocol_name: Cow<'static, [u8]>,
+}
+
+impl KademliaProtocolConfig {
+    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
+    /// between networks on purpose.
+    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
+        self.protocol_name = name.into();
+        self
+    }
+}
+
+impl Default for KademliaProtocolConfig {
+    fn default() -> Self {
+        KademliaProtocolConfig {
+            protocol_name: Cow::Borrowed(b"/ipfs/kad/1.0.0"),
+        }
+    }
+}
 
 impl UpgradeInfo for KademliaProtocolConfig {
-    type Info = &'static [u8];
+    type Info = Cow<'static, [u8]>;
     type InfoIter = iter::Once<Self::Info>;
 
-    #[inline]
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/kad/1.0.0")
+        iter::once(self.protocol_name.clone())
     }
 }
 
