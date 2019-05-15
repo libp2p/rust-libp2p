@@ -1,3 +1,7 @@
+# Version 0.7.1 (2019-05-15)
+
+- Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
+
 # Version 0.7.0 (2019-04-23)
 
 - Fixed the inactive connections shutdown mechanism not working.
