@@ -27,7 +27,7 @@ protobuf = "2.3"
 quick-error = "1.2"
 rand = "0.6"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
-secp256k1 = { version = "0.12", features = ["rand"], optional = true }
+libsecp256k1 = { version = "0.2.2", optional = true }
 sha2 = "0.8.0"
 smallvec = "0.6"
 tokio-executor = "0.1.4"
@@ -57,3 +57,5 @@ tokio-mock-task = "0.1"
 
 [features]
 default = ["secp256k1"]
+secp256k1 = ["libsecp256k1"]
+

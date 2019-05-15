@@ -17,7 +17,6 @@ libp2p-core = { version = "0.7.0", path = "../../core" }
 log = "0.4.6"
 protobuf = "2.3"
 rand = "0.6.5"
-secp256k1 = { version = "0.12", features = ["rand"], optional = true }
 aes-ctr = "0.3"
 aesni = { version = "0.6", features = ["nocheck"], optional = true }
 twofish = "0.2.0"
@@ -41,6 +40,7 @@ web-sys = { version = "0.3.10", features = ["Crypto", "CryptoKey", "SubtleCrypto
 
 [features]
 default = ["secp256k1"]
+secp256k1 = []
 aes-all = ["aesni"]
 
 [dev-dependencies]

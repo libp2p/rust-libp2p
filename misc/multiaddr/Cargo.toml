@@ -17,6 +17,7 @@ data-encoding = "2.1"
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../multihash" }
 serde = "1.0.70"
 unsigned-varint = "0.2"
+url = { version = "1.7.2", default-features = false }
 
 [dev-dependencies]
 bincode = "1"
