@@ -212,8 +212,7 @@ where
             let session = NoiseSession::xx(noisesession_xx::NoiseSession::init_session(
                 false,
                 prologue,
-                self.0,
-                PublicKey::empty(),
+                self.0
             ));
             return rt15::NoiseInboundFuture::new(socket, session);
     }
@@ -234,7 +233,6 @@ where
                 true,
                 prologue,
                 self.0,
-                PublicKey::empty(),
             ));
             return rt15::NoiseOutboundFuture::new(socket, session);
     }
@@ -279,7 +277,7 @@ where
                 false,
                 prologue,
                 self.0,
-                PublicKey::from_bytes(self.1),
+                None,
             ));
             return rt1::NoiseInboundFuture::new(socket, session);
     }
@@ -300,7 +298,7 @@ where
                 true,
                 prologue,
                 self.0,
-                PublicKey::from_bytes(self.1),
+                Some(PublicKey::from_bytes(self.1)),
             ));
             return rt1::NoiseOutboundFuture::new(socket, session);
     }
