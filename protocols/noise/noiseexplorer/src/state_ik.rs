@@ -269,10 +269,11 @@ impl HandshakeState {
 		HandshakeState{ss, s, e: Keypair::new_empty(), rs, re: PublicKey::empty(), psk}
 	}
 
-	pub(crate) fn initialize_responder(prologue: &[u8], s: Keypair, rs: PublicKey, psk: Psk) -> HandshakeState {
+	pub(crate) fn initialize_responder(prologue: &[u8], s: Keypair, psk: Psk) -> HandshakeState {
 		let protocol_name = b"Noise_IK_25519_ChaChaPoly_BLAKE2s";
 		let mut ss: SymmetricState = SymmetricState::initialize_symmetric(&protocol_name[..]);
 		ss.mix_hash(prologue);
+		let rs = PublicKey::empty();
 		ss.mix_hash(&s.get_public_key().as_bytes()[..]);
 		HandshakeState{ss, s, e: Keypair::new_empty(), rs, re: PublicKey::empty(), psk}
 	}

@@ -261,17 +261,19 @@ impl HandshakeState {
 		self.e = e;
 	}
 
-	pub(crate) fn initialize_initiator(prologue: &[u8], s: Keypair, rs: PublicKey, psk: Psk) -> HandshakeState {
+	pub(crate) fn initialize_initiator(prologue: &[u8], s: Keypair, psk: Psk) -> HandshakeState {
 		let protocol_name = b"Noise_IX_25519_ChaChaPoly_BLAKE2s";
 		let mut ss: SymmetricState = SymmetricState::initialize_symmetric(&protocol_name[..]);
 		ss.mix_hash(prologue);
+		let rs = PublicKey::empty();
 		HandshakeState{ss, s, e: Keypair::new_empty(), rs, re: PublicKey::empty(), psk}
 	}
 
-	pub(crate) fn initialize_responder(prologue: &[u8], s: Keypair, rs: PublicKey, psk: Psk) -> HandshakeState {
+	pub(crate) fn initialize_responder(prologue: &[u8], s: Keypair, psk: Psk) -> HandshakeState {
 		let protocol_name = b"Noise_IX_25519_ChaChaPoly_BLAKE2s";
 		let mut ss: SymmetricState = SymmetricState::initialize_symmetric(&protocol_name[..]);
 		ss.mix_hash(prologue);
+		let rs = PublicKey::empty();
 		HandshakeState{ss, s, e: Keypair::new_empty(), rs, re: PublicKey::empty(), psk}
 	}
 	pub(crate) fn write_message_a(&mut self, input: &[u8]) -> Result<Vec<u8>, NoiseError> {

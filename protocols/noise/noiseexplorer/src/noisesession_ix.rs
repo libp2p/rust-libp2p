@@ -62,20 +62,21 @@ impl NoiseSession {
 		self.hs.set_ephemeral_keypair(e,);
 	}
 
-    pub fn get_remote_static_public_key(&self) -> PublicKey {
+      pub fn get_remote_static_public_key(&self) -> PublicKey {
          self.hs.get_remote_static_public_key()
-    }
+     }
+
 
 	/// Instantiates a `NoiseSession` object. Takes the following as parameters:
 	/// - `initiator`: `bool` variable. To be set as `true` when initiating a handshake with a remote party, or `false` otherwise.
 	/// - `prologue`: `Message` object. Could optionally contain the name of the protocol to be used.
 	/// - `s`: `Keypair` object. Contains local party's static keypair.
-	/// - `rs`: `PublicKey` object. Contains the remote party's static public key.
 
-	pub fn init_session(initiator: bool, prologue: Message, s: Keypair, rs: PublicKey) -> NoiseSession {
+
+	pub fn init_session(initiator: bool, prologue: Message, s: Keypair) -> NoiseSession {
 		if initiator {
 			NoiseSession{
-				hs: HandshakeState::initialize_initiator(&prologue.as_bytes(), s, rs, Psk::new()),
+				hs: HandshakeState::initialize_initiator(&prologue.as_bytes(), s, Psk::new()),
 				mc: 0,
 				i: initiator,
 				cs1: CipherState::new(),
@@ -84,7 +85,7 @@ impl NoiseSession {
 			}
 		} else {
 			NoiseSession {
-				hs: HandshakeState::initialize_responder(&prologue.as_bytes(), s, rs, Psk::new()),
+				hs: HandshakeState::initialize_responder(&prologue.as_bytes(), s, Psk::new()),
 				mc: 0,
 				i: initiator,
 				cs1: CipherState::new(),
