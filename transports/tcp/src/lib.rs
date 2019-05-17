@@ -55,7 +55,7 @@ use std::{
     fmt,
     io::{self, Read, Write},
     iter::{self, FromIterator},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Duration,
     vec::IntoIter
 };
@@ -334,6 +334,8 @@ enum Addresses {
     Many(HashMap<IpAddr, Multiaddr>)
 }
 
+type Buffer = VecDeque<ListenerEvent<FutureResult<TcpTransStream, io::Error>>>;
+
 /// Stream that listens on an TCP/IP address.
 pub struct TcpListenStream {
     /// Stream of incoming sockets.
@@ -343,9 +345,78 @@ pub struct TcpListenStream {
     /// The set of known addresses.
     addrs: Addresses,
     /// Temporary buffer of listener events.
-    pending: VecDeque<ListenerEvent<FutureResult<TcpTransStream, io::Error>>>,
+    pending: Buffer,
     /// Original configuration.
     config: TcpConfig
+}
+
+// Map a `SocketAddr` to the corresponding `Multiaddr`.
+// If not found, check for host address changes.
+// This is a function rather than a method due to borrowing issues.
+fn map_addr(addr: &SocketAddr, addrs: &mut Addresses, pending: &mut Buffer, port: u16)
+    -> Result<Multiaddr, io::Error>
+{
+    match addrs {
+        Addresses::One(ref ma) => Ok(ma.clone()),
+        Addresses::Many(ref mut addrs) => {
+            if let Some(ma) = addrs.get(&addr.ip()) {
+                return Ok(ma.clone())
+            }
+
+            // The local IP address of this socket is new to us.
+            // First we check for local loopback IPv4 addresses.
+
+            if addr.ip().is_loopback() && addr.ip().is_ipv4() {
+                // We have encountered an unknown local loopback IPv4 address. This
+                // deserves some special treatment.
+                //
+                // As mentioned in RFC 5735: "A datagram sent by a higher-level protocol
+                // to an address anywhere within this block [127.0.0.0/8] loops back
+                // inside the host. This is ordinarily implemented using only
+                // 127.0.0.1/32 for loopback."
+                //
+                // We therefore report 127.0.0.1 for every address of the block 127.0.0.0/8.
+                // IPv6 does not reserve a block for loopback addresses but only uses ::1,
+                // hence we do not treat it in a special way.
+                if let Some(ma) = addrs.get(&IpAddr::V4(Ipv4Addr::LOCALHOST)) {
+                    return Ok(ma.clone())
+                }
+            }
+
+            // We really do not know the address yet, so we need to check for changes in
+            // the set of host addresses and report new and expired addresses.
+            //
+            // TODO: We do not detect expired addresses unless there is a new address.
+
+            let new_addrs = host_addresses(port)?;
+            let old_addrs = std::mem::replace(addrs, new_addrs);
+
+            // Check for addresses no longer in use.
+            for (ip, ma) in old_addrs.iter() {
+                if !addrs.contains_key(&ip) {
+                    debug!("Expired listen address: {}", ma);
+                    pending.push_back(ListenerEvent::AddressExpired(ma.clone()));
+                }
+            }
+
+            // Check for new addresses.
+            for (ip, ma) in addrs.iter() {
+                if !old_addrs.contains_key(&ip) {
+                    debug!("New listen address: {}", ma);
+                    pending.push_back(ListenerEvent::NewAddress(ma.clone()));
+                }
+            }
+
+            // We should now be able to find the listen address of the local socket address,
+            // if not something is seriously wrong and we report an error.
+            if addrs.get(&addr.ip()).is_none() {
+                let msg = format!("{} does not match any listen address {:?}", addr.ip(), addrs.keys());
+                return Err(io::Error::new(io::ErrorKind::Other, msg))
+            }
+
+            Ok(sockaddr_to_multiaddr(addr.ip(), port))
+        }
+    }
 }
 
 impl Stream for TcpListenStream {
@@ -379,39 +450,7 @@ impl Stream for TcpListenStream {
             };
 
             let listen_addr = match sock.local_addr() {
-                Ok(addr) => match self.addrs {
-                    Addresses::One(ref ma) => ma.clone(),
-                    Addresses::Many(ref mut addrs) => if let Some(ma) = addrs.get(&addr.ip()) {
-                        ma.clone()
-                    } else {
-                        // The local IP address of this socket is new to us.
-                        // We need to check for changes in the set of host addresses and report
-                        // new and expired addresses.
-                        //
-                        // TODO: We do not detect expired addresses unless there is a new address.
-
-                        let new_addrs = host_addresses(self.port)?;
-                        let old_addrs = std::mem::replace(addrs, new_addrs);
-
-                        // Check for addresses no longer in use.
-                        for (ip, ma) in &old_addrs {
-                            if !addrs.contains_key(&ip) {
-                                debug!("Expired listen address: {}", ma);
-                                self.pending.push_back(ListenerEvent::AddressExpired(ma.clone()));
-                            }
-                        }
-
-                        // Check for new addresses.
-                        for (ip, ma) in addrs {
-                            if !old_addrs.contains_key(&ip) {
-                                debug!("New listen address: {}", ma);
-                                self.pending.push_back(ListenerEvent::NewAddress(ma.clone()));
-                            }
-                        }
-
-                        sockaddr_to_multiaddr(addr.ip(), self.port)
-                    }
-                }
+                Ok(addr) => map_addr(&addr, &mut self.addrs, &mut self.pending, self.port)?,
                 Err(err) => {
                     error!("Failed to get local address of incoming socket: {:?}", err);
                     return Err(err)
@@ -459,7 +498,6 @@ pub struct TcpTransStream {
 }
 
 impl Read for TcpTransStream {
-    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         self.inner.read(buf)
     }
@@ -476,26 +514,22 @@ impl AsyncRead for TcpTransStream {
 }
 
 impl Write for TcpTransStream {
-    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.inner.write(buf)
     }
 
-    #[inline]
     fn flush(&mut self) -> Result<(), io::Error> {
         self.inner.flush()
     }
 }
 
 impl AsyncWrite for TcpTransStream {
-    #[inline]
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         AsyncWrite::shutdown(&mut self.inner)
     }
 }
 
 impl Drop for TcpTransStream {
-    #[inline]
     fn drop(&mut self) {
         if let Ok(addr) = self.inner.peer_addr() {
             debug!("Dropped TCP connection to {:?}", addr);
