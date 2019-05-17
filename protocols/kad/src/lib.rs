@@ -25,7 +25,6 @@
 #![allow(dead_code)]
 
 pub use self::behaviour::{Kademlia, KademliaOut};
-pub use self::kbucket::KBucketsPeerId;
 pub use self::protocol::KadConnectionType;
 
 pub mod handler;
@@ -34,6 +33,5 @@ pub mod protocol;
 
 mod addresses;
 mod behaviour;
-mod kad_hash;
 mod protobuf_structs;
 mod query;

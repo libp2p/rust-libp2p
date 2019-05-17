@@ -23,7 +23,7 @@
 //! This allows one to create queries that iterate on the DHT on nodes that become closer and
 //! closer to the target.
 
-use crate::kbucket::KBucketsPeerId;
+use crate::kbucket;
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{cmp::PartialEq, time::Duration};
@@ -44,13 +44,16 @@ pub struct QueryState<TTarget, TPeerId> {
     /// Target we're looking for.
     target: TTarget,
 
+    /// The `kbucket::Key` representation of the `target`.
+    target_key: kbucket::Key<TTarget>,
+
     /// Stage of the query. See the documentation of `QueryStage`.
     stage: QueryStage,
 
     /// Ordered list of the peers closest to the result we're looking for.
     /// Entries that are `InProgress` shouldn't be removed from the list before they complete.
     /// Must never contain two entries with the same peer IDs.
-    closest_peers: SmallVec<[(TPeerId, QueryPeerState); 32]>,
+    closest_peers: SmallVec<[(kbucket::Key<TPeerId>, QueryPeerState); 32]>,
 
     /// Allowed level of parallelism.
     parallelism: usize,
@@ -100,25 +103,27 @@ enum QueryStage {
 
 impl<TTarget, TPeerId> QueryState<TTarget, TPeerId>
 where
-    TPeerId: Eq,
-    TTarget: KBucketsPeerId<TPeerId>
+    TTarget: Into<kbucket::Key<TTarget>> + Clone,
+    TPeerId: Into<kbucket::Key<TPeerId>> + Eq
 {
     /// Creates a new query.
     ///
     /// You should call `poll()` this function returns in order to know what to do.
-    pub fn new(config: QueryConfig<impl IntoIterator<Item = TPeerId>, TTarget>) -> Self {
+    pub fn new(config: QueryConfig<impl IntoIterator<Item = kbucket::Key<TPeerId>>, TTarget>) -> Self {
         let mut closest_peers: SmallVec<[_; 32]> = config
             .known_closest_peers
             .into_iter()
-            .map(|peer_id| (peer_id, QueryPeerState::NotContacted))
+            .map(|key| (key, QueryPeerState::NotContacted))
             .take(config.num_results)
             .collect();
-        let target = config.target;
-        closest_peers.sort_by_key(|e| target.distance_with(&e.0));
+
+        let target_key = config.target.clone().into();
+        closest_peers.sort_by_key(|e| target_key.distance(&e.0));
         closest_peers.dedup_by(|a, b| a.0 == b.0);
 
         QueryState {
-            target,
+            target: config.target,
+            target_key,
             stage: QueryStage::Iterating {
                 no_closer_in_a_row: 0,
             },
@@ -158,7 +163,7 @@ where
     ) {
         // Mark the peer as succeeded.
         for (peer_id, state) in self.closest_peers.iter_mut() {
-            if result_source == peer_id {
+            if result_source == peer_id.preimage() {
                 if let state @ QueryPeerState::InProgress(_) = state {
                     *state = QueryPeerState::Succeeded;
                 }
@@ -172,14 +177,16 @@ where
             ref mut no_closer_in_a_row,
         } = self.stage
         {
+            let target = &self.target_key;
+
             // We increment now, and reset to 0 if we find a closer node.
             *no_closer_in_a_row += 1;
 
-            for elem_to_add in closer_peers {
-                let target = &self.target;
-                let elem_to_add_distance = target.distance_with(&elem_to_add);
-                let insert_pos_start = self.closest_peers.iter().position(|(id, _)| {
-                    target.distance_with(&id) >= elem_to_add_distance
+            for peer in closer_peers {
+                let peer_key = peer.into();
+                let peer_distance = target.distance(&peer_key);
+                let insert_pos_start = self.closest_peers.iter().position(|(key, _)| {
+                    target.distance(&key) >= peer_distance
                 });
 
                 if let Some(insert_pos_start) = insert_pos_start {
@@ -187,30 +194,29 @@ where
                     // `insert_pos_start + insert_pos_size`.
                     let insert_pos_size = self.closest_peers.iter()
                         .skip(insert_pos_start)
-                        .position(|(id, _)| {
-                            target.distance_with(&id) > elem_to_add_distance
+                        .position(|(key, _)| {
+                            target.distance(&key) > peer_distance
                         });
 
                     // Make sure we don't insert duplicates.
                     let mut iter_start = self.closest_peers.iter().skip(insert_pos_start);
                     let duplicate = if let Some(insert_pos_size) = insert_pos_size {
-                        iter_start.take(insert_pos_size).any(|e| e.0 == elem_to_add)
+                        iter_start.take(insert_pos_size).any(|e| e.0 == peer_key)
                     } else {
-                        iter_start.any(|e| e.0 == elem_to_add)
+                        iter_start.any(|e| e.0 == peer_key)
                     };
 
                     if !duplicate {
                         if insert_pos_start == 0 {
                             *no_closer_in_a_row = 0;
                         }
-                        debug_assert!(self.closest_peers.iter().all(|e| e.0 != elem_to_add));
+                        debug_assert!(self.closest_peers.iter().all(|e| e.0 != peer_key));
                         self.closest_peers
-                            .insert(insert_pos_start, (elem_to_add, QueryPeerState::NotContacted));
+                            .insert(insert_pos_start, (peer_key, QueryPeerState::NotContacted));
                     }
                 } else if num_closest < self.num_results {
-                    debug_assert!(self.closest_peers.iter().all(|e| e.0 != elem_to_add));
-                    self.closest_peers
-                        .push((elem_to_add, QueryPeerState::NotContacted));
+                    debug_assert!(self.closest_peers.iter().all(|e| e.0 != peer_key));
+                    self.closest_peers.push((peer_key, QueryPeerState::NotContacted));
                 }
             }
         }
@@ -246,7 +252,7 @@ where
                     QueryPeerState::Failed => false,
                 }
             })
-            .map(|(id, _)| id)
+            .map(|(key, _)| key.preimage())
     }
 
     /// Returns true if we are waiting for a query answer from that peer.
@@ -268,7 +274,7 @@ where
             .closest_peers
             .iter_mut()
             .find_map(|(peer_id, state)|
-                if peer_id == id {
+                if peer_id.preimage() == id {
                     Some(state)
                 } else {
                     None
@@ -303,7 +309,7 @@ where
                 match timeout.poll() {
                     Ok(Async::Ready(_)) | Err(_) => {
                         *state = QueryPeerState::Failed;
-                        return Async::Ready(QueryStatePollOut::CancelRpc { peer_id });
+                        return Async::Ready(QueryStatePollOut::CancelRpc { peer_id: peer_id.preimage() });
                     }
                     Ok(Async::NotReady) => {
                         active_counter += 1
@@ -328,7 +334,7 @@ where
                     let delay = Delay::new(Instant::now() + self.rpc_timeout);
                     *state = QueryPeerState::InProgress(delay);
                     return Async::Ready(QueryStatePollOut::SendRpc {
-                        peer_id,
+                        peer_id: peer_id.preimage(),
                         query_target: &self.target,
                     });
                 }
@@ -353,7 +359,7 @@ where
             .into_iter()
             .filter_map(|(peer_id, state)| {
                 if let QueryPeerState::Succeeded = state {
-                    Some(peer_id)
+                    Some(peer_id.into_preimage())
                 } else {
                     None
                 }
@@ -423,7 +429,7 @@ enum QueryPeerState {
 
 #[cfg(test)]
 mod tests {
-    use super::{QueryConfig, QueryState, QueryStatePollOut};
+    use super::{kbucket, QueryConfig, QueryState, QueryStatePollOut};
     use futures::{self, try_ready, prelude::*};
     use libp2p_core::PeerId;
     use std::{iter, time::Duration, sync::Arc, sync::Mutex, thread};
@@ -432,11 +438,12 @@ mod tests {
     #[test]
     fn start_by_sending_rpc_to_known_peers() {
         let random_id = PeerId::random();
+        let random_key = kbucket::Key::new(random_id.clone());
         let target = PeerId::random();
 
         let mut query = QueryState::new(QueryConfig {
             target,
-            known_closest_peers: iter::once(random_id.clone()),
+            known_closest_peers: iter::once(random_key),
             parallelism: 3,
             num_results: 100,
             rpc_timeout: Duration::from_secs(10),
@@ -455,12 +462,13 @@ mod tests {
     #[test]
     fn continue_second_result() {
         let random_id = PeerId::random();
+        let random_key = kbucket::Key::from(random_id.clone());
         let random_id2 = PeerId::random();
         let target = PeerId::random();
 
         let query = Arc::new(Mutex::new(QueryState::new(QueryConfig {
             target,
-            known_closest_peers: iter::once(random_id.clone()),
+            known_closest_peers: iter::once(random_key),
             parallelism: 3,
             num_results: 100,
             rpc_timeout: Duration::from_secs(10),
@@ -500,10 +508,11 @@ mod tests {
     #[test]
     fn timeout_works() {
         let random_id = PeerId::random();
+        let random_key = kbucket::Key::from(random_id.clone());
 
         let query = Arc::new(Mutex::new(QueryState::new(QueryConfig {
             target: PeerId::random(),
-            known_closest_peers: iter::once(random_id.clone()),
+            known_closest_peers: iter::once(random_key),
             parallelism: 3,
             num_results: 100,
             rpc_timeout: Duration::from_millis(100),
