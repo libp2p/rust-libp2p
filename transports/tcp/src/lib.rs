@@ -256,7 +256,7 @@ fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
             }
             IfAddr::V6(ip6) => {
                 let plen = prefix_len(&IpAddr::V6(ip6.netmask));
-                IpNet::V6(Ipv6Net::new(ip6.ip, plen).expect("prelix len has been checked"))
+                IpNet::V6(Ipv6Net::new(ip6.ip, plen).expect("prefix len has been checked"))
             }
         };
         addrs.push((ip, ipn, ma))
@@ -405,12 +405,12 @@ fn map_addr(addr: &SocketAddr, addrs: &mut Addresses, pending: &mut Buffer, port
         Addresses::One(ref ma) => Ok(ma.clone()),
         Addresses::Many(ref mut addrs) => {
             // Check for exact match:
-            if let Some((_, _, ma)) = addrs.iter().filter(|(i, ..)| i == &addr.ip()).next() {
+            if let Some((_, _, ma)) = addrs.iter().find(|(i, ..)| i == &addr.ip()) {
                 return Ok(ma.clone())
             }
 
             // No exact match => check netmask
-            if let Some((_, _, ma)) = addrs.iter().filter(|(_, i, _)| i.contains(&addr.ip())).next() {
+            if let Some((_, _, ma)) = addrs.iter().find(|(_, i, _)| i.contains(&addr.ip())) {
                 return Ok(ma.clone())
             }
 
