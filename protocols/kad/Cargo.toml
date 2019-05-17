@@ -24,6 +24,7 @@ multihash = { package = "parity-multihash", version = "0.1.0", path = "../../mis
 parking_lot = "0.7"
 protobuf = "2.3"
 rand = "0.6.0"
+sha2 = "0.8.0"
 smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
@@ -36,4 +37,6 @@ libp2p-mplex = { version = "0.8.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.8.0", path = "../secio" }
 libp2p-tcp = { version = "0.8.0", path = "../../transports/tcp" }
 libp2p-yamux = { version = "0.8.0", path = "../../muxers/yamux" }
+quickcheck = "0.8"
+rand = "0.6.0"
 tokio = "0.1"

@@ -20,8 +20,7 @@
 
 use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn};
-use crate::kad_hash::KadHash;
-use crate::kbucket::{self, KBucketsTable, KBucketsPeerId};
+use crate::kbucket::{self, KBucketsTable};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -30,7 +29,7 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{borrow::Cow, error, marker::PhantomData, num::NonZeroUsize, time::Duration};
+use std::{borrow::Cow, error, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::{Instant, Interval};
 
@@ -39,7 +38,7 @@ mod test;
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
-    kbuckets: KBucketsTable<KadHash, Addresses>,
+    kbuckets: KBucketsTable<PeerId, Addresses>,
 
     /// If `Some`, we overwrite the Kademlia protocol name with this one.
     protocol_name_override: Option<Cow<'static, [u8]>>,
@@ -133,31 +132,20 @@ enum QueryInfoInner {
     },
 }
 
-impl KBucketsPeerId<PeerId> for QueryInfo {
-    fn distance_with(&self, other: &PeerId) -> u32 {
-        let other: &Multihash = other.as_ref();
-        self.as_ref().distance_with(other)
-    }
-
-    fn max_distance() -> NonZeroUsize {
-        <PeerId as KBucketsPeerId>::max_distance()
+impl Into<kbucket::Key<QueryInfo>> for QueryInfo {
+    fn into(self) -> kbucket::Key<QueryInfo> {
+        kbucket::Key::new(self)
     }
 }
 
-impl AsRef<Multihash> for QueryInfo {
-    fn as_ref(&self) -> &Multihash {
+impl AsRef<[u8]> for QueryInfo {
+    fn as_ref(&self) -> &[u8] {
         match &self.inner {
             QueryInfoInner::Initialization { target } => target.as_ref(),
             QueryInfoInner::FindPeer(peer) => peer.as_ref(),
-            QueryInfoInner::GetProviders { target, .. } => target,
-            QueryInfoInner::AddProvider { target } => target,
+            QueryInfoInner::GetProviders { target, .. } => target.as_bytes(),
+            QueryInfoInner::AddProvider { target } => target.as_bytes(),
         }
-    }
-}
-
-impl PartialEq<PeerId> for QueryInfo {
-    fn eq(&self, other: &PeerId) -> bool {
-        self.as_ref().eq(other)
     }
 }
 
@@ -174,7 +162,7 @@ impl QueryInfo {
                 user_data,
             },
             QueryInfoInner::GetProviders { target, .. } => KademliaHandlerIn::GetProvidersReq {
-                key: target.clone().into(),
+                key: target.clone(),
                 user_data,
             },
             QueryInfoInner::AddProvider { .. } => KademliaHandlerIn::FindNodeReq {
@@ -227,9 +215,8 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Underlying implementation for `add_connected_address` and `add_not_connected_address`.
     fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr, _connected: bool) {
-        let kad_hash = KadHash::from(peer_id.clone());
-
-        match self.kbuckets.entry(&kad_hash) {
+        let key = kbucket::Key::new(peer_id.clone());
+        match self.kbuckets.entry(&key) {
             kbucket::Entry::InKbucketConnected(mut entry) => entry.value().insert(address),
             kbucket::Entry::InKbucketConnectedPending(mut entry) => entry.value().insert(address),
             kbucket::Entry::InKbucketDisconnected(mut entry) => entry.value().insert(address),
@@ -248,7 +235,7 @@ impl<TSubstream> Kademlia<TSubstream> {
                     kbucket::InsertOutcome::Full => (),
                     kbucket::InsertOutcome::Pending { to_ping } => {
                         self.queued_events.push(NetworkBehaviourAction::DialPeer {
-                            peer_id: to_ping.peer_id().clone(),
+                            peer_id: to_ping.into_preimage(),
                         })
                     },
                 }
@@ -263,7 +250,7 @@ impl<TSubstream> Kademlia<TSubstream> {
         let parallelism = 3;
 
         Kademlia {
-            kbuckets: KBucketsTable::new(local_peer_id.into(), Duration::from_secs(60)),   // TODO: constant
+            kbuckets: KBucketsTable::new(kbucket::Key::new(local_peer_id), Duration::from_secs(60)),   // TODO: constant
             protocol_name_override: None,
             queued_events: SmallVec::new(),
             active_queries: Default::default(),
@@ -283,7 +270,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
     pub fn kbuckets_entries(&self) -> impl Iterator<Item = &PeerId> {
-        self.kbuckets.entries_not_pending().map(|(kad_hash, _)| kad_hash.peer_id())
+        self.kbuckets.entries_not_pending().map(|(key, _)| key.preimage())
     }
 
     /// Starts an iterative `FIND_NODE` request.
@@ -310,9 +297,9 @@ impl<TSubstream> Kademlia<TSubstream> {
     pub fn add_providing(&mut self, key: Multihash) {
         self.providing_keys.insert(key.clone());
         let providers = self.values_providers.entry(key).or_insert_with(Default::default);
-        let my_id = self.kbuckets.my_id();
-        if !providers.iter().any(|peer_id| peer_id == my_id.peer_id()) {
-            providers.push(my_id.peer_id().clone());
+        let local_id = self.kbuckets.local_key().preimage();
+        if !providers.iter().any(|peer_id| peer_id == local_id) {
+            providers.push(local_id.clone());
         }
 
         // Trigger the next refresh now.
@@ -348,9 +335,8 @@ impl<TSubstream> Kademlia<TSubstream> {
         };
 
         let known_closest_peers = self.kbuckets
-            .find_closest(target.as_ref())
-            .take(self.num_results)
-            .map(|h| h.peer_id().clone());
+            .find_closest(&kbucket::Key::new(target.clone()))
+            .take(self.num_results);
 
         self.active_queries.insert(
             query_id,
@@ -369,7 +355,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     where
         I: Iterator<Item=&'a KadPeer> + Clone
     {
-        let local_id = self.kbuckets.my_id().peer_id().clone();
+        let local_id = self.kbuckets.local_key().preimage().clone();
         let others_iter = peers.filter(|p| p.node_id != local_id);
 
         for peer in others_iter.clone() {
@@ -411,7 +397,7 @@ where
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
         let mut out_list = self.kbuckets
-            .entry(&KadHash::from(peer_id.clone()))
+            .entry(&kbucket::Key::new(peer_id.clone()))
             .value_not_pending()
             .map(|l| l.iter().cloned().collect::<Vec<_>>())
             .unwrap_or_else(Vec::new);
@@ -442,9 +428,9 @@ where
             ConnectedPoint::Listener { .. } => None,
         };
 
-        let id_kad_hash = KadHash::from(id.clone());
+        let key = kbucket::Key::new(id.clone());
 
-        match self.kbuckets.entry(&id_kad_hash) {
+        match self.kbuckets.entry(&key) {
             kbucket::Entry::InKbucketConnected(_) => {
                 unreachable!("Kbuckets are always kept in sync with the connection state; QED")
             },
@@ -482,7 +468,7 @@ where
                     kbucket::InsertOutcome::Full => (),
                     kbucket::InsertOutcome::Pending { to_ping } => {
                         self.queued_events.push(NetworkBehaviourAction::DialPeer {
-                            peer_id: to_ping.peer_id().clone(),
+                            peer_id: to_ping.into_preimage(),
                         })
                     },
                 }
@@ -498,16 +484,16 @@ where
 
     fn inject_addr_reach_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, _: &dyn error::Error) {
         if let Some(peer_id) = peer_id {
-            let id_kad_hash = KadHash::from(peer_id.clone());
+            let key = kbucket::Key::new(peer_id.clone());
 
-            if let Some(list) = self.kbuckets.entry(&id_kad_hash).value() {
+            if let Some(list) = self.kbuckets.entry(&key).value() {
                 // TODO: don't remove the address if the error is that we are already connected
                 //       to this peer
                 list.remove(addr);
             }
 
             for query in self.active_queries.values_mut() {
-                if let Some(addrs) = query.target_mut().untrusted_addresses.get_mut(id_kad_hash.peer_id()) {
+                if let Some(addrs) = query.target_mut().untrusted_addresses.get_mut(&peer_id) {
                     addrs.retain(|a| a != addr);
                 }
             }
@@ -528,13 +514,13 @@ where
             query.inject_rpc_error(id);
         }
 
-        match self.kbuckets.entry(&KadHash::from(id.clone())) {
+        match self.kbuckets.entry(&kbucket::Key::new(id.clone())) {
             kbucket::Entry::InKbucketConnected(entry) => {
                 match entry.set_disconnected() {
                     kbucket::SetDisconnectedOutcome::Kept(_) => {},
                     kbucket::SetDisconnectedOutcome::Replaced { replacement, .. } => {
                         let event = KademliaOut::KBucketAdded {
-                            peer_id: replacement.peer_id().clone(),
+                            peer_id: replacement.into_preimage(),
                             replaced: Some(id.clone()),
                         };
                         self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
@@ -568,7 +554,7 @@ where
             }
         }
 
-        if let Some(list) = self.kbuckets.entry(&KadHash::from(peer_id)).value() {
+        if let Some(list) = self.kbuckets.entry(&kbucket::Key::new(peer_id)).value() {
             if let ConnectedPoint::Dialer { address } = new_endpoint {
                 list.insert(address);
             }
@@ -579,10 +565,10 @@ where
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.kbuckets
-                    .find_closest(&KadHash::from(key.clone()))
-                    .filter(|p| p.peer_id() != &source)
+                    .find_closest(&kbucket::Key::new(key))
+                    .filter(|p| p.preimage() != &source)
                     .take(self.num_results)
-                    .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
+                    .map(|key| build_kad_peer(&key, &mut self.kbuckets))
                     .collect();
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
@@ -600,13 +586,6 @@ where
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
-                let closer_peers = self.kbuckets
-                    .find_closest(&key)
-                    .filter(|p| p.peer_id() != &source)
-                    .take(self.num_results)
-                    .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
-                    .collect();
-
                 let provider_peers = {
                     let kbuckets = &mut self.kbuckets;
                     self.values_providers
@@ -614,9 +593,15 @@ where
                         .into_iter()
                         .flat_map(|peers| peers)
                         .filter(|p| *p != &source)
-                        .map(move |peer_id| build_kad_peer(&KadHash::from(peer_id.clone()), kbuckets))
+                        .map(move |peer_id| build_kad_peer(&kbucket::Key::new(peer_id.clone()), kbuckets))
                         .collect()
                 };
+
+                let closer_peers = self.kbuckets
+                    .find_closest(&kbucket::Key::from(key))
+                    .take(self.num_results)
+                    .map(|key| build_kad_peer(&key, &mut self.kbuckets))
+                    .collect();
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
@@ -675,7 +660,7 @@ where
         // Flush the changes to the topology that we want to make.
         for (key, provider) in self.add_provider.drain() {
             // Don't add ourselves to the providers.
-            if provider == *self.kbuckets.my_id().peer_id() {
+            if provider == *self.kbuckets.local_key().preimage() {
                 continue;
             }
             let providers = self.values_providers.entry(key).or_insert_with(Default::default);
@@ -719,12 +704,12 @@ where
                             query_target,
                         }) => {
                             let rpc = query_target.to_rpc_request(query_id);
-                            if self.connected_peers.contains(&peer_id) {
+                            if self.connected_peers.contains(peer_id) {
                                 return Async::Ready(NetworkBehaviourAction::SendEvent {
                                     peer_id: peer_id.clone(),
                                     event: rpc,
                                 });
-                            } else if peer_id != self.kbuckets.my_id().peer_id() {
+                            } else if peer_id != self.kbuckets.local_key().preimage() {
                                 self.pending_rpcs.push((peer_id.clone(), rpc));
                                 return Async::Ready(NetworkBehaviourAction::DialPeer {
                                     peer_id: peer_id.clone(),
@@ -766,12 +751,13 @@ where
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                     QueryInfoInner::AddProvider { target } => {
+                        let local_key = kbucket::Key::new(parameters.local_peer_id().clone());
                         for closest in closer_peers {
                             let event = NetworkBehaviourAction::SendEvent {
                                 peer_id: closest,
                                 event: KademliaHandlerIn::AddProvider {
                                     key: target.clone(),
-                                    provider_peer: build_kad_peer(&KadHash::from(parameters.local_peer_id().clone()), &mut self.kbuckets),
+                                    provider_peer: build_kad_peer(&local_key, &mut self.kbuckets),
                                 },
                             };
 
@@ -834,20 +820,20 @@ pub enum KademliaOut {
 ///
 /// > **Note**: This is just a convenience function that doesn't do anything note-worthy.
 fn build_kad_peer(
-    kad_hash: &KadHash,
-    kbuckets: &mut KBucketsTable<KadHash, Addresses>
+    key: &kbucket::Key<PeerId>,
+    kbuckets: &mut KBucketsTable<PeerId, Addresses>
 ) -> KadPeer {
-    let (multiaddrs, connection_ty) = match kbuckets.entry(kad_hash) {
+    let (multiaddrs, connection_ty) = match kbuckets.entry(key) {
         kbucket::Entry::NotInKbucket(_) => (Vec::new(), KadConnectionType::NotConnected),       // TODO: pending connection?
         kbucket::Entry::InKbucketConnected(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::Connected),
         kbucket::Entry::InKbucketDisconnected(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::NotConnected),
         kbucket::Entry::InKbucketConnectedPending(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::Connected),
         kbucket::Entry::InKbucketDisconnectedPending(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::NotConnected),
-        kbucket::Entry::SelfEntry => panic!("build_kad_peer expects not to be called with the KadHash of the local ID"),
+        kbucket::Entry::SelfEntry => panic!("build_kad_peer expects not to be called with the kbucket::Key of the local ID"),
     };
 
     KadPeer {
-        node_id: kad_hash.peer_id().clone(),
+        node_id: key.preimage().clone(),
         multiaddrs,
         connection_ty,
     }
