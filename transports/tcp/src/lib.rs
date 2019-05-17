@@ -43,7 +43,8 @@ use futures::{
     prelude::*,
     stream::{self, Chain, IterOk, Once}
 };
-use get_if_addrs::get_if_addrs;
+use get_if_addrs::{IfAddr, get_if_addrs};
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
@@ -51,11 +52,11 @@ use libp2p_core::{
 };
 use log::{debug, error, trace};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     fmt,
     io::{self, Read, Write},
     iter::{self, FromIterator},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     time::Duration,
     vec::IntoIter
 };
@@ -152,10 +153,10 @@ impl Transport for TcpConfig {
         let addrs =
             if socket_addr.ip().is_unspecified() {
                 let addrs = host_addresses(port).map_err(TransportError::Other)?;
-                debug!("Listening on {:?}", addrs.values());
+                debug!("Listening on {:?}", addrs.iter().map(|(_, _, ma)| ma).collect::<Vec<_>>());
                 Addresses::Many(addrs)
             } else {
-                let ma = sockaddr_to_multiaddr(local_addr.ip(), port);
+                let ma = ip_to_multiaddr(local_addr.ip(), port);
                 debug!("Listening on {:?}", ma);
                 Addresses::One(ma)
             };
@@ -167,7 +168,8 @@ impl Transport for TcpConfig {
                 Either::A(stream::once(Ok(event)))
             }
             Addresses::Many(ref aa) => {
-                let events = aa.values()
+                let events = aa.iter()
+                    .map(|(_, _, ma)| ma)
                     .cloned()
                     .map(ListenerEvent::NewAddress)
                     .collect::<Vec<_>>();
@@ -232,7 +234,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 }
 
 // Create a [`Multiaddr`] from the given IP address and port number.
-fn sockaddr_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
+fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
     let proto = match ip {
         IpAddr::V4(ip) => Protocol::Ip4(ip),
         IpAddr::V6(ip) => Protocol::Ip6(ip)
@@ -242,13 +244,56 @@ fn sockaddr_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 }
 
 // Collect all local host addresses and use the provided port number as listen port.
-fn host_addresses(port: u16) -> io::Result<HashMap<IpAddr, Multiaddr>> {
-    let mut addrs = HashMap::new();
+fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
+    let mut addrs = Vec::new();
     for iface in get_if_addrs()? {
-        let ma = sockaddr_to_multiaddr(iface.ip(), port);
-        addrs.insert(iface.ip(), ma);
+        let ip = iface.ip();
+        let ma = ip_to_multiaddr(ip, port);
+        let ipn = match iface.addr {
+            IfAddr::V4(ip4) => {
+                let plen = prefix_len(&IpAddr::V4(ip4.netmask));
+                IpNet::V4(Ipv4Net::new(ip4.ip, plen).expect("prefix len has been checked"))
+            }
+            IfAddr::V6(ip6) => {
+                let plen = prefix_len(&IpAddr::V6(ip6.netmask));
+                IpNet::V6(Ipv6Net::new(ip6.ip, plen).expect("prelix len has been checked"))
+            }
+        };
+        addrs.push((ip, ipn, ma))
     }
     Ok(addrs)
+}
+
+// Derive the prefix len of the given netmask, i.e. the number of leading 1s in its octets.
+fn prefix_len(netmask: &IpAddr) -> u8 {
+    fn count_bits(octets: &[u8]) -> u8 {
+        let mut len = 0;
+        'main: for o in octets {
+            let mut o = *o;
+            let is_last = o != 0xFF;
+            loop {
+                if o == 0 {
+                    if is_last { return len }
+                    continue 'main
+                }
+                len += 1;
+                o = o >> 1
+            }
+        }
+        len
+    }
+    match netmask {
+        IpAddr::V4(ip4) => {
+            let len = count_bits(&ip4.octets());
+            assert!(len <= 32);
+            len
+        }
+        IpAddr::V6(ip6) => {
+            let len = count_bits(&ip6.octets());
+            assert!(len <= 128);
+            len
+        }
+    }
 }
 
 /// Applies the socket configuration parameters to a socket.
@@ -331,7 +376,7 @@ enum Addresses {
     /// A specific address is used to listen.
     One(Multiaddr),
     /// A set of addresses is used to listen.
-    Many(HashMap<IpAddr, Multiaddr>)
+    Many(Vec<(IpAddr, IpNet, Multiaddr)>)
 }
 
 type Buffer = VecDeque<ListenerEvent<FutureResult<TcpTransStream, io::Error>>>;
@@ -359,32 +404,19 @@ fn map_addr(addr: &SocketAddr, addrs: &mut Addresses, pending: &mut Buffer, port
     match addrs {
         Addresses::One(ref ma) => Ok(ma.clone()),
         Addresses::Many(ref mut addrs) => {
-            if let Some(ma) = addrs.get(&addr.ip()) {
+            // Check for exact match:
+            if let Some((_, _, ma)) = addrs.iter().filter(|(i, ..)| i == &addr.ip()).next() {
+                return Ok(ma.clone())
+            }
+
+            // No exact match => check netmask
+            if let Some((_, _, ma)) = addrs.iter().filter(|(_, i, _)| i.contains(&addr.ip())).next() {
                 return Ok(ma.clone())
             }
 
             // The local IP address of this socket is new to us.
-            // First we check for local loopback IPv4 addresses.
-
-            if addr.ip().is_loopback() && addr.ip().is_ipv4() {
-                // We have encountered an unknown local loopback IPv4 address. This
-                // deserves some special treatment.
-                //
-                // As mentioned in RFC 5735: "A datagram sent by a higher-level protocol
-                // to an address anywhere within this block [127.0.0.0/8] loops back
-                // inside the host. This is ordinarily implemented using only
-                // 127.0.0.1/32 for loopback."
-                //
-                // We therefore report 127.0.0.1 for every address of the block 127.0.0.0/8.
-                // IPv6 does not reserve a block for loopback addresses but only uses ::1,
-                // hence we do not treat it in a special way.
-                if let Some(ma) = addrs.get(&IpAddr::V4(Ipv4Addr::LOCALHOST)) {
-                    return Ok(ma.clone())
-                }
-            }
-
-            // We really do not know the address yet, so we need to check for changes in
-            // the set of host addresses and report new and expired addresses.
+            // We need to check for changes in the set of host addresses and report new
+            // and expired addresses.
             //
             // TODO: We do not detect expired addresses unless there is a new address.
 
@@ -392,16 +424,16 @@ fn map_addr(addr: &SocketAddr, addrs: &mut Addresses, pending: &mut Buffer, port
             let old_addrs = std::mem::replace(addrs, new_addrs);
 
             // Check for addresses no longer in use.
-            for (ip, ma) in old_addrs.iter() {
-                if !addrs.contains_key(&ip) {
+            for (ip, _, ma) in old_addrs.iter() {
+                if addrs.iter().find(|(i, ..)| i == ip).is_none() {
                     debug!("Expired listen address: {}", ma);
                     pending.push_back(ListenerEvent::AddressExpired(ma.clone()));
                 }
             }
 
             // Check for new addresses.
-            for (ip, ma) in addrs.iter() {
-                if !old_addrs.contains_key(&ip) {
+            for (ip, _, ma) in addrs.iter() {
+                if old_addrs.iter().find(|(i, ..)| i == ip).is_none() {
                     debug!("New listen address: {}", ma);
                     pending.push_back(ListenerEvent::NewAddress(ma.clone()));
                 }
@@ -409,12 +441,12 @@ fn map_addr(addr: &SocketAddr, addrs: &mut Addresses, pending: &mut Buffer, port
 
             // We should now be able to find the listen address of the local socket address,
             // if not something is seriously wrong and we report an error.
-            if addrs.get(&addr.ip()).is_none() {
-                let msg = format!("{} does not match any listen address {:?}", addr.ip(), addrs.keys());
+            if addrs.iter().find(|(i, j, _)| i == &addr.ip() || j.contains(&addr.ip())).is_none() {
+                let msg = format!("{} does not match any listen address", addr.ip());
                 return Err(io::Error::new(io::ErrorKind::Other, msg))
             }
 
-            Ok(sockaddr_to_multiaddr(addr.ip(), port))
+            Ok(ip_to_multiaddr(addr.ip(), port))
         }
     }
 }
@@ -457,7 +489,7 @@ impl Stream for TcpListenStream {
                 }
             };
 
-            let remote_addr = sockaddr_to_multiaddr(sock_addr.ip(), sock_addr.port());
+            let remote_addr = ip_to_multiaddr(sock_addr.ip(), sock_addr.port());
 
             match apply_config(&self.config, &sock) {
                 Ok(()) => {
