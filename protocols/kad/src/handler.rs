@@ -182,6 +182,25 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Known provider for this key.
         provider_peer: KadPeer,
     },
+
+    GetValue {
+        key: Vec<u8>,
+
+        request_id: KademliaRequestId,
+    },
+
+    GetValueRes {
+        result: Option<(Vec<u8>, Vec<u8>)>,
+
+        closer_peers: Vec<KadPeer>,
+
+        user_data: TUserData,
+    },
+
+    PutValue {
+        key: Vec<u8>,
+        value: Vec<u8>,
+    },
 }
 
 /// Error that can happen when requesting an RPC query.
@@ -229,6 +248,7 @@ impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 }
 
 /// Event to send to the handler.
+#[derive(Debug)]
 pub enum KademliaHandlerIn<TUserData> {
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
@@ -280,6 +300,27 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Known provider for this key.
         provider_peer: KadPeer,
     },
+
+    GetValue {
+        key: Vec<u8>,
+
+        user_data: TUserData,
+    },
+
+    GetValueRes {
+        /// The value that might have been found in our storage
+        result: Option<(Vec<u8>, Vec<u8>)>,
+
+        /// Nodes that are closer to the key we were searching for
+        closer_peers: Vec<KadPeer>,
+
+        request_id: KademliaRequestId,
+    },
+
+    PutValue {
+        key: Vec<u8>,
+        value: Vec<u8>,
+    }
 }
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
@@ -464,6 +505,50 @@ where
                 };
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, None));
+            }
+            KademliaHandlerIn::GetValue { key, user_data } => {
+                let msg = KadRequestMsg::GetValue { key };
+
+                self.substreams
+                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
+
+            }
+            KademliaHandlerIn::PutValue { key, value } => {
+                let msg = KadRequestMsg::PutValue {
+                    key,
+                    value: value,
+                };
+
+                self.substreams
+                    .push(SubstreamState::OutPendingOpen(msg, None));
+            }
+            KademliaHandlerIn::GetValueRes {
+                result,
+                closer_peers,
+                request_id,
+            } => {
+                let pos = self.substreams.iter().position(|state| match state {
+                    SubstreamState::InWaitingUser(ref conn_id, _)
+                        if conn_id == &request_id.connec_unique_id =>
+                        {
+                            true
+                        }
+                    _ => false,
+                });
+
+                if let Some(pos) = pos {
+                    let (conn_id, substream) = match self.substreams.remove(pos) {
+                        SubstreamState::InWaitingUser(conn_id, substream) => (conn_id, substream),
+                        _ => unreachable!(),
+                    };
+
+                    let msg = KadResponseMsg::GetValue {
+                        result,
+                        closer_peers: closer_peers.clone(),
+                    };
+                    self.substreams
+                        .push(SubstreamState::InPendingSend(conn_id, substream, msg));
+                }
             }
         }
     }
@@ -740,6 +825,13 @@ fn process_kad_request<TUserData>(
         KadRequestMsg::AddProvider { key, provider_peer } => {
             Ok(KademliaHandlerEvent::AddProvider { key, provider_peer })
         }
+        KadRequestMsg::GetValue { key } => Ok(KademliaHandlerEvent::GetValue {
+            key,
+            request_id: KademliaRequestId { connec_unique_id },
+        }),
+        KadRequestMsg::PutValue { key, value } => {
+            Ok(KademliaHandlerEvent::PutValue { key, value })
+        }
     }
 }
 
@@ -771,5 +863,19 @@ fn process_kad_response<TUserData>(
             provider_peers,
             user_data,
         },
+        KadResponseMsg::GetValue {
+            result,
+            closer_peers,
+        } => KademliaHandlerEvent::GetValueRes {
+            result,
+            closer_peers,
+            user_data,
+        },
+        KadResponseMsg::PutValue { key, value } => {
+            KademliaHandlerEvent::PutValue {
+                key,
+                value,
+            }
+        }
     }
 }

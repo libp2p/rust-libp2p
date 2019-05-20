@@ -33,6 +33,7 @@
 use bytes::BytesMut;
 use codec::UviBytes;
 use crate::protobuf_structs::dht as proto;
+use crate::protobuf_structs::dht::Record;
 use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
@@ -273,6 +274,15 @@ pub enum KadRequestMsg {
         /// Known provider for this key.
         provider_peer: KadPeer,
     },
+
+    GetValue {
+        key: Vec<u8>,
+    },
+
+    PutValue {
+        key: Vec<u8>,
+        value: Vec<u8>,
+    }
 }
 
 /// Response that we can send to a peer or that we received from a peer.
@@ -293,6 +303,19 @@ pub enum KadResponseMsg {
         closer_peers: Vec<KadPeer>,
         /// Known providers for this key.
         provider_peers: Vec<KadPeer>,
+    },
+
+    GetValue {
+        /// Result that might have been found
+        result: Option<(Vec<u8>, Vec<u8>)>,
+
+        /// Nodes closest to the key
+        closer_peers: Vec<KadPeer>,
+    },
+
+    PutValue {
+        key: Vec<u8>,
+        value: Vec<u8>,
     },
 }
 
@@ -324,6 +347,28 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             msg.set_clusterLevelRaw(10);
             msg.set_key(key.into_bytes());
             msg.mut_providerPeers().push(provider_peer.into());
+            msg
+        }
+        KadRequestMsg::GetValue { key } => {
+            let mut msg = proto::Message::new();
+            msg.set_field_type(proto::Message_MessageType::GET_VALUE);
+            msg.set_clusterLevelRaw(10);
+            msg.set_key(key.clone());
+
+            let mut record = Record::new();
+            record.set_key(key);
+            msg.set_record(record);
+
+            msg
+        }
+        KadRequestMsg::PutValue { key, value} => {
+            let mut msg = proto::Message::new();
+            msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
+            let mut record = Record::new();
+            record.set_value(value);
+            record.set_key(key);
+
+            msg.set_record(record);
             msg
         }
     }
@@ -361,6 +406,36 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             }
             msg
         }
+        KadResponseMsg::GetValue {
+            result,
+            closer_peers,
+        } => {
+            let mut msg = proto::Message::new();
+            msg.set_field_type(proto::Message_MessageType::GET_VALUE);
+            msg.set_clusterLevelRaw(9);
+            for peer in closer_peers {
+                msg.mut_closerPeers().push(peer.into());
+            }
+
+            result.map(|(key, value)| {
+                let mut record = Record::new();
+                record.set_key(key);
+                record.set_value(value);
+                msg.set_record(record);
+            });
+
+            msg
+        }
+        KadResponseMsg::PutValue {key, value} =>  {
+            let mut msg = proto::Message::new();
+            msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
+            let mut record = Record::new();
+            record.set_key(key);
+            record.set_value(value);
+            msg.set_record(record);
+
+            msg
+        }
     }
 }
 
@@ -371,11 +446,19 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
     match message.get_field_type() {
         proto::Message_MessageType::PING => Ok(KadRequestMsg::Ping),
 
-        proto::Message_MessageType::PUT_VALUE =>
-            Err(invalid_data("Unsupported: PUT_VALUE message.")),
+        proto::Message_MessageType::PUT_VALUE => {
 
-        proto::Message_MessageType::GET_VALUE =>
-            Err(invalid_data("Unsupported: GET_VALUE message.")),
+            let record = message.get_record();
+            let value = record.get_value();
+            let key = record.get_key().into();
+            Ok(KadRequestMsg::PutValue { key, value: value.to_vec() })
+        }
+
+        proto::Message_MessageType::GET_VALUE => {
+            let record = message.get_record();
+            let key = record.get_key().into();
+            Ok(KadRequestMsg::GetValue { key })
+        }
 
         proto::Message_MessageType::FIND_NODE => {
             let key = PeerId::from_bytes(message.take_key())
@@ -414,8 +497,23 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
     match message.get_field_type() {
         proto::Message_MessageType::PING => Ok(KadResponseMsg::Pong),
 
-        proto::Message_MessageType::GET_VALUE =>
-            Err(invalid_data("Unsupported: GET_VALUE message")),
+        proto::Message_MessageType::GET_VALUE => {
+            let result = match message.has_record() {
+                true => {
+                    let record = message.get_record();
+                    Some((record.get_key().into(), record.get_value().into()))
+                }
+                false => None,
+            };
+
+            let closer_peers = message
+                .mut_closerPeers()
+                .iter_mut()
+                .filter_map(|peer| KadPeer::try_from(peer).ok())
+                .collect::<Vec<_>>();
+
+            Ok(KadResponseMsg::GetValue { result, closer_peers })
+        },
 
         proto::Message_MessageType::FIND_NODE => {
             let closer_peers = message
@@ -446,8 +544,15 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
             })
         }
 
-        proto::Message_MessageType::PUT_VALUE =>
-            Err(invalid_data("received an unexpected PUT_VALUE message")),
+        proto::Message_MessageType::PUT_VALUE => {
+            let record = message.get_record();
+            let key = record.get_key().into();
+
+            Ok(KadResponseMsg::PutValue {
+                key,
+                value:  Vec::from(record.get_value()),
+            })
+        }
 
         proto::Message_MessageType::ADD_PROVIDER =>
             Err(invalid_data("received an unexpected ADD_PROVIDER message"))

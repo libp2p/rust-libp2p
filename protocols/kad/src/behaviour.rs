@@ -89,6 +89,10 @@ pub struct Kademlia<TSubstream> {
 
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
+
+    /// The records that we keep.
+    /// TODO: Key should be a multihash
+    records: FnvHashMap<Vec<u8>, Vec<u8>>
 }
 
 /// Opaque type. Each query that we start gets a unique number.
@@ -131,6 +135,16 @@ enum QueryInfoInner {
         /// Which hash we're targetting.
         target: Multihash,
     },
+
+    /// Put the value to the dht records
+    PutValue {
+        key: Vec<u8>,
+        value: Vec<u8>,
+    },
+
+    GetValue {
+        key: Vec<u8>,
+    },
 }
 
 impl Into<kbucket::Key<QueryInfo>> for QueryInfo {
@@ -146,6 +160,14 @@ impl AsRef<[u8]> for QueryInfo {
             QueryInfoInner::FindPeer(peer) => peer.as_ref(),
             QueryInfoInner::GetProviders { target, .. } => target.as_bytes(),
             QueryInfoInner::AddProvider { target } => target.as_bytes(),
+            QueryInfoInner::GetValue { key } => {
+                // TODO: actually hash the string
+                key
+            }
+            QueryInfoInner::PutValue { key, .. } => {
+                // TODO: actually hash the string
+                key
+            }
         }
     }
 }
@@ -170,6 +192,17 @@ impl QueryInfo {
                 key: unimplemented!(), // TODO: target.clone(),
                 user_data,
             },
+            QueryInfoInner::GetValue { key } => {
+
+                KademliaHandlerIn::GetValue {
+                    key: key.clone(),
+                    user_data,
+                }
+            },
+            QueryInfoInner::PutValue { key, value } => KademliaHandlerIn::PutValue {
+                key: key.clone(),
+                value: value.clone(),
+            }
         }
     }
 }
@@ -261,6 +294,7 @@ impl<TSubstream> Kademlia<TSubstream> {
             rpc_timeout: Duration::from_secs(8),
             add_provider: SmallVec::new(),
             marker: PhantomData,
+            records: FnvHashMap::default(),
         }
     }
 
@@ -281,6 +315,16 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// Starts an iterative `GET_PROVIDERS` request.
     pub fn get_providers(&mut self, target: Multihash) {
         self.start_query(QueryInfoInner::GetProviders { target, pending_results: Vec::new() });
+    }
+
+    /// Starts an iterative `GET_VALUE` request.
+    pub fn get_data(&mut self, key: Vec<u8>) {
+        self.start_query(QueryInfoInner::GetValue { key });
+    }
+
+    /// Starts an iterative `PUT_VALUE` request
+    pub fn put_data(&mut self, key: Vec<u8>, data: &[u8]) {
+        self.start_query(QueryInfoInner::PutValue{key, value: Vec::from(data)});
     }
 
     /// Register the local node as the provider for the given key.
@@ -623,6 +667,37 @@ where
                 self.add_provider.push((key, provider_peer.node_id));
                 return;
             }
+            KademliaHandlerEvent::GetValue { key, request_id } => {
+                let result = match self.records.get(&key) {
+                    Some(value) => Some((key.clone(), value.clone())),
+                    None => None,
+                };
+
+                let key = key;
+                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+
+                self.queued_events.push(NetworkBehaviourAction::SendEvent {
+                    peer_id: source,
+                    event: KademliaHandlerIn::GetValueRes {
+                        result,
+                        closer_peers,
+                        request_id,
+                    },
+                });
+            }
+            KademliaHandlerEvent::GetValueRes {
+                result: _,
+                closer_peers,
+                user_data,
+            } => {
+                self.discovered(&user_data, &source, closer_peers.iter());
+            }
+            KademliaHandlerEvent::PutValue { key, value} => {
+                self.records.insert(key.clone(), value);
+                self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
+                        KademliaOut::RecordPut { key }));
+                return;
+            }
         };
     }
 
@@ -663,7 +738,8 @@ where
         loop {
             // Drain queued events first.
             if !self.queued_events.is_empty() {
-                return Async::Ready(self.queued_events.remove(0));
+                let e = self.queued_events.remove(0);
+                return Async::Ready(e);
             }
             self.queued_events.shrink_to_fit();
 
@@ -753,6 +829,32 @@ where
                             self.queued_events.push(event);
                         }
                     },
+                    QueryInfoInner::GetValue { key } => {
+                        let result = match self.records.get(&key) {
+                                Some(value) => Some((key.clone(), value.clone())),
+                                None => None
+                            };
+                        let event = KademliaOut::GetValueRes {
+                            result,
+                            closer_peers: vec![],
+                        };
+
+                        break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                    },
+                    QueryInfoInner::PutValue { key, value } => {
+                        self.records.insert(key.clone(), value.clone());
+                        for closest in closer_peers {
+                            let event = NetworkBehaviourAction::SendEvent {
+                                peer_id: closest,
+                                event: KademliaHandlerIn::PutValue {
+                                    key: key.clone(),
+                                    value: value.clone(),
+                                }
+                            };
+
+                            self.queued_events.push(event);
+                        }
+                    },
                 }
             } else {
                 break Async::NotReady;
@@ -802,6 +904,15 @@ pub enum KademliaOut {
         /// List of peers ordered from closest to furthest away.
         closer_peers: Vec<PeerId>,
     },
+
+    GetValueRes {
+        result: Option<(Vec<u8>, Vec<u8>)>,
+        closer_peers: Vec<PeerId>,
+    },
+
+    RecordPut {
+        key: Vec<u8>,
+    }
 }
 
 impl From<kbucket::EntryView<PeerId, Addresses>> for KadPeer {
