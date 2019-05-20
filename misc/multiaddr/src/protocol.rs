@@ -9,7 +9,7 @@ use std::{
     borrow::Cow,
     convert::From,
     fmt,
-    io::{self, Cursor, Write},
+    io::{Cursor, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     str::{self, FromStr}
 };

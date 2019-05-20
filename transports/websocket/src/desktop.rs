@@ -279,16 +279,11 @@ mod tests {
     use libp2p_tcp as tcp;
     use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
-<<<<<<< HEAD
-    use multiaddr::Protocol;
-    use libp2p_core::{Transport, transport::ListenerEvent};
-=======
     use libp2p_core::{
         Transport,
         multiaddr::Protocol,
         transport::ListenerEvent
     };
->>>>>>> upstream/master
     use super::WsConfig;
 
     #[test]
