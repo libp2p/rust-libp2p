@@ -41,7 +41,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         let kp = RsaKeyPair::from_pkcs8(Input::from(&der[..]))
-            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo", e))?;
+            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo").source(e))?;
         der.zeroize();
         Ok(Keypair(Arc::new(kp)))
     }
@@ -57,7 +57,7 @@ impl Keypair {
         let rng = SystemRandom::new();
         match self.0.sign(&RSA_PKCS1_SHA256, &rng, &data, &mut signature) {
             Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA", e))
+            Err(e) => Err(SigningError::new("RSA").source(e))
         }
     }
 }
@@ -105,7 +105,7 @@ impl PublicKey {
     /// structure. See also `encode_x509`.
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::deserialize(pk.iter())
-            .map_err(|e| DecodingError::new("RSA X.509", e))
+            .map_err(|e| DecodingError::new("RSA X.509").source(e))
             .map(|spki| spki.subjectPublicKey.0)
     }
 }

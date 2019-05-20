@@ -46,7 +46,7 @@ impl Keypair {
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
             .map(|k| { kp.zeroize(); Keypair(k) })
-            .map_err(|e| DecodingError::new("Ed25519 keypair", e.compat()))
+            .map_err(|e| DecodingError::new("Ed25519 keypair").source(e.compat()))
     }
 
     /// Sign a message using the private key of this keypair.
@@ -100,7 +100,7 @@ pub struct PublicKey(ed25519::PublicKey);
 impl PublicKey {
     /// Verify the Ed25519 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        ed25519::Signature::from_bytes(sig).map(|s| self.0.verify(msg, &s)).is_ok()
+        ed25519::Signature::from_bytes(sig).and_then(|s| self.0.verify(msg, &s)).is_ok()
     }
 
     /// Encode the public key into a byte array in compressed form, i.e.
@@ -112,7 +112,7 @@ impl PublicKey {
     /// Decode a public key from a byte array as produced by `encode`.
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
-            .map_err(|e| DecodingError::new("Ed25519 public key", e.compat()))
+            .map_err(|e| DecodingError::new("Ed25519 public key").source(e.compat()))
             .map(PublicKey)
     }
 }
@@ -147,7 +147,7 @@ impl SecretKey {
     pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk_bytes.as_mut();
         let secret = ed25519::SecretKey::from_bytes(&*sk_bytes)
-            .map_err(|e| DecodingError::new("Ed25519 secret key", e.compat()))?;
+            .map_err(|e| DecodingError::new("Ed25519 secret key").source(e.compat()))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
@@ -189,5 +189,21 @@ mod tests {
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);
     }
-}
 
+    #[test]
+    fn ed25519_signature() {
+        let kp = Keypair::generate();
+        let pk = kp.public();
+
+        let msg = "hello world".as_bytes();
+        let sig = kp.sign(msg);
+        assert!(pk.verify(msg, &sig));
+
+        let mut invalid_sig = sig.clone();
+        invalid_sig[3..6].copy_from_slice(&[10, 23, 42]);
+        assert!(!pk.verify(msg, &invalid_sig));
+
+        let invalid_msg = "h3ll0 w0rld".as_bytes();
+        assert!(!pk.verify(invalid_msg, &sig));
+    }
+}

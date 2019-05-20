@@ -44,9 +44,12 @@ use futures::{
     stream::{self, Chain, IterOk, Once}
 };
 use get_if_addrs::get_if_addrs;
-use libp2p_core::{Transport, transport::{ListenerEvent, TransportError}};
-use log::{debug, error};
-use multiaddr::{Protocol, Multiaddr};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
+use log::{debug, error, trace};
 use std::{
     collections::{HashMap, VecDeque},
     fmt,
@@ -419,7 +422,7 @@ impl Stream for TcpListenStream {
 
             match apply_config(&self.config, &sock) {
                 Ok(()) => {
-                    debug!("Incoming connection from {}", remote_addr);
+                    trace!("Incoming connection from {} on {}", remote_addr, listen_addr);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::ok(TcpTransStream { inner: sock }),
                         listen_addr,
@@ -427,6 +430,7 @@ impl Stream for TcpListenStream {
                     })
                 }
                 Err(err) => {
+                    debug!("Error upgrading incoming connection from {}: {:?}", remote_addr, err);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::err(err),
                         listen_addr,
@@ -461,7 +465,15 @@ impl Read for TcpTransStream {
     }
 }
 
-impl AsyncRead for TcpTransStream {}
+impl AsyncRead for TcpTransStream {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.inner.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.inner.read_buf(buf)
+    }
+}
 
 impl Write for TcpTransStream {
     #[inline]
@@ -499,10 +511,13 @@ mod tests {
     use super::{multiaddr_to_socketaddr, TcpConfig};
     use futures::stream::Stream;
     use futures::Future;
-    use multiaddr::{Multiaddr, Protocol};
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use libp2p_core::{Transport, transport::ListenerEvent};
+    use libp2p_core::{
+        Transport,
+        multiaddr::{Multiaddr, Protocol},
+        transport::ListenerEvent
+    };
     use tokio_io;
 
     #[test]

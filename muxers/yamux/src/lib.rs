@@ -80,6 +80,10 @@ where
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
     }
 
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
+    }
+
     fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
         let result = sub.poll_read(buf);
         if let Ok(Async::Ready(_)) = result {

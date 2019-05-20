@@ -32,7 +32,7 @@ use libp2p_core::protocols_handler::{
 };
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
-use std::{error, fmt, io, time::Duration};
+use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::Instant;
 
@@ -70,9 +70,6 @@ where
     /// We haven't started opening the outgoing substream yet.
     /// Contains the request we want to send, and the user data if we expect an answer.
     OutPendingOpen(KadRequestMsg, Option<TUserData>),
-    /// We are waiting for the outgoing substream to be upgraded.
-    /// Contains the request we want to send, and the user data if we expect an answer.
-    OutPendingUpgrade(KadRequestMsg, Option<TUserData>),
     /// Waiting to send a message to the remote.
     OutPendingSend(
         KadOutStreamSink<TSubstream>,
@@ -111,7 +108,6 @@ where
     fn try_close(self) -> AsyncSink<Self> {
         match self {
             SubstreamState::OutPendingOpen(_, _)
-            | SubstreamState::OutPendingUpgrade(_, _)
             | SubstreamState::OutReportError(_, _) => AsyncSink::Ready,
             SubstreamState::OutPendingSend(mut stream, _, _)
             | SubstreamState::OutPendingFlush(mut stream, _)
@@ -307,7 +303,6 @@ where
 {
     /// Create a `KademliaHandler` that only allows sending messages to the remote but denying
     /// incoming connections.
-    #[inline]
     pub fn dial_only() -> Self {
         KademliaHandler::with_allow_listening(false)
     }
@@ -316,7 +311,6 @@ where
     /// requests.
     ///
     /// The `Default` trait implementation wraps around this function.
-    #[inline]
     pub fn dial_and_listen() -> Self {
         KademliaHandler::with_allow_listening(true)
     }
@@ -329,6 +323,13 @@ where
             substreams: Vec::new(),
             keep_alive: KeepAlive::Yes,
         }
+    }
+
+    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
+    /// between networks on purpose.
+    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
+        self.config = self.config.with_protocol_name(name);
+        self
     }
 }
 
@@ -359,7 +360,7 @@ where
     #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if self.allow_listening {
-            SubstreamProtocol::new(self.config).map_upgrade(upgrade::EitherUpgrade::A)
+            SubstreamProtocol::new(self.config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
             SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
@@ -405,11 +406,8 @@ where
                 request_id,
             } => {
                 let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _)
-                        if conn_id == &request_id.connec_unique_id =>
-                    {
-                        true
-                    }
+                    SubstreamState::InWaitingUser(ref conn_id, _) =>
+                        conn_id == &request_id.connec_unique_id,
                     _ => false,
                 });
 
@@ -500,7 +498,7 @@ where
             let mut substream = self.substreams.swap_remove(n);
 
             loop {
-                match advance_substream(substream, self.config) {
+                match advance_substream(substream, self.config.clone()) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
                         return Ok(Async::Ready(event));
@@ -562,11 +560,6 @@ where
             };
             (None, Some(ev), false)
         }
-        SubstreamState::OutPendingUpgrade(msg, user_data) => (
-            Some(SubstreamState::OutPendingUpgrade(msg, user_data)),
-            None,
-            false,
-        ),
         SubstreamState::OutPendingSend(mut substream, msg, user_data) => {
             match substream.start_send(msg) {
                 Ok(AsyncSink::Ready) => (
@@ -764,9 +757,11 @@ fn process_kad_response<TUserData>(
                 user_data,
             }
         }
-        KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
-            closer_peers,
-            user_data,
+        KadResponseMsg::FindNode { closer_peers } => {
+            KademliaHandlerEvent::FindNodeRes {
+                closer_peers,
+                user_data,
+            }
         },
         KadResponseMsg::GetProviders {
             closer_peers,

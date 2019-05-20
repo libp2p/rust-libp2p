@@ -23,6 +23,7 @@
 pub mod x25519;
 
 use crate::NoiseError;
+use libp2p_core::identity;
 use rand::FromEntropy;
 use zeroize::Zeroize;
 
@@ -59,15 +60,80 @@ pub trait Protocol<C> {
     fn params_ix() -> ProtocolParams;
     /// The protocol parameters for the XX handshake pattern.
     fn params_xx() -> ProtocolParams;
+
     /// Construct a DH public key from a byte slice.
     fn public_from_bytes(s: &[u8]) -> Result<PublicKey<C>, NoiseError>;
+
+    /// Determines whether the authenticity of the given DH static public key
+    /// and public identity key is linked, i.e. that proof of ownership of a
+    /// secret key for the static DH public key implies that the key is
+    /// authentic w.r.t. the given public identity key.
+    ///
+    /// The trivial case is when the keys are byte for byte identical.
+    #[allow(unused_variables)]
+    fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>) -> bool {
+        false
+    }
+
+    /// Verifies that a given static DH public key is authentic w.r.t. a
+    /// given public identity key in the context of an optional signature.
+    ///
+    /// The given static DH public key is assumed to already be authentic
+    /// in the sense that possession of a corresponding secret key has been
+    /// established, as is the case at the end of a Noise handshake involving
+    /// static DH keys.
+    ///
+    /// If the public keys are [`linked`](Protocol::linked), verification succeeds
+    /// without a signature, otherwise a signature over the static DH public key
+    /// must be given and is verified with the public identity key, establishing
+    /// the authenticity of the static DH public key w.r.t. the public identity key.
+    fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
+    where
+        C: AsRef<[u8]>
+    {
+        Self::linked(id_pk, dh_pk)
+            ||
+        sig.as_ref().map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
+    }
 }
 
 /// DH keypair.
 #[derive(Clone)]
 pub struct Keypair<T: Zeroize> {
     secret: SecretKey<T>,
-    public: PublicKey<T>
+    public: PublicKey<T>,
+}
+
+/// A DH keypair that is authentic w.r.t. a [`identity::PublicKey`].
+#[derive(Clone)]
+pub struct AuthenticKeypair<T: Zeroize> {
+    keypair: Keypair<T>,
+    identity: KeypairIdentity
+}
+
+impl<T: Zeroize> AuthenticKeypair<T> {
+    /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
+    /// dropping the DH `Keypair`.
+    pub fn into_identity(self) -> KeypairIdentity {
+        self.identity
+    }
+}
+
+impl<T: Zeroize> std::ops::Deref for AuthenticKeypair<T> {
+    type Target = Keypair<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.keypair
+    }
+}
+
+/// The associated public identity of a DH keypair.
+#[derive(Clone)]
+pub struct KeypairIdentity {
+    /// The public identity key.
+    pub public: identity::PublicKey,
+    /// The signature over the public DH key.
+    pub signature: Option<Vec<u8>>
 }
 
 impl<T: Zeroize> Keypair<T> {
@@ -79,6 +145,22 @@ impl<T: Zeroize> Keypair<T> {
     /// The secret key of the DH keypair.
     pub fn secret(&self) -> &SecretKey<T> {
         &self.secret
+    }
+
+    /// Turn this DH keypair into a [`AuthenticKeypair`], i.e. a DH keypair that
+    /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
+    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, NoiseError>
+    where
+        T: AsRef<[u8]>
+    {
+        let sig = id_keys.sign(self.public.as_ref())?;
+
+        let identity = KeypairIdentity {
+            public: id_keys.public(),
+            signature: Some(sig)
+        };
+
+        Ok(AuthenticKeypair { keypair: self, identity })
     }
 }
 
