@@ -140,6 +140,16 @@ impl<'a> Protocol<'a> {
             "quic" => Ok(Protocol::Quic),
             "ws" => Ok(Protocol::Ws(Cow::Borrowed("/"))),
             "wss" => Ok(Protocol::Wss(Cow::Borrowed("/"))),
+            "x-parity-ws" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let decoded = percent_encoding::percent_decode(s.as_bytes()).decode_utf8()?;
+                Ok(Protocol::Ws(decoded))
+            }
+            "x-parity-wss" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let decoded = percent_encoding::percent_decode(s.as_bytes()).decode_utf8()?;
+                Ok(Protocol::Wss(decoded))
+            }
             "p2p-websocket-star" => Ok(Protocol::P2pWebSocketStar),
             "p2p-webrtc-star" => Ok(Protocol::P2pWebRtcStar),
             "p2p-webrtc-direct" => Ok(Protocol::P2pWebRtcDirect),
@@ -418,9 +428,15 @@ impl<'a> fmt::Display for Protocol<'a> {
             Unix(s) => write!(f, "/unix/{}", s),
             Utp => f.write_str("/utp"),
             Ws(ref s) if s == "/" => f.write_str("/ws"),
-            Ws(s) => write!(f, "/ws/[{}]", s),   // TODO: the String representation is undefined
+            Ws(s) => {
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::DEFAULT_ENCODE_SET);
+                write!(f, "/x-parity-ws/{}", encoded)
+            },
             Wss(ref s) if s == "/" => f.write_str("/wss"),
-            Wss(s) => write!(f, "/wss/[{}]", s),  // TODO: the String representation is undefined
+            Wss(s) => {
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::DEFAULT_ENCODE_SET);
+                write!(f, "/x-parity-wss/{}", encoded)
+            },
         }
     }
 }
@@ -480,4 +496,3 @@ fn read_onion(s: &str) -> Result<([u8; 10], u16)> {
 
     Ok((buf, port))
 }
-
