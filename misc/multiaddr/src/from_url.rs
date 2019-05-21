@@ -260,4 +260,19 @@ mod tests {
         let addr = from_url("unix:/foo/bar").unwrap();
         assert_eq!(addr, Multiaddr::from(Protocol::Unix("/foo/bar".into())));
     }
+
+    #[test]
+    fn ws_path() {
+        let addr = from_url("ws://1.2.3.4:1000/foo/bar").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/x-parity-ws/%2ffoo%2fbar".parse().unwrap());
+
+        let addr = from_url("ws://1.2.3.4:1000/").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/ws".parse().unwrap());
+
+        let addr = from_url("wss://1.2.3.4:1000/foo/bar").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/x-parity-wss/%2ffoo%2fbar".parse().unwrap());
+
+        let addr = from_url("wss://1.2.3.4:1000").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/wss".parse().unwrap());
+    }
 }
