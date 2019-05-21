@@ -79,8 +79,8 @@ where
 
     fn listen_on(self, original_addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
-        let ws_path = match inner_addr.pop() {
-            Some(Protocol::Ws(path)) => path.into_owned(),
+        match inner_addr.pop() {
+            Some(Protocol::Ws(ref path)) if path == "/" || path.is_empty() => {},
             _ => return Err(TransportError::MultiaddrNotSupported(original_addr)),
         };
 
@@ -90,16 +90,16 @@ where
         let listen = inner_listen.map_err(WsError::Underlying).map(move |event| {
             match event {
                 ListenerEvent::NewAddress(mut a) => {
-                    a = a.with(Protocol::Ws(ws_path.clone().into()));
+                    a = a.with(Protocol::Ws(From::from("/")));
                     debug!("Listening on {}", a);
                     ListenerEvent::NewAddress(a)
                 }
                 ListenerEvent::AddressExpired(mut a) => {
-                    a = a.with(Protocol::Ws(ws_path.clone().into()));
+                    a = a.with(Protocol::Ws(From::from("/")));
                     ListenerEvent::AddressExpired(a)
                 }
                 ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
-                    listen_addr = listen_addr.with(Protocol::Ws(ws_path.clone().into()));
+                    listen_addr = listen_addr.with(Protocol::Ws(From::from("/")));
                     remote_addr = remote_addr.with(Protocol::Ws(From::from("/")));
 
                     // Upgrade the listener to websockets like the websockets library requires us to do.
