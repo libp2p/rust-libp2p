@@ -97,7 +97,7 @@ fn query_iter() {
 
         // Connect each swarm in the list to its predecessor in the list.
         for (i, (swarm, peer)) in &mut swarms.iter_mut().skip(1).zip(swarm_ids.clone()).enumerate() {
-            swarm.add_not_connected_address(&peer, Protocol::Memory(port_base + i as u64).into())
+            swarm.add_address(&peer, Protocol::Memory(port_base + i as u64).into())
         }
 
         // Ask the last peer in the list to search a random peer. The search should
@@ -150,7 +150,7 @@ fn unresponsive_not_returned_direct() {
 
     // Add fake addresses.
     for _ in 0 .. 10 {
-        swarms[0].add_not_connected_address(&PeerId::random(), Protocol::Udp(10u16).into());
+        swarms[0].add_address(&PeerId::random(), Protocol::Udp(10u16).into());
     }
 
     // Ask first to search a random value.
@@ -189,14 +189,14 @@ fn unresponsive_not_returned_indirect() {
     // Add fake addresses to first.
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
     for _ in 0 .. 10 {
-        swarms[0].add_not_connected_address(
+        swarms[0].add_address(
             &PeerId::random(),
             multiaddr![Udp(10u16)]
         );
     }
 
     // Connect second to first.
-    swarms[1].add_not_connected_address(&first_peer_id, Protocol::Memory(port_base).into());
+    swarms[1].add_address(&first_peer_id, Protocol::Memory(port_base).into());
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
