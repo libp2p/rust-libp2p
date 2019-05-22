@@ -535,11 +535,11 @@ where
     }
 
     fn inject_disconnected(&mut self, id: &PeerId, _old_endpoint: ConnectedPoint) {
+        self.connected_peers.remove(id);
         for query in self.active_queries.values_mut() {
             query.inject_rpc_error(id);
         }
         self.connection_updated(id.clone(), None, NodeStatus::Disconnected);
-        self.connected_peers.remove(id);
     }
 
     fn inject_replaced(&mut self, peer_id: PeerId, _old: ConnectedPoint, new_endpoint: ConnectedPoint) {
