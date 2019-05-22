@@ -604,7 +604,6 @@ mod tests {
         fn prop(mut bucket: KBucket<PeerId, ()>, pos: Position, status: NodeStatus) -> bool {
             let num_nodes = bucket.num_entries();
             let pos = pos.0 % num_nodes;
-            println!("POS: {:?}", pos);
 
             // Record the (ordered) list of status of all nodes in the bucket.
             let mut expected = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
