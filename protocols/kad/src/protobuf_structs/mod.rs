@@ -19,4 +19,3 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod dht;
-pub mod record;
