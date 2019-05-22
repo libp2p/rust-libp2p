@@ -600,23 +600,23 @@ mod tests {
 
 
     #[test]
-    fn bucket_update_preserves_status_and_order() {
+    fn bucket_update() {
         fn prop(mut bucket: KBucket<PeerId, ()>, pos: Position, status: NodeStatus) -> bool {
             let num_nodes = bucket.num_entries();
+
+            // Capture position and key of the random node to update.
             let pos = pos.0 % num_nodes;
+            let key = bucket.nodes[pos].key.clone();
 
             // Record the (ordered) list of status of all nodes in the bucket.
             let mut expected = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
 
-            // Pick a random node to update.
-            let key = bucket.nodes[pos].key.clone();
-
-            // Update the node in the bucket
+            // Update the node in the bucket, recording the new position.
             bucket.update(&key, status);
             let new_pos = bucket.position(&key).expect("Key not in bucket after update.");
 
             // Check that the bucket now contains the node with the new status,
-            // preserving the status and order of all other nodes.
+            // preserving the status and relative order of all other nodes.
             expected.remove(pos);
             expected.insert(new_pos.0, (key.clone(), status));
             let actual = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
