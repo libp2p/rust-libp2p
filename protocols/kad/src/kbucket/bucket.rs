@@ -611,14 +611,17 @@ mod tests {
             // Record the (ordered) list of status of all nodes in the bucket.
             let mut expected = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
 
-            // Update the node in the bucket, recording the new position.
+            // Update the node in the bucket.
             bucket.update(&key, status);
-            let new_pos = bucket.position(&key).expect("Key not in bucket after update.");
 
             // Check that the bucket now contains the node with the new status,
             // preserving the status and relative order of all other nodes.
+            let expected_pos = match status {
+                NodeStatus::Connected => num_nodes - 1,
+                NodeStatus::Disconnected => bucket.first_connected_pos.unwrap_or(num_nodes) - 1
+            };
             expected.remove(pos);
-            expected.insert(new_pos.0, (key.clone(), status));
+            expected.insert(expected_pos, (key.clone(), status));
             let actual = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
             expected == actual
         }
