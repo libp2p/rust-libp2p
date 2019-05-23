@@ -316,12 +316,12 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Starts an iterative `GET_VALUE` request.
-    pub fn get_data(&mut self, key: Multihash) {
+    pub fn get_value(&mut self, key: &Multihash) {
         self.start_query(QueryInfoInner::GetValue { key, results: vec![] });
     }
 
     /// Starts an iterative `PUT_VALUE` request
-    pub fn put_data(&mut self, key: Multihash, data: &[u8]) {
+    pub fn put_value(&mut self, key: &Multihash, value: Vec<u8>) {
         // TODO: Probably we shouldn't store the value ourselves
         self.records.insert(key.clone(), data.to_vec());
         self.start_query(QueryInfoInner::PutValue{key, value: Vec::from(data)});
@@ -911,7 +911,7 @@ pub enum KademliaOut {
     },
 
     /// Result of a `GET_VALUE` query
-    GetValueRes {
+    GetValueResult {
         /// The result that we have probably received
         result: Option<(Multihash, Vec<u8>)>,
         /// List of peers ordered from closes to furthest from the key
