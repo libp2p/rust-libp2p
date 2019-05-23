@@ -237,7 +237,7 @@ fn search_for_unknown_value() {
     swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    swarms[0].get_value(target_key);
+    swarms[0].get_value(&target_key);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
@@ -272,7 +272,7 @@ fn put_value() {
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
 
     // TODO: This is racy, need to be sequenced
-    swarms[0].get_value(target_key.clone());
+    swarms[0].get_value(&target_key);
     swarms[1].put_value(target_key.clone(), vec![4,5,6]);
 
     Runtime::new().unwrap().block_on(
@@ -285,11 +285,10 @@ fn put_value() {
                             closer_peers,
                         })) => {
                             assert_ne!(result, None);
+                            assert_eq!(closer_peers, None);
                             let value = result.unwrap();
                             assert_eq!(value.0, target_key);
                             assert_eq!(value.1, vec![4,5,6]);
-                            assert!(closer_peers.contains(&peer_ids[1]));
-                            assert!(closer_peers.contains(&peer_ids[2]));
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(Some(KademliaOut::PutValueResult { key })) => {

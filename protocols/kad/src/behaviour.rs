@@ -317,8 +317,16 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Starts an iterative `GET_VALUE` request.
-    pub fn get_value(&mut self, key: Multihash) {
-        self.start_query(QueryInfoInner::GetValue { key, results: vec![] });
+    pub fn get_value(&mut self, key: &Multihash) {
+        if let Some(value) = self.records.get(key) {
+            self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
+                KademliaOut::GetValueResult {
+                    result: Some((key.clone(), value.clone())),
+                    closer_peers: None,
+                }
+            ));
+        }
+        self.start_query(QueryInfoInner::GetValue { key: key.clone(), results: vec![] });
     }
 
     /// Starts an iterative `PUT_VALUE` request
@@ -861,7 +869,11 @@ where
 
                         let event = KademliaOut::GetValueResult {
                             result: result.clone(),
-                            closer_peers: closer_peers.collect(),
+                            closer_peers: {
+                                match result {
+                                None => Some(closer_peers.collect()),
+                                Some(_) => None,
+                            }},
                         };
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -927,7 +939,7 @@ pub enum KademliaOut {
         /// The result that we have probably received
         result: Option<(Multihash, Vec<u8>)>,
         /// List of peers ordered from closes to furthest from the key
-        closer_peers: Vec<PeerId>,
+        closer_peers: Option<Vec<PeerId>>,
     },
 
     /// Result of a `PUT_VALUE` query
