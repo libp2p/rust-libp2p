@@ -227,37 +227,28 @@ fn unresponsive_not_returned_indirect() {
 
 #[test]
 fn search_for_unknown_value() {
-    use multihash::{Hash, Multihash};
+    use multihash::Hash;
     let (port_base, mut swarms) = build_nodes(3);
 
     let peer_ids: Vec<_> = swarms.iter()
         .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
 
-    for id in &peer_ids {
-        println!("id {}", id);
-    }
-
     swarms[0].add_address(&peer_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
 
-    let target_key = vec![1,2,3];
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
     swarms[0].get_data(target_key);
 
-    // This returns correct event
-    //let key = Multihash::random(Hash::SHA2256);
-    //swarms[0].get_providers(key);
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueRes { result, .. })) => {
-                            println!("Event {:?}", result);
+                            assert_eq!(result, None);
                             return Ok(Async::Ready(()));
                         }
-                        Async::Ready(a) => {
-                            println!("a {:?}", a);
-                        }
+                        Async::Ready(_) => (),
                         Async::NotReady => break,
                     }
                 }

@@ -184,13 +184,13 @@ pub enum KademliaHandlerEvent<TUserData> {
     },
 
     GetValue {
-        key: Vec<u8>,
+        key: Multihash,
 
         request_id: KademliaRequestId,
     },
 
     GetValueRes {
-        result: Option<(Vec<u8>, Vec<u8>)>,
+        result: Option<(Multihash, Vec<u8>)>,
 
         closer_peers: Vec<KadPeer>,
 
@@ -198,7 +198,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     },
 
     PutValue {
-        key: Vec<u8>,
+        key: Multihash,
         value: Vec<u8>,
     },
 }
@@ -302,14 +302,14 @@ pub enum KademliaHandlerIn<TUserData> {
     },
 
     GetValue {
-        key: Vec<u8>,
+        key: Multihash,
 
         user_data: TUserData,
     },
 
     GetValueRes {
         /// The value that might have been found in our storage
-        result: Option<(Vec<u8>, Vec<u8>)>,
+        result: Option<(Multihash, Vec<u8>)>,
 
         /// Nodes that are closer to the key we were searching for
         closer_peers: Vec<KadPeer>,
@@ -318,7 +318,7 @@ pub enum KademliaHandlerIn<TUserData> {
     },
 
     PutValue {
-        key: Vec<u8>,
+        key: Multihash,
         value: Vec<u8>,
     }
 }

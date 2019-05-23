@@ -91,8 +91,7 @@ pub struct Kademlia<TSubstream> {
     marker: PhantomData<TSubstream>,
 
     /// The records that we keep.
-    /// TODO: Key should be a multihash
-    records: FnvHashMap<Vec<u8>, Vec<u8>>
+    records: FnvHashMap<Multihash, Vec<u8>>
 }
 
 /// Opaque type. Each query that we start gets a unique number.
@@ -138,12 +137,12 @@ enum QueryInfoInner {
 
     /// Put the value to the dht records
     PutValue {
-        key: Vec<u8>,
+        key: Multihash,
         value: Vec<u8>,
     },
 
     GetValue {
-        key: Vec<u8>,
+        key: Multihash,
     },
 }
 
@@ -160,14 +159,8 @@ impl AsRef<[u8]> for QueryInfo {
             QueryInfoInner::FindPeer(peer) => peer.as_ref(),
             QueryInfoInner::GetProviders { target, .. } => target.as_bytes(),
             QueryInfoInner::AddProvider { target } => target.as_bytes(),
-            QueryInfoInner::GetValue { key } => {
-                // TODO: actually hash the string
-                key
-            }
-            QueryInfoInner::PutValue { key, .. } => {
-                // TODO: actually hash the string
-                key
-            }
+            QueryInfoInner::GetValue { key } => key.as_bytes(),
+            QueryInfoInner::PutValue { key, .. } => key.as_bytes(),
         }
     }
 }
@@ -318,12 +311,12 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Starts an iterative `GET_VALUE` request.
-    pub fn get_data(&mut self, key: Vec<u8>) {
+    pub fn get_data(&mut self, key: Multihash) {
         self.start_query(QueryInfoInner::GetValue { key });
     }
 
     /// Starts an iterative `PUT_VALUE` request
-    pub fn put_data(&mut self, key: Vec<u8>, data: &[u8]) {
+    pub fn put_data(&mut self, key: Multihash, data: &[u8]) {
         self.start_query(QueryInfoInner::PutValue{key, value: Vec::from(data)});
     }
 
@@ -673,8 +666,7 @@ where
                     None => None,
                 };
 
-                let key = key;
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
@@ -906,12 +898,12 @@ pub enum KademliaOut {
     },
 
     GetValueRes {
-        result: Option<(Vec<u8>, Vec<u8>)>,
+        result: Option<(Multihash, Vec<u8>)>,
         closer_peers: Vec<PeerId>,
     },
 
     RecordPut {
-        key: Vec<u8>,
+        key: Multihash,
     }
 }
 

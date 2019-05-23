@@ -276,11 +276,11 @@ pub enum KadRequestMsg {
     },
 
     GetValue {
-        key: Vec<u8>,
+        key: Multihash,
     },
 
     PutValue {
-        key: Vec<u8>,
+        key: Multihash,
         value: Vec<u8>,
     }
 }
@@ -307,14 +307,14 @@ pub enum KadResponseMsg {
 
     GetValue {
         /// Result that might have been found
-        result: Option<(Vec<u8>, Vec<u8>)>,
+        result: Option<(Multihash, Vec<u8>)>,
 
         /// Nodes closest to the key
         closer_peers: Vec<KadPeer>,
     },
 
     PutValue {
-        key: Vec<u8>,
+        key: Multihash,
         value: Vec<u8>,
     },
 }
@@ -353,10 +353,10 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::GET_VALUE);
             msg.set_clusterLevelRaw(10);
-            msg.set_key(key.clone());
+            msg.set_key(key.as_bytes().to_vec());
 
             let mut record = Record::new();
-            record.set_key(key);
+            record.set_key(key.into_bytes());
             msg.set_record(record);
 
             msg
@@ -366,7 +366,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
             let mut record = Record::new();
             record.set_value(value);
-            record.set_key(key);
+            record.set_key(key.into_bytes());
 
             msg.set_record(record);
             msg
@@ -419,7 +419,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
 
             result.map(|(key, value)| {
                 let mut record = Record::new();
-                record.set_key(key);
+                record.set_key(key.into_bytes());
                 record.set_value(value);
                 msg.set_record(record);
             });
@@ -430,7 +430,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
             let mut record = Record::new();
-            record.set_key(key);
+            record.set_key(key.into_bytes());
             record.set_value(value);
             msg.set_record(record);
 
@@ -447,16 +447,14 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
         proto::Message_MessageType::PING => Ok(KadRequestMsg::Ping),
 
         proto::Message_MessageType::PUT_VALUE => {
-
-            let record = message.get_record();
-            let value = record.get_value();
-            let key = record.get_key().into();
-            Ok(KadRequestMsg::PutValue { key, value: value.to_vec() })
+            let record = message.mut_record();
+            let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
+            Ok(KadRequestMsg::PutValue { key, value: record.take_value().to_vec() })
         }
 
         proto::Message_MessageType::GET_VALUE => {
-            let record = message.get_record();
-            let key = record.get_key().into();
+            let record = message.mut_record();
+            let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
             Ok(KadRequestMsg::GetValue { key })
         }
 
@@ -500,8 +498,9 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
         proto::Message_MessageType::GET_VALUE => {
             let result = match message.has_record() {
                 true => {
-                    let record = message.get_record();
-                    Some((record.get_key().into(), record.get_value().into()))
+                    let mut record = message.take_record();
+                    let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
+                    Some((key, record.take_value().into()))
                 }
                 false => None,
             };
@@ -545,8 +544,8 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
         }
 
         proto::Message_MessageType::PUT_VALUE => {
-            let record = message.get_record();
-            let key = record.get_key().into();
+            let mut record = message.take_record();
+            let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
 
             Ok(KadResponseMsg::PutValue {
                 key,
