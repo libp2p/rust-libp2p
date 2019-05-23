@@ -237,14 +237,14 @@ fn search_for_unknown_value() {
     swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    swarms[0].get_data(target_key);
+    swarms[0].get_value(target_key);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueRes { result, .. })) => {
+                        Async::Ready(Some(KademliaOut::GetValueResult { result, .. })) => {
                             assert_eq!(result, None);
                             return Ok(Async::Ready(()));
                         }
@@ -270,15 +270,15 @@ fn put_value() {
     swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    swarms[0].get_data(target_key.clone());
-    swarms[1].put_data(target_key.clone(), &vec![4,5,6]);
+    swarms[0].get_value(target_key.clone());
+    swarms[1].put_value(target_key.clone(), vec![4,5,6]);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueRes {
+                        Async::Ready(Some(KademliaOut::GetValueResult {
                             result,
                             closer_peers,
                         })) => {

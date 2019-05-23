@@ -316,15 +316,15 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Starts an iterative `GET_VALUE` request.
-    pub fn get_value(&mut self, key: &Multihash) {
+    pub fn get_value(&mut self, key: Multihash) {
         self.start_query(QueryInfoInner::GetValue { key, results: vec![] });
     }
 
     /// Starts an iterative `PUT_VALUE` request
-    pub fn put_value(&mut self, key: &Multihash, value: Vec<u8>) {
+    pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) {
         // TODO: Probably we shouldn't store the value ourselves
-        self.records.insert(key.clone(), data.to_vec());
-        self.start_query(QueryInfoInner::PutValue{key, value: Vec::from(data)});
+        self.records.insert(key.clone(), value.clone());
+        self.start_query(QueryInfoInner::PutValue{key, value});
     }
 
     /// Register the local node as the provider for the given key.
@@ -839,7 +839,7 @@ where
                             None => None,
                         };
 
-                        let event = KademliaOut::GetValueRes {
+                        let event = KademliaOut::GetValueResult {
                             result: result.clone(),
                             closer_peers: closer_peers.collect(),
                         };
