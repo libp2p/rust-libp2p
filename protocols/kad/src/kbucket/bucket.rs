@@ -268,11 +268,34 @@ where
     /// Updates the status of the node referred to by the given key, if it is
     /// in the bucket.
     pub fn update(&mut self, key: &Key<TPeerId>, status: NodeStatus) {
+        // Remove the node from its current position and then reinsert it
+        // with the desired status, which puts it at the end of either the
+        // prefix list of disconnected nodes or the suffix list of connected
+        // nodes (i.e. most-recently disconnected or most-recently connected,
+        // respectively).
         if let Some(pos) = self.position(key) {
+            // Remove the node from its current position.
+            let old_status = self.status(pos);
             let node = self.nodes.remove(pos.0);
+            // Adjust `first_connected_pos` accordingly.
+            match old_status {
+                NodeStatus::Connected =>
+                    if self.first_connected_pos.map_or(false, |p| p == pos.0) {
+                        if pos.0 == self.nodes.len() {
+                            // It was the last connected node.
+                            self.first_connected_pos = None
+                        }
+                    }
+                NodeStatus::Disconnected =>
+                    self.first_connected_pos = self.first_connected_pos
+                        .and_then(|p| p.checked_sub(1))
+            }
+            // If the least-recently connected node re-establishes its
+            // connected status, drop the pending node.
             if pos == Position(0) && status == NodeStatus::Connected {
                 self.pending = None
             }
+            // Reinsert the node with the desired status.
             match self.insert(node, status) {
                 InsertResult::Inserted => {},
                 _ => unreachable!("The node is removed before being (re)inserted.")
@@ -385,6 +408,24 @@ mod tests {
     use super::*;
     use quickcheck::*;
 
+    impl Arbitrary for KBucket<PeerId, ()> {
+        fn arbitrary<G: Gen>(g: &mut G) -> KBucket<PeerId, ()> {
+            let timeout = Duration::from_secs(g.gen_range(1, g.size() as u64));
+            let mut bucket = KBucket::<PeerId, ()>::new(timeout);
+            let num_nodes = g.gen_range(1, MAX_NODES_PER_BUCKET + 1);
+            for _ in 0 .. num_nodes {
+                let key = Key::new(PeerId::random());
+                let node = Node { key: key.clone(), value: () };
+                let status = NodeStatus::arbitrary(g);
+                match bucket.insert(node, status) {
+                    InsertResult::Inserted => {}
+                    _ => panic!()
+                }
+            }
+            bucket
+        }
+    }
+
     impl Arbitrary for NodeStatus {
         fn arbitrary<G: Gen>(g: &mut G) -> NodeStatus {
             if g.gen() {
@@ -395,14 +436,21 @@ mod tests {
         }
     }
 
+    impl Arbitrary for Position {
+        fn arbitrary<G: Gen>(g: &mut G) -> Position {
+            Position(g.gen_range(0, MAX_NODES_PER_BUCKET))
+        }
+    }
+
+    // Fill a bucket with random nodes with the given status.
     fn fill_bucket(bucket: &mut KBucket<PeerId, ()>, status: NodeStatus) {
-        for i in 0 .. MAX_NODES_PER_BUCKET - bucket.num_entries() {
+        let num_entries_start = bucket.num_entries();
+        for i in 0 .. MAX_NODES_PER_BUCKET - num_entries_start {
             let key = Key::new(PeerId::random());
             let node = Node { key, value: () };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
-            assert_eq!(bucket.num_entries(), i + 1);
+            assert_eq!(bucket.num_entries(), num_entries_start + i + 1);
         }
-        assert!(bucket.pending().is_none());
     }
 
     #[test]
@@ -548,5 +596,36 @@ mod tests {
         assert_eq!(bucket.position(&first_disconnected.key).map(|p| p.0), bucket.first_connected_pos);
         assert_eq!(1, bucket.num_connected());
         assert_eq!(MAX_NODES_PER_BUCKET - 1, bucket.num_disconnected());
+    }
+
+
+    #[test]
+    fn bucket_update() {
+        fn prop(mut bucket: KBucket<PeerId, ()>, pos: Position, status: NodeStatus) -> bool {
+            let num_nodes = bucket.num_entries();
+
+            // Capture position and key of the random node to update.
+            let pos = pos.0 % num_nodes;
+            let key = bucket.nodes[pos].key.clone();
+
+            // Record the (ordered) list of status of all nodes in the bucket.
+            let mut expected = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
+
+            // Update the node in the bucket.
+            bucket.update(&key, status);
+
+            // Check that the bucket now contains the node with the new status,
+            // preserving the status and relative order of all other nodes.
+            let expected_pos = match status {
+                NodeStatus::Connected => num_nodes - 1,
+                NodeStatus::Disconnected => bucket.first_connected_pos.unwrap_or(num_nodes) - 1
+            };
+            expected.remove(pos);
+            expected.insert(expected_pos, (key.clone(), status));
+            let actual = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
+            expected == actual
+        }
+
+        quickcheck(prop as fn(_,_,_) -> _);
     }
 }
