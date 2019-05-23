@@ -197,7 +197,7 @@ impl QueryInfo {
                     user_data,
                 }
             },
-            QueryInfoInner::PutValue { key, .. } => KademliaHandlerIn::FindNodeReq {
+            QueryInfoInner::PutValue { key, value } => KademliaHandlerIn::PutValue {
                 key: key.clone(),
                 value: value.clone(),
                 user_data,
