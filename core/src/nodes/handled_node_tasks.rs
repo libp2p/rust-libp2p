@@ -340,7 +340,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
                 // It would normally be desirable to either report or log when a background task
                 // errors. However the default tokio executor doesn't do anything in case of error,
                 // and therefore we mimic this behaviour by also not doing anything.
-                Err(_err) => {}
+                Err(()) => {}
             }
         }
 
