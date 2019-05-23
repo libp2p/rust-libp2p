@@ -38,6 +38,7 @@ use libp2p_yamux as yamux;
 use rand::random;
 use std::{io, u64};
 use tokio::runtime::Runtime;
+use multihash::Hash;
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
@@ -227,7 +228,6 @@ fn unresponsive_not_returned_indirect() {
 
 #[test]
 fn search_for_unknown_value() {
-    use multihash::Hash;
     let (port_base, mut swarms) = build_nodes(3);
 
     let peer_ids: Vec<_> = swarms.iter()
@@ -246,6 +246,42 @@ fn search_for_unknown_value() {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueRes { result, .. })) => {
                             assert_eq!(result, None);
+                            return Ok(Async::Ready(()));
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap()
+}
+
+#[test]
+fn put_value() {
+    let (port_base, mut swarms) = build_nodes(3);
+
+    let peer_ids: Vec<_> = swarms.iter()
+        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+    swarms[0].add_address(&peer_ids[1], Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
+
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+    swarms[0].get_data(target_key.clone());
+    swarms[1].put_data(target_key, &vec![4,5,6]);
+
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::GetValueRes { result, .. })) => {
+                            assert_ne!(result, None);
+                            let value = result.unwrap();
+                            assert_eq!(value.1, vec![4,5,6]);
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),

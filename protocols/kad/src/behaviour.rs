@@ -143,6 +143,8 @@ enum QueryInfoInner {
 
     GetValue {
         key: Multihash,
+
+        results: Vec<(Multihash, Vec<u8>)>,
     },
 }
 
@@ -159,7 +161,7 @@ impl AsRef<[u8]> for QueryInfo {
             QueryInfoInner::FindPeer(peer) => peer.as_ref(),
             QueryInfoInner::GetProviders { target, .. } => target.as_bytes(),
             QueryInfoInner::AddProvider { target } => target.as_bytes(),
-            QueryInfoInner::GetValue { key } => key.as_bytes(),
+            QueryInfoInner::GetValue { key, .. } => key.as_bytes(),
             QueryInfoInner::PutValue { key, .. } => key.as_bytes(),
         }
     }
@@ -185,7 +187,7 @@ impl QueryInfo {
                 key: unimplemented!(), // TODO: target.clone(),
                 user_data,
             },
-            QueryInfoInner::GetValue { key } => {
+            QueryInfoInner::GetValue { key, .. } => {
 
                 KademliaHandlerIn::GetValue {
                     key: key.clone(),
@@ -312,11 +314,12 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Starts an iterative `GET_VALUE` request.
     pub fn get_data(&mut self, key: Multihash) {
-        self.start_query(QueryInfoInner::GetValue { key });
+        self.start_query(QueryInfoInner::GetValue { key, results: vec![] });
     }
 
     /// Starts an iterative `PUT_VALUE` request
     pub fn put_data(&mut self, key: Multihash, data: &[u8]) {
+        self.records.insert(key.clone(), data.to_vec());
         self.start_query(QueryInfoInner::PutValue{key, value: Vec::from(data)});
     }
 
@@ -665,7 +668,6 @@ where
                     Some(value) => Some((key.clone(), value.clone())),
                     None => None,
                 };
-
                 let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
@@ -678,10 +680,19 @@ where
                 });
             }
             KademliaHandlerEvent::GetValueRes {
-                result: _,
+                result,
                 closer_peers,
                 user_data,
             } => {
+                if let Some(query) = self.active_queries.get_mut(&user_data) {
+                    if let QueryInfoInner::GetValue {
+                        key: _,
+                        results
+                    } = &mut query.target_mut().inner {
+                        if let Some(result) = result {
+                            results.push(result);
+                        }
+                    }}
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
             KademliaHandlerEvent::PutValue { key, value} => {
@@ -821,13 +832,14 @@ where
                             self.queued_events.push(event);
                         }
                     },
-                    QueryInfoInner::GetValue { key } => {
-                        let result = match self.records.get(&key) {
-                                Some(value) => Some((key.clone(), value.clone())),
-                                None => None
-                            };
+                    QueryInfoInner::GetValue { key: _, results } => {
+                        let result = match results.first() {
+                            Some(a) => Some(a.clone()),
+                            None => None,
+                        };
+
                         let event = KademliaOut::GetValueRes {
-                            result,
+                            result: result.clone(),
                             closer_peers: vec![],
                         };
 
