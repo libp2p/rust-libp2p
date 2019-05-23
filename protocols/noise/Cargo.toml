@@ -20,7 +20,7 @@ ring = { version = "0.14", features = ["use_heap"], default-features = false }
 snow = { version = "0.5.2", features = ["ring-resolver"], default-features = false }
 tokio-io = "0.1"
 x25519-dalek = "0.5"
-zeroize = "0.5"
+zeroize = "0.8"
 
 [dev-dependencies]
 env_logger = "0.6"
