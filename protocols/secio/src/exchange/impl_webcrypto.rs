@@ -22,7 +22,7 @@
 
 use crate::{KeyAgreement, SecioError};
 use futures::prelude::*;
-use send_wrapper::SendWrapper;
+use parity_send_wrapper::SendWrapper;
 use std::io;
 use wasm_bindgen::prelude::*;
 
