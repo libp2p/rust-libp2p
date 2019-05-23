@@ -879,8 +879,6 @@ where
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                     QueryInfoInner::PutValue { key, value } => {
-                        self.records.insert(key.clone(), value.clone());
-
                         let event = KademliaOut::PutValueResult { key };
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
