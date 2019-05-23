@@ -270,6 +270,8 @@ fn put_value() {
     swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+
+    // TODO: This is racy, need to be sequenced
     swarms[0].get_value(target_key.clone());
     swarms[1].put_value(target_key.clone(), vec![4,5,6]);
 
@@ -290,6 +292,9 @@ fn put_value() {
                             assert!(closer_peers.contains(&peer_ids[2]));
                             return Ok(Async::Ready(()));
                         }
+                        Async::Ready(Some(KademliaOut::PutValueResult { key })) => {
+                            assert_eq!(key, target_key);
+                        },
                         Async::Ready(_) => (),
                         Async::NotReady => break,
                     }

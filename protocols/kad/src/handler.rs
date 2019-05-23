@@ -210,7 +210,17 @@ pub enum KademliaHandlerEvent<TUserData> {
         key: Multihash,
         /// The value of the record
         value: Vec<u8>,
+        /// Identifier of the request. Needs to be passed back when answering.
+        request_id: KademliaRequestId,
     },
+
+    /// Response to a request to put a value
+    PutValueRes {
+        /// The key we were putting in
+        key: Multihash,
+        /// The user data passed to the `GetValue`.
+        user_data: TUserData,
+    }
 }
 
 /// Error that can happen when requesting an RPC query.
@@ -335,6 +345,13 @@ pub enum KademliaHandlerIn<TUserData> {
         key: Multihash,
         /// The value of the record
         value: Vec<u8>,
+        /// Custom data. Passed back in the out event when the results arrive.
+        user_data: TUserData,
+    },
+
+    PutValueRes {
+        key: Multihash,
+        request_id: KademliaRequestId,
     }
 }
 
@@ -527,14 +544,14 @@ where
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
 
             }
-            KademliaHandlerIn::PutValue { key, value } => {
+            KademliaHandlerIn::PutValue { key, value, user_data } => {
                 let msg = KadRequestMsg::PutValue {
                     key,
                     value: value,
                 };
 
                 self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, None));
+                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
             KademliaHandlerIn::GetValueRes {
                 result,
@@ -559,6 +576,29 @@ where
                     let msg = KadResponseMsg::GetValue {
                         result,
                         closer_peers: closer_peers.clone(),
+                    };
+                    self.substreams
+                        .push(SubstreamState::InPendingSend(conn_id, substream, msg));
+                }
+            }
+            KademliaHandlerIn::PutValueRes { key, request_id } => {
+                let pos = self.substreams.iter().position(|state| match state {
+                    SubstreamState::InWaitingUser(ref conn_id, _)
+                        if conn_id == &request_id.connec_unique_id =>
+                        {
+                            true
+                        }
+                    _ => false,
+                });
+
+                if let Some(pos) = pos {
+                    let (conn_id, substream) = match self.substreams.remove(pos) {
+                        SubstreamState::InWaitingUser(conn_id, substream) => (conn_id, substream),
+                        _ => unreachable!(),
+                    };
+
+                    let msg = KadResponseMsg::PutValue {
+                        key
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
@@ -843,9 +883,11 @@ fn process_kad_request<TUserData>(
             key,
             request_id: KademliaRequestId { connec_unique_id },
         }),
-        KadRequestMsg::PutValue { key, value } => {
-            Ok(KademliaHandlerEvent::PutValue { key, value })
-        }
+        KadRequestMsg::PutValue { key, value } => Ok(KademliaHandlerEvent::PutValue {
+            key,
+            value,
+            request_id: KademliaRequestId { connec_unique_id },
+        })
     }
 }
 
@@ -885,10 +927,10 @@ fn process_kad_response<TUserData>(
             closer_peers,
             user_data,
         },
-        KadResponseMsg::PutValue { key, value } => {
-            KademliaHandlerEvent::PutValue {
+        KadResponseMsg::PutValue { key, .. } => {
+            KademliaHandlerEvent::PutValueRes {
                 key,
-                value,
+                user_data,
             }
         }
     }

@@ -200,6 +200,7 @@ impl QueryInfo {
             QueryInfoInner::PutValue { key, value } => KademliaHandlerIn::PutValue {
                 key: key.clone(),
                 value: value.clone(),
+                user_data,
             }
         }
     }
@@ -696,12 +697,31 @@ where
                         if let Some(result) = result {
                             results.push(result);
                         }
-                    }}
+                    }
+                    // A hacky way to end a query
+                    query.inject_rpc_result(&source, vec![source.clone()]);
+                }
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
-            KademliaHandlerEvent::PutValue { key, value} => {
+            KademliaHandlerEvent::PutValue { key, value, request_id } => {
                 self.records.insert(key.clone(), value);
-                return;
+
+                self.queued_events.push(NetworkBehaviourAction::SendEvent {
+                    peer_id: source,
+                    event: KademliaHandlerIn::PutValueRes {
+                        key,
+                        request_id,
+                    },
+                });
+            }
+            KademliaHandlerEvent::PutValueRes {
+                key: _,
+                user_data,
+            } => {
+                if let Some(query) = self.active_queries.get_mut(&user_data) {
+                    // A hacky way to end a query
+                    query.inject_rpc_result(&source, vec![source.clone()]);
+                }
             }
         };
     }
@@ -848,17 +868,9 @@ where
                     },
                     QueryInfoInner::PutValue { key, value } => {
                         self.records.insert(key.clone(), value.clone());
-                        for closest in closer_peers {
-                            let event = NetworkBehaviourAction::SendEvent {
-                                peer_id: closest,
-                                event: KademliaHandlerIn::PutValue {
-                                    key: key.clone(),
-                                    value: value.clone(),
-                                }
-                            };
 
-                            self.queued_events.push(event);
-                        }
+                        let event = KademliaOut::PutValueResult { key };
+                        break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                 }
             } else {
@@ -917,6 +929,12 @@ pub enum KademliaOut {
         /// List of peers ordered from closes to furthest from the key
         closer_peers: Vec<PeerId>,
     },
+
+    /// Result of a `PUT_VALUE` query
+    PutValueResult {
+        /// The key that we were inserting
+        key: Multihash,
+    }
 }
 
 impl From<kbucket::EntryView<PeerId, Addresses>> for KadPeer {
