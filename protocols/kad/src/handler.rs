@@ -183,22 +183,32 @@ pub enum KademliaHandlerEvent<TUserData> {
         provider_peer: KadPeer,
     },
 
+    /// Request to get a value from the dht records
     GetValue {
+        /// Key for which we should look in the dht
         key: Multihash,
 
+        /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
 
+    /// Response to a `KademliaHandlerIn::GetValue`.
     GetValueRes {
+        /// The result is present if the key has been found
         result: Option<(Multihash, Vec<u8>)>,
 
+        /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
 
+        /// The user data passed to the `GetValue`.
         user_data: TUserData,
     },
 
+    /// Request to put a value in the dht records
     PutValue {
+        /// The key of the record
         key: Multihash,
+        /// The value of the record
         value: Vec<u8>,
     },
 }
@@ -301,24 +311,29 @@ pub enum KademliaHandlerIn<TUserData> {
         provider_peer: KadPeer,
     },
 
+    /// Request to get a node from the dht
     GetValue {
+        /// The key of the value we are looking for
         key: Multihash,
-
+        /// Custom data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
 
+    /// Response to a `GetValue`.
     GetValueRes {
         /// The value that might have been found in our storage
         result: Option<(Multihash, Vec<u8>)>,
-
         /// Nodes that are closer to the key we were searching for
         closer_peers: Vec<KadPeer>,
-
+        /// Identifier of the request that was made by the remote
         request_id: KademliaRequestId,
     },
 
+    /// Put a value into the dht records
     PutValue {
+        /// The key of the record
         key: Multihash,
+        /// The value of the record
         value: Vec<u8>,
     }
 }
@@ -508,7 +523,6 @@ where
             }
             KademliaHandlerIn::GetValue { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
 

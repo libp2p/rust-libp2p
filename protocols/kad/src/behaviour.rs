@@ -137,13 +137,17 @@ enum QueryInfoInner {
 
     /// Put the value to the dht records
     PutValue {
+        /// The key of the record being inserted
         key: Multihash,
+        /// The value of the record being inserted
         value: Vec<u8>,
     },
 
+    /// Get value from the dht record
     GetValue {
+        /// The key we're looking for
         key: Multihash,
-
+        /// The results from peers are stored here
         results: Vec<(Multihash, Vec<u8>)>,
     },
 }
@@ -188,7 +192,6 @@ impl QueryInfo {
                 user_data,
             },
             QueryInfoInner::GetValue { key, .. } => {
-
                 KademliaHandlerIn::GetValue {
                     key: key.clone(),
                     user_data,
@@ -319,6 +322,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Starts an iterative `PUT_VALUE` request
     pub fn put_data(&mut self, key: Multihash, data: &[u8]) {
+        // TODO: Probably we shouldn't store the value ourselves
         self.records.insert(key.clone(), data.to_vec());
         self.start_query(QueryInfoInner::PutValue{key, value: Vec::from(data)});
     }
@@ -697,8 +701,6 @@ where
             }
             KademliaHandlerEvent::PutValue { key, value} => {
                 self.records.insert(key.clone(), value);
-                self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
-                        KademliaOut::RecordPut { key }));
                 return;
             }
         };
@@ -741,8 +743,7 @@ where
         loop {
             // Drain queued events first.
             if !self.queued_events.is_empty() {
-                let e = self.queued_events.remove(0);
-                return Async::Ready(e);
+                return Async::Ready(self.queued_events.remove(0));
             }
             self.queued_events.shrink_to_fit();
 
@@ -909,14 +910,13 @@ pub enum KademliaOut {
         closer_peers: Vec<PeerId>,
     },
 
+    /// Result of a `GET_VALUE` query
     GetValueRes {
+        /// The result that we have probably received
         result: Option<(Multihash, Vec<u8>)>,
+        /// List of peers ordered from closes to furthest from the key
         closer_peers: Vec<PeerId>,
     },
-
-    RecordPut {
-        key: Multihash,
-    }
 }
 
 impl From<kbucket::EntryView<PeerId, Addresses>> for KadPeer {

@@ -33,7 +33,6 @@
 use bytes::BytesMut;
 use codec::UviBytes;
 use crate::protobuf_structs::dht as proto;
-use crate::protobuf_structs::dht::Record;
 use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
@@ -275,12 +274,17 @@ pub enum KadRequestMsg {
         provider_peer: KadPeer,
     },
 
+    /// Request to get a value from the dht records
     GetValue {
+        /// The key we are searching for
         key: Multihash,
     },
 
+    /// Request to put a value into the dht records
     PutValue {
+        /// The key of the record
         key: Multihash,
+        /// The value of the record
         value: Vec<u8>,
     }
 }
@@ -305,16 +309,19 @@ pub enum KadResponseMsg {
         provider_peers: Vec<KadPeer>,
     },
 
+    /// Response to a `GetValue`.
     GetValue {
         /// Result that might have been found
         result: Option<(Multihash, Vec<u8>)>,
-
         /// Nodes closest to the key
         closer_peers: Vec<KadPeer>,
     },
 
+    /// Response to a `PutValue`.
     PutValue {
+        /// The key of the record.
         key: Multihash,
+        /// The value of the record.
         value: Vec<u8>,
     },
 }
@@ -355,7 +362,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             msg.set_clusterLevelRaw(10);
             msg.set_key(key.as_bytes().to_vec());
 
-            let mut record = Record::new();
+            let mut record = proto::Record::new();
             record.set_key(key.into_bytes());
             msg.set_record(record);
 
@@ -364,7 +371,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
         KadRequestMsg::PutValue { key, value} => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
-            let mut record = Record::new();
+            let mut record = proto::Record::new();
             record.set_value(value);
             record.set_key(key.into_bytes());
 
@@ -418,7 +425,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             }
 
             result.map(|(key, value)| {
-                let mut record = Record::new();
+                let mut record = proto::Record::new();
                 record.set_key(key.into_bytes());
                 record.set_value(value);
                 msg.set_record(record);
@@ -429,7 +436,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
         KadResponseMsg::PutValue {key, value} =>  {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
-            let mut record = Record::new();
+            let mut record = proto::Record::new();
             record.set_key(key.into_bytes());
             record.set_value(value);
             msg.set_record(record);
