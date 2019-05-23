@@ -841,7 +841,7 @@ where
 
                         let event = KademliaOut::GetValueRes {
                             result: result.clone(),
-                            closer_peers: vec![],
+                            closer_peers: closer_peers.collect(),
                         };
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));

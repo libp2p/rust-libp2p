@@ -271,17 +271,23 @@ fn put_value() {
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
     swarms[0].get_data(target_key.clone());
-    swarms[1].put_data(target_key, &vec![4,5,6]);
+    swarms[1].put_data(target_key.clone(), &vec![4,5,6]);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueRes { result, .. })) => {
+                        Async::Ready(Some(KademliaOut::GetValueRes {
+                            result,
+                            closer_peers,
+                        })) => {
                             assert_ne!(result, None);
                             let value = result.unwrap();
+                            assert_eq!(value.0, target_key);
                             assert_eq!(value.1, vec![4,5,6]);
+                            assert!(closer_peers.contains(&peer_ids[1]));
+                            assert!(closer_peers.contains(&peer_ids[0]));
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
