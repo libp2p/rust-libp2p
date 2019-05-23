@@ -16,7 +16,7 @@ libp2p-core = { version = "0.8.0", path = "../../core" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.4.0", path = "../../misc/multiaddr" }
 futures = "0.1"
-parking_lot = "0.7"
+parking_lot = "0.8"
 rand = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
