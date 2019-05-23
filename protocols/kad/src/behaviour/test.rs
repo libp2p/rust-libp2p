@@ -287,7 +287,7 @@ fn put_value() {
                             assert_eq!(value.0, target_key);
                             assert_eq!(value.1, vec![4,5,6]);
                             assert!(closer_peers.contains(&peer_ids[1]));
-                            assert!(closer_peers.contains(&peer_ids[0]));
+                            assert!(closer_peers.contains(&peer_ids[2]));
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
