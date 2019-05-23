@@ -2,7 +2,7 @@
 name = "libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,12 +10,12 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.7.0", path = "../../core" }
+libp2p-core = { version = "0.8.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
 tokio-dns-unofficial = "0.4"
 tokio-io = "0.1"
 
 [dev-dependencies]
-libp2p-tcp = { version = "0.7.0", path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.8.0", path = "../../transports/tcp" }
 tokio = "0.1"

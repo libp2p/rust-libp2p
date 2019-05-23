@@ -28,3 +28,4 @@ Where to ask questions?
 - https://github.com/paritytech/polkadot
 - https://github.com/paritytech/substrate
 - https://github.com/sigp/lighthouse
+- https://github.com/golemfactory/golem-libp2p
