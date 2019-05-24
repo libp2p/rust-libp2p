@@ -335,9 +335,12 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
         for n in (0..self.local_spawns.len()).rev() {
             let mut task = self.local_spawns.swap_remove(n);
             match task.poll() {
-                Ok(Async::Ready(())) => (),
+                Ok(Async::Ready(())) => {},
                 Ok(Async::NotReady) => self.local_spawns.push(task),
-                Err(_err) => ()     // TODO: log this?
+                // It would normally be desirable to either report or log when a background task
+                // errors. However the default tokio executor doesn't do anything in case of error,
+                // and therefore we mimic this behaviour by also not doing anything.
+                Err(()) => {}
             }
         }
 

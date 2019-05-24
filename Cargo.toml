@@ -33,7 +33,7 @@ libp2p-uds = { version = "0.8.0", path = "./transports/uds" }
 libp2p-wasm-ext = { version = "0.1.0", path = "./transports/wasm-ext" }
 libp2p-websocket = { version = "0.8.0", path = "./transports/websocket", optional = true }
 libp2p-yamux = { version = "0.8.0", path = "./muxers/yamux" }
-parking_lot = "0.7"
+parking_lot = "0.8"
 smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-executor = "0.1"
