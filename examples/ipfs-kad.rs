@@ -28,6 +28,7 @@ use libp2p::{
     PeerId,
     identity
 };
+use libp2p::kad::Kademlia;
 
 fn main() {
     // Create a random key for ourselves.
@@ -44,7 +45,7 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut behaviour = libp2p::kad::Kademlia::new(local_peer_id.clone());
+        let mut behaviour: Kademlia<_> = libp2p::kad::Kademlia::new(local_peer_id.clone());
         behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse().unwrap(), "/ip4/104.131.131.82/tcp/4001".parse().unwrap());
         behaviour.add_address(&"QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM".parse().unwrap(), "/ip4/104.236.179.241/tcp/4001".parse().unwrap());
         behaviour.add_address(&"QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64".parse().unwrap(), "/ip4/104.236.76.40/tcp/4001".parse().unwrap());

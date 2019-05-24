@@ -35,8 +35,26 @@ use wasm_timer::{Instant, Interval};
 
 mod test;
 
+pub trait KRecordStorage {
+    fn get(&self, k: &Multihash) -> Option<&Vec<u8>>;
+    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>>;
+}
+
+pub struct RecordsMemoryStorage(FnvHashMap<Multihash, Vec<u8>>);
+
+impl Default for RecordsMemoryStorage {
+    fn default() -> Self {
+        RecordsMemoryStorage(FnvHashMap::default())
+    }
+}
+
+impl KRecordStorage for RecordsMemoryStorage {
+    fn get(&self, k: &Multihash) -> Option<&Vec<u8>> { self.0.get(k) }
+    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>> { self.0.insert(k, v) }
+}
+
 /// Network behaviour that handles Kademlia.
-pub struct Kademlia<TSubstream> {
+pub struct Kademlia<TSubstream, TRecordStorage:KRecordStorage = RecordsMemoryStorage> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
     kbuckets: KBucketsTable<PeerId, Addresses>,
 
@@ -91,7 +109,7 @@ pub struct Kademlia<TSubstream> {
     marker: PhantomData<TSubstream>,
 
     /// The records that we keep.
-    records: FnvHashMap<Multihash, Vec<u8>>
+    records: TRecordStorage,
 }
 
 /// Opaque type. Each query that we start gets a unique number.
@@ -206,7 +224,10 @@ impl QueryInfo {
     }
 }
 
-impl<TSubstream> Kademlia<TSubstream> {
+impl<TSubstream, TRecordStorage> Kademlia<TSubstream, TRecordStorage>
+where
+    TRecordStorage: Default + KRecordStorage
+{
     /// Creates a `Kademlia`.
     #[inline]
     pub fn new(local_peer_id: PeerId) -> Self {
@@ -293,7 +314,7 @@ impl<TSubstream> Kademlia<TSubstream> {
             rpc_timeout: Duration::from_secs(8),
             add_provider: SmallVec::new(),
             marker: PhantomData,
-            records: FnvHashMap::default(),
+            records: Default::default(),
         }
     }
 
@@ -506,9 +527,10 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for Kademlia<TSubstream>
+impl<TSubstream, TRecordStorage> NetworkBehaviour for Kademlia<TSubstream, TRecordStorage>
 where
     TSubstream: AsyncRead + AsyncWrite,
+    TRecordStorage: KRecordStorage + Default,
 {
     type ProtocolsHandler = KademliaHandler<TSubstream, QueryId>;
     type OutEvent = KademliaOut;

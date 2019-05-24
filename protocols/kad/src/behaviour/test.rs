@@ -20,7 +20,7 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KademliaOut, kbucket::{self, Distance}};
+use crate::{Kademlia, KRecordStorage, KademliaOut, kbucket::{self, Distance}};
 use futures::{future, prelude::*};
 use libp2p_core::{
     PeerId,
@@ -38,11 +38,27 @@ use libp2p_yamux as yamux;
 use rand::random;
 use std::{io, u64};
 use tokio::runtime::Runtime;
-use multihash::Hash;
+use multihash::{Hash, Multihash};
+use std::collections::HashMap;
+
+// Let's test with a custom storage type
+struct TestMemoryStorage(HashMap<Multihash, Vec<u8>>);
+
+impl Default for TestMemoryStorage {
+    fn default() -> Self {
+        TestMemoryStorage(HashMap::default())
+    }
+}
+
+impl KRecordStorage for TestMemoryStorage {
+    fn get(&self, k: &Multihash) -> Option<&Vec<u8>> { self.0.get(k) }
+    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>> { self.0.insert(k, v) }
+}
+
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
-    Kademlia<Substream<StreamMuxerBox>>
+    Kademlia<Substream<StreamMuxerBox>, TestMemoryStorage>
 >;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
