@@ -20,7 +20,7 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KademliaOut, kbucket::{self, Distance}};
+use crate::{Kademlia, KademliaOut, KademliaStorage, kbucket::{self, Distance}};
 use futures::{future, prelude::*};
 use libp2p_core::{
     PeerId,
@@ -36,13 +36,34 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{io, u64};
+use std::{io, u64, collections::HashMap};
 use tokio::runtime::Runtime;
-use multihash::Hash;
+use multihash::{Hash, Multihash};
+
+struct TestStorage(HashMap<Multihash, Vec<u8>>);
+
+impl KademliaStorage for TestStorage {
+    fn contains_key(&self, k: &Multihash) -> bool { self.0.contains_key(k) }
+    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>> {
+        self.0.insert(k, v)
+    }
+    fn remove_entry(&mut self, k: &Multihash) -> Option<(Multihash, Vec<u8>)> {
+        self.0.remove_entry(k)
+    }
+    fn get(&self, k: &Multihash) -> Option<&Vec<u8>> {
+        self.0.get(k)
+    }
+}
+
+impl TestStorage {
+    fn new() -> Self {
+        TestStorage(HashMap::new())
+    }
+}
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
-    Kademlia<Substream<StreamMuxerBox>>
+    Kademlia<Substream<StreamMuxerBox>, TestStorage>
 >;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
@@ -66,7 +87,7 @@ fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
             .map_err(|e| panic!("Failed to create transport: {:?}", e))
             .boxed();
 
-        let kad = Kademlia::new(local_public_key.clone().into_peer_id());
+        let kad = Kademlia::new(local_public_key.clone().into_peer_id(), TestStorage::new());
         result.push(Swarm::new(transport, kad, local_public_key.into_peer_id()));
     }
 
