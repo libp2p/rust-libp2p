@@ -231,7 +231,7 @@ where
     /// Creates a `Kademlia`.
     #[inline]
     pub fn new(local_peer_id: PeerId) -> Self {
-        Self::new_inner(local_peer_id)
+        Self::new_inner(local_peer_id, Default::default())
     }
 
     /// The same as `new`, but using a custom protocol name.
@@ -239,9 +239,17 @@ where
     /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
     /// custom name therefore allows to segregate the DHT from others, if that is desired.
     pub fn with_protocol_name(local_peer_id: PeerId, name: impl Into<Cow<'static, [u8]>>) -> Self {
-        let mut me = Kademlia::new_inner(local_peer_id);
+        let mut me = Kademlia::new_inner(local_peer_id, Default::default());
         me.protocol_name_override = Some(name.into());
         me
+    }
+
+    /// The same as `new`, but with a custom storage.
+    ///
+    /// The default records storage is in memory, this lets override the
+    /// storage with user-defined behaviour
+    pub fn with_storage(local_peer_id: PeerId, records: TRecordStorage) -> Self {
+        Self::new_inner(local_peer_id, records)
     }
 
     /// Creates a `Kademlia`.
@@ -251,7 +259,7 @@ where
     #[inline]
     #[deprecated(note="this function is now equivalent to new() and will be removed in the future")]
     pub fn without_init(local_peer_id: PeerId) -> Self {
-        Self::new_inner(local_peer_id)
+        Self::new_inner(local_peer_id, Default::default())
     }
 
     /// Adds a known address of a peer participating in the Kademlia DHT to the
@@ -295,7 +303,7 @@ where
     }
 
     /// Inner implementation of the constructors.
-    fn new_inner(local_peer_id: PeerId) -> Self {
+    fn new_inner(local_peer_id: PeerId, records: TRecordStorage) -> Self {
         let parallelism = 3;
 
         Kademlia {
@@ -314,7 +322,7 @@ where
             rpc_timeout: Duration::from_secs(8),
             add_provider: SmallVec::new(),
             marker: PhantomData,
-            records: Default::default(),
+            records,
         }
     }
 
