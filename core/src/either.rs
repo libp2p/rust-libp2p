@@ -88,7 +88,6 @@ where
     A: Read,
     B: Read,
 {
-    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         match self {
             EitherOutput::First(a) => a.read(buf),
@@ -102,7 +101,6 @@ where
     A: AsyncWrite,
     B: AsyncWrite,
 {
-    #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
         match self {
             EitherOutput::First(a) => a.shutdown(),
@@ -116,7 +114,6 @@ where
     A: Write,
     B: Write,
 {
-    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         match self {
             EitherOutput::First(a) => a.write(buf),
@@ -124,7 +121,6 @@ where
         }
     }
 
-    #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
         match self {
             EitherOutput::First(a) => a.flush(),
@@ -302,7 +298,6 @@ where
     type Item = ListenerEvent<EitherFuture<AInner, BInner>>;
     type Error = EitherError<AStream::Error, BStream::Error>;
 
-    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self {
             EitherListenStream::First(a) => a.poll()
@@ -331,7 +326,6 @@ where
     type Item = EitherOutput<AInner, BInner>;
     type Error = EitherError<AFuture::Error, BFuture::Error>;
 
-    #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
             EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)).map_err(EitherError::A),

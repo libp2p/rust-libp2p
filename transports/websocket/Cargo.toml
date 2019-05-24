@@ -17,7 +17,9 @@ log = "0.4.1"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-codec = "0.1.1"
 tokio-io = "0.1.12"
+tokio-rustls = "0.10.0-alpha.3"
 soketto = { git = "https://github.com/paritytech/soketto.git" }
+webpki-roots = "0.16.0"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.8.0", path = "../tcp" }

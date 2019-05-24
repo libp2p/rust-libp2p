@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2017 - 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -22,6 +22,7 @@
 
 pub mod error;
 pub mod framed;
+pub mod tls;
 
 use error::Error;
 use framed::BytesConnection;
@@ -41,15 +42,7 @@ pub struct WsConfig<T> {
     transport: framed::WsConfig<T>
 }
 
-impl<T> WsConfig<T>
-where
-    T: Transport,
-    T::Error: Send + 'static,
-    T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
-    T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Send + 'static
-{
+impl<T> WsConfig<T> {
     pub fn new(transport: T) -> Self {
         WsConfig {
             transport: framed::WsConfig::new(transport)
@@ -62,6 +55,11 @@ where
 
     pub fn set_max_data_size(&mut self, size: u64) -> &mut Self {
         self.transport.set_max_data_size(size);
+        self
+    }
+
+    pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
+        self.transport.set_tls_config(c);
         self
     }
 }
