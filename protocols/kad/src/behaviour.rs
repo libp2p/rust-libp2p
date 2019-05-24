@@ -332,7 +332,6 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// Starts an iterative `PUT_VALUE` request
     pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) {
         // TODO: Probably we shouldn't store the value ourselves
-        self.records.insert(key.clone(), value.clone());
         self.start_query(QueryInfoInner::PutValue{key, value});
     }
 
@@ -826,7 +825,7 @@ where
             }
 
             if let Some(finished_query) = finished_query {
-                let (query_info, closer_peers) = self
+                let (query_info, mut closer_peers) = self
                     .active_queries
                     .remove(&finished_query)
                     .expect("finished_query was gathered when iterating active_queries; QED.")
@@ -883,8 +882,13 @@ where
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
-                    QueryInfoInner::PutValue { key, .. } => {
-                        let event = KademliaOut::PutValueResult { key };
+                    QueryInfoInner::PutValue { key, value } => {
+                        let event = KademliaOut::PutValueResult { key: key.clone() };
+                        let local_id = self.kbuckets.local_key().preimage();
+
+                        if closer_peers.any(|ref peer_id| peer_id == local_id) {
+                            self.records.insert(key.clone(), value.clone());
+                        }
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                 }
