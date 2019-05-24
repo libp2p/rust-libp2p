@@ -711,13 +711,18 @@ where
                 }
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
-            KademliaHandlerEvent::PutValue { key, value, request_id } => {
-                self.records.insert(key.clone(), value);
+            KademliaHandlerEvent::PutValue {
+                key,
+                value,
+                request_id
+            } => {
+                self.records.insert(key.clone(), value.clone());
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
                     event: KademliaHandlerIn::PutValueRes {
                         key,
+                        value,
                         request_id,
                     },
                 });
@@ -878,7 +883,7 @@ where
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
-                    QueryInfoInner::PutValue { key, value } => {
+                    QueryInfoInner::PutValue { key, .. } => {
                         let event = KademliaOut::PutValueResult { key };
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },

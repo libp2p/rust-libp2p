@@ -321,6 +321,8 @@ pub enum KadResponseMsg {
     PutValue {
         /// The key of the record.
         key: Multihash,
+        /// Value of the record.
+        value: Vec<u8>,
     },
 }
 
@@ -431,10 +433,18 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
 
             msg
         }
-        KadResponseMsg::PutValue {key} => {
+        KadResponseMsg::PutValue {
+            key,
+            value,
+        } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
-            msg.set_key(key.into_bytes());
+            msg.set_key(key.clone().into_bytes());
+
+            let mut record = proto::Record::new();
+            record.set_key(key.into_bytes());
+            record.set_value(value);
+            msg.set_record(record);
 
             msg
         }
@@ -547,8 +557,14 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
 
         proto::Message_MessageType::PUT_VALUE => {
             let key = Multihash::from_bytes(message.take_key()).map_err(invalid_data)?;
+            if !message.has_record() {
+                return Err(invalid_data("received PUT_VALUE message with no record"));
+            }
+
+            let mut record = message.take_record();
             Ok(KadResponseMsg::PutValue {
                 key,
+                value: record.take_value().into(),
             })
         }
 

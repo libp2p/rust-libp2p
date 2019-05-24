@@ -351,6 +351,7 @@ pub enum KademliaHandlerIn<TUserData> {
 
     PutValueRes {
         key: Multihash,
+        value: Vec<u8>,
         request_id: KademliaRequestId,
     }
 }
@@ -581,7 +582,11 @@ where
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
                 }
             }
-            KademliaHandlerIn::PutValueRes { key, request_id } => {
+            KademliaHandlerIn::PutValueRes {
+                key,
+                request_id,
+                value,
+            } => {
                 let pos = self.substreams.iter().position(|state| match state {
                     SubstreamState::InWaitingUser(ref conn_id, _)
                         if conn_id == &request_id.connec_unique_id =>
@@ -598,7 +603,8 @@ where
                     };
 
                     let msg = KadResponseMsg::PutValue {
-                        key
+                        key,
+                        value,
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
