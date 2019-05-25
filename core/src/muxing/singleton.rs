@@ -101,6 +101,10 @@ where
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
     }
 
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.inner.lock().prepare_uninitialized_buffer(buf)
+    }
+
     fn read_substream(&self, _: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, io::Error> {
         let res = self.inner.lock().poll_read(buf);
         if let Ok(Async::Ready(_)) = res {

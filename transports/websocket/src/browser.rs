@@ -232,7 +232,15 @@ impl Drop for BrowserWsConn {
     }
 }
 
-impl AsyncRead for BrowserWsConn {}
+impl AsyncRead for BrowserWsConn {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.incoming_data.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, IoError> {
+        self.incoming_data.read_buf(buf)
+    }
+}
 
 impl Read for BrowserWsConn {
     #[inline]
@@ -290,41 +298,41 @@ fn multiaddr_to_target(addr: &Multiaddr) -> Result<String, ()> {
     }
 
     match (&protocols[0], &protocols[1], &protocols[2]) {
-        (&Protocol::Ip4(ref ip), &Protocol::Tcp(port), &Protocol::Ws) => {
+        (&Protocol::Ip4(ref ip), &Protocol::Tcp(port), &Protocol::Ws(ref ws_path)) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
-            Ok(format!("ws://{}:{}/", ip, port))
+            Ok(format!("ws://{}:{}{}", ip, port, ws_path))
         }
-        (&Protocol::Ip6(ref ip), &Protocol::Tcp(port), &Protocol::Ws) => {
+        (&Protocol::Ip6(ref ip), &Protocol::Tcp(port), &Protocol::Ws(ref ws_path)) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
-            Ok(format!("ws://[{}]:{}/", ip, port))
+            Ok(format!("ws://[{}]:{}{}", ip, port, ws_path))
         }
-        (&Protocol::Ip4(ref ip), &Protocol::Tcp(port), &Protocol::Wss) => {
+        (&Protocol::Ip4(ref ip), &Protocol::Tcp(port), &Protocol::Wss(ref ws_path)) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
-            Ok(format!("wss://{}:{}/", ip, port))
+            Ok(format!("wss://{}:{}{}", ip, port, ws_path))
         }
-        (&Protocol::Ip6(ref ip), &Protocol::Tcp(port), &Protocol::Wss) => {
+        (&Protocol::Ip6(ref ip), &Protocol::Tcp(port), &Protocol::Wss(ref ws_path)) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
-            Ok(format!("wss://[{}]:{}/", ip, port))
+            Ok(format!("wss://[{}]:{}{}", ip, port, ws_path))
         }
-        (&Protocol::Dns4(ref ns), &Protocol::Tcp(port), &Protocol::Ws) => {
-            Ok(format!("ws://{}:{}/", ns, port))
+        (&Protocol::Dns4(ref ns), &Protocol::Tcp(port), &Protocol::Ws(ref ws_path)) => {
+            Ok(format!("ws://{}:{}{}", ns, port, ws_path))
         }
-        (&Protocol::Dns6(ref ns), &Protocol::Tcp(port), &Protocol::Ws) => {
-            Ok(format!("ws://{}:{}/", ns, port))
+        (&Protocol::Dns6(ref ns), &Protocol::Tcp(port), &Protocol::Ws(ref ws_path)) => {
+            Ok(format!("ws://{}:{}{}", ns, port, ws_path))
         }
-        (&Protocol::Dns4(ref ns), &Protocol::Tcp(port), &Protocol::Wss) => {
-            Ok(format!("wss://{}:{}/", ns, port))
+        (&Protocol::Dns4(ref ns), &Protocol::Tcp(port), &Protocol::Wss(ref ws_path)) => {
+            Ok(format!("wss://{}:{}{}", ns, port, ws_path))
         }
-        (&Protocol::Dns6(ref ns), &Protocol::Tcp(port), &Protocol::Wss) => {
-            Ok(format!("wss://{}:{}/", ns, port))
+        (&Protocol::Dns6(ref ns), &Protocol::Tcp(port), &Protocol::Wss(ref ws_path)) => {
+            Ok(format!("wss://{}:{}{}", ns, port, ws_path))
         }
         _ => Err(()),
     }

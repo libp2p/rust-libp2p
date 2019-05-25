@@ -61,7 +61,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TConnInfo, TPeerId>,
+    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
 
     /// The reach attempts of the swarm.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
@@ -85,6 +85,17 @@ where
             .field("reach_attempts", &self.reach_attempts)
             .field("incoming_limit", &self.incoming_limit)
             .finish()
+    }
+}
+
+impl<TConnInfo> ConnectionInfo for (TConnInfo, ConnectedPoint)
+where
+    TConnInfo: ConnectionInfo
+{
+    type PeerId = TConnInfo::PeerId;
+
+    fn peer_id(&self) -> &Self::PeerId {
+        self.0.peer_id()
     }
 }
 
@@ -520,7 +531,7 @@ where TTrans: Transport
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
     /// Reference to the `active_nodes` field of the swarm.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TConnInfo, TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
     /// Reference to the `other_reach_attempts` field of the swarm.
     other_reach_attempts: &'a mut Vec<(ReachAttemptId, ConnectedPoint)>,
 }
@@ -531,7 +542,7 @@ where
     TTrans: Transport<Output = (TConnInfo, TMuxer)>,
     TTrans::Error: Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
-    THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
+    THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
@@ -558,11 +569,14 @@ where
         let local_peer_id = self.local_peer_id;
         let upgrade = self.upgrade
             .map_err(|err| InternalReachErr::Transport(TransportError::Other(err)))
-            .and_then(move |(peer_id, muxer)| {
-                if *peer_id.peer_id() == local_peer_id {
-                    Err(InternalReachErr::FoundLocalPeerId)
-                } else {
-                    Ok((peer_id, muxer))
+            .and_then({
+                let connected_point = connected_point.clone();
+                move |(peer_id, muxer)| {
+                    if *peer_id.peer_id() == local_peer_id {
+                        Err(InternalReachErr::FoundLocalPeerId)
+                    } else {
+                        Ok(((peer_id, connected_point), muxer))
+                    }
                 }
             });
         let id = self.active_nodes.add_reach_attempt(upgrade, handler);
@@ -691,7 +705,7 @@ impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, TPee
 where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
-    THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
+    THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
@@ -798,17 +812,20 @@ where
         TPeerId: Send + 'static,
     {
         let local_peer_id = self.reach_attempts.local_peer_id.clone();
-        let future = self.transport().clone().dial(addr.clone())?
+        let connected_point = ConnectedPoint::Dialer { address: addr.clone() };
+        let future = self.transport().clone().dial(addr)?
             .map_err(|err| InternalReachErr::Transport(TransportError::Other(err)))
-            .and_then(move |(peer_id, muxer)| {
-                if *peer_id.peer_id() == local_peer_id {
-                    Err(InternalReachErr::FoundLocalPeerId)
-                } else {
-                    Ok((peer_id, muxer))
+            .and_then({
+                let connected_point = connected_point.clone();
+                move |(peer_id, muxer)| {
+                    if *peer_id.peer_id() == local_peer_id {
+                        Err(InternalReachErr::FoundLocalPeerId)
+                    } else {
+                        Ok(((peer_id, connected_point), muxer))
+                    }
                 }
             });
 
-        let connected_point = ConnectedPoint::Dialer { address: addr };
         let reach_id = self.active_nodes.add_reach_attempt(future, handler);
         self.reach_attempts.other_reach_attempts.push((reach_id, connected_point));
         Ok(())
@@ -946,11 +963,12 @@ where
         let reach_id = match self.transport().clone().dial(first.clone()) {
             Ok(fut) => {
                 let expected_peer_id = peer_id.clone();
+                let connected_point = ConnectedPoint::Dialer { address: first.clone() };
                 let fut = fut
                     .map_err(|err| InternalReachErr::Transport(TransportError::Other(err)))
                     .and_then(move |(actual_conn_info, muxer)| {
                         if *actual_conn_info.peer_id() == expected_peer_id {
-                            Ok((actual_conn_info, muxer))
+                            Ok(((actual_conn_info, connected_point), muxer))
                         } else {
                             Err(InternalReachErr::PeerIdMismatch { obtained: actual_conn_info })
                         }
@@ -987,7 +1005,7 @@ where
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
+        THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
         THandlerErr: error::Error + Send + 'static,
@@ -1053,14 +1071,14 @@ where
                              messages; QED");
                 action = Default::default();
                 out_event = RawSwarmEvent::NodeClosed {
-                    conn_info,
+                    conn_info: conn_info.0,
                     endpoint,
                     error,
                 };
             }
             Async::Ready(CollectionEvent::NodeEvent { peer, event }) => {
                 action = Default::default();
-                out_event = RawSwarmEvent::NodeEvent { conn_info: peer.info().clone(), event };
+                out_event = RawSwarmEvent::NodeEvent { conn_info: peer.info().0.clone(), event };
             }
         }
 
@@ -1112,7 +1130,7 @@ impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
 /// >           panics will likely happen.
 fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
-    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TConnInfo, TPeerId>,
+    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
 ) -> (ActionItem<THandler, TPeerId>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
@@ -1181,14 +1199,14 @@ where
                          guaranteed to always deliver a connection closed message after it has \
                          been opened, and no two closed messages; QED");
             return (action, RawSwarmEvent::Replaced {
-                new_info: conn_info,
-                old_info,
+                new_info: conn_info.0,
+                old_info: old_info.0,
                 endpoint: opened_endpoint,
                 closed_endpoint,
             });
         } else {
             return (action, RawSwarmEvent::Connected {
-                conn_info,
+                conn_info: conn_info.0,
                 endpoint: opened_endpoint
             });
         }
@@ -1223,15 +1241,15 @@ where
                         to always deliver a connection closed message after it has been opened, \
                         and no two closed messages; QED");
             return (Default::default(), RawSwarmEvent::Replaced {
-                new_info: conn_info,
-                old_info,
+                new_info: conn_info.0,
+                old_info: old_info.0,
                 endpoint: opened_endpoint,
                 closed_endpoint,
             });
 
         } else {
             return (Default::default(), RawSwarmEvent::Connected {
-                conn_info,
+                conn_info: conn_info.0,
                 endpoint: opened_endpoint
             });
         }
@@ -1447,7 +1465,7 @@ where
     TMuxer::Substream: Send,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
-    THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
+    THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
@@ -1572,7 +1590,7 @@ pub struct PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr,
 where TTrans: Transport,
 {
     /// Reference to the `active_nodes` of the parent.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TConnInfo, TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
     /// Reference to the `connected_points` field of the parent.
     connected_points: &'a mut FnvHashMap<TPeerId, ConnectedPoint>,
     /// Reference to the `out_reach_attempts` field of the parent.
@@ -1630,7 +1648,7 @@ where
     TTrans: Transport
 {
     attempt: OccupiedEntry<'a, TPeerId, OutReachAttempt>,
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TConnInfo, TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
 }
 
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
@@ -1720,7 +1738,7 @@ where
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
-    THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
+    THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,

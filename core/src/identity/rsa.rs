@@ -24,7 +24,7 @@ use asn1_der::{Asn1Der, FromDerObject, IntoDerObject, DerObject, DerTag, DerValu
 use lazy_static::lazy_static;
 use super::error::*;
 use ring::rand::SystemRandom;
-use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256, RsaEncoding, VerificationAlgorithm};
+use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
 use std::sync::Arc;
 use untrusted::Input;
@@ -41,7 +41,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         let kp = RsaKeyPair::from_pkcs8(Input::from(&der[..]))
-            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo", e))?;
+            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo").source(e))?;
         der.zeroize();
         Ok(Keypair(Arc::new(kp)))
     }
@@ -57,17 +57,7 @@ impl Keypair {
         let rng = SystemRandom::new();
         match self.0.sign(&RSA_PKCS1_SHA256, &rng, &data, &mut signature) {
             Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA", e))
-        }
-    }
-
-    /// Sign a message with this keypair using a custom digest algorithm.
-    pub fn sign_custom(&self, data: &[u8], algorithm: &'static dyn RsaEncoding) -> Result<Vec<u8>, SigningError> {
-        let mut signature = vec![0; self.0.public_modulus_len()];
-        let rng = SystemRandom::new();
-        match self.0.sign(algorithm, &rng, &data, &mut signature) {
-            Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA", e))
+            Err(e) => Err(SigningError::new("RSA").source(e))
         }
     }
 }
@@ -80,15 +70,6 @@ impl PublicKey {
     /// Verify an RSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         signature::verify(&RSA_PKCS1_2048_8192_SHA256,
-                          Input::from(&self.0),
-                          Input::from(msg),
-                          Input::from(sig)).is_ok()
-    }
-
-    /// Verify an RSA signature on a message using the public key and a custom verification
-    /// algorithm.
-    pub fn verify_custom(&self, msg: &[u8], sig: &[u8], algorithm: &dyn VerificationAlgorithm) -> bool {
-        signature::verify(algorithm,
                           Input::from(&self.0),
                           Input::from(msg),
                           Input::from(sig)).is_ok()
@@ -124,7 +105,7 @@ impl PublicKey {
     /// structure. See also `encode_x509`.
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::deserialize(pk.iter())
-            .map_err(|e| DecodingError::new("RSA X.509", e))
+            .map_err(|e| DecodingError::new("RSA X.509").source(e))
             .map(|spki| spki.subjectPublicKey.0)
     }
 }

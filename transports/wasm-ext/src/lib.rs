@@ -34,7 +34,7 @@
 
 use futures::{future::FutureResult, prelude::*, stream::Stream, try_ready};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
-use send_wrapper::SendWrapper;
+use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem};
 use wasm_bindgen::{JsCast, prelude::*};
 
@@ -411,7 +411,11 @@ impl io::Read for Connection {
     }
 }
 
-impl tokio_io::AsyncRead for Connection {}
+impl tokio_io::AsyncRead for Connection {
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
+    }
+}
 
 impl io::Write for Connection {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {

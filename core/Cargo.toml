@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.7.0"
+version = "0.8.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,17 +22,16 @@ multiaddr = { package = "parity-multiaddr", version = "0.4.0", path = "../misc/m
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/multihash" }
 multistream-select = { version = "0.4.0", path = "../misc/multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
-parking_lot = "0.7"
+parking_lot = "0.8"
 protobuf = "2.3"
 quick-error = "1.2"
 rand = "0.6"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
-secp256k1 = { version = "0.12", features = ["rand"], optional = true }
+libsecp256k1 = { version = "0.2.2", optional = true }
 sha2 = "0.8.0"
 smallvec = "0.6"
 tokio-executor = "0.1.4"
 tokio-io = "0.1"
-typenum = "1.10.0"
 wasm-timer = "0.1"
 unsigned-varint = "0.2"
 void = "1"
@@ -44,10 +43,10 @@ untrusted = { version = "0.6" }
 
 [dev-dependencies]
 env_logger = "0.6"
-libp2p-ping = { version = "0.7.0", path = "../protocols/ping" }
-libp2p-tcp = { version = "0.7.0", path = "../transports/tcp" }
-libp2p-mplex = { version = "0.7.0", path = "../muxers/mplex" }
-libp2p-secio = { version = "0.7.0", path = "../protocols/secio" }
+libp2p-ping = { version = "0.8.0", path = "../protocols/ping" }
+libp2p-tcp = { version = "0.8.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.8.0", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.8.0", path = "../protocols/secio" }
 rand = "0.6"
 quickcheck = "0.8"
 tokio = "0.1"
@@ -58,3 +57,5 @@ tokio-mock-task = "0.1"
 
 [features]
 default = ["secp256k1"]
+secp256k1 = ["libsecp256k1"]
+

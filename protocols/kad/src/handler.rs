@@ -32,7 +32,7 @@ use libp2p_core::protocols_handler::{
 };
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
-use std::{error, fmt, io, time::Duration};
+use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::Instant;
 
@@ -303,7 +303,6 @@ where
 {
     /// Create a `KademliaHandler` that only allows sending messages to the remote but denying
     /// incoming connections.
-    #[inline]
     pub fn dial_only() -> Self {
         KademliaHandler::with_allow_listening(false)
     }
@@ -312,7 +311,6 @@ where
     /// requests.
     ///
     /// The `Default` trait implementation wraps around this function.
-    #[inline]
     pub fn dial_and_listen() -> Self {
         KademliaHandler::with_allow_listening(true)
     }
@@ -325,6 +323,13 @@ where
             substreams: Vec::new(),
             keep_alive: KeepAlive::Yes,
         }
+    }
+
+    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
+    /// between networks on purpose.
+    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
+        self.config = self.config.with_protocol_name(name);
+        self
     }
 }
 
@@ -355,7 +360,7 @@ where
     #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if self.allow_listening {
-            SubstreamProtocol::new(self.config).map_upgrade(upgrade::EitherUpgrade::A)
+            SubstreamProtocol::new(self.config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
             SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
@@ -493,7 +498,7 @@ where
             let mut substream = self.substreams.swap_remove(n);
 
             loop {
-                match advance_substream(substream, self.config) {
+                match advance_substream(substream, self.config.clone()) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
                         return Ok(Async::Ready(event));

@@ -37,6 +37,7 @@
 //! >           connection with a remote. In order to handle a protocol that requires knowledge of
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
+use crate::nodes::raw_swarm::ConnectedPoint;
 use crate::PeerId;
 use crate::upgrade::{
     InboundUpgrade,
@@ -427,7 +428,7 @@ pub trait IntoProtocolsHandler {
     /// Builds the protocols handler.
     ///
     /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler;
+    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler;
 
     /// Return the handler's inbound protocol.
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol;
@@ -456,7 +457,7 @@ where T: ProtocolsHandler
 {
     type Handler = Self;
 
-    fn into_handler(self, _: &PeerId) -> Self {
+    fn into_handler(self, _: &PeerId, _: &ConnectedPoint) -> Self {
         self
     }
 
