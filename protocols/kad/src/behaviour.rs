@@ -23,6 +23,7 @@ use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::kbucket::{self, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
+use crate::record::{RecordStore, Record, RecordStorageError};
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -35,26 +36,52 @@ use wasm_timer::{Instant, Interval};
 
 mod test;
 
-pub trait KRecordStorage {
-    fn get(&self, k: &Multihash) -> Option<&Vec<u8>>;
-    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>>;
+pub struct MemoryRecordStorage{
+    max_records: usize,
+    max_record_size: usize,
+    records: FnvHashMap<Multihash, Record>
 }
 
-pub struct RecordsMemoryStorage(FnvHashMap<Multihash, Vec<u8>>);
+impl MemoryRecordStorage {
+    const MAX_RECORDS: usize = 1024;
+    const MAX_RECORD_SIZE: usize = 65535;
 
-impl Default for RecordsMemoryStorage {
-    fn default() -> Self {
-        RecordsMemoryStorage(FnvHashMap::default())
+    pub fn new(max_records: usize, max_record_size: usize) -> Self {
+        MemoryRecordStorage{
+            max_records,
+            max_record_size,
+            records: FnvHashMap::default()
+        }
     }
 }
 
-impl KRecordStorage for RecordsMemoryStorage {
-    fn get(&self, k: &Multihash) -> Option<&Vec<u8>> { self.0.get(k) }
-    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>> { self.0.insert(k, v) }
+impl Default for MemoryRecordStorage {
+    fn default() -> Self {
+        MemoryRecordStorage::new(Self::MAX_RECORDS, Self::MAX_RECORD_SIZE)
+    }
+}
+
+impl RecordStore for MemoryRecordStorage {
+    fn get(&self, k: &Multihash) -> Option<&Record> {
+        self.records.get(k)
+    }
+    fn put(&mut self, k: Multihash, r: Record) -> Result<(), RecordStorageError> {
+        if self.records.len() >= self.max_records {
+            return Err(RecordStorageError::AtCapacity);
+        }
+
+        if r.value().len() >= self.max_record_size {
+            return Err(RecordStorageError::ValueTooLarge)
+        }
+
+        self.records.insert(k, r);
+
+        Ok(())
+    }
 }
 
 /// Network behaviour that handles Kademlia.
-pub struct Kademlia<TSubstream, TRecordStorage:KRecordStorage = RecordsMemoryStorage> {
+pub struct Kademlia<TSubstream, TRecordStorage:RecordStore = MemoryRecordStorage> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
     kbuckets: KBucketsTable<PeerId, Addresses>,
 
@@ -166,7 +193,7 @@ enum QueryInfoInner {
         /// The key we're looking for
         key: Multihash,
         /// The results from peers are stored here
-        results: Vec<(Multihash, Vec<u8>)>,
+        results: Vec<Record>,
     },
 }
 
@@ -226,7 +253,7 @@ impl QueryInfo {
 
 impl<TSubstream, TRecordStorage> Kademlia<TSubstream, TRecordStorage>
 where
-    TRecordStorage: Default + KRecordStorage
+    TRecordStorage: Default + RecordStore
 {
     /// Creates a `Kademlia`.
     #[inline]
@@ -347,12 +374,11 @@ where
 
     /// Starts an iterative `GET_VALUE` request.
     pub fn get_value(&mut self, key: &Multihash) {
-        if let Some(value) = self.records.get(key) {
+        if let Some(record) = self.records.get(key) {
             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
-                KademliaOut::GetValueResult {
-                    result: Some((key.clone(), value.clone())),
-                    closer_peers: None,
-                }
+                KademliaOut::GetValueResult(
+                    GetValueResult::Found{ record: record.clone() }
+                )
             ));
         }
         self.start_query(QueryInfoInner::GetValue { key: key.clone(), results: vec![] });
@@ -538,7 +564,7 @@ where
 impl<TSubstream, TRecordStorage> NetworkBehaviour for Kademlia<TSubstream, TRecordStorage>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TRecordStorage: KRecordStorage + Default,
+    TRecordStorage: RecordStore + Default,
 {
     type ProtocolsHandler = KademliaHandler<TSubstream, QueryId>;
     type OutEvent = KademliaOut;
@@ -707,9 +733,10 @@ where
             }
             KademliaHandlerEvent::GetValue { key, request_id } => {
                 let result = match self.records.get(&key) {
-                    Some(value) => Some((key.clone(), value.clone())),
+                    Some(record) => Some(record.clone()),
                     None => None,
                 };
+
                 let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
@@ -745,16 +772,16 @@ where
                 value,
                 request_id
             } => {
-                self.records.insert(key.clone(), value.clone());
-
-                self.queued_events.push(NetworkBehaviourAction::SendEvent {
-                    peer_id: source,
-                    event: KademliaHandlerIn::PutValueRes {
-                        key,
-                        value,
-                        request_id,
-                    },
-                });
+                if let Ok(()) = self.records.put(key.clone(), Record::new(key.clone(), value.clone())) {
+                    self.queued_events.push(NetworkBehaviourAction::SendEvent {
+                        peer_id: source,
+                        event: KademliaHandlerIn::PutValueRes {
+                            key,
+                            value,
+                            request_id,
+                        },
+                    });
+                }
             }
             KademliaHandlerEvent::PutValueRes {
                 key: _,
@@ -897,18 +924,11 @@ where
                     },
                     QueryInfoInner::GetValue { key: _, results } => {
                         let result = match results.first() {
-                            Some(a) => Some(a.clone()),
-                            None => None,
+                            Some(record) => GetValueResult::Found{ record: record.clone() },
+                            None => GetValueResult::NotFound{ closest_peers: vec![]},
                         };
 
-                        let event = KademliaOut::GetValueResult {
-                            result: result.clone(),
-                            closer_peers: {
-                                match result {
-                                None => Some(closer_peers.collect()),
-                                Some(_) => None,
-                            }},
-                        };
+                        let event = KademliaOut::GetValueResult(result);
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
@@ -917,9 +937,10 @@ where
                         let local_id = self.kbuckets.local_key().preimage();
 
                         if closer_peers.any(|ref peer_id| peer_id == local_id) {
-                            self.records.insert(key.clone(), value.clone());
+                            if let Ok(()) = self.records.put(key.clone(), Record::new(key, value)) {
+                                break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                            }
                         }
-                        break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                 }
             } else {
@@ -927,6 +948,13 @@ where
             }
         }
     }
+}
+
+/// The result of a `GET_VALUE` query.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GetValueResult {
+    Found { record: Record },
+    NotFound { closest_peers: Vec<PeerId> }
 }
 
 /// Output event of the `Kademlia` behaviour.
@@ -972,12 +1000,7 @@ pub enum KademliaOut {
     },
 
     /// Result of a `GET_VALUE` query
-    GetValueResult {
-        /// The result that we have probably received
-        result: Option<(Multihash, Vec<u8>)>,
-        /// List of peers ordered from closes to furthest from the key
-        closer_peers: Option<Vec<PeerId>>,
-    },
+    GetValueResult(GetValueResult),
 
     /// Result of a `PUT_VALUE` query
     PutValueResult {

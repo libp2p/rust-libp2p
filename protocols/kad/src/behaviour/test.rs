@@ -20,7 +20,8 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KRecordStorage, KademliaOut, kbucket::{self, Distance}};
+use crate::{GetValueResult, Kademlia, KademliaOut, kbucket::{self, Distance},
+    record::{Record, RecordStore, RecordStorageError}};
 use futures::{future, prelude::*};
 use libp2p_core::{
     PeerId,
@@ -42,7 +43,7 @@ use multihash::{Hash, Multihash};
 use std::collections::HashMap;
 
 // Let's test with a custom storage type
-struct TestMemoryStorage(HashMap<Multihash, Vec<u8>>);
+struct TestMemoryStorage(HashMap<Multihash, Record>);
 
 impl Default for TestMemoryStorage {
     fn default() -> Self {
@@ -50,9 +51,13 @@ impl Default for TestMemoryStorage {
     }
 }
 
-impl KRecordStorage for TestMemoryStorage {
-    fn get(&self, k: &Multihash) -> Option<&Vec<u8>> { self.0.get(k) }
-    fn insert(&mut self, k: Multihash, v: Vec<u8>) -> Option<Vec<u8>> { self.0.insert(k, v) }
+impl RecordStore for TestMemoryStorage {
+    fn get(&self, k: &Multihash) -> Option<&Record> { self.0.get(k) }
+    fn put(&mut self, k: Multihash, v: Record) -> Result<(), RecordStorageError> {
+        self.0.insert(k, v);
+
+        Ok(())
+    }
 }
 
 
@@ -260,8 +265,8 @@ fn search_for_unknown_value() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueResult { result, .. })) => {
-                            assert_eq!(result, None);
+                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
+                            assert_eq!(result, GetValueResult::NotFound{ closest_peers: vec![]});
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
@@ -303,17 +308,15 @@ fn put_value() {
                 }
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueResult {
-                            result,
-                            closer_peers,
-                        })) => {
+                        Async::Ready(Some(KademliaOut::GetValueResult(
+                                GetValueResult::Found {
+                                    record
+                                }
+                        ))) => {
                             assert_eq!(swarm.kbuckets.local_key().preimage(), &peer_ids[2]);
-                            assert_ne!(result, None);
-                            assert_eq!(closer_peers, None);
 
-                            let value = result.unwrap();
-                            assert_eq!(value.0, target_key);
-                            assert_eq!(value.1, vec![4,5,6]);
+                            assert_eq!(record.key(), &target_key);
+                            assert_eq!(record.value(), &vec![4,5,6]);
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(Some(KademliaOut::PutValueResult {

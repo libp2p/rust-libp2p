@@ -22,6 +22,7 @@ use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
+use crate::record::Record;
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{
     KeepAlive,
@@ -195,7 +196,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Response to a `KademliaHandlerIn::GetValue`.
     GetValueRes {
         /// The result is present if the key has been found
-        result: Option<(Multihash, Vec<u8>)>,
+        result: Option<Record>,
 
         /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
@@ -332,7 +333,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// Response to a `GetValue`.
     GetValueRes {
         /// The value that might have been found in our storage
-        result: Option<(Multihash, Vec<u8>)>,
+        result: Option<Record>,
         /// Nodes that are closer to the key we were searching for
         closer_peers: Vec<KadPeer>,
         /// Identifier of the request that was made by the remote

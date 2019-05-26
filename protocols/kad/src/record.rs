@@ -18,21 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the Kademlia protocol for libp2p.
+use multihash::Multihash;
 
-// TODO: we allow dead_code for now because this library contains a lot of unused code that will
-//       be useful later for record store
-#![allow(dead_code)]
+pub enum RecordStorageError {
+    AtCapacity,
+    ValueTooLarge,
+}
 
-pub use self::behaviour::{Kademlia, GetValueResult, KademliaOut, RecordsMemoryStorage};
-pub use self::protocol::KadConnectionType;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Record {
+    key: Multihash,
+    value: Vec<u8>,
+}
 
-pub mod handler;
-pub mod kbucket;
-pub mod protocol;
-pub mod record;
+impl Record {
+    pub fn new(key: Multihash, value: Vec<u8>) -> Self { Record { key, value } }
+    pub fn key(&self) -> &Multihash { &self.key }
+    pub fn value(&self) -> &Vec<u8> { &self.value }
+}
 
-mod addresses;
-mod behaviour;
-mod protobuf_structs;
-mod query;
+pub trait RecordStore {
+    fn get(&self, k: &Multihash) -> Option<&Record>;
+    fn put(&mut self, k: Multihash, r: Record) -> Result<(), RecordStorageError>;
+}

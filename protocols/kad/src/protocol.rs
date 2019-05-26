@@ -33,6 +33,7 @@
 use bytes::BytesMut;
 use codec::UviBytes;
 use crate::protobuf_structs::dht as proto;
+use crate::record::Record;
 use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
@@ -312,7 +313,7 @@ pub enum KadResponseMsg {
     /// Response to a `GetValue`.
     GetValue {
         /// Result that might have been found
-        result: Option<(Multihash, Vec<u8>)>,
+        result: Option<Record>,
         /// Nodes closest to the key
         closer_peers: Vec<KadPeer>,
     },
@@ -424,10 +425,10 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
                 msg.mut_closerPeers().push(peer.into());
             }
 
-            result.map(|(key, value)| {
+            result.map(|r| {
                 let mut record = proto::Record::new();
-                record.set_key(key.into_bytes());
-                record.set_value(value);
+                record.set_key(r.key().clone().into_bytes());
+                record.set_value(r.value().to_vec());
                 msg.set_record(record);
             });
 
@@ -512,7 +513,7 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
                 true => {
                     let mut record = message.take_record();
                     let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
-                    Some((key, record.take_value().into()))
+                    Some(Record::new(key, record.take_value().into()))
                 }
                 false => None,
             };
