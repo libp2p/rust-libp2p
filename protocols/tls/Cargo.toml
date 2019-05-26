@@ -1,0 +1,16 @@
+[package]
+name = "libp2p-tls"
+edition = "2018"
+description = "TLS encryption protocol for libp2p"
+version = "0.1.0"
+authors = ["Grant Wuerker <gwuerker@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+futures = "0.1"
+libp2p-core = { version = "0.8.0", path = "../../core" }
+rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
+tokio-io = "0.1.0"
