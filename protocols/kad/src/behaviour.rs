@@ -882,7 +882,7 @@ where
             }
 
             if let Some(finished_query) = finished_query {
-                let (query_info, mut closer_peers) = self
+                let (query_info, closer_peers) = self
                     .active_queries
                     .remove(&finished_query)
                     .expect("finished_query was gathered when iterating active_queries; QED.")
@@ -932,15 +932,10 @@ where
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
-                    QueryInfoInner::PutValue { key, value } => {
+                    QueryInfoInner::PutValue { key, .. } => {
                         let event = KademliaOut::PutValueResult { key: key.clone() };
-                        let local_id = self.kbuckets.local_key().preimage();
 
-                        if closer_peers.any(|ref peer_id| peer_id == local_id) {
-                            if let Ok(()) = self.records.put(key.clone(), Record::new(key, value)) {
-                                break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                            }
-                        }
+                        break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                 }
             } else {
