@@ -25,18 +25,23 @@
 
 use futures::prelude::*;
 use libp2p::{
+    Swarm,
     PeerId,
-    identity
+    identity,
+    build_development_transport
 };
-use libp2p::kad::Kademlia;
+use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent};
+use std::env;
 
 fn main() {
+    env_logger::init();
+
     // Create a random key for ourselves.
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = libp2p::build_development_transport(local_key);
+    let transport = build_development_transport(local_key);
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
@@ -45,7 +50,8 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut behaviour: Kademlia<_> = libp2p::kad::Kademlia::new(local_peer_id.clone());
+        let cfg = KademliaConfig::new(local_peer_id.clone());
+        let mut behaviour: Kademlia<_> = Kademlia::new(cfg);
         // TODO: the /dnsaddr/ scheme is not supported (https://github.com/libp2p/rust-libp2p/issues/967)
 	    /*behaviour.add_address(&"QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
 	    behaviour.add_address(&"QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
@@ -60,25 +66,33 @@ fn main() {
 	    behaviour.add_address(&"QmSoLSafTMBsPKadTEgaXctDQVcqN88CNLHXMkTNwMKPnu".parse().unwrap(), "/ip6/2400:6180:0:d0::151:6001/tcp/4001".parse().unwrap());
 	    behaviour.add_address(&"QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64".parse().unwrap(), "/ip6/2604:a880:800:10::4a:5001/tcp/4001".parse().unwrap());
         behaviour.add_address(&"QmSoLer265NRgSp2LA3dPaeykiS1J6DifTC88f5uVQKNAd".parse().unwrap(), "/ip6/2a03:b0c0:0:1010::23:1001/tcp/4001".parse().unwrap());
-        libp2p::core::Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::new(transport, behaviour, local_peer_id)
     };
 
     // Order Kademlia to search for a peer.
-    let to_search: PeerId = if let Some(peer_id) = std::env::args().nth(1) {
+    let to_search: PeerId = if let Some(peer_id) = env::args().nth(1) {
         peer_id.parse().expect("Failed to parse peer ID to find")
     } else {
         identity::Keypair::generate_ed25519().public().into()
     };
-    println!("Searching for {:?}", to_search);
-    swarm.find_node(to_search);
+
+    println!("Searching for the closest peers to {:?}", to_search);
+    swarm.get_closest_peers(to_search);
 
     // Kick it off!
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(ev @ libp2p::kad::KademliaOut::FindNodeResult { .. })) => {
-                    println!("Result: {:#?}", ev);
-                    return Ok(Async::Ready(()));
+                Async::Ready(Some(KademliaEvent::GetClosestPeersResult(res))) => {
+                    match res {
+                        Ok(ok) => {
+                            println!("Closest peers: {:#?}", ok.peers);
+                            return Ok(Async::Ready(()));
+                        }
+                        Err(err) => {
+                            println!("The search for closest peers failed: {:?}", err);
+                        }
+                    }
                 },
                 Async::Ready(Some(_)) => (),
                 Async::Ready(None) | Async::NotReady => break,

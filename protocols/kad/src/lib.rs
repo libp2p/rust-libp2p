@@ -18,15 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the Kademlia protocol for libp2p.
+//! Implementation of the libp2p-specific Kademlia protocol.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store
 #![allow(dead_code)]
-
-pub use self::behaviour::{Kademlia, KademliaOut, GetValueResult, PutValueResult};
-pub use self::protocol::KadConnectionType;
-pub use self::record::{RecordStore, RecordStorageError, MemoryRecordStorage};
 
 pub mod handler;
 pub mod kbucket;
@@ -37,4 +33,39 @@ mod addresses;
 mod behaviour;
 mod protobuf_structs;
 mod query;
-mod write;
+
+pub use behaviour::*;
+pub use protocol::KadConnectionType;
+pub use record::{RecordStore, RecordStorageError, MemoryRecordStorage};
+
+use std::time::Duration;
+
+/// The `k` parameter of the Kademlia specification.
+///
+/// This parameter determines:
+///
+///   1) The (fixed) maximum number of nodes in a bucket.
+///   2) The (default) replication factor, which in turn determines:
+///       a) The number of closer peers returned in response to a request.
+///       b) The number of closest peers to a key to search for in an iterative query.
+///
+/// The choice of (1) is fixed to this constant. The replication factor is configurable
+/// but should generally be no greater than `K_VALUE`. All nodes in a Kademlia
+/// DHT should agree on the choices made for (1) and (2).
+///
+/// The current value is `20`.
+pub const K_VALUE: usize = 20;
+
+/// The `α` parameter of the Kademlia specification.
+///
+/// This parameter determines the default parallelism for iterative queries,
+/// i.e. the allowed number of in-flight requests that an iterative query is
+/// waiting for at a particular time while it continues to make progress towards
+/// locating the closest peers to a key.
+///
+/// The current value is `3`.
+pub const ALPHA_VALUE: usize = 3;
+
+const KBUCKET_PENDING_TIMEOUT: Duration = Duration::from_secs(60);
+const ADD_PROVIDER_INTERVAL: Duration = Duration::from_secs(60);
+

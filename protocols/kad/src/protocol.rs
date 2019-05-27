@@ -256,8 +256,8 @@ pub enum KadRequestMsg {
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNode {
-        /// Identifier of the node.
-        key: PeerId,
+        /// The key for which to locate the closest nodes.
+        key: Multihash,
     },
 
     /// Same as `FindNode`, but should also return the entries of the local providers list for
@@ -467,8 +467,8 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
         }
 
         proto::Message_MessageType::FIND_NODE => {
-            let key = PeerId::from_bytes(message.take_key())
-                .map_err(|_| invalid_data("Invalid peer id in FIND_NODE"))?;
+            let key = Multihash::from_bytes(message.take_key())
+                .map_err(|_| invalid_data("Invalid key in FIND_NODE"))?;
             Ok(KadRequestMsg::FindNode { key })
         }
 
