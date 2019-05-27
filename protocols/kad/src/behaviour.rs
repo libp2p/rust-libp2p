@@ -221,11 +221,11 @@ impl QueryInfo {
     fn to_rpc_request<TUserData>(&self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
         match &self.inner {
             QueryInfoInner::Initialization { target } => KademliaHandlerIn::FindNodeReq {
-                key: target.clone(),
+                key: target.clone().into(),
                 user_data,
             },
             QueryInfoInner::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
-                key: key.clone(),
+                key: key.clone().into(),
                 user_data,
             },
             QueryInfoInner::GetProviders { target, .. } => KademliaHandlerIn::GetProvidersReq {

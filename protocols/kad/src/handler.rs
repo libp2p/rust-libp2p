@@ -275,7 +275,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// returned is not specified, but should be around 20.
     FindNodeReq {
         /// Identifier of the node.
-        key: PeerId,
+        key: Multihash,
         /// Custom user data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -472,9 +472,14 @@ where
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
-                let msg = KadRequestMsg::FindNode { key: key.clone() };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
+                match PeerId::from_multihash(key.clone()) {
+                    Ok(key) => {
+                        let msg = KadRequestMsg::FindNode { key };
+                        self.substreams
+                            .push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
+                    },
+                    Err(_) => (),
+                }
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
