@@ -123,12 +123,6 @@ pub enum Error {
     Io(io::Error),
     /// Actual TLS error.
     Tls(Box<dyn std::error::Error + Send>),
-    /// Failed to read PKCS8-encoded key.
-    Pkcs8ReadError,
-    /// Failed to read certificate.
-    CertReadError,
-    /// No key was found at the specified location.
-    MissingKey,
     /// The DNS name was invalid.
     InvalidDnsName(String),
 
@@ -141,9 +135,6 @@ impl fmt::Display for Error {
         match self {
             Error::Io(e) => write!(f, "i/o error: {}", e),
             Error::Tls(e) => write!(f, "tls error: {}", e),
-            Error::Pkcs8ReadError => f.write_str("failed to read PKCS8 data"),
-            Error::CertReadError => f.write_str("failed to read certificate data"),
-            Error::MissingKey => f.write_str("failed to get a key when one was expected"),
             Error::InvalidDnsName(n) => write!(f, "invalid DNS name: {}", n),
             Error::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
@@ -155,11 +146,7 @@ impl std::error::Error for Error {
         match self {
             Error::Io(e) => Some(e),
             Error::Tls(e) => Some(&**e),
-            Error::Pkcs8ReadError
-            | Error::CertReadError
-            | Error::MissingKey
-            | Error::InvalidDnsName(_)
-            | Error::__Nonexhaustive => None
+            Error::InvalidDnsName(_) | Error::__Nonexhaustive => None
         }
     }
 }
