@@ -227,7 +227,7 @@ fn unresponsive_not_returned_indirect() {
 
 
 #[test]
-fn search_for_unknown_value() {
+fn get_value_not_found() {
     let (port_base, mut swarms) = build_nodes(3);
 
     let swarm_ids: Vec<_> = swarms.iter()
