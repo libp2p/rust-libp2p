@@ -318,8 +318,12 @@ fn put_value() {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::PutValueResult {
-                            key
+                            key,
+                            successes,
+                            failures,
                         })) => {
+                            assert_eq!(successes, kbucket::MAX_NODES_PER_BUCKET);
+                            assert_eq!(failures, 0);
                             assert_eq!(swarm.kbuckets.local_key().preimage(), &swarm_ids[31]);
                             assert_eq!(key, target_key);
                             put_completed = true;
