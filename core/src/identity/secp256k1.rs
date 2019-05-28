@@ -120,16 +120,22 @@ impl SecretKey {
     ///
     /// [RFC3278]: https://tools.ietf.org/html/rfc3278#section-8.2
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
-        let m = Message::parse_slice(Sha256::digest(msg).as_ref())
-            .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
-        secp256k1::sign(&m, &self.0)
-            .map(|s| s.0.serialize_der().as_ref().into())
-            .map_err(|_| SigningError::new("failed to create secp256k1 signature"))
+        self.sign_hash(Sha256::digest(msg).as_ref())
     }
 
     /// Returns the raw bytes of the secret key.
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.serialize()
+    }
+
+    /// Sign a raw message of length 256 bits with this secret key, produces a DER-encoded
+    /// ECDSA signature.
+    pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
+        let m = Message::parse_slice(msg)
+            .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
+        secp256k1::sign(&m, &self.0)
+            .map(|s| s.0.serialize_der().as_ref().into())
+            .map_err(|_| SigningError::new("failed to create secp256k1 signature"))
     }
 }
 
@@ -140,7 +146,12 @@ pub struct PublicKey(secp256k1::PublicKey);
 impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        Message::parse_slice(Sha256::digest(msg).as_ref())
+        self.verify_hash(Sha256::digest(msg).as_ref(), sig)
+    }
+
+    /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
+    pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
+        Message::parse_slice(msg)
             .and_then(|m| Signature::parse_der(sig).map(|s| secp256k1::verify(&m, &s, &self.0)))
             .unwrap_or(false)
     }
@@ -149,6 +160,11 @@ impl PublicKey {
     /// represented by a single bit.
     pub fn encode(&self) -> [u8; 33] {
         self.0.serialize_compressed()
+    }
+
+    /// Encode the public key in uncompressed form.
+    pub fn encode_uncompressed(&self) -> [u8; 65] {
+        self.0.serialize()
     }
 
     /// Decode a public key from a byte slice in the the format produced
