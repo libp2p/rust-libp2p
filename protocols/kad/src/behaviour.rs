@@ -755,12 +755,16 @@ where
                 return;
             }
             KademliaHandlerEvent::GetValue { key, request_id } => {
-                let result = match self.records.get(&key) {
-                    Some(record) => Some(record.clone()),
-                    None => None,
+                let (result, closer_peers) = match self.records.get(&key) {
+                    Some(record) => {
+                        (Some(record.clone()), vec![])
+                    },
+                    None => {
+                        let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
+                        (None, closer_peers)
+                    }
                 };
 
-                let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
