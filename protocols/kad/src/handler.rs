@@ -567,10 +567,7 @@ where
             } => {
                 let pos = self.substreams.iter().position(|state| match state {
                     SubstreamState::InWaitingUser(ref conn_id, _)
-                        if conn_id == &request_id.connec_unique_id =>
-                        {
-                            true
-                        }
+                        => conn_id == &request_id.connec_unique_id,
                     _ => false,
                 });
 
