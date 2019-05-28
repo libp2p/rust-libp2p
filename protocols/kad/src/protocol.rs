@@ -363,10 +363,6 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             msg.set_clusterLevelRaw(10);
             msg.set_key(key.as_bytes().to_vec());
 
-            let mut record = proto::Record::new();
-            record.set_key(key.into_bytes());
-            msg.set_record(record);
-
             msg
         }
         KadRequestMsg::PutValue { key, value} => {
