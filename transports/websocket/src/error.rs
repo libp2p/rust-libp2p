@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_core::Multiaddr;
 use crate::tls;
 use std::{error, fmt};
 
@@ -30,6 +31,12 @@ pub enum Error<E> {
     Tls(tls::Error),
     /// Websocket handshake error.
     Handshake(Box<dyn error::Error + Send>),
+    /// The configured maximum of redirects have been made.
+    TooManyRedirects,
+    /// A multi-address is not supported.
+    InvalidMultiaddr(Multiaddr),
+    /// The location header URL was invalid.
+    InvalidRedirectLocation,
     /// Websocket base framing error.
     Base(Box<dyn error::Error + Send>)
 }
@@ -40,6 +47,9 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
             Error::Transport(err) => write!(f, "{}", err),
             Error::Tls(err) => write!(f, "{}", err),
             Error::Handshake(err) => write!(f, "{}", err),
+            Error::InvalidMultiaddr(ma) => write!(f, "invalid multi-address: {}", ma),
+            Error::TooManyRedirects => f.write_str("too many redirects"),
+            Error::InvalidRedirectLocation => f.write_str("invalid redirect location"),
             Error::Base(err) => write!(f, "{}", err)
         }
     }
@@ -51,7 +61,10 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
             Error::Transport(err) => Some(err),
             Error::Tls(err) => Some(err),
             Error::Handshake(err) => Some(&**err),
-            Error::Base(err) => Some(&**err)
+            Error::Base(err) => Some(&**err),
+            Error::InvalidMultiaddr(_)
+            | Error::TooManyRedirects
+            | Error::InvalidRedirectLocation => None
         }
     }
 }

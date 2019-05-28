@@ -66,7 +66,7 @@ impl<T> WsConfig<T> {
 
 impl<T> Transport for WsConfig<T>
 where
-    T: Transport,
+    T: Transport + Send + Clone + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
