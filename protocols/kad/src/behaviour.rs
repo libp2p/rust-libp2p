@@ -22,7 +22,7 @@ use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::kbucket::{self, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer};
-use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
+use crate::query::{QueryConfig, QueryState, WriteState, QueryStatePollOut};
 use crate::record::{RecordStore, Record, RecordStorageError};
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
@@ -91,6 +91,9 @@ pub struct Kademlia<TSubstream, TRecordStorage:RecordStore = MemoryRecordStorage
     /// All the iterative queries we are currently performing, with their ID. The last parameter
     /// is the list of accumulated providers for `GET_PROVIDERS` queries.
     active_queries: FnvHashMap<QueryId, QueryState<QueryInfo, PeerId>>,
+
+    /// All the `PUT_VALUE` actions we are currently performing
+    active_writes: FnvHashMap<QueryId, WriteState<PeerId, Multihash>>,
 
     /// List of peers the swarm is connected to.
     connected_peers: FnvHashSet<PeerId>,
@@ -242,9 +245,8 @@ impl QueryInfo {
                     user_data,
                 }
             },
-            QueryInfoInner::PutValue { key, value } => KademliaHandlerIn::PutValue {
-                key: key.clone(),
-                value: value.clone(),
+            QueryInfoInner::PutValue { key, .. } => KademliaHandlerIn::FindNodeReq {
+                key: key.clone().into(),
                 user_data,
             }
         }
@@ -338,6 +340,7 @@ where
             protocol_name_override: None,
             queued_events: SmallVec::new(),
             active_queries: Default::default(),
+            active_writes: Default::default(),
             connected_peers: Default::default(),
             pending_rpcs: SmallVec::with_capacity(parallelism),
             next_query_id: QueryId(0),
@@ -385,9 +388,10 @@ where
     }
 
     /// Starts an iterative `PUT_VALUE` request
-    pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) {
-        // TODO: Probably we shouldn't store the value ourselves
+    pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) -> Result<(), RecordStorageError> {
+        self.records.put(key.clone(), Record::new(key.clone(), value.clone()))?;
         self.start_query(QueryInfoInner::PutValue{key, value});
+        Ok(())
     }
 
     /// Register the local node as the provider for the given key.
@@ -559,6 +563,11 @@ where
             _ => {}
         }
     }
+
+    #[cfg(test)]
+    fn has_record(&self, key: &Multihash) -> bool {
+        self.records.get(key).is_some()
+    }
 }
 
 impl<TSubstream, TRecordStorage> NetworkBehaviour for Kademlia<TSubstream, TRecordStorage>
@@ -633,6 +642,10 @@ where
                     addrs.retain(|a| a != addr);
                 }
             }
+
+            for write in self.active_writes.values_mut() {
+                write.inject_write_error(peer_id);
+            }
         }
     }
 
@@ -640,11 +653,17 @@ where
         for query in self.active_queries.values_mut() {
             query.inject_rpc_error(peer_id);
         }
+        for write in self.active_writes.values_mut() {
+            write.inject_write_error(peer_id);
+        }
     }
 
     fn inject_disconnected(&mut self, id: &PeerId, _old_endpoint: ConnectedPoint) {
         for query in self.active_queries.values_mut() {
             query.inject_rpc_error(id);
+        }
+        for write in self.active_writes.values_mut() {
+            write.inject_write_error(id);
         }
         self.connection_updated(id.clone(), None, NodeStatus::Disconnected);
         self.connected_peers.remove(id);
@@ -721,6 +740,10 @@ where
                 if let Some(query) = self.active_queries.get_mut(&user_data) {
                     query.inject_rpc_error(&source)
                 }
+
+                if let Some(write) = self.active_writes.get_mut(&user_data) {
+                    write.inject_write_error(&source);
+                }
             }
             KademliaHandlerEvent::AddProvider { key, provider_peer } => {
                 self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
@@ -762,7 +785,6 @@ where
                             results.push(result);
                         }
                     }
-                    // A hacky way to end a query
                     query.inject_rpc_result(&source, vec![source.clone()]);
                 }
                 self.discovered(&user_data, &source, closer_peers.iter());
@@ -787,9 +809,8 @@ where
                 key: _,
                 user_data,
             } => {
-                if let Some(query) = self.active_queries.get_mut(&user_data) {
-                    // A hacky way to end a query
-                    query.inject_rpc_result(&source, vec![source.clone()]);
+                if let Some(write) = self.active_writes.get_mut(&user_data) {
+                    write.inject_write_success(&source);
                 }
             }
         };
@@ -881,6 +902,28 @@ where
                 }
             }
 
+            let mut finished_write = None;
+
+            for (&query_id, write) in self.active_writes.iter_mut() {
+                if write.done() {
+                    finished_write = Some(query_id);
+                    break;
+                }
+            }
+
+            if let Some(finished_write) = finished_write {
+                let (t, .. ) = self
+                    .active_writes
+                    .remove(&finished_write)
+                    .expect("finished_write was gathered when iterating active_writes; QED.")
+                    .into_inner();
+                let event = KademliaOut::PutValueResult {
+                    key: t
+                };
+
+                break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            }
+
             if let Some(finished_query) = finished_query {
                 let (query_info, closer_peers) = self
                     .active_queries
@@ -932,10 +975,23 @@ where
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
-                    QueryInfoInner::PutValue { key, .. } => {
-                        let event = KademliaOut::PutValueResult { key: key.clone() };
+                    QueryInfoInner::PutValue { key, value } => {
+                        use std::iter::FromIterator;
 
-                        break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                        let closer_peers = Vec::from_iter(closer_peers);
+                        for peer in &closer_peers {
+                            let event = NetworkBehaviourAction::SendEvent {
+                                peer_id: peer.clone(),
+                                event: KademliaHandlerIn::PutValue {
+                                    key: key.clone(),
+                                    value: value.clone(),
+                                    user_data: finished_query,
+                                }
+                            };
+                            self.queued_events.push(event);
+                        }
+
+                        self.active_writes.insert(finished_query, WriteState::new(key, Vec::from_iter(closer_peers)));
                     },
                 }
             } else {

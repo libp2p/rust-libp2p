@@ -130,8 +130,8 @@ fn query_iter() {
 
         // Set up expectations.
         let expected_swarm_id = swarm_ids.last().unwrap().clone();
-        let expected_peer_ids: Vec<_> = swarm_ids.iter().cloned().take(n - 1).collect();
-        let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
+        let expected_swarm_ids: Vec<_> = swarm_ids.iter().cloned().take(n - 1).collect();
+        let mut expected_distances = distances(&search_target_key, expected_swarm_ids.clone());
         expected_distances.sort();
 
         // Run test
@@ -145,7 +145,7 @@ fn query_iter() {
                             })) => {
                                 assert_eq!(key, search_target);
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert!(expected_peer_ids.iter().all(|p| closer_peers.contains(p)));
+                                assert!(expected_swarm_ids.iter().all(|p| closer_peers.contains(p)));
                                 let key = kbucket::Key::from(key);
                                 assert_eq!(expected_distances, distances(&key, closer_peers));
                                 return Ok(Async::Ready(()));
@@ -251,11 +251,11 @@ fn unresponsive_not_returned_indirect() {
 fn search_for_unknown_value() {
     let (port_base, mut swarms) = build_nodes(3);
 
-    let peer_ids: Vec<_> = swarms.iter()
+    let swarm_ids: Vec<_> = swarms.iter()
         .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
 
-    swarms[0].add_address(&peer_ids[1], Protocol::Memory(port_base + 1).into());
-    swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
+    swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
     swarms[0].get_value(&target_key);
@@ -282,47 +282,45 @@ fn search_for_unknown_value() {
 
 #[test]
 fn put_value() {
-    let (port_base, mut swarms) = build_nodes(3);
+    let (port_base, mut swarms) = build_nodes(32);
 
-    let peer_ids: Vec<_> = swarms.iter()
+    let swarm_ids: Vec<_> = swarms.iter()
         .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
 
-    swarms[0].add_address(&peer_ids[1], Protocol::Memory(port_base + 1).into());
-    swarms[1].add_address(&peer_ids[2], Protocol::Memory(port_base + 2).into());
+    // Test routing configuration:
+    // swarms[31] is connected to swarms[30]
+    // swarms[30] is connected to swarms[..29]
+
+    // Remove two last swarms temoporarily to make borrow checker happy
+    let mut swarm_1 = swarms.pop().unwrap();
+    let mut swarm_2 = swarms.pop().unwrap();
+
+    // Connect swarms[30] to each swarm in swarms[..29]
+    for (i, (_, peer)) in &mut swarms.iter_mut().skip(1).zip(swarm_ids.clone()).enumerate() {
+        swarm_2.add_address(&peer, Protocol::Memory(port_base + i as u64).into());
+    }
+
+    // Connect swarms[31] to swarms[30]
+    swarm_1.add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
+
+    swarms.push(swarm_2);
+    swarms.push(swarm_1);
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
 
-    // Send a PUT_VALUE request from first peer
-    swarms[0].put_value(target_key.clone(), vec![4,5,6]);
+    swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
             let mut put_completed = false;
 
-            for (i, swarm) in swarms.iter_mut().enumerate() {
-                // The PUT_VALUE has successfully completed, GET_VALUE from third peer
-                if i == 2 && put_completed {
-                    swarm.add_address(&peer_ids[1], Protocol::Memory(port_base + 1).into());
-                    swarm.get_value(&target_key);
-                    put_completed = false;
-                }
+            for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueResult(
-                                GetValueResult::Found {
-                                    record
-                                }
-                        ))) => {
-                            assert_eq!(swarm.kbuckets.local_key().preimage(), &peer_ids[2]);
-
-                            assert_eq!(record.key(), &target_key);
-                            assert_eq!(record.value(), &vec![4,5,6]);
-                            return Ok(Async::Ready(()));
-                        }
                         Async::Ready(Some(KademliaOut::PutValueResult {
                             key
                         })) => {
-                            assert_eq!(swarm.kbuckets.local_key().preimage(), &peer_ids[0]);
+                            assert_eq!(swarm.kbuckets.local_key().preimage(), &swarm_ids[31]);
                             assert_eq!(key, target_key);
                             put_completed = true;
                         },
@@ -332,7 +330,16 @@ fn put_value() {
                 }
             }
 
-            Ok(Async::NotReady)
+            if put_completed {
+                let swarms_have_record = swarms
+                    .iter()
+                    .filter(|&s| s.has_record(&target_key))
+                    .count();
+                assert_eq!(swarms_have_record, kbucket::MAX_NODES_PER_BUCKET + 1);
+                Ok(Async::Ready(()))
+            } else {
+                Ok(Async::NotReady)
+            }
         }))
         .unwrap()
 }

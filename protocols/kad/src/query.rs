@@ -28,6 +28,7 @@ use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{cmp::PartialEq, time::Duration};
 use wasm_timer::{Delay, Instant};
+use fnv::FnvHashSet;
 
 /// State of a query iterative process.
 ///
@@ -65,6 +66,25 @@ pub struct QueryState<TTarget, TPeerId> {
     rpc_timeout: Duration,
 }
 
+/// State of the `PUV_VALUE` second stage
+///
+/// Here we are gathering the results of all `PUT_VALUE` requests that we've
+/// sent to the appropriate peers. We keep track of the set of peers that we've
+/// sent the requests to and the counts for error and normal responses
+pub struct WriteState<TPeerId, TTarget> {
+    /// The key that we're inserting into the dht.
+    target: TTarget,
+
+    /// The peers thae we'are asking to store our value.
+    peers: FnvHashSet<TPeerId>,
+
+    /// The count of successful stores.
+    successes: usize,
+
+    /// The count of errors.
+    failures: usize,
+}
+
 /// Configuration for a query.
 #[derive(Debug, Clone)]
 pub struct QueryConfig<TIter, TTarget> {
@@ -99,6 +119,49 @@ enum QueryStage {
 
     // We have found the closest node, and we are now pinging the nodes we know about.
     Frozen,
+}
+
+impl<TPeerId, TTarget> WriteState<TPeerId, TTarget>
+where
+    TPeerId: std::hash::Hash + Clone + Eq
+{
+    /// Creates a new WriteState.
+    ///
+    /// Stores the state of an ongoing second stage of a PUT_VALUE process
+    pub fn new(target: TTarget, peers: Vec<TPeerId>) -> Self {
+        use std::iter::FromIterator;
+        WriteState {
+            target,
+            peers: FnvHashSet::from_iter(peers.into_iter()),
+            successes: 0,
+            failures: 0,
+        }
+    }
+
+    /// Inform the state that writing to one of the target peers has succeeded
+    pub fn inject_write_success(&mut self, peer: &TPeerId) {
+        if self.peers.contains(peer) {
+            self.successes += 1;
+        }
+    }
+
+    /// Inform the state that writing to one of the target peers has failed
+    pub fn inject_write_error(&mut self, peer: &TPeerId) {
+        if self.peers.contains(peer) {
+            self.failures += 1;
+        }
+    }
+
+    /// Ask the state if it is done
+    // TODO: probably it should also be a poll() in the fashion of QueryState and have a timeout
+    pub fn done(&self) -> bool {
+        self.peers.len() == self.successes + self.failures
+    }
+
+    /// Consume the state and return a list of target peers and succeess/error counters
+    pub fn into_inner(self) -> (TTarget, usize, usize) {
+        (self.target, self.successes, self.failures)
+    }
 }
 
 impl<TTarget, TPeerId> QueryState<TTarget, TPeerId>

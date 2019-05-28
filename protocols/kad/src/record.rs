@@ -20,6 +20,7 @@
 
 use multihash::Multihash;
 
+#[derive(Debug)]
 pub enum RecordStorageError {
     AtCapacity,
     ValueTooLarge,
