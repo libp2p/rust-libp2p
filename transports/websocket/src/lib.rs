@@ -43,24 +43,29 @@ pub struct WsConfig<T> {
 }
 
 impl<T> WsConfig<T> {
+    /// Create a new websocket transport based on the given transport.
     pub fn new(transport: T) -> Self {
+        framed::WsConfig::new(transport).into()
+    }
+}
+
+impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
+    fn from(framed: framed::WsConfig<T>) -> Self {
         WsConfig {
-            transport: framed::WsConfig::new(transport)
+            transport: framed
         }
     }
+}
 
-    pub fn max_data_size(&self) -> u64 {
-        self.transport.max_data_size()
+impl<T> AsRef<framed::WsConfig<T>> for WsConfig<T> {
+    fn as_ref(&self) -> &framed::WsConfig<T> {
+        &self.transport
     }
+}
 
-    pub fn set_max_data_size(&mut self, size: u64) -> &mut Self {
-        self.transport.set_max_data_size(size);
-        self
-    }
-
-    pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
-        self.transport.set_tls_config(c);
-        self
+impl<T> AsMut<framed::WsConfig<T>> for WsConfig<T> {
+    fn as_mut(&mut self) -> &mut framed::WsConfig<T> {
+        &mut self.transport
     }
 }
 
@@ -138,7 +143,7 @@ mod tests {
             .into_new_address()
             .expect("listen address");
 
-        assert_eq!(Some(Protocol::Ws), addr.iter().nth(2));
+        assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
         assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
 
         let listener = listener
@@ -172,7 +177,7 @@ mod tests {
             .into_new_address()
             .expect("listen address");
 
-        assert_eq!(Some(Protocol::Ws), addr.iter().nth(2));
+        assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
         assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
 
         let listener = listener

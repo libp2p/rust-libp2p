@@ -27,7 +27,7 @@ use libp2p_core::{
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
-use log::{debug, error, trace};
+use log::{debug, trace};
 use tokio_rustls::{client, server};
 use soketto::{base, connection::{Connection, Mode}, handshake::{self, Redirect, Response}};
 use std::io;
@@ -40,8 +40,8 @@ use url::Url;
 const MAX_DATA_SIZE: u64 = 256 * 1024 * 1024;
 
 /// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
-/// frame payloads (text or binary) but does not implement [`AsyncRead`] or
-/// [`AsyncWrite`]. See [`WsConfig`] if you require the latter.
+/// frame payloads which does not implement [`AsyncRead`] or
+/// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
 #[derive(Debug, Clone)]
 pub struct WsConfig<T> {
     transport: T,
@@ -140,41 +140,43 @@ where
                 ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
                     listen_addr = listen_addr.with(proto.clone());
                     remote_addr = remote_addr.with(proto.clone());
+                    let remote1 = remote_addr.clone(); // used for logging
+                    let remote2 = remote_addr.clone(); // used for logging
                     let tls_config = tls_config.clone();
                     let upgraded = upgrade.map_err(Error::Transport)
                         .and_then(move |stream| {
-                            trace!("incoming connection");
+                            trace!("incoming connection from {}", remote1);
                             if let Some(tc) = tls_config { // begin TLS session
-                                trace!("awaiting TLS handshake");
+                                trace!("awaiting TLS handshake with {}", remote1);
                                 let future = tc.server.accept(stream)
-                                    .map_err(|e| {
-                                        debug!("TLS handshake failed: {}", e);
+                                    .map_err(move |e| {
+                                        debug!("TLS handshake with {} failed: {}", remote1, e);
                                         Error::Tls(tls::Error::from(e))
                                     })
                                     .map(|s| EitherOutput::First(EitherOutput::Second(s)));
                                 Either::A(future)
-                            } else {
+                            } else { // continue with plain stream
                                 Either::B(future::ok(EitherOutput::Second(stream)))
                             }
                         })
                         .and_then(move |stream| {
-                            trace!("receiving websocket handshake request");
+                            trace!("receiving websocket handshake request from {}", remote2);
                             Framed::new(stream, handshake::Server::new())
                                 .into_future()
                                 .map_err(|(e, _framed)| Error::Handshake(Box::new(e)))
                                 .and_then(move |(request, framed)| {
                                     if let Some(r) = request {
-                                        trace!("accepting websocket handshake request");
+                                        trace!("accepting websocket handshake request from {}", remote2);
                                         let key = Vec::from(r.key());
                                         Either::A(framed.send(Ok(handshake::Accept::new(key)))
                                             .map_err(|e| Error::Base(Box::new(e)))
                                             .map(move |f| {
-                                                trace!("websocket handshake successful");
+                                                trace!("websocket handshake with {} successful", remote2);
                                                 let c = new_connection(f, max_size, Mode::Server);
                                                 BytesConnection { inner: c }
                                             }))
                                     } else {
-                                        debug!("connection terminated during handshake");
+                                        debug!("connection to {} terminated during handshake", remote2);
                                         let e: io::Error = io::ErrorKind::ConnectionAborted.into();
                                         Either::B(future::err(Error::Handshake(Box::new(e))))
                                     }
@@ -200,15 +202,17 @@ where
                     return Err(TransportError::MultiaddrNotSupported(addr))
                 }
             _ => {
-                trace!("{} is not a websocket multiaddr", addr);
+                debug!("{} is not a websocket multiaddr", addr);
                 return Err(TransportError::MultiaddrNotSupported(addr))
             }
         }
+        // We are looping here in order to follow redirects (if any):
         let max_redirects = self.max_redirects;
         let future = future::loop_fn((addr, self, max_redirects), |(addr, cfg, remaining)| {
             dial(addr, cfg.clone()).and_then(move |result| match result {
                 Either::A(redirect) => {
                     if remaining == 0 {
+                        debug!("too many redirects");
                         return Err(Error::TooManyRedirects)
                     }
                     let a = location_to_multiaddr(redirect.location())?;
@@ -221,12 +225,15 @@ where
     }
 }
 
-fn dial<T>(mut address: Multiaddr, config: WsConfig<T>)
+/// Attempty to dial the given address and perform a websocket handshake.
+fn dial<T>(address: Multiaddr, config: WsConfig<T>)
     -> impl Future<Item = Either<Redirect, BytesConnection<T::Output>>, Error = Error<T::Error>>
 where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite
 {
+    trace!("dial address: {}", address);
+
     let WsConfig { transport, max_data_size, tls_config, .. } = config;
 
     let (host_port, dns_name) = match host_and_dnsname(&address) {
@@ -234,17 +241,26 @@ where
         Err(e) => return Either::A(future::err(e))
     };
 
-    let path = match address.pop() {
-        Some(Protocol::Ws(p)) => p,
-        Some(Protocol::Wss(p)) => p,
-        Some(other) => {
-            address.push(other);
-            return Either::A(future::err(Error::InvalidMultiaddr(address)))
+    let mut inner_addr = address.clone();
+
+    let path = match inner_addr.pop() {
+        Some(Protocol::Ws(path)) => path,
+        Some(Protocol::Wss(path)) => {
+            if tls_config.is_none() {
+                debug!("/wss address but TLS is not configured");
+                return Either::A(future::err(Error::InvalidMultiaddr(address)))
+            }
+            if dns_name.is_none() {
+                debug!("no DNS name in {}", address);
+                return Either::A(future::err(Error::InvalidMultiaddr(address)))
+            }
+            path
         }
+        Some(_) => return Either::A(future::err(Error::InvalidMultiaddr(address))),
         None => return Either::A(future::err(Error::InvalidMultiaddr(address)))
     };
 
-    let dial = match transport.dial(address) {
+    let dial = match transport.dial(inner_addr) {
         Ok(dial) => dial,
         Err(TransportError::MultiaddrNotSupported(a)) =>
             return Either::A(future::err(Error::InvalidMultiaddr(a))),
@@ -252,49 +268,49 @@ where
             return Either::A(future::err(Error::Transport(e)))
     };
 
+    let address1 = address.clone(); // used for logging
+    let address2 = address.clone(); // used for logging
     let future = dial.map_err(Error::Transport)
         .and_then(move |stream| {
-            trace!("connected");
-            if let Some(tc) = tls_config { // begin TLS session
-                if let Some(dns_name) = dns_name {
-                    trace!("starting TLS handshake");
+            trace!("connected to {}", address);
+            if let Some(tc) = tls_config {
+                if let Some(dns_name) = dns_name { // begin TLS session
+                    trace!("starting TLS handshake with {}", address);
                     let future = tc.client.connect(dns_name.as_ref(), stream)
-                        .map_err(|e| {
-                            debug!("TLS handshake failed: {}", e);
+                        .map_err(move |e| {
+                            debug!("TLS handshake with {} failed: {}", address, e);
                             Error::Tls(tls::Error::from(e))
                         })
                         .map(|s| EitherOutput::First(EitherOutput::First(s)));
-                    Either::A(future)
-                } else {
-                    Either::B(future::err(Error::Tls(tls::Error::InvalidDnsName(String::new()))))
+                    return Either::A(future)
                 }
-            } else { // continue with plain stream
-                Either::B(future::ok(EitherOutput::Second(stream)))
             }
+            // continue with plain stream
+            Either::B(future::ok(EitherOutput::Second(stream)))
         })
         .and_then(move |stream| {
-            trace!("sending websocket handshake request");
+            trace!("sending websocket handshake request to {}", address1);
             let client = handshake::Client::new(host_port, path);
             Framed::new(stream, client)
                 .send(())
                 .map_err(|e| Error::Handshake(Box::new(e)))
-                .and_then(|framed| {
-                    trace!("awaiting websocket handshake response");
+                .and_then(move |framed| {
+                    trace!("awaiting websocket handshake response form {}", address2);
                     framed.into_future().map_err(|(e, _)| Error::Base(Box::new(e)))
                 })
                 .and_then(move |(response, framed)| {
                     match response {
                         None => {
-                            debug!("connection terminated during handshake");
+                            debug!("connection to {} terminated during handshake", address1);
                             let e: io::Error = io::ErrorKind::ConnectionAborted.into();
                             return Err(Error::Handshake(Box::new(e)))
                         }
                         Some(Response::Redirect(r)) => {
-                            error!("received redirect: {} ({})", r.location(), r.status_code());
+                            debug!("received {}", r);
                             return Ok(Either::A(r))
                         }
                         Some(Response::Accepted(_)) => {
-                            trace!("websocket handshake successful")
+                            trace!("websocket handshake with {} successful", address1)
                         }
                     }
                     let c = new_connection(framed, max_data_size, Mode::Client);
@@ -305,6 +321,7 @@ where
     Either::B(future)
 }
 
+// Extract host, port and optionally the DNS name from the given [`Multiaddr`].
 fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSName>), Error<T>> {
     let mut iter = addr.iter();
     match (iter.next(), iter.next()) {
@@ -323,6 +340,7 @@ fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSNa
     }
 }
 
+// Given a location URL, build a new websocket [`Multiaddr`].
 fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
     match Url::parse(location) {
         Ok(url) => {
@@ -342,17 +360,14 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
             if let Some(p) = url.port() {
                 a.push(Protocol::Tcp(p))
             }
-            match url.scheme() {
-                "https" | "wss" => {
-                    a.push(Protocol::Wss(url.path().into()))
-                }
-                "http" | "ws" => {
-                    a.push(Protocol::Ws(url.path().into()))
-                }
-                other => {
-                    debug!("unsupported scheme: {}", other);
-                    return Err(Error::InvalidRedirectLocation)
-                }
+            let s = url.scheme();
+            if s.eq_ignore_ascii_case("https") | s.eq_ignore_ascii_case("wss") {
+                a.push(Protocol::Wss(url.path().into()))
+            } else if s.eq_ignore_ascii_case("http") | s.eq_ignore_ascii_case("ws") {
+                a.push(Protocol::Ws(url.path().into()))
+            } else {
+                debug!("unsupported scheme: {}", s);
+                return Err(Error::InvalidRedirectLocation)
             }
             Ok(a)
         }
