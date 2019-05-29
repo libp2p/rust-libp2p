@@ -109,8 +109,8 @@ fn query_iter() {
 
         // Set up expectations.
         let expected_swarm_id = swarm_ids.last().unwrap().clone();
-        let expected_swarm_ids: Vec<_> = swarm_ids.iter().cloned().take(n - 1).collect();
-        let mut expected_distances = distances(&search_target_key, expected_swarm_ids.clone());
+        let expected_peer_ids: Vec<_> = swarm_ids.iter().cloned().take(n - 1).collect();
+        let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
         expected_distances.sort();
 
         // Run test
@@ -124,7 +124,7 @@ fn query_iter() {
                             })) => {
                                 assert_eq!(key, search_target);
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert!(expected_swarm_ids.iter().all(|p| closer_peers.contains(p)));
+                                assert!(expected_peer_ids.iter().all(|p| closer_peers.contains(p)));
                                 let key = kbucket::Key::from(key);
                                 assert_eq!(expected_distances, distances(&key, closer_peers));
                                 return Ok(Async::Ready(()));
