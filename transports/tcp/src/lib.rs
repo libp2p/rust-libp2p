@@ -268,16 +268,10 @@ fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
 fn prefix_len(netmask: &IpAddr) -> u8 {
     fn count_bits(octets: &[u8]) -> u8 {
         let mut len = 0;
-        'main: for o in octets {
-            let mut o = *o;
-            let is_last = o != 0xFF;
-            loop {
-                if o == 0 {
-                    if is_last { return len }
-                    continue 'main
-                }
-                len += 1;
-                o = o >> 1
+        for &o in octets {
+            len += (!o).leading_zeros() as u8;
+            if o != 0xff {
+                break
             }
         }
         len
@@ -573,18 +567,31 @@ impl Drop for TcpTransStream {
 
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread::Runtime;
-    use super::{multiaddr_to_socketaddr, TcpConfig};
-    use futures::stream::Stream;
-    use futures::Future;
-    use std;
+    use futures::prelude::*;
+    use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
+    use quickcheck::QuickCheck;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use libp2p_core::{
-        Transport,
-        multiaddr::{Multiaddr, Protocol},
-        transport::ListenerEvent
-    };
+    use super::{multiaddr_to_socketaddr, TcpConfig};
+    use tokio::runtime::current_thread::Runtime;
     use tokio_io;
+
+    #[test]
+    fn ipv4_prefix_len() {
+        fn property(ip: u32) -> bool {
+            let leading_ones = (!ip).leading_zeros();
+            leading_ones == u32::from(super::prefix_len(&IpAddr::V4(ip.into())))
+        }
+        QuickCheck::new().quickcheck(property as fn(u32) -> bool)
+    }
+
+    #[test]
+    fn ipv6_prefix_len() {
+        fn property(ip: u128) -> bool {
+            let leading_ones = (!ip).leading_zeros();
+            leading_ones == u32::from(super::prefix_len(&IpAddr::V6(ip.into())))
+        }
+        QuickCheck::new().quickcheck(property as fn(u128) -> bool)
+    }
 
     #[test]
     fn wildcard_expansion() {
