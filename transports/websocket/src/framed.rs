@@ -46,7 +46,7 @@ const MAX_DATA_SIZE: u64 = 256 * 1024 * 1024;
 pub struct WsConfig<T> {
     transport: T,
     max_data_size: u64,
-    tls_config: Option<tls::Config>,
+    tls_config: tls::Config,
     max_redirects: u8
 }
 
@@ -56,7 +56,7 @@ impl<T> WsConfig<T> {
         WsConfig {
             transport,
             max_data_size: MAX_DATA_SIZE,
-            tls_config: None,
+            tls_config: tls::Config::client(),
             max_redirects: 0
         }
     }
@@ -85,7 +85,7 @@ impl<T> WsConfig<T> {
 
     /// Set the TLS configuration if TLS support is desired.
     pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
-        self.tls_config = Some(c);
+        self.tls_config = c;
         self
     }
 }
@@ -108,21 +108,22 @@ where
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
 
-        let (tls_config, proto) = match inner_addr.pop() {
+        let (use_tls, proto) = match inner_addr.pop() {
             Some(p@Protocol::Wss(_)) =>
-                if let Some(c) = self.tls_config {
-                    (Some(c.clone()), p)
+                if self.tls_config.server.is_some() {
+                    (true, p)
                 } else {
-                    debug!("/wss address but TLS is not configured");
+                    debug!("/wss address but TLS server support is not configured");
                     return Err(TransportError::MultiaddrNotSupported(addr))
                 }
-            Some(p@Protocol::Ws(_)) => (None, p),
+            Some(p@Protocol::Ws(_)) => (false, p),
             _ => {
-                trace!("{} is not a websocket multiaddr", addr);
+                debug!("{} is not a websocket multiaddr", addr);
                 return Err(TransportError::MultiaddrNotSupported(addr))
             }
         };
 
+        let tls_config = self.tls_config;
         let max_size = self.max_data_size;
         let listen = self.transport.listen_on(inner_addr)
             .map_err(|e| e.map(Error::Transport))?
@@ -146,9 +147,10 @@ where
                     let upgraded = upgrade.map_err(Error::Transport)
                         .and_then(move |stream| {
                             trace!("incoming connection from {}", remote1);
-                            if let Some(tc) = tls_config { // begin TLS session
+                            if use_tls { // begin TLS session
+                                let server = tls_config.server.expect("for use_tls we checked server");
                                 trace!("awaiting TLS handshake with {}", remote1);
-                                let future = tc.server.accept(stream)
+                                let future = server.accept(stream)
                                     .map_err(move |e| {
                                         debug!("TLS handshake with {} failed: {}", remote1, e);
                                         Error::Tls(tls::Error::from(e))
@@ -194,17 +196,11 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Quick sanity check of the provided Multiaddr.
-        match addr.iter().last() {
-            Some(Protocol::Ws(_)) => (),
-            Some(Protocol::Wss(_)) =>
-                if self.tls_config.is_none() {
-                    debug!("/wss address but TLS is not configured");
-                    return Err(TransportError::MultiaddrNotSupported(addr))
-                }
-            _ => {
-                debug!("{} is not a websocket multiaddr", addr);
-                return Err(TransportError::MultiaddrNotSupported(addr))
-            }
+        if let Some(Protocol::Ws(_)) | Some(Protocol::Wss(_)) = addr.iter().last() {
+            // ok
+        } else {
+            debug!("{} is not a websocket multiaddr", addr);
+            return Err(TransportError::MultiaddrNotSupported(addr))
         }
         // We are looping here in order to follow redirects (if any):
         let max_redirects = self.max_redirects;
@@ -243,21 +239,19 @@ where
 
     let mut inner_addr = address.clone();
 
-    let path = match inner_addr.pop() {
-        Some(Protocol::Ws(path)) => path,
+    let (use_tls, path) = match inner_addr.pop() {
+        Some(Protocol::Ws(path)) => (false, path),
         Some(Protocol::Wss(path)) => {
-            if tls_config.is_none() {
-                debug!("/wss address but TLS is not configured");
-                return Either::A(future::err(Error::InvalidMultiaddr(address)))
-            }
             if dns_name.is_none() {
                 debug!("no DNS name in {}", address);
                 return Either::A(future::err(Error::InvalidMultiaddr(address)))
             }
-            path
+            (true, path)
         }
-        Some(_) => return Either::A(future::err(Error::InvalidMultiaddr(address))),
-        None => return Either::A(future::err(Error::InvalidMultiaddr(address)))
+        _ => {
+            debug!("{} is not a websocket multiaddr", address);
+            return Either::A(future::err(Error::InvalidMultiaddr(address)))
+        }
     };
 
     let dial = match transport.dial(inner_addr) {
@@ -273,17 +267,16 @@ where
     let future = dial.map_err(Error::Transport)
         .and_then(move |stream| {
             trace!("connected to {}", address);
-            if let Some(tc) = tls_config {
-                if let Some(dns_name) = dns_name { // begin TLS session
-                    trace!("starting TLS handshake with {}", address);
-                    let future = tc.client.connect(dns_name.as_ref(), stream)
-                        .map_err(move |e| {
-                            debug!("TLS handshake with {} failed: {}", address, e);
-                            Error::Tls(tls::Error::from(e))
-                        })
-                        .map(|s| EitherOutput::First(EitherOutput::First(s)));
-                    return Either::A(future)
-                }
+            if use_tls { // begin TLS session
+                let dns_name = dns_name.expect("for use_tls we have checked that dns_name is some");
+                trace!("starting TLS handshake with {}", address);
+                let future = tls_config.client.connect(dns_name.as_ref(), stream)
+                    .map_err(move |e| {
+                        debug!("TLS handshake with {} failed: {}", address, e);
+                        Error::Tls(tls::Error::from(e))
+                    })
+                    .map(|s| EitherOutput::First(EitherOutput::First(s)));
+                return Either::A(future)
             }
             // continue with plain stream
             Either::B(future::ok(EitherOutput::Second(stream)))

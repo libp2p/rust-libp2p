@@ -30,7 +30,7 @@ use tokio_rustls::{
 #[derive(Clone)]
 pub struct Config {
     pub(crate) client: TlsConnector,
-    pub(crate) server: TlsAcceptor
+    pub(crate) server: Option<TlsAcceptor>
 }
 
 impl fmt::Debug for Config {
@@ -62,39 +62,56 @@ impl Certificate {
 }
 
 impl Config {
-    /// Create a new TLS configuration.
+    /// Create a new TLS configuration with the given server key and certificate chain.
     pub fn new<I>(key: PrivateKey, certs: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = Certificate>
     {
-        Config::builder(key, certs).map(Builder::finish)
+        let mut builder = Config::builder();
+        builder.server(key, certs)?;
+        Ok(builder.finish())
+    }
+
+    /// Create a client-only configuration.
+    pub fn client() -> Self {
+        Config {
+            client: Arc::new(client_config()).into(),
+            server: None
+        }
     }
 
     /// Create a new TLS configuration builder.
-    pub fn builder<I>(key: PrivateKey, certs: I) -> Result<Builder, Error>
-    where
-        I: IntoIterator<Item = Certificate>
-    {
-        // server configuration
-        let mut server = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-        let certs = certs.into_iter().map(|c| c.0).collect();
-        server.set_single_cert(certs, key.0).map_err(|e| Error::Tls(Box::new(e)))?;
-
-        // client configuration
-        let mut client = rustls::ClientConfig::new();
-        client.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-
-        Ok(Builder { client, server })
+    pub fn builder() -> Builder {
+        Builder { client: client_config(), server: None }
     }
+}
+
+/// Setup the rustls client configuration.
+fn client_config() -> rustls::ClientConfig {
+    let mut client = rustls::ClientConfig::new();
+    client.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    client
 }
 
 /// TLS configuration builder.
 pub struct Builder {
     client: rustls::ClientConfig,
-    server: rustls::ServerConfig
+    server: Option<rustls::ServerConfig>
 }
 
 impl Builder {
+    /// Set server key and certificate chain.
+    pub fn server<I>(&mut self, key: PrivateKey, certs: I) -> Result<&mut Self, Error>
+    where
+        I: IntoIterator<Item = Certificate>
+    {
+        let mut server = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+        let certs = certs.into_iter().map(|c| c.0).collect();
+        server.set_single_cert(certs, key.0).map_err(|e| Error::Tls(Box::new(e)))?;
+        self.server = Some(server);
+        Ok(self)
+    }
+
     /// Add an additional trust anchor.
     pub fn add_trust(&mut self, cert: &Certificate) -> Result<&mut Self, Error> {
         self.client.root_store.add(&cert.0).map_err(|e| Error::Tls(Box::new(e)))?;
@@ -105,7 +122,7 @@ impl Builder {
     pub fn finish(self) -> Config {
         Config {
             client: Arc::new(self.client).into(),
-            server: Arc::new(self.server).into()
+            server: self.server.map(|s| Arc::new(s).into())
         }
     }
 }
