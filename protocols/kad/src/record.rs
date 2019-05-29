@@ -20,6 +20,7 @@
 
 use fnv::FnvHashMap;
 use multihash::Multihash;
+use std::borrow::{Cow, ToOwned};
 
 #[derive(Debug)]
 pub enum RecordStorageError {
@@ -40,7 +41,7 @@ impl Record {
 }
 
 pub trait RecordStore {
-    fn get(&self, k: &Multihash) -> Option<&Record>;
+    fn get(&self, k: &Multihash) -> Option<Cow<Record>>;
     fn put(&mut self, r: Record) -> Result<(), RecordStorageError>;
 }
 
@@ -70,8 +71,11 @@ impl Default for MemoryRecordStorage {
 }
 
 impl RecordStore for MemoryRecordStorage {
-    fn get(&self, k: &Multihash) -> Option<&Record> {
-        self.records.get(k)
+    fn get(&self, k: &Multihash) -> Option<Cow<Record>> {
+        match self.records.get(k) {
+            Some(rec) => Some(Cow::Owned(rec.to_owned())),
+            None => None,
+        }
     }
 
     fn put(&mut self, r: Record) -> Result<(), RecordStorageError> {

@@ -336,7 +336,7 @@ where
         if let Some(record) = self.records.get(key) {
             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
                 KademliaOut::GetValueResult(
-                    GetValueResult::Found{ record: record.clone() }
+                    GetValueResult::Found{ record: record.into_owned() }
                 )
             ));
         }
@@ -713,7 +713,7 @@ where
             KademliaHandlerEvent::GetValue { key, request_id } => {
                 let (result, closer_peers) = match self.records.get(&key) {
                     Some(record) => {
-                        (Some(record.clone()), vec![])
+                        (Some(record.into_owned()), vec![])
                     },
                     None => {
                         let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
