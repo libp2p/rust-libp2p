@@ -184,6 +184,7 @@ impl QueryInfo {
                 user_data,
             },
             QueryInfoInner::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
+                // TODO: Change the `key` of `QueryInfoInner::FindPeer` to be a `Multihash`.
                 key: key.clone().into(),
                 user_data,
             },
@@ -202,7 +203,7 @@ impl QueryInfo {
                 }
             },
             QueryInfoInner::PutValue { key, .. } => KademliaHandlerIn::FindNodeReq {
-                key: key.clone().into(),
+                key: key.clone(),
                 user_data,
             }
         }
@@ -339,8 +340,9 @@ where
                     GetValueResult::Found{ record: record.into_owned() }
                 )
             ));
+        } else {
+            self.start_query(QueryInfoInner::GetValue { key: key.clone(), results: Vec::new() });
         }
-        self.start_query(QueryInfoInner::GetValue { key: key.clone(), results: vec![] });
     }
 
     /// Starts an iterative `PUT_VALUE` request
@@ -518,11 +520,6 @@ where
             },
             _ => {}
         }
-    }
-
-    #[cfg(test)]
-    fn has_record(&self, key: &Multihash) -> bool {
-        self.records.get(key).is_some()
     }
 }
 
@@ -754,6 +751,7 @@ where
                 value,
                 request_id
             } => {
+                // TODO: Log errors and immediately reset the stream on error instead of letting the request time out.
                 if let Ok(()) = self.records.put(Record::new(key.clone(), value.clone())) {
                     self.queued_events.push(NetworkBehaviourAction::SendEvent {
                         peer_id: source,
@@ -930,7 +928,9 @@ where
                     QueryInfoInner::GetValue { key: _, results } => {
                         let result = match results.first() {
                             Some(record) => GetValueResult::Found{ record: record.clone() },
-                            None => GetValueResult::NotFound{ closest_peers: vec![]},
+                            None => GetValueResult::NotFound{
+                                closest_peers: closer_peers.collect()
+                            },
                         };
 
                         let event = KademliaOut::GetValueResult(result);
@@ -953,7 +953,7 @@ where
                             self.queued_events.push(event);
                         }
 
-                        self.active_writes.insert(finished_query, WriteState::new(key, Vec::from_iter(closer_peers)));
+                        self.active_writes.insert(finished_query, WriteState::new(key, closer_peers));
                     },
                 }
             } else {

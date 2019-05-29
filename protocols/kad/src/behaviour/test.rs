@@ -313,16 +313,7 @@ fn put_value() {
                 }
             }
 
-            if put_completed {
-                let swarms_have_record = swarms
-                    .iter()
-                    .filter(|&s| s.has_record(&target_key))
-                    .count();
-                assert_eq!(swarms_have_record, kbucket::MAX_NODES_PER_BUCKET + 1);
-                Ok(Async::Ready(()))
-            } else {
-                Ok(Async::NotReady)
-            }
+            Ok(Async::NotReady)
         }))
         .unwrap()
 }
