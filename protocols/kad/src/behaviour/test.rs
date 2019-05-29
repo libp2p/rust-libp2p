@@ -248,7 +248,7 @@ fn get_value_not_found() {
                             if let GetValueResult::NotFound { closest_peers} = result {
                                 assert_eq!(closest_peers.len(), 2);
                                 assert!(closest_peers.contains(&swarm_ids[1]));
-                                assert!(closest_peers.contains(&swarm_ids[1]));
+                                assert!(closest_peers.contains(&swarm_ids[2]));
                                 return Ok(Async::Ready(()));
                             } else {
                                 panic!("Expected GetValueResult::NotFound event");
