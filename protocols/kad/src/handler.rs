@@ -472,6 +472,7 @@ where
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
+                // FIXME: Change `KadRequestMsg::FindNode::key` to be a `Multihash`.
                 match PeerId::from_multihash(key.clone()) {
                     Ok(key) => {
                         let msg = KadRequestMsg::FindNode { key };
