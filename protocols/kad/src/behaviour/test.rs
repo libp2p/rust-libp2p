@@ -245,8 +245,14 @@ fn get_value_not_found() {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
-                            assert_eq!(result, GetValueResult::NotFound{ closest_peers: vec![]});
-                            return Ok(Async::Ready(()));
+                            if let GetValueResult::NotFound { closest_peers} = result {
+                                assert_eq!(closest_peers.len(), 2);
+                                assert!(closest_peers.contains(&swarm_ids[1]));
+                                assert!(closest_peers.contains(&swarm_ids[1]));
+                                return Ok(Async::Ready(()));
+                            } else {
+                                panic!("Expected GetValueResult::NotFound event");
+                            }
                         }
                         Async::Ready(_) => (),
                         Async::NotReady => break,
@@ -291,8 +297,6 @@ fn put_value() {
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
-            let mut put_completed = false;
-
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
@@ -305,7 +309,7 @@ fn put_value() {
                             assert_eq!(failures, 0);
                             assert_eq!(swarm.kbuckets.local_key().preimage(), &swarm_ids[31]);
                             assert_eq!(key, target_key);
-                            put_completed = true;
+                            return Ok(Async::Ready(()));
                         },
                         Async::Ready(_) => (),
                         Async::NotReady => break,
