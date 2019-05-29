@@ -64,16 +64,17 @@ impl Addresses {
     pub fn add(&mut self, a: Multiaddr) {
         for r in &mut self.registry {
             if &r.addr == &a {
-                r.score = r.score.saturating_add(1);
-                isort(&mut self.registry);
-                return ()
+                r.score = r.score.saturating_add(1)
+            } else {
+                r.score = r.score.saturating_sub(1)
             }
         }
         if self.registry.len() == self.limit.get() {
             self.registry.pop();
         }
-        let r = Record { score: 0, addr: a };
-        self.registry.push(r)
+        let r = Record { score: 1, addr: a };
+        self.registry.push(r);
+        isort(&mut self.registry)
     }
 
     /// Return an iterator over all [`Multiaddr`] values.
