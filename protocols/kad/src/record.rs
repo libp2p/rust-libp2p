@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use fnv::FnvHashMap;
 use multihash::Multihash;
 
 #[derive(Debug)]
@@ -40,5 +41,50 @@ impl Record {
 
 pub trait RecordStore {
     fn get(&self, k: &Multihash) -> Option<&Record>;
-    fn put(&mut self, k: Multihash, r: Record) -> Result<(), RecordStorageError>;
+    fn put(&mut self, r: Record) -> Result<(), RecordStorageError>;
+}
+
+pub struct MemoryRecordStorage{
+    max_records: usize,
+    max_record_size: usize,
+    records: FnvHashMap<Multihash, Record>
+}
+
+impl MemoryRecordStorage {
+    const MAX_RECORDS: usize = 1024;
+    const MAX_RECORD_SIZE: usize = 65535;
+
+    pub fn new(max_records: usize, max_record_size: usize) -> Self {
+        MemoryRecordStorage{
+            max_records,
+            max_record_size,
+            records: FnvHashMap::default()
+        }
+    }
+}
+
+impl Default for MemoryRecordStorage {
+    fn default() -> Self {
+        MemoryRecordStorage::new(Self::MAX_RECORDS, Self::MAX_RECORD_SIZE)
+    }
+}
+
+impl RecordStore for MemoryRecordStorage {
+    fn get(&self, k: &Multihash) -> Option<&Record> {
+        self.records.get(k)
+    }
+
+    fn put(&mut self, r: Record) -> Result<(), RecordStorageError> {
+        if self.records.len() >= self.max_records {
+            return Err(RecordStorageError::AtCapacity);
+        }
+
+        if r.value().len() >= self.max_record_size {
+            return Err(RecordStorageError::ValueTooLarge)
+        }
+
+        self.records.insert(r.key().clone(), r);
+
+        Ok(())
+    }
 }

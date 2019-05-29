@@ -24,8 +24,9 @@
 //       be useful later for record store
 #![allow(dead_code)]
 
-pub use self::behaviour::{Kademlia, GetValueResult, KademliaOut, MemoryRecordStorage};
+pub use self::behaviour::{Kademlia, GetValueResult, KademliaOut};
 pub use self::protocol::KadConnectionType;
+pub use self::record::{RecordStore, RecordStorageError, MemoryRecordStorage};
 
 pub mod handler;
 pub mod kbucket;
