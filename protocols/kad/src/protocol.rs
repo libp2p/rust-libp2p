@@ -462,8 +462,7 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
         }
 
         proto::Message_MessageType::GET_VALUE => {
-            let record = message.mut_record();
-            let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
+            let key = Multihash::from_bytes(message.take_key()).map_err(invalid_data)?;
             Ok(KadRequestMsg::GetValue { key })
         }
 
