@@ -37,9 +37,16 @@ const UDT: u32 = 301;
 const UNIX: u32 = 400;
 const UTP: u32 = 302;
 const WS: u32 = 477;
+const WS_WITH_PATH: u32 = 4770;         // Note: not standard
 const WSS: u32 = 478;
+const WSS_WITH_PATH: u32 = 4780;        // Note: not standard
 
 /// `Protocol` describes all possible multiaddress protocols.
+///
+/// For `Unix`, `Ws` and `Wss` we use `&str` instead of `Path` to allow
+/// cross-platform usage of `Protocol` since encoding `Paths` to bytes is
+/// platform-specific. This means that the actual validation of paths needs to
+/// happen separately.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Protocol<'a> {
     Dccp(u16),
@@ -62,13 +69,10 @@ pub enum Protocol<'a> {
     Tcp(u16),
     Udp(u16),
     Udt,
-    /// For `Unix` we use `&str` instead of `Path` to allow cross-platform usage of
-    /// `Protocol` since encoding `Paths` to bytes is platform-specific.
-    /// This means that the actual validation of paths needs to happen separately.
     Unix(Cow<'a, str>),
     Utp,
-    Ws,
-    Wss
+    Ws(Cow<'a, str>),
+    Wss(Cow<'a, str>),
 }
 
 impl<'a> Protocol<'a> {
@@ -134,8 +138,18 @@ impl<'a> Protocol<'a> {
                     .and_then(|s| read_onion(&s.to_uppercase()))
                     .map(|(a, p)| Protocol::Onion(Cow::Owned(a), p)),
             "quic" => Ok(Protocol::Quic),
-            "ws" => Ok(Protocol::Ws),
-            "wss" => Ok(Protocol::Wss),
+            "ws" => Ok(Protocol::Ws(Cow::Borrowed("/"))),
+            "wss" => Ok(Protocol::Wss(Cow::Borrowed("/"))),
+            "x-parity-ws" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let decoded = percent_encoding::percent_decode(s.as_bytes()).decode_utf8()?;
+                Ok(Protocol::Ws(decoded))
+            }
+            "x-parity-wss" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let decoded = percent_encoding::percent_decode(s.as_bytes()).decode_utf8()?;
+                Ok(Protocol::Wss(decoded))
+            }
             "p2p-websocket-star" => Ok(Protocol::P2pWebSocketStar),
             "p2p-webrtc-star" => Ok(Protocol::P2pWebRtcStar),
             "p2p-webrtc-direct" => Ok(Protocol::P2pWebRtcDirect),
@@ -247,8 +261,18 @@ impl<'a> Protocol<'a> {
                 Ok((Protocol::Unix(Cow::Borrowed(str::from_utf8(data)?)), rest))
             }
             UTP => Ok((Protocol::Utp, input)),
-            WS => Ok((Protocol::Ws, input)),
-            WSS => Ok((Protocol::Wss, input)),
+            WS => Ok((Protocol::Ws(Cow::Borrowed("/")), input)),
+            WS_WITH_PATH => {
+                let (n, input) = decode::usize(input)?;
+                let (data, rest) = split_at(n, input)?;
+                Ok((Protocol::Ws(Cow::Borrowed(str::from_utf8(data)?)), rest))
+            }
+            WSS => Ok((Protocol::Wss(Cow::Borrowed("/")), input)),
+            WSS_WITH_PATH => {
+                let (n, input) = decode::usize(input)?;
+                let (data, rest) = split_at(n, input)?;
+                Ok((Protocol::Wss(Cow::Borrowed(str::from_utf8(data)?)), rest))
+            }
             _ => Err(Error::UnknownProtocolId(id))
         }
     }
@@ -318,8 +342,20 @@ impl<'a> Protocol<'a> {
             Protocol::Udt => w.write_all(encode::u32(UDT, &mut buf))?,
             Protocol::Http => w.write_all(encode::u32(HTTP, &mut buf))?,
             Protocol::Https => w.write_all(encode::u32(HTTPS, &mut buf))?,
-            Protocol::Ws => w.write_all(encode::u32(WS, &mut buf))?,
-            Protocol::Wss => w.write_all(encode::u32(WSS, &mut buf))?,
+            Protocol::Ws(ref s) if s == "/" => w.write_all(encode::u32(WS, &mut buf))?,
+            Protocol::Ws(s) => {
+                w.write_all(encode::u32(WS_WITH_PATH, &mut buf))?;
+                let bytes = s.as_bytes();
+                w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
+                w.write_all(&bytes)?
+            },
+            Protocol::Wss(ref s) if s == "/" => w.write_all(encode::u32(WSS, &mut buf))?,
+            Protocol::Wss(s) => {
+                w.write_all(encode::u32(WSS_WITH_PATH, &mut buf))?;
+                let bytes = s.as_bytes();
+                w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
+                w.write_all(&bytes)?
+            },
             Protocol::P2pWebSocketStar => w.write_all(encode::u32(P2P_WEBSOCKET_STAR, &mut buf))?,
             Protocol::P2pWebRtcStar => w.write_all(encode::u32(P2P_WEBRTC_STAR, &mut buf))?,
             Protocol::P2pWebRtcDirect => w.write_all(encode::u32(P2P_WEBRTC_DIRECT, &mut buf))?,
@@ -357,8 +393,8 @@ impl<'a> Protocol<'a> {
             Udt => Udt,
             Unix(cow) => Unix(Cow::Owned(cow.into_owned())),
             Utp => Utp,
-            Ws => Ws,
-            Wss => Wss
+            Ws(cow) => Ws(Cow::Owned(cow.into_owned())),
+            Wss(cow) => Wss(Cow::Owned(cow.into_owned())),
         }
     }
 }
@@ -391,8 +427,16 @@ impl<'a> fmt::Display for Protocol<'a> {
             Udt => f.write_str("/udt"),
             Unix(s) => write!(f, "/unix/{}", s),
             Utp => f.write_str("/utp"),
-            Ws => f.write_str("/ws"),
-            Wss => f.write_str("/wss"),
+            Ws(ref s) if s == "/" => f.write_str("/ws"),
+            Ws(s) => {
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::PATH_SEGMENT_ENCODE_SET);
+                write!(f, "/x-parity-ws/{}", encoded)
+            },
+            Wss(ref s) if s == "/" => f.write_str("/wss"),
+            Wss(s) => {
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::PATH_SEGMENT_ENCODE_SET);
+                write!(f, "/x-parity-wss/{}", encoded)
+            },
         }
     }
 }
@@ -452,4 +496,3 @@ fn read_onion(s: &str) -> Result<([u8; 10], u16)> {
 
     Ok((buf, port))
 }
-
