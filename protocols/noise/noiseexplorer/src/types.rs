@@ -1,13 +1,13 @@
 /* ---------------------------------------------------------------- *
  * TYPES                                                            *
  * ---------------------------------------------------------------- */
-
+// TODO clean up here
+use constant_time_eq::constant_time_eq;
 use crate::{
-    consts::{DHLEN, EMPTY_KEY, HASHLEN, MAX_MESSAGE, MAX_NONCE},
+    consts::{DHLEN, EMPTY_KEY, HASHLEN, MAX_NONCE},
     error::NoiseError,
 };
 use hacl_star::curve25519;
-
 use rand;
 use zeroize::Zeroize;
 
@@ -25,11 +25,6 @@ fn decode_str_32(s: &str) -> Result<[u8; DHLEN], NoiseError> {
     else {
         return Err(NoiseError::InvalidInputError);
     }
-}
-
-fn decode_str(s: &str) -> Result<Vec<u8>, NoiseError> {
-    let res = hex::decode(s)?;
-    Ok(res)
 }
 
 #[derive(Clone)]
@@ -75,7 +70,7 @@ impl Key {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::Key,
     /// # };
@@ -98,7 +93,7 @@ impl Key {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::Key,
     /// # };
@@ -116,7 +111,7 @@ impl Key {
     /// # }
     /// ```
     pub fn is_empty(&self) -> bool {
-        crypto::util::fixed_time_eq(&self.k[..], &EMPTY_KEY)
+        constant_time_eq(&self.k[..], &EMPTY_KEY)
     }
     /// Derives a `PublicKey` from the `Key` and returns it.
     pub fn generate_public_key(private_key: &[u8; DHLEN]) -> PublicKey {
@@ -150,7 +145,7 @@ impl Psk {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::Psk,
     /// # };
@@ -174,7 +169,7 @@ impl Psk {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::Psk,
     /// # };
@@ -192,7 +187,7 @@ impl Psk {
     /// # }
     /// ```
     pub fn is_empty(&self) -> bool {
-        crypto::util::fixed_time_eq(&self.psk[..], &EMPTY_KEY)
+        constant_time_eq(&self.psk[..], &EMPTY_KEY)
     }
 }
 impl Clone for Psk {
@@ -230,7 +225,7 @@ impl PrivateKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::PrivateKey,
     /// # };
@@ -253,7 +248,7 @@ impl PrivateKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::PrivateKey,
     /// # };
@@ -271,7 +266,7 @@ impl PrivateKey {
     /// # }
     /// ```
     pub fn is_empty(&self) -> bool {
-        crypto::util::fixed_time_eq(&self.k[..], &EMPTY_KEY)
+        constant_time_eq(&self.k[..], &EMPTY_KEY)
     }
     /// Derives a `PublicKey` from the `PrivateKey` then returns `Ok(PublicKey)` when successful and `Err(NoiseError)` otherwise.
     pub fn generate_public_key(&self) -> Result<PublicKey, NoiseError> {
@@ -296,10 +291,14 @@ impl PublicKey {
         }
     }
     /// Instanciates a new `PublicKey` from an array of `DHLEN` bytes.
-    pub fn from_bytes(k: [u8; DHLEN]) -> Self {
-        Self {
+    pub fn from_bytes(k: [u8; DHLEN]) -> Result<Self, NoiseError> {
+        // TODO check if public key is a valid point on the curve
+        // if false {
+        //     Err(NoiseError::InvalidPublicKeyError)
+        // }
+        Ok(Self {
             k,
-        }
+        })
     }
     pub(crate) fn clear(&mut self) {
         self.k.zeroize();
@@ -309,7 +308,7 @@ impl PublicKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::PublicKey,
     /// # };
@@ -338,7 +337,7 @@ impl PublicKey {
     /// # Example
     ///
     /// ```
-    /// # use noiseexplorer_xx::{
+    /// # use noiseexplorer::{
     /// #   error::NoiseError,
     /// #   types::PublicKey,
     /// # };
@@ -356,7 +355,7 @@ impl PublicKey {
     /// # }
     /// ```
     pub fn is_empty(&self) -> bool {
-        crypto::util::fixed_time_eq(&self.k[..], &EMPTY_KEY)
+        constant_time_eq(&self.k[..], &EMPTY_KEY)
     }
 }
 
@@ -378,64 +377,6 @@ impl Nonce {
             return Err(NoiseError::ExhaustedNonceError);
         }
         Ok(self.n)
-    }
-}
-
-#[derive(Clone)]
-/// Data structure to be used
-pub(crate) struct MessageBuffer {
-    pub(crate) ne: [u8; DHLEN],
-    pub(crate) ns: Vec<u8>,
-    pub(crate) ciphertext: Vec<u8>,
-}
-
-pub struct Message {
-    payload: Vec<u8>,
-}
-impl Message {
-    /// Instanciates a new `Message` from a `Vec<u8>`.
-    pub fn from_vec(m: Vec<u8>) -> Result<Self, NoiseError> {
-        if m.len() > MAX_MESSAGE || m.is_empty() {
-            return Err(NoiseError::UnsupportedMessageLengthError);
-        }
-        Ok(Self {
-            payload: m,
-        })
-    }
-    /// Instanciates a new `Message` from a `&str`.
-    pub fn from_str(m: &str) -> Result<Self, NoiseError> {
-        let msg = decode_str(m)?;
-        Self::from_vec(msg)
-    }
-    /// Instanciates a new `Message` from a `&[u8]`.
-    /// Returns `Ok(Message)` when successful and `Err(NoiseError)` otherwise.
-    pub fn from_bytes(m: &[u8]) -> Result<Self, NoiseError> {
-        Self::from_vec(Vec::from(m))
-    }
-    /// View the `Message` payload as a `Vec<u8>`.
-    pub fn as_bytes(&self) -> &Vec<u8> {
-        &self.payload
-    }
-    /// Returns a `usize` value that represents the `Message` payload length in bytes.
-    pub fn len(&self) -> usize {
-        self.payload.len()
-    }
-}
-impl Clone for Message {
-    fn clone(&self) -> Self {
-        Self {
-            payload: self.as_bytes().to_owned(),
-        }
-    }
-}
-impl PartialEq for Message {
-    fn eq(&self, other: &Self) -> bool {
-        self.payload == other.payload
-    }
-}
-impl std::fmt::Debug for Message {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "({:X?})", self.payload)
     }
 }
 
