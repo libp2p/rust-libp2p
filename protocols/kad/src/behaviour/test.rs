@@ -36,7 +36,7 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{collections::HashSet, io, u64};
+use std::{io, u64};
 use tokio::runtime::Runtime;
 use multihash::{Hash, Multihash};
 
@@ -299,8 +299,6 @@ fn put_value() {
         target_key: Multihash,
         swarm_ids: Vec<PeerId>,
         swarms: Vec<TestSwarm>,
-        have_key: HashSet<PeerId>,
-        have_no_key: HashSet<PeerId>
     }
 
     impl Future for TestContext {
@@ -311,43 +309,19 @@ fn put_value() {
             loop {
                 let res = self.poll_swarms().unwrap();
                 match res {
-                    Async::Ready((i, e)) => {
+                    Async::Ready((_, e)) => {
                         match e {
-                            KademliaOut::PutValueResult{ .. } => {
-                                for swarm in self.swarms.iter_mut().take(31) {
-                                    swarm.get_value(&self.target_key);
-                                }
-                            }
-                            KademliaOut::GetValueResult(res) => {
-                                match res {
-                                    GetValueResult::Found{ .. } => {
-                                        self.have_key.insert(self.swarm_ids[i].clone());
-                                    }
-                                    GetValueResult::NotFound{ .. } => {
-                                        self.have_no_key.insert(self.swarm_ids[i].clone());
-                                    }
-                                }
+                            KademliaOut::PutValueResult{ key: _, results } => {
+                                assert_eq!(results.len(), 20);
 
-                                if self.have_key.len() + self.have_no_key.len() == 31 {
-                                    assert_eq!(self.have_key.len(), kbucket::MAX_NODES_PER_BUCKET + 1);
-                                    assert_eq!(self.have_no_key.len(), 30 - kbucket::MAX_NODES_PER_BUCKET);
-                                    let key = kbucket::Key::from(self.target_key.clone());
-                                    let mut has_distances: Vec<_> = self.have_key.iter()
-                                        .map(|k| kbucket::Key::from(k.clone()))
-                                        .map(|k| key.distance(&k))
-                                        .collect();
+                                let failures: Vec<_> = results
+                                    .iter()
+                                    .filter(|&(_, &v)| v == false)
+                                    .collect();
 
-                                    let mut has_no_distances: Vec<_> = self.have_no_key.iter()
-                                        .map(|k| kbucket::Key::from(k.clone()))
-                                        .map(|k| key.distance(&k))
-                                        .collect();
+                                assert_eq!(failures, Vec::new());
 
-                                    has_distances.sort();
-                                    has_no_distances.sort();
-                                    assert!(has_no_distances.first() >= has_distances.last());
-
-                                    return Ok(Async::Ready(()));
-                                }
+                                return Ok(Async::Ready(()));
                             }
                             _ => ()
                         }
@@ -382,8 +356,6 @@ fn put_value() {
         target_key,
         swarm_ids,
         swarms,
-        have_key: Default::default(),
-        have_no_key: Default::default(),
     };
 
     Runtime::new().unwrap().block_on(
