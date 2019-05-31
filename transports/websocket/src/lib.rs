@@ -47,6 +47,34 @@ impl<T> WsConfig<T> {
     pub fn new(transport: T) -> Self {
         framed::WsConfig::new(transport).into()
     }
+
+    /// Return the configured maximum number of redirects.
+    pub fn max_redirects(&self) -> u8 {
+        self.transport.max_redirects()
+    }
+
+    /// Set max. number of redirects to follow.
+    pub fn set_max_redirects(&mut self, max: u8) -> &mut Self {
+        self.transport.set_max_redirects(max);
+        self
+    }
+
+    /// Get the max. frame data size we support.
+    pub fn max_data_size(&self) -> u64 {
+        self.transport.max_data_size()
+    }
+
+    /// Set the max. frame data size we support.
+    pub fn set_max_data_size(&mut self, size: u64) -> &mut Self {
+        self.transport.set_max_data_size(size);
+        self
+    }
+
+    /// Set the TLS configuration if TLS support is desired.
+    pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
+        self.transport.set_tls_config(c);
+        self
+    }
 }
 
 impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
@@ -54,18 +82,6 @@ impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
         WsConfig {
             transport: framed
         }
-    }
-}
-
-impl<T> AsRef<framed::WsConfig<T>> for WsConfig<T> {
-    fn as_ref(&self) -> &framed::WsConfig<T> {
-        &self.transport
-    }
-}
-
-impl<T> AsMut<framed::WsConfig<T>> for WsConfig<T> {
-    fn as_mut(&mut self) -> &mut framed::WsConfig<T> {
-        &mut self.transport
     }
 }
 
