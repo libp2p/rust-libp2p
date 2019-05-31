@@ -36,7 +36,7 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{io, u64};
+use std::{collections::HashSet, iter::FromIterator, io, u64};
 use tokio::runtime::Runtime;
 use multihash::{Hash, Multihash};
 
@@ -289,9 +289,18 @@ fn put_value() {
     swarm_1.add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
 
     swarms.push(swarm_2);
-    swarms.push(swarm_1);
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+
+    let mut sorted_peer_ids: Vec<_> = swarm_ids
+        .iter()
+        .map(|id| (id.clone(), kbucket::Key::from(id.clone()).distance(&kbucket::Key::from(target_key.clone()))))
+        .collect();
+
+    sorted_peer_ids.sort_by(|(_, d1), (_, d2)| d1.cmp(d2));
+
+    let closest = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
+    swarms.push(swarm_1);
 
     swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
 
@@ -299,6 +308,7 @@ fn put_value() {
         target_key: Multihash,
         swarm_ids: Vec<PeerId>,
         swarms: Vec<TestSwarm>,
+        closest: HashSet<PeerId>,
     }
 
     impl Future for TestContext {
@@ -320,6 +330,9 @@ fn put_value() {
                                     .collect();
 
                                 assert_eq!(failures, Vec::new());
+                                for (result, _) in &results {
+                                    assert!(self.closest.contains(result));
+                                }
 
                                 return Ok(Async::Ready(()));
                             }
@@ -356,6 +369,7 @@ fn put_value() {
         target_key,
         swarm_ids,
         swarms,
+        closest,
     };
 
     Runtime::new().unwrap().block_on(
