@@ -36,9 +36,9 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{io, u64};
+use std::{collections::HashSet, io, u64};
 use tokio::runtime::Runtime;
-use multihash::Hash;
+use multihash::{Hash, Multihash};
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
@@ -281,7 +281,7 @@ fn put_value() {
     let mut swarm_2 = swarms.pop().unwrap();
 
     // Connect swarms[30] to each swarm in swarms[..29]
-    for (i, (_, peer)) in &mut swarms.iter_mut().skip(1).zip(swarm_ids.clone()).enumerate() {
+    for (i, (_, peer)) in &mut swarms.iter_mut().zip(swarm_ids.clone()).enumerate() {
         swarm_2.add_address(&peer, Protocol::Memory(port_base + i as u64).into());
     }
 
@@ -295,29 +295,99 @@ fn put_value() {
 
     swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
-            for swarm in &mut swarms {
+    struct TestContext {
+        target_key: Multihash,
+        swarm_ids: Vec<PeerId>,
+        swarms: Vec<TestSwarm>,
+        have_key: HashSet<PeerId>,
+        have_no_key: HashSet<PeerId>
+    }
+
+    impl Future for TestContext {
+        type Item = ();
+        type Error = ();
+
+        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+            loop {
+                let res = self.poll_swarms().unwrap();
+                match res {
+                    Async::Ready((i, e)) => {
+                        match e {
+                            KademliaOut::PutValueResult{ .. } => {
+                                for swarm in self.swarms.iter_mut().take(31) {
+                                    swarm.get_value(&self.target_key);
+                                }
+                            }
+                            KademliaOut::GetValueResult(res) => {
+                                match res {
+                                    GetValueResult::Found{ .. } => {
+                                        self.have_key.insert(self.swarm_ids[i].clone());
+                                    }
+                                    GetValueResult::NotFound{ .. } => {
+                                        self.have_no_key.insert(self.swarm_ids[i].clone());
+                                    }
+                                }
+
+                                if self.have_key.len() + self.have_no_key.len() == 31 {
+                                    assert_eq!(self.have_key.len(), kbucket::MAX_NODES_PER_BUCKET + 1);
+                                    assert_eq!(self.have_no_key.len(), 30 - kbucket::MAX_NODES_PER_BUCKET);
+                                    let key = kbucket::Key::from(self.target_key.clone());
+                                    let mut has_distances: Vec<_> = self.have_key.iter()
+                                        .map(|k| kbucket::Key::from(k.clone()))
+                                        .map(|k| key.distance(&k))
+                                        .collect();
+
+                                    let mut has_no_distances: Vec<_> = self.have_no_key.iter()
+                                        .map(|k| kbucket::Key::from(k.clone()))
+                                        .map(|k| key.distance(&k))
+                                        .collect();
+
+                                    has_distances.sort();
+                                    has_no_distances.sort();
+                                    assert!(has_no_distances.first() >= has_distances.last());
+
+                                    return Ok(Async::Ready(()));
+                                }
+                            }
+                            _ => ()
+                        }
+                    }
+                    Async::NotReady => break,
+                }
+            }
+
+            Ok(Async::NotReady)
+        }
+    }
+
+    impl TestContext {
+        fn poll_swarms(&mut self) -> Poll<(usize, KademliaOut), ()> {
+            for (i, swarm) in self.swarms.iter_mut().enumerate() {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::PutValueResult {
-                            key,
-                            successes,
-                            failures,
-                        })) => {
-                            assert_eq!(successes, kbucket::MAX_NODES_PER_BUCKET);
-                            assert_eq!(failures, 0);
-                            assert_eq!(swarm.kbuckets.local_key().preimage(), &swarm_ids[31]);
-                            assert_eq!(key, target_key);
-                            return Ok(Async::Ready(()));
+                        Async::Ready(Some(event)) => {
+                            return Ok(Async::Ready((i, event)))
                         },
                         Async::Ready(_) => (),
                         Async::NotReady => break,
                     }
                 }
-            }
+            };
 
             Ok(Async::NotReady)
-        }))
-        .unwrap()
+        }
+    }
+
+    let a = TestContext {
+        target_key,
+        swarm_ids,
+        swarms,
+        have_key: Default::default(),
+        have_no_key: Default::default(),
+    };
+
+    Runtime::new().unwrap().block_on(
+        a
+    )
+    .unwrap();
 }
