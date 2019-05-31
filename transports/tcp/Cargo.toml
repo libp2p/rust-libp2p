@@ -21,5 +21,4 @@ tokio-io = "0.1"
 tokio-tcp = "0.1"
 
 [dev-dependencies]
-quickcheck = "0.8.3"
 tokio = "0.1"

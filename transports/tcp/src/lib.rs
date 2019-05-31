@@ -251,43 +251,21 @@ fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
         let ma = ip_to_multiaddr(ip, port);
         let ipn = match iface.addr {
             IfAddr::V4(ip4) => {
-                let plen = prefix_len(&IpAddr::V4(ip4.netmask));
-                IpNet::V4(Ipv4Net::new(ip4.ip, plen).expect("prefix len has been checked"))
+                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
+                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
+                IpNet::V4(ipnet)
             }
             IfAddr::V6(ip6) => {
-                let plen = prefix_len(&IpAddr::V6(ip6.netmask));
-                IpNet::V6(Ipv6Net::new(ip6.ip, plen).expect("prefix len has been checked"))
+                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
+                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
+                IpNet::V6(ipnet)
             }
         };
         addrs.push((ip, ipn, ma))
     }
     Ok(addrs)
-}
-
-// Derive the prefix len of the given netmask, i.e. the number of leading 1s in its octets.
-fn prefix_len(netmask: &IpAddr) -> u8 {
-    fn count_bits(octets: &[u8]) -> u8 {
-        let mut len = 0;
-        for &o in octets {
-            len += (!o).leading_zeros() as u8;
-            if o != 0xff {
-                break
-            }
-        }
-        len
-    }
-    match netmask {
-        IpAddr::V4(ip4) => {
-            let len = count_bits(&ip4.octets());
-            assert!(len <= 32);
-            len
-        }
-        IpAddr::V6(ip6) => {
-            let len = count_bits(&ip6.octets());
-            assert!(len <= 128);
-            len
-        }
-    }
 }
 
 /// Applies the socket configuration parameters to a socket.
@@ -569,29 +547,10 @@ impl Drop for TcpTransStream {
 mod tests {
     use futures::prelude::*;
     use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
-    use quickcheck::QuickCheck;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use super::{multiaddr_to_socketaddr, TcpConfig};
     use tokio::runtime::current_thread::Runtime;
     use tokio_io;
-
-    #[test]
-    fn ipv4_prefix_len() {
-        fn property(ip: u32) -> bool {
-            let leading_ones = (!ip).leading_zeros();
-            leading_ones == u32::from(super::prefix_len(&IpAddr::V4(ip.into())))
-        }
-        QuickCheck::new().quickcheck(property as fn(u32) -> bool)
-    }
-
-    #[test]
-    fn ipv6_prefix_len() {
-        fn property(ip: u128) -> bool {
-            let leading_ones = (!ip).leading_zeros();
-            leading_ones == u32::from(super::prefix_len(&IpAddr::V6(ip.into())))
-        }
-        QuickCheck::new().quickcheck(property as fn(u128) -> bool)
-    }
 
     #[test]
     fn wildcard_expansion() {
