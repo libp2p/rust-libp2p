@@ -25,7 +25,7 @@ use crate::{
     Kademlia,
     KademliaOut,
     kbucket::{self, Distance},
-    record::{RecordStore},
+    record::{Record, RecordStore},
 };
 use futures::{future, prelude::*};
 use libp2p_core::{
@@ -364,4 +364,44 @@ fn put_value() {
     for _ in 0 .. 10 {
         run();
     }
+}
+
+#[test]
+fn get_value() {
+    let (port_base, mut swarms) = build_nodes(3);
+
+    let swarm_ids: Vec<_> = swarms.iter()
+        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+    swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+    let target_value = vec![4,5,6];
+
+    swarms[1].records.put(Record::new(target_key.clone(), target_value.clone())).unwrap();
+    swarms[0].get_value(&target_key);
+
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
+                            if let GetValueResult::Found { record } = result {
+                                assert_eq!(record.key(), &target_key);
+                                assert_eq!(record.value(), &target_value);
+                                return Ok(Async::Ready(()));
+                            } else {
+                                panic!("Expected GetValueResult::Found event");
+                            }
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap()
 }
