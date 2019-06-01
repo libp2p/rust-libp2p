@@ -421,12 +421,12 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
                 msg.mut_closerPeers().push(peer.into());
             }
 
-            result.map(|r| {
+            if let Some(Record{ key, value }) = result {
                 let mut record = proto::Record::new();
-                record.set_key(r.key().clone().into_bytes());
-                record.set_value(r.value().to_vec());
+                record.set_key(key.into_bytes());
+                record.set_value(value.to_vec());
                 msg.set_record(record);
-            });
+            }
 
             msg
         }

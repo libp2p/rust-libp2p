@@ -30,14 +30,12 @@ pub enum RecordStorageError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
-    key: Multihash,
-    value: Vec<u8>,
+    pub key: Multihash,
+    pub value: Vec<u8>,
 }
 
 impl Record {
     pub fn new(key: Multihash, value: Vec<u8>) -> Self { Record { key, value } }
-    pub fn key(&self) -> &Multihash { &self.key }
-    pub fn value(&self) -> &Vec<u8> { &self.value }
 }
 
 pub trait RecordStore {
@@ -83,11 +81,11 @@ impl RecordStore for MemoryRecordStorage {
             return Err(RecordStorageError::AtCapacity);
         }
 
-        if r.value().len() >= self.max_record_size {
+        if r.value.len() >= self.max_record_size {
             return Err(RecordStorageError::ValueTooLarge)
         }
 
-        self.records.insert(r.key().clone(), r);
+        self.records.insert(r.key.clone(), r);
 
         Ok(())
     }
