@@ -290,28 +290,19 @@ fn put_value() {
         let swarm_ids: Vec<_> = swarms.iter()
             .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
 
-        // Remove two last swarms temoporarily to make borrow checker happy
-        let mut swarm_1 = swarms.pop().unwrap();
-        let mut swarm_2 = swarms.pop().unwrap();
-        let mut swarm_3 = swarms.pop().unwrap();
-
         // Connect swarm[30] to each swarm in swarms[..15]
-        for (i, (_, peer)) in &mut swarms.iter_mut().take(15).zip(swarm_ids.iter()).enumerate() {
-            swarm_2.add_address(&peer, Protocol::Memory(port_base + i as u64).into());
+        for (i, peer) in &mut swarm_ids.iter().take(15).enumerate() {
+            swarms[30].add_address(&peer, Protocol::Memory(port_base + i as u64).into());
         }
 
-        // Connect swarm[29] to each swarm in swarms[..15]
-        for (i, (_, peer)) in &mut swarms.iter_mut().skip(15).take(14).zip(swarm_ids.iter().skip(15)).enumerate() {
-            swarm_3.add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
+        // Connect swarm[29] to each swarm in swarms[15..29]
+        for (i, peer) in &mut swarm_ids.iter().skip(15).take(14).enumerate() {
+            swarms[29].add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
         }
 
-        // Connect swarms[31] to swarms[30]
-        swarm_1.add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
-        swarm_1.add_address(&swarm_ids[29], Protocol::Memory(port_base + 29 as u64).into());
-
-        swarms.push(swarm_3);
-        swarms.push(swarm_2);
-        swarms.push(swarm_1);
+        // Connect swarms[31] to swarms[29, 30]
+        swarms[31].add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
+        swarms[31].add_address(&swarm_ids[29], Protocol::Memory(port_base + 29 as u64).into());
 
         let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
 
