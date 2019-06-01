@@ -555,7 +555,7 @@ where
             KademliaHandlerIn::PutValue { key, value, user_data } => {
                 let msg = KadRequestMsg::PutValue {
                     key,
-                    value: value,
+                    value,
                 };
 
                 self.substreams

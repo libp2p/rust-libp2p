@@ -185,6 +185,7 @@ impl QueryInfo {
             },
             QueryInfoInner::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
                 // TODO: Change the `key` of `QueryInfoInner::FindPeer` to be a `Multihash`.
+                // TODO: Change the `key` of `QueryInfoInner::FindPeer` to be a `Multihash`.
                 key: key.clone().into(),
                 user_data,
             },
@@ -739,10 +740,10 @@ where
                         results
                     } = &mut query.target_mut().inner {
                         if let Some(result) = result {
+                            // TODO: Finish query as soon as enough results have been received.
                             results.push(result);
                         }
                     }
-                    query.inject_rpc_result(&source, vec![source.clone()]);
                 }
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
@@ -926,7 +927,8 @@ where
                         }
                     },
                     QueryInfoInner::GetValue { key: _, results } => {
-                        let result = match results.first() {
+                        // TODO: Return all results. The query should finish as soon as enough results have been collected.
+                        let result = match results.into_iter().next() {
                             Some(record) => GetValueResult::Found{ record: record.clone() },
                             None => GetValueResult::NotFound{
                                 closest_peers: closer_peers.collect()
@@ -942,6 +944,8 @@ where
 
                         let closer_peers = Vec::from_iter(closer_peers);
                         for peer in &closer_peers {
+                            // TODO: Check if the peer is still connected and if not, push the RPC onto `pending_rpcs`
+                            // and queue a `DialPeer` event instead of `SendEvent`.
                             let event = NetworkBehaviourAction::SendEvent {
                                 peer_id: peer.clone(),
                                 event: KademliaHandlerIn::PutValue {
