@@ -273,90 +273,95 @@ fn get_value_not_found() {
 
 #[test]
 fn put_value() {
-    // Build a test that checks if PUT_VALUE gets correctly propagated in
-    // a nontrivial topology:
-    //                [31]
-    //               /    \
-    //             [29]  [30]
-    //            /|\      /|\
-    //         [0]..[14] [15]..[28]
-    //
-    // Nodes [29] and [30] have less than kbuckets::MAX_NODES_PER_BUCKET
-    // peers to avoid the situation when the bucket may be overflowed and
-    // some of the connections are dropped from the routing table
-    let (port_base, mut swarms) = build_nodes(32);
+    fn run() {
+        // Build a test that checks if PUT_VALUE gets correctly propagated in
+        // a nontrivial topology:
+        //                [31]
+        //               /    \
+        //             [29]  [30]
+        //            /|\      /|\
+        //         [0]..[14] [15]..[28]
+        //
+        // Nodes [29] and [30] have less than kbuckets::MAX_NODES_PER_BUCKET
+        // peers to avoid the situation when the bucket may be overflowed and
+        // some of the connections are dropped from the routing table
+        let (port_base, mut swarms) = build_nodes(32);
 
-    let swarm_ids: Vec<_> = swarms.iter()
-        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+        let swarm_ids: Vec<_> = swarms.iter()
+            .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
 
-    // Remove two last swarms temoporarily to make borrow checker happy
-    let mut swarm_1 = swarms.pop().unwrap();
-    let mut swarm_2 = swarms.pop().unwrap();
-    let mut swarm_3 = swarms.pop().unwrap();
+        // Remove two last swarms temoporarily to make borrow checker happy
+        let mut swarm_1 = swarms.pop().unwrap();
+        let mut swarm_2 = swarms.pop().unwrap();
+        let mut swarm_3 = swarms.pop().unwrap();
 
-    // Connect swarm[30] to each swarm in swarms[..15]
-    for (i, (_, peer)) in &mut swarms.iter_mut().take(15).zip(swarm_ids.iter()).enumerate() {
-        swarm_2.add_address(&peer, Protocol::Memory(port_base + i as u64).into());
-    }
+        // Connect swarm[30] to each swarm in swarms[..15]
+        for (i, (_, peer)) in &mut swarms.iter_mut().take(15).zip(swarm_ids.iter()).enumerate() {
+            swarm_2.add_address(&peer, Protocol::Memory(port_base + i as u64).into());
+        }
 
-    // Connect swarm[29] to each swarm in swarms[..15]
-    for (i, (_, peer)) in &mut swarms.iter_mut().skip(15).take(14).zip(swarm_ids.iter().skip(15)).enumerate() {
-        swarm_3.add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
-    }
+        // Connect swarm[29] to each swarm in swarms[..15]
+        for (i, (_, peer)) in &mut swarms.iter_mut().skip(15).take(14).zip(swarm_ids.iter().skip(15)).enumerate() {
+            swarm_3.add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
+        }
 
-    // Connect swarms[31] to swarms[30]
-    swarm_1.add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
-    swarm_1.add_address(&swarm_ids[29], Protocol::Memory(port_base + 29 as u64).into());
+        // Connect swarms[31] to swarms[30]
+        swarm_1.add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
+        swarm_1.add_address(&swarm_ids[29], Protocol::Memory(port_base + 29 as u64).into());
 
-    swarms.push(swarm_3);
-    swarms.push(swarm_2);
-    swarms.push(swarm_1);
+        swarms.push(swarm_3);
+        swarms.push(swarm_2);
+        swarms.push(swarm_1);
 
-    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+        let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
 
-    let mut sorted_peer_ids: Vec<_> = swarm_ids
-        .iter()
-        .map(|id| (id.clone(), kbucket::Key::from(id.clone()).distance(&kbucket::Key::from(target_key.clone()))))
-        .collect();
+        let mut sorted_peer_ids: Vec<_> = swarm_ids
+            .iter()
+            .map(|id| (id.clone(), kbucket::Key::from(id.clone()).distance(&kbucket::Key::from(target_key.clone()))))
+            .collect();
 
-    sorted_peer_ids.sort_by(|(_, d1), (_, d2)| d1.cmp(d2));
+        sorted_peer_ids.sort_by(|(_, d1), (_, d2)| d1.cmp(d2));
 
-    let closest: HashSet<PeerId> = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
+        let closest: HashSet<PeerId> = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
 
-    swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
+        swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
-            let mut check_results = false;
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::PutValueResult{ .. })) => {
-                            check_results = true;
+        Runtime::new().unwrap().block_on(
+            future::poll_fn(move || -> Result<_, io::Error> {
+                let mut check_results = false;
+                for swarm in &mut swarms {
+                    loop {
+                        match swarm.poll().unwrap() {
+                            Async::Ready(Some(KademliaOut::PutValueResult{ .. })) => {
+                                check_results = true;
+                            }
+                            Async::Ready(_) => (),
+                            Async::NotReady => break,
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
-                    }
-                }
-            }
-
-            if check_results {
-                let mut have: HashSet<_> = Default::default();
-
-                for (i, swarm) in swarms.iter().take(31).enumerate() {
-                    if swarm.records.get(&target_key).is_some() {
-                        have.insert(swarm_ids[i].clone());
                     }
                 }
 
-                let intersection: HashSet<_> = have.intersection(&closest).collect();
+                if check_results {
+                    let mut have: HashSet<_> = Default::default();
 
-                assert_eq!(have.len(), kbucket::MAX_NODES_PER_BUCKET);
-                assert_eq!(intersection.len(), kbucket::MAX_NODES_PER_BUCKET);
-                return Ok(Async::Ready(()));
-            }
+                    for (i, swarm) in swarms.iter().take(31).enumerate() {
+                        if swarm.records.get(&target_key).is_some() {
+                            have.insert(swarm_ids[i].clone());
+                        }
+                    }
 
-            Ok(Async::NotReady)
-        }))
-        .unwrap()
+                    let intersection: HashSet<_> = have.intersection(&closest).collect();
+
+                    assert_eq!(have.len(), kbucket::MAX_NODES_PER_BUCKET);
+                    assert_eq!(intersection.len(), kbucket::MAX_NODES_PER_BUCKET);
+                    return Ok(Async::Ready(()));
+                }
+
+                Ok(Async::NotReady)
+            }))
+            .unwrap()
+    }
+    for _ in 0 .. 10 {
+        run();
+    }
 }
