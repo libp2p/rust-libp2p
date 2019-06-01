@@ -1,9 +1,10 @@
 
-//! The `secio` protocol is a middleware that will encrypt and decrypt communications going
+//! The `tls` protocol is a middleware that will encrypt and decrypt communications going
 //! through a socket (or anything that implements `AsyncRead + AsyncWrite`).
 
 pub use self::error::TlsError;
 
+use bytes::BytesMut;
 use futures::stream::MapErr as StreamMapErr;
 use tokio_io::{AsyncRead, AsyncWrite};
 use libp2p_core::{PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
@@ -13,6 +14,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 
 mod error;
+mod codec;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// tls on any connection.
@@ -45,6 +47,7 @@ impl UpgradeInfo for TlsConfig {
     }
 }
 
+/*
 impl <T> InboundUpgrade<T> for TlsConfig
     where T: AsyncRead + AsyncWrite + Send + 'static,
 {
@@ -69,11 +72,12 @@ where
         Box::new(self.handshake(socket))
     }
 }
+*/
 
-/// Output of the secio protocol.
+/// Output of the tls protocol.
 pub struct TlsOutput<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: Sink<SinkItem = BytesMut, SinkError = IoError> + Stream<Item = Vec<u8>, Error = TlsError>,
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<TlsMiddleware<S>, fn(TlsError) -> IoError>>,
@@ -83,47 +87,43 @@ where
     pub ephemeral_public_key: Vec<u8>,
 }
 
-impl<S> TlsMiddleware<S>
-where
-    S: AsyncRead + AsyncWrite + Send,
+pub struct TlsMiddleware<S>
 {
-    /*
-    pub fn handshake(socket: S, config: TlsConfig)
-        -> Impl Future<Item = (TlsMiddleware<S>, PublicKey, Vec<u8>), Error = TlsError>
-    {
-
-    }
-    */
+    inner: S,
 }
 
 impl<S> Sink for TlsMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: Sink<SinkItem = BytesMut, SinkError = IoError>,
 {
     type SinkItem = BytesMut;
     type SinkError = IoError;
 
     #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        self.inner.start_send(item)
     }
 
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        self.inner.poll_complete()
     }
 
     #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.inner.close()
     }
 }
 
-impl<S> Stream for TlsMiddleWare<S>
+impl<S> Stream for TlsMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite
+    S: Stream<Item = Vec<u8>, Error = TlsError>,
 {
     type Item = Vec<u8>;
     type Error = TlsError;
 
     #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::item>, Self::Error> {
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        self.inner.poll()
     }
 }
