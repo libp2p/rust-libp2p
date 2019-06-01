@@ -36,7 +36,7 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{collections::HashSet, iter::FromIterator, io, u64};
+use std::{collections::HashSet, io, u64};
 use tokio::runtime::Runtime;
 use multihash::{Hash, Multihash};
 
@@ -289,18 +289,9 @@ fn put_value() {
     swarm_1.add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
 
     swarms.push(swarm_2);
+    swarms.push(swarm_1);
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-
-    let mut sorted_peer_ids: Vec<_> = swarm_ids
-        .iter()
-        .map(|id| (id.clone(), kbucket::Key::from(id.clone()).distance(&kbucket::Key::from(target_key.clone()))))
-        .collect();
-
-    sorted_peer_ids.sort_by(|(_, d1), (_, d2)| d1.cmp(d2));
-
-    let closest = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
-    swarms.push(swarm_1);
 
     swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
 
@@ -308,7 +299,8 @@ fn put_value() {
         target_key: Multihash,
         swarm_ids: Vec<PeerId>,
         swarms: Vec<TestSwarm>,
-        closest: HashSet<PeerId>,
+        have_key: HashSet<PeerId>,
+        have_no_key: HashSet<PeerId>
     }
 
     impl Future for TestContext {
@@ -319,22 +311,43 @@ fn put_value() {
             loop {
                 let res = self.poll_swarms().unwrap();
                 match res {
-                    Async::Ready((_, e)) => {
+                    Async::Ready((i, e)) => {
                         match e {
-                            KademliaOut::PutValueResult{ key: _, results } => {
-                                assert_eq!(results.len(), 20);
-
-                                let failures: Vec<_> = results
-                                    .iter()
-                                    .filter(|&(_, &v)| v == false)
-                                    .collect();
-
-                                assert_eq!(failures, Vec::new());
-                                for (result, _) in &results {
-                                    assert!(self.closest.contains(result));
+                            KademliaOut::PutValueResult{ .. } => {
+                                for swarm in self.swarms.iter_mut().take(31) {
+                                    swarm.get_value(&self.target_key);
+                                }
+                            }
+                            KademliaOut::GetValueResult(res) => {
+                                match res {
+                                    GetValueResult::Found{ .. } => {
+                                        self.have_key.insert(self.swarm_ids[i].clone());
+                                    }
+                                    GetValueResult::NotFound{ .. } => {
+                                        self.have_no_key.insert(self.swarm_ids[i].clone());
+                                    }
                                 }
 
-                                return Ok(Async::Ready(()));
+                                if self.have_key.len() + self.have_no_key.len() == 31 {
+                                    assert_eq!(self.have_key.len(), kbucket::MAX_NODES_PER_BUCKET + 1);
+                                    assert_eq!(self.have_no_key.len(), 30 - kbucket::MAX_NODES_PER_BUCKET);
+                                    let key = kbucket::Key::from(self.target_key.clone());
+                                    let mut has_distances: Vec<_> = self.have_key.iter()
+                                        .map(|k| kbucket::Key::from(k.clone()))
+                                        .map(|k| key.distance(&k))
+                                        .collect();
+
+                                    let mut has_no_distances: Vec<_> = self.have_no_key.iter()
+                                        .map(|k| kbucket::Key::from(k.clone()))
+                                        .map(|k| key.distance(&k))
+                                        .collect();
+
+                                    has_distances.sort();
+                                    has_no_distances.sort();
+                                    assert!(has_no_distances.first() >= has_distances.last());
+
+                                    return Ok(Async::Ready(()));
+                                }
                             }
                             _ => ()
                         }
@@ -369,7 +382,8 @@ fn put_value() {
         target_key,
         swarm_ids,
         swarms,
-        closest,
+        have_key: Default::default(),
+        have_no_key: Default::default(),
     };
 
     Runtime::new().unwrap().block_on(

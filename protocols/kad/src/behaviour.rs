@@ -870,14 +870,15 @@ where
             }
 
             if let Some(finished_write) = finished_write {
-                let (t, peers) = self
+                let (t, successes, failures) = self
                     .active_writes
                     .remove(&finished_write)
                     .expect("finished_write was gathered when iterating active_writes; QED.")
                     .into_inner();
                 let event = KademliaOut::PutValueResult {
                     key: t,
-                    results: peers,
+                    successes,
+                    failures,
                 };
 
                 break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -1018,8 +1019,10 @@ pub enum KademliaOut {
     PutValueResult {
         /// The key that we were inserting
         key: Multihash,
-        /// The statuses of puts replied by peers
-        results: FnvHashMap<PeerId, bool>
+        /// The number of successul writes.
+        successes: usize,
+        /// The number of failed writes.
+        failures: usize,
     }
 }
 

@@ -28,7 +28,7 @@ use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{cmp::PartialEq, time::Duration};
 use wasm_timer::{Delay, Instant};
-use fnv::FnvHashMap;
+use fnv::FnvHashSet;
 
 /// State of a query iterative process.
 ///
@@ -76,7 +76,7 @@ pub struct WriteState<TPeerId, TTarget> {
     target: TTarget,
 
     /// The peers thae we'are asking to store our value.
-    peers: FnvHashMap<TPeerId, bool>,
+    peers: FnvHashSet<TPeerId>,
 
     /// The count of successful stores.
     successes: usize,
@@ -132,7 +132,7 @@ where
         use std::iter::FromIterator;
         WriteState {
             target,
-            peers: FnvHashMap::from_iter(peers.into_iter().zip(std::iter::repeat(false))),
+            peers: FnvHashSet::from_iter(peers.into_iter()),
             successes: 0,
             failures: 0,
         }
@@ -140,15 +140,14 @@ where
 
     /// Inform the state that writing to one of the target peers has succeeded
     pub fn inject_write_success(&mut self, peer: &TPeerId) {
-        if self.peers.contains_key(peer) {
-            self.peers.get_mut(peer).map(|v| *v = true);
+        if self.peers.contains(peer) {
             self.successes += 1;
         }
     }
 
     /// Inform the state that writing to one of the target peers has failed
     pub fn inject_write_error(&mut self, peer: &TPeerId) {
-        if self.peers.contains_key(peer) {
+        if self.peers.contains(peer) {
             self.failures += 1;
         }
     }
@@ -160,15 +159,15 @@ where
     }
 
     /// Consume the state and return a list of target peers and succeess/error counters
-    pub fn into_inner(self) -> (TTarget, FnvHashMap<TPeerId, bool>) {
-        (self.target, self.peers)
+    pub fn into_inner(self) -> (TTarget, usize, usize) {
+        (self.target, self.successes, self.failures)
     }
 }
 
 impl<TTarget, TPeerId> QueryState<TTarget, TPeerId>
 where
     TTarget: Into<kbucket::Key<TTarget>> + Clone,
-    TPeerId: Into<kbucket::Key<TPeerId>> + Eq + std::fmt::Debug,
+    TPeerId: Into<kbucket::Key<TPeerId>> + Eq
 {
     /// Creates a new query.
     ///
