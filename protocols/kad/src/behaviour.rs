@@ -597,10 +597,6 @@ where
                     addrs.retain(|a| a != addr);
                 }
             }
-
-            for write in self.active_writes.values_mut() {
-                write.inject_write_error(peer_id);
-            }
         }
     }
 
@@ -862,14 +858,13 @@ where
                 }
             }
 
-            let mut finished_write = None;
-
-            for (&query_id, write) in self.active_writes.iter_mut() {
-                if write.done() {
-                    finished_write = Some(query_id);
-                    break;
-                }
-            }
+            let finished_write =  self.active_writes.iter()
+                .find_map(|(&query_id, write)|
+                          if write.done() {
+                              Some(query_id)
+                          } else {
+                              None
+                          });
 
             if let Some(finished_write) = finished_write {
                 let (t, successes, failures) = self
