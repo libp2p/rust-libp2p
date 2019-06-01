@@ -348,10 +348,16 @@ where
     }
 
     /// Starts an iterative `PUT_VALUE` request
-    pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) -> Result<(), RecordStorageError> {
-        self.records.put(Record::new(key.clone(), value.clone()))?;
-        self.start_query(QueryInfoInner::PutValue{key, value});
-        Ok(())
+    pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) {
+        if let Err(error) = self.records.put(Record::new(key.clone(), value.clone())) {
+            self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
+                KademliaOut::PutValueResult(
+                    PutValueResult::Err { key, cause: error }
+                )
+            ));
+        } else {
+            self.start_query(QueryInfoInner::PutValue{key, value});
+        }
     }
 
     /// Register the local node as the provider for the given key.
@@ -872,11 +878,11 @@ where
                     .remove(&finished_write)
                     .expect("finished_write was gathered when iterating active_writes; QED.")
                     .into_inner();
-                let event = KademliaOut::PutValueResult {
+                let event = KademliaOut::PutValueResult(PutValueResult::Ok {
                     key: t,
                     successes,
                     failures,
-                };
+                });
 
                 break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
             }
@@ -970,6 +976,13 @@ pub enum GetValueResult {
     NotFound { closest_peers: Vec<PeerId> }
 }
 
+/// The result of a `PUT_VALUE` query.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PutValueResult {
+    Ok { key: Multihash, successes: usize, failures: usize },
+    Err { key: Multihash, cause: RecordStorageError }
+}
+
 /// Output event of the `Kademlia` behaviour.
 #[derive(Debug, Clone)]
 pub enum KademliaOut {
@@ -1016,14 +1029,7 @@ pub enum KademliaOut {
     GetValueResult(GetValueResult),
 
     /// Result of a `PUT_VALUE` query
-    PutValueResult {
-        /// The key that we were inserting
-        key: Multihash,
-        /// The number of successul writes.
-        successes: usize,
-        /// The number of failed writes.
-        failures: usize,
-    }
+    PutValueResult(PutValueResult),
 }
 
 impl From<kbucket::EntryView<PeerId, Addresses>> for KadPeer {

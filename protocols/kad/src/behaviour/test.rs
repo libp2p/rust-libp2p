@@ -315,7 +315,7 @@ fn put_value() {
 
         let closest: HashSet<PeerId> = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
 
-        swarms[31].put_value(target_key.clone(), vec![4,5,6]).unwrap();
+        swarms[31].put_value(target_key.clone(), vec![4,5,6]);
 
         Runtime::new().unwrap().block_on(
             future::poll_fn(move || -> Result<_, io::Error> {

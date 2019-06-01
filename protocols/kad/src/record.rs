@@ -22,7 +22,7 @@ use fnv::FnvHashMap;
 use multihash::Multihash;
 use std::borrow::{Cow, ToOwned};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RecordStorageError {
     AtCapacity,
     ValueTooLarge,
