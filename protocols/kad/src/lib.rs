@@ -37,3 +37,4 @@ mod addresses;
 mod behaviour;
 mod protobuf_structs;
 mod query;
+mod write;

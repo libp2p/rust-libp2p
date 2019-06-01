@@ -458,7 +458,7 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
         proto::Message_MessageType::PUT_VALUE => {
             let record = message.mut_record();
             let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
-            Ok(KadRequestMsg::PutValue { key, value: record.take_value().to_vec() })
+            Ok(KadRequestMsg::PutValue { key, value: record.take_value() })
         }
 
         proto::Message_MessageType::GET_VALUE => {
@@ -508,7 +508,7 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
                 true => {
                     let mut record = message.take_record();
                     let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
-                    Some(Record::new(key, record.take_value().into()))
+                    Some(Record::new(key, record.take_value()))
                 }
                 false => None,
             };
