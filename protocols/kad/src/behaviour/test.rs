@@ -291,12 +291,12 @@ fn put_value() {
             .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
 
         // Connect swarm[30] to each swarm in swarms[..15]
-        for (i, peer) in &mut swarm_ids.iter().take(15).enumerate() {
+        for (i, peer) in swarm_ids.iter().take(15).enumerate() {
             swarms[30].add_address(&peer, Protocol::Memory(port_base + i as u64).into());
         }
 
         // Connect swarm[29] to each swarm in swarms[15..29]
-        for (i, peer) in &mut swarm_ids.iter().skip(15).take(14).enumerate() {
+        for (i, peer) in swarm_ids.iter().skip(15).take(14).enumerate() {
             swarms[29].add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
         }
 
