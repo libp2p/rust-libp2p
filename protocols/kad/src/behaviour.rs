@@ -964,17 +964,24 @@ where
 
                         let closer_peers = Vec::from_iter(closer_peers);
                         for peer in &closer_peers {
-                            // TODO: Check if the peer is still connected and if not, push the RPC onto `pending_rpcs`
-                            // and queue a `DialPeer` event instead of `SendEvent`.
-                            let event = NetworkBehaviourAction::SendEvent {
-                                peer_id: peer.clone(),
-                                event: KademliaHandlerIn::PutValue {
-                                    key: key.clone(),
-                                    value: value.clone(),
-                                    user_data: finished_query,
-                                }
-                            };
-                            self.queued_events.push(event);
+                            let event = KademliaHandlerIn::PutValue {
+                                            key: key.clone(),
+                                            value: value.clone(),
+                                            user_data: finished_query,
+                                        };
+
+                            if self.connected_peers.contains(peer) {
+                                let event = NetworkBehaviourAction::SendEvent {
+                                    peer_id: peer.clone(),
+                                    event
+                                };
+                                self.queued_events.push(event);
+                            } else {
+                                self.pending_rpcs.push((peer.clone(), event));
+                                self.queued_events.push(NetworkBehaviourAction::DialPeer {
+                                    peer_id: peer.clone(),
+                                });
+                            }
                         }
 
                         self.active_writes.insert(finished_query, WriteState::new(key, closer_peers));
