@@ -398,3 +398,49 @@ fn get_value() {
         }))
         .unwrap()
 }
+
+#[test]
+fn get_value_multiple() {
+    // Check that if we have responses from multiple peers, a correct number of
+    // results is returned.
+    let (port_base, mut swarms) = build_nodes(2 + crate::handler::MAX_GET_VALUE_RESULTS);
+
+    let swarm_ids: Vec<_> = swarms.iter()
+        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+    let target_value = vec![4,5,6];
+
+    for (i, swarm_id) in swarm_ids.iter().skip(1).enumerate() {
+        swarms[i + 1].records.put(Record::new(target_key.clone(), target_value.clone())).unwrap();
+        swarms[0].add_address(&swarm_id, Protocol::Memory(port_base + (i + 1) as u64).into());
+    }
+
+    swarms[0].get_value(&target_key);
+
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
+                            if let GetValueResult::Found { results } = result {
+                                assert_eq!(results.len(), crate::handler::MAX_GET_VALUE_RESULTS);
+                                let record = results.first().unwrap();
+                                assert_eq!(record.key, target_key);
+                                assert_eq!(record.value, target_value);
+                                return Ok(Async::Ready(()));
+                            } else {
+                                panic!("Expected GetValueResult::Found event");
+                            }
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap()
+}
