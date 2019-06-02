@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,34 +18,48 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Abstracts the Kademlia record store behaviour and provides default in-memory store
+
 use fnv::FnvHashMap;
 use multihash::Multihash;
 use std::borrow::{Cow, ToOwned};
 
+/// The error record store may return
 #[derive(Clone, Debug, PartialEq)]
 pub enum RecordStorageError {
+    /// Store reached the capacity limit.
     AtCapacity,
+    /// Value being put is larger than the limit.
     ValueTooLarge,
 }
 
+/// The records that are kept in the dht.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
+    /// Key of the record.
     pub key: Multihash,
+    /// Value of the record.
     pub value: Vec<u8>,
 }
 
 impl Record {
+    /// Creates a new `Record` with a given key and value.
     pub fn new(key: Multihash, value: Vec<u8>) -> Self { Record { key, value } }
 }
 
+/// Trait for a record store.
 pub trait RecordStore {
     fn get(&self, k: &Multihash) -> Option<Cow<Record>>;
     fn put(&mut self, r: Record) -> Result<(), RecordStorageError>;
 }
 
-pub struct MemoryRecordStorage{
+/// In-memory implementation of the record store.
+pub struct MemoryRecordStorage {
+    /// Maximum number of records we will store.
     max_records: usize,
+    /// Maximum size of the record we will store.
     max_record_size: usize,
+    /// The records.
     records: FnvHashMap<Multihash, Record>
 }
 
@@ -53,6 +67,7 @@ impl MemoryRecordStorage {
     const MAX_RECORDS: usize = 1024;
     const MAX_RECORD_SIZE: usize = 65535;
 
+    /// Creates a new `MemoryRecordStorage`.
     pub fn new(max_records: usize, max_record_size: usize) -> Self {
         MemoryRecordStorage{
             max_records,

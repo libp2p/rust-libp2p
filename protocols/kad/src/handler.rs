@@ -188,7 +188,6 @@ pub enum KademliaHandlerEvent<TUserData> {
     GetValue {
         /// Key for which we should look in the dht
         key: Multihash,
-
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -197,10 +196,8 @@ pub enum KademliaHandlerEvent<TUserData> {
     GetValueRes {
         /// The result is present if the key has been found
         result: Option<Record>,
-
         /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
-
         /// The user data passed to the `GetValue`.
         user_data: TUserData,
     },
@@ -332,27 +329,31 @@ pub enum KademliaHandlerIn<TUserData> {
 
     /// Response to a `GetValue`.
     GetValueRes {
-        /// The value that might have been found in our storage
+        /// The value that might have been found in our storage.
         result: Option<Record>,
-        /// Nodes that are closer to the key we were searching for
+        /// Nodes that are closer to the key we were searching for.
         closer_peers: Vec<KadPeer>,
-        /// Identifier of the request that was made by the remote
+        /// Identifier of the request that was made by the remote.
         request_id: KademliaRequestId,
     },
 
-    /// Put a value into the dht records
+    /// Put a value into the dht records.
     PutValue {
-        /// The key of the record
+        /// The key of the record.
         key: Multihash,
-        /// The value of the record
+        /// The value of the record.
         value: Vec<u8>,
         /// Custom data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
 
+    /// Response to a `PutValue`.
     PutValueRes {
+        /// Key of the value that was put.
         key: Multihash,
+        /// Value that was put.
         value: Vec<u8>,
+        /// Identifier of the request that was made by the remote.
         request_id: KademliaRequestId,
     }
 }

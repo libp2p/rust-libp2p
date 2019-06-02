@@ -186,7 +186,6 @@ impl QueryInfo {
             },
             QueryInfoInner::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
                 // TODO: Change the `key` of `QueryInfoInner::FindPeer` to be a `Multihash`.
-                // TODO: Change the `key` of `QueryInfoInner::FindPeer` to be a `Multihash`.
                 key: key.clone().into(),
                 user_data,
             },
@@ -198,11 +197,9 @@ impl QueryInfo {
                 key: unimplemented!(), // TODO: target.clone(),
                 user_data,
             },
-            QueryInfoInner::GetValue { key, .. } => {
-                KademliaHandlerIn::GetValue {
-                    key: key.clone(),
-                    user_data,
-                }
+            QueryInfoInner::GetValue { key, .. } => KademliaHandlerIn::GetValue {
+                key: key.clone(),
+                user_data,
             },
             QueryInfoInner::PutValue { key, .. } => KademliaHandlerIn::FindNodeReq {
                 key: key.clone(),
@@ -339,7 +336,7 @@ where
         if let Some(record) = self.records.get(key) {
             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
                 KademliaOut::GetValueResult(
-                    GetValueResult::Found{ record: record.into_owned() }
+                    GetValueResult::Found { record: record.into_owned() }
                 )
             ));
         } else {
@@ -356,7 +353,7 @@ where
                 )
             ));
         } else {
-            self.start_query(QueryInfoInner::PutValue{key, value});
+            self.start_query(QueryInfoInner::PutValue { key, value });
         }
     }
 
@@ -714,14 +711,13 @@ where
             KademliaHandlerEvent::GetValue { key, request_id } => {
                 let (result, closer_peers) = match self.records.get(&key) {
                     Some(record) => {
-                        (Some(record.into_owned()), vec![])
+                        (Some(record.into_owned()), Vec::new())
                     },
                     None => {
                         let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
                         (None, closer_peers)
                     }
                 };
-
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
@@ -972,14 +968,18 @@ where
 /// The result of a `GET_VALUE` query.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GetValueResult {
+    /// The record was found.
     Found { record: Record },
+    /// The record wasn't found
     NotFound { closest_peers: Vec<PeerId> }
 }
 
 /// The result of a `PUT_VALUE` query.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PutValueResult {
+    /// The value has been put successfully.
     Ok { key: Multihash, successes: usize, failures: usize },
+    /// The put value failed.
     Err { key: Multihash, cause: RecordStorageError }
 }
 

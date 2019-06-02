@@ -275,17 +275,17 @@ pub enum KadRequestMsg {
         provider_peer: KadPeer,
     },
 
-    /// Request to get a value from the dht records
+    /// Request to get a value from the dht records.
     GetValue {
-        /// The key we are searching for
+        /// The key we are searching for.
         key: Multihash,
     },
 
-    /// Request to put a value into the dht records
+    /// Request to put a value into the dht records.
     PutValue {
-        /// The key of the record
+        /// The key of the record.
         key: Multihash,
-        /// The value of the record
+        /// The value of the record.
         value: Vec<u8>,
     }
 }
