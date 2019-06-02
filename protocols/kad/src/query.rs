@@ -298,7 +298,7 @@ where
 
         // While iterating over peers, count the number of queries in a row (from closer to further
         // away from target) that are in the succeeded state.
-        let mut succeeded_counter = 0;
+        let mut succeeded_counter = Some(0);
 
         // Extract `self.num_results` to avoid borrowing errors with closures.
         let num_results = self.num_results;
@@ -312,15 +312,16 @@ where
                         return Async::Ready(QueryStatePollOut::CancelRpc { peer_id: peer_id.preimage() });
                     }
                     Ok(Async::NotReady) => {
+                        succeeded_counter = None;
                         active_counter += 1
                     }
                 }
             }
 
             if let QueryPeerState::Succeeded = state {
-                succeeded_counter += 1;
+                succeeded_counter.as_mut().map(|c| *c += 1);
                 // If we have enough results; the query is done.
-                if succeeded_counter >= num_results {
+                if succeeded_counter.unwrap_or(0) >= num_results {
                     return Async::Ready(QueryStatePollOut::Finished)
                 }
             }
