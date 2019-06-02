@@ -742,7 +742,7 @@ where
                     } = &mut query.target_mut().inner {
                         if let Some(result) = result {
                             results.push(result);
-                            if results.len() > crate::handler::MAX_GET_VALUE_RESULTS {
+                            if results.len() == crate::handler::MAX_GET_VALUE_RESULTS {
                                 finished_query = Some(user_data);
                             }
                         }
