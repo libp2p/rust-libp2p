@@ -338,6 +338,11 @@ where
                         peer_id: peer_id.preimage(),
                         query_target: &self.target,
                     });
+                } else {
+                    // The peer is among the `num_results` closest and still
+                    // needs to be contacted, but the query is currently at
+                    // capacity w.r.t. the allowed parallelism.
+                    return Async::NotReady
                 }
             }
         }
