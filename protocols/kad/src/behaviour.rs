@@ -336,7 +336,7 @@ where
         if let Some(record) = self.records.get(key) {
             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
                 KademliaOut::GetValueResult(
-                    GetValueResult::Found { record: record.into_owned() }
+                    GetValueResult::Found { results: vec![record.into_owned()] }
                 )
             ));
         } else {
@@ -733,17 +733,40 @@ where
                 closer_peers,
                 user_data,
             } => {
+                let mut finished_query = None;
+
                 if let Some(query) = self.active_queries.get_mut(&user_data) {
                     if let QueryInfoInner::GetValue {
                         key: _,
                         results
                     } = &mut query.target_mut().inner {
                         if let Some(result) = result {
-                            // TODO: Finish query as soon as enough results have been received.
                             results.push(result);
+                            if results.len() > crate::handler::MAX_GET_VALUE_RESULTS {
+                                finished_query = Some(user_data);
+                            }
                         }
                     }
                 }
+
+                if let Some(finished_query) = finished_query {
+                    let (query_info, _) = self
+                        .active_queries
+                        .remove(&finished_query)
+                        .expect("finished_query was gathered when peeking into active_queries; QED.")
+                        .into_target_and_closest_peers();
+
+                    match query_info.inner {
+                        QueryInfoInner::GetValue { key: _, results } => {
+                            let result = GetValueResult::Found { results };
+                            let event = KademliaOut::GetValueResult(result);
+
+                            self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
+                        }
+                        _ => (),
+                    }
+                }
+
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
             KademliaHandlerEvent::PutValue {
@@ -925,12 +948,11 @@ where
                         }
                     },
                     QueryInfoInner::GetValue { key: _, results } => {
-                        // TODO: Return all results. The query should finish as soon as enough results have been collected.
-                        let result = match results.into_iter().next() {
-                            Some(record) => GetValueResult::Found{ record: record.clone() },
-                            None => GetValueResult::NotFound{
+                        let result = match results.len() {
+                            0 => GetValueResult::NotFound{
                                 closest_peers: closer_peers.collect()
                             },
+                            _ => GetValueResult::Found{ results },
                         };
 
                         let event = KademliaOut::GetValueResult(result);
@@ -968,9 +990,9 @@ where
 /// The result of a `GET_VALUE` query.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GetValueResult {
-    /// The record was found.
-    Found { record: Record },
-    /// The record wasn't found
+    /// The results received from peers.
+    Found { results: Vec<Record> },
+    /// The record wasn't found.
     NotFound { closest_peers: Vec<PeerId> }
 }
 

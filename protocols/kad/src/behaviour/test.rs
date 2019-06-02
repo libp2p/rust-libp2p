@@ -378,7 +378,9 @@ fn get_value() {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
-                            if let GetValueResult::Found { record } = result {
+                            if let GetValueResult::Found { results } = result {
+                                assert_eq!(results.len(), 1);
+                                let record = results.first().unwrap();
                                 assert_eq!(record.key, target_key);
                                 assert_eq!(record.value, target_value);
                                 return Ok(Async::Ready(()));

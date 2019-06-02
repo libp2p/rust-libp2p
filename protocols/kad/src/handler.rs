@@ -129,6 +129,8 @@ where
     }
 }
 
+/// Number of `GetValue` results we wait for.
+pub const MAX_GET_VALUE_RESULTS: usize = 10;
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
 pub enum KademliaHandlerEvent<TUserData> {
