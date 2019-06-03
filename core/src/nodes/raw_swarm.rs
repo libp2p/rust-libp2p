@@ -1784,6 +1784,39 @@ where
         Ok(self.connect_inner(handler, first, rest))
     }
 
+    /// Moves the given node to a connected state using the given connection info and muxer.
+    ///
+    /// No `Connected` event is generated for this action.
+    ///
+    /// # Panic
+    ///
+    /// Panics if `conn_info.peer_id()` is not the current peer.
+    ///
+    pub fn inject_connection(self, conn_info: TConnInfo, connected_point: ConnectedPoint, muxer: TMuxer, handler: THandler::Handler)
+        -> PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    where
+        TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Clone + Send + 'static,
+        TPeerId: Eq + Hash + Clone,
+    {
+        if conn_info.peer_id() != &self.peer_id {
+            panic!("Mismatch between conn_info PeerId and request PeerId");
+        }
+
+        match self.nodes.active_nodes.add_connection((conn_info, connected_point), (), muxer, handler) {
+            CollectionNodeAccept::NewEntry => {},
+            CollectionNodeAccept::ReplacedExisting { .. } =>
+                unreachable!("We can only build a PeerNotConnected if we don't have this peer in \
+                              the collection yet"),
+        }
+
+        PeerConnected {
+            active_nodes: &mut self.nodes.active_nodes,
+            connected_points: &mut self.nodes.reach_attempts.connected_points,
+            out_reach_attempts: &mut self.nodes.reach_attempts.out_reach_attempts,
+            peer_id: self.peer_id,
+        }
+    }
+
     /// Inner implementation of `connect`.
     fn connect_inner(self, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
         -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>

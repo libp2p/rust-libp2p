@@ -298,7 +298,7 @@ where
 
         // While iterating over peers, count the number of queries in a row (from closer to further
         // away from target) that are in the succeeded state.
-        let mut succeeded_counter = 0;
+        let mut succeeded_counter = Some(0);
 
         // Extract `self.num_results` to avoid borrowing errors with closures.
         let num_results = self.num_results;
@@ -312,16 +312,19 @@ where
                         return Async::Ready(QueryStatePollOut::CancelRpc { peer_id: peer_id.preimage() });
                     }
                     Ok(Async::NotReady) => {
+                        succeeded_counter = None;
                         active_counter += 1
                     }
                 }
             }
 
             if let QueryPeerState::Succeeded = state {
-                succeeded_counter += 1;
-                // If we have enough results; the query is done.
-                if succeeded_counter >= num_results {
-                    return Async::Ready(QueryStatePollOut::Finished)
+                if let Some(ref mut cnt) = succeeded_counter {
+                    *cnt += 1;
+                    // If we have enough results; the query is done.
+                    if *cnt >= num_results {
+                        return Async::Ready(QueryStatePollOut::Finished)
+                    }
                 }
             }
 
@@ -337,6 +340,11 @@ where
                         peer_id: peer_id.preimage(),
                         query_target: &self.target,
                     });
+                } else {
+                    // The peer is among the `num_results` closest and still
+                    // needs to be contacted, but the query is currently at
+                    // capacity w.r.t. the allowed parallelism.
+                    return Async::NotReady
                 }
             }
         }
