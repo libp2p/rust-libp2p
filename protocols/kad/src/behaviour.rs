@@ -493,7 +493,7 @@ where
     }
 
     fn inject_connected(&mut self, id: PeerId, endpoint: ConnectedPoint) {
-        if let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == &id) {
+        while let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == &id) {
             let (_, rpc) = self.pending_rpcs.remove(pos);
             self.queued_events.push(NetworkBehaviourAction::SendEvent {
                 peer_id: id.clone(),
