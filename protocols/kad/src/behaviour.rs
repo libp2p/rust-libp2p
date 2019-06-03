@@ -154,6 +154,8 @@ enum QueryInfoInner {
         key: Multihash,
         /// The results from peers are stored here
         results: Vec<Record>,
+        /// The number of results to look for.
+        num_results: usize,
     },
 }
 
@@ -332,16 +334,27 @@ where
     }
 
     /// Starts an iterative `GET_VALUE` request.
-    pub fn get_value(&mut self, key: &Multihash) {
+    pub fn get_value(&mut self, key: &Multihash, mut num_results: usize) {
+        let mut results = Vec::with_capacity(num_results);
+
         if let Some(record) = self.records.get(key) {
-            self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
-                KademliaOut::GetValueResult(
-                    GetValueResult::Found { results: vec![record.into_owned()] }
-                )
-            ));
-        } else {
-            self.start_query(QueryInfoInner::GetValue { key: key.clone(), results: Vec::new() });
+            if num_results == 1 {
+                self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
+                    KademliaOut::GetValueResult(
+                        GetValueResult::Found { results: vec![record.into_owned()] }
+                )));
+                return;
+            } else {
+                num_results -= 1;
+                results.push(record);
+            }
         }
+
+        self.start_query(QueryInfoInner::GetValue {
+            key: key.clone(),
+            results: Vec::with_capacity(num_results),
+            num_results
+        });
     }
 
     /// Starts an iterative `PUT_VALUE` request
@@ -738,11 +751,12 @@ where
                 if let Some(query) = self.active_queries.get_mut(&user_data) {
                     if let QueryInfoInner::GetValue {
                         key: _,
-                        results
+                        results,
+                        num_results,
                     } = &mut query.target_mut().inner {
                         if let Some(result) = result {
                             results.push(result);
-                            if results.len() == crate::handler::MAX_GET_VALUE_RESULTS {
+                            if results.len() == *num_results {
                                 finished_query = Some(user_data);
                             }
                         }
@@ -757,7 +771,7 @@ where
                         .into_target_and_closest_peers();
 
                     match query_info.inner {
-                        QueryInfoInner::GetValue { key: _, results } => {
+                        QueryInfoInner::GetValue { key: _, results, .. } => {
                             let result = GetValueResult::Found { results };
                             let event = KademliaOut::GetValueResult(result);
 
@@ -947,7 +961,7 @@ where
                             self.queued_events.push(event);
                         }
                     },
-                    QueryInfoInner::GetValue { key: _, results } => {
+                    QueryInfoInner::GetValue { key: _, results, .. } => {
                         let result = match results.len() {
                             0 => GetValueResult::NotFound{
                                 closest_peers: closer_peers.collect()

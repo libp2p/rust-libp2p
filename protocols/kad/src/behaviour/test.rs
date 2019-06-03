@@ -243,7 +243,8 @@ fn get_value_not_found() {
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    swarms[0].get_value(&target_key);
+    let num_results = 1;
+    swarms[0].get_value(&target_key, num_results);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
@@ -369,8 +370,9 @@ fn get_value() {
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
     let target_value = vec![4,5,6];
 
+    let num_results = 1;
     swarms[1].records.put(Record::new(target_key.clone(), target_value.clone())).unwrap();
-    swarms[0].get_value(&target_key);
+    swarms[0].get_value(&target_key, num_results);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
@@ -403,7 +405,8 @@ fn get_value() {
 fn get_value_multiple() {
     // Check that if we have responses from multiple peers, a correct number of
     // results is returned.
-    let (port_base, mut swarms) = build_nodes(2 + crate::handler::MAX_GET_VALUE_RESULTS);
+    let num_results = 10;
+    let (port_base, mut swarms) = build_nodes(2 + num_results);
 
     let swarm_ids: Vec<_> = swarms.iter()
         .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
@@ -416,7 +419,7 @@ fn get_value_multiple() {
         swarms[0].add_address(&swarm_id, Protocol::Memory(port_base + (i + 1) as u64).into());
     }
 
-    swarms[0].get_value(&target_key);
+    swarms[0].get_value(&target_key, num_results);
 
     Runtime::new().unwrap().block_on(
         future::poll_fn(move || -> Result<_, io::Error> {
@@ -425,7 +428,7 @@ fn get_value_multiple() {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
                             if let GetValueResult::Found { results } = result {
-                                assert_eq!(results.len(), crate::handler::MAX_GET_VALUE_RESULTS);
+                                assert_eq!(results.len(), num_results);
                                 let record = results.first().unwrap();
                                 assert_eq!(record.key, target_key);
                                 assert_eq!(record.value, target_value);
