@@ -319,10 +319,12 @@ where
             }
 
             if let QueryPeerState::Succeeded = state {
-                succeeded_counter.as_mut().map(|c| *c += 1);
-                // If we have enough results; the query is done.
-                if succeeded_counter.unwrap_or(0) >= num_results {
-                    return Async::Ready(QueryStatePollOut::Finished)
+                if let Some(ref mut cnt) = succeeded_counter {
+                    *cnt += 1;
+                    // If we have enough results; the query is done.
+                    if *cnt >= num_results {
+                        return Async::Ready(QueryStatePollOut::Finished)
+                    }
                 }
             }
 
