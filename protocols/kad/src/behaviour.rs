@@ -338,15 +338,15 @@ where
         let mut results = Vec::with_capacity(num_results);
 
         if let Some(record) = self.records.get(key) {
+            results.push(record.into_owned());
             if num_results == 1 {
                 self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
                     KademliaOut::GetValueResult(
-                        GetValueResult::Found { results: vec![record.into_owned()] }
+                        GetValueResult::Found { results }
                 )));
                 return;
             } else {
                 num_results -= 1;
-                results.push(record);
             }
         }
 
