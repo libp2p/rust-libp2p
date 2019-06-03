@@ -20,7 +20,20 @@
 
 //! Contains the state of the second stage of PUT_VALUE process of Kademlia.
 
-use fnv::FnvHashSet;
+use fnv::FnvHashMap;
+
+/// The state of the single peer.
+#[derive(Clone)]
+enum PeerState {
+    /// We don't know yet.
+    Unknown,
+
+    /// Putting a value failed.
+    Failed,
+
+    /// Putting a value succeeded.
+    Succeeded,
+}
 
 /// State of the `PUV_VALUE` second stage
 ///
@@ -32,7 +45,7 @@ pub struct WriteState<TPeerId, TTarget> {
     target: TTarget,
 
     /// The peers thae we'are asking to store our value.
-    peers: FnvHashSet<TPeerId>,
+    peers: FnvHashMap<TPeerId, PeerState>,
 
     /// The count of successful stores.
     successes: usize,
@@ -52,7 +65,10 @@ where
         use std::iter::FromIterator;
         WriteState {
             target,
-            peers: FnvHashSet::from_iter(peers.into_iter()),
+            peers: FnvHashMap::from_iter(peers
+                                         .into_iter()
+                                         .zip(std::iter::repeat(PeerState::Unknown))
+            ),
             successes: 0,
             failures: 0,
         }
@@ -60,14 +76,16 @@ where
 
     /// Inform the state that writing to one of the target peers has succeeded
     pub fn inject_write_success(&mut self, peer: &TPeerId) {
-        if self.peers.contains(peer) {
+        if let Some(state @ PeerState::Unknown) = self.peers.get_mut(peer) {
+            *state = PeerState::Succeeded;
             self.successes += 1;
         }
     }
 
     /// Inform the state that writing to one of the target peers has failed
     pub fn inject_write_error(&mut self, peer: &TPeerId) {
-        if self.peers.contains(peer) {
+        if let Some(state @ PeerState::Unknown) = self.peers.get_mut(peer) {
+            *state = PeerState::Failed;
             self.failures += 1;
         }
     }
@@ -83,4 +101,3 @@ where
         (self.target, self.successes, self.failures)
     }
 }
-
