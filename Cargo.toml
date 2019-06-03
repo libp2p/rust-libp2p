@@ -25,6 +25,7 @@ libp2p-kad = { version = "0.8.0", path = "./protocols/kad" }
 libp2p-floodsub = { version = "0.8.0", path = "./protocols/floodsub" }
 libp2p-ping = { version = "0.8.0", path = "./protocols/ping" }
 libp2p-plaintext = { version = "0.8.0", path = "./protocols/plaintext" }
+libp2p-deflate = { version = "0.1.0", path = "./protocols/deflate" }
 libp2p-ratelimit = { version = "0.8.0", path = "./transports/ratelimit" }
 libp2p-core = { version = "0.8.1", path = "./core" }
 libp2p-core-derive = { version = "0.8.0", path = "./misc/core-derive" }
