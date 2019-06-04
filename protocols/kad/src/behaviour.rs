@@ -787,6 +787,7 @@ where
 
                             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
                         }
+                        // TODO: write a better proof
                         _ => panic!("unexpected query_info.inner variant for a get_value result; QED.")
                     }
                 }
