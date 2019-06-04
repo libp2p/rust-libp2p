@@ -197,7 +197,7 @@ pub use libp2p_tcp as tcp;
 pub use libp2p_uds as uds;
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(feature = "libp2p-websocket")]
+#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
 #[doc(inline)]
@@ -270,9 +270,7 @@ struct CommonTransport {
 type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
-type InnerImplementation = websocket::BrowserWsConfig;
-#[cfg(all(any(target_os = "emscripten", target_os = "unknown"), not(feature = "libp2p-websocket")))]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 type InnerImplementation = core::transport::dummy::DummyTransport;
 
 #[derive(Debug, Clone)]
@@ -298,16 +296,7 @@ impl CommonTransport {
     }
 
     /// Initializes the `CommonTransport`.
-    #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
-    pub fn new() -> CommonTransport {
-        let inner = websocket::BrowserWsConfig::new();
-        CommonTransport {
-            inner: CommonTransportInner { inner }
-        }
-    }
-
-    /// Initializes the `CommonTransport`.
-    #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), not(feature = "libp2p-websocket")))]
+    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
     pub fn new() -> CommonTransport {
         let inner = core::transport::dummy::DummyTransport::new();
         CommonTransport {
