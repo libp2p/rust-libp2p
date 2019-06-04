@@ -1,7 +1,7 @@
 # Version 0.9.0 (2019-06-04)
 
 - Major fixes and performance improvements to libp2p-kad.
-- Implemented records storage for libp2p-kad.
+- Initial prototype for record storage in libp2p-kad.
 - Rewrote the implementation of WebSockets. It now properly supports WebSockets Secure (WSS).
 - Removed `BrowserWsConfig`. Please use `libp2p::wasm_ext::ExtTransport` instead.
 - Added a `Path` parameter to `multiaddr::Protocol::WS` and `WSS`. The string representation when a path is present is respectively `x-parity-ws/<path>` and `x-parity-wss/<path>` where `<path>` is percent-encoded.
