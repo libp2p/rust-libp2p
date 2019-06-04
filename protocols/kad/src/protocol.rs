@@ -361,7 +361,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::GET_VALUE);
             msg.set_clusterLevelRaw(10);
-            msg.set_key(key.as_bytes().to_vec());
+            msg.set_key(key.into_bytes());
 
             msg
         }
@@ -424,7 +424,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             if let Some(Record{ key, value }) = result {
                 let mut record = proto::Record::new();
                 record.set_key(key.into_bytes());
-                record.set_value(value.to_vec());
+                record.set_value(value);
                 msg.set_record(record);
             }
 
@@ -560,7 +560,7 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
             let mut record = message.take_record();
             Ok(KadResponseMsg::PutValue {
                 key,
-                value: record.take_value().into(),
+                value: record.take_value(),
             })
         }
 

@@ -86,7 +86,7 @@ impl Default for MemoryRecordStorage {
 impl RecordStore for MemoryRecordStorage {
     fn get(&self, k: &Multihash) -> Option<Cow<Record>> {
         match self.records.get(k) {
-            Some(rec) => Some(Cow::Owned(rec.to_owned())),
+            Some(rec) => Some(Cow::Borrowed(rec)),
             None => None,
         }
     }
