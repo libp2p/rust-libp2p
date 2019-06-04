@@ -1,3 +1,15 @@
+# Version 0.9.0 (2019-06-04)
+
+- Major fixes and performance improvements to libp2p-kad.
+- Initial prototype for record storage in libp2p-kad.
+- Rewrote the implementation of WebSockets. It now properly supports WebSockets Secure (WSS).
+- Removed `BrowserWsConfig`. Please use `libp2p::wasm_ext::ExtTransport` instead.
+- Added a `Path` parameter to `multiaddr::Protocol::WS` and `WSS`. The string representation when a path is present is respectively `x-parity-ws/<path>` and `x-parity-wss/<path>` where `<path>` is percent-encoded.
+- Fixed an issue with `libp2p-tcp` where the wrong listened address was returned, if the actual address was loopback.
+- Added `core::upgrade::OptionalUpgrade`.
+- Added some utility functions in `core::identity::secp256k1`.
+- It is now possible to inject an artificial connection in the `RawSwarm`.
+
 # Version 0.8.1 (2019-05-15)
 
 - Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
