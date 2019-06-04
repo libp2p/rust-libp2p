@@ -10,20 +10,18 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.8.0", path = "../../core" }
+bytes = "0.4.6"
 futures = "0.1"
+libp2p-core = { version = "0.8.0", path = "../../core" }
 log = "0.4.1"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
-tokio-io = "0.1"
+tokio-codec = "0.1.1"
+tokio-io = "0.1.12"
+tokio-rustls = "0.10.0-alpha.3"
+soketto = { git = "https://github.com/paritytech/soketto.git" }
+url = "1.7.2"
+webpki-roots = "0.16.0"
 
-[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
-websocket = { version = "0.22.2", default-features = false, features = ["async", "async-ssl"] }
-
-[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-bytes = "0.4"
-stdweb = { version = "0.4", default-features = false }
-wasm-bindgen = "0.2.42"
-
-[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dev-dependencies]
+[dev-dependencies]
 libp2p-tcp = { version = "0.8.0", path = "../tcp" }
-tokio = "0.1"
+tokio = "0.1.20"
