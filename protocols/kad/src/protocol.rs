@@ -508,7 +508,7 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
                 true => {
                     let mut record = message.take_record();
                     let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
-                    Some(Record::new(key, record.take_value()))
+                    Some(Record { key, value: record.take_value() })
                 }
                 false => None,
             };

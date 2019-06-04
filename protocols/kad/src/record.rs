@@ -22,7 +22,7 @@
 
 use fnv::FnvHashMap;
 use multihash::Multihash;
-use std::borrow::{Cow, ToOwned};
+use std::borrow::Cow;
 
 /// The error record store may return
 #[derive(Clone, Debug, PartialEq)]
@@ -40,11 +40,6 @@ pub struct Record {
     pub key: Multihash,
     /// Value of the record.
     pub value: Vec<u8>,
-}
-
-impl Record {
-    /// Creates a new `Record` with a given key and value.
-    pub fn new(key: Multihash, value: Vec<u8>) -> Self { Record { key, value } }
 }
 
 /// Trait for a record store.

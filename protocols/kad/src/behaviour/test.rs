@@ -42,7 +42,7 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{collections::HashSet, iter::FromIterator, io, u64};
+use std::{collections::HashSet, iter::FromIterator, io, num::NonZeroU8, u64};
 use tokio::runtime::Runtime;
 use multihash::Hash;
 
@@ -243,7 +243,7 @@ fn get_value_not_found() {
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    let num_results = 1;
+    let num_results = NonZeroU8::new(1).unwrap();
     swarms[0].get_value(&target_key, num_results);
 
     Runtime::new().unwrap().block_on(
@@ -370,8 +370,11 @@ fn get_value() {
     let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
     let target_value = vec![4,5,6];
 
-    let num_results = 1;
-    swarms[1].records.put(Record::new(target_key.clone(), target_value.clone())).unwrap();
+    let num_results = NonZeroU8::new(1).unwrap();
+    swarms[1].records.put(Record {
+        key: target_key.clone(),
+        value: target_value.clone()
+    }).unwrap();
     swarms[0].get_value(&target_key, num_results);
 
     Runtime::new().unwrap().block_on(
@@ -405,8 +408,8 @@ fn get_value() {
 fn get_value_multiple() {
     // Check that if we have responses from multiple peers, a correct number of
     // results is returned.
-    let num_results = 10;
-    let (port_base, mut swarms) = build_nodes(2 + num_results);
+    let num_results = NonZeroU8::new(10).unwrap();
+    let (port_base, mut swarms) = build_nodes(2 + num_results.get() as usize);
 
     let swarm_ids: Vec<_> = swarms.iter()
         .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
@@ -415,10 +418,14 @@ fn get_value_multiple() {
     let target_value = vec![4,5,6];
 
     for (i, swarm_id) in swarm_ids.iter().skip(1).enumerate() {
-        swarms[i + 1].records.put(Record::new(target_key.clone(), target_value.clone())).unwrap();
+        swarms[i + 1].records.put(Record {
+            key: target_key.clone(),
+            value: target_value.clone()
+        }).unwrap();
         swarms[0].add_address(&swarm_id, Protocol::Memory(port_base + (i + 1) as u64).into());
     }
 
+    swarms[0].records.put(Record { key: target_key.clone(), value: target_value.clone() }).unwrap();
     swarms[0].get_value(&target_key, num_results);
 
     Runtime::new().unwrap().block_on(
@@ -428,7 +435,7 @@ fn get_value_multiple() {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
                             if let GetValueResult::Found { results } = result {
-                                assert_eq!(results.len(), num_results);
+                                assert_eq!(results.len(), num_results.get() as usize);
                                 let record = results.first().unwrap();
                                 assert_eq!(record.key, target_key);
                                 assert_eq!(record.value, target_value);

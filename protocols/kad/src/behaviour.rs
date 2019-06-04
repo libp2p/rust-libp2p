@@ -31,7 +31,7 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{borrow::Cow, error, marker::PhantomData, time::Duration};
+use std::{borrow::Cow, error, marker::PhantomData, num::NonZeroU8, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::{Instant, Interval};
 
@@ -334,7 +334,11 @@ where
     }
 
     /// Starts an iterative `GET_VALUE` request.
-    pub fn get_value(&mut self, key: &Multihash, mut num_results: usize) {
+    ///
+    /// Returns a number of results that is in the inerval [1, 20],
+    /// if the user requested a larger amount of results it is cropped to 20.
+    pub fn get_value(&mut self, key: &Multihash, num_results: NonZeroU8) {
+        let num_results = usize::min(num_results.get() as usize, kbucket::MAX_NODES_PER_BUCKET);
         let mut results = Vec::with_capacity(num_results);
 
         if let Some(record) = self.records.get(key) {
@@ -345,21 +349,19 @@ where
                         GetValueResult::Found { results }
                 )));
                 return;
-            } else {
-                num_results -= 1;
             }
         }
 
         self.start_query(QueryInfoInner::GetValue {
             key: key.clone(),
-            results: Vec::with_capacity(num_results),
+            results,
             num_results
         });
     }
 
     /// Starts an iterative `PUT_VALUE` request
     pub fn put_value(&mut self, key: Multihash, value: Vec<u8>) {
-        if let Err(error) = self.records.put(Record::new(key.clone(), value.clone())) {
+        if let Err(error) = self.records.put(Record { key: key.clone(), value: value.clone() }) {
             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(
                 KademliaOut::PutValueResult(
                     PutValueResult::Err { key, cause: error }
@@ -777,7 +779,7 @@ where
 
                             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
                         }
-                        _ => (),
+                        _ => panic!("QueryInfoInner::GetValue was expected at the GetValueRes query id; QED.")
                     }
                 }
 
@@ -789,7 +791,7 @@ where
                 request_id
             } => {
                 // TODO: Log errors and immediately reset the stream on error instead of letting the request time out.
-                if let Ok(()) = self.records.put(Record::new(key.clone(), value.clone())) {
+                if let Ok(()) = self.records.put(Record { key: key.clone(), value: value.clone() }) {
                     self.queued_events.push(NetworkBehaviourAction::SendEvent {
                         peer_id: source,
                         event: KademliaHandlerIn::PutValueRes {
@@ -1011,7 +1013,7 @@ where
 /// The result of a `GET_VALUE` query.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GetValueResult {
-    /// The results received from peers.
+    /// The results received from peers. Always contains non-zero number of results.
     Found { results: Vec<Record> },
     /// The record wasn't found.
     NotFound { closest_peers: Vec<PeerId> }
