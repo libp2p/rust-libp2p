@@ -26,7 +26,6 @@ use crate::{
     protocols_handler::{KeepAlive, ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
-        OutboundUpgrade,
         InboundUpgradeApply,
         OutboundUpgradeApply,
     }
@@ -75,8 +74,6 @@ impl<TIntoProtoHandler, TProtoHandler> IntoNodeHandler<(PeerId, ConnectedPoint)>
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
     TProtoHandler: ProtocolsHandler,
-    // TODO: meh for Debug
-    <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
 {
     type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
 
@@ -179,8 +176,6 @@ where
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
-    // TODO: meh for Debug
-    <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
