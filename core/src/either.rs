@@ -44,8 +44,8 @@ where
 
 impl<A, B> std::error::Error for EitherError<A, B>
 where
-    A: fmt::Debug + std::error::Error,
-    B: fmt::Debug + std::error::Error
+    A: std::error::Error,
+    B: std::error::Error
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
