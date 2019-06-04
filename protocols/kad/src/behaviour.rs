@@ -38,7 +38,7 @@ use wasm_timer::{Instant, Interval};
 mod test;
 
 /// Network behaviour that handles Kademlia.
-pub struct Kademlia<TSubstream, TRecordStorage:RecordStore = MemoryRecordStorage> {
+pub struct Kademlia<TSubstream, TRecordStorage: RecordStore = MemoryRecordStorage> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
     kbuckets: KBucketsTable<PeerId, Addresses>,
 
@@ -213,11 +213,14 @@ impl QueryInfo {
 
 impl<TSubstream, TRecordStorage> Kademlia<TSubstream, TRecordStorage>
 where
-    TRecordStorage: Default + RecordStore
+    TRecordStorage: RecordStore
 {
     /// Creates a `Kademlia`.
     #[inline]
-    pub fn new(local_peer_id: PeerId) -> Self {
+    pub fn new(local_peer_id: PeerId) -> Self
+    where
+        TRecordStorage: Default
+    {
         Self::new_inner(local_peer_id, Default::default())
     }
 
@@ -225,7 +228,10 @@ where
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
     /// custom name therefore allows to segregate the DHT from others, if that is desired.
-    pub fn with_protocol_name(local_peer_id: PeerId, name: impl Into<Cow<'static, [u8]>>) -> Self {
+    pub fn with_protocol_name(local_peer_id: PeerId, name: impl Into<Cow<'static, [u8]>>) -> Self
+    where
+        TRecordStorage: Default
+    {
         let mut me = Kademlia::new_inner(local_peer_id, Default::default());
         me.protocol_name_override = Some(name.into());
         me
@@ -245,7 +251,9 @@ where
     /// the DHT and fill our buckets.
     #[inline]
     #[deprecated(note="this function is now equivalent to new() and will be removed in the future")]
-    pub fn without_init(local_peer_id: PeerId) -> Self {
+    pub fn without_init(local_peer_id: PeerId) -> Self
+        where TRecordStorage: Default
+    {
         Self::new_inner(local_peer_id, Default::default())
     }
 
@@ -335,7 +343,7 @@ where
 
     /// Starts an iterative `GET_VALUE` request.
     ///
-    /// Returns a number of results that is in the inerval [1, 20],
+    /// Returns a number of results that is in the interval [1, 20],
     /// if the user requested a larger amount of results it is cropped to 20.
     pub fn get_value(&mut self, key: &Multihash, num_results: NonZeroU8) {
         let num_results = usize::min(num_results.get() as usize, kbucket::MAX_NODES_PER_BUCKET);
@@ -546,7 +554,7 @@ where
 impl<TSubstream, TRecordStorage> NetworkBehaviour for Kademlia<TSubstream, TRecordStorage>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TRecordStorage: RecordStore + Default,
+    TRecordStorage: RecordStore,
 {
     type ProtocolsHandler = KademliaHandler<TSubstream, QueryId>;
     type OutEvent = KademliaOut;
@@ -779,6 +787,7 @@ where
 
                             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
                         }
+                        // TODO: write a better proof
                         _ => panic!("QueryInfoInner::GetValue was expected at the GetValueRes query id; QED.")
                     }
                 }
@@ -976,7 +985,6 @@ where
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                     QueryInfoInner::PutValue { key, value } => {
-                        use std::iter::FromIterator;
 
                         let closer_peers = Vec::from_iter(closer_peers);
                         for peer in &closer_peers {
