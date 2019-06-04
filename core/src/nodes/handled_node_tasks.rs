@@ -217,9 +217,9 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
         THandlerErr: error::Error + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        <TIntoHandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
-        TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
-        TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
+        <TIntoHandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,
+        TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send + 'static,
         TConnInfo: Send + 'static,
     {
         let task_id = self.next_task_id;
@@ -241,6 +241,43 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
         });
 
         self.to_spawn.push(task);
+        task_id
+    }
+
+    /// Adds an existing connection to a node to the collection.
+    ///
+    /// This method spawns a task dedicated to processing the node's events.
+    ///
+    /// No `NodeReached` event will be emitted for this task, since the node has already been
+    /// reached.
+    pub fn add_connection<TMuxer, THandler>(&mut self, user_data: TUserData, muxer: TMuxer, handler: THandler) -> TaskId
+    where
+        TIntoHandler: IntoNodeHandler<TConnInfo, Handler = THandler> + Send + 'static,
+        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        TReachErr: error::Error + Send + 'static,
+        THandlerErr: error::Error + Send + 'static,
+        TInEvent: Send + 'static,
+        TOutEvent: Send + 'static,
+        <TIntoHandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,
+        TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send + 'static,
+        TConnInfo: Send + 'static,
+    {
+        let task_id = self.next_task_id;
+        self.next_task_id.0 += 1;
+
+        let (tx, rx) = mpsc::unbounded();
+        self.tasks.insert(task_id, (tx, user_data));
+
+        let task: NodeTask<futures::future::Empty<_, _>, _, _, _, _, _, _> = NodeTask {
+            taken_over: SmallVec::new(),
+            inner: NodeTaskInner::Node(HandledNode::new(muxer, handler)),
+            events_tx: self.events_tx.clone(),
+            in_events_rx: rx.fuse(),
+            id: task_id,
+        };
+
+        self.to_spawn.push(Box::new(task));
         task_id
     }
 

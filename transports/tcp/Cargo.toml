@@ -12,6 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "0.4"
 get_if_addrs = "0.5.3"
+ipnet = "2.0.0"
 libp2p-core = { version = "0.8.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
