@@ -20,7 +20,13 @@
 
 #![cfg(test)]
 
-use crate::{Kademlia, KademliaOut, kbucket::{self, Distance}};
+use crate::{
+    GetValueResult,
+    Kademlia,
+    KademliaOut,
+    kbucket::{self, Distance},
+    record::{Record, RecordStore},
+};
 use futures::{future, prelude::*};
 use libp2p_core::{
     PeerId,
@@ -36,8 +42,9 @@ use libp2p_core::{
 use libp2p_secio::SecioConfig;
 use libp2p_yamux as yamux;
 use rand::random;
-use std::{io, u64};
+use std::{collections::HashSet, iter::FromIterator, io, num::NonZeroU8, u64};
 use tokio::runtime::Runtime;
+use multihash::Hash;
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
@@ -222,4 +229,228 @@ fn unresponsive_not_returned_indirect() {
             Ok(Async::NotReady)
         }))
         .unwrap();
+}
+
+
+#[test]
+fn get_value_not_found() {
+    let (port_base, mut swarms) = build_nodes(3);
+
+    let swarm_ids: Vec<_> = swarms.iter()
+        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+    swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
+
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+    let num_results = NonZeroU8::new(1).unwrap();
+    swarms[0].get_value(&target_key, num_results);
+
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
+                            if let GetValueResult::NotFound { closest_peers} = result {
+                                assert_eq!(closest_peers.len(), 2);
+                                assert!(closest_peers.contains(&swarm_ids[1]));
+                                assert!(closest_peers.contains(&swarm_ids[2]));
+                                return Ok(Async::Ready(()));
+                            } else {
+                                panic!("Expected GetValueResult::NotFound event");
+                            }
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap()
+}
+
+#[test]
+fn put_value() {
+    fn run() {
+        // Build a test that checks if PUT_VALUE gets correctly propagated in
+        // a nontrivial topology:
+        //                [31]
+        //               /    \
+        //             [29]  [30]
+        //            /|\      /|\
+        //         [0]..[14] [15]..[28]
+        //
+        // Nodes [29] and [30] have less than kbuckets::MAX_NODES_PER_BUCKET
+        // peers to avoid the situation when the bucket may be overflowed and
+        // some of the connections are dropped from the routing table
+        let (port_base, mut swarms) = build_nodes(32);
+
+        let swarm_ids: Vec<_> = swarms.iter()
+            .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+        // Connect swarm[30] to each swarm in swarms[..15]
+        for (i, peer) in swarm_ids.iter().take(15).enumerate() {
+            swarms[30].add_address(&peer, Protocol::Memory(port_base + i as u64).into());
+        }
+
+        // Connect swarm[29] to each swarm in swarms[15..29]
+        for (i, peer) in swarm_ids.iter().skip(15).take(14).enumerate() {
+            swarms[29].add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
+        }
+
+        // Connect swarms[31] to swarms[29, 30]
+        swarms[31].add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
+        swarms[31].add_address(&swarm_ids[29], Protocol::Memory(port_base + 29 as u64).into());
+
+        let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+
+        let mut sorted_peer_ids: Vec<_> = swarm_ids
+            .iter()
+            .map(|id| (id.clone(), kbucket::Key::from(id.clone()).distance(&kbucket::Key::from(target_key.clone()))))
+            .collect();
+
+        sorted_peer_ids.sort_by(|(_, d1), (_, d2)| d1.cmp(d2));
+
+        let closest: HashSet<PeerId> = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
+
+        swarms[31].put_value(target_key.clone(), vec![4,5,6]);
+
+        Runtime::new().unwrap().block_on(
+            future::poll_fn(move || -> Result<_, io::Error> {
+                let mut check_results = false;
+                for swarm in &mut swarms {
+                    loop {
+                        match swarm.poll().unwrap() {
+                            Async::Ready(Some(KademliaOut::PutValueResult{ .. })) => {
+                                check_results = true;
+                            }
+                            Async::Ready(_) => (),
+                            Async::NotReady => break,
+                        }
+                    }
+                }
+
+                if check_results {
+                    let mut have: HashSet<_> = Default::default();
+
+                    for (i, swarm) in swarms.iter().take(31).enumerate() {
+                        if swarm.records.get(&target_key).is_some() {
+                            have.insert(swarm_ids[i].clone());
+                        }
+                    }
+
+                    let intersection: HashSet<_> = have.intersection(&closest).collect();
+
+                    assert_eq!(have.len(), kbucket::MAX_NODES_PER_BUCKET);
+                    assert_eq!(intersection.len(), kbucket::MAX_NODES_PER_BUCKET);
+                    return Ok(Async::Ready(()));
+                }
+
+                Ok(Async::NotReady)
+            }))
+            .unwrap()
+    }
+    for _ in 0 .. 10 {
+        run();
+    }
+}
+
+#[test]
+fn get_value() {
+    let (port_base, mut swarms) = build_nodes(3);
+
+    let swarm_ids: Vec<_> = swarms.iter()
+        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+    swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+    let target_value = vec![4,5,6];
+
+    let num_results = NonZeroU8::new(1).unwrap();
+    swarms[1].records.put(Record {
+        key: target_key.clone(),
+        value: target_value.clone()
+    }).unwrap();
+    swarms[0].get_value(&target_key, num_results);
+
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
+                            if let GetValueResult::Found { results } = result {
+                                assert_eq!(results.len(), 1);
+                                let record = results.first().unwrap();
+                                assert_eq!(record.key, target_key);
+                                assert_eq!(record.value, target_value);
+                                return Ok(Async::Ready(()));
+                            } else {
+                                panic!("Expected GetValueResult::Found event");
+                            }
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap()
+}
+
+#[test]
+fn get_value_multiple() {
+    // Check that if we have responses from multiple peers, a correct number of
+    // results is returned.
+    let num_results = NonZeroU8::new(10).unwrap();
+    let (port_base, mut swarms) = build_nodes(2 + num_results.get() as usize);
+
+    let swarm_ids: Vec<_> = swarms.iter()
+        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+
+    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
+    let target_value = vec![4,5,6];
+
+    for (i, swarm_id) in swarm_ids.iter().skip(1).enumerate() {
+        swarms[i + 1].records.put(Record {
+            key: target_key.clone(),
+            value: target_value.clone()
+        }).unwrap();
+        swarms[0].add_address(&swarm_id, Protocol::Memory(port_base + (i + 1) as u64).into());
+    }
+
+    swarms[0].records.put(Record { key: target_key.clone(), value: target_value.clone() }).unwrap();
+    swarms[0].get_value(&target_key, num_results);
+
+    Runtime::new().unwrap().block_on(
+        future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
+                            if let GetValueResult::Found { results } = result {
+                                assert_eq!(results.len(), num_results.get() as usize);
+                                let record = results.first().unwrap();
+                                assert_eq!(record.key, target_key);
+                                assert_eq!(record.value, target_value);
+                                return Ok(Async::Ready(()));
+                            } else {
+                                panic!("Expected GetValueResult::Found event");
+                            }
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap()
 }
