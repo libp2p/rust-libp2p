@@ -325,13 +325,13 @@ where
         TFut: Future<Item = (TConnInfo, TMuxer), Error = TReachErr> + Send + 'static,
         THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
-        <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
+        <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,
         TReachErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
-        TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
+        TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send + 'static,
         TConnInfo: Send + 'static,
     {
         ReachAttemptId(self.inner.add_reach_attempt(future, TaskState::Pending, handler))
@@ -363,6 +363,42 @@ where
     {
         // TODO: remove the ones we're not connected to?
         self.inner.broadcast_event(event)
+    }
+
+    /// Adds an existing connection to a node to the collection.
+    ///
+    /// Returns whether we have replaced an existing connection, or not.
+    pub fn add_connection<TMuxer>(&mut self, conn_info: TConnInfo, user_data: TUserData, muxer: TMuxer, handler: THandler::Handler)
+        -> CollectionNodeAccept<TConnInfo, TUserData>
+    where
+        THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
+        THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,
+        TReachErr: error::Error + Send + 'static,
+        THandlerErr: error::Error + Send + 'static,
+        TInEvent: Send + 'static,
+        TOutEvent: Send + 'static,
+        TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send + 'static,
+        TConnInfo: Clone + Send + 'static,
+        TPeerId: Clone,
+    {
+        // Calling `HandledNodesTasks::add_connection` is the same as calling
+        // `HandledNodesTasks::add_reach_attempt`, except that we don't get any `NodeReached` event.
+        // We therefore implement this method the same way as calling `add_reach_attempt` followed
+        // with simulating a received `NodeReached` event and accepting it.
+
+        let task_id = self.inner.add_connection(
+            TaskState::Pending,
+            muxer,
+            handler
+        );
+
+        CollectionReachEvent {
+            conn_info: Some(conn_info),
+            id: task_id,
+            parent: self,
+        }.accept(user_data).0
     }
 
     /// Grants access to an object that allows controlling a peer of the collection.
