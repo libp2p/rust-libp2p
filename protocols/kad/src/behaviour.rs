@@ -31,7 +31,7 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{borrow::Cow, error, marker::PhantomData, num::NonZeroU8, time::Duration};
+use std::{borrow::Cow, error, iter::FromIterator, marker::PhantomData, num::NonZeroU8, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::{Instant, Interval};
 
@@ -787,8 +787,7 @@ where
 
                             self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
                         }
-                        // TODO: write a better proof
-                        _ => panic!("QueryInfoInner::GetValue was expected at the GetValueRes query id; QED.")
+                        _ => panic!("unexpected query_info.inner variant for a get_value result; QED.")
                     }
                 }
 
@@ -985,7 +984,6 @@ where
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     },
                     QueryInfoInner::PutValue { key, value } => {
-
                         let closer_peers = Vec::from_iter(closer_peers);
                         for peer in &closer_peers {
                             let event = KademliaHandlerIn::PutValue {
