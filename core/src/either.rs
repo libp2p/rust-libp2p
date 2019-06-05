@@ -129,6 +129,52 @@ where
     }
 }
 
+impl<A, B, I> Stream for EitherOutput<A, B>
+where
+    A: Stream<Item = I>,
+    B: Stream<Item = I>,
+{
+    type Item = I;
+    type Error = EitherError<A::Error, B::Error>;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match self {
+            EitherOutput::First(a) => a.poll().map_err(EitherError::A),
+            EitherOutput::Second(b) => b.poll().map_err(EitherError::B),
+        }
+    }
+}
+
+impl<A, B, I> Sink for EitherOutput<A, B>
+where
+    A: Sink<SinkItem = I>,
+    B: Sink<SinkItem = I>,
+{
+    type SinkItem = I;
+    type SinkError = EitherError<A::SinkError, B::SinkError>;
+
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        match self {
+            EitherOutput::First(a) => a.start_send(item).map_err(EitherError::A),
+            EitherOutput::Second(b) => b.start_send(item).map_err(EitherError::B),
+        }
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        match self {
+            EitherOutput::First(a) => a.poll_complete().map_err(EitherError::A),
+            EitherOutput::Second(b) => b.poll_complete().map_err(EitherError::B),
+        }
+    }
+
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        match self {
+            EitherOutput::First(a) => a.close().map_err(EitherError::A),
+            EitherOutput::Second(b) => b.close().map_err(EitherError::B),
+        }
+    }
+}
+
 impl<A, B> StreamMuxer for EitherOutput<A, B>
 where
     A: StreamMuxer,
