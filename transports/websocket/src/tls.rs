@@ -139,7 +139,7 @@ pub enum Error {
     /// An underlying I/O error.
     Io(io::Error),
     /// Actual TLS error.
-    Tls(Box<dyn std::error::Error + Send>),
+    Tls(Box<dyn std::error::Error + Send + Sync>),
     /// The DNS name was invalid.
     InvalidDnsName(String),
 

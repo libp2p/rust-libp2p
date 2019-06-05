@@ -30,7 +30,7 @@ pub enum Error<E> {
     /// A TLS related error.
     Tls(tls::Error),
     /// Websocket handshake error.
-    Handshake(Box<dyn error::Error + Send>),
+    Handshake(Box<dyn error::Error + Send + Sync>),
     /// The configured maximum of redirects have been made.
     TooManyRedirects,
     /// A multi-address is not supported.
@@ -38,7 +38,7 @@ pub enum Error<E> {
     /// The location header URL was invalid.
     InvalidRedirectLocation,
     /// Websocket base framing error.
-    Base(Box<dyn error::Error + Send>)
+    Base(Box<dyn error::Error + Send + Sync>)
 }
 
 impl<E: fmt::Display> fmt::Display for Error<E> {

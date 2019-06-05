@@ -18,7 +18,7 @@ rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-codec = "0.1.1"
 tokio-io = "0.1.12"
 tokio-rustls = "0.10.0-alpha.3"
-soketto = "0.1.0-alpha.1"
+soketto = "0.1.0"
 url = "1.7.2"
 webpki-roots = "0.16.0"
 
