@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, future, try_ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated};
+use futures::{future, prelude::*, try_ready};
+use libp2p_core::{upgrade::Negotiated, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::debug;
 use rand::{distributions, prelude::*};
 use std::{io, iter, time::Duration};
@@ -67,13 +67,20 @@ where
     type Error = io::Error;
     type Future = future::Map<
         future::AndThen<
-        future::AndThen<
-        future::AndThen<
-            RecvPing<TSocket>,
-            SendPong<TSocket>, fn((Negotiated<TSocket>, [u8; 32])) -> SendPong<TSocket>>,
-            Flush<TSocket>, fn((Negotiated<TSocket>, [u8; 32])) -> Flush<TSocket>>,
-            Shutdown<TSocket>, fn(Negotiated<TSocket>) -> Shutdown<TSocket>>,
-    fn(Negotiated<TSocket>) -> ()>;
+            future::AndThen<
+                future::AndThen<
+                    RecvPing<TSocket>,
+                    SendPong<TSocket>,
+                    fn((Negotiated<TSocket>, [u8; 32])) -> SendPong<TSocket>,
+                >,
+                Flush<TSocket>,
+                fn((Negotiated<TSocket>, [u8; 32])) -> Flush<TSocket>,
+            >,
+            Shutdown<TSocket>,
+            fn(Negotiated<TSocket>) -> Shutdown<TSocket>,
+        >,
+        fn(Negotiated<TSocket>) -> (),
+    >;
 
     #[inline]
     fn upgrade_inbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
@@ -108,7 +115,7 @@ where
 
 /// A `PingDialer` is a future that sends a ping and expects to receive a pong.
 pub struct PingDialer<TSocket> {
-    state: PingDialerState<TSocket>
+    state: PingDialerState<TSocket>,
 }
 
 enum PingDialerState<TSocket> {
@@ -146,8 +153,11 @@ where
                         inner: nio::flush(socket),
                         payload,
                     }
-                },
-                PingDialerState::Flush { ref mut inner, payload } => {
+                }
+                PingDialerState::Flush {
+                    ref mut inner,
+                    payload,
+                } => {
                     let socket = try_ready!(inner.poll());
                     let started = Instant::now();
                     PingDialerState::Read {
@@ -155,23 +165,29 @@ where
                         payload,
                         started,
                     }
-                },
-                PingDialerState::Read { ref mut inner, payload, started } => {
+                }
+                PingDialerState::Read {
+                    ref mut inner,
+                    payload,
+                    started,
+                } => {
                     let (socket, payload_received) = try_ready!(inner.poll());
                     let rtt = started.elapsed();
                     if payload_received != payload {
                         return Err(io::Error::new(
-                            io::ErrorKind::InvalidData, "Ping payload mismatch"));
+                            io::ErrorKind::InvalidData,
+                            "Ping payload mismatch",
+                        ));
                     }
                     PingDialerState::Shutdown {
                         inner: nio::shutdown(socket),
                         rtt,
                     }
-                },
+                }
                 PingDialerState::Shutdown { ref mut inner, rtt } => {
                     try_ready!(inner.poll());
                     return Ok(Async::Ready(rtt));
-                },
+                }
             }
         }
     }
@@ -182,13 +198,9 @@ mod tests {
     use super::Ping;
     use futures::prelude::*;
     use libp2p_core::{
-        upgrade,
         multiaddr::multiaddr,
-        transport::{
-            Transport,
-            ListenerEvent,
-            memory::MemoryTransport
-        }
+        transport::{memory::MemoryTransport, ListenerEvent, Transport},
+        upgrade,
     };
     use rand::{thread_rng, Rng};
     use std::time::Duration;
@@ -211,15 +223,13 @@ mod tests {
             .and_then(|(listener_event, _)| {
                 let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
                 let conn = listener_upgrade.wait().unwrap();
-                upgrade::apply_inbound(conn, Ping::default())
-                    .map_err(|e| panic!(e))
+                upgrade::apply_inbound(conn, Ping::default()).map_err(|e| panic!(e))
             });
 
-        let client = MemoryTransport.dial(listener_addr).unwrap()
-            .and_then(|c| {
-                upgrade::apply_outbound(c, Ping::default())
-                    .map_err(|e| panic!(e))
-            });
+        let client = MemoryTransport
+            .dial(listener_addr)
+            .unwrap()
+            .and_then(|c| upgrade::apply_outbound(c, Ping::default()).map_err(|e| panic!(e)));
 
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.spawn(server.map_err(|e| panic!(e)));

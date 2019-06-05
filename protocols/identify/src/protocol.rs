@@ -18,17 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::BytesMut;
 use crate::structs_proto;
-use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
+use bytes::BytesMut;
 use futures::try_ready;
+use futures::{
+    future::{self, FutureResult},
+    Async, AsyncSink, Future, Poll, Sink, Stream,
+};
 use libp2p_core::{
+    upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo},
     Multiaddr, PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
 };
 use log::{debug, trace};
-use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
+use protobuf::Message as ProtobufMessage;
 use protobuf::RepeatedField;
 use std::convert::TryFrom;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -48,7 +51,7 @@ pub struct RemoteInfo {
     /// Address the remote sees for us.
     pub observed_addr: Multiaddr,
 
-    _priv: ()
+    _priv: (),
 }
 
 /// Object used to send back information to the client.
@@ -56,14 +59,18 @@ pub struct IdentifySender<T> {
     inner: Framed<T, codec::UviBytes<Vec<u8>>>,
 }
 
-impl<T> IdentifySender<T> where T: AsyncWrite {
+impl<T> IdentifySender<T>
+where
+    T: AsyncWrite,
+{
     /// Sends back information to the client. Returns a future that is signalled whenever the
     /// info have been sent.
     pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr) -> IdentifySenderFuture<T> {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
-        let listen_addrs = info.listen_addrs
+        let listen_addrs = info
+            .listen_addrs
             .into_iter()
             .map(|addr| addr.to_vec())
             .collect();
@@ -103,7 +110,8 @@ pub struct IdentifySenderFuture<T> {
 }
 
 impl<T> Future for IdentifySenderFuture<T>
-where T: AsyncWrite
+where
+    T: AsyncWrite,
 {
     type Item = ();
     type Error = IoError;
@@ -187,7 +195,8 @@ pub struct IdentifyOutboundFuture<T> {
 }
 
 impl<T> Future for IdentifyOutboundFuture<T>
-where T: AsyncRead + AsyncWrite,
+where
+    T: AsyncRead + AsyncWrite,
 {
     type Item = RemoteInfo;
     type Error = IoError;
@@ -212,7 +221,7 @@ where T: AsyncRead + AsyncWrite,
             Ok(v) => v,
             Err(err) => {
                 debug!("Failed to parse protobuf message; error = {:?}", err);
-                return Err(err)
+                return Err(err);
             }
         };
 
@@ -222,7 +231,7 @@ where T: AsyncRead + AsyncWrite,
         Ok(Async::Ready(RemoteInfo {
             info,
             observed_addr: observed_addr.clone(),
-            _priv: ()
+            _priv: (),
         }))
     }
 }
@@ -268,17 +277,17 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
 #[cfg(test)]
 mod tests {
-    use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use tokio::runtime::current_thread::Runtime;
-    use libp2p_tcp::TcpConfig;
+    use crate::protocol::{IdentifyInfo, IdentifyProtocolConfig, RemoteInfo};
     use futures::{Future, Stream};
     use libp2p_core::{
         identity,
-        Transport,
         transport::ListenerEvent,
-        upgrade::{apply_outbound, apply_inbound}
+        upgrade::{apply_inbound, apply_outbound},
+        Transport,
     };
+    use libp2p_tcp::TcpConfig;
     use std::{io, sync::mpsc, thread};
+    use tokio::runtime::current_thread::Runtime;
 
     #[test]
     fn correct_transfer() {
@@ -296,13 +305,14 @@ mod tests {
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let addr = listener.by_ref().wait()
+            let addr = listener
+                .by_ref()
+                .wait()
                 .next()
                 .expect("some event")
                 .expect("no error")
                 .into_new_address()
                 .expect("listen address");
-
 
             tx.send(addr).unwrap();
 
@@ -336,23 +346,40 @@ mod tests {
 
         let transport = TcpConfig::new();
 
-        let future = transport.dial(rx.recv().unwrap())
+        let future = transport
+            .dial(rx.recv().unwrap())
             .unwrap()
             .and_then(|socket| {
                 apply_outbound(socket, IdentifyProtocolConfig)
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
             })
-            .and_then(|RemoteInfo { info, observed_addr, .. }| {
-                assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
-                assert_eq!(info.public_key, recv_pubkey);
-                assert_eq!(info.protocol_version, "proto_version");
-                assert_eq!(info.agent_version, "agent_version");
-                assert_eq!(info.listen_addrs,
-                    &["/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                      "/ip6/::1/udp/1000".parse().unwrap()]);
-                assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
-                Ok(())
-            });
+            .and_then(
+                |RemoteInfo {
+                     info,
+                     observed_addr,
+                     ..
+                 }| {
+                    assert_eq!(
+                        observed_addr,
+                        "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
+                    );
+                    assert_eq!(info.public_key, recv_pubkey);
+                    assert_eq!(info.protocol_version, "proto_version");
+                    assert_eq!(info.agent_version, "agent_version");
+                    assert_eq!(
+                        info.listen_addrs,
+                        &[
+                            "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                            "/ip6/::1/udp/1000".parse().unwrap()
+                        ]
+                    );
+                    assert_eq!(
+                        info.protocols,
+                        &["proto1".to_string(), "proto2".to_string()]
+                    );
+                    Ok(())
+                },
+            );
 
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(future).unwrap();

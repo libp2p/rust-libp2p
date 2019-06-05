@@ -41,7 +41,7 @@ pub struct LengthDelimited<R, C> {
     // Number of bytes within `internal_buffer` that contain valid data.
     internal_buffer_pos: usize,
     // State of the decoder.
-    state: State
+    state: State,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -55,7 +55,7 @@ enum State {
 impl<R, C> LengthDelimited<R, C>
 where
     R: AsyncWrite,
-    C: Encoder
+    C: Encoder,
 {
     pub fn new(inner: R, codec: C) -> LengthDelimited<R, C> {
         LengthDelimited {
@@ -66,7 +66,7 @@ where
                 v
             },
             internal_buffer_pos: 0,
-            state: State::ReadingLength
+            state: State::ReadingLength,
         }
     }
 
@@ -91,7 +91,7 @@ where
 
 impl<R, C> Stream for LengthDelimited<R, C>
 where
-    R: AsyncRead
+    R: AsyncRead,
 {
     type Item = Bytes;
     type Error = io::Error;
@@ -151,7 +151,10 @@ where
                         }
                     } else if self.internal_buffer_pos >= 2 {
                         // Length prefix is too long. See module doc for info about max frame len.
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "frame length too long"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "frame length too long",
+                        ));
                     } else {
                         // Prepare for next read.
                         self.internal_buffer.push(0);
@@ -165,7 +168,7 @@ where
                         Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
                             return Ok(Async::NotReady)
                         }
-                        Err(err) => return Err(err)
+                        Err(err) => return Err(err),
                     };
                     if self.internal_buffer_pos >= frame_len as usize {
                         // Finished reading the frame of data.
@@ -185,7 +188,7 @@ where
 impl<R, C> Sink for LengthDelimited<R, C>
 where
     R: AsyncWrite,
-    C: Encoder
+    C: Encoder,
 {
     type SinkItem = <FramedWrite<R, C> as Sink>::SinkItem;
     type SinkError = <FramedWrite<R, C> as Sink>::SinkError;
@@ -208,8 +211,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::{Future, Stream};
     use crate::length_delimited::LengthDelimited;
+    use futures::{Future, Stream};
     use std::io::{Cursor, ErrorKind};
     use unsigned_varint::codec::UviBytes;
 
@@ -317,4 +320,3 @@ mod tests {
         }
     }
 }
-

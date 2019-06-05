@@ -18,22 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
+use crate::protocol::{IdentifyProtocolConfig, RemoteInfo};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{
-        KeepAlive,
+        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
         SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
     },
-    upgrade::{DeniedUpgrade, OutboundUpgrade}
+    upgrade::{DeniedUpgrade, OutboundUpgrade},
 };
 use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
+use void::{unreachable, Void};
 use wasm_timer::{Delay, Instant};
-use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
 const DELAY_TO_FIRST_ID: Duration = Duration::from_millis(500);
@@ -118,7 +115,13 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        err: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
         self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
         self.first_id_happened = true;
         self.next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
@@ -144,9 +147,7 @@ where
         Self::Error,
     > {
         if let Some(pending_result) = self.pending_result.take() {
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
-                pending_result,
-            )));
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(pending_result)));
         }
 
         // Poll the future that fires when we need to identify the node again.

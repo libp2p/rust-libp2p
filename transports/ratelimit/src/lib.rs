@@ -21,11 +21,17 @@
 use aio_limited::{Limited, Limiter};
 use futures::prelude::*;
 use futures::try_ready;
-use libp2p_core::{Multiaddr, Transport, transport::{ListenerEvent, TransportError}};
+use libp2p_core::{
+    transport::{ListenerEvent, TransportError},
+    Multiaddr, Transport,
+};
 use log::error;
 use std::{error, fmt, io};
 use tokio_executor::Executor;
-use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
+use tokio_io::{
+    io::{ReadHalf, WriteHalf},
+    AsyncRead, AsyncWrite,
+};
 
 #[derive(Clone)]
 pub struct RateLimited<T> {
@@ -73,7 +79,8 @@ pub enum RateLimitedErr<TErr> {
 }
 
 impl<TErr> fmt::Display for RateLimitedErr<TErr>
-where TErr: fmt::Display
+where
+    TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -84,7 +91,8 @@ where TErr: fmt::Display
 }
 
 impl<TErr> error::Error for RateLimitedErr<TErr>
-where TErr: error::Error + 'static
+where
+    TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -175,7 +183,7 @@ pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 impl<T> Future for ListenerUpgrade<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite
+    T::Output: AsyncRead + AsyncWrite,
 {
     type Item = Connection<T::Output>;
     type Error = RateLimitedErr<T::Error>;
@@ -184,7 +192,9 @@ where
         let conn = try_ready!(self.0.value.poll().map_err(RateLimitedErr::Underlying));
         let r = self.0.rlimiter.clone();
         let w = self.0.wlimiter.clone();
-        Ok(Async::Ready(Connection::new(conn, r, w).map_err(RateLimitedErr::LimiterError)?))
+        Ok(Async::Ready(
+            Connection::new(conn, r, w).map_err(RateLimitedErr::LimiterError)?,
+        ))
     }
 }
 
@@ -206,15 +216,16 @@ where
         self.value
             .listen_on(addr)
             .map_err(|err| err.map(RateLimitedErr::Underlying))
-            .map(|listener| {
-                Listener(RateLimited::from_parts(listener, r.clone(), w.clone()))
-            })
+            .map(|listener| Listener(RateLimited::from_parts(listener, r.clone(), w.clone())))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let r = self.rlimiter;
         let w = self.wlimiter;
-        let dial = self.value.dial(addr).map_err(|err| err.map(RateLimitedErr::Underlying))?;
+        let dial = self
+            .value
+            .dial(addr)
+            .map_err(|err| err.map(RateLimitedErr::Underlying))?;
         Ok(DialFuture { r, w, f: dial })
     }
 }
@@ -223,7 +234,7 @@ where
 pub struct DialFuture<T> {
     r: Limiter,
     w: Limiter,
-    f: T
+    f: T,
 }
 
 impl<T> Future for DialFuture<T>
@@ -236,7 +247,9 @@ where
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let item = try_ready!(self.f.poll().map_err(RateLimitedErr::Underlying));
-        Ok(Async::Ready(Connection::new(item, self.r.clone(), self.w.clone())
-            .map_err(RateLimitedErr::LimiterError)?))
+        Ok(Async::Ready(
+            Connection::new(item, self.r.clone(), self.w.clone())
+                .map_err(RateLimitedErr::LimiterError)?,
+        ))
     }
 }

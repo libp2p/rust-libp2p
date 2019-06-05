@@ -19,16 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    transport::{Transport, TransportError, ListenerEvent},
+    transport::{ListenerEvent, Transport, TransportError},
     upgrade::{
-        OutboundUpgrade,
-        InboundUpgrade,
-        apply_inbound,
-        apply_outbound,
-        UpgradeError,
-        OutboundUpgradeApply,
-        InboundUpgradeApply
-    }
+        apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
+        OutboundUpgradeApply, UpgradeError,
+    },
 };
 use futures::{future::Either, prelude::*, try_ready};
 use multiaddr::Multiaddr;
@@ -36,7 +31,10 @@ use std::{error, fmt};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Copy, Clone)]
-pub struct Upgrade<T, U> { inner: T, upgrade: U }
+pub struct Upgrade<T, U> {
+    inner: T,
+    upgrade: U,
+}
 
 impl<T, U> Upgrade<T, U> {
     pub fn new(inner: T, upgrade: U) -> Self {
@@ -51,7 +49,7 @@ where
     D::Error: 'static,
     U: InboundUpgrade<D::Output, Output = O, Error = TUpgrErr>,
     U: OutboundUpgrade<D::Output, Output = O, Error = TUpgrErr> + Clone,
-    TUpgrErr: std::error::Error + Send + Sync + 'static     // TODO: remove bounds
+    TUpgrErr: std::error::Error + Send + Sync + 'static, // TODO: remove bounds
 {
     type Output = O;
     type Error = TransportUpgradeError<D::Error, TUpgrErr>;
@@ -60,18 +58,25 @@ where
     type Dial = DialUpgradeFuture<D::Dial, U>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let outbound = self.inner.dial(addr.clone())
+        let outbound = self
+            .inner
+            .dial(addr.clone())
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: outbound,
-            upgrade: Either::A(Some(self.upgrade))
+            upgrade: Either::A(Some(self.upgrade)),
         })
     }
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let inbound = self.inner.listen_on(addr)
+        let inbound = self
+            .inner
+            .listen_on(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(ListenerStream { stream: inbound, upgrade: self.upgrade })
+        Ok(ListenerStream {
+            stream: inbound,
+            upgrade: self.upgrade,
+        })
     }
 }
 
@@ -114,10 +119,10 @@ pub struct DialUpgradeFuture<T, U>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<T::Item>
+    U: OutboundUpgrade<T::Item>,
 {
     future: T,
-    upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>
+    upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>,
 }
 
 impl<T, U> Future for DialUpgradeFuture<T, U>
@@ -125,7 +130,7 @@ where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<T::Item>,
-    U::Error: std::error::Error + Send + Sync + 'static
+    U::Error: std::error::Error + Send + Sync + 'static,
 {
     type Item = U::Output;
     type Error = TransportUpgradeError<T::Error, U::Error>;
@@ -134,11 +139,14 @@ where
         loop {
             let next = match self.upgrade {
                 Either::A(ref mut up) => {
-                    let x = try_ready!(self.future.poll().map_err(TransportUpgradeError::Transport));
-                    let u = up.take().expect("DialUpgradeFuture is constructed with Either::A(Some).");
+                    let x =
+                        try_ready!(self.future.poll().map_err(TransportUpgradeError::Transport));
+                    let u = up
+                        .take()
+                        .expect("DialUpgradeFuture is constructed with Either::A(Some).");
                     Either::B(apply_outbound(x, u))
                 }
-                Either::B(ref mut up) => return up.poll().map_err(TransportUpgradeError::Upgrade)
+                Either::B(ref mut up) => return up.poll().map_err(TransportUpgradeError::Upgrade),
             };
             self.upgrade = next
         }
@@ -147,7 +155,7 @@ where
 
 pub struct ListenerStream<T, U> {
     stream: T,
-    upgrade: U
+    upgrade: U,
 }
 
 impl<T, U, F> Stream for ListenerStream<T, U>
@@ -155,7 +163,7 @@ where
     T: Stream<Item = ListenerEvent<F>>,
     F: Future,
     F::Item: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<F::Item> + Clone
+    U: InboundUpgrade<F::Item> + Clone,
 {
     type Item = ListenerEvent<ListenerUpgradeFuture<F, U>>;
     type Error = TransportUpgradeError<T::Error, U::Error>;
@@ -163,15 +171,13 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match try_ready!(self.stream.poll().map_err(TransportUpgradeError::Transport)) {
             Some(event) => {
-                let event = event.map(move |x| {
-                    ListenerUpgradeFuture {
-                        future: x,
-                        upgrade: Either::A(Some(self.upgrade.clone()))
-                    }
+                let event = event.map(move |x| ListenerUpgradeFuture {
+                    future: x,
+                    upgrade: Either::A(Some(self.upgrade.clone())),
                 });
                 Ok(Async::Ready(Some(event)))
             }
-            None => Ok(Async::Ready(None))
+            None => Ok(Async::Ready(None)),
         }
     }
 }
@@ -180,10 +186,10 @@ pub struct ListenerUpgradeFuture<T, U>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<T::Item>
+    U: InboundUpgrade<T::Item>,
 {
     future: T,
-    upgrade: Either<Option<U>, InboundUpgradeApply<T::Item, U>>
+    upgrade: Either<Option<U>, InboundUpgradeApply<T::Item, U>>,
 }
 
 impl<T, U> Future for ListenerUpgradeFuture<T, U>
@@ -191,7 +197,7 @@ where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
     U: InboundUpgrade<T::Item>,
-    U::Error: std::error::Error + Send + Sync + 'static
+    U::Error: std::error::Error + Send + Sync + 'static,
 {
     type Item = U::Output;
     type Error = TransportUpgradeError<T::Error, U::Error>;
@@ -200,14 +206,16 @@ where
         loop {
             let next = match self.upgrade {
                 Either::A(ref mut up) => {
-                    let x = try_ready!(self.future.poll().map_err(TransportUpgradeError::Transport));
-                    let u = up.take().expect("ListenerUpgradeFuture is constructed with Either::A(Some).");
+                    let x =
+                        try_ready!(self.future.poll().map_err(TransportUpgradeError::Transport));
+                    let u = up
+                        .take()
+                        .expect("ListenerUpgradeFuture is constructed with Either::A(Some).");
                     Either::B(apply_inbound(x, u))
                 }
-                Either::B(ref mut up) => return up.poll().map_err(TransportUpgradeError::Upgrade)
+                Either::B(ref mut up) => return up.poll().map_err(TransportUpgradeError::Upgrade),
             };
             self.upgrade = next
         }
     }
 }
-

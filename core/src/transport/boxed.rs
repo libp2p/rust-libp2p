@@ -38,7 +38,8 @@ where
 }
 
 pub type Dial<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
-pub type Listener<O, E> = Box<dyn Stream<Item = ListenerEvent<ListenerUpgrade<O, E>>, Error = E> + Send>;
+pub type Listener<O, E> =
+    Box<dyn Stream<Item = ListenerEvent<ListenerUpgrade<O, E>>, Error = E> + Send>;
 pub type ListenerUpgrade<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
 
 trait Abstract<O, E> {
@@ -56,9 +57,8 @@ where
 {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>> {
         let listener = Transport::listen_on(self.clone(), addr)?;
-        let fut = listener.map(|event| event.map(|upgrade| {
-            Box::new(upgrade) as ListenerUpgrade<O, E>
-        }));
+        let fut =
+            listener.map(|event| event.map(|upgrade| Box::new(upgrade) as ListenerUpgrade<O, E>));
         Ok(Box::new(fut) as Box<_>)
     }
 
@@ -88,7 +88,8 @@ impl<O, E> Clone for Boxed<O, E> {
 }
 
 impl<O, E> Transport for Boxed<O, E>
-where E: error::Error,
+where
+    E: error::Error,
 {
     type Output = O;
     type Error = E;

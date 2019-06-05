@@ -20,7 +20,9 @@
 
 //! Provides the `TransportExt` trait.
 
-use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, ratelimit::RateLimited, Transport};
+use crate::{
+    bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, ratelimit::RateLimited, Transport,
+};
 use std::{io, sync::Arc, time::Duration};
 use tokio_executor::DefaultExecutor;
 
@@ -62,9 +64,12 @@ pub trait TransportExt: Transport {
     ///
     /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the bandwidth
     /// values.
-    fn with_bandwidth_logging(self, period: Duration) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
+    fn with_bandwidth_logging(
+        self,
+        period: Duration,
+    ) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
     where
-        Self: Sized
+        Self: Sized,
     {
         BandwidthLogging::new(self, period)
     }

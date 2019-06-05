@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::nodes::ConnectedPoint;
-use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
@@ -27,8 +27,11 @@ use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
-    -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
+pub fn apply<C, U>(
+    conn: C,
+    up: U,
+    cp: ConnectedPoint,
+) -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C> + OutboundUpgrade<C>,
@@ -49,7 +52,7 @@ where
     let iter = UpgradeInfoIterWrap(up);
     let future = multistream_select::listener_select_proto(conn, iter);
     InboundUpgradeApply {
-        inner: InboundUpgradeApplyState::Init { future }
+        inner: InboundUpgradeApplyState::Init { future },
     }
 }
 
@@ -57,12 +60,18 @@ where
 pub fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
 {
-    let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
+    let iter = up
+        .protocol_info()
+        .into_iter()
+        .map(NameWrap as fn(_) -> NameWrap<_>);
     let future = multistream_select::dialer_select_proto(conn, iter);
     OutboundUpgradeApply {
-        inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
+        inner: OutboundUpgradeApplyState::Init {
+            future,
+            upgrade: up,
+        },
     }
 }
 
@@ -70,23 +79,23 @@ where
 pub struct InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C>
+    U: InboundUpgrade<C>,
 {
-    inner: InboundUpgradeApplyState<C, U>
+    inner: InboundUpgradeApplyState<C, U>,
 }
 
 enum InboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C>
+    U: InboundUpgrade<C>,
 {
     Init {
         future: ListenerSelectFuture<C, UpgradeInfoIterWrap<U>, NameWrap<U::Info>>,
     },
     Upgrade {
-        future: U::Future
+        future: U::Future,
     },
-    Undefined
+    Undefined,
 }
 
 impl<C, U> Future for InboundUpgradeApply<C, U>
@@ -105,31 +114,30 @@ where
                         Async::Ready(x) => x,
                         Async::NotReady => {
                             self.inner = InboundUpgradeApplyState::Init { future };
-                            return Ok(Async::NotReady)
+                            return Ok(Async::NotReady);
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.0.upgrade_inbound(connection, info.0)
+                        future: upgrade.0.upgrade_inbound(connection, info.0),
                     };
                 }
-                InboundUpgradeApplyState::Upgrade { mut future } => {
-                    match future.poll() {
-                        Ok(Async::NotReady) => {
-                            self.inner = InboundUpgradeApplyState::Upgrade { future };
-                            return Ok(Async::NotReady)
-                        }
-                        Ok(Async::Ready(x)) => {
-                            debug!("Successfully applied negotiated protocol");
-                            return Ok(Async::Ready(x))
-                        }
-                        Err(e) => {
-                            debug!("Failed to apply negotiated protocol");
-                            return Err(UpgradeError::Apply(e))
-                        }
+                InboundUpgradeApplyState::Upgrade { mut future } => match future.poll() {
+                    Ok(Async::NotReady) => {
+                        self.inner = InboundUpgradeApplyState::Upgrade { future };
+                        return Ok(Async::NotReady);
                     }
-                }
-                InboundUpgradeApplyState::Undefined =>
+                    Ok(Async::Ready(x)) => {
+                        debug!("Successfully applied negotiated protocol");
+                        return Ok(Async::Ready(x));
+                    }
+                    Err(e) => {
+                        debug!("Failed to apply negotiated protocol");
+                        return Err(UpgradeError::Apply(e));
+                    }
+                },
+                InboundUpgradeApplyState::Undefined => {
                     panic!("InboundUpgradeApplyState::poll called after completion")
+                }
             }
         }
     }
@@ -139,30 +147,30 @@ where
 pub struct OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
 {
-    inner: OutboundUpgradeApplyState<C, U>
+    inner: OutboundUpgradeApplyState<C, U>,
 }
 
 enum OutboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
 {
     Init {
         future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
-        upgrade: U
+        upgrade: U,
     },
     Upgrade {
-        future: U::Future
+        future: U::Future,
     },
-    Undefined
+    Undefined,
 }
 
 impl<C, U> Future for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
 {
     type Item = U::Output;
     type Error = UpgradeError<U::Error>;
@@ -170,36 +178,38 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, OutboundUpgradeApplyState::Undefined) {
-                OutboundUpgradeApplyState::Init { mut future, upgrade } => {
+                OutboundUpgradeApplyState::Init {
+                    mut future,
+                    upgrade,
+                } => {
                     let (info, connection) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
                             self.inner = OutboundUpgradeApplyState::Init { future, upgrade };
-                            return Ok(Async::NotReady)
+                            return Ok(Async::NotReady);
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(connection, info.0)
+                        future: upgrade.upgrade_outbound(connection, info.0),
                     };
                 }
-                OutboundUpgradeApplyState::Upgrade { mut future } => {
-                    match future.poll() {
-                        Ok(Async::NotReady) => {
-                            self.inner = OutboundUpgradeApplyState::Upgrade { future };
-                            return Ok(Async::NotReady)
-                        }
-                        Ok(Async::Ready(x)) => {
-                            debug!("Successfully applied negotiated protocol");
-                            return Ok(Async::Ready(x))
-                        }
-                        Err(e) => {
-                            debug!("Failed to apply negotiated protocol");
-                            return Err(UpgradeError::Apply(e))
-                        }
+                OutboundUpgradeApplyState::Upgrade { mut future } => match future.poll() {
+                    Ok(Async::NotReady) => {
+                        self.inner = OutboundUpgradeApplyState::Upgrade { future };
+                        return Ok(Async::NotReady);
                     }
-                }
-                OutboundUpgradeApplyState::Undefined =>
+                    Ok(Async::Ready(x)) => {
+                        debug!("Successfully applied negotiated protocol");
+                        return Ok(Async::Ready(x));
+                    }
+                    Err(e) => {
+                        debug!("Failed to apply negotiated protocol");
+                        return Err(UpgradeError::Apply(e));
+                    }
+                },
+                OutboundUpgradeApplyState::Undefined => {
                     panic!("OutboundUpgradeApplyState::poll called after completion")
+                }
             }
         }
     }
@@ -210,7 +220,7 @@ struct UpgradeInfoIterWrap<U>(U);
 
 impl<'a, U> IntoIterator for &'a UpgradeInfoIterWrap<U>
 where
-    U: UpgradeInfo
+    U: UpgradeInfo,
 {
     type Item = NameWrap<U::Info>;
     type IntoIter = NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>;
@@ -232,4 +242,3 @@ impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
         self.0.protocol_name()
     }
 }
-

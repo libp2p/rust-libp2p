@@ -21,11 +21,14 @@
 //! Implements the Yamux multiplexing protocol for libp2p, see also the
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
-use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use futures::{
+    future::{self, FutureResult},
+    prelude::*,
+};
+use libp2p_core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
 use log::debug;
+use std::io::Error as IoError;
 use std::{io, iter, sync::atomic};
-use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 // TODO: add documentation and field names
@@ -33,17 +36,20 @@ pub struct Yamux<C>(yamux::Connection<C>, atomic::AtomicBool);
 
 impl<C> Yamux<C>
 where
-    C: AsyncRead + AsyncWrite + 'static
+    C: AsyncRead + AsyncWrite + 'static,
 {
     pub fn new(c: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
         cfg.set_read_after_close(false);
-        Yamux(yamux::Connection::new(c, cfg, mode), atomic::AtomicBool::new(false))
+        Yamux(
+            yamux::Connection::new(c, cfg, mode),
+            atomic::AtomicBool::new(false),
+        )
     }
 }
 
 impl<C> libp2p_core::StreamMuxer for Yamux<C>
 where
-    C: AsyncRead + AsyncWrite + 'static
+    C: AsyncRead + AsyncWrite + 'static,
 {
     type Substream = yamux::StreamHandle<C>;
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
@@ -65,11 +71,17 @@ where
     }
 
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+        let stream = self
+            .0
+            .open_stream()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         future::result(stream)
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
+    fn poll_outbound(
+        &self,
+        substream: &mut Self::OutboundSubstream,
+    ) -> Poll<Self::Substream, IoError> {
         match substream.poll()? {
             Async::Ready(Some(s)) => Ok(Async::Ready(s)),
             Async::Ready(None) => Err(io::ErrorKind::BrokenPipe.into()),
@@ -77,8 +89,7 @@ where
         }
     }
 
-    fn destroy_outbound(&self, _: Self::OutboundSubstream) {
-    }
+    fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
 
     unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
         false
@@ -104,19 +115,22 @@ where
         sub.shutdown()
     }
 
-    fn destroy_substream(&self, _: Self::Substream) {
-    }
+    fn destroy_substream(&self, _: Self::Substream) {}
 
     fn is_remote_acknowledged(&self) -> bool {
         self.1.load(atomic::Ordering::Acquire)
     }
 
     fn close(&self) -> Poll<(), IoError> {
-        self.0.close().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        self.0
+            .close()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn flush_all(&self) -> Poll<(), IoError> {
-        self.0.flush().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        self.0
+            .flush()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 
@@ -169,4 +183,3 @@ where
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }
-

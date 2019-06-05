@@ -55,7 +55,7 @@ pub struct MemoryRecordStorage {
     /// Maximum size of the record we will store.
     max_record_size: usize,
     /// The records.
-    records: FnvHashMap<Multihash, Record>
+    records: FnvHashMap<Multihash, Record>,
 }
 
 impl MemoryRecordStorage {
@@ -64,10 +64,10 @@ impl MemoryRecordStorage {
 
     /// Creates a new `MemoryRecordStorage`.
     pub fn new(max_records: usize, max_record_size: usize) -> Self {
-        MemoryRecordStorage{
+        MemoryRecordStorage {
             max_records,
             max_record_size,
-            records: FnvHashMap::default()
+            records: FnvHashMap::default(),
         }
     }
 }
@@ -92,7 +92,7 @@ impl RecordStore for MemoryRecordStorage {
         }
 
         if r.value.len() >= self.max_record_size {
-            return Err(RecordStorageError::ValueTooLarge)
+            return Err(RecordStorageError::ValueTooLarge);
         }
 
         self.records.insert(r.key.clone(), r);

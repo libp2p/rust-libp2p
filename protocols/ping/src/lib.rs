@@ -41,14 +41,16 @@
 //! [`Swarm`]: libp2p_core::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
-pub mod protocol;
 pub mod handler;
+pub mod protocol;
 
-pub use handler::{PingConfig, PingResult, PingSuccess, PingFailure};
 use handler::PingHandler;
+pub use handler::{PingConfig, PingFailure, PingResult, PingSuccess};
 
 use futures::prelude::*;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_core::swarm::{
+    ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+};
 use libp2p_core::{Multiaddr, PeerId};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
@@ -116,8 +118,10 @@ where
         self.events.push_front(PingEvent { peer, result })
     }
 
-    fn poll(&mut self, _: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<Void, PingEvent>>
-    {
+    fn poll(
+        &mut self,
+        _: &mut PollParameters<'_>,
+    ) -> Async<NetworkBehaviourAction<Void, PingEvent>> {
         if let Some(e) = self.events.pop_back() {
             Async::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {

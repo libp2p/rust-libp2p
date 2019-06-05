@@ -54,9 +54,9 @@
 use fnv::FnvHashMap;
 use futures::{future, prelude::*, try_ready};
 use parking_lot::Mutex;
+use std::fmt;
 use std::io::{self, Read, Write};
 use std::ops::Deref;
-use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -142,7 +142,9 @@ pub trait StreamMuxer {
     /// implementations of `AsyncRead` which are composed of multiple subimplementations to
     /// efficiently implement `prepare_uninitialized_buffer`.
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        for b in buf.iter_mut() { *b = 0; }
+        for b in buf.iter_mut() {
+            *b = 0;
+        }
         true
     }
 
@@ -362,7 +364,6 @@ where
     }
 }
 
-
 impl<P> Read for SubstreamRef<P>
 where
     P: Deref,
@@ -373,7 +374,7 @@ where
         let s = self.substream.as_mut().expect("substream was empty");
         match self.muxer.read_substream(s, buf).map_err(|e| e.into())? {
             Async::Ready(n) => Ok(n),
-            Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
+            Async::NotReady => Err(io::ErrorKind::WouldBlock.into()),
         }
     }
 }
@@ -403,7 +404,7 @@ where
         let s = self.substream.as_mut().expect("substream was empty");
         match self.muxer.write_substream(s, buf).map_err(|e| e.into())? {
             Async::Ready(n) => Ok(n),
-            Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
+            Async::NotReady => Err(io::ErrorKind::WouldBlock.into()),
         }
     }
 
@@ -412,7 +413,7 @@ where
         let s = self.substream.as_mut().expect("substream was empty");
         match self.muxer.flush_substream(s).map_err(|e| e.into())? {
             Async::Ready(()) => Ok(()),
-            Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
+            Async::NotReady => Err(io::ErrorKind::WouldBlock.into()),
         }
     }
 }
@@ -449,13 +450,18 @@ where
 {
     #[inline]
     fn drop(&mut self) {
-        self.muxer.destroy_substream(self.substream.take().expect("substream was empty"))
+        self.muxer
+            .destroy_substream(self.substream.take().expect("substream was empty"))
     }
 }
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Box<dyn StreamMuxer<Substream = usize, OutboundSubstream = usize, Error = io::Error> + Send + Sync>,
+    inner: Box<
+        dyn StreamMuxer<Substream = usize, OutboundSubstream = usize, Error = io::Error>
+            + Send
+            + Sync,
+    >,
 }
 
 impl StreamMuxerBox {
@@ -550,7 +556,10 @@ impl StreamMuxer for StreamMuxerBox {
     }
 }
 
-struct Wrap<T> where T: StreamMuxer {
+struct Wrap<T>
+where
+    T: StreamMuxer,
+{
     inner: T,
     substreams: Mutex<FnvHashMap<usize, T::Substream>>,
     next_substream: AtomicUsize,
@@ -588,7 +597,10 @@ where
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Self::Substream, Self::Error> {
         let mut list = self.outbound.lock();
-        let substream = try_ready!(self.inner.poll_outbound(list.get_mut(substream).unwrap()).map_err(|e| e.into()));
+        let substream = try_ready!(self
+            .inner
+            .poll_outbound(list.get_mut(substream).unwrap())
+            .map_err(|e| e.into()));
         let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
         self.substreams.lock().insert(id, substream);
         Ok(Async::Ready(id))
@@ -597,7 +609,8 @@ where
     #[inline]
     fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
         let mut list = self.outbound.lock();
-        self.inner.destroy_outbound(list.remove(&substream).unwrap())
+        self.inner
+            .destroy_outbound(list.remove(&substream).unwrap())
     }
 
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
@@ -607,31 +620,40 @@ where
     #[inline]
     fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.read_substream(list.get_mut(s).unwrap(), buf).map_err(|e| e.into())
+        self.inner
+            .read_substream(list.get_mut(s).unwrap(), buf)
+            .map_err(|e| e.into())
     }
 
     #[inline]
     fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Poll<usize, Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.write_substream(list.get_mut(s).unwrap(), buf).map_err(|e| e.into())
+        self.inner
+            .write_substream(list.get_mut(s).unwrap(), buf)
+            .map_err(|e| e.into())
     }
 
     #[inline]
     fn flush_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.flush_substream(list.get_mut(s).unwrap()).map_err(|e| e.into())
+        self.inner
+            .flush_substream(list.get_mut(s).unwrap())
+            .map_err(|e| e.into())
     }
 
     #[inline]
     fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), Self::Error> {
         let mut list = self.substreams.lock();
-        self.inner.shutdown_substream(list.get_mut(s).unwrap()).map_err(|e| e.into())
+        self.inner
+            .shutdown_substream(list.get_mut(s).unwrap())
+            .map_err(|e| e.into())
     }
 
     #[inline]
     fn destroy_substream(&self, substream: Self::Substream) {
         let mut list = self.substreams.lock();
-        self.inner.destroy_substream(list.remove(&substream).unwrap())
+        self.inner
+            .destroy_substream(list.remove(&substream).unwrap())
     }
 
     #[inline]

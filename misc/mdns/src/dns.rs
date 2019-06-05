@@ -277,7 +277,7 @@ fn append_txt_record<'a>(
 
     // Flags.
     out.push(0x00);
-    out.push(0x10);     // TXT record.
+    out.push(0x10); // TXT record.
     out.push(0x80);
     out.push(0x01);
 
@@ -348,7 +348,9 @@ mod tests {
 
     #[test]
     fn build_query_response_correct() {
-        let my_peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let my_peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
         let query = build_query_response(

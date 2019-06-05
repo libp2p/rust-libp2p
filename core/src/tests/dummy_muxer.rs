@@ -22,8 +22,8 @@
 //! version of the trait along with a way to setup the muxer to behave in the
 //! desired way when testing other components.
 
-use futures::prelude::*;
 use crate::muxing::StreamMuxer;
+use futures::prelude::*;
 use std::io::Error as IoError;
 
 /// Substream type
@@ -48,7 +48,7 @@ struct DummyConnection {
 
 /// `DummyMuxer` implements `StreamMuxer` and methods to control its behaviour when used in tests
 #[derive(Debug, PartialEq, Clone)]
-pub struct DummyMuxer{
+pub struct DummyMuxer {
     in_connection: DummyConnection,
     out_connection: DummyConnection,
 }
@@ -112,7 +112,9 @@ impl StreamMuxer for DummyMuxer {
         unreachable!()
     }
     fn destroy_substream(&self, _: Self::Substream) {}
-    fn is_remote_acknowledged(&self) -> bool { true }
+    fn is_remote_acknowledged(&self) -> bool {
+        true
+    }
     fn close(&self) -> Poll<(), IoError> {
         Ok(Async::Ready(()))
     }

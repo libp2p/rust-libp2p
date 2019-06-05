@@ -20,15 +20,11 @@
 
 use futures::{future, prelude::*};
 use libp2p_core::identity;
-use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, IncomingError};
-use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
+use libp2p_core::nodes::raw_swarm::{IncomingError, RawSwarm, RawSwarmEvent};
 use libp2p_core::protocols_handler::{
-    ProtocolsHandler,
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use libp2p_core::{upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt, Transport};
 use std::{io, time::Duration};
 use wasm_timer::{Delay, Instant};
 
@@ -43,15 +39,15 @@ impl<TSubstream> Default for TestHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for TestHandler<TSubstream>
 where
-    TSubstream: tokio_io::AsyncRead + tokio_io::AsyncWrite
+    TSubstream: tokio_io::AsyncRead + tokio_io::AsyncWrite,
 {
-    type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
-    type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
+    type InEvent = (); // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
+    type OutEvent = (); // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type Error = io::Error;
     type Substream = TSubstream;
     type InboundProtocol = upgrade::DeniedUpgrade;
     type OutboundProtocol = upgrade::DeniedUpgrade;
-    type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
+    type OutboundOpenInfo = (); // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(upgrade::DeniedUpgrade)
@@ -59,26 +55,43 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as upgrade::InboundUpgrade<Self::Substream>>::Output
-    ) { panic!() }
+        _: <Self::InboundProtocol as upgrade::InboundUpgrade<Self::Substream>>::Output,
+    ) {
+        panic!()
+    }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Output,
-        _: Self::OutboundOpenInfo
-    ) { panic!() }
+        _: Self::OutboundOpenInfo,
+    ) {
+        panic!()
+    }
 
     fn inject_event(&mut self, _: Self::InEvent) {
         panic!()
     }
 
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
 
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Yes }
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::Yes
+    }
 
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
+    fn poll(
+        &mut self,
+    ) -> Poll<
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error,
+    > {
         Ok(Async::NotReady)
     }
 }
@@ -103,7 +116,7 @@ fn raw_swarm_simultaneous_connect() {
     //                 if we use the `MemoryTransport`. Using the TCP transport is important,
     //                 despite the fact that it adds a dependency.
 
-    for _ in 0 .. 10 {
+    for _ in 0..10 {
         // TODO: make creating the transport more elegant ; literaly half of the code of the test
         //       is about creating the transport
         let mut swarm1 = {
@@ -138,20 +151,28 @@ fn raw_swarm_simultaneous_connect() {
             RawSwarm::new(transport, local_public_key.into_peer_id())
         };
 
-        swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-        swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        swarm1
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
+        swarm2
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
 
         let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) =
             future::lazy(move || {
                 let swarm1_listen_addr =
-                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) =
+                        swarm1.poll()
+                    {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
                     };
 
                 let swarm2_listen_addr =
-                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
+                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) =
+                        swarm2.poll()
+                    {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
@@ -164,12 +185,14 @@ fn raw_swarm_simultaneous_connect() {
 
         let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
 
-        for _ in 0 .. 10 {
+        for _ in 0..10 {
             let mut swarm1_step = 0;
             let mut swarm2_step = 0;
 
-            let mut swarm1_dial_start = Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
-            let mut swarm2_dial_start = Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
+            let mut swarm1_dial_start =
+                Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
+            let mut swarm2_dial_start =
+                Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
 
             let future = future::poll_fn(|| -> Poll<(), io::Error> {
                 loop {
@@ -183,11 +206,14 @@ fn raw_swarm_simultaneous_connect() {
                         match swarm1_dial_start.poll().unwrap() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
-                                swarm1.peer(swarm2.local_peer_id().clone()).into_not_connected().unwrap()
+                                swarm1
+                                    .peer(swarm2.local_peer_id().clone())
+                                    .into_not_connected()
+                                    .unwrap()
                                     .connect(swarm2_listen_addr.clone(), handler);
                                 swarm1_step = 1;
                                 swarm1_not_ready = false;
-                            },
+                            }
                             Async::NotReady => swarm1_not_ready = true,
                         }
                     }
@@ -196,34 +222,40 @@ fn raw_swarm_simultaneous_connect() {
                         match swarm2_dial_start.poll().unwrap() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
-                                swarm2.peer(swarm1.local_peer_id().clone()).into_not_connected().unwrap()
+                                swarm2
+                                    .peer(swarm1.local_peer_id().clone())
+                                    .into_not_connected()
+                                    .unwrap()
                                     .connect(swarm1_listen_addr.clone(), handler);
                                 swarm2_step = 1;
                                 swarm2_not_ready = false;
-                            },
+                            }
                             Async::NotReady => swarm2_not_ready = true,
                         }
                     }
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm1.poll() {
-                            Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                            Async::Ready(RawSwarmEvent::IncomingConnectionError {
+                                error: IncomingError::DeniedLowerPriority,
+                                ..
+                            }) => {
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
-                            },
+                            }
                             Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 1);
                                 swarm1_step = 2;
-                            },
+                            }
                             Async::Ready(RawSwarmEvent::Replaced { new_info, .. }) => {
                                 assert_eq!(new_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
-                            },
+                            }
                             Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
-                            },
+                            }
                             Async::Ready(_) => unreachable!(),
                             Async::NotReady => swarm1_not_ready = true,
                         }
@@ -231,23 +263,26 @@ fn raw_swarm_simultaneous_connect() {
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm2.poll() {
-                            Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                            Async::Ready(RawSwarmEvent::IncomingConnectionError {
+                                error: IncomingError::DeniedLowerPriority,
+                                ..
+                            }) => {
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
-                            },
+                            }
                             Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 1);
                                 swarm2_step = 2;
-                            },
+                            }
                             Async::Ready(RawSwarmEvent::Replaced { new_info, .. }) => {
                                 assert_eq!(new_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
-                            },
+                            }
                             Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
-                            },
+                            }
                             Async::Ready(_) => unreachable!(),
                             Async::NotReady => swarm2_not_ready = true,
                         }
@@ -267,8 +302,16 @@ fn raw_swarm_simultaneous_connect() {
             reactor.block_on(future).unwrap();
 
             // We now disconnect them again.
-            swarm1.peer(swarm2.local_peer_id().clone()).into_connected().unwrap().close();
-            swarm2.peer(swarm1.local_peer_id().clone()).into_connected().unwrap().close();
+            swarm1
+                .peer(swarm2.local_peer_id().clone())
+                .into_connected()
+                .unwrap()
+                .close();
+            swarm2
+                .peer(swarm1.local_peer_id().clone())
+                .into_connected()
+                .unwrap()
+                .close();
         }
     }
 }

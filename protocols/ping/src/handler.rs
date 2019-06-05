@@ -20,18 +20,15 @@
 
 use crate::protocol;
 use futures::prelude::*;
-use libp2p_core::ProtocolsHandlerEvent;
 use libp2p_core::protocols_handler::{
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandler,
-    ProtocolsHandlerUpgrErr,
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use std::{error::Error, io, fmt, num::NonZeroU32, time::Duration};
+use libp2p_core::ProtocolsHandlerEvent;
 use std::collections::VecDeque;
+use std::{error::Error, fmt, io, num::NonZeroU32, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
-use wasm_timer::{Delay, Instant};
 use void::Void;
+use wasm_timer::{Delay, Instant};
 
 /// The configuration for outbound pings.
 #[derive(Clone, Debug)]
@@ -73,7 +70,7 @@ impl PingConfig {
             timeout: Duration::from_secs(20),
             interval: Duration::from_secs(15),
             max_failures: NonZeroU32::new(1).expect("1 != 0"),
-            keep_alive: false
+            keep_alive: false,
         }
     }
 
@@ -133,14 +130,16 @@ pub enum PingFailure {
     /// configured ping timeout.
     Timeout,
     /// The ping failed for reasons other than a timeout.
-    Other { error: Box<dyn std::error::Error + Send + 'static> }
+    Other {
+        error: Box<dyn std::error::Error + Send + 'static>,
+    },
 }
 
 impl fmt::Display for PingFailure {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PingFailure::Timeout => f.write_str("Ping timeout"),
-            PingFailure::Other { error } => write!(f, "Ping error: {}", error)
+            PingFailure::Other { error } => write!(f, "Ping error: {}", error),
         }
     }
 }
@@ -149,7 +148,7 @@ impl Error for PingFailure {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             PingFailure::Timeout => None,
-            PingFailure::Other { error } => Some(&**error)
+            PingFailure::Other { error } => Some(&**error),
         }
     }
 }
@@ -168,7 +167,7 @@ pub struct PingHandler<TSubstream> {
     pending_results: VecDeque<PingResult>,
     /// The number of consecutive ping failures that occurred.
     failures: u32,
-    _marker: std::marker::PhantomData<TSubstream>
+    _marker: std::marker::PhantomData<TSubstream>,
 }
 
 impl<TSubstream> PingHandler<TSubstream> {
@@ -179,7 +178,7 @@ impl<TSubstream> PingHandler<TSubstream> {
             next_ping: Delay::new(Instant::now()),
             pending_results: VecDeque::with_capacity(2),
             failures: 0,
-            _marker: std::marker::PhantomData
+            _marker: std::marker::PhantomData,
         }
     }
 }
@@ -207,17 +206,17 @@ where
 
     fn inject_fully_negotiated_outbound(&mut self, rtt: Duration, _info: ()) {
         // A ping initiated by the local peer was answered by the remote.
-        self.pending_results.push_front(Ok(PingSuccess::Ping { rtt }));
+        self.pending_results
+            .push_front(Ok(PingSuccess::Ping { rtt }));
     }
 
     fn inject_event(&mut self, _: Void) {}
 
     fn inject_dial_upgrade_error(&mut self, _info: (), error: ProtocolsHandlerUpgrErr<io::Error>) {
-        self.pending_results.push_front(
-            Err(match error {
-                ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
-                e => PingFailure::Other { error: Box::new(e) }
-            }))
+        self.pending_results.push_front(Err(match error {
+            ProtocolsHandlerUpgrErr::Timeout => PingFailure::Timeout,
+            e => PingFailure::Other { error: Box::new(e) },
+        }))
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -238,26 +237,25 @@ where
             if let Err(e) = result {
                 self.failures += 1;
                 if self.failures >= self.config.max_failures.get() {
-                    return Err(e)
+                    return Err(e);
                 } else {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(Err(e))))
+                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(Err(e))));
                 }
             }
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(result)))
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(result)));
         }
 
         match self.next_ping.poll() {
             Ok(Async::Ready(())) => {
                 self.next_ping.reset(Instant::now() + self.config.timeout);
-                let protocol = SubstreamProtocol::new(protocol::Ping)
-                    .with_timeout(self.config.timeout);
-                Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol,
-                    info: (),
-                }))
-            },
+                let protocol =
+                    SubstreamProtocol::new(protocol::Ping).with_timeout(self.config.timeout);
+                Ok(Async::Ready(
+                    ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info: () },
+                ))
+            }
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(e) => Err(PingFailure::Other { error: Box::new(e) })
+            Err(e) => Err(PingFailure::Other { error: Box::new(e) }),
         }
     }
 }
@@ -269,8 +267,8 @@ mod tests {
     use futures::future;
     use quickcheck::*;
     use rand::Rng;
-    use tokio_tcp::TcpStream;
     use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::TcpStream;
 
     impl Arbitrary for PingConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> PingConfig {
@@ -281,11 +279,12 @@ mod tests {
         }
     }
 
-    fn tick(h: &mut PingHandler<TcpStream>) -> Result<
-        ProtocolsHandlerEvent<protocol::Ping, (), PingResult>,
-        PingFailure
-    > {
-        Runtime::new().unwrap().block_on(future::poll_fn(|| h.poll() ))
+    fn tick(
+        h: &mut PingHandler<TcpStream>,
+    ) -> Result<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, PingFailure> {
+        Runtime::new()
+            .unwrap()
+            .block_on(future::poll_fn(|| h.poll()))
     }
 
     #[test]
@@ -305,7 +304,7 @@ mod tests {
                     // The next ping must be scheduled no earlier than the ping timeout.
                     assert!(h.next_ping.deadline() >= start + h.config.timeout);
                 }
-                e => panic!("Unexpected event: {:?}", e)
+                e => panic!("Unexpected event: {:?}", e),
             }
 
             let now = Instant::now();
@@ -319,23 +318,23 @@ mod tests {
                     // The next ping must be scheduled no earlier than the ping interval.
                     assert!(now + h.config.interval <= h.next_ping.deadline());
                 }
-                e => panic!("Unexpected event: {:?}", e)
+                e => panic!("Unexpected event: {:?}", e),
             }
             true
         }
 
-        quickcheck(prop as fn(_,_) -> _);
+        quickcheck(prop as fn(_, _) -> _);
     }
 
     #[test]
     fn max_failures() {
         let cfg = PingConfig::arbitrary(&mut StdGen::new(rand::thread_rng(), 100));
         let mut h = PingHandler::<TcpStream>::new(cfg);
-        for _ in 0 .. h.config.max_failures.get() - 1 {
+        for _ in 0..h.config.max_failures.get() - 1 {
             h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
             match tick(&mut h) {
                 Ok(ProtocolsHandlerEvent::Custom(Err(PingFailure::Timeout))) => {}
-                e => panic!("Unexpected event: {:?}", e)
+                e => panic!("Unexpected event: {:?}", e),
             }
         }
         h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
@@ -343,7 +342,7 @@ mod tests {
             Err(PingFailure::Timeout) => {
                 assert_eq!(h.failures, h.config.max_failures.get());
             }
-            e => panic!("Unexpected event: {:?}", e)
+            e => panic!("Unexpected event: {:?}", e),
         }
         h.inject_fully_negotiated_outbound(Duration::from_secs(1), ());
         match tick(&mut h) {
@@ -351,7 +350,7 @@ mod tests {
                 // A success resets the counter for consecutive failures.
                 assert_eq!(h.failures, 0);
             }
-            e => panic!("Unexpected event: {:?}", e)
+            e => panic!("Unexpected event: {:?}", e),
         }
     }
 }

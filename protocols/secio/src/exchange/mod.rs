@@ -20,8 +20,8 @@
 
 //! This module handles the key agreement process. Typically ECDH.
 
-use futures::prelude::*;
 use crate::SecioError;
+use futures::prelude::*;
 
 #[path = "impl_ring.rs"]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
@@ -34,7 +34,7 @@ mod platform;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KeyAgreement {
     EcdhP256,
-    EcdhP384
+    EcdhP384,
 }
 
 /// Opaque private key type.
@@ -44,15 +44,19 @@ pub struct AgreementPrivateKey(platform::AgreementPrivateKey);
 ///
 /// Returns the opaque private key and the corresponding public key.
 #[inline]
-pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (AgreementPrivateKey, Vec<u8>), Error = SecioError> {
+pub fn generate_agreement(
+    algorithm: KeyAgreement,
+) -> impl Future<Item = (AgreementPrivateKey, Vec<u8>), Error = SecioError> {
     platform::generate_agreement(algorithm).map(|(pr, pu)| (AgreementPrivateKey(pr), pu))
 }
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
 #[inline]
-pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8], out_size: usize)
-    -> impl Future<Item = Vec<u8>, Error = SecioError>
-{
+pub fn agree(
+    algorithm: KeyAgreement,
+    my_private_key: AgreementPrivateKey,
+    other_public_key: &[u8],
+    out_size: usize,
+) -> impl Future<Item = Vec<u8>, Error = SecioError> {
     platform::agree(algorithm, my_private_key.0, other_public_key, out_size)
 }
-

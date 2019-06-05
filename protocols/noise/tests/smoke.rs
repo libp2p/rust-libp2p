@@ -18,11 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::{self, Either}, prelude::*};
+use futures::{
+    future::{self, Either},
+    prelude::*,
+};
 use libp2p_core::identity;
-use libp2p_core::upgrade::{Negotiated, apply_inbound, apply_outbound};
-use libp2p_core::transport::{Transport, ListenerEvent};
-use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
+use libp2p_core::transport::{ListenerEvent, Transport};
+use libp2p_core::upgrade::{apply_inbound, apply_outbound, Negotiated};
+use libp2p_noise::{Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
@@ -51,7 +54,9 @@ fn xx() {
         run(server_transport, client_transport, message);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 #[test]
@@ -77,7 +82,9 @@ fn ix() {
         run(server_transport, client_transport, message);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 #[test]
@@ -107,8 +114,10 @@ fn ik_xx() {
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
-                    Either::A(apply_outbound(output,
-                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public)))
+                    Either::A(apply_outbound(
+                        output,
+                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public),
+                    ))
                 } else {
                     Either::B(apply_inbound(output, NoiseConfig::xx(client_dh)))
                 }
@@ -118,10 +127,15 @@ fn ik_xx() {
         run(server_transport, client_transport, message);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
-type Output = (RemoteIdentity<X25519>, NoiseOutput<Negotiated<TcpTransStream>>);
+type Output = (
+    RemoteIdentity<X25519>,
+    NoiseOutput<Negotiated<TcpTransStream>>,
+);
 
 fn run<T, U>(server_transport: T, client_transport: U, message1: Vec<u8>)
 where
@@ -140,14 +154,17 @@ where
         .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
         .unwrap();
 
-    let server_address = server.by_ref().wait()
+    let server_address = server
+        .by_ref()
+        .wait()
         .next()
         .expect("some event")
         .expect("no error")
         .into_new_address()
         .expect("listen address");
 
-    let server = server.take(1)
+    let server = server
+        .take(1)
         .filter_map(ListenerEvent::into_upgrade)
         .and_then(|client| client.0)
         .map_err(|e| panic!("server error: {}", e))
@@ -160,25 +177,29 @@ where
             Ok(())
         });
 
-    let client = client_transport.dial(server_address.clone()).unwrap()
+    let client = client_transport
+        .dial(server_address.clone())
+        .unwrap()
         .map_err(|e| panic!("client error: {}", e))
         .and_then(move |(_, server)| {
             io::write_all(server, message2).and_then(|(client, _)| io::flush(client))
         })
         .map(|_| ());
 
-    let future = client.join(server)
+    let future = client
+        .join(server)
         .map_err(|e| panic!("{:?}", e))
         .map(|_| ());
 
     tokio::run(future)
 }
 
-fn expect_identity(output: Output, pk: &identity::PublicKey)
-    -> impl Future<Item = Output, Error = NoiseError>
-{
+fn expect_identity(
+    output: Output,
+    pk: &identity::PublicKey,
+) -> impl Future<Item = Output, Error = NoiseError> {
     match output.0 {
         RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),
-        _ => panic!("Unexpected remote identity")
+        _ => panic!("Unexpected remote identity"),
     }
 }

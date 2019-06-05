@@ -18,17 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use crate::protocol::{
+    FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction,
+};
 use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
 use futures::prelude::*;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, Multiaddr, PeerId};
+use libp2p_core::swarm::{
+    ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+};
+use libp2p_core::{
+    protocols_handler::OneShotHandler, protocols_handler::ProtocolsHandler, Multiaddr, PeerId,
+};
 use rand;
 use smallvec::SmallVec;
-use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
+use std::{collections::VecDeque, iter, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
@@ -94,7 +100,8 @@ impl<TSubstream> Floodsub<TSubstream> {
         }
 
         if self.target_peers.insert(peer_id.clone()) {
-            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id });
+            self.events
+                .push_back(NetworkBehaviourAction::DialPeer { peer_id });
         }
     }
 
@@ -110,7 +117,11 @@ impl<TSubstream> Floodsub<TSubstream> {
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
-        if self.subscribed_topics.iter().any(|t| t.hash() == topic.hash()) {
+        if self
+            .subscribed_topics
+            .iter()
+            .any(|t| t.hash() == topic.hash())
+        {
             return false;
         }
 
@@ -138,9 +149,13 @@ impl<TSubstream> Floodsub<TSubstream> {
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
         let topic = topic.as_ref();
-        let pos = match self.subscribed_topics.iter().position(|t| t.hash() == topic) {
+        let pos = match self
+            .subscribed_topics
+            .iter()
+            .position(|t| t.hash() == topic)
+        {
             Some(pos) => pos,
-            None => return false
+            None => return false,
         };
 
         self.subscribed_topics.remove(pos);
@@ -171,7 +186,11 @@ impl<TSubstream> Floodsub<TSubstream> {
     /// Publishes a message with multiple topics to the network.
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
-    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
+    pub fn publish_many(
+        &mut self,
+        topic: impl IntoIterator<Item = impl Into<TopicHash>>,
+        data: impl Into<Vec<u8>>,
+    ) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
@@ -183,7 +202,11 @@ impl<TSubstream> Floodsub<TSubstream> {
         };
 
         // Don't publish the message if we're not subscribed ourselves to any of the topics.
-        if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+        if !self
+            .subscribed_topics
+            .iter()
+            .any(|t| message.topics.iter().any(|u| t.hash() == u))
+        {
             return;
         }
 
@@ -191,7 +214,10 @@ impl<TSubstream> Floodsub<TSubstream> {
 
         // Send to peers we know are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
-            if !sub_topic.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+            if !sub_topic
+                .iter()
+                .any(|t| message.topics.iter().any(|u| t == u))
+            {
                 continue;
             }
 
@@ -200,7 +226,7 @@ impl<TSubstream> Floodsub<TSubstream> {
                 event: FloodsubRpc {
                     subscriptions: Vec::new(),
                     messages: vec![message.clone()],
-                }
+                },
             });
         }
     }
@@ -248,15 +274,13 @@ where
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
         if self.target_peers.contains(id) {
-            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id: id.clone() });
+            self.events.push_back(NetworkBehaviourAction::DialPeer {
+                peer_id: id.clone(),
+            });
         }
     }
 
-    fn inject_node_event(
-        &mut self,
-        propagation_source: PeerId,
-        event: InnerMessage,
-    ) {
+    fn inject_node_event(&mut self, propagation_source: PeerId, event: InnerMessage) {
         // We ignore successful sends event.
         let event = match event {
             InnerMessage::Rx(event) => event,
@@ -273,19 +297,26 @@ where
                     if !remote_peer_topics.contains(&subscription.topic) {
                         remote_peer_topics.push(subscription.topic.clone());
                     }
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Subscribed {
-                        peer_id: propagation_source.clone(),
-                        topic: subscription.topic,
-                    }));
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        FloodsubEvent::Subscribed {
+                            peer_id: propagation_source.clone(),
+                            topic: subscription.topic,
+                        },
+                    ));
                 }
                 FloodsubSubscriptionAction::Unsubscribe => {
-                    if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
+                    if let Some(pos) = remote_peer_topics
+                        .iter()
+                        .position(|t| t == &subscription.topic)
+                    {
                         remote_peer_topics.remove(pos);
                     }
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Unsubscribed {
-                        peer_id: propagation_source.clone(),
-                        topic: subscription.topic,
-                    }));
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        FloodsubEvent::Unsubscribed {
+                            peer_id: propagation_source.clone(),
+                            topic: subscription.topic,
+                        },
+                    ));
                 }
             }
         }
@@ -301,9 +332,14 @@ where
             }
 
             // Add the message to be dispatched to the user.
-            if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+            if self
+                .subscribed_topics
+                .iter()
+                .any(|t| message.topics.iter().any(|u| t.hash() == u))
+            {
                 let event = FloodsubEvent::Message(message.clone());
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(event));
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(event));
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
@@ -312,17 +348,23 @@ where
                     continue;
                 }
 
-                if !subscr_topics.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+                if !subscr_topics
+                    .iter()
+                    .any(|t| message.topics.iter().any(|u| t == u))
+                {
                     continue;
                 }
 
                 if let Some(pos) = rpcs_to_dispatch.iter().position(|(p, _)| p == peer_id) {
                     rpcs_to_dispatch[pos].1.messages.push(message.clone());
                 } else {
-                    rpcs_to_dispatch.push((peer_id.clone(), FloodsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: vec![message.clone()],
-                    }));
+                    rpcs_to_dispatch.push((
+                        peer_id.clone(),
+                        FloodsubRpc {
+                            subscriptions: Vec::new(),
+                            messages: vec![message.clone()],
+                        },
+                    ));
                 }
             }
         }

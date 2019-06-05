@@ -18,15 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
+use crate::{dns, META_QUERY_SERVICE, SERVICE_NAME};
 use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration};
 use tokio_reactor::Handle;
-use wasm_timer::{Instant, Interval};
 use tokio_udp::UdpSocket;
+use wasm_timer::{Instant, Interval};
 
 pub use dns::MdnsResponseError;
 
@@ -132,7 +132,9 @@ impl MdnsService {
                 Ok(())
             }
             #[cfg(not(unix))]
-            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> { Ok(()) }
+            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> {
+                Ok(())
+            }
             let builder = net2::UdpBuilder::new_v4()?;
             builder.reuse_address(true)?;
             platform_specific(&builder)?;
@@ -537,10 +539,10 @@ impl<'a> fmt::Debug for MdnsPeer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::service::{MdnsPacket, MdnsService};
     use libp2p_core::PeerId;
     use std::{io, time::Duration};
     use tokio::{self, prelude::*};
-    use crate::service::{MdnsPacket, MdnsService};
 
     #[test]
     fn discover_ourselves() {
@@ -555,7 +557,9 @@ mod tests {
 
                 match packet {
                     MdnsPacket::Query(query) => {
-                        query.respond(peer_id.clone(), None, Duration::from_secs(120)).unwrap();
+                        query
+                            .respond(peer_id.clone(), None, Duration::from_secs(120))
+                            .unwrap();
                     }
                     MdnsPacket::Response(response) => {
                         for peer in response.discovered_peers() {

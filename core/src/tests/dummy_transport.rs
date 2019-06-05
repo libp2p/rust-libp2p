@@ -22,20 +22,23 @@
 //! version of the trait along with a way to setup the transport listeners with
 //! an initial state to facilitate testing.
 
+use crate::tests::dummy_muxer::DummyMuxer;
+use crate::{
+    transport::{ListenerEvent, TransportError},
+    Multiaddr, PeerId, Transport,
+};
 use futures::prelude::*;
 use futures::{
     future::{self, FutureResult},
     stream,
 };
 use std::io;
-use crate::{Multiaddr, PeerId, Transport, transport::{ListenerEvent, TransportError}};
-use crate::tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
     Ok(Async<Option<ListenerEvent<(PeerId, DummyMuxer)>>>),
     Error,
-    Events(Vec<ListenerEvent<(PeerId, DummyMuxer)>>)
+    Events(Vec<ListenerEvent<(PeerId, DummyMuxer)>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -70,7 +73,8 @@ impl DummyTransport {
 impl Transport for DummyTransport {
     type Output = (PeerId, DummyMuxer);
     type Error = io::Error;
-    type Listener = Box<dyn Stream<Item=ListenerEvent<Self::ListenerUpgrade>, Error=io::Error> + Send>;
+    type Listener =
+        Box<dyn Stream<Item = ListenerEvent<Self::ListenerUpgrade>, Error = io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = Box<dyn Future<Item = Self::Output, Error = io::Error> + Send>;
 
@@ -84,11 +88,12 @@ impl Transport for DummyTransport {
                 Async::Ready(Some(event)) => Ok(Box::new(stream::poll_fn(move || {
                     Ok(Async::Ready(Some(event.clone().map(future::ok))))
                 }))),
-                Async::Ready(None) => Ok(Box::new(stream::empty()))
+                Async::Ready(None) => Ok(Box::new(stream::empty())),
             },
             ListenerState::Error => Err(TransportError::MultiaddrNotSupported(addr)),
-            ListenerState::Events(events) =>
-                Ok(Box::new(stream::iter_ok(events.into_iter().map(|e| e.map(future::ok)))))
+            ListenerState::Events(events) => Ok(Box::new(stream::iter_ok(
+                events.into_iter().map(|e| e.map(future::ok)),
+            ))),
         }
     }
 
@@ -102,13 +107,12 @@ impl Transport for DummyTransport {
             PeerId::random()
         };
 
-        let fut =
-            if self.dial_should_fail {
-                let err_string = format!("unreachable host error, peer={:?}", peer_id);
-                future::err(io::Error::new(io::ErrorKind::Other, err_string))
-            } else {
-                future::ok((peer_id, DummyMuxer::new()))
-            };
+        let fut = if self.dial_should_fail {
+            let err_string = format!("unreachable host error, peer={:?}", peer_id);
+            future::err(io::Error::new(io::ErrorKind::Other, err_string))
+        } else {
+            future::ok((peer_id, DummyMuxer::new()))
+        };
 
         Ok(Box::new(fut))
     }

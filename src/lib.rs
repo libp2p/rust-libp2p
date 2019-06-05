@@ -158,8 +158,8 @@ pub use futures;
 pub use multiaddr;
 #[doc(inline)]
 pub use multihash;
-pub use tokio_io;
 pub use tokio_codec;
+pub use tokio_io;
 
 #[doc(inline)]
 pub use libp2p_core as core;
@@ -169,16 +169,16 @@ pub use libp2p_deflate as deflate;
 #[doc(inline)]
 pub use libp2p_dns as dns;
 #[doc(inline)]
+pub use libp2p_floodsub as floodsub;
+#[doc(inline)]
 pub use libp2p_identify as identify;
 #[doc(inline)]
 pub use libp2p_kad as kad;
-#[doc(inline)]
-pub use libp2p_floodsub as floodsub;
-#[doc(inline)]
-pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[doc(inline)]
+pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_noise as noise;
@@ -197,7 +197,10 @@ pub use libp2p_tcp as tcp;
 pub use libp2p_uds as uds;
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(all(
+    feature = "libp2p-websocket",
+    not(any(target_os = "emscripten", target_os = "unknown"))
+))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
 #[doc(inline)]
@@ -210,14 +213,14 @@ pub mod simple;
 
 pub use self::core::{
     identity,
-    Transport, PeerId, Swarm,
     transport::TransportError,
-    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
+    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
+    PeerId, Swarm, Transport,
 };
-pub use libp2p_core_derive::NetworkBehaviour;
-pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
+pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
+pub use libp2p_core_derive::NetworkBehaviour;
 
 use futures::prelude::*;
 use std::{error, io, time::Duration};
@@ -226,10 +229,24 @@ use std::{error, io, time::Duration};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-pub fn build_development_transport(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
-{
-     build_tcp_ws_secio_mplex_yamux(keypair)
+pub fn build_development_transport(
+    keypair: identity::Keypair,
+) -> impl Transport<
+    Output = (
+        PeerId,
+        impl core::muxing::StreamMuxer<
+                OutboundSubstream = impl Send,
+                Substream = impl Send,
+                Error = impl Into<io::Error>,
+            > + Send
+            + Sync,
+    ),
+    Error = impl error::Error + Send,
+    Listener = impl Send,
+    Dial = impl Send,
+    ListenerUpgrade = impl Send,
+> + Clone {
+    build_tcp_ws_secio_mplex_yamux(keypair)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
@@ -238,18 +255,35 @@ pub fn build_development_transport(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
-{
+pub fn build_tcp_ws_secio_mplex_yamux(
+    keypair: identity::Keypair,
+) -> impl Transport<
+    Output = (
+        PeerId,
+        impl core::muxing::StreamMuxer<
+                OutboundSubstream = impl Send,
+                Substream = impl Send,
+                Error = impl Into<io::Error>,
+            > + Send
+            + Sync,
+    ),
+    Error = impl error::Error + Send,
+    Listener = impl Send,
+    Dial = impl Send,
+    ListenerUpgrade = impl Send,
+> + Clone {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(keypair))
         .and_then(move |output, endpoint| {
             let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
-                // TODO: use a single `.map` instead of two maps
-                .map_inbound(move |muxer| (peer_id, muxer))
-                .map_outbound(move |muxer| (peer_id2, muxer));
+            let upgrade = core::upgrade::SelectUpgrade::new(
+                yamux::Config::default(),
+                mplex::MplexConfig::new(),
+            )
+            // TODO: use a single `.map` instead of two maps
+            .map_inbound(move |muxer| (peer_id, muxer))
+            .map_outbound(move |muxer| (peer_id2, muxer));
             core::upgrade::apply(output.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })
@@ -263,12 +297,21 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 #[derive(Debug, Clone)]
 struct CommonTransport {
     // The actual implementation of everything.
-    inner: CommonTransportInner
+    inner: CommonTransportInner,
 }
 
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
-type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
+#[cfg(all(
+    not(any(target_os = "emscripten", target_os = "unknown")),
+    feature = "libp2p-websocket"
+))]
+type InnerImplementation = core::transport::OrTransport<
+    dns::DnsConfig<tcp::TcpConfig>,
+    websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>,
+>;
+#[cfg(all(
+    not(any(target_os = "emscripten", target_os = "unknown")),
+    not(feature = "libp2p-websocket")
+))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 type InnerImplementation = core::transport::dummy::DummyTransport;
@@ -291,7 +334,7 @@ impl CommonTransport {
         };
 
         CommonTransport {
-            inner: CommonTransportInner { inner: transport }
+            inner: CommonTransportInner { inner: transport },
         }
     }
 
@@ -300,7 +343,7 @@ impl CommonTransport {
     pub fn new() -> CommonTransport {
         let inner = core::transport::dummy::DummyTransport::new();
         CommonTransport {
-            inner: CommonTransportInner { inner }
+            inner: CommonTransportInner { inner },
         }
     }
 }

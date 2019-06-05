@@ -20,17 +20,10 @@
 
 use crate::{
     protocols_handler::{
-        KeepAlive,
+        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
         SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
     },
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-        DeniedUpgrade,
-    }
+    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade},
 };
 use futures::prelude::*;
 use std::marker::PhantomData;
@@ -71,7 +64,7 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output,
     ) {
     }
 
@@ -79,7 +72,7 @@ where
     fn inject_fully_negotiated_outbound(
         &mut self,
         _: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
-        _: Self::OutboundOpenInfo
+        _: Self::OutboundOpenInfo,
     ) {
     }
 
@@ -87,10 +80,19 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
+    }
 
     #[inline]
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::No
+    }
 
     #[inline]
     fn poll(

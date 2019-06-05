@@ -24,13 +24,14 @@ use super::*;
 
 use std::io;
 
-use futures::future;
 use crate::tests::dummy_handler::{Handler, InEvent, OutEvent};
 use crate::tests::dummy_muxer::DummyMuxer;
-use void::Void;
 use crate::PeerId;
+use futures::future;
+use void::Void;
 
-type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error, ()>;
+type TestHandledNodesTasks =
+    HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error, ()>;
 
 struct HandledNodeTaskTestBuilder {
     muxer: DummyMuxer,
@@ -57,14 +58,11 @@ impl HandledNodeTaskTestBuilder {
         let mut task_ids = Vec::new();
         for _i in 0..self.task_count {
             let fut = future::ok((peer_id.clone(), self.muxer.clone()));
-            task_ids.push(
-                handled_nodes.add_reach_attempt(fut, (), self.handler.clone())
-            );
+            task_ids.push(handled_nodes.add_reach_attempt(fut, (), self.handler.clone()));
         }
         (handled_nodes, task_ids)
     }
 }
-
 
 // Tests for HandledNodeTasks
 
@@ -87,7 +85,7 @@ fn iterate_over_all_tasks() {
 
     let mut tasks: Vec<TaskId> = handled_nodes.tasks().collect();
     assert!(tasks.len() == 3);
-    tasks.sort_by_key(|t| t.0 );
+    tasks.sort_by_key(|t| t.0);
     assert_eq!(tasks, task_ids);
 }
 

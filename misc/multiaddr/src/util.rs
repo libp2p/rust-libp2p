@@ -17,5 +17,3 @@ impl std::io::Write for BytesWriter {
         Ok(())
     }
 }
-
-

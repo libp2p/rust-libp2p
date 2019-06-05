@@ -29,7 +29,7 @@ pub mod secp256k1;
 pub mod error;
 
 use self::error::*;
-use crate::{PeerId, keys_proto};
+use crate::{keys_proto, PeerId};
 
 /// Identity keypair of a node.
 ///
@@ -57,7 +57,7 @@ pub enum Keypair {
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
-    Secp256k1(secp256k1::Keypair)
+    Secp256k1(secp256k1::Keypair),
 }
 
 impl Keypair {
@@ -100,7 +100,7 @@ impl Keypair {
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(ref pair) => pair.secret().sign(msg)
+            Secp256k1(ref pair) => pair.secret().sign(msg),
         }
     }
 
@@ -127,7 +127,7 @@ pub enum PublicKey {
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
     /// A public Secp256k1 key.
-    Secp256k1(secp256k1::PublicKey)
+    Secp256k1(secp256k1::PublicKey),
 }
 
 impl PublicKey {
@@ -142,7 +142,7 @@ impl PublicKey {
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             Rsa(pk) => pk.verify(msg, sig),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(pk) => pk.verify(msg, sig)
+            Secp256k1(pk) => pk.verify(msg, sig),
         }
     }
 
@@ -155,17 +155,17 @@ impl PublicKey {
             PublicKey::Ed25519(key) => {
                 public_key.set_Type(keys_proto::KeyType::Ed25519);
                 public_key.set_Data(key.encode().to_vec());
-            },
+            }
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             PublicKey::Rsa(key) => {
                 public_key.set_Type(keys_proto::KeyType::RSA);
                 public_key.set_Data(key.encode_x509());
-            },
+            }
             #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(key) => {
                 public_key.set_Type(keys_proto::KeyType::Secp256k1);
                 public_key.set_Data(key.encode().to_vec());
-            },
+            }
         };
 
         public_key
@@ -182,29 +182,26 @@ impl PublicKey {
 
         match pubkey.get_Type() {
             keys_proto::KeyType::Ed25519 => {
-                ed25519::PublicKey::decode(pubkey.get_Data())
-                    .map(PublicKey::Ed25519)
-            },
+                ed25519::PublicKey::decode(pubkey.get_Data()).map(PublicKey::Ed25519)
+            }
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             keys_proto::KeyType::RSA => {
-                rsa::PublicKey::decode_x509(&pubkey.take_Data())
-                    .map(PublicKey::Rsa)
+                rsa::PublicKey::decode_x509(&pubkey.take_Data()).map(PublicKey::Rsa)
             }
             #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
             keys_proto::KeyType::RSA => {
                 log::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))
-            },
+            }
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
-                secp256k1::PublicKey::decode(pubkey.get_Data())
-                    .map(PublicKey::Secp256k1)
+                secp256k1::PublicKey::decode(pubkey.get_Data()).map(PublicKey::Secp256k1)
             }
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err("Unsupported".to_string().into())
-            },
+            }
         }
     }
 
@@ -213,4 +210,3 @@ impl PublicKey {
         self.into()
     }
 }
-

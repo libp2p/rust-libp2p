@@ -28,10 +28,12 @@ use error::Error;
 use framed::BytesConnection;
 use futures::prelude::*;
 use libp2p_core::{
-    ConnectedPoint,
-    Transport,
     multiaddr::Multiaddr,
-    transport::{map::{MapFuture, MapStream}, ListenerEvent, TransportError}
+    transport::{
+        map::{MapFuture, MapStream},
+        ListenerEvent, TransportError,
+    },
+    ConnectedPoint, Transport,
 };
 use rw_stream_sink::RwStreamSink;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -39,7 +41,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// A Websocket transport.
 #[derive(Debug, Clone)]
 pub struct WsConfig<T> {
-    transport: framed::WsConfig<T>
+    transport: framed::WsConfig<T>,
 }
 
 impl<T> WsConfig<T> {
@@ -79,9 +81,7 @@ impl<T> WsConfig<T> {
 
 impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
     fn from(framed: framed::WsConfig<T>) -> Self {
-        WsConfig {
-            transport: framed
-        }
+        WsConfig { transport: framed }
     }
 }
 
@@ -92,7 +92,7 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Send + 'static
+    T::Output: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = RwStreamSink<BytesConnection<T::Output>>;
     type Error = Error<T::Error>;
@@ -101,11 +101,15 @@ where
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.transport.map(wrap_connection as WrapperFn<T::Output>).listen_on(addr)
+        self.transport
+            .map(wrap_connection as WrapperFn<T::Output>)
+            .listen_on(addr)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport.map(wrap_connection as WrapperFn<T::Output>).dial(addr)
+        self.transport
+            .map(wrap_connection as WrapperFn<T::Output>)
+            .dial(addr)
     }
 }
 
@@ -114,18 +118,16 @@ pub type InnerStream<T, E> =
     Box<(dyn Stream<Error = Error<E>, Item = ListenerEvent<InnerFuture<T, E>>> + Send)>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
-pub type InnerFuture<T, E> =
-    Box<(dyn Future<Item = BytesConnection<T>, Error = Error<E>> + Send)>;
+pub type InnerFuture<T, E> = Box<(dyn Future<Item = BytesConnection<T>, Error = Error<E>> + Send)>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
-pub type WrapperFn<T> =
-    fn(BytesConnection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
+pub type WrapperFn<T> = fn(BytesConnection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
 
 /// Wrap a websocket connection producing data frames into a `RwStreamSink`
 /// implementing `AsyncRead` + `AsyncWrite`.
 fn wrap_connection<T>(c: BytesConnection<T>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
 where
-    T: AsyncRead + AsyncWrite
+    T: AsyncRead + AsyncWrite,
 {
     RwStreamSink::new(c)
 }
@@ -134,25 +136,24 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::WsConfig;
+    use futures::{Future, Stream};
+    use libp2p_core::{multiaddr::Protocol, transport::ListenerEvent, Transport};
     use libp2p_tcp as tcp;
     use tokio::runtime::current_thread::Runtime;
-    use futures::{Future, Stream};
-    use libp2p_core::{
-        Transport,
-        multiaddr::Protocol,
-        transport::ListenerEvent
-    };
-    use super::WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
         let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
-        let mut listener = ws_config.clone()
+        let mut listener = ws_config
+            .clone()
             .listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap())
             .unwrap();
 
-        let addr = listener.by_ref().wait()
+        let addr = listener
+            .by_ref()
+            .wait()
             .next()
             .expect("some event")
             .expect("no error")
@@ -182,11 +183,14 @@ mod tests {
     fn dialer_connects_to_listener_ipv6() {
         let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
-        let mut listener = ws_config.clone()
+        let mut listener = ws_config
+            .clone()
             .listen_on("/ip6/::1/tcp/0/ws".parse().unwrap())
             .unwrap();
 
-        let addr = listener.by_ref().wait()
+        let addr = listener
+            .by_ref()
+            .wait()
             .next()
             .expect("some event")
             .expect("no error")

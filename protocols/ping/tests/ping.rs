@@ -20,21 +20,19 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
+use futures::{future, prelude::*};
 use libp2p_core::{
-    Multiaddr,
-    PeerId,
-    Swarm,
     identity,
     muxing::StreamMuxer,
-    upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
-    transport::Transport
+    transport::Transport,
+    upgrade::{self, InboundUpgradeExt, OutboundUpgradeExt},
+    Multiaddr, PeerId, Swarm,
 };
 use libp2p_ping::*;
-use libp2p_yamux as yamux;
 use libp2p_secio::SecioConfig;
 use libp2p_tcp::TcpConfig;
-use futures::{future, prelude::*};
-use std::{fmt, io, time::Duration, sync::mpsc::sync_channel};
+use libp2p_yamux as yamux;
+use std::{fmt, io, sync::mpsc::sync_channel, time::Duration};
 use tokio::runtime::Runtime;
 
 #[test]
@@ -57,8 +55,9 @@ fn ping() {
         loop {
             match swarm1.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(PingEvent { peer, result })) => match result {
-                    Ok(PingSuccess::Ping { rtt }) =>
-                        return Ok(Async::Ready((pid1.clone(), peer, rtt))),
+                    Ok(PingSuccess::Ping { rtt }) => {
+                        return Ok(Async::Ready((pid1.clone(), peer, rtt)))
+                    }
                     _ => {}
                 },
                 _ => {
@@ -68,7 +67,7 @@ fn ping() {
                             listening = true;
                         }
                     }
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
             }
         }
@@ -80,8 +79,9 @@ fn ping() {
         loop {
             match swarm2.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(PingEvent { peer, result })) => match result {
-                    Ok(PingSuccess::Ping { rtt }) =>
-                        return Ok(Async::Ready((pid2.clone(), peer, rtt))),
+                    Ok(PingSuccess::Ping { rtt }) => {
+                        return Ok(Async::Ready((pid2.clone(), peer, rtt)))
+                    }
                     _ => {}
                 },
                 _ => {
@@ -89,7 +89,7 @@ fn ping() {
                         Swarm::dial_addr(&mut swarm2, rx.recv().unwrap()).unwrap();
                         dialing = true;
                     }
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
             }
         }
@@ -101,13 +101,23 @@ fn ping() {
     assert!(rtt < Duration::from_millis(50));
 }
 
-fn mk_transport() -> (PeerId, impl Transport<
-    Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
-    Listener = impl Send,
-    ListenerUpgrade = impl Send,
-    Dial = impl Send,
-    Error = impl fmt::Debug
-> + Clone) {
+fn mk_transport() -> (
+    PeerId,
+    impl Transport<
+            Output = (
+                PeerId,
+                impl StreamMuxer<
+                    Substream = impl Send,
+                    OutboundSubstream = impl Send,
+                    Error = impl Into<io::Error>,
+                >,
+            ),
+            Listener = impl Send,
+            ListenerUpgrade = impl Send,
+            Dial = impl Send,
+            Error = impl fmt::Debug,
+        > + Clone,
+) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let transport = TcpConfig::new()
@@ -123,4 +133,3 @@ fn mk_transport() -> (PeerId, impl Transport<
         });
     (peer_id, transport)
 }
-

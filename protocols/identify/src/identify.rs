@@ -22,9 +22,13 @@ use crate::listen_handler::IdentifyListenHandler;
 use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, PublicKey, either::EitherOutput, upgrade::Negotiated};
+use libp2p_core::protocols_handler::{
+    ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr,
+};
+use libp2p_core::swarm::{
+    ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+};
+use libp2p_core::{either::EitherOutput, upgrade::Negotiated, Multiaddr, PeerId, PublicKey};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -51,7 +55,11 @@ pub struct Identify<TSubstream> {
 
 impl<TSubstream> Identify<TSubstream> {
     /// Creates a `Identify`.
-    pub fn new(protocol_version: String, agent_version: String, local_public_key: PublicKey) -> Self {
+    pub fn new(
+        protocol_version: String,
+        agent_version: String,
+        local_public_key: PublicKey,
+    ) -> Self {
         Identify {
             protocol_version,
             agent_version,
@@ -68,7 +76,8 @@ impl<TSubstream> NetworkBehaviour for Identify<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
+    type ProtocolsHandler =
+        ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -99,30 +108,33 @@ where
     ) {
         match event {
             EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    IdentifyEvent::Identified {
                         peer_id,
                         info: remote.info,
                         observed_addr: remote.observed_addr.clone(),
-                    }));
+                    },
+                ));
                 self.events
                     .push_back(NetworkBehaviourAction::ReportObservedAddr {
                         address: remote.observed_addr,
                     });
             }
             EitherOutput::First(sender) => {
-                let observed = self.observed_addresses.get(&peer_id)
-                    .expect("We only receive events from nodes we're connected to. We insert \
-                             into the hashmap when we connect to a node and remove only when we \
-                             disconnect; QED");
+                let observed = self.observed_addresses.get(&peer_id).expect(
+                    "We only receive events from nodes we're connected to. We insert \
+                     into the hashmap when we connect to a node and remove only when we \
+                     disconnect; QED",
+                );
                 self.to_answer.push((peer_id, sender, observed.clone()));
             }
             EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    IdentifyEvent::Error {
                         peer_id,
                         error: err,
-                    }));
+                    },
+                ));
             }
         }
     }
@@ -173,7 +185,7 @@ where
                         result: Ok(()),
                     };
                     return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                },
+                }
                 Ok(Async::NotReady) => self.futures.push((peer_id, future)),
                 Err(err) => {
                     let event = IdentifyEvent::SendBack {
@@ -181,7 +193,7 @@ where
                         result: Err(err),
                     };
                     return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                },
+                }
             }
         }
 
@@ -223,27 +235,34 @@ mod tests {
     use futures::{future, prelude::*};
     use libp2p_core::{
         identity,
-        PeerId,
-        upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
         muxing::StreamMuxer,
-        Multiaddr,
-        Swarm,
-        Transport
+        upgrade::{self, InboundUpgradeExt, OutboundUpgradeExt},
+        Multiaddr, PeerId, Swarm, Transport,
     };
-    use libp2p_tcp::TcpConfig;
-    use libp2p_secio::SecioConfig;
     use libp2p_mplex::MplexConfig;
+    use libp2p_secio::SecioConfig;
+    use libp2p_tcp::TcpConfig;
     use rand::Rng;
     use std::{fmt, io};
     use tokio::runtime::current_thread;
 
-    fn transport() -> (identity::PublicKey, impl Transport<
-        Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
-        Listener = impl Send,
-        ListenerUpgrade = impl Send,
-        Dial = impl Send,
-        Error = impl fmt::Debug
-    > + Clone) {
+    fn transport() -> (
+        identity::PublicKey,
+        impl Transport<
+                Output = (
+                    PeerId,
+                    impl StreamMuxer<
+                        Substream = impl Send,
+                        OutboundSubstream = impl Send,
+                        Error = impl Into<io::Error>,
+                    >,
+                ),
+                Listener = impl Send,
+                ListenerUpgrade = impl Send,
+                Dial = impl Send,
+                Error = impl fmt::Debug,
+            > + Clone,
+    ) {
         let id_keys = identity::Keypair::generate_ed25519();
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
@@ -288,8 +307,9 @@ mod tests {
         // it will permit the connection to be closed, as defined by
         // `PeriodicIdHandler::connection_keep_alive`. Hence the test succeeds if
         // either `Identified` event arrives correctly.
-        current_thread::Runtime::new().unwrap().block_on(
-            future::poll_fn(move || -> Result<_, io::Error> {
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future::poll_fn(move || -> Result<_, io::Error> {
                 loop {
                     match swarm1.poll().unwrap() {
                         Async::Ready(Some(IdentifyEvent::Identified { info, .. })) => {
@@ -298,8 +318,8 @@ mod tests {
                             assert_eq!(info.agent_version, "d");
                             assert!(!info.protocols.is_empty());
                             assert!(info.listen_addrs.is_empty());
-                            return Ok(Async::Ready(()))
-                        },
+                            return Ok(Async::Ready(()));
+                        }
                         Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
                         Async::Ready(e) => panic!("{:?}", e),
                         Async::NotReady => {}
@@ -312,11 +332,11 @@ mod tests {
                             assert_eq!(info.agent_version, "b");
                             assert!(!info.protocols.is_empty());
                             assert_eq!(info.listen_addrs.len(), 1);
-                            return Ok(Async::Ready(()))
-                        },
+                            return Ok(Async::Ready(()));
+                        }
                         Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
                         Async::Ready(e) => panic!("{:?}", e),
-                        Async::NotReady => break
+                        Async::NotReady => break,
                     }
                 }
 

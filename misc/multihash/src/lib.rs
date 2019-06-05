@@ -122,9 +122,7 @@ impl Multihash {
             *b = rand::random();
         }
 
-        Multihash {
-            bytes: output,
-        }
+        Multihash { bytes: output }
     }
 
     /// Returns the bytes representation of the multihash.
@@ -261,15 +259,18 @@ mod tests {
     #[test]
     fn rand_generates_valid_multihash() {
         // Iterate over every possible hash function.
-        for code in 0 .. u16::max_value() {
+        for code in 0..u16::max_value() {
             let hash_fn = match Hash::from_code(code) {
                 Some(c) => c,
                 None => continue,
             };
 
-            for _ in 0 .. 2000 {
+            for _ in 0..2000 {
                 let hash = Multihash::random(hash_fn);
-                assert_eq!(hash, Multihash::from_bytes(hash.clone().into_bytes()).unwrap());
+                assert_eq!(
+                    hash,
+                    Multihash::from_bytes(hash.clone().into_bytes()).unwrap()
+                );
             }
         }
     }

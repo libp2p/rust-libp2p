@@ -18,21 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
+use crate::protocol::{IdentifyProtocolConfig, IdentifySender};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{
-        KeepAlive,
+        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
         SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
     },
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated}
+    upgrade::{DeniedUpgrade, InboundUpgrade, Negotiated, OutboundUpgrade},
 };
 use smallvec::SmallVec;
 use tokio_io::{AsyncRead, AsyncWrite};
-use void::{Void, unreachable};
+use void::{unreachable, Void};
 
 /// Protocol handler that identifies the remote at a regular period.
 pub struct IdentifyListenHandler<TSubstream> {
@@ -73,7 +70,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output,
     ) {
         self.pending_result.push(protocol)
     }
@@ -86,7 +83,14 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
+    }
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -96,11 +100,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        ProtocolsHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-        >,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
         if !self.pending_result.is_empty() {

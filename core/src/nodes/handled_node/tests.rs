@@ -21,9 +21,9 @@
 #![cfg(test)]
 
 use super::*;
-use assert_matches::assert_matches;
-use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
 use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
+use crate::tests::dummy_muxer::{DummyConnectionState, DummyMuxer};
+use assert_matches::assert_matches;
 
 struct TestBuilder {
     muxer: DummyMuxer,
@@ -73,14 +73,13 @@ impl TestBuilder {
 }
 
 // Set the state of the `Handler` after `inject_outbound_closed` is called
-fn set_next_handler_outbound_state( handled_node: &mut TestHandledNode, next_state: HandlerState) {
+fn set_next_handler_outbound_state(handled_node: &mut TestHandledNode, next_state: HandlerState) {
     handled_node.handler.next_outbound_state = Some(next_state);
 }
 
 #[test]
 fn can_inject_event() {
-    let mut handled = TestBuilder::new()
-        .handled_node();
+    let mut handled = TestBuilder::new().handled_node();
 
     let event = InEvent::Custom("banana");
     handled.inject_event(event.clone());
@@ -113,7 +112,7 @@ fn handler_emits_outbound_closed_when_opening_new_substream_on_closed_node() {
 
     set_next_handler_outbound_state(
         &mut handled,
-        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("pear")))
+        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("pear"))),
     );
     handled.poll().expect("poll works");
 }

@@ -24,8 +24,8 @@
 use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
-use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
+use aes_ctr::stream_cipher;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
 use tokio_io::codec::length_delimited;
@@ -60,10 +60,12 @@ impl Hmac {
         // TODO: it would be nice to tweak the hmac crate to add an equivalent to new_varkey that
         //       never errors
         match algorithm {
-            Digest::Sha256 => Hmac::Sha256(Mac::new_varkey(key)
-                .expect("Hmac::new_varkey accepts any key length")),
-            Digest::Sha512 => Hmac::Sha512(Mac::new_varkey(key)
-                .expect("Hmac::new_varkey accepts any key length")),
+            Digest::Sha256 => {
+                Hmac::Sha256(Mac::new_varkey(key).expect("Hmac::new_varkey accepts any key length"))
+            }
+            Digest::Sha512 => {
+                Hmac::Sha512(Mac::new_varkey(key).expect("Hmac::new_varkey accepts any key length"))
+            }
         }
     }
 
@@ -75,12 +77,12 @@ impl Hmac {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
-            },
+            }
             Hmac::Sha512(ref hmac) => {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
-            },
+            }
         }
     }
 
@@ -92,12 +94,12 @@ impl Hmac {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
-            },
+            }
             Hmac::Sha512(ref hmac) => {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
-            },
+            }
         }
     }
 }
@@ -113,7 +115,7 @@ pub fn full_codec<S>(
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
     decoding_hmac: Hmac,
-    remote_nonce: Vec<u8>
+    remote_nonce: Vec<u8>,
 ) -> FullCodec<S>
 where
     S: AsyncRead + AsyncWrite,
@@ -124,23 +126,23 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
-    use crate::stream_cipher::{ctr, Cipher};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
     use super::Hmac;
     use crate::algo_support::Digest;
     use crate::error::SecioError;
+    use crate::stream_cipher::{ctr, Cipher};
     use bytes::BytesMut;
     use futures::sync::mpsc::channel;
-    use futures::{Future, Sink, Stream, stream};
+    use futures::{stream, Future, Sink, Stream};
     use rand;
     use std::io::Error as IoError;
+    use tokio::runtime::current_thread::Runtime;
     use tokio_io::codec::length_delimited::Framed;
+    use tokio_tcp::{TcpListener, TcpStream};
 
-    const NULL_IV : [u8; 16] = [0;16];
+    const NULL_IV: [u8; 16] = [0; 16];
 
     #[test]
     fn raw_encode_then_decode() {
@@ -151,7 +153,6 @@ mod tests {
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
 
-
         let encoder = EncoderMiddleware::new(
             data_tx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
@@ -161,7 +162,7 @@ mod tests {
             data_rx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
-            Vec::new()
+            Vec::new(),
         );
 
         let data = b"hello world";
@@ -170,7 +171,8 @@ mod tests {
         let data_received = decoder.into_future().map(|(n, _)| n).map_err(|(e, _)| e);
         let mut rt = Runtime::new().unwrap();
 
-        let (_, decoded) = rt.block_on(data_sent.join(data_received))
+        let (_, decoded) = rt
+            .block_on(data_sent.join(data_received))
             .map_err(|_| ())
             .unwrap();
         assert_eq!(&decoded.unwrap()[..], &data[..]);
@@ -190,20 +192,21 @@ mod tests {
         let listener_addr = listener.local_addr().unwrap();
 
         let nonce2 = nonce.clone();
-        let server = listener.incoming()
-            .into_future()
-            .map_err(|(e, _)| e)
-            .map(move |(connec, _)| {
-                full_codec(
-                    Framed::new(connec.unwrap()),
-                    ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
-                    Hmac::from_key(Digest::Sha256, &hmac_key),
-                    ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
-                    Hmac::from_key(Digest::Sha256, &hmac_key),
-                    nonce2
-                )
-            },
-        );
+        let server =
+            listener
+                .incoming()
+                .into_future()
+                .map_err(|(e, _)| e)
+                .map(move |(connec, _)| {
+                    full_codec(
+                        Framed::new(connec.unwrap()),
+                        ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
+                        Hmac::from_key(Digest::Sha256, &hmac_key),
+                        ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
+                        Hmac::from_key(Digest::Sha256, &hmac_key),
+                        nonce2,
+                    )
+                });
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
@@ -214,7 +217,7 @@ mod tests {
                     Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key_clone),
-                    Vec::new()
+                    Vec::new(),
                 )
             });
 
@@ -223,7 +226,10 @@ mod tests {
             .from_err::<SecioError>()
             .and_then(|(server, client)| {
                 client
-                    .send_all(stream::iter_ok::<_, IoError>(vec![nonce.into(), data_clone[..].into()]))
+                    .send_all(stream::iter_ok::<_, IoError>(vec![
+                        nonce.into(),
+                        data_clone[..].into(),
+                    ]))
                     .map(move |_| server)
                     .from_err()
             })

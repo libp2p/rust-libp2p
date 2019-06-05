@@ -38,8 +38,12 @@
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
-use futures::{prelude::*, future};
-use libp2p::{ identity, PeerId, ping::{Ping, PingConfig}, Swarm };
+use futures::{future, prelude::*};
+use libp2p::{
+    identity,
+    ping::{Ping, PingConfig},
+    PeerId, Swarm,
+};
 use std::env;
 
 fn main() {
@@ -69,11 +73,9 @@ fn main() {
     if let Some(addr) = env::args().nth(1) {
         let remote_addr = addr.clone();
         match addr.parse() {
-            Ok(remote) => {
-                match Swarm::dial_addr(&mut swarm, remote) {
-                    Ok(()) => println!("Dialed {:?}", remote_addr),
-                    Err(e) => println!("Dialing {:?} failed with: {:?}", remote_addr, e)
-                }
+            Ok(remote) => match Swarm::dial_addr(&mut swarm, remote) {
+                Ok(()) => println!("Dialed {:?}", remote_addr),
+                Err(e) => println!("Dialing {:?} failed with: {:?}", remote_addr, e),
             },
             Err(err) => println!("Failed to parse address to dial: {:?}", err),
         }
@@ -95,7 +97,7 @@ fn main() {
                             listening = true;
                         }
                     }
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
             }
         }

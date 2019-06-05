@@ -19,8 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
-    SubstreamProtocol
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
@@ -65,10 +64,7 @@ where
 {
     /// Creates a `OneShotHandler`.
     #[inline]
-    pub fn new(
-        listen_protocol: SubstreamProtocol<TInProto>,
-        inactive_timeout: Duration
-    ) -> Self {
+    pub fn new(listen_protocol: SubstreamProtocol<TInProto>, inactive_timeout: Duration) -> Self {
         OneShotHandler {
             listen_protocol,
             pending_error: None,
@@ -122,7 +118,10 @@ where
 {
     #[inline]
     fn default() -> Self {
-        OneShotHandler::new(SubstreamProtocol::new(Default::default()), Duration::from_secs(10))
+        OneShotHandler::new(
+            SubstreamProtocol::new(Default::default()),
+            Duration::from_secs(10),
+        )
     }
 }
 

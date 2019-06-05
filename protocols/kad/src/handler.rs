@@ -25,13 +25,11 @@ use crate::protocol::{
 use crate::record::Record;
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandler,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
+use libp2p_core::{
+    either::EitherOutput, upgrade, upgrade::Negotiated, InboundUpgrade, OutboundUpgrade, PeerId,
+};
 use multihash::Multihash;
 use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -108,8 +106,9 @@ where
     /// If the substream is not ready to be closed, returns it back.
     fn try_close(self) -> AsyncSink<Self> {
         match self {
-            SubstreamState::OutPendingOpen(_, _)
-            | SubstreamState::OutReportError(_, _) => AsyncSink::Ready,
+            SubstreamState::OutPendingOpen(_, _) | SubstreamState::OutReportError(_, _) => {
+                AsyncSink::Ready
+            }
             SubstreamState::OutPendingSend(mut stream, _, _)
             | SubstreamState::OutPendingFlush(mut stream, _)
             | SubstreamState::OutWaitingAnswer(mut stream, _)
@@ -218,7 +217,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         key: Multihash,
         /// The user data passed to the `GetValue`.
         user_data: TUserData,
-    }
+    },
 }
 
 /// Error that can happen when requesting an RPC query.
@@ -237,13 +236,14 @@ impl fmt::Display for KademliaHandlerQueryErr {
         match self {
             KademliaHandlerQueryErr::Upgrade(err) => {
                 write!(f, "Error while performing Kademlia query: {}", err)
-            },
-            KademliaHandlerQueryErr::UnexpectedMessage => {
-                write!(f, "Remote answered our Kademlia RPC query with the wrong message type")
-            },
+            }
+            KademliaHandlerQueryErr::UnexpectedMessage => write!(
+                f,
+                "Remote answered our Kademlia RPC query with the wrong message type"
+            ),
             KademliaHandlerQueryErr::Io(err) => {
                 write!(f, "I/O error during a Kademlia RPC query: {}", err)
-            },
+            }
         }
     }
 }
@@ -355,7 +355,7 @@ pub enum KademliaHandlerIn<TUserData> {
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
         request_id: KademliaRequestId,
-    }
+    },
 }
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
@@ -479,7 +479,7 @@ where
                         let msg = KadRequestMsg::FindNode { key };
                         self.substreams
                             .push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
-                    },
+                    }
                     Err(_) => (),
                 }
             }
@@ -488,8 +488,9 @@ where
                 request_id,
             } => {
                 let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _) =>
-                        conn_id == &request_id.connec_unique_id,
+                    SubstreamState::InWaitingUser(ref conn_id, _) => {
+                        conn_id == &request_id.connec_unique_id
+                    }
                     _ => false,
                 });
 
@@ -551,13 +552,13 @@ where
                 let msg = KadRequestMsg::GetValue { key };
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
-
             }
-            KademliaHandlerIn::PutValue { key, value, user_data } => {
-                let msg = KadRequestMsg::PutValue {
-                    key,
-                    value,
-                };
+            KademliaHandlerIn::PutValue {
+                key,
+                value,
+                user_data,
+            } => {
+                let msg = KadRequestMsg::PutValue { key, value };
 
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
@@ -568,8 +569,9 @@ where
                 request_id,
             } => {
                 let pos = self.substreams.iter().position(|state| match state {
-                    SubstreamState::InWaitingUser(ref conn_id, _)
-                        => conn_id == &request_id.connec_unique_id,
+                    SubstreamState::InWaitingUser(ref conn_id, _) => {
+                        conn_id == &request_id.connec_unique_id
+                    }
                     _ => false,
                 });
 
@@ -595,9 +597,9 @@ where
                 let pos = self.substreams.iter().position(|state| match state {
                     SubstreamState::InWaitingUser(ref conn_id, _)
                         if conn_id == &request_id.connec_unique_id =>
-                        {
-                            true
-                        }
+                    {
+                        true
+                    }
                     _ => false,
                 });
 
@@ -607,10 +609,7 @@ where
                         _ => unreachable!(),
                     };
 
-                    let msg = KadResponseMsg::PutValue {
-                        key,
-                        value,
-                    };
+                    let msg = KadResponseMsg::PutValue { key, value };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
                 }
@@ -724,10 +723,12 @@ where
                 ),
                 Err(error) => {
                     let event = if let Some(user_data) = user_data {
-                        Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                            error: KademliaHandlerQueryErr::Io(error),
-                            user_data
-                        }))
+                        Some(ProtocolsHandlerEvent::Custom(
+                            KademliaHandlerEvent::QueryError {
+                                error: KademliaHandlerQueryErr::Io(error),
+                                user_data,
+                            },
+                        ))
                     } else {
                         None
                     };
@@ -756,10 +757,12 @@ where
                 ),
                 Err(error) => {
                     let event = if let Some(user_data) = user_data {
-                        Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                            error: KademliaHandlerQueryErr::Io(error),
-                            user_data,
-                        }))
+                        Some(ProtocolsHandlerEvent::Custom(
+                            KademliaHandlerEvent::QueryError {
+                                error: KademliaHandlerQueryErr::Io(error),
+                                user_data,
+                            },
+                        ))
                     } else {
                         None
                     };
@@ -898,7 +901,7 @@ fn process_kad_request<TUserData>(
             key,
             value,
             request_id: KademliaRequestId { connec_unique_id },
-        })
+        }),
     }
 }
 
@@ -916,11 +919,9 @@ fn process_kad_response<TUserData>(
                 user_data,
             }
         }
-        KadResponseMsg::FindNode { closer_peers } => {
-            KademliaHandlerEvent::FindNodeRes {
-                closer_peers,
-                user_data,
-            }
+        KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
+            closer_peers,
+            user_data,
         },
         KadResponseMsg::GetProviders {
             closer_peers,
@@ -939,10 +940,7 @@ fn process_kad_response<TUserData>(
             user_data,
         },
         KadResponseMsg::PutValue { key, .. } => {
-            KademliaHandlerEvent::PutValueRes {
-                key,
-                user_data,
-            }
+            KademliaHandlerEvent::PutValueRes { key, user_data }
         }
     }
 }

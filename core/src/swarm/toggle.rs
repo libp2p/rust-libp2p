@@ -20,17 +20,15 @@
 
 use crate::{
     either::EitherOutput,
+    nodes::ConnectedPoint,
     protocols_handler::{
-        KeepAlive,
-        SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr,
-        IntoProtocolsHandler
+        IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr, SubstreamProtocol,
     },
+    swarm::PollParameters,
     swarm::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess},
-    upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade},
-    PeerId, Multiaddr, nodes::ConnectedPoint, swarm::PollParameters,
+    upgrade::{DeniedUpgrade, EitherUpgrade, InboundUpgrade, OutboundUpgrade},
+    Multiaddr, PeerId,
 };
 use futures::prelude::*;
 use std::error;
@@ -50,19 +48,22 @@ impl<TBehaviour> From<Option<TBehaviour>> for Toggle<TBehaviour> {
 
 impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
-    TBehaviour: NetworkBehaviour
+    TBehaviour: NetworkBehaviour,
 {
     type ProtocolsHandler = ToggleIntoProtoHandler<TBehaviour::ProtocolsHandler>;
     type OutEvent = TBehaviour::OutEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         ToggleIntoProtoHandler {
-            inner: self.inner.as_mut().map(|i| i.new_handler())
+            inner: self.inner.as_mut().map(|i| i.new_handler()),
         }
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.inner.as_mut().map(|b| b.addresses_of_peer(peer_id)).unwrap_or_else(Vec::new)
+        self.inner
+            .as_mut()
+            .map(|b| b.addresses_of_peer(peer_id))
+            .unwrap_or_else(Vec::new)
     }
 
     fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
@@ -77,7 +78,12 @@ where
         }
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
+    fn inject_replaced(
+        &mut self,
+        peer_id: PeerId,
+        closed_endpoint: ConnectedPoint,
+        new_endpoint: ConnectedPoint,
+    ) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_replaced(peer_id, closed_endpoint, new_endpoint)
         }
@@ -86,14 +92,19 @@ where
     fn inject_node_event(
         &mut self,
         peer_id: PeerId,
-        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
+        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_node_event(peer_id, event);
         }
     }
 
-    fn inject_addr_reach_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, error: &dyn error::Error) {
+    fn inject_addr_reach_failure(
+        &mut self,
+        peer_id: Option<&PeerId>,
+        addr: &Multiaddr,
+        error: &dyn error::Error,
+    ) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_addr_reach_failure(peer_id, addr, error)
         }
@@ -136,7 +147,7 @@ where
 
 impl<TEvent, TBehaviour> NetworkBehaviourEventProcess<TEvent> for Toggle<TBehaviour>
 where
-    TBehaviour: NetworkBehaviourEventProcess<TEvent>
+    TBehaviour: NetworkBehaviourEventProcess<TEvent>,
 {
     fn inject_event(&mut self, event: TEvent) {
         if let Some(inner) = self.inner.as_mut() {
@@ -152,13 +163,19 @@ pub struct ToggleIntoProtoHandler<TInner> {
 
 impl<TInner> IntoProtocolsHandler for ToggleIntoProtoHandler<TInner>
 where
-    TInner: IntoProtocolsHandler
+    TInner: IntoProtocolsHandler,
 {
     type Handler = ToggleProtoHandler<TInner::Handler>;
 
-    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler {
+    fn into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::Handler {
         ToggleProtoHandler {
-            inner: self.inner.map(|h| h.into_handler(remote_peer_id, connected_point))
+            inner: self
+                .inner
+                .map(|h| h.into_handler(remote_peer_id, connected_point)),
         }
     }
 
@@ -198,38 +215,54 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        out: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
     ) {
         let out = match out {
             EitherOutput::First(out) => out,
             EitherOutput::Second(v) => void::unreachable(v),
         };
 
-        self.inner.as_mut().expect("Can't receive an inbound substream if disabled; QED")
+        self.inner
+            .as_mut()
+            .expect("Can't receive an inbound substream if disabled; QED")
             .inject_fully_negotiated_inbound(out)
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         out: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     ) {
-        self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
+        self.inner
+            .as_mut()
+            .expect("Can't receive an outbound substream if disabled; QED")
             .inject_fully_negotiated_outbound(out, info)
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
-        self.inner.as_mut().expect("Can't receive events if disabled; QED")
+        self.inner
+            .as_mut()
+            .expect("Can't receive events if disabled; QED")
             .inject_event(event)
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
-        self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
+    fn inject_dial_upgrade_error(
+        &mut self,
+        info: Self::OutboundOpenInfo,
+        err: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
+        self.inner
+            .as_mut()
+            .expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.inner.as_ref().map(|h| h.connection_keep_alive())
+        self.inner
+            .as_ref()
+            .map(|h| h.connection_keep_alive())
             .unwrap_or(KeepAlive::No)
     }
 

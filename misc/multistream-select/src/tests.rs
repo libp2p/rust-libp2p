@@ -22,9 +22,9 @@
 
 #![cfg(test)]
 
-use crate::ProtocolChoiceError;
 use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
+use crate::ProtocolChoiceError;
 use crate::{dialer_select_proto, listener_select_proto};
 use futures::prelude::*;
 use tokio::runtime::current_thread::Runtime;
@@ -34,7 +34,8 @@ use tokio_tcp::{TcpListener, TcpStream};
 struct VecRefIntoIter<T>(Vec<T>);
 
 impl<'a, T> IntoIterator for &'a VecRefIntoIter<T>
-where T: Clone
+where
+    T: Clone,
 {
     type Item = T;
     type IntoIter = std::vec::IntoIter<T>;
@@ -104,8 +105,7 @@ fn select_proto_basic() {
             dialer_select_proto(connec, protos).map(|r| r.0)
         });
     let mut rt = Runtime::new().unwrap();
-    let (dialer_chosen, listener_chosen) =
-        rt.block_on(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) = rt.block_on(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, b"/proto2");
     assert_eq!(listener_chosen, b"/proto2");
 }
@@ -161,8 +161,7 @@ fn select_proto_parallel() {
         });
 
     let mut rt = Runtime::new().unwrap();
-    let (dialer_chosen, listener_chosen) =
-        rt.block_on(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) = rt.block_on(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, b"/proto2");
     assert_eq!(listener_chosen, b"/proto2");
 }
@@ -190,8 +189,7 @@ fn select_proto_serial() {
         });
 
     let mut rt = Runtime::new().unwrap();
-    let (dialer_chosen, listener_chosen) =
-        rt.block_on(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) = rt.block_on(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, b"/proto2");
     assert_eq!(listener_chosen, b"/proto2");
 }

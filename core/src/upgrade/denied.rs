@@ -57,4 +57,3 @@ impl<C> OutboundUpgrade<C> for DeniedUpgrade {
         future::empty()
     }
 }
-

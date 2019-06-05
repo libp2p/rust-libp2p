@@ -18,10 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, muxing::StreamMuxer};
+use crate::{muxing::StreamMuxer, Endpoint};
 use futures::prelude::*;
 use parking_lot::Mutex;
-use std::{io, sync::atomic::{AtomicBool, Ordering}};
+use std::{
+    io,
+    sync::atomic::{AtomicBool, Ordering},
+};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `StreamMuxer` that allows only one substream on top of a connection,
@@ -98,8 +101,7 @@ where
         }
     }
 
-    fn destroy_outbound(&self, _: Self::OutboundSubstream) {
-    }
+    fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
 
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         self.inner.lock().prepare_uninitialized_buffer(buf)
@@ -125,8 +127,7 @@ where
         self.inner.lock().shutdown()
     }
 
-    fn destroy_substream(&self, _: Self::Substream) {
-    }
+    fn destroy_substream(&self, _: Self::Substream) {}
 
     fn is_remote_acknowledged(&self) -> bool {
         self.remote_acknowledged.load(Ordering::Acquire)

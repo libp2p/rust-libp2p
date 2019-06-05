@@ -19,11 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::algo_support;
-use bytes::BytesMut;
 use crate::codec::{full_codec, FullCodec, Hmac};
-use crate::stream_cipher::{Cipher, ctr};
 use crate::error::SecioError;
 use crate::exchange;
+use crate::stream_cipher::{ctr, Cipher};
+use crate::structs_proto::{Exchange, Propose};
+use crate::{KeyAgreement, SecioConfig};
+use bytes::BytesMut;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
@@ -36,16 +38,14 @@ use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-use crate::{KeyAgreement, SecioConfig};
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
 struct HandshakeContext<T> {
     config: SecioConfig,
-    state: T
+    state: T,
 }
 
 // HandshakeContext<()> --with_local-> HandshakeContext<Local>
@@ -55,7 +55,7 @@ struct Local {
     // Our encoded local public key
     public_key_encoded: Vec<u8>,
     // Our local proposition's raw bytes:
-    proposition_bytes: Vec<u8>
+    proposition_bytes: Vec<u8>,
 }
 
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
@@ -89,21 +89,18 @@ struct Ephemeral {
     remote: Remote,
     // Ephemeral keypair generated for the handshake:
     local_tmp_priv_key: exchange::AgreementPrivateKey,
-    local_tmp_pub_key: Vec<u8>
+    local_tmp_pub_key: Vec<u8>,
 }
 
 // HandshakeContext<Ephemeral> --take_private_key-> HandshakeContext<PubEphemeral>
 struct PubEphemeral {
     remote: Remote,
-    local_tmp_pub_key: Vec<u8>
+    local_tmp_pub_key: Vec<u8>,
 }
 
 impl HandshakeContext<()> {
     fn new(config: SecioConfig) -> Self {
-        HandshakeContext {
-            config,
-            state: ()
-        }
+        HandshakeContext { config, state: () }
     }
 
     // Setup local proposition.
@@ -124,7 +121,10 @@ impl HandshakeContext<()> {
             trace!("agreements proposition: {}", p);
             proposition.set_exchanges(p.clone())
         } else {
-            trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+            trace!(
+                "agreements proposition: {}",
+                algo_support::DEFAULT_AGREEMENTS_PROPOSITION
+            );
             proposition.set_exchanges(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
         }
 
@@ -132,7 +132,10 @@ impl HandshakeContext<()> {
             trace!("ciphers proposition: {}", p);
             proposition.set_ciphers(p.clone())
         } else {
-            trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
+            trace!(
+                "ciphers proposition: {}",
+                algo_support::DEFAULT_CIPHERS_PROPOSITION
+            );
             proposition.set_ciphers(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
         }
 
@@ -140,7 +143,10 @@ impl HandshakeContext<()> {
             trace!("digests proposition: {}", p);
             proposition.set_hashes(p.clone())
         } else {
-            trace!("digests proposition: {}", algo_support::DEFAULT_DIGESTS_PROPOSITION);
+            trace!(
+                "digests proposition: {}",
+                algo_support::DEFAULT_DIGESTS_PROPOSITION
+            );
             proposition.set_hashes(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
         }
 
@@ -151,8 +157,8 @@ impl HandshakeContext<()> {
             state: Local {
                 nonce,
                 public_key_encoded,
-                proposition_bytes
-            }
+                proposition_bytes,
+            },
         })
     }
 }
@@ -176,7 +182,7 @@ impl HandshakeContext<Local> {
             Err(_) => {
                 debug!("failed to parse remote's proposition's pubkey protobuf");
                 return Err(SecioError::HandshakeParsingFailure);
-            },
+            }
         };
 
         // In order to determine which protocols to use, we compute two hashes and choose
@@ -200,7 +206,10 @@ impl HandshakeContext<Local> {
         };
 
         let chosen_exchange = {
-            let ours = self.config.agreements_prop.as_ref()
+            let ours = self
+                .config
+                .agreements_prop
+                .as_ref()
                 .map(|s| s.as_ref())
                 .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
             let theirs = &prop.get_exchanges();
@@ -214,7 +223,10 @@ impl HandshakeContext<Local> {
         };
 
         let chosen_cipher = {
-            let ours = self.config.ciphers_prop.as_ref()
+            let ours = self
+                .config
+                .ciphers_prop
+                .as_ref()
                 .map(|s| s.as_ref())
                 .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
             let theirs = &prop.get_ciphers();
@@ -231,7 +243,10 @@ impl HandshakeContext<Local> {
         };
 
         let chosen_hash = {
-            let ours = self.config.digests_prop.as_ref()
+            let ours = self
+                .config
+                .digests_prop
+                .as_ref()
                 .map(|s| s.as_ref())
                 .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
             let theirs = &prop.get_hashes();
@@ -257,33 +272,42 @@ impl HandshakeContext<Local> {
                 hashes_ordering,
                 chosen_exchange,
                 chosen_cipher,
-                chosen_hash
-            }
+                chosen_hash,
+            },
         })
     }
 }
 
 impl HandshakeContext<Remote> {
-    fn with_ephemeral(self, sk: exchange::AgreementPrivateKey, pk: Vec<u8>) -> HandshakeContext<Ephemeral> {
+    fn with_ephemeral(
+        self,
+        sk: exchange::AgreementPrivateKey,
+        pk: Vec<u8>,
+    ) -> HandshakeContext<Ephemeral> {
         HandshakeContext {
             config: self.config,
             state: Ephemeral {
                 remote: self.state,
                 local_tmp_priv_key: sk,
-                local_tmp_pub_key: pk
-            }
+                local_tmp_pub_key: pk,
+            },
         }
     }
 }
 
 impl HandshakeContext<Ephemeral> {
-    fn take_private_key(self) -> (HandshakeContext<PubEphemeral>, exchange::AgreementPrivateKey) {
+    fn take_private_key(
+        self,
+    ) -> (
+        HandshakeContext<PubEphemeral>,
+        exchange::AgreementPrivateKey,
+    ) {
         let context = HandshakeContext {
             config: self.config,
             state: PubEphemeral {
                 remote: self.state.remote,
-                local_tmp_pub_key: self.state.local_tmp_pub_key
-            }
+                local_tmp_pub_key: self.state.local_tmp_pub_key,
+            },
         };
         (context, self.state.local_tmp_priv_key)
     }
@@ -298,8 +322,10 @@ impl HandshakeContext<Ephemeral> {
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
 /// negotiation.
-pub fn handshake<'a, S: 'a>(socket: S, config: SecioConfig)
-    -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError>
+pub fn handshake<'a, S: 'a>(
+    socket: S,
+    config: SecioConfig,
+) -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError>
 where
     S: AsyncRead + AsyncWrite + Send,
 {
@@ -313,18 +339,23 @@ where
         .and_then(|context| {
             // Generate our nonce.
             let context = context.with_local()?;
-            trace!("starting handshake; local nonce = {:?}", context.state.nonce);
+            trace!(
+                "starting handshake; local nonce = {:?}",
+                context.state.nonce
+            );
             Ok(context)
         })
         .and_then(|context| {
             trace!("sending proposition to remote");
-            socket.send(BytesMut::from(context.state.proposition_bytes.clone()))
+            socket
+                .send(BytesMut::from(context.state.proposition_bytes.clone()))
                 .from_err()
                 .map(|s| (s, context))
         })
         // Receive the remote's proposition.
         .and_then(move |(socket, context)| {
-            socket.into_future()
+            socket
+                .into_future()
                 .map_err(|(e, _)| e.into())
                 .and_then(move |(prop_raw, socket)| {
                     let context = match prop_raw {
@@ -332,18 +363,22 @@ where
                         None => {
                             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
                             debug!("unexpected eof while waiting for remote's proposition");
-                            return Err(err.into())
-                        },
+                            return Err(err.into());
+                        }
                     };
-                    trace!("received proposition from remote; pubkey = {:?}; nonce = {:?}",
-                           context.state.public_key, context.state.nonce);
+                    trace!(
+                        "received proposition from remote; pubkey = {:?}; nonce = {:?}",
+                        context.state.public_key,
+                        context.state.nonce
+                    );
                     Ok((socket, context))
                 })
         })
         // Generate an ephemeral key for the negotiation.
         .and_then(|(socket, context)| {
-            exchange::generate_agreement(context.state.chosen_exchange)
-                .map(move |(tmp_priv_key, tmp_pub_key)| (socket, context, tmp_priv_key, tmp_pub_key))
+            exchange::generate_agreement(context.state.chosen_exchange).map(
+                move |(tmp_priv_key, tmp_pub_key)| (socket, context, tmp_priv_key, tmp_pub_key),
+            )
         })
         // Send the ephemeral pub key to the remote in an `Exchange` struct. The `Exchange` also
         // contains a signature of the two propositions encoded with our static public key.
@@ -358,7 +393,7 @@ where
                 exchange.set_epubkey(tmp_pub_key);
                 match context.config.key.sign(&data_to_sign) {
                     Ok(sig) => exchange.set_signature(sig),
-                    Err(_) => return Err(SecioError::SigningFailure)
+                    Err(_) => return Err(SecioError::SigningFailure),
                 }
                 exchange
             };
@@ -368,13 +403,12 @@ where
         // Send our local `Exchange`.
         .and_then(|(local_exch, socket, context)| {
             trace!("sending exchange to remote");
-            socket.send(local_exch)
-                .from_err()
-                .map(|s| (s, context))
+            socket.send(local_exch).from_err().map(|s| (s, context))
         })
         // Receive the remote's `Exchange`.
         .and_then(move |(socket, context)| {
-            socket.into_future()
+            socket
+                .into_future()
                 .map_err(|(e, _)| e.into())
                 .and_then(move |(raw, socket)| {
                     let raw = match raw {
@@ -382,8 +416,8 @@ where
                         None => {
                             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
                             debug!("unexpected eof while waiting for remote's exchange");
-                            return Err(err.into())
-                        },
+                            return Err(err.into());
+                        }
                     };
 
                     let remote_exch = match protobuf_parse_from_bytes::<Exchange>(&raw) {
@@ -406,8 +440,13 @@ where
             data_to_verify.extend_from_slice(&context.state.remote.local.proposition_bytes);
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
-            if !context.state.remote.public_key.verify(&data_to_verify, remote_exch.get_signature()) {
-                return Err(SecioError::SignatureVerificationFailed)
+            if !context
+                .state
+                .remote
+                .public_key
+                .verify(&data_to_verify, remote_exch.get_signature())
+            {
+                return Err(SecioError::SignatureVerificationFailed);
             }
 
             trace!("successfully verified the remote's signature");
@@ -418,8 +457,13 @@ where
         .and_then(|(remote_exch, socket, context)| {
             let (context, local_priv_key) = context.take_private_key();
             let key_size = context.state.remote.chosen_hash.num_bytes();
-            exchange::agree(context.state.remote.chosen_exchange, local_priv_key, remote_exch.get_epubkey(), key_size)
-                .map(move |key_material| (socket, context, key_material))
+            exchange::agree(
+                context.state.remote.chosen_exchange,
+                local_priv_key,
+                remote_exch.get_epubkey(),
+                key_size,
+            )
+            .map(move |key_material| (socket, context, key_material))
         })
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
         // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
@@ -437,7 +481,7 @@ where
                 match context.state.remote.hashes_ordering {
                     Ordering::Equal => {
                         let msg = "equal digest of public key and nonce for local and remote";
-                        return Err(SecioError::InvalidProposition(msg))
+                        return Err(SecioError::InvalidProposition(msg));
                     }
                     Ordering::Less => (second_half, first_half),
                     Ordering::Greater => (first_half, second_half),
@@ -466,7 +510,7 @@ where
                 encoding_hmac,
                 decoding_cipher,
                 decoding_hmac,
-                context.state.remote.local.nonce.to_vec()
+                context.state.remote.local.nonce.to_vec(),
             );
             Ok((codec, context))
         })
@@ -474,8 +518,15 @@ where
         .and_then(|(codec, context)| {
             let remote_nonce = context.state.remote.nonce.clone();
             trace!("checking encryption by sending back remote's nonce");
-            codec.send(BytesMut::from(remote_nonce))
-                .map(|s| (s, context.state.remote.public_key, context.state.local_tmp_pub_key))
+            codec
+                .send(BytesMut::from(remote_nonce))
+                .map(|s| {
+                    (
+                        s,
+                        context.state.remote.public_key,
+                        context.state.local_tmp_pub_key,
+                    )
+                })
                 .from_err()
         })
 }
@@ -490,9 +541,14 @@ fn stretch_key(hmac: Hmac, result: &mut [u8]) {
 }
 
 fn stretch_key_inner<D>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
-where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
-          ::hmac::digest::FixedOutput + ::hmac::digest::Reset + Default + Clone,
-    ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac
+where
+    D: ::hmac::digest::Input
+        + ::hmac::digest::BlockInput
+        + ::hmac::digest::FixedOutput
+        + ::hmac::digest::Reset
+        + Default
+        + Clone,
+    ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac,
 {
     use ::hmac::Mac;
     const SEED: &[u8] = b"key expansion";
@@ -522,16 +578,16 @@ where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
-    use libp2p_core::identity;
-    use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
-    use crate::{SecioConfig, SecioError};
     use super::handshake;
     use super::stretch_key;
     use crate::algo_support::Digest;
     use crate::codec::Hmac;
+    use crate::{SecioConfig, SecioError};
+    use bytes::BytesMut;
     use futures::prelude::*;
+    use libp2p_core::identity;
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
 
     #[test]
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
@@ -592,10 +648,12 @@ mod tests {
             .map_err(|e| e.into())
             .and_then(move |stream| handshake(stream, key2))
             .and_then(|(connec, _, _)| {
-                connec.send("hello".into())
+                connec
+                    .send("hello".into())
                     .from_err()
                     .and_then(|connec| {
-                        connec.filter(|v| !v.is_empty())
+                        connec
+                            .filter(|v| !v.is_empty())
                             .into_future()
                             .map(|(v, _)| v)
                             .map_err(|(e, _)| e)

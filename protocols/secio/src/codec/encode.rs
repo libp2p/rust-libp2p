@@ -20,8 +20,8 @@
 
 //! Individual messages encoding.
 
-use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
+use bytes::BytesMut;
 use futures::prelude::*;
 
 /// Wraps around a `Sink`. Encodes the buffers passed to it and passes it to the underlying sink.
@@ -35,7 +35,7 @@ pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,
     raw_sink: S,
-    pending: Option<BytesMut> // buffer encrypted data which can not be sent right away
+    pending: Option<BytesMut>, // buffer encrypted data which can not be sent right away
 }
 
 impl<S> EncoderMiddleware<S> {
@@ -44,7 +44,7 @@ impl<S> EncoderMiddleware<S> {
             cipher_state: cipher,
             hmac,
             raw_sink: raw,
-            pending: None
+            pending: None,
         }
     }
 }
@@ -56,11 +56,14 @@ where
     type SinkItem = BytesMut;
     type SinkError = S::SinkError;
 
-    fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn start_send(
+        &mut self,
+        mut data_buf: Self::SinkItem,
+    ) -> StartSend<Self::SinkItem, Self::SinkError> {
         if let Some(data) = self.pending.take() {
             if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
                 self.pending = Some(data);
-                return Ok(AsyncSink::NotReady(data_buf))
+                return Ok(AsyncSink::NotReady(data_buf));
             }
         }
         debug_assert!(self.pending.is_none());
@@ -79,7 +82,7 @@ where
         if let Some(data) = self.pending.take() {
             if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
                 self.pending = Some(data);
-                return Ok(Async::NotReady)
+                return Ok(Async::NotReady);
             }
         }
         self.raw_sink.poll_complete()
@@ -90,7 +93,7 @@ where
         if let Some(data) = self.pending.take() {
             if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
                 self.pending = Some(data);
-                return Ok(Async::NotReady)
+                return Ok(Async::NotReady);
             }
         }
         self.raw_sink.close()

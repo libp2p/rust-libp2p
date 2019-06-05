@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError, ListenerEvent};
+use crate::transport::{ListenerEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::error;
@@ -53,14 +53,17 @@ where
         let map = self.map;
         match self.transport.listen_on(addr) {
             Ok(stream) => Ok(MapErrListener { inner: stream, map }),
-            Err(err) => Err(err.map(map))
+            Err(err) => Err(err.map(map)),
         }
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map;
         match self.transport.dial(addr) {
-            Ok(future) => Ok(MapErrDial { inner: future, map: Some(map) }),
+            Ok(future) => Ok(MapErrDial {
+                inner: future,
+                map: Some(map),
+            }),
             Err(err) => Err(err.map(map)),
         }
     }
@@ -84,11 +87,9 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.inner.poll() {
             Ok(Async::Ready(Some(event))) => {
-                let event = event.map(move |value| {
-                    MapErrListenerUpgrade {
-                        inner: value,
-                        map: Some(self.map.clone())
-                    }
+                let event = event.map(move |value| MapErrListenerUpgrade {
+                    inner: value,
+                    map: Some(self.map.clone()),
                 });
                 Ok(Async::Ready(Some(event)))
             }
@@ -106,7 +107,8 @@ pub struct MapErrListenerUpgrade<T: Transport, F> {
 }
 
 impl<T, F, TErr> Future for MapErrListenerUpgrade<T, F>
-where T: Transport,
+where
+    T: Transport,
     F: FnOnce(T::Error) -> TErr,
 {
     type Item = T::Output;
@@ -140,9 +142,7 @@ where
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll() {
-            Ok(Async::Ready(value)) => {
-                Ok(Async::Ready(value))
-            },
+            Ok(Async::Ready(value)) => Ok(Async::Ready(value)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
                 let map = self.map.take().expect("poll() called again after error");

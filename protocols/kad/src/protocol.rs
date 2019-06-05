@@ -30,13 +30,16 @@
 //! [`KadRequestMsg`]: protocol::KadRequestMsg
 //! [`KadResponseMsg`]: protocol::KadResponseMsg
 
-use bytes::BytesMut;
-use codec::UviBytes;
 use crate::protobuf_structs::dht as proto;
 use crate::record::Record;
-use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
+use bytes::BytesMut;
+use codec::UviBytes;
+use futures::{
+    future::{self, FutureResult},
+    sink, stream, Sink, Stream,
+};
+use libp2p_core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use std::{borrow::Cow, convert::TryFrom};
@@ -62,7 +65,7 @@ impl From<proto::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn from(raw: proto::Message_ConnectionType) -> KadConnectionType {
         use proto::Message_ConnectionType::{
-            CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
+            CANNOT_CONNECT, CAN_CONNECT, CONNECTED, NOT_CONNECTED,
         };
         match raw {
             NOT_CONNECTED => KadConnectionType::NotConnected,
@@ -77,7 +80,7 @@ impl Into<proto::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn into(self) -> proto::Message_ConnectionType {
         use proto::Message_ConnectionType::{
-            CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
+            CANNOT_CONNECT, CAN_CONNECT, CONNECTED, NOT_CONNECTED,
         };
         match self {
             KadConnectionType::NotConnected => NOT_CONNECTED,
@@ -121,7 +124,7 @@ impl TryFrom<&mut proto::Message_Peer> for KadPeer {
         Ok(KadPeer {
             node_id,
             multiaddrs: addrs,
-            connection_ty
+            connection_ty,
         })
     }
 }
@@ -287,7 +290,7 @@ pub enum KadRequestMsg {
         key: Multihash,
         /// The value of the record.
         value: Vec<u8>,
-    }
+    },
 }
 
 /// Response that we can send to a peer or that we received from a peer.
@@ -365,7 +368,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
 
             msg
         }
-        KadRequestMsg::PutValue { key, value} => {
+        KadRequestMsg::PutValue { key, value } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
             let mut record = proto::Record::new();
@@ -421,7 +424,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
                 msg.mut_closerPeers().push(peer.into());
             }
 
-            if let Some(Record{ key, value }) = result {
+            if let Some(Record { key, value }) = result {
                 let mut record = proto::Record::new();
                 record.set_key(key.into_bytes());
                 record.set_value(value);
@@ -430,10 +433,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
 
             msg
         }
-        KadResponseMsg::PutValue {
-            key,
-            value,
-        } => {
+        KadResponseMsg::PutValue { key, value } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
             msg.set_key(key.clone().into_bytes());
@@ -458,7 +458,10 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
         proto::Message_MessageType::PUT_VALUE => {
             let record = message.mut_record();
             let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
-            Ok(KadRequestMsg::PutValue { key, value: record.take_value() })
+            Ok(KadRequestMsg::PutValue {
+                key,
+                value: record.take_value(),
+            })
         }
 
         proto::Message_MessageType::GET_VALUE => {
@@ -508,7 +511,10 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
                 true => {
                     let mut record = message.take_record();
                     let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
-                    Some(Record { key, value: record.take_value() })
+                    Some(Record {
+                        key,
+                        value: record.take_value(),
+                    })
                 }
                 false => None,
             };
@@ -519,8 +525,11 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
                 .filter_map(|peer| KadPeer::try_from(peer).ok())
                 .collect::<Vec<_>>();
 
-            Ok(KadResponseMsg::GetValue { result, closer_peers })
-        },
+            Ok(KadResponseMsg::GetValue {
+                result,
+                closer_peers,
+            })
+        }
 
         proto::Message_MessageType::FIND_NODE => {
             let closer_peers = message
@@ -564,15 +573,16 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
             })
         }
 
-        proto::Message_MessageType::ADD_PROVIDER =>
+        proto::Message_MessageType::ADD_PROVIDER => {
             Err(invalid_data("received an unexpected ADD_PROVIDER message"))
+        }
     }
 }
 
 /// Creates an `io::Error` with `io::ErrorKind::InvalidData`.
 fn invalid_data<E>(e: E) -> io::Error
 where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     io::Error::new(io::ErrorKind::InvalidData, e)
 }

@@ -18,7 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
+use crate::{
+    core::{
+        transport::{ListenerEvent, TransportError},
+        Transport,
+    },
+    Multiaddr,
+};
 use futures::{prelude::*, try_ready};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
@@ -98,11 +104,12 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let event = match try_ready!(self.inner.poll()) {
             Some(v) => v,
-            None => return Ok(Async::Ready(None))
+            None => return Ok(Async::Ready(None)),
         };
 
-        let event = event.map(|inner| {
-            BandwidthFuture { inner, sinks: self.sinks.clone() }
+        let event = event.map(|inner| BandwidthFuture {
+            inner,
+            sinks: self.sinks.clone(),
         });
 
         Ok(Async::Ready(Some(event)))
@@ -117,7 +124,8 @@ pub struct BandwidthFuture<TInner> {
 }
 
 impl<TInner> Future for BandwidthFuture<TInner>
-    where TInner: Future,
+where
+    TInner: Future,
 {
     type Item = BandwidthConnecLogging<TInner::Item>;
     type Error = TInner::Error;
@@ -158,7 +166,8 @@ pub struct BandwidthConnecLogging<TInner> {
 }
 
 impl<TInner> Read for BandwidthConnecLogging<TInner>
-    where TInner: Read
+where
+    TInner: Read,
 {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -169,7 +178,8 @@ impl<TInner> Read for BandwidthConnecLogging<TInner>
 }
 
 impl<TInner> tokio_io::AsyncRead for BandwidthConnecLogging<TInner>
-    where TInner: tokio_io::AsyncRead
+where
+    TInner: tokio_io::AsyncRead,
 {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         self.inner.prepare_uninitialized_buffer(buf)
@@ -181,7 +191,8 @@ impl<TInner> tokio_io::AsyncRead for BandwidthConnecLogging<TInner>
 }
 
 impl<TInner> Write for BandwidthConnecLogging<TInner>
-    where TInner: Write
+where
+    TInner: Write,
 {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -197,7 +208,8 @@ impl<TInner> Write for BandwidthConnecLogging<TInner>
 }
 
 impl<TInner> tokio_io::AsyncWrite for BandwidthConnecLogging<TInner>
-    where TInner: tokio_io::AsyncWrite
+where
+    TInner: tokio_io::AsyncWrite,
 {
     #[inline]
     fn shutdown(&mut self) -> Poll<(), io::Error> {
@@ -243,9 +255,11 @@ impl BandwidthSink {
     fn get(&mut self) -> u64 {
         self.update();
         let seconds = self.bytes.len() - 1;
-        self.bytes.iter()
+        self.bytes
+            .iter()
             .take(seconds)
-            .fold(0u64, |a, &b| a.saturating_add(b)) / seconds as u64
+            .fold(0u64, |a, &b| a.saturating_add(b))
+            / seconds as u64
     }
 
     /// Notifies the `BandwidthSink` that a certain number of bytes have been transmitted at this
@@ -274,8 +288,8 @@ impl BandwidthSink {
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
     use super::*;
+    use std::{thread, time::Duration};
 
     #[test]
     fn sink_works() {

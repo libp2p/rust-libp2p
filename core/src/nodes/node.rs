@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
 use crate::muxing;
+use futures::prelude::*;
 use smallvec::SmallVec;
 use std::fmt;
 use std::io::Error as IoError;
@@ -128,7 +128,9 @@ where
     #[must_use]
     pub fn close(mut self) -> (Close<TMuxer>, Vec<TUserData>) {
         let substreams = self.cancel_outgoing();
-        let close = Close { muxer: self.muxer.clone() };
+        let close = Close {
+            muxer: self.muxer.clone(),
+        };
         (close, substreams)
     }
 
@@ -148,9 +150,7 @@ where
         match self.muxer.poll_inbound().map_err(|e| e.into())? {
             Async::Ready(substream) => {
                 let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
-                return Ok(Async::Ready(NodeEvent::InboundSubstream {
-                    substream,
-                }));
+                return Ok(Async::Ready(NodeEvent::InboundSubstream { substream }));
             }
             Async::NotReady => {}
         }
@@ -225,8 +225,7 @@ where
     TMuxer: muxing::StreamMuxer,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("Close")
-            .finish()
+        f.debug_struct("Close").finish()
     }
 }
 
@@ -238,17 +237,18 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NodeEvent::InboundSubstream { substream } => {
-                f.debug_struct("NodeEvent::OutboundClosed")
-                    .field("substream", substream)
-                    .finish()
-            },
-            NodeEvent::OutboundSubstream { user_data, substream } => {
-                f.debug_struct("NodeEvent::OutboundSubstream")
-                    .field("user_data", user_data)
-                    .field("substream", substream)
-                    .finish()
-            },
+            NodeEvent::InboundSubstream { substream } => f
+                .debug_struct("NodeEvent::OutboundClosed")
+                .field("substream", substream)
+                .finish(),
+            NodeEvent::OutboundSubstream {
+                user_data,
+                substream,
+            } => f
+                .debug_struct("NodeEvent::OutboundSubstream")
+                .field("user_data", user_data)
+                .field("substream", substream)
+                .finish(),
         }
     }
 }
@@ -256,7 +256,7 @@ where
 #[cfg(test)]
 mod node_stream {
     use super::{NodeEvent, NodeStream};
-    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use crate::tests::dummy_muxer::{DummyConnectionState, DummyMuxer};
     use assert_matches::assert_matches;
     use futures::prelude::*;
     use tokio_mock_task::MockTask;
@@ -273,9 +273,7 @@ mod node_stream {
         ns.open_substream(vec![3]);
         ns.open_substream(vec![5]);
         let user_data_submitted = ns.close();
-        assert_eq!(user_data_submitted.1, vec![
-            vec![2], vec![3], vec![5]
-        ]);
+        assert_eq!(user_data_submitted.1, vec![vec![2], vec![3], vec![5]]);
     }
 
     #[test]

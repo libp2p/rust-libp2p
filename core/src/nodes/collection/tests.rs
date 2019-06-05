@@ -21,15 +21,15 @@
 #![cfg(test)]
 
 use super::*;
+use crate::nodes::NodeHandlerEvent;
+use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
+use crate::tests::dummy_muxer::{DummyConnectionState, DummyMuxer};
 use assert_matches::assert_matches;
 use futures::future;
-use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-use crate::tests::dummy_handler::{Handler, InEvent, OutEvent, HandlerState};
+use parking_lot::Mutex;
+use std::{io, sync::Arc};
 use tokio::runtime::current_thread::Runtime;
 use tokio::runtime::Builder;
-use crate::nodes::NodeHandlerEvent;
-use std::{io, sync::Arc};
-use parking_lot::Mutex;
 
 type TestCollectionStream = CollectionStream<InEvent, OutEvent, Handler, io::Error, io::Error, ()>;
 
@@ -80,7 +80,7 @@ fn collection_stream_reaches_the_nodes() {
                 assert_matches!(event, Async::Ready(CollectionEvent::NodeReached(_)));
                 return Ok(Async::Ready(())); // stop
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
         Ok(Async::NotReady)
     });
@@ -103,7 +103,7 @@ fn accepting_a_node_yields_new_entry() {
             match poll_count {
                 1 => {
                     assert_matches!(event, Async::NotReady);
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
                 2 => {
                     assert_matches!(event, Async::Ready(CollectionEvent::NodeReached(reach_ev)) => {
@@ -112,7 +112,7 @@ fn accepting_a_node_yields_new_entry() {
                         assert_matches!(accept_ev, CollectionNodeAccept::NewEntry);
                     });
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
         assert!(cs.peer_mut(&peer_id).is_some(), "peer is not in the list");
@@ -129,12 +129,14 @@ fn events_in_a_node_reaches_the_collection_stream() {
     let task_peer_id = PeerId::random();
 
     let mut handler = Handler::default();
-    handler.state = Some(HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("init"))));
+    handler.state = Some(HandlerState::Ready(NodeHandlerEvent::Custom(
+        OutEvent::Custom("init"),
+    )));
     let handler_states = vec![
         HandlerState::Err,
-        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 3") )),
-        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 2") )),
-        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1") )),
+        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 3"))),
+        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 2"))),
+        HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1"))),
     ];
     handler.next_states = handler_states;
 
@@ -152,7 +154,8 @@ fn events_in_a_node_reaches_the_collection_stream() {
         let mut cs = cs_fut.lock();
         assert_matches!(cs.poll(), Async::NotReady);
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
@@ -162,7 +165,8 @@ fn events_in_a_node_reaches_the_collection_stream() {
             reach_ev.accept(());
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
@@ -172,8 +176,8 @@ fn events_in_a_node_reaches_the_collection_stream() {
             assert_matches!(event, OutEvent::Custom("init"));
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
-
+    }))
+    .expect("tokio works");
 
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
@@ -183,7 +187,8 @@ fn events_in_a_node_reaches_the_collection_stream() {
             assert_matches!(event, OutEvent::Custom("from handler 1"));
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
@@ -193,14 +198,20 @@ fn events_in_a_node_reaches_the_collection_stream() {
             assert_matches!(event, OutEvent::Custom("from handler 2"));
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 }
 
 #[test]
 fn task_closed_with_error_while_task_is_pending_yields_reach_error() {
     let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
-    let task_inner_fut = future::err(std::io::Error::new(std::io::ErrorKind::Other, "inner fut error"));
-    let reach_attempt_id = cs.lock().add_reach_attempt(task_inner_fut, Handler::default());
+    let task_inner_fut = future::err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "inner fut error",
+    ));
+    let reach_attempt_id = cs
+        .lock()
+        .add_reach_attempt(task_inner_fut, Handler::default());
 
     let mut rt = Builder::new().core_threads(1).build().unwrap();
     let cs_fut = cs.clone();
@@ -208,7 +219,8 @@ fn task_closed_with_error_while_task_is_pending_yields_reach_error() {
         let mut cs = cs_fut.lock();
         assert_matches!(cs.poll(), Async::NotReady);
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
@@ -221,8 +233,8 @@ fn task_closed_with_error_while_task_is_pending_yields_reach_error() {
 
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
-
+    }))
+    .expect("tokio works");
 }
 
 #[test]
@@ -245,7 +257,8 @@ fn task_closed_with_error_when_task_is_connected_yields_node_error() {
         // send an event so the Handler errors in two polls
         cs.broadcast_event(&InEvent::NextState);
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     // Accept the new node
     let cs_fut = cs.clone();
@@ -256,7 +269,8 @@ fn task_closed_with_error_when_task_is_connected_yields_node_error() {
             reach_ev.accept(());
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     assert!(cs.lock().has_connection(&peer_id));
 
@@ -268,7 +282,8 @@ fn task_closed_with_error_when_task_is_connected_yields_node_error() {
             assert_matches!(collection_ev, CollectionEvent::NodeClosed{..});
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 }
 
 #[test]
@@ -286,7 +301,10 @@ fn interrupting_a_connection_attempt_twice_is_err() {
     let fut = future::empty();
     let reach_id = cs.add_reach_attempt(fut, Handler::default());
     assert!(cs.interrupt(reach_id).is_ok());
-    assert_matches!(cs.interrupt(reach_id), Err(InterruptError::ReachAttemptNotFound))
+    assert_matches!(
+        cs.interrupt(reach_id),
+        Err(InterruptError::ReachAttemptNotFound)
+    )
 }
 
 #[test]
@@ -307,7 +325,8 @@ fn interrupting_an_established_connection_is_err() {
         assert_matches!(cs.poll(), Async::NotReady);
         // send an event so the Handler errors in two polls
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
     // Accept the new node
     let cs_fut = cs.clone();
@@ -318,9 +337,16 @@ fn interrupting_an_established_connection_is_err() {
             reach_ev.accept(());
         });
         Ok(Async::Ready(()))
-    })).expect("tokio works");
+    }))
+    .expect("tokio works");
 
-    assert!(cs.lock().has_connection(&peer_id), "Connection was not established");
+    assert!(
+        cs.lock().has_connection(&peer_id),
+        "Connection was not established"
+    );
 
-    assert_matches!(cs.lock().interrupt(reach_id), Err(InterruptError::AlreadyReached));
+    assert_matches!(
+        cs.lock().interrupt(reach_id),
+        Err(InterruptError::AlreadyReached)
+    );
 }

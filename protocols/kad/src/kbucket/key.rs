@@ -21,7 +21,10 @@
 use bigint::U256;
 use libp2p_core::PeerId;
 use multihash::Multihash;
-use sha2::{Digest, Sha256, digest::generic_array::{GenericArray, typenum::U32}};
+use sha2::{
+    digest::generic_array::{typenum::U32, GenericArray},
+    Digest, Sha256,
+};
 
 /// A `Key` is a cryptographic hash, identifying both the nodes participating in
 /// the Kademlia DHT, as well as records stored in the DHT.
@@ -59,7 +62,7 @@ impl<T> Key<T> {
     /// [`Key::into_preimage`].
     pub fn new(preimage: T) -> Key<T>
     where
-        T: AsRef<[u8]>
+        T: AsRef<[u8]>,
     {
         let hash = Sha256::digest(preimage.as_ref());
         Key { preimage, hash }
@@ -86,7 +89,10 @@ impl<T> Key<T> {
 impl From<Multihash> for Key<Multihash> {
     fn from(h: Multihash) -> Self {
         let k = Key::new(h.clone().into_bytes());
-        Key { preimage: h, hash: k.hash }
+        Key {
+            preimage: h,
+            hash: k.hash,
+        }
     }
 }
 
@@ -124,7 +130,7 @@ mod tests {
         fn prop(a: Key<PeerId>, b: Key<PeerId>) -> bool {
             a.distance(&b) == b.distance(&a)
         }
-        quickcheck(prop as fn(_,_) -> _)
+        quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
@@ -139,18 +145,18 @@ mod tests {
                 TestResult::from_bool(a.distance(&c) <= Distance(ab_plus_bc))
             }
         }
-        quickcheck(prop as fn(_,_,_) -> _)
+        quickcheck(prop as fn(_, _, _) -> _)
     }
 
     #[test]
     fn unidirectionality() {
         fn prop(a: Key<PeerId>, b: Key<PeerId>) -> bool {
             let d = a.distance(&b);
-            (0 .. 100).all(|_| {
+            (0..100).all(|_| {
                 let c = Key::from(PeerId::random());
                 a.distance(&c) != d || b == c
             })
         }
-        quickcheck(prop as fn(_,_) -> _)
+        quickcheck(prop as fn(_, _) -> _)
     }
 }

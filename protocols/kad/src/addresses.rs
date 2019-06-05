@@ -85,8 +85,6 @@ impl Default for Addresses {
 
 impl fmt::Debug for Addresses {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_list()
-            .entries(self.addrs.iter())
-            .finish()
+        f.debug_list().entries(self.addrs.iter()).finish()
     }
 }

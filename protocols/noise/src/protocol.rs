@@ -89,11 +89,12 @@ pub trait Protocol<C> {
     /// the authenticity of the static DH public key w.r.t. the public identity key.
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
     where
-        C: AsRef<[u8]>
+        C: AsRef<[u8]>,
     {
         Self::linked(id_pk, dh_pk)
-            ||
-        sig.as_ref().map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
+            || sig
+                .as_ref()
+                .map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
     }
 }
 
@@ -108,7 +109,7 @@ pub struct Keypair<T: Zeroize> {
 #[derive(Clone)]
 pub struct AuthenticKeypair<T: Zeroize> {
     keypair: Keypair<T>,
-    identity: KeypairIdentity
+    identity: KeypairIdentity,
 }
 
 impl<T: Zeroize> AuthenticKeypair<T> {
@@ -133,7 +134,7 @@ pub struct KeypairIdentity {
     /// The public identity key.
     pub public: identity::PublicKey,
     /// The signature over the public DH key.
-    pub signature: Option<Vec<u8>>
+    pub signature: Option<Vec<u8>>,
 }
 
 impl<T: Zeroize> Keypair<T> {
@@ -149,18 +150,24 @@ impl<T: Zeroize> Keypair<T> {
 
     /// Turn this DH keypair into a [`AuthenticKeypair`], i.e. a DH keypair that
     /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
-    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, NoiseError>
+    pub fn into_authentic(
+        self,
+        id_keys: &identity::Keypair,
+    ) -> Result<AuthenticKeypair<T>, NoiseError>
     where
-        T: AsRef<[u8]>
+        T: AsRef<[u8]>,
     {
         let sig = id_keys.sign(self.public.as_ref())?;
 
         let identity = KeypairIdentity {
             public: id_keys.public(),
-            signature: Some(sig)
+            signature: Some(sig),
         };
 
-        Ok(AuthenticKeypair { keypair: self, identity })
+        Ok(AuthenticKeypair {
+            keypair: self,
+            identity,
+        })
     }
 }
 
@@ -219,11 +226,17 @@ impl snow::resolvers::CryptoResolver for Resolver {
         }
     }
 
-    fn resolve_hash(&self, choice: &snow::params::HashChoice) -> Option<Box<dyn snow::types::Hash>> {
+    fn resolve_hash(
+        &self,
+        choice: &snow::params::HashChoice,
+    ) -> Option<Box<dyn snow::types::Hash>> {
         snow::resolvers::RingResolver.resolve_hash(choice)
     }
 
-    fn resolve_cipher(&self, choice: &snow::params::CipherChoice) -> Option<Box<dyn snow::types::Cipher>> {
+    fn resolve_cipher(
+        &self,
+        choice: &snow::params::CipherChoice,
+    ) -> Option<Box<dyn snow::types::Cipher>> {
         snow::resolvers::RingResolver.resolve_cipher(choice)
     }
 }
@@ -252,4 +265,3 @@ impl rand::RngCore for Rng {
 impl rand::CryptoRng for Rng {}
 
 impl snow::types::Random for Rng {}
-

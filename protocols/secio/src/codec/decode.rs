@@ -20,8 +20,8 @@
 
 //! Individual messages decoding.
 
-use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
+use bytes::BytesMut;
 
 use crate::error::SecioError;
 use futures::sink::Sink;
@@ -44,7 +44,7 @@ pub struct DecoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,
     raw_stream: S,
-    nonce: Vec<u8>
+    nonce: Vec<u8>,
 }
 
 impl<S> DecoderMiddleware<S> {
@@ -53,12 +53,17 @@ impl<S> DecoderMiddleware<S> {
     /// The `nonce` parameter denotes a sequence of bytes which are expected to be found at the
     /// beginning of the stream and are checked for equality.
     #[inline]
-    pub fn new(raw_stream: S, cipher: StreamCipher, hmac: Hmac, nonce: Vec<u8>) -> DecoderMiddleware<S> {
+    pub fn new(
+        raw_stream: S,
+        cipher: StreamCipher,
+        hmac: Hmac,
+        nonce: Vec<u8>,
+    ) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
             hmac,
             raw_stream,
-            nonce
+            nonce,
         }
     }
 }
@@ -97,16 +102,15 @@ where
 
         let mut data_buf = frame.to_vec();
         data_buf.truncate(content_length);
-        self.cipher_state
-            .decrypt(&mut data_buf);
+        self.cipher_state.decrypt(&mut data_buf);
 
         if !self.nonce.is_empty() {
             let n = min(data_buf.len(), self.nonce.len());
-            if data_buf[.. n] != self.nonce[.. n] {
-                return Err(SecioError::NonceVerificationFailed)
+            if data_buf[..n] != self.nonce[..n] {
+                return Err(SecioError::NonceVerificationFailed);
             }
-            self.nonce.drain(.. n);
-            data_buf.drain(.. n);
+            self.nonce.drain(..n);
+            data_buf.drain(..n);
         }
 
         Ok(Async::Ready(Some(data_buf)))

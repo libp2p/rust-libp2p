@@ -56,7 +56,7 @@ pub struct WriteState<TPeerId, TTarget> {
 
 impl<TPeerId, TTarget> WriteState<TPeerId, TTarget>
 where
-    TPeerId: std::hash::Hash + Clone + Eq
+    TPeerId: std::hash::Hash + Clone + Eq,
 {
     /// Creates a new WriteState.
     ///
@@ -65,9 +65,8 @@ where
         use std::iter::FromIterator;
         WriteState {
             target,
-            peers: FnvHashMap::from_iter(peers
-                                         .into_iter()
-                                         .zip(std::iter::repeat(PeerState::Unknown))
+            peers: FnvHashMap::from_iter(
+                peers.into_iter().zip(std::iter::repeat(PeerState::Unknown)),
             ),
             successes: 0,
             failures: 0,

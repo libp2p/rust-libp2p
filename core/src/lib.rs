@@ -58,7 +58,6 @@
 //!   information.
 //! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler` and `NetworkBehaviour`.
 
-
 /// Multi-address re-export.
 pub use multiaddr;
 pub use multistream_select::Negotiated;
@@ -79,16 +78,16 @@ pub mod swarm;
 pub mod transport;
 pub mod upgrade;
 
+pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use muxing::StreamMuxer;
 pub use nodes::raw_swarm::ConnectedPoint;
 pub use peer_id::PeerId;
 pub use protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-pub use identity::PublicKey;
 pub use swarm::Swarm;
-pub use transport::Transport;
 pub use translation::address_translation;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
+pub use transport::Transport;
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
@@ -104,7 +103,7 @@ impl std::ops::Not for Endpoint {
     fn not(self) -> Self::Output {
         match self {
             Endpoint::Dialer => Endpoint::Listener,
-            Endpoint::Listener => Endpoint::Dialer
+            Endpoint::Listener => Endpoint::Dialer,
         }
     }
 }
@@ -128,4 +127,3 @@ impl Endpoint {
         }
     }
 }
-

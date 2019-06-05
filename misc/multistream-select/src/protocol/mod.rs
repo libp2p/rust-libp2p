@@ -39,7 +39,7 @@ pub enum DialerToListenerMessage<N> {
     /// communicating in the new protocol.
     ProtocolRequest {
         /// Name of the protocol.
-        name: N
+        name: N,
     },
 
     /// The dialer requested the list of protocols that the listener supports.
@@ -63,4 +63,3 @@ pub enum ListenerToDialerMessage<N> {
         list: Vec<N>,
     },
 }
-

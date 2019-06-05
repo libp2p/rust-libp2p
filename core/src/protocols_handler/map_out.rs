@@ -20,16 +20,10 @@
 
 use crate::{
     protocols_handler::{
-        KeepAlive,
+        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
         SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
     },
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-    }
+    upgrade::{InboundUpgrade, OutboundUpgrade},
 };
 use futures::prelude::*;
 
@@ -43,10 +37,7 @@ impl<TProtoHandler, TMap> MapOutEvent<TProtoHandler, TMap> {
     /// Creates a `MapOutEvent`.
     #[inline]
     pub(crate) fn new(inner: TProtoHandler, map: TMap) -> Self {
-        MapOutEvent {
-            inner,
-            map,
-        }
+        MapOutEvent { inner, map }
     }
 }
 
@@ -71,7 +62,7 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
     ) {
         self.inner.inject_fully_negotiated_inbound(protocol)
     }
@@ -80,7 +71,7 @@ where
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     ) {
         self.inner.inject_fully_negotiated_outbound(protocol, info)
     }
@@ -91,7 +82,13 @@ where
     }
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(
+        &mut self,
+        info: Self::OutboundOpenInfo,
+        error: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
 
@@ -107,12 +104,10 @@ where
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
-        Ok(self.inner.poll()?.map(|ev| {
-            match ev {
-                ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
-                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
-                    ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
-                }
+        Ok(self.inner.poll()?.map(|ev| match ev {
+            ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
+            ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
             }
         }))
     }

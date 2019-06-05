@@ -20,16 +20,10 @@
 
 use crate::{
     protocols_handler::{
-        KeepAlive,
+        KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
         SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
     },
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-    }
+    upgrade::{InboundUpgrade, OutboundUpgrade},
 };
 use futures::prelude::*;
 use std::marker::PhantomData;
@@ -74,7 +68,7 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
     ) {
         self.inner.inject_fully_negotiated_inbound(protocol)
     }
@@ -83,7 +77,7 @@ where
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     ) {
         self.inner.inject_fully_negotiated_outbound(protocol, info)
     }
@@ -96,7 +90,13 @@ where
     }
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(
+        &mut self,
+        info: Self::OutboundOpenInfo,
+        error: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
 

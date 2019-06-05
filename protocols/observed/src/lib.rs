@@ -23,7 +23,10 @@
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}};
+use libp2p_core::{
+    upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo},
+    Multiaddr,
+};
 use std::{convert::TryFrom, io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -49,11 +52,11 @@ impl UpgradeInfo for Observed {
 
 impl<C> InboundUpgrade<C> for Observed
 where
-    C: AsyncRead + AsyncWrite + Send + 'static
+    C: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = Sender<Negotiated<C>>;
     type Error = io::Error;
-    type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
+    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn upgrade_inbound(self, conn: Negotiated<C>, _: Self::Info) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
@@ -63,15 +66,16 @@ where
 
 impl<C> OutboundUpgrade<C> for Observed
 where
-    C: AsyncRead + AsyncWrite + Send + 'static
+    C: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = Multiaddr;
     type Error = io::Error;
-    type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
+    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn upgrade_outbound(self, conn: Negotiated<C>, _: Self::Info) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());
-        let future = io.into_future()
+        let future = io
+            .into_future()
             .map_err(|(e, _): (io::Error, FramedRead<Negotiated<C>, UviBytes>)| e)
             .and_then(move |(bytes, _)| {
                 if let Some(b) = bytes {
@@ -88,22 +92,25 @@ where
 
 /// `Sender` allows reporting back the observed address to the remote endpoint.
 pub struct Sender<C> {
-    io: FramedWrite<C, UviBytes>
+    io: FramedWrite<C, UviBytes>,
 }
 
 impl<C: AsyncWrite> Sender<C> {
     /// Send address `a` to remote as the observed address.
-    pub fn send_address(self, a: Multiaddr) -> impl Future<Item=(), Error=io::Error> {
+    pub fn send_address(self, a: Multiaddr) -> impl Future<Item = (), Error = io::Error> {
         self.io.send(Bytes::from(a.to_vec())).map(|_io| ())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use libp2p_core::{Multiaddr, upgrade::{apply_inbound, apply_outbound}};
-    use tokio::runtime::current_thread;
-    use tokio::net::{TcpListener, TcpStream};
     use super::*;
+    use libp2p_core::{
+        upgrade::{apply_inbound, apply_outbound},
+        Multiaddr,
+    };
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::runtime::current_thread;
 
     #[test]
     fn observed_address() {
@@ -113,20 +120,17 @@ mod tests {
         let observed_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/10000".parse().unwrap();
         let observed_addr2 = observed_addr1.clone();
 
-        let server = server.incoming()
+        let server = server
+            .incoming()
             .into_future()
             .map_err(|_| panic!())
-            .and_then(move |(conn, _)| {
-                apply_inbound(conn.unwrap(), Observed::new())
-            })
+            .and_then(move |(conn, _)| apply_inbound(conn.unwrap(), Observed::new()))
             .map_err(|_| panic!())
             .and_then(move |sender| sender.send_address(observed_addr1));
 
         let client = TcpStream::connect(&server_addr)
             .map_err(|_| panic!())
-            .and_then(|conn| {
-                apply_outbound(conn, Observed::new())
-            })
+            .and_then(|conn| apply_outbound(conn, Observed::new()))
             .map_err(|_| panic!())
             .map(move |addr| {
                 eprintln!("{} {}", addr, observed_addr2);
@@ -134,7 +138,11 @@ mod tests {
             });
 
         current_thread::block_on_all(future::lazy(move || {
-            current_thread::spawn(server.map_err(|e| panic!("server error: {}", e)).map(|_| ()));
+            current_thread::spawn(
+                server
+                    .map_err(|e| panic!("server error: {}", e))
+                    .map(|_| ()),
+            );
             client
         }))
         .unwrap();

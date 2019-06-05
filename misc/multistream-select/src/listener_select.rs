@@ -21,17 +21,12 @@
 //! Contains the `listener_select_proto` code, which allows selecting a protocol thanks to
 //! `multistream-select` for the listener.
 
+use crate::protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use crate::{Negotiated, ProtocolChoiceError};
 use futures::{prelude::*, sink, stream::StreamFuture};
-use crate::protocol::{
-    DialerToListenerMessage,
-    Listener,
-    ListenerFuture,
-    ListenerToDialerMessage
-};
 use log::{debug, trace};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
-use crate::{Negotiated, ProtocolChoiceError};
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
@@ -51,13 +46,13 @@ pub fn listener_select_proto<R, I, X>(inner: R, protocols: I) -> ListenerSelectF
 where
     R: AsyncRead + AsyncWrite,
     for<'r> &'r I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    X: AsRef<[u8]>,
 {
     ListenerSelectFuture {
         inner: ListenerSelectState::AwaitListener {
             listener_fut: Listener::listen(inner),
-            protocols
-        }
+            protocols,
+        },
     }
 }
 
@@ -66,38 +61,38 @@ pub struct ListenerSelectFuture<R, I, X>
 where
     R: AsyncRead + AsyncWrite,
     for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    X: AsRef<[u8]>,
 {
-    inner: ListenerSelectState<R, I, X>
+    inner: ListenerSelectState<R, I, X>,
 }
 
 enum ListenerSelectState<R, I, X>
 where
     R: AsyncRead + AsyncWrite,
     for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    X: AsRef<[u8]>,
 {
     AwaitListener {
         listener_fut: ListenerFuture<R, X>,
-        protocols: I
+        protocols: I,
     },
     Incoming {
         stream: StreamFuture<Listener<R, X>>,
-        protocols: I
+        protocols: I,
     },
     Outgoing {
         sender: sink::Send<Listener<R, X>>,
         protocols: I,
-        outcome: Option<X>
+        outcome: Option<X>,
     },
-    Undefined
+    Undefined,
 }
 
 impl<R, I, X> Future for ListenerSelectFuture<R, I, X>
 where
     R: AsyncRead + AsyncWrite,
     for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]> + Clone
+    X: AsRef<[u8]> + Clone,
 {
     type Item = (X, Negotiated<R>, I);
     type Error = ProtocolChoiceError;
@@ -105,39 +100,51 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, ListenerSelectState::Undefined) {
-                ListenerSelectState::AwaitListener { mut listener_fut, protocols } => {
+                ListenerSelectState::AwaitListener {
+                    mut listener_fut,
+                    protocols,
+                } => {
                     let listener = match listener_fut.poll()? {
                         Async::Ready(l) => l,
                         Async::NotReady => {
-                            self.inner = ListenerSelectState::AwaitListener { listener_fut, protocols };
-                            return Ok(Async::NotReady)
+                            self.inner = ListenerSelectState::AwaitListener {
+                                listener_fut,
+                                protocols,
+                            };
+                            return Ok(Async::NotReady);
                         }
                     };
                     let stream = listener.into_future();
                     self.inner = ListenerSelectState::Incoming { stream, protocols };
                 }
-                ListenerSelectState::Incoming { mut stream, protocols } => {
+                ListenerSelectState::Incoming {
+                    mut stream,
+                    protocols,
+                } => {
                     let (msg, listener) = match stream.poll() {
                         Ok(Async::Ready(x)) => x,
                         Ok(Async::NotReady) => {
                             self.inner = ListenerSelectState::Incoming { stream, protocols };
-                            return Ok(Async::NotReady)
+                            return Ok(Async::NotReady);
                         }
-                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
+                        Err((e, _)) => return Err(ProtocolChoiceError::from(e)),
                     };
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
-                            trace!("protocols list response: {:?}", protocols
-                                   .into_iter()
-                                   .map(|p| p.as_ref().into())
-                                   .collect::<Vec<Vec<u8>>>());
+                            trace!(
+                                "protocols list response: {:?}",
+                                protocols
+                                    .into_iter()
+                                    .map(|p| p.as_ref().into())
+                                    .collect::<Vec<Vec<u8>>>()
+                            );
                             let list = protocols.into_iter().collect();
                             let msg = ListenerToDialerMessage::ProtocolsListResponse { list };
                             let sender = listener.send(msg);
                             self.inner = ListenerSelectState::Outgoing {
                                 sender,
                                 protocols,
-                                outcome: None
+                                outcome: None,
                             }
                         }
                         Some(DialerToListenerMessage::ProtocolRequest { name }) => {
@@ -146,7 +153,7 @@ where
                             for supported in &protocols {
                                 if name.as_ref() == supported.as_ref() {
                                     send_back = ListenerToDialerMessage::ProtocolAck {
-                                        name: supported.clone()
+                                        name: supported.clone(),
                                     };
                                     outcome = Some(supported);
                                     break;
@@ -154,31 +161,48 @@ where
                             }
                             trace!("requested: {:?}, supported: {}", name, outcome.is_some());
                             let sender = listener.send(send_back);
-                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome }
+                            self.inner = ListenerSelectState::Outgoing {
+                                sender,
+                                protocols,
+                                outcome,
+                            }
                         }
                         None => {
                             debug!("no protocol request received");
-                            return Err(ProtocolChoiceError::NoProtocolFound)
+                            return Err(ProtocolChoiceError::NoProtocolFound);
                         }
                     }
                 }
-                ListenerSelectState::Outgoing { mut sender, protocols, outcome } => {
+                ListenerSelectState::Outgoing {
+                    mut sender,
+                    protocols,
+                    outcome,
+                } => {
                     let listener = match sender.poll()? {
                         Async::Ready(l) => l,
                         Async::NotReady => {
-                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome };
-                            return Ok(Async::NotReady)
+                            self.inner = ListenerSelectState::Outgoing {
+                                sender,
+                                protocols,
+                                outcome,
+                            };
+                            return Ok(Async::NotReady);
                         }
                     };
                     if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, Negotiated(listener.into_inner()), protocols)))
+                        return Ok(Async::Ready((
+                            p,
+                            Negotiated(listener.into_inner()),
+                            protocols,
+                        )));
                     } else {
                         let stream = listener.into_future();
                         self.inner = ListenerSelectState::Incoming { stream, protocols }
                     }
                 }
-                ListenerSelectState::Undefined =>
+                ListenerSelectState::Undefined => {
                     panic!("ListenerSelectState::poll called after completion")
+                }
             }
         }
     }

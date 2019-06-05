@@ -20,8 +20,8 @@
 
 use crate::PublicKey;
 use bs58;
-use quick_error::quick_error;
 use multihash;
+use quick_error::quick_error;
 use std::{convert::TryFrom, fmt, str::FromStr};
 
 /// Identifier of a peer of the network.
@@ -35,9 +35,7 @@ pub struct PeerId {
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PeerId")
-            .field(&self.to_base58())
-            .finish()
+        f.debug_tuple("PeerId").field(&self.to_base58()).finish()
     }
 }
 
@@ -68,7 +66,7 @@ impl PeerId {
                 } else {
                     Err(multihash.into_bytes())
                 }
-            },
+            }
             Err(err) => Err(err.data),
         }
     }
@@ -90,7 +88,7 @@ impl PeerId {
     #[inline]
     pub fn random() -> PeerId {
         PeerId {
-            multihash: multihash::Multihash::random(multihash::Hash::SHA2256)
+            multihash: multihash::Multihash::random(multihash::Hash::SHA2256),
         }
     }
 
@@ -131,7 +129,7 @@ impl PeerId {
         let enc = public_key.clone().into_protobuf_encoding();
         match multihash::encode(alg, &enc) {
             Ok(h) => Some(h == self.multihash),
-            Err(multihash::EncodeError::UnsupportedType) => None
+            Err(multihash::EncodeError::UnsupportedType) => None,
         }
     }
 }
@@ -220,7 +218,7 @@ impl FromStr for PeerId {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PeerId, identity};
+    use crate::{identity, PeerId};
 
     #[test]
     fn peer_id_is_public_key() {
@@ -231,23 +229,30 @@ mod tests {
 
     #[test]
     fn peer_id_into_bytes_then_from_bytes() {
-        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let second = PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn peer_id_to_base58_then_back() {
-        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn random_peer_id_is_valid() {
-        for _ in 0 .. 5000 {
+        for _ in 0..5000 {
             let peer_id = PeerId::random();
-            assert_eq!(peer_id, PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap());
+            assert_eq!(
+                peer_id,
+                PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap()
+            );
         }
     }
 }

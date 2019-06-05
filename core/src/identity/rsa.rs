@@ -20,12 +20,12 @@
 
 //! RSA keys.
 
-use asn1_der::{Asn1Der, FromDerObject, IntoDerObject, DerObject, DerTag, DerValue, Asn1DerError};
-use lazy_static::lazy_static;
 use super::error::*;
+use asn1_der::{Asn1Der, Asn1DerError, DerObject, DerTag, DerValue, FromDerObject, IntoDerObject};
+use lazy_static::lazy_static;
 use ring::rand::SystemRandom;
-use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
+use ring::signature::{self, RsaKeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use std::sync::Arc;
 use untrusted::Input;
 use zeroize::Zeroize;
@@ -57,7 +57,7 @@ impl Keypair {
         let rng = SystemRandom::new();
         match self.0.sign(&RSA_PKCS1_SHA256, &rng, &data, &mut signature) {
             Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA").source(e))
+            Err(e) => Err(SigningError::new("RSA").source(e)),
         }
     }
 }
@@ -69,10 +69,13 @@ pub struct PublicKey(Vec<u8>);
 impl PublicKey {
     /// Verify an RSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        signature::verify(&RSA_PKCS1_2048_8192_SHA256,
-                          Input::from(&self.0),
-                          Input::from(msg),
-                          Input::from(sig)).is_ok()
+        signature::verify(
+            &RSA_PKCS1_2048_8192_SHA256,
+            Input::from(&self.0),
+            Input::from(msg),
+            Input::from(sig),
+        )
+        .is_ok()
     }
 
     /// Encode the RSA public key in DER as a PKCS#1 RSAPublicKey structure,
@@ -92,12 +95,13 @@ impl PublicKey {
         let spki = Asn1SubjectPublicKeyInfo {
             algorithmIdentifier: Asn1RsaEncryption {
                 algorithm: Asn1OidRsaEncryption(),
-                parameters: ()
+                parameters: (),
             },
-            subjectPublicKey: Asn1SubjectPublicKey(self.clone())
+            subjectPublicKey: Asn1SubjectPublicKey(self.clone()),
         };
         let mut buf = vec![0u8; spki.serialized_len()];
-        spki.serialize(buf.iter_mut()).map(|_| buf)
+        spki.serialize(buf.iter_mut())
+            .map(|_| buf)
             .expect("RSA X.509 public key encoding failed.")
     }
 
@@ -148,10 +152,10 @@ impl IntoDerObject for Asn1OidRsaEncryption {
 impl FromDerObject for Asn1OidRsaEncryption {
     fn from_der_object(o: DerObject) -> Result<Self, Asn1DerError> {
         if o.tag != DerTag::x06 {
-            return Err(Asn1DerError::InvalidTag)
+            return Err(Asn1DerError::InvalidTag);
         }
         if o.value != OID_RSA_ENCRYPTION_DER.value {
-            return Err(Asn1DerError::InvalidEncoding)
+            return Err(Asn1DerError::InvalidEncoding);
         }
         Ok(Asn1OidRsaEncryption())
     }
@@ -161,7 +165,7 @@ impl FromDerObject for Asn1OidRsaEncryption {
 #[derive(Asn1Der)]
 struct Asn1RsaEncryption {
     algorithm: Asn1OidRsaEncryption,
-    parameters: ()
+    parameters: (),
 }
 
 /// The ASN.1 SubjectPublicKey inside a SubjectPublicKeyInfo,
@@ -186,7 +190,7 @@ impl IntoDerObject for Asn1SubjectPublicKey {
 impl FromDerObject for Asn1SubjectPublicKey {
     fn from_der_object(o: DerObject) -> Result<Self, Asn1DerError> {
         if o.tag != DerTag::x03 {
-            return Err(Asn1DerError::InvalidTag)
+            return Err(Asn1DerError::InvalidTag);
         }
         let pk_der: Vec<u8> = o.value.data.into_iter().skip(1).collect();
         // We don't parse pk_der further as an ASN.1 RsaPublicKey, since
@@ -200,7 +204,7 @@ impl FromDerObject for Asn1SubjectPublicKey {
 #[allow(non_snake_case)]
 struct Asn1SubjectPublicKeyInfo {
     algorithmIdentifier: Asn1RsaEncryption,
-    subjectPublicKey: Asn1SubjectPublicKey
+    subjectPublicKey: Asn1SubjectPublicKey,
 }
 
 #[cfg(test)]
@@ -253,7 +257,8 @@ mod tests {
         fn prop(SomeKeypair(kp): SomeKeypair, msg: Vec<u8>) -> Result<bool, SigningError> {
             kp.sign(&msg).map(|s| kp.public().verify(&msg, &s))
         }
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_,_) -> _);
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _) -> _);
     }
 }
-

@@ -52,7 +52,10 @@ where
 {
     /// Wraps around `inner`.
     pub fn new(inner: S) -> RwStreamSink<S> {
-        RwStreamSink { inner, current_item: None }
+        RwStreamSink {
+            inner,
+            current_item: None,
+        }
     }
 }
 
@@ -72,7 +75,7 @@ where
 
             self.current_item = Some(match self.inner.poll()? {
                 Async::Ready(Some(i)) => i.into_buf(),
-                Async::Ready(None) => return Ok(0),     // EOF
+                Async::Ready(None) => return Ok(0), // EOF
                 Async::NotReady => return Err(IoErrorKind::WouldBlock.into()),
             });
         };
@@ -80,7 +83,9 @@ where
         // Copy it!
         debug_assert!(item_to_copy.has_remaining());
         let to_copy = cmp::min(buf.len(), item_to_copy.remaining());
-        item_to_copy.take(to_copy).copy_to_slice(&mut buf[..to_copy]);
+        item_to_copy
+            .take(to_copy)
+            .copy_to_slice(&mut buf[..to_copy]);
         Ok(to_copy)
     }
 }
@@ -112,7 +117,7 @@ where
     fn flush(&mut self) -> Result<(), IoError> {
         match self.inner.poll_complete()? {
             Async::Ready(()) => Ok(()),
-            Async::NotReady => Err(IoError::new(IoErrorKind::WouldBlock, "not ready"))
+            Async::NotReady => Err(IoError::new(IoErrorKind::WouldBlock, "not ready")),
         }
     }
 }
@@ -130,8 +135,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
     use crate::RwStreamSink;
+    use bytes::Bytes;
     use futures::{prelude::*, stream, sync::mpsc::channel};
     use std::io::Read;
 

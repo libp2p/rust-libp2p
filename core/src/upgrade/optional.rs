@@ -113,8 +113,4 @@ where
     }
 }
 
-impl<T> ExactSizeIterator for Iter<T>
-where
-    T: ExactSizeIterator
-{
-}
+impl<T> ExactSizeIterator for Iter<T> where T: ExactSizeIterator {}

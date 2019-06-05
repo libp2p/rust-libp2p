@@ -24,12 +24,15 @@
 //! underlying `Transport`.
 // TODO: add example
 
-use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
+use crate::{
+    transport::{ListenerEvent, TransportError},
+    Multiaddr, Transport,
+};
 use futures::{try_ready, Async, Future, Poll, Stream};
 use log::debug;
 use std::{error, fmt, time::Duration};
-use wasm_timer::Timeout;
 use wasm_timer::timeout::Error as TimeoutError;
+use wasm_timer::Timeout;
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -84,7 +87,9 @@ where
     type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self.inner.listen_on(addr)
+        let listener = self
+            .inner
+            .listen_on(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
 
         let listener = TimeoutListener {
@@ -96,7 +101,9 @@ where
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dial = self.inner.dial(addr)
+        let dial = self
+            .inner
+            .dial(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(TokioTimerMapErr {
             inner: Timeout::new(dial, self.outgoing_timeout),
@@ -113,7 +120,7 @@ pub struct TimeoutListener<InnerStream> {
 
 impl<InnerStream, O> Stream for TimeoutListener<InnerStream>
 where
-    InnerStream: Stream<Item = ListenerEvent<O>>
+    InnerStream: Stream<Item = ListenerEvent<O>>,
 {
     type Item = ListenerEvent<TokioTimerMapErr<Timeout<O>>>;
     type Error = TransportTimeoutError<InnerStream::Error>;
@@ -121,8 +128,8 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let poll_out = try_ready!(self.inner.poll().map_err(TransportTimeoutError::Other));
         if let Some(event) = poll_out {
-            let event = event.map(move |inner_fut| {
-                TokioTimerMapErr { inner: Timeout::new(inner_fut, self.timeout) }
+            let event = event.map(move |inner_fut| TokioTimerMapErr {
+                inner: Timeout::new(inner_fut, self.timeout),
             });
             Ok(Async::Ready(Some(event)))
         } else {
@@ -175,7 +182,8 @@ pub enum TransportTimeoutError<TErr> {
 }
 
 impl<TErr> fmt::Display for TransportTimeoutError<TErr>
-where TErr: fmt::Display,
+where
+    TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -187,7 +195,8 @@ where TErr: fmt::Display,
 }
 
 impl<TErr> error::Error for TransportTimeoutError<TErr>
-where TErr: error::Error + 'static,
+where
+    TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {

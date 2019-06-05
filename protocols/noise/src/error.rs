@@ -36,7 +36,7 @@ pub enum NoiseError {
     /// A signature was required and could not be created.
     SigningError(identity::error::SigningError),
     #[doc(hidden)]
-    __Nonexhaustive
+    __Nonexhaustive,
 }
 
 impl fmt::Display for NoiseError {
@@ -47,7 +47,7 @@ impl fmt::Display for NoiseError {
             NoiseError::InvalidKey => f.write_str("invalid public key"),
             NoiseError::InvalidPayload(e) => write!(f, "{}", e),
             NoiseError::SigningError(e) => write!(f, "{}", e),
-            NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive")
+            NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive"),
         }
     }
 }
@@ -60,7 +60,7 @@ impl Error for NoiseError {
             NoiseError::InvalidKey => None,
             NoiseError::InvalidPayload(e) => Some(e),
             NoiseError::SigningError(e) => Some(e),
-            NoiseError::__Nonexhaustive => None
+            NoiseError::__Nonexhaustive => None,
         }
     }
 }
@@ -88,4 +88,3 @@ impl From<identity::error::SigningError> for NoiseError {
         NoiseError::SigningError(e)
     }
 }
-

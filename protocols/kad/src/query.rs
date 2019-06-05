@@ -104,12 +104,14 @@ enum QueryStage {
 impl<TTarget, TPeerId> QueryState<TTarget, TPeerId>
 where
     TTarget: Into<kbucket::Key<TTarget>> + Clone,
-    TPeerId: Into<kbucket::Key<TPeerId>> + Eq
+    TPeerId: Into<kbucket::Key<TPeerId>> + Eq,
 {
     /// Creates a new query.
     ///
     /// You should call `poll()` this function returns in order to know what to do.
-    pub fn new(config: QueryConfig<impl IntoIterator<Item = kbucket::Key<TPeerId>>, TTarget>) -> Self {
+    pub fn new(
+        config: QueryConfig<impl IntoIterator<Item = kbucket::Key<TPeerId>>, TTarget>,
+    ) -> Self {
         let mut closest_peers: SmallVec<[_; 32]> = config
             .known_closest_peers
             .into_iter()
@@ -185,18 +187,19 @@ where
             for peer in closer_peers {
                 let peer_key = peer.into();
                 let peer_distance = target.distance(&peer_key);
-                let insert_pos_start = self.closest_peers.iter().position(|(key, _)| {
-                    target.distance(&key) >= peer_distance
-                });
+                let insert_pos_start = self
+                    .closest_peers
+                    .iter()
+                    .position(|(key, _)| target.distance(&key) >= peer_distance);
 
                 if let Some(insert_pos_start) = insert_pos_start {
                     // We need to insert the element between `insert_pos_start` and
                     // `insert_pos_start + insert_pos_size`.
-                    let insert_pos_size = self.closest_peers.iter()
+                    let insert_pos_size = self
+                        .closest_peers
+                        .iter()
                         .skip(insert_pos_start)
-                        .position(|(key, _)| {
-                            target.distance(&key) > peer_distance
-                        });
+                        .position(|(key, _)| target.distance(&key) > peer_distance);
 
                     // Make sure we don't insert duplicates.
                     let mut iter_start = self.closest_peers.iter().skip(insert_pos_start);
@@ -216,7 +219,8 @@ where
                     }
                 } else if num_closest < self.num_results {
                     debug_assert!(self.closest_peers.iter().all(|e| e.0 != peer_key));
-                    self.closest_peers.push((peer_key, QueryPeerState::NotContacted));
+                    self.closest_peers
+                        .push((peer_key, QueryPeerState::NotContacted));
                 }
             }
         }
@@ -231,9 +235,8 @@ where
         // were discovered or the number of discovered peers reached the desired
         // number of results, then the query is considered complete.
         if let QueryStage::Iterating { no_closer_in_a_row } = self.stage {
-            if no_closer_in_a_row >= self.parallelism &&
-                (num_closest == num_closest_new ||
-                     num_closest_new >= self.num_results)
+            if no_closer_in_a_row >= self.parallelism
+                && (num_closest == num_closest_new || num_closest_new >= self.num_results)
             {
                 self.stage = QueryStage::Frozen;
             }
@@ -244,13 +247,11 @@ where
     pub fn waiting(&self) -> impl Iterator<Item = &TPeerId> {
         self.closest_peers
             .iter()
-            .filter(|(_, state)| {
-                match state {
-                    QueryPeerState::InProgress(_) => true,
-                    QueryPeerState::NotContacted => false,
-                    QueryPeerState::Succeeded => false,
-                    QueryPeerState::Failed => false,
-                }
+            .filter(|(_, state)| match state {
+                QueryPeerState::InProgress(_) => true,
+                QueryPeerState::NotContacted => false,
+                QueryPeerState::Succeeded => false,
+                QueryPeerState::Failed => false,
             })
             .map(|(key, _)| key.preimage())
     }
@@ -270,15 +271,13 @@ where
     ///
     /// After this function returns, you should call `poll()` again.
     pub fn inject_rpc_error(&mut self, id: &TPeerId) {
-        let state = self
-            .closest_peers
-            .iter_mut()
-            .find_map(|(peer_id, state)|
-                if peer_id.preimage() == id {
-                    Some(state)
-                } else {
-                    None
-                });
+        let state = self.closest_peers.iter_mut().find_map(|(peer_id, state)| {
+            if peer_id.preimage() == id {
+                Some(state)
+            } else {
+                None
+            }
+        });
 
         match state {
             Some(state @ &mut QueryPeerState::InProgress(_)) => *state = QueryPeerState::Failed,
@@ -309,7 +308,9 @@ where
                 match timeout.poll() {
                     Ok(Async::Ready(_)) | Err(_) => {
                         *state = QueryPeerState::Failed;
-                        return Async::Ready(QueryStatePollOut::CancelRpc { peer_id: peer_id.preimage() });
+                        return Async::Ready(QueryStatePollOut::CancelRpc {
+                            peer_id: peer_id.preimage(),
+                        });
                     }
                     Ok(Async::NotReady) => {
                         succeeded_counter = None;
@@ -323,7 +324,7 @@ where
                     *cnt += 1;
                     // If we have enough results; the query is done.
                     if *cnt >= num_results {
-                        return Async::Ready(QueryStatePollOut::Finished)
+                        return Async::Ready(QueryStatePollOut::Finished);
                     }
                 }
             }
@@ -331,7 +332,7 @@ where
             if let QueryPeerState::NotContacted = state {
                 let connect = match self.stage {
                     QueryStage::Frozen => true,
-                    QueryStage::Iterating {..} => active_counter < self.parallelism,
+                    QueryStage::Iterating { .. } => active_counter < self.parallelism,
                 };
                 if connect {
                     let delay = Delay::new(Instant::now() + self.rpc_timeout);
@@ -344,7 +345,7 @@ where
                     // The peer is among the `num_results` closest and still
                     // needs to be contacted, but the query is currently at
                     // capacity w.r.t. the allowed parallelism.
-                    return Async::NotReady
+                    return Async::NotReady;
                 }
             }
         }
@@ -363,7 +364,8 @@ where
     /// > **Note**: This can be called at any time, but you normally only do that once the query
     /// >           is finished.
     pub fn into_target_and_closest_peers(self) -> (TTarget, impl Iterator<Item = TPeerId>) {
-        let closest = self.closest_peers
+        let closest = self
+            .closest_peers
             .into_iter()
             .filter_map(|(peer_id, state)| {
                 if let QueryPeerState::Succeeded = state {
@@ -438,9 +440,9 @@ enum QueryPeerState {
 #[cfg(test)]
 mod tests {
     use super::{kbucket, QueryConfig, QueryState, QueryStatePollOut};
-    use futures::{self, try_ready, prelude::*};
+    use futures::{self, prelude::*, try_ready};
     use libp2p_core::PeerId;
-    use std::{iter, time::Duration, sync::Arc, sync::Mutex, thread};
+    use std::{iter, sync::Arc, sync::Mutex, thread, time::Duration};
     use tokio;
 
     #[test]
@@ -486,29 +488,28 @@ mod tests {
         tokio::run(futures::future::poll_fn({
             let random_id = random_id.clone();
             let query = query.clone();
-            move || {
-                match try_ready!(Ok(query.lock().unwrap().poll())) {
-                    QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id => {
-                        Ok(Async::Ready(()))
-                    }
-                    _ => panic!(),
+            move || match try_ready!(Ok(query.lock().unwrap().poll())) {
+                QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id => {
+                    Ok(Async::Ready(()))
                 }
+                _ => panic!(),
             }
         }));
 
         // Send the reply.
-        query.lock().unwrap().inject_rpc_result(&random_id, iter::once(random_id2.clone()));
+        query
+            .lock()
+            .unwrap()
+            .inject_rpc_result(&random_id, iter::once(random_id2.clone()));
 
         // Second polling round to check the second `SendRpc` request.
         tokio::run(futures::future::poll_fn({
             let query = query.clone();
-            move || {
-                match try_ready!(Ok(query.lock().unwrap().poll())) {
-                    QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id2 => {
-                        Ok(Async::Ready(()))
-                    }
-                    _ => panic!(),
+            move || match try_ready!(Ok(query.lock().unwrap().poll())) {
+                QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id2 => {
+                    Ok(Async::Ready(()))
                 }
+                _ => panic!(),
             }
         }));
     }
@@ -530,13 +531,11 @@ mod tests {
         tokio::run(futures::future::poll_fn({
             let random_id = random_id.clone();
             let query = query.clone();
-            move || {
-                match try_ready!(Ok(query.lock().unwrap().poll())) {
-                    QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id => {
-                        Ok(Async::Ready(()))
-                    }
-                    _ => panic!(),
+            move || match try_ready!(Ok(query.lock().unwrap().poll())) {
+                QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id => {
+                    Ok(Async::Ready(()))
                 }
+                _ => panic!(),
             }
         }));
 
@@ -546,26 +545,20 @@ mod tests {
         // Second polling round to check the timeout.
         tokio::run(futures::future::poll_fn({
             let query = query.clone();
-            move || {
-                match try_ready!(Ok(query.lock().unwrap().poll())) {
-                    QueryStatePollOut::CancelRpc { peer_id, .. } if peer_id == &random_id => {
-                        Ok(Async::Ready(()))
-                    }
-                    _ => panic!(),
+            move || match try_ready!(Ok(query.lock().unwrap().poll())) {
+                QueryStatePollOut::CancelRpc { peer_id, .. } if peer_id == &random_id => {
+                    Ok(Async::Ready(()))
                 }
+                _ => panic!(),
             }
         }));
 
         // Third polling round for finished.
         tokio::run(futures::future::poll_fn({
             let query = query.clone();
-            move || {
-                match try_ready!(Ok(query.lock().unwrap().poll())) {
-                    QueryStatePollOut::Finished => {
-                        Ok(Async::Ready(()))
-                    }
-                    _ => panic!(),
-                }
+            move || match try_ready!(Ok(query.lock().unwrap().poll())) {
+                QueryStatePollOut::Finished => Ok(Async::Ready(())),
+                _ => panic!(),
             }
         }));
     }

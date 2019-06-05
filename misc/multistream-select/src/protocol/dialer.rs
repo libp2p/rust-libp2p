@@ -20,35 +20,35 @@
 
 //! Contains the `Dialer` wrapper, which allows raw communications with a listener.
 
-use bytes::{BufMut, Bytes, BytesMut};
 use crate::length_delimited::LengthDelimited;
 use crate::protocol::DialerToListenerMessage;
 use crate::protocol::ListenerToDialerMessage;
 use crate::protocol::MultistreamSelectError;
 use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
-use futures::{prelude::*, sink, Async, StartSend, try_ready};
+use bytes::{BufMut, Bytes, BytesMut};
+use futures::{prelude::*, sink, try_ready, Async, StartSend};
 use std::io;
 use tokio_codec::Encoder;
 use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint::{decode, codec::Uvi};
+use unsigned_varint::{codec::Uvi, decode};
 
 /// Wraps around a `AsyncRead+AsyncWrite`.
 /// Assumes that we're on the dialer's side. Produces and accepts messages.
 pub struct Dialer<R, N> {
     inner: LengthDelimited<R, MessageEncoder<N>>,
-    handshake_finished: bool
+    handshake_finished: bool,
 }
 
 impl<R, N> Dialer<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
+    N: AsRef<[u8]>,
 {
     pub fn dial(inner: R) -> DialerFuture<R, N> {
         let codec = MessageEncoder(std::marker::PhantomData);
         let sender = LengthDelimited::new(inner, codec);
         DialerFuture {
-            inner: sender.send(Message::Header)
+            inner: sender.send(Message::Header),
         }
     }
 
@@ -62,7 +62,7 @@ where
 impl<R, N> Sink for Dialer<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
+    N: AsRef<[u8]>,
 {
     type SinkItem = DialerToListenerMessage<N>;
     type SinkError = MultistreamSelectError;
@@ -72,7 +72,7 @@ where
         match self.inner.start_send(Message::Body(item))? {
             AsyncSink::NotReady(Message::Body(item)) => Ok(AsyncSink::NotReady(item)),
             AsyncSink::NotReady(Message::Header) => unreachable!(),
-            AsyncSink::Ready => Ok(AsyncSink::Ready)
+            AsyncSink::Ready => Ok(AsyncSink::Ready),
         }
     }
 
@@ -89,7 +89,7 @@ where
 
 impl<R, N> Stream for Dialer<R, N>
 where
-    R: AsyncRead + AsyncWrite
+    R: AsyncRead + AsyncWrite,
 {
     type Item = ListenerToDialerMessage<Bytes>;
     type Error = MultistreamSelectError;
@@ -116,24 +116,27 @@ where
                 let frame_len = frame.len();
                 let protocol = frame.split_to(frame_len - 1);
                 return Ok(Async::Ready(Some(ListenerToDialerMessage::ProtocolAck {
-                    name: protocol
+                    name: protocol,
                 })));
             } else if frame == b"na\n"[..] {
                 return Ok(Async::Ready(Some(ListenerToDialerMessage::NotAvailable)));
             } else {
                 // A varint number of protocols
                 let (num_protocols, mut remaining) = decode::usize(&frame)?;
-                if num_protocols > 1000 { // TODO: configurable limit
-                    return Err(MultistreamSelectError::VarintParseError("too many protocols".into()))
+                if num_protocols > 1000 {
+                    // TODO: configurable limit
+                    return Err(MultistreamSelectError::VarintParseError(
+                        "too many protocols".into(),
+                    ));
                 }
                 let mut out = Vec::with_capacity(num_protocols);
-                for _ in 0 .. num_protocols {
+                for _ in 0..num_protocols {
                     let (len, rem) = decode::usize(remaining)?;
                     if len == 0 || len > rem.len() || rem[len - 1] != b'\n' {
-                        return Err(MultistreamSelectError::UnknownMessage)
+                        return Err(MultistreamSelectError::UnknownMessage);
                     }
-                    out.push(Bytes::from(&rem[.. len - 1]));
-                    remaining = &rem[len ..]
+                    out.push(Bytes::from(&rem[..len - 1]));
+                    remaining = &rem[len..]
                 }
                 return Ok(Async::Ready(Some(
                     ListenerToDialerMessage::ProtocolsListResponse { list: out },
@@ -145,7 +148,7 @@ where
 
 /// Future, returned by `Dialer::new`, which send the handshake and returns the actual `Dialer`.
 pub struct DialerFuture<T: AsyncWrite, N: AsRef<[u8]>> {
-    inner: sink::Send<LengthDelimited<T, MessageEncoder<N>>>
+    inner: sink::Send<LengthDelimited<T, MessageEncoder<N>>>,
 }
 
 impl<T: AsyncWrite, N: AsRef<[u8]>> Future for DialerFuture<T, N> {
@@ -154,7 +157,10 @@ impl<T: AsyncWrite, N: AsRef<[u8]>> Future for DialerFuture<T, N> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let inner = try_ready!(self.inner.poll());
-        Ok(Async::Ready(Dialer { inner, handshake_finished: false }))
+        Ok(Async::Ready(Dialer {
+            inner,
+            handshake_finished: false,
+        }))
     }
 }
 
@@ -163,7 +169,7 @@ struct MessageEncoder<N>(std::marker::PhantomData<N>);
 
 enum Message<N> {
     Header,
-    Body(DialerToListenerMessage<N>)
+    Body(DialerToListenerMessage<N>),
 }
 
 impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
@@ -180,11 +186,11 @@ impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
             }
             Message::Body(DialerToListenerMessage::ProtocolRequest { name }) => {
                 if !name.as_ref().starts_with(b"/") {
-                    return Err(MultistreamSelectError::WrongProtocolName)
+                    return Err(MultistreamSelectError::WrongProtocolName);
                 }
                 let len = name.as_ref().len() + 1; // + 1 for \n
                 if len > std::u16::MAX as usize {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "name too long").into())
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "name too long").into());
                 }
                 Uvi::<usize>::default().encode(len, dest)?;
                 dest.reserve(len);
@@ -205,10 +211,10 @@ impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
 #[cfg(test)]
 mod tests {
     use crate::protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
-    use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
     use futures::Future;
     use futures::{Sink, Stream};
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
 
     #[test]
     fn wrong_proto_name() {

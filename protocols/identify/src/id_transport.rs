@@ -20,12 +20,13 @@
 
 //! Contains the `IdentifyTransport` type.
 
-use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
+use crate::protocol::{IdentifyProtocolConfig, RemoteInfo};
 use futures::{future, prelude::*, stream, AndThen, MapErr};
 use libp2p_core::{
-    Multiaddr, PeerId, PublicKey, muxing, Transport,
-    transport::{TransportError, ListenerEvent, upgrade::TransportUpgradeError},
-    upgrade::{self, OutboundUpgradeApply, UpgradeError}
+    muxing,
+    transport::{upgrade::TransportUpgradeError, ListenerEvent, TransportError},
+    upgrade::{self, OutboundUpgradeApply, UpgradeError},
+    Multiaddr, PeerId, PublicKey, Transport,
 };
 use std::io::Error as IoError;
 use std::mem;
@@ -51,9 +52,7 @@ impl<TTrans> IdentifyTransport<TTrans> {
     /// Creates an `IdentifyTransport` that wraps around the given transport.
     #[inline]
     pub fn new(transport: TTrans) -> Self {
-        IdentifyTransport {
-            transport,
-        }
+        IdentifyTransport { transport }
     }
 }
 
@@ -61,17 +60,17 @@ impl<TTrans, TMuxer> Transport for IdentifyTransport<TTrans>
 where
     TTrans: Transport<Output = TMuxer>,
     TTrans::Error: 'static,
-    TMuxer: muxing::StreamMuxer + Send + Sync + 'static,      // TODO: remove unnecessary bounds
-    TMuxer::Substream: Send + Sync + 'static,      // TODO: remove unnecessary bounds
+    TMuxer: muxing::StreamMuxer + Send + Sync + 'static, // TODO: remove unnecessary bounds
+    TMuxer::Substream: Send + Sync + 'static,            // TODO: remove unnecessary bounds
 {
     type Output = (PeerId, TMuxer);
-    type Error = TransportUpgradeError<TTrans::Error, IoError>;     // TODO: better than IoError
+    type Error = TransportUpgradeError<TTrans::Error, IoError>; // TODO: better than IoError
     type Listener = stream::Empty<ListenerEvent<Self::ListenerUpgrade>, Self::Error>;
     type ListenerUpgrade = future::Empty<Self::Output, Self::Error>;
     type Dial = AndThen<
         MapErr<TTrans::Dial, fn(TTrans::Error) -> Self::Error>,
         MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>,
-        fn(TMuxer) -> MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>
+        fn(TMuxer) -> MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>,
     >;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
@@ -80,32 +79,46 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // We dial a first time the node.
-        let dial = self.transport.dial(addr)
+        let dial = self
+            .transport
+            .dial(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(dial.map_err::<fn(_) -> _, _>(TransportUpgradeError::Transport).and_then(|muxer| {
-            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(TransportUpgradeError::Upgrade)
-        }))
+        Ok(dial
+            .map_err::<fn(_) -> _, _>(TransportUpgradeError::Transport)
+            .and_then(|muxer| {
+                IdRetriever::new(muxer, IdentifyProtocolConfig)
+                    .map_err(TransportUpgradeError::Upgrade)
+            }))
     }
 }
 
 /// Implementation of `Future` that asks the remote of its `PeerId`.
 // TODO: remove unneeded bounds
 pub struct IdRetriever<TMuxer>
-where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
-      TMuxer::Substream: Send,
+where
+    TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
+    TMuxer::Substream: Send,
 {
     /// Internal state.
-    state: IdRetrieverState<TMuxer>
+    state: IdRetrieverState<TMuxer>,
 }
 
 enum IdRetrieverState<TMuxer>
-where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
-      TMuxer::Substream: Send,
+where
+    TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
+    TMuxer::Substream: Send,
 {
     /// We are in the process of opening a substream with the remote.
-    OpeningSubstream(Arc<TMuxer>, muxing::OutboundSubstreamRefWrapFuture<Arc<TMuxer>>, IdentifyProtocolConfig),
+    OpeningSubstream(
+        Arc<TMuxer>,
+        muxing::OutboundSubstreamRefWrapFuture<Arc<TMuxer>>,
+        IdentifyProtocolConfig,
+    ),
     /// We opened the substream and are currently negotiating the identify protocol.
-    NegotiatingIdentify(Arc<TMuxer>, OutboundUpgradeApply<muxing::SubstreamRef<Arc<TMuxer>>, IdentifyProtocolConfig>),
+    NegotiatingIdentify(
+        Arc<TMuxer>,
+        OutboundUpgradeApply<muxing::SubstreamRef<Arc<TMuxer>>, IdentifyProtocolConfig>,
+    ),
     /// We retreived the remote's public key and are ready to yield it when polled again.
     Finishing(Arc<TMuxer>, PublicKey),
     /// Something bad happend, or the `Future` is finished, and shouldn't be polled again.
@@ -113,8 +126,9 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
 }
 
 impl<TMuxer> IdRetriever<TMuxer>
-where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
-      TMuxer::Substream: Send,
+where
+    TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
+    TMuxer::Substream: Send,
 {
     /// Creates a new `IdRetriever` ready to be polled.
     fn new(muxer: TMuxer, config: IdentifyProtocolConfig) -> Self {
@@ -122,14 +136,15 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
         let opening = muxing::outbound_from_ref_and_wrap(muxer.clone());
 
         IdRetriever {
-            state: IdRetrieverState::OpeningSubstream(muxer, opening, config)
+            state: IdRetrieverState::OpeningSubstream(muxer, opening, config),
         }
     }
 }
 
 impl<TMuxer> Future for IdRetriever<TMuxer>
-where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
-      TMuxer::Substream: Send,
+where
+    TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
+    TMuxer::Substream: Send,
 {
     type Item = (PeerId, TMuxer);
     type Error = UpgradeError<IoError>;
@@ -145,41 +160,41 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                         Ok(Async::Ready(substream)) => {
                             let upgrade = upgrade::apply_outbound(substream, config);
                             self.state = IdRetrieverState::NegotiatingIdentify(muxer, upgrade)
-                        },
+                        }
                         Ok(Async::NotReady) => {
                             self.state = IdRetrieverState::OpeningSubstream(muxer, opening, config);
                             return Ok(Async::NotReady);
-                        },
-                        Err(err) => return Err(UpgradeError::Apply(err.into()))
+                        }
+                        Err(err) => return Err(UpgradeError::Apply(err.into())),
                     }
-                },
-                IdRetrieverState::NegotiatingIdentify(muxer, mut nego) => {
-                    match nego.poll() {
-                        Ok(Async::Ready(RemoteInfo { info, .. })) => {
-                            self.state = IdRetrieverState::Finishing(muxer, info.public_key);
-                        },
-                        Ok(Async::NotReady) => {
-                            self.state = IdRetrieverState::NegotiatingIdentify(muxer, nego);
-                            return Ok(Async::NotReady);
-                        },
-                        Err(err) => return Err(err),
+                }
+                IdRetrieverState::NegotiatingIdentify(muxer, mut nego) => match nego.poll() {
+                    Ok(Async::Ready(RemoteInfo { info, .. })) => {
+                        self.state = IdRetrieverState::Finishing(muxer, info.public_key);
                     }
+                    Ok(Async::NotReady) => {
+                        self.state = IdRetrieverState::NegotiatingIdentify(muxer, nego);
+                        return Ok(Async::NotReady);
+                    }
+                    Err(err) => return Err(err),
                 },
                 IdRetrieverState::Finishing(muxer, public_key) => {
                     // Here is a tricky part: we need to get back the muxer in order to return
                     // it, but it is in an `Arc`.
                     let unwrapped = Arc::try_unwrap(muxer).unwrap_or_else(|_| {
-                        panic!("We clone the Arc only to put it into substreams. Once in the \
-                                Finishing state, no substream or upgrade exists anymore. \
-                                Therefore, there exists only one instance of the Arc. QED")
+                        panic!(
+                            "We clone the Arc only to put it into substreams. Once in the \
+                             Finishing state, no substream or upgrade exists anymore. \
+                             Therefore, there exists only one instance of the Arc. QED"
+                        )
                     });
 
                     // We leave `Poisoned` as the state when returning.
                     return Ok(Async::Ready((public_key.into(), unwrapped)));
-                },
+                }
                 IdRetrieverState::Poisoned => {
                     panic!("Future state panicked inside poll() or is finished")
-                },
+                }
             }
         }
     }

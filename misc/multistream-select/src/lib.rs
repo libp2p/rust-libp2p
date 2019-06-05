@@ -86,7 +86,7 @@ pub struct Negotiated<TInner>(pub(crate) TInner);
 
 impl<TInner> io::Read for Negotiated<TInner>
 where
-    TInner: io::Read
+    TInner: io::Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read(buf)
@@ -95,7 +95,7 @@ where
 
 impl<TInner> tokio_io::AsyncRead for Negotiated<TInner>
 where
-    TInner: tokio_io::AsyncRead
+    TInner: tokio_io::AsyncRead,
 {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         self.0.prepare_uninitialized_buffer(buf)
@@ -108,7 +108,7 @@ where
 
 impl<TInner> io::Write for Negotiated<TInner>
 where
-    TInner: io::Write
+    TInner: io::Write,
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.write(buf)
@@ -121,7 +121,7 @@ where
 
 impl<TInner> tokio_io::AsyncWrite for Negotiated<TInner>
 where
-    TInner: tokio_io::AsyncWrite
+    TInner: tokio_io::AsyncWrite,
 {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.0.shutdown()

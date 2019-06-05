@@ -21,15 +21,15 @@
 use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
-use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, RawSwarmReachError, PeerState, UnknownPeerDialErr, IncomingError};
-use libp2p_core::{PeerId, Transport, upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt};
+use libp2p_core::nodes::raw_swarm::{
+    IncomingError, PeerState, RawSwarm, RawSwarmEvent, RawSwarmReachError, UnknownPeerDialErr,
+};
 use libp2p_core::protocols_handler::{
-    ProtocolsHandler,
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr,
-    NodeHandlerWrapperBuilder
+    KeepAlive, NodeHandlerWrapperBuilder, ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+};
+use libp2p_core::{
+    upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt, PeerId, Transport,
 };
 use rand::seq::SliceRandom;
 use std::io;
@@ -45,15 +45,15 @@ impl<TSubstream> Default for TestHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for TestHandler<TSubstream>
 where
-    TSubstream: tokio_io::AsyncRead + tokio_io::AsyncWrite
+    TSubstream: tokio_io::AsyncRead + tokio_io::AsyncWrite,
 {
-    type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
-    type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
+    type InEvent = (); // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
+    type OutEvent = (); // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type Error = io::Error;
     type Substream = TSubstream;
     type InboundProtocol = upgrade::DeniedUpgrade;
     type OutboundProtocol = upgrade::DeniedUpgrade;
-    type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
+    type OutboundOpenInfo = (); // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(upgrade::DeniedUpgrade)
@@ -61,26 +61,43 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as upgrade::InboundUpgrade<Self::Substream>>::Output
-    ) { panic!() }
+        _: <Self::InboundProtocol as upgrade::InboundUpgrade<Self::Substream>>::Output,
+    ) {
+        panic!()
+    }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
         _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Output,
-        _: Self::OutboundOpenInfo
-    ) { panic!() }
+        _: Self::OutboundOpenInfo,
+    ) {
+        panic!()
+    }
 
     fn inject_event(&mut self, _: Self::InEvent) {
         panic!()
     }
 
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _: Self::OutboundOpenInfo,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Error,
+        >,
+    ) {
 
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::No
+    }
 
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
+    fn poll(
+        &mut self,
+    ) -> Poll<
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error,
+    > {
         Ok(Async::NotReady)
     }
 }
@@ -123,19 +140,26 @@ fn deny_incoming_connec() {
         RawSwarm::new(transport, local_public_key.into())
     };
 
-    swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+    swarm1
+        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+        .unwrap();
 
-    let address =
-        if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
-            listen_addr
-        } else {
-            panic!("Was expecting the listen address to be reported")
-        };
+    let address = if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) =
+        swarm1.poll()
+    {
+        listen_addr
+    } else {
+        panic!("Was expecting the listen address to be reported")
+    };
 
     swarm2
         .peer(swarm1.local_peer_id().clone())
-        .into_not_connected().unwrap()
-        .connect(address.clone(), TestHandler::default().into_node_handler_builder());
+        .into_not_connected()
+        .unwrap()
+        .connect(
+            address.clone(),
+            TestHandler::default().into_node_handler_builder(),
+        );
 
     let future = future::poll_fn(|| -> Poll<(), io::Error> {
         match swarm1.poll() {
@@ -149,12 +173,12 @@ fn deny_incoming_connec() {
                 new_state: PeerState::NotConnected,
                 peer_id,
                 multiaddr,
-                error: RawSwarmReachError::Transport(_)
+                error: RawSwarmReachError::Transport(_),
             }) => {
                 assert_eq!(peer_id, *swarm1.local_peer_id());
                 assert_eq!(multiaddr, address);
                 return Ok(Async::Ready(()));
-            },
+            }
             Async::Ready(_) => unreachable!(),
             Async::NotReady => (),
         }
@@ -162,7 +186,10 @@ fn deny_incoming_connec() {
         Ok(Async::NotReady)
     });
 
-    tokio::runtime::current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+    tokio::runtime::current_thread::Runtime::new()
+        .unwrap()
+        .block_on(future)
+        .unwrap();
 }
 
 #[test]
@@ -195,20 +222,26 @@ fn dial_self() {
         RawSwarm::new(transport, local_public_key.into())
     };
 
-    swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-
-    let (address, mut swarm) =
-        future::lazy(move || {
-            if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
-                Ok::<_, void::Void>((listen_addr, swarm))
-            } else {
-                panic!("Was expecting the listen address to be reported")
-            }
-        })
-        .wait()
+    swarm
+        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
         .unwrap();
 
-    swarm.dial(address.clone(), TestHandler::default().into_node_handler_builder()).unwrap();
+    let (address, mut swarm) = future::lazy(move || {
+        if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
+            Ok::<_, void::Void>((listen_addr, swarm))
+        } else {
+            panic!("Was expecting the listen address to be reported")
+        }
+    })
+    .wait()
+    .unwrap();
+
+    swarm
+        .dial(
+            address.clone(),
+            TestHandler::default().into_node_handler_builder(),
+        )
+        .unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
@@ -218,7 +251,7 @@ fn dial_self() {
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError {
                     multiaddr,
                     error: UnknownPeerDialErr::FoundLocalPeerId,
-                    handler: _
+                    handler: _,
                 }) => {
                     assert_eq!(multiaddr, address);
                     assert!(!got_dial_err);
@@ -226,11 +259,11 @@ fn dial_self() {
                     if got_inc_err {
                         return Ok(Async::Ready(()));
                     }
-                },
+                }
                 Async::Ready(RawSwarmEvent::IncomingConnectionError {
                     listen_addr,
                     send_back_addr: _,
-                    error: IncomingError::FoundLocalPeerId
+                    error: IncomingError::FoundLocalPeerId,
                 }) => {
                     assert_eq!(address, listen_addr);
                     assert!(!got_inc_err);
@@ -238,18 +271,21 @@ fn dial_self() {
                     if got_dial_err {
                         return Ok(Async::Ready(()));
                     }
-                },
+                }
                 Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
                     assert_eq!(*inc.listen_addr(), address);
                     inc.accept(TestHandler::default().into_node_handler_builder());
-                },
+                }
                 Async::Ready(ev) => unreachable!("{:?}", ev),
                 Async::NotReady => break Ok(Async::NotReady),
             }
         }
     });
 
-    tokio::runtime::current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+    tokio::runtime::current_thread::Runtime::new()
+        .unwrap()
+        .block_on(future)
+        .unwrap();
 }
 
 #[test]
@@ -302,18 +338,23 @@ fn multiple_addresses_err() {
     };
 
     let mut addresses = Vec::new();
-    for _ in 0 .. 3 {
+    for _ in 0..3 {
         addresses.push(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
     }
-    for _ in 0 .. 5 {
+    for _ in 0..5 {
         addresses.push(multiaddr![Udp(rand::random::<u16>())]);
     }
     addresses.shuffle(&mut rand::thread_rng());
 
     let target = PeerId::random();
-    swarm.peer(target.clone())
-        .into_not_connected().unwrap()
-        .connect_iter(addresses.clone(), TestHandler::default().into_node_handler_builder())
+    swarm
+        .peer(target.clone())
+        .into_not_connected()
+        .unwrap()
+        .connect_iter(
+            addresses.clone(),
+            TestHandler::default().into_node_handler_builder(),
+        )
         .unwrap();
 
     let future = future::poll_fn(|| -> Poll<(), io::Error> {
@@ -323,7 +364,7 @@ fn multiple_addresses_err() {
                     new_state,
                     peer_id,
                     multiaddr,
-                    error: RawSwarmReachError::Transport(_)
+                    error: RawSwarmReachError::Transport(_),
                 }) => {
                     assert_eq!(peer_id, target);
                     let expected = addresses.remove(0);
@@ -333,18 +374,23 @@ fn multiple_addresses_err() {
                         return Ok(Async::Ready(()));
                     } else {
                         match new_state {
-                            PeerState::Dialing { num_pending_addresses } => {
+                            PeerState::Dialing {
+                                num_pending_addresses,
+                            } => {
                                 assert_eq!(num_pending_addresses.get(), addresses.len());
-                            },
-                            _ => panic!()
+                            }
+                            _ => panic!(),
                         }
                     }
-                },
+                }
                 Async::Ready(_) => unreachable!(),
                 Async::NotReady => break Ok(Async::NotReady),
             }
         }
     });
 
-    tokio::runtime::current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+    tokio::runtime::current_thread::Runtime::new()
+        .unwrap()
+        .block_on(future)
+        .unwrap();
 }

@@ -18,12 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::service::{MdnsService, MdnsPacket};
+use crate::service::{MdnsPacket, MdnsService};
 use futures::prelude::*;
-use log::warn;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{address_translation, Multiaddr, PeerId, multiaddr::Protocol};
+use libp2p_core::swarm::{
+    ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+};
+use libp2p_core::{address_translation, multiaddr::Protocol, Multiaddr, PeerId};
+use log::warn;
 use smallvec::SmallVec;
 use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -82,7 +84,7 @@ pub enum MdnsEvent {
 
 /// Iterator that produces the list of addresses that have been discovered.
 pub struct DiscoveredAddrsIter {
-    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }
 
 impl Iterator for DiscoveredAddrsIter {
@@ -99,19 +101,17 @@ impl Iterator for DiscoveredAddrsIter {
     }
 }
 
-impl ExactSizeIterator for DiscoveredAddrsIter {
-}
+impl ExactSizeIterator for DiscoveredAddrsIter {}
 
 impl fmt::Debug for DiscoveredAddrsIter {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("DiscoveredAddrsIter")
-            .finish()
+        fmt.debug_struct("DiscoveredAddrsIter").finish()
     }
 }
 
 /// Iterator that produces the list of addresses that have expired.
 pub struct ExpiredAddrsIter {
-    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }
 
 impl Iterator for ExpiredAddrsIter {
@@ -128,13 +128,11 @@ impl Iterator for ExpiredAddrsIter {
     }
 }
 
-impl ExactSizeIterator for ExpiredAddrsIter {
-}
+impl ExactSizeIterator for ExpiredAddrsIter {}
 
 impl fmt::Debug for ExpiredAddrsIter {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("ExpiredAddrsIter")
-            .finish()
+        fmt.debug_struct("ExpiredAddrsIter").finish()
     }
 }
 
@@ -185,7 +183,11 @@ where
                 Ok(Async::Ready(())) => {
                     let now = Instant::now();
                     let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
-                    while let Some(pos) = self.discovered_nodes.iter().position(|(_, _, exp)| *exp < now) {
+                    while let Some(pos) = self
+                        .discovered_nodes
+                        .iter()
+                        .position(|(_, _, exp)| *exp < now)
+                    {
                         let (peer_id, addr, _) = self.discovered_nodes.remove(pos);
                         expired.push((peer_id, addr));
                     }
@@ -197,7 +199,7 @@ where
 
                         return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     }
-                },
+                }
                 Ok(Async::NotReady) => (),
                 Err(err) => warn!("tokio timer has errored: {:?}", err),
             }
@@ -215,17 +217,16 @@ where
                     let _ = query.respond(
                         params.local_peer_id().clone(),
                         params.listened_addresses().cloned(),
-                        Duration::from_secs(5 * 60)
+                        Duration::from_secs(5 * 60),
                     );
-                },
+                }
                 MdnsPacket::Response(response) => {
                     // We replace the IP address with the address we observe the
                     // remote as and the address they listen on.
                     let obs_ip = Protocol::from(response.remote_addr().ip());
                     let obs_port = Protocol::Udp(response.remote_addr().port());
-                    let observed: Multiaddr = iter::once(obs_ip)
-                        .chain(iter::once(obs_port))
-                        .collect();
+                    let observed: Multiaddr =
+                        iter::once(obs_ip).chain(iter::once(obs_port)).collect();
 
                     let mut discovered: SmallVec<[_; 4]> = SmallVec::new();
                     for peer in response.discovered_peers() {
@@ -244,12 +245,18 @@ where
                         }
 
                         for addr in addrs {
-                            if let Some((_, _, cur_expires)) = self.discovered_nodes.iter_mut()
+                            if let Some((_, _, cur_expires)) = self
+                                .discovered_nodes
+                                .iter_mut()
                                 .find(|(p, a, _)| p == peer.id() && *a == addr)
                             {
                                 *cur_expires = cmp::max(*cur_expires, new_expiration);
                             } else {
-                                self.discovered_nodes.push((peer.id().clone(), addr.clone(), new_expiration));
+                                self.discovered_nodes.push((
+                                    peer.id().clone(),
+                                    addr.clone(),
+                                    new_expiration,
+                                ));
                             }
 
                             discovered.push((peer.id().clone(), addr));
@@ -257,22 +264,26 @@ where
                     }
 
                     break discovered;
-                },
+                }
                 MdnsPacket::ServiceDiscovery(disc) => {
                     disc.respond(Duration::from_secs(5 * 60));
-                },
+                }
             }
         };
 
         // As the final step, we need to refresh `closest_expiration`.
-        self.closest_expiration = self.discovered_nodes.iter()
+        self.closest_expiration = self
+            .discovered_nodes
+            .iter()
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
             .map(Delay::new);
-        Async::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
-            inner: discovered.into_iter(),
-        })))
+        Async::Ready(NetworkBehaviourAction::GenerateEvent(
+            MdnsEvent::Discovered(DiscoveredAddrsIter {
+                inner: discovered.into_iter(),
+            }),
+        ))
     }
 }
 
@@ -283,4 +294,3 @@ impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
             .finish()
     }
 }
-

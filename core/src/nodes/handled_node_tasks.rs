@@ -19,21 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    PeerId,
     muxing::StreamMuxer,
     nodes::{
         handled_node::{HandledNode, HandledNodeError, NodeHandler},
-        node::{Close, Substream}
-    }
+        node::{Close, Substream},
+    },
+    PeerId,
 };
 use fnv::FnvHashMap;
 use futures::{prelude::*, stream, sync::mpsc};
 use smallvec::SmallVec;
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
-    error,
-    fmt,
-    mem
+    error, fmt, mem,
 };
 use tokio_executor::Executor;
 
@@ -56,7 +54,15 @@ mod tests;
 // conditions in the user's code. See similar comments in the documentation of `NodeStream`.
 
 /// Implementation of `Stream` that handles a collection of nodes.
-pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo = PeerId> {
+pub struct HandledNodesTasks<
+    TInEvent,
+    TOutEvent,
+    TIntoHandler,
+    TReachErr,
+    THandlerErr,
+    TUserData,
+    TConnInfo = PeerId,
+> {
     /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
@@ -73,15 +79,29 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
     local_spawns: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)>,
+    events_tx: mpsc::UnboundedSender<(
+        InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>,
+        TaskId,
+    )>,
     /// Receiver side for the events.
-    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)>,
+    events_rx: mpsc::UnboundedReceiver<(
+        InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>,
+        TaskId,
+    )>,
 }
 
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo> fmt::Debug for
-    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo>
+impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo> fmt::Debug
+    for HandledNodesTasks<
+        TInEvent,
+        TOutEvent,
+        TIntoHandler,
+        TReachErr,
+        THandlerErr,
+        TUserData,
+        TConnInfo,
+    >
 where
-    TUserData: fmt::Debug
+    TUserData: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_map()
@@ -115,7 +135,7 @@ where
 impl<TReachErr, THandlerErr> error::Error for TaskClosedEvent<TReachErr, THandlerErr>
 where
     TReachErr: error::Error + 'static,
-    THandlerErr: error::Error + 'static
+    THandlerErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -138,7 +158,8 @@ pub trait IntoNodeHandler<TConnInfo = PeerId> {
 }
 
 impl<T, TConnInfo> IntoNodeHandler<TConnInfo> for T
-where T: NodeHandler
+where
+    T: NodeHandler,
 {
     type Handler = Self;
 
@@ -150,7 +171,16 @@ where T: NodeHandler
 
 /// Event that can happen on the `HandledNodesTasks`.
 #[derive(Debug)]
-pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo = PeerId> {
+pub enum HandledNodesEvent<
+    'a,
+    TInEvent,
+    TOutEvent,
+    TIntoHandler,
+    TReachErr,
+    THandlerErr,
+    TUserData,
+    TConnInfo = PeerId,
+> {
     /// A task has been closed.
     ///
     /// This happens once the node handler closes or an error happens.
@@ -187,7 +217,15 @@ pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THa
 pub struct TaskId(usize);
 
 impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo>
-    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo>
+    HandledNodesTasks<
+        TInEvent,
+        TOutEvent,
+        TIntoHandler,
+        TReachErr,
+        THandlerErr,
+        TUserData,
+        TConnInfo,
+    >
 {
     /// Creates a new empty collection.
     #[inline]
@@ -208,11 +246,22 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, user_data: TUserData, handler: TIntoHandler) -> TaskId
+    pub fn add_reach_attempt<TFut, TMuxer>(
+        &mut self,
+        future: TFut,
+        user_data: TUserData,
+        handler: TIntoHandler,
+    ) -> TaskId
     where
         TFut: Future<Item = (TConnInfo, TMuxer), Error = TReachErr> + Send + 'static,
         TIntoHandler: IntoNodeHandler<TConnInfo> + Send + 'static,
-        TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        TIntoHandler::Handler: NodeHandler<
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+                Error = THandlerErr,
+            > + Send
+            + 'static,
         TReachErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
         TInEvent: Send + 'static,
@@ -250,10 +299,21 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
     ///
     /// No `NodeReached` event will be emitted for this task, since the node has already been
     /// reached.
-    pub fn add_connection<TMuxer, THandler>(&mut self, user_data: TUserData, muxer: TMuxer, handler: THandler) -> TaskId
+    pub fn add_connection<TMuxer, THandler>(
+        &mut self,
+        user_data: TUserData,
+        muxer: TMuxer,
+        handler: THandler,
+    ) -> TaskId
     where
         TIntoHandler: IntoNodeHandler<TConnInfo, Handler = THandler> + Send + 'static,
-        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        THandler: NodeHandler<
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+                Error = THandlerErr,
+            > + Send
+            + 'static,
         TReachErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
         TInEvent: Send + 'static,
@@ -283,7 +343,8 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
 
     /// Sends an event to all the tasks, including the pending ones.
     pub fn broadcast_event(&mut self, event: &TInEvent)
-    where TInEvent: Clone,
+    where
+        TInEvent: Clone,
     {
         for (sender, _) in self.tasks.values() {
             // Note: it is possible that sending an event fails if the background task has already
@@ -311,33 +372,43 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<HandledNodesEvent<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConnInfo>> {
+    pub fn poll(
+        &mut self,
+    ) -> Async<
+        HandledNodesEvent<
+            TInEvent,
+            TOutEvent,
+            TIntoHandler,
+            TReachErr,
+            THandlerErr,
+            TUserData,
+            TConnInfo,
+        >,
+    > {
         let (message, task_id) = match self.poll_inner() {
             Async::Ready(r) => r,
             Async::NotReady => return Async::NotReady,
         };
 
         Async::Ready(match message {
-            InToExtMessage::NodeEvent(event) => {
-                HandledNodesEvent::NodeEvent {
-                    task: match self.tasks.entry(task_id) {
-                        Entry::Occupied(inner) => Task { inner },
-                        Entry::Vacant(_) => panic!("poll_inner only returns valid TaskIds; QED")
-                    },
-                    event
-                }
+            InToExtMessage::NodeEvent(event) => HandledNodesEvent::NodeEvent {
+                task: match self.tasks.entry(task_id) {
+                    Entry::Occupied(inner) => Task { inner },
+                    Entry::Vacant(_) => panic!("poll_inner only returns valid TaskIds; QED"),
+                },
+                event,
             },
-            InToExtMessage::NodeReached(conn_info) => {
-                HandledNodesEvent::NodeReached {
-                    task: match self.tasks.entry(task_id) {
-                        Entry::Occupied(inner) => Task { inner },
-                        Entry::Vacant(_) => panic!("poll_inner only returns valid TaskIds; QED")
-                    },
-                    conn_info
-                }
+            InToExtMessage::NodeReached(conn_info) => HandledNodesEvent::NodeReached {
+                task: match self.tasks.entry(task_id) {
+                    Entry::Occupied(inner) => Task { inner },
+                    Entry::Vacant(_) => panic!("poll_inner only returns valid TaskIds; QED"),
+                },
+                conn_info,
             },
             InToExtMessage::TaskClosed(result, handler) => {
-                let (channel, user_data) = self.tasks.remove(&task_id)
+                let (channel, user_data) = self
+                    .tasks
+                    .remove(&task_id)
                     .expect("poll_inner only returns valid TaskIds; QED");
                 HandledNodesEvent::TaskClosed {
                     task: ClosedTask {
@@ -348,7 +419,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
                     result,
                     handler,
                 }
-            },
+            }
         })
     }
 
@@ -356,14 +427,21 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
     /// split `poll()` in two. This method returns an `InToExtMessage` that is guaranteed to come
     /// from an alive task.
     // TODO: look into merging with `poll()`
-    fn poll_inner(&mut self) -> Async<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>, TaskId)> {
+    fn poll_inner(
+        &mut self,
+    ) -> Async<(
+        InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo>,
+        TaskId,
+    )> {
         for to_spawn in self.to_spawn.drain() {
             // We try to use the default executor, but fall back to polling the task manually if
             // no executor is available. This makes it possible to use the core in environments
             // outside of tokio.
             let mut executor = tokio_executor::DefaultExecutor::current();
             if executor.status().is_ok() {
-                executor.spawn(to_spawn).expect("failed to create a node task");
+                executor
+                    .spawn(to_spawn)
+                    .expect("failed to create a node task");
             } else {
                 self.local_spawns.push(to_spawn);
             }
@@ -372,7 +450,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
         for n in (0..self.local_spawns.len()).rev() {
             let mut task = self.local_spawns.swap_remove(n);
             match task.poll() {
-                Ok(Async::Ready(())) => {},
+                Ok(Async::Ready(())) => {}
                 Ok(Async::NotReady) => self.local_spawns.push(task),
                 // It would normally be desirable to either report or log when a background task
                 // errors. However the default tokio executor doesn't do anything in case of error,
@@ -394,10 +472,10 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
                 Ok(Async::NotReady) => {
                     break Async::NotReady;
                 }
-                Ok(Async::Ready(None)) => {
-                    unreachable!("The sender is in self as well, therefore the receiver never \
-                                  closes.")
-                },
+                Ok(Async::Ready(None)) => unreachable!(
+                    "The sender is in self as well, therefore the receiver never \
+                     closes."
+                ),
                 Err(()) => unreachable!("An unbounded receiver never errors"),
             }
         }
@@ -417,7 +495,11 @@ impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
-        let _ = self.inner.get_mut().0.unbounded_send(ExtToInMessage::HandlerEvent(event));
+        let _ = self
+            .inner
+            .get_mut()
+            .0
+            .unbounded_send(ExtToInMessage::HandlerEvent(event));
     }
 
     /// Returns the user data associated with the task.
@@ -443,7 +525,11 @@ impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
     pub fn close(self) -> ClosedTask<TInEvent, TUserData> {
         let id = *self.inner.key();
         let (channel, user_data) = self.inner.remove();
-        ClosedTask { id, channel, user_data }
+        ClosedTask {
+            id,
+            channel,
+            user_data,
+        }
     }
 
     /// Gives ownership of a closed task. As soon as our task (`self`) has some acknowledgment from
@@ -452,7 +538,11 @@ impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
-        let _ = self.inner.get_mut().0.unbounded_send(ExtToInMessage::TakeOver(other.channel));
+        let _ = self
+            .inner
+            .get_mut()
+            .0
+            .unbounded_send(ExtToInMessage::TakeOver(other.channel));
         other.user_data
     }
 }
@@ -535,7 +625,10 @@ enum InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TConnInfo> 
     /// A connection to a node has succeeded.
     NodeReached(TConnInfo),
     /// The task closed.
-    TaskClosed(TaskClosedEvent<TReachErr, THandlerErr>, Option<TIntoHandler>),
+    TaskClosed(
+        TaskClosedEvent<TReachErr, THandlerErr>,
+        Option<TIntoHandler>,
+    ),
     /// An event from the node.
     NodeEvent(TOutEvent),
 }
@@ -549,7 +642,16 @@ where
     TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Sender to transmit events to the outside.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, <TIntoHandler::Handler as NodeHandler>::Error, TConnInfo>, TaskId)>,
+    events_tx: mpsc::UnboundedSender<(
+        InToExtMessage<
+            TOutEvent,
+            TIntoHandler,
+            TReachErr,
+            <TIntoHandler::Handler as NodeHandler>::Error,
+            TConnInfo,
+        >,
+        TaskId,
+    )>,
     /// Receiving end for events sent from the main `HandledNodesTasks`.
     in_events_rx: stream::Fuse<mpsc::UnboundedReceiver<ExtToInMessage<TInEvent>>>,
     /// Inner state of the `NodeTask`.
@@ -588,13 +690,14 @@ where
     Poisoned,
 }
 
-impl<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TConnInfo> Future for
-    NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TConnInfo>
+impl<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TConnInfo> Future
+    for NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TConnInfo>
 where
     TMuxer: StreamMuxer,
     TFut: Future<Item = (TConnInfo, TMuxer), Error = TReachErr>,
     TIntoHandler: IntoNodeHandler<TConnInfo>,
-    TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
+    TIntoHandler::Handler:
+        NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();
     type Error = ();
@@ -603,17 +706,21 @@ where
         'outer_loop: loop {
             match mem::replace(&mut self.inner, NodeTaskInner::Poisoned) {
                 // First possibility: we are still trying to reach a node.
-                NodeTaskInner::Future { mut future, handler, mut events_buffer } => {
+                NodeTaskInner::Future {
+                    mut future,
+                    handler,
+                    mut events_buffer,
+                } => {
                     // If self.in_events_rx is closed, we stop the task.
                     loop {
                         match self.in_events_rx.poll() {
                             Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
                             Ok(Async::Ready(Some(ExtToInMessage::HandlerEvent(event)))) => {
                                 events_buffer.push(event)
-                            },
+                            }
                             Ok(Async::Ready(Some(ExtToInMessage::TakeOver(take_over)))) => {
                                 self.taken_over.push(take_over);
-                            },
+                            }
                             Ok(Async::NotReady) => break,
                             Err(_) => unreachable!("An UnboundedReceiver never errors"),
                         }
@@ -621,7 +728,8 @@ where
                     // Check whether dialing succeeded.
                     match future.poll() {
                         Ok(Async::Ready((conn_info, muxer))) => {
-                            let mut node = HandledNode::new(muxer, handler.into_handler(&conn_info));
+                            let mut node =
+                                HandledNode::new(muxer, handler.into_handler(&conn_info));
                             let event = InToExtMessage::NodeReached(conn_info);
                             for event in events_buffer {
                                 node.inject_event(event);
@@ -630,17 +738,24 @@ where
                             self.inner = NodeTaskInner::Node(node);
                         }
                         Ok(Async::NotReady) => {
-                            self.inner = NodeTaskInner::Future { future, handler, events_buffer };
+                            self.inner = NodeTaskInner::Future {
+                                future,
+                                handler,
+                                events_buffer,
+                            };
                             return Ok(Async::NotReady);
-                        },
+                        }
                         Err(err) => {
                             // End the task
-                            let event = InToExtMessage::TaskClosed(TaskClosedEvent::Reach(err), Some(handler));
+                            let event = InToExtMessage::TaskClosed(
+                                TaskClosedEvent::Reach(err),
+                                Some(handler),
+                            );
                             let _ = self.events_tx.unbounded_send((event, self.id));
                             return Ok(Async::Ready(()));
                         }
                     }
-                },
+                }
 
                 // Second possibility: we have a node.
                 NodeTaskInner::Node(mut node) => {
@@ -651,10 +766,10 @@ where
                                 Ok(Async::NotReady) => break,
                                 Ok(Async::Ready(Some(ExtToInMessage::HandlerEvent(event)))) => {
                                     node.inject_event(event)
-                                },
+                                }
                                 Ok(Async::Ready(Some(ExtToInMessage::TakeOver(take_over)))) => {
                                     self.taken_over.push(take_over);
-                                },
+                                }
                                 Ok(Async::Ready(None)) => {
                                     // Node closed by the external API; start closing.
                                     self.inner = NodeTaskInner::Closing(node.close());
@@ -675,35 +790,36 @@ where
                             Ok(Async::NotReady) => {
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
-                            },
+                            }
                             Ok(Async::Ready(event)) => {
                                 let event = InToExtMessage::NodeEvent(event);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                             }
                             Err(err) => {
-                                let event = InToExtMessage::TaskClosed(TaskClosedEvent::Node(err), None);
+                                let event =
+                                    InToExtMessage::TaskClosed(TaskClosedEvent::Node(err), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                         }
                     }
-                },
+                }
 
                 NodeTaskInner::Closing(mut closing) => {
                     match closing.poll() {
                         Ok(Async::Ready(())) | Err(_) => {
                             return Ok(Async::Ready(())); // End the task.
-                        },
+                        }
                         Ok(Async::NotReady) => {
                             self.inner = NodeTaskInner::Closing(closing);
                             return Ok(Async::NotReady);
                         }
                     }
-                },
+                }
 
                 // This happens if a previous poll has ended unexpectedly. The API of futures
                 // guarantees that we shouldn't be polled again.
-                NodeTaskInner::Poisoned => panic!("the node task panicked or errored earlier")
+                NodeTaskInner::Poisoned => panic!("the node task panicked or errored earlier"),
             }
         }
     }

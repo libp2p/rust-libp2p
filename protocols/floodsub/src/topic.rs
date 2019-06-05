@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bs58;
 use crate::rpc_proto;
+use bs58;
 use protobuf::Message;
 
 /// Represents the hash of a topic.

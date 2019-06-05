@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use crate::core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
 use bytes::Bytes;
 use futures::{future::FromErr, prelude::*};
-use std::{iter, io::Error as IoError, sync::Arc};
+use std::{io::Error as IoError, iter, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
@@ -71,7 +71,7 @@ impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(Negotiated<C>) -> O,
-    O: IntoFuture<Error = IoError>
+    O: IntoFuture<Error = IoError>,
 {
     type Output = O::Item;
     type Error = IoError;
@@ -88,7 +88,7 @@ impl<C, F, O> OutboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(Negotiated<C>) -> O,
-    O: IntoFuture<Error = IoError>
+    O: IntoFuture<Error = IoError>,
 {
     type Output = O::Item;
     type Error = IoError;

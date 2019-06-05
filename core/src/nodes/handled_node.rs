@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::muxing::StreamMuxer;
-use crate::nodes::node::{NodeEvent, NodeStream, Substream, Close};
+use crate::nodes::node::{Close, NodeEvent, NodeStream, Substream};
 use futures::prelude::*;
 use std::{error, fmt, io};
 
@@ -51,7 +51,11 @@ pub trait NodeHandler {
     /// Implementations are allowed to panic in the case of dialing if the `user_data` in
     /// `endpoint` doesn't correspond to what was returned earlier when polling, or is used
     /// multiple times.
-    fn inject_substream(&mut self, substream: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>);
+    fn inject_substream(
+        &mut self,
+        substream: Self::Substream,
+        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+    );
 
     /// Injects an event coming from the outside into the handler.
     fn inject_event(&mut self, event: Self::InEvent);
@@ -59,7 +63,9 @@ pub trait NodeHandler {
     /// Should behave like `Stream::poll()`.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self) -> Poll<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
+    fn poll(
+        &mut self,
+    ) -> Poll<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
 }
 
 /// Endpoint for a received substream.
@@ -104,12 +110,13 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// If this is `OutboundSubstreamRequest`, maps the content to something else.
     #[inline]
     pub fn map_outbound_open_info<F, I>(self, map: F) -> NodeHandlerEvent<I, TCustom>
-    where F: FnOnce(TOutboundOpenInfo) -> I
+    where
+        F: FnOnce(TOutboundOpenInfo) -> I,
     {
         match self {
             NodeHandlerEvent::OutboundSubstreamRequest(val) => {
                 NodeHandlerEvent::OutboundSubstreamRequest(map(val))
-            },
+            }
             NodeHandlerEvent::Custom(val) => NodeHandlerEvent::Custom(val),
         }
     }
@@ -117,12 +124,13 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// If this is `Custom`, maps the content to something else.
     #[inline]
     pub fn map_custom<F, I>(self, map: F) -> NodeHandlerEvent<TOutboundOpenInfo, I>
-    where F: FnOnce(TCustom) -> I
+    where
+        F: FnOnce(TCustom) -> I,
     {
         match self {
             NodeHandlerEvent::OutboundSubstreamRequest(val) => {
                 NodeHandlerEvent::OutboundSubstreamRequest(val)
-            },
+            }
             NodeHandlerEvent::Custom(val) => NodeHandlerEvent::Custom(map(val)),
         }
     }
@@ -203,10 +211,13 @@ where
 
             match self.node.poll().map_err(HandledNodeError::Node)? {
                 Async::NotReady => node_not_ready = true,
-                Async::Ready(NodeEvent::InboundSubstream { substream }) => {
-                    self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
-                }
-                Async::Ready(NodeEvent::OutboundSubstream { user_data, substream }) => {
+                Async::Ready(NodeEvent::InboundSubstream { substream }) => self
+                    .handler
+                    .inject_substream(substream, NodeHandlerEndpoint::Listener),
+                Async::Ready(NodeEvent::OutboundSubstream {
+                    user_data,
+                    substream,
+                }) => {
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
@@ -215,7 +226,7 @@ where
             match self.handler.poll().map_err(HandledNodeError::Handler)? {
                 Async::NotReady => {
                     if node_not_ready {
-                        break
+                        break;
                     }
                 }
                 Async::Ready(NodeHandlerEvent::OutboundSubstreamRequest(user_data)) => {
@@ -242,7 +253,8 @@ pub enum HandledNodeError<THandlerErr> {
 }
 
 impl<THandlerErr> fmt::Display for HandledNodeError<THandlerErr>
-where THandlerErr: fmt::Display
+where
+    THandlerErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -253,7 +265,8 @@ where THandlerErr: fmt::Display
 }
 
 impl<THandlerErr> error::Error for HandledNodeError<THandlerErr>
-where THandlerErr: error::Error + 'static
+where
+    THandlerErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {

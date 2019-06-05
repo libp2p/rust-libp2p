@@ -68,17 +68,20 @@ mod transfer;
 
 use futures::future::Future;
 
-pub use multistream_select::Negotiated;
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     either::EitherUpgrade,
     error::UpgradeError,
-    map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
+    map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
     select::SelectUpgrade,
-    transfer::{write_one, WriteOne, read_one, ReadOne, read_one_then, ReadOneThen, ReadOneError, request_response, RequestResponse, read_respond, ReadRespond},
+    transfer::{
+        read_one, read_one_then, read_respond, request_response, write_one, ReadOne, ReadOneError,
+        ReadOneThen, ReadRespond, RequestResponse, WriteOne,
+    },
 };
+pub use multistream_select::Negotiated;
 
 /// Types serving as protocol names.
 pub trait ProtocolName {
@@ -127,7 +130,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound<F, T>(self, f: F) -> MapInboundUpgrade<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T
+        F: FnOnce(Self::Output) -> T,
     {
         MapInboundUpgrade::new(self, f)
     }
@@ -136,7 +139,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound_err<F, T>(self, f: F) -> MapInboundUpgradeErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T
+        F: FnOnce(Self::Error) -> T,
     {
         MapInboundUpgradeErr::new(self, f)
     }
@@ -167,7 +170,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound<F, T>(self, f: F) -> MapOutboundUpgrade<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T
+        F: FnOnce(Self::Output) -> T,
     {
         MapOutboundUpgrade::new(self, f)
     }
@@ -176,11 +179,10 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound_err<F, T>(self, f: F) -> MapOutboundUpgradeErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T
+        F: FnOnce(Self::Error) -> T,
     {
         MapOutboundUpgradeErr::new(self, f)
     }
 }
 
 impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
-

@@ -76,7 +76,11 @@ pub use self::error::SecioError;
 use bytes::BytesMut;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
+use libp2p_core::{
+    identity,
+    upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo},
+    PublicKey,
+};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -104,7 +108,7 @@ pub struct SecioConfig {
     pub(crate) key: identity::Keypair,
     pub(crate) agreements_prop: Option<String>,
     pub(crate) ciphers_prop: Option<String>,
-    pub(crate) digests_prop: Option<String>
+    pub(crate) digests_prop: Option<String>,
 }
 
 impl SecioConfig {
@@ -114,14 +118,14 @@ impl SecioConfig {
             key: kp,
             agreements_prop: None,
             ciphers_prop: None,
-            digests_prop: None
+            digests_prop: None,
         }
     }
 
     /// Override the default set of supported key agreement algorithms.
     pub fn key_agreements<'a, I>(mut self, xs: I) -> Self
     where
-        I: IntoIterator<Item=&'a KeyAgreement>
+        I: IntoIterator<Item = &'a KeyAgreement>,
     {
         self.agreements_prop = Some(algo_support::key_agreements_proposition(xs));
         self
@@ -130,7 +134,7 @@ impl SecioConfig {
     /// Override the default set of supported ciphers.
     pub fn ciphers<'a, I>(mut self, xs: I) -> Self
     where
-        I: IntoIterator<Item=&'a Cipher>
+        I: IntoIterator<Item = &'a Cipher>,
     {
         self.ciphers_prop = Some(algo_support::ciphers_proposition(xs));
         self
@@ -139,26 +143,25 @@ impl SecioConfig {
     /// Override the default set of supported digest algorithms.
     pub fn digests<'a, I>(mut self, xs: I) -> Self
     where
-        I: IntoIterator<Item=&'a Digest>
+        I: IntoIterator<Item = &'a Digest>,
     {
         self.digests_prop = Some(algo_support::digests_proposition(xs));
         self
     }
 
-    fn handshake<T>(self, socket: T) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
+    fn handshake<T>(self, socket: T) -> impl Future<Item = SecioOutput<T>, Error = SecioError>
     where
-        T: AsyncRead + AsyncWrite + Send + 'static
+        T: AsyncRead + AsyncWrite + Send + 'static,
     {
         debug!("Starting secio upgrade");
-        SecioMiddleware::handshake(socket, self)
-            .map(|(stream_sink, pubkey, ephemeral)| {
-                let mapped = stream_sink.map_err(map_err as fn(_) -> _);
-                SecioOutput {
-                    stream: RwStreamSink::new(mapped),
-                    remote_key: pubkey,
-                    ephemeral_public_key: ephemeral
-                }
-            })
+        SecioMiddleware::handshake(socket, self).map(|(stream_sink, pubkey, ephemeral)| {
+            let mapped = stream_sink.map_err(map_err as fn(_) -> _);
+            SecioOutput {
+                stream: RwStreamSink::new(mapped),
+                remote_key: pubkey,
+                ephemeral_public_key: ephemeral,
+            }
+        })
     }
 }
 
@@ -186,7 +189,7 @@ impl UpgradeInfo for SecioConfig {
 
 impl<T> InboundUpgrade<T> for SecioConfig
 where
-    T: AsyncRead + AsyncWrite + Send + 'static
+    T: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = SecioOutput<Negotiated<T>>;
     type Error = SecioError;
@@ -199,7 +202,7 @@ where
 
 impl<T> OutboundUpgrade<T> for SecioConfig
 where
-    T: AsyncRead + AsyncWrite + Send + 'static
+    T: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = SecioOutput<Negotiated<T>>;
     type Error = SecioError;
@@ -232,9 +235,10 @@ where
     ///
     /// On success, produces a `SecioMiddleware` that can then be used to encode/decode
     /// communications, plus the public key of the remote, plus the ephemeral public key.
-    pub fn handshake(socket: S, config: SecioConfig)
-        -> impl Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError>
-    {
+    pub fn handshake(
+        socket: S,
+        config: SecioConfig,
+    ) -> impl Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> {
         handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)

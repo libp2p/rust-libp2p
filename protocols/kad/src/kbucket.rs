@@ -90,7 +90,7 @@ pub struct KBucketsTable<TPeerId, TVal> {
     buckets: Vec<KBucket<TPeerId, TVal>>,
     /// The list of evicted entries that have been replaced with pending
     /// entries since the last call to [`KBucketsTable::take_applied_pending`].
-    applied_pending: VecDeque<AppliedPending<TPeerId, TVal>>
+    applied_pending: VecDeque<AppliedPending<TPeerId, TVal>>,
 }
 
 /// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in the
@@ -131,8 +131,10 @@ where
     pub fn new(local_key: Key<TPeerId>, pending_timeout: Duration) -> Self {
         KBucketsTable {
             local_key,
-            buckets: (0 .. NUM_BUCKETS).map(|_| KBucket::new(pending_timeout)).collect(),
-            applied_pending: VecDeque::new()
+            buckets: (0..NUM_BUCKETS)
+                .map(|_| KBucket::new(pending_timeout))
+                .collect(),
+            applied_pending: VecDeque::new(),
         }
     }
 
@@ -164,14 +166,12 @@ where
                 applied_pending.push_back(applied)
             }
             let table = &*table;
-            table.iter().map(move |(n, status)| {
-                EntryRefView {
-                    node: NodeRefView {
-                        key: &n.key,
-                        value: &n.value
-                    },
-                    status
-                }
+            table.iter().map(move |(n, status)| EntryRefView {
+                node: NodeRefView {
+                    key: &n.key,
+                    value: &n.value,
+                },
+                status,
             })
         })
     }
@@ -208,10 +208,12 @@ where
 
     /// Returns an iterator over the keys closest to `target`, ordered by
     /// increasing distance.
-    pub fn closest_keys<'a, T>(&'a mut self, target: &'a Key<T>)
-        -> impl Iterator<Item = Key<TPeerId>> + 'a
+    pub fn closest_keys<'a, T>(
+        &'a mut self,
+        target: &'a Key<T>,
+    ) -> impl Iterator<Item = Key<TPeerId>> + 'a
     where
-        T: Clone
+        T: Clone,
     {
         let distance = self.local_key.distance(target);
         ClosestIter {
@@ -220,18 +222,20 @@ where
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
             fmap: |b: &KBucket<_, _>| -> ArrayVec<_> {
-                b.iter().map(|(n,_)| n.key.clone()).collect()
-            }
+                b.iter().map(|(n, _)| n.key.clone()).collect()
+            },
         }
     }
 
     /// Returns an iterator over the nodes closest to the `target` key, ordered by
     /// increasing distance.
-    pub fn closest<'a, T>(&'a mut self, target: &'a Key<T>)
-        -> impl Iterator<Item = EntryView<TPeerId, TVal>> + 'a
+    pub fn closest<'a, T>(
+        &'a mut self,
+        target: &'a Key<T>,
+    ) -> impl Iterator<Item = EntryView<TPeerId, TVal>> + 'a
     where
         T: Clone,
-        TVal: Clone
+        TVal: Clone,
     {
         let distance = self.local_key.distance(target);
         ClosestIter {
@@ -240,11 +244,13 @@ where
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
             fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_> {
-                b.iter().map(|(n, status)| EntryView {
-                    node: n.clone(),
-                    status
-                }).collect()
-            }
+                b.iter()
+                    .map(|(n, status)| EntryView {
+                        node: n.clone(),
+                        status,
+                    })
+                    .collect()
+            },
         }
     }
 }
@@ -266,7 +272,7 @@ struct ClosestIter<'a, TTarget, TPeerId, TVal, TMap, TOut> {
     iter: Option<arrayvec::IntoIter<[TOut; MAX_NODES_PER_BUCKET]>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
-    fmap: TMap
+    fmap: TMap,
 }
 
 /// An iterator over the bucket indices, in the order determined by the `Distance` of
@@ -276,7 +282,7 @@ struct ClosestBucketsIter {
     /// The distance to the `local_key`.
     distance: Distance,
     /// The current state of the iterator.
-    state: ClosestBucketsIterState
+    state: ClosestBucketsIterState,
 }
 
 /// Operating states of a `ClosestBucketsIter`.
@@ -297,34 +303,36 @@ enum ClosestBucketsIterState {
     /// `255` is reached, the iterator transitions to state `Done`.
     ZoomOut(BucketIndex),
     /// The iterator is in this state once it has visited all buckets.
-    Done
+    Done,
 }
 
 impl ClosestBucketsIter {
     fn new(distance: Distance) -> Self {
         let state = match BucketIndex::new(&distance) {
             Some(i) => ClosestBucketsIterState::Start(i),
-            None => ClosestBucketsIterState::Done
+            None => ClosestBucketsIterState::Done,
         };
         Self { distance, state }
     }
 
     fn next_in(&self, i: BucketIndex) -> Option<BucketIndex> {
-        (0 .. i.get()).rev().find_map(|i|
+        (0..i.get()).rev().find_map(|i| {
             if self.distance.0.bit(i) {
                 Some(BucketIndex(i))
             } else {
                 None
-            })
+            }
+        })
     }
 
     fn next_out(&self, i: BucketIndex) -> Option<BucketIndex> {
-        (i.get() + 1 .. NUM_BUCKETS).find_map(|i|
+        (i.get() + 1..NUM_BUCKETS).find_map(|i| {
             if !self.distance.0.bit(i) {
                 Some(BucketIndex(i))
             } else {
                 None
-            })
+            }
+        })
     }
 }
 
@@ -337,7 +345,7 @@ impl Iterator for ClosestBucketsIter {
                 self.state = ClosestBucketsIterState::ZoomIn(i);
                 Some(i)
             }
-            ClosestBucketsIterState::ZoomIn(i) =>
+            ClosestBucketsIterState::ZoomIn(i) => {
                 if let Some(i) = self.next_in(i) {
                     self.state = ClosestBucketsIterState::ZoomIn(i);
                     Some(i)
@@ -346,7 +354,8 @@ impl Iterator for ClosestBucketsIter {
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 }
-            ClosestBucketsIterState::ZoomOut(i) =>
+            }
+            ClosestBucketsIterState::ZoomOut(i) => {
                 if let Some(i) = self.next_out(i) {
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
@@ -354,17 +363,18 @@ impl Iterator for ClosestBucketsIter {
                     self.state = ClosestBucketsIterState::Done;
                     None
                 }
-            ClosestBucketsIterState::Done => None
+            }
+            ClosestBucketsIterState::Done => None,
         }
     }
 }
 
 impl<TTarget, TPeerId, TVal, TMap, TOut> Iterator
-for ClosestIter<'_, TTarget, TPeerId, TVal, TMap, TOut>
+    for ClosestIter<'_, TTarget, TPeerId, TVal, TMap, TOut>
 where
     TPeerId: Clone,
     TMap: Fn(&KBucket<TPeerId, TVal>) -> ArrayVec<[TOut; MAX_NODES_PER_BUCKET]>,
-    TOut: AsRef<Key<TPeerId>>
+    TOut: AsRef<Key<TPeerId>>,
 {
     type Item = TOut;
 
@@ -373,8 +383,8 @@ where
             match &mut self.iter {
                 Some(iter) => match iter.next() {
                     Some(k) => return Some(k),
-                    None => self.iter = None
-                }
+                    None => self.iter = None,
+                },
                 None => {
                     if let Some(i) = self.buckets_iter.next() {
                         let bucket = &mut self.table.buckets[i.get()];
@@ -382,12 +392,14 @@ where
                             self.table.applied_pending.push_back(applied)
                         }
                         let mut v = (self.fmap)(bucket);
-                        v.sort_by(|a, b|
-                            self.target.distance(a.as_ref())
-                                .cmp(&self.target.distance(b.as_ref())));
+                        v.sort_by(|a, b| {
+                            self.target
+                                .distance(a.as_ref())
+                                .cmp(&self.target.distance(b.as_ref()))
+                        });
                         self.iter = Some(v.into_iter());
                     } else {
-                        return None
+                        return None;
                     }
                 }
             }
@@ -400,7 +412,7 @@ pub struct KBucketRef<'a, TPeerId, TVal>(&'a mut KBucket<TPeerId, TVal>);
 
 impl<TPeerId, TVal> KBucketRef<'_, TPeerId, TVal>
 where
-    TPeerId: Clone
+    TPeerId: Clone,
 {
     /// Returns the number of entries in the bucket.
     pub fn num_entries(&self) -> usize {
@@ -427,7 +439,7 @@ mod tests {
         if let Entry::Absent(entry) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
                 InsertResult::Inserted => (),
-                _ => panic!()
+                _ => panic!(),
             }
         } else {
             panic!()
@@ -454,7 +466,9 @@ mod tests {
         let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
         let mut count = 0;
         loop {
-            if count == 100 { break; }
+            if count == 100 {
+                break;
+            }
             let key = Key::from(PeerId::random());
             if let Entry::Absent(e) = table.entry(&key) {
                 match e.insert((), NodeStatus::Connected) {
@@ -466,12 +480,13 @@ mod tests {
             }
         }
 
-        let mut expected_keys: Vec<_> = table.buckets
+        let mut expected_keys: Vec<_> = table
+            .buckets
             .iter()
-            .flat_map(|t| t.iter().map(|(n,_)| n.key.clone()))
+            .flat_map(|t| t.iter().map(|(n, _)| n.key.clone()))
             .collect();
 
-        for _ in 0 .. 10 {
+        for _ in 0..10 {
             let target_key = Key::from(PeerId::random());
             let keys = table.closest_keys(&target_key).collect::<Vec<_>>();
             // The list of keys is expected to match the result of a full-table scan.
@@ -496,17 +511,20 @@ mod tests {
                                 InsertResult::Pending { disconnected } => {
                                     expected_applied = AppliedPending {
                                         inserted: key.clone(),
-                                        evicted: Some(Node { key: disconnected, value: () })
+                                        evicted: Some(Node {
+                                            key: disconnected,
+                                            value: (),
+                                        }),
                                     };
                                     full_bucket_index = BucketIndex::new(&key.distance(&local_key));
-                                    break
-                                },
-                                _ => panic!()
+                                    break;
+                                }
+                                _ => panic!(),
                             }
                         } else {
                             panic!()
                         }
-                    },
+                    }
                     _ => continue,
                 }
             } else {
@@ -521,12 +539,12 @@ mod tests {
 
         match table.entry(&expected_applied.inserted) {
             Entry::Present(_, NodeStatus::Connected) => {}
-            x => panic!("Unexpected entry: {:?}", x)
+            x => panic!("Unexpected entry: {:?}", x),
         }
 
         match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
             Entry::Absent(_) => {}
-            x => panic!("Unexpected entry: {:?}", x)
+            x => panic!("Unexpected entry: {:?}", x),
         }
 
         assert_eq!(Some(expected_applied), table.take_applied_pending());

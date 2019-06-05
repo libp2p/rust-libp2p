@@ -18,15 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{muxing, Transport, transport::ListenerEvent};
-use libp2p_tcp::TcpConfig;
 use futures::prelude::*;
-use std::sync::{Arc, mpsc};
+use libp2p_core::{muxing, transport::ListenerEvent, Transport};
+use libp2p_tcp::TcpConfig;
+use std::sync::{mpsc, Arc};
 use std::thread;
-use tokio::{
-    codec::length_delimited::Builder,
-    runtime::current_thread::Runtime
-};
+use tokio::{codec::length_delimited::Builder, runtime::current_thread::Runtime};
 
 #[test]
 fn client_to_server_outbound() {
@@ -35,14 +32,15 @@ fn client_to_server_outbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+        let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener.by_ref().wait()
+        let addr = listener
+            .by_ref()
+            .wait()
             .next()
             .expect("some event")
             .expect("no error")
@@ -98,20 +96,20 @@ fn client_to_server_inbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+        let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener.by_ref().wait()
+        let addr = listener
+            .by_ref()
+            .wait()
             .next()
             .expect("some event")
             .expect("no error")
             .into_new_address()
             .expect("listen address");
-
 
         tx.send(addr).unwrap();
 

@@ -20,8 +20,8 @@
 
 use crate::rpc_proto;
 use crate::topic::TopicHash;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
-use protobuf::{ProtobufError, Message as ProtobufMessage};
+use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use protobuf::{Message as ProtobufMessage, ProtobufError};
 use std::{error, fmt, io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -53,7 +53,11 @@ where
 {
     type Output = FloodsubRpc;
     type Error = FloodsubDecodeError;
-    type Future = upgrade::ReadOneThen<upgrade::Negotiated<TSocket>, (), fn(Vec<u8>, ()) -> Result<FloodsubRpc, FloodsubDecodeError>>;
+    type Future = upgrade::ReadOneThen<
+        upgrade::Negotiated<TSocket>,
+        (),
+        fn(Vec<u8>, ()) -> Result<FloodsubRpc, FloodsubDecodeError>,
+    >;
 
     #[inline]
     fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
@@ -63,9 +67,8 @@ where
             let mut messages = Vec::with_capacity(rpc.get_publish().len());
             for mut publish in rpc.take_publish().into_iter() {
                 messages.push(FloodsubMessage {
-                    source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
-                        FloodsubDecodeError::InvalidPeerId
-                    })?,
+                    source: PeerId::from_bytes(publish.take_from())
+                        .map_err(|_| FloodsubDecodeError::InvalidPeerId)?,
                     data: publish.take_data(),
                     sequence_number: publish.take_seqno(),
                     topics: publish
@@ -123,12 +126,15 @@ impl From<ProtobufError> for FloodsubDecodeError {
 impl fmt::Display for FloodsubDecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            FloodsubDecodeError::ReadError(ref err) =>
-                write!(f, "Error while reading from socket: {}", err),
-            FloodsubDecodeError::ProtobufError(ref err) =>
-                write!(f, "Error while decoding protobuf: {}", err),
-            FloodsubDecodeError::InvalidPeerId =>
-                write!(f, "Error while decoding PeerId from message"),
+            FloodsubDecodeError::ReadError(ref err) => {
+                write!(f, "Error while reading from socket: {}", err)
+            }
+            FloodsubDecodeError::ProtobufError(ref err) => {
+                write!(f, "Error while decoding protobuf: {}", err)
+            }
+            FloodsubDecodeError::InvalidPeerId => {
+                write!(f, "Error while decoding PeerId from message")
+            }
         }
     }
 }

@@ -38,12 +38,8 @@
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
 use crate::nodes::raw_swarm::ConnectedPoint;
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
 use crate::PeerId;
-use crate::upgrade::{
-    InboundUpgrade,
-    OutboundUpgrade,
-    UpgradeError,
-};
 use futures::prelude::*;
 use std::{cmp::Ordering, error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -52,7 +48,9 @@ use wasm_timer::Instant;
 pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;
 pub use self::map_out::MapOutEvent;
-pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
+pub use self::node_handler::{
+    NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError,
+};
 pub use self::one_shot::OneShotHandler;
 pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
@@ -123,7 +121,7 @@ pub trait ProtocolsHandler {
     /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
     );
 
     /// Injects the output of a successful upgrade on a new outbound substream.
@@ -133,7 +131,7 @@ pub trait ProtocolsHandler {
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     );
 
     /// Injects an event coming from the outside in the handler.
@@ -144,8 +142,8 @@ pub trait ProtocolsHandler {
         &mut self,
         info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error
-        >
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        >,
     );
 
     /// Returns until when the connection should be kept alive.
@@ -173,9 +171,11 @@ pub trait ProtocolsHandler {
     /// Should behave like `Stream::poll()`.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self) -> Poll<
+    fn poll(
+        &mut self,
+    ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error
+        Self::Error,
     >;
 
     /// Adds a closure that turns the input event into something else.
@@ -343,10 +343,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`)
     /// to something else.
     #[inline]
-    pub fn map_protocol<F, I>(
-        self,
-        map: F,
-    ) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom>
+    pub fn map_protocol<F, I>(self, map: F) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom>
     where
         F: FnOnce(TConnectionUpgrade) -> I,
     {
@@ -398,10 +395,8 @@ where
         match self {
             ProtocolsHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
-            },
-            ProtocolsHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
-            },
+            }
+            ProtocolsHandlerUpgrErr::Timer => write!(f, "Timer error while opening a substream"),
             ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
         }
     }
@@ -409,7 +404,7 @@ where
 
 impl<TUpgrErr> error::Error for ProtocolsHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: error::Error + 'static
+    TUpgrErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -428,7 +423,11 @@ pub trait IntoProtocolsHandler {
     /// Builds the protocols handler.
     ///
     /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler;
+    fn into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::Handler;
 
     /// Return the handler's inbound protocol.
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol;
@@ -453,7 +452,8 @@ pub trait IntoProtocolsHandler {
 }
 
 impl<T> IntoProtocolsHandler for T
-where T: ProtocolsHandler
+where
+    T: ProtocolsHandler,
 {
     type Handler = Self;
 
@@ -498,9 +498,9 @@ impl Ord for KeepAlive {
         use self::KeepAlive::*;
 
         match (self, other) {
-            (No, No) | (Yes, Yes)  => Ordering::Equal,
-            (No,  _) | (_,   Yes)  => Ordering::Less,
-            (_,  No) | (Yes,   _)  => Ordering::Greater,
+            (No, No) | (Yes, Yes) => Ordering::Equal,
+            (No, _) | (_, Yes) => Ordering::Less,
+            (_, No) | (Yes, _) => Ordering::Greater,
             (Until(t1), Until(t2)) => t1.cmp(t2),
         }
     }

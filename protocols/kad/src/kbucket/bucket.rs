@@ -53,7 +53,7 @@ pub enum NodeStatus {
     /// The node is considered connected.
     Connected,
     /// The node is considered disconnected.
-    Disconnected
+    Disconnected,
 }
 
 impl<TPeerId, TVal> PendingNode<TPeerId, TVal> {
@@ -123,29 +123,29 @@ pub struct KBucket<TPeerId, TVal> {
     /// The timeout window before a new pending node is eligible for insertion,
     /// if the least-recently connected node is not updated as being connected
     /// in the meantime.
-    pending_timeout: Duration
+    pending_timeout: Duration,
 }
 
 /// The result of inserting an entry into a bucket.
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InsertResult<TPeerId> {
-     /// The entry has been successfully inserted.
-     Inserted,
-     /// The entry is pending insertion because the relevant bucket is currently full.
-     /// The entry is inserted after a timeout elapsed, if the status of the
-     /// least-recently connected (and currently disconnected) node in the bucket
-     /// is not updated before the timeout expires.
-     Pending {
-         /// The key of the least-recently connected entry that is currently considered
-         /// disconnected and whose corresponding peer should be checked for connectivity
-         /// in order to prevent it from being evicted. If connectivity to the peer is
-         /// re-established, the corresponding entry should be updated with
-         /// [`NodeStatus::Connected`].
-         disconnected: Key<TPeerId>
-     },
-     /// The entry was not inserted because the relevant bucket is full.
-     Full
+    /// The entry has been successfully inserted.
+    Inserted,
+    /// The entry is pending insertion because the relevant bucket is currently full.
+    /// The entry is inserted after a timeout elapsed, if the status of the
+    /// least-recently connected (and currently disconnected) node in the bucket
+    /// is not updated before the timeout expires.
+    Pending {
+        /// The key of the least-recently connected entry that is currently considered
+        /// disconnected and whose corresponding peer should be checked for connectivity
+        /// in order to prevent it from being evicted. If connectivity to the peer is
+        /// re-established, the corresponding entry should be updated with
+        /// [`NodeStatus::Connected`].
+        disconnected: Key<TPeerId>,
+    },
+    /// The entry was not inserted because the relevant bucket is full.
+    Full,
 }
 
 /// The result of applying a pending node to a bucket, possibly
@@ -156,12 +156,12 @@ pub struct AppliedPending<TPeerId, TVal> {
     pub inserted: Key<TPeerId>,
     /// The node that has been evicted from the bucket to make room for the
     /// pending node, if any.
-    pub evicted: Option<Node<TPeerId, TVal>>
+    pub evicted: Option<Node<TPeerId, TVal>>,
 }
 
 impl<TPeerId, TVal> KBucket<TPeerId, TVal>
 where
-    TPeerId: Clone
+    TPeerId: Clone,
 {
     /// Creates a new `KBucket` with the given timeout for pending entries.
     pub fn new(pending_timeout: Duration) -> Self {
@@ -196,7 +196,10 @@ where
 
     /// Returns an iterator over the nodes in the bucket, together with their status.
     pub fn iter(&self) -> impl Iterator<Item = (&Node<TPeerId, TVal>, NodeStatus)> {
-        self.nodes.iter().enumerate().map(move |(p, n)| (n, self.status(Position(p))))
+        self.nodes
+            .iter()
+            .enumerate()
+            .map(move |(p, n)| (n, self.status(Position(p))))
     }
 
     /// Inserts the pending node into the bucket, if its timeout has elapsed,
@@ -211,7 +214,7 @@ where
                 if self.nodes.is_full() {
                     if self.status(Position(0)) == NodeStatus::Connected {
                         // The bucket is full with connected nodes. Drop the pending node.
-                        return None
+                        return None;
                     }
                     // The pending node will be inserted.
                     let inserted = pending.node.key.clone();
@@ -219,12 +222,11 @@ where
                     // the connected peers, removing the least-recently connected.
                     if pending.status == NodeStatus::Connected {
                         let evicted = Some(self.nodes.remove(0));
-                        self.first_connected_pos = self.first_connected_pos
-                            .map_or_else(
-                                | | Some(self.nodes.len()),
-                                |p| p.checked_sub(1));
+                        self.first_connected_pos = self
+                            .first_connected_pos
+                            .map_or_else(|| Some(self.nodes.len()), |p| p.checked_sub(1));
                         self.nodes.push(pending.node);
-                        return Some(AppliedPending { inserted, evicted })
+                        return Some(AppliedPending { inserted, evicted });
                     }
                     // A disconnected pending node goes at the end of the list
                     // for the disconnected peers.
@@ -232,22 +234,26 @@ where
                         if let Some(insert_pos) = p.checked_sub(1) {
                             let evicted = Some(self.nodes.remove(0));
                             self.nodes.insert(insert_pos, pending.node);
-                            return Some(AppliedPending { inserted, evicted })
+                            return Some(AppliedPending { inserted, evicted });
                         }
                     } else {
                         // All nodes are disconnected. Insert the new node as the most
                         // recently disconnected, removing the least-recently disconnected.
                         let evicted = Some(self.nodes.remove(0));
                         self.nodes.push(pending.node);
-                        return Some(AppliedPending { inserted, evicted })
+                        return Some(AppliedPending { inserted, evicted });
                     }
                 } else {
                     // There is room in the bucket, so just insert the pending node.
                     let inserted = pending.node.key.clone();
                     match self.insert(pending.node, pending.status) {
-                        InsertResult::Inserted =>
-                            return Some(AppliedPending { inserted, evicted: None }),
-                        _ => unreachable!("Bucket is not full.")
+                        InsertResult::Inserted => {
+                            return Some(AppliedPending {
+                                inserted,
+                                evicted: None,
+                            })
+                        }
+                        _ => unreachable!("Bucket is not full."),
                     }
                 }
             } else {
@@ -255,7 +261,7 @@ where
             }
         }
 
-        return None
+        return None;
     }
 
     /// Updates the status of the pending node, if any.
@@ -279,16 +285,18 @@ where
             let node = self.nodes.remove(pos.0);
             // Adjust `first_connected_pos` accordingly.
             match old_status {
-                NodeStatus::Connected =>
+                NodeStatus::Connected => {
                     if self.first_connected_pos.map_or(false, |p| p == pos.0) {
                         if pos.0 == self.nodes.len() {
                             // It was the last connected node.
                             self.first_connected_pos = None
                         }
                     }
-                NodeStatus::Disconnected =>
-                    self.first_connected_pos = self.first_connected_pos
-                        .and_then(|p| p.checked_sub(1))
+                }
+                NodeStatus::Disconnected => {
+                    self.first_connected_pos =
+                        self.first_connected_pos.and_then(|p| p.checked_sub(1))
+                }
             }
             // If the least-recently connected node re-establishes its
             // connected status, drop the pending node.
@@ -297,8 +305,8 @@ where
             }
             // Reinsert the node with the desired status.
             match self.insert(node, status) {
-                InsertResult::Inserted => {},
-                _ => unreachable!("The node is removed before being (re)inserted.")
+                InsertResult::Inserted => {}
+                _ => unreachable!("The node is removed before being (re)inserted."),
             }
         }
     }
@@ -320,12 +328,16 @@ where
     ///     i.e. as the most-recently disconnected node. If there are no connected nodes,
     ///     the new node is added as the last element of the bucket.
     ///
-    pub fn insert(&mut self, node: Node<TPeerId, TVal>, status: NodeStatus) -> InsertResult<TPeerId> {
+    pub fn insert(
+        &mut self,
+        node: Node<TPeerId, TVal>,
+        status: NodeStatus,
+    ) -> InsertResult<TPeerId> {
         match status {
             NodeStatus::Connected => {
                 if self.nodes.is_full() {
                     if self.first_connected_pos == Some(0) || self.pending.is_some() {
-                        return InsertResult::Full
+                        return InsertResult::Full;
                     } else {
                         self.pending = Some(PendingNode {
                             node,
@@ -333,8 +345,8 @@ where
                             replace: Instant::now() + self.pending_timeout,
                         });
                         return InsertResult::Pending {
-                            disconnected: self.nodes[0].key.clone()
-                        }
+                            disconnected: self.nodes[0].key.clone(),
+                        };
                     }
                 }
                 let pos = self.nodes.len();
@@ -344,7 +356,7 @@ where
             }
             NodeStatus::Disconnected => {
                 if self.nodes.is_full() {
-                    return InsertResult::Full
+                    return InsertResult::Full;
                 }
                 if let Some(ref mut first_connected_pos) = self.first_connected_pos {
                     self.nodes.insert(*first_connected_pos, node);
@@ -402,24 +414,27 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use libp2p_core::PeerId;
+    use quickcheck::*;
     use rand::Rng;
     use std::collections::VecDeque;
-    use super::*;
-    use quickcheck::*;
 
     impl Arbitrary for KBucket<PeerId, ()> {
         fn arbitrary<G: Gen>(g: &mut G) -> KBucket<PeerId, ()> {
             let timeout = Duration::from_secs(g.gen_range(1, g.size() as u64));
             let mut bucket = KBucket::<PeerId, ()>::new(timeout);
             let num_nodes = g.gen_range(1, MAX_NODES_PER_BUCKET + 1);
-            for _ in 0 .. num_nodes {
+            for _ in 0..num_nodes {
                 let key = Key::new(PeerId::random());
-                let node = Node { key: key.clone(), value: () };
+                let node = Node {
+                    key: key.clone(),
+                    value: (),
+                };
                 let status = NodeStatus::arbitrary(g);
                 match bucket.insert(node, status) {
                     InsertResult::Inserted => {}
-                    _ => panic!()
+                    _ => panic!(),
                 }
             }
             bucket
@@ -445,7 +460,7 @@ mod tests {
     // Fill a bucket with random nodes with the given status.
     fn fill_bucket(bucket: &mut KBucket<PeerId, ()>, status: NodeStatus) {
         let num_entries_start = bucket.num_entries();
-        for i in 0 .. MAX_NODES_PER_BUCKET - num_entries_start {
+        for i in 0..MAX_NODES_PER_BUCKET - num_entries_start {
             let key = Key::new(PeerId::random());
             let node = Node { key, value: () };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
@@ -465,13 +480,16 @@ mod tests {
             // Fill the bucket, thereby populating the expected lists in insertion order.
             for status in status {
                 let key = Key::new(PeerId::random());
-                let node = Node { key: key.clone(), value: () };
+                let node = Node {
+                    key: key.clone(),
+                    value: (),
+                };
                 let full = bucket.num_entries() == MAX_NODES_PER_BUCKET;
                 match bucket.insert(node, status) {
                     InsertResult::Inserted => {
                         let vec = match status {
                             NodeStatus::Connected => &mut connected,
-                            NodeStatus::Disconnected => &mut disconnected
+                            NodeStatus::Disconnected => &mut disconnected,
                         };
                         if full {
                             vec.pop_front();
@@ -483,21 +501,20 @@ mod tests {
             }
 
             // Get all nodes from the bucket, together with their status.
-            let mut nodes = bucket.iter()
+            let mut nodes = bucket
+                .iter()
                 .map(|(n, s)| (s, n.key.clone()))
                 .collect::<Vec<_>>();
 
             // Split the list of nodes at the first connected node.
-            let first_connected_pos = nodes.iter().position(|(s,_)| *s == NodeStatus::Connected);
+            let first_connected_pos = nodes.iter().position(|(s, _)| *s == NodeStatus::Connected);
             assert_eq!(bucket.first_connected_pos, first_connected_pos);
             let tail = first_connected_pos.map_or(Vec::new(), |p| nodes.split_off(p));
 
             // All nodes before the first connected node must be disconnected and
             // in insertion order. Similarly, all remaining nodes must be connected
             // and in insertion order.
-            nodes == Vec::from(disconnected)
-                &&
-            tail == Vec::from(connected)
+            nodes == Vec::from(disconnected) && tail == Vec::from(connected)
         }
 
         quickcheck(prop as fn(_) -> _);
@@ -514,12 +531,12 @@ mod tests {
         let key = Key::new(PeerId::random());
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Disconnected) {
-            InsertResult::Full => {},
-            x => panic!("{:?}", x)
+            InsertResult::Full => {}
+            x => panic!("{:?}", x),
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
-        for i in 0 .. MAX_NODES_PER_BUCKET {
+        for i in 0..MAX_NODES_PER_BUCKET {
             let (first, first_status) = bucket.iter().next().unwrap();
             let first_disconnected = first.clone();
             assert_eq!(first_status, NodeStatus::Disconnected);
@@ -527,17 +544,21 @@ mod tests {
             // Add a connected node, which is expected to be pending, scheduled to
             // replace the first (i.e. least-recently connected) node.
             let key = Key::new(PeerId::random());
-            let node = Node { key: key.clone(), value: () };
+            let node = Node {
+                key: key.clone(),
+                value: (),
+            };
             match bucket.insert(node.clone(), NodeStatus::Connected) {
-                InsertResult::Pending { disconnected } =>
-                    assert_eq!(disconnected, first_disconnected.key),
-                x => panic!("{:?}", x)
+                InsertResult::Pending { disconnected } => {
+                    assert_eq!(disconnected, first_disconnected.key)
+                }
+                x => panic!("{:?}", x),
             }
 
             // Trying to insert another connected node fails.
             match bucket.insert(node.clone(), NodeStatus::Connected) {
-                InsertResult::Full => {},
-                x => panic!("{:?}", x)
+                InsertResult::Full => {}
+                x => panic!("{:?}", x),
             }
 
             assert!(bucket.pending().is_some());
@@ -546,13 +567,19 @@ mod tests {
             let pending = bucket.pending_mut().expect("No pending node.");
             pending.set_ready_at(Instant::now() - Duration::from_secs(1));
             let result = bucket.apply_pending();
-            assert_eq!(result, Some(AppliedPending {
-                inserted: key.clone(),
-                evicted: Some(first_disconnected)
-            }));
+            assert_eq!(
+                result,
+                Some(AppliedPending {
+                    inserted: key.clone(),
+                    evicted: Some(first_disconnected)
+                })
+            );
             assert_eq!(Some((&node, NodeStatus::Connected)), bucket.iter().last());
             assert!(bucket.pending().is_none());
-            assert_eq!(Some(MAX_NODES_PER_BUCKET - (i + 1)), bucket.first_connected_pos);
+            assert_eq!(
+                Some(MAX_NODES_PER_BUCKET - (i + 1)),
+                bucket.first_connected_pos
+            );
         }
 
         assert!(bucket.pending().is_none());
@@ -562,8 +589,8 @@ mod tests {
         let key = Key::new(PeerId::random());
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Connected) {
-            InsertResult::Full => {},
-            x => panic!("{:?}", x)
+            InsertResult::Full => {}
+            x => panic!("{:?}", x),
         }
     }
 
@@ -576,7 +603,10 @@ mod tests {
 
         // Add a connected pending node.
         let key = Key::new(PeerId::random());
-        let node = Node { key: key.clone(), value: () };
+        let node = Node {
+            key: key.clone(),
+            value: (),
+        };
         if let InsertResult::Pending { disconnected } = bucket.insert(node, NodeStatus::Connected) {
             assert_eq!(&disconnected, &first_disconnected.key);
         } else {
@@ -589,15 +619,20 @@ mod tests {
 
         // The pending node has been discarded.
         assert!(bucket.pending().is_none());
-        assert!(bucket.iter().all(|(n,_)| &n.key != &key));
+        assert!(bucket.iter().all(|(n, _)| &n.key != &key));
 
         // The initially disconnected node is now the most-recently connected.
-        assert_eq!(Some((&first_disconnected, NodeStatus::Connected)), bucket.iter().last());
-        assert_eq!(bucket.position(&first_disconnected.key).map(|p| p.0), bucket.first_connected_pos);
+        assert_eq!(
+            Some((&first_disconnected, NodeStatus::Connected)),
+            bucket.iter().last()
+        );
+        assert_eq!(
+            bucket.position(&first_disconnected.key).map(|p| p.0),
+            bucket.first_connected_pos
+        );
         assert_eq!(1, bucket.num_connected());
         assert_eq!(MAX_NODES_PER_BUCKET - 1, bucket.num_disconnected());
     }
-
 
     #[test]
     fn bucket_update() {
@@ -609,7 +644,10 @@ mod tests {
             let key = bucket.nodes[pos].key.clone();
 
             // Record the (ordered) list of status of all nodes in the bucket.
-            let mut expected = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
+            let mut expected = bucket
+                .iter()
+                .map(|(n, s)| (n.key.clone(), s))
+                .collect::<Vec<_>>();
 
             // Update the node in the bucket.
             bucket.update(&key, status);
@@ -618,14 +656,17 @@ mod tests {
             // preserving the status and relative order of all other nodes.
             let expected_pos = match status {
                 NodeStatus::Connected => num_nodes - 1,
-                NodeStatus::Disconnected => bucket.first_connected_pos.unwrap_or(num_nodes) - 1
+                NodeStatus::Disconnected => bucket.first_connected_pos.unwrap_or(num_nodes) - 1,
             };
             expected.remove(pos);
             expected.insert(expected_pos, (key.clone(), status));
-            let actual = bucket.iter().map(|(n,s)| (n.key.clone(), s)).collect::<Vec<_>>();
+            let actual = bucket
+                .iter()
+                .map(|(n, s)| (n.key.clone(), s))
+                .collect::<Vec<_>>();
             expected == actual
         }
 
-        quickcheck(prop as fn(_,_,_) -> _);
+        quickcheck(prop as fn(_, _, _) -> _);
     }
 }

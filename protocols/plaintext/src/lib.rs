@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::future::{self, FutureResult};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated};
+use libp2p_core::{upgrade::Negotiated, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::iter;
 use void::Void;
 
@@ -54,4 +54,3 @@ impl<C> OutboundUpgrade<C> for PlainTextConfig {
         future::ok(i)
     }
 }
-

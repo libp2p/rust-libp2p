@@ -19,22 +19,31 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
         collection::ConnectionInfo,
         handled_node::NodeHandler,
         node::Substream,
-        raw_swarm::{self, RawSwarm, RawSwarmEvent}
+        raw_swarm::{self, RawSwarm, RawSwarmEvent},
     },
-    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError, IntoProtocolsHandler, ProtocolsHandler},
-    swarm::{NetworkBehaviour, NetworkBehaviourAction, registry::{Addresses, AddressIter}},
+    protocols_handler::{
+        IntoProtocolsHandler, NodeHandlerWrapper, NodeHandlerWrapperBuilder,
+        NodeHandlerWrapperError, ProtocolsHandler,
+    },
+    swarm::{
+        registry::{AddressIter, Addresses},
+        NetworkBehaviour, NetworkBehaviourAction,
+    },
     transport::TransportError,
+    InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, ProtocolName, Transport, UpgradeInfo,
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{error, io, ops::{Deref, DerefMut}};
 use std::collections::HashSet;
+use std::{
+    error, io,
+    ops::{Deref, DerefMut},
+};
 
 /// Contains the state of the network, plus the way it should behave.
 pub type Swarm<TTransport, TBehaviour> = ExpandedSwarm<
@@ -79,8 +88,8 @@ where
     banned_peers: HashSet<PeerId>,
 }
 
-impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr> Deref for
-    ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr>
+impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr> Deref
+    for ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTransport: Transport,
 {
@@ -91,8 +100,8 @@ where
     }
 }
 
-impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr> DerefMut for
-    ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr>
+impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr> DerefMut
+    for ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTransport: Transport,
 {
@@ -357,7 +366,7 @@ pub struct PollParameters<'a: 'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
-    external_addrs: AddressIter<'a>
+    external_addrs: AddressIter<'a>,
 }
 
 impl<'a> PollParameters<'a> {
@@ -463,10 +472,12 @@ where TBehaviour: NetworkBehaviour,
 
 #[cfg(test)]
 mod tests {
-    use crate::{identity, PeerId, PublicKey};
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-    use crate::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmBuilder};
+    use crate::swarm::{
+        ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmBuilder,
+    };
     use crate::tests::dummy_transport::DummyTransport;
+    use crate::{identity, PeerId, PublicKey};
     use futures::prelude::*;
     use multiaddr::Multiaddr;
     use std::marker::PhantomData;
@@ -480,9 +491,9 @@ mod tests {
 
     trait TSubstream: AsyncRead + AsyncWrite {}
 
-    impl<TSubstream> NetworkBehaviour
-        for DummyBehaviour<TSubstream>
-        where TSubstream: AsyncRead + AsyncWrite
+    impl<TSubstream> NetworkBehaviour for DummyBehaviour<TSubstream>
+    where
+        TSubstream: AsyncRead + AsyncWrite,
     {
         type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
         type OutEvent = Void;
@@ -499,16 +510,24 @@ mod tests {
 
         fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
 
-        fn inject_node_event(&mut self, _: PeerId,
-            _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
-
-        fn poll(&mut self, _: &mut PollParameters<'_>) ->
-            Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
-            ProtocolsHandler>::InEvent, Self::OutEvent>>
-        {
-            Async::NotReady
+        fn inject_node_event(
+            &mut self,
+            _: PeerId,
+            _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        ) {
         }
 
+        fn poll(
+            &mut self,
+            _: &mut PollParameters<'_>,
+        ) -> Async<
+            NetworkBehaviourAction<
+                <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
+                Self::OutEvent,
+            >,
+        > {
+            Async::NotReady
+        }
     }
 
     fn get_random_id() -> PublicKey {
@@ -519,9 +538,12 @@ mod tests {
     fn test_build_swarm() {
         let id = get_random_id();
         let transport = DummyTransport::new();
-        let behaviour = DummyBehaviour{marker: PhantomData};
+        let behaviour = DummyBehaviour {
+            marker: PhantomData,
+        };
         let swarm = SwarmBuilder::new(transport, behaviour, id.into())
-            .incoming_limit(Some(4)).build();
+            .incoming_limit(Some(4))
+            .build();
         assert_eq!(swarm.raw_swarm.incoming_limit(), Some(4));
     }
 
@@ -529,7 +551,9 @@ mod tests {
     fn test_build_swarm_with_max_listeners_none() {
         let id = get_random_id();
         let transport = DummyTransport::new();
-        let behaviour = DummyBehaviour{marker: PhantomData};
+        let behaviour = DummyBehaviour {
+            marker: PhantomData,
+        };
         let swarm = SwarmBuilder::new(transport, behaviour, id.into()).build();
         assert!(swarm.raw_swarm.incoming_limit().is_none())
     }

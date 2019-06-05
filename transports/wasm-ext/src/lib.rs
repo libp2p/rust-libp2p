@@ -36,7 +36,7 @@ use futures::{future::FutureResult, prelude::*, stream::Stream, try_ready};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
 use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem};
-use wasm_bindgen::{JsCast, prelude::*};
+use wasm_bindgen::{prelude::*, JsCast};
 
 /// Contains the definition that one must match on the JavaScript side.
 pub mod ffi {
@@ -160,16 +160,13 @@ impl Transport for ExtTransport {
     type Dial = Dial;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let iter = self
-            .inner
-            .listen_on(&addr.to_string())
-            .map_err(|err| {
-                if is_not_supported_error(&err) {
-                    TransportError::MultiaddrNotSupported(addr)
-                } else {
-                    TransportError::Other(JsErr::from(err))
-                }
-            })?;
+        let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
+            if is_not_supported_error(&err) {
+                TransportError::MultiaddrNotSupported(addr)
+            } else {
+                TransportError::Other(JsErr::from(err))
+            }
+        })?;
 
         Ok(Listen {
             iterator: SendWrapper::new(iter),
@@ -179,16 +176,13 @@ impl Transport for ExtTransport {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let promise = self
-            .inner
-            .dial(&addr.to_string())
-            .map_err(|err| {
-                if is_not_supported_error(&err) {
-                    TransportError::MultiaddrNotSupported(addr)
-                } else {
-                    TransportError::Other(JsErr::from(err))
-                }
-            })?;
+        let promise = self.inner.dial(&addr.to_string()).map_err(|err| {
+            if is_not_supported_error(&err) {
+                TransportError::MultiaddrNotSupported(addr)
+            } else {
+                TransportError::Other(JsErr::from(err))
+            }
+        })?;
 
         Ok(Dial {
             inner: SendWrapper::new(promise.into()),

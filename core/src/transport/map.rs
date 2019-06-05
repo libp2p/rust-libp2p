@@ -20,14 +20,17 @@
 
 use crate::{
     nodes::raw_swarm::ConnectedPoint,
-    transport::{Transport, TransportError, ListenerEvent}
+    transport::{ListenerEvent, Transport, TransportError},
 };
 use futures::{prelude::*, try_ready};
 use multiaddr::Multiaddr;
 
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
-pub struct Map<T, F> { transport: T, fun: F }
+pub struct Map<T, F> {
+    transport: T,
+    fun: F,
+}
 
 impl<T, F> Map<T, F> {
     pub(crate) fn new(transport: T, fun: F) -> Self {
@@ -38,7 +41,7 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport,
-    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
+    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone,
 {
     type Output = D;
     type Error = T::Error;
@@ -48,13 +51,19 @@ where
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let stream = self.transport.listen_on(addr)?;
-        Ok(MapStream { stream, fun: self.fun })
+        Ok(MapStream {
+            stream,
+            fun: self.fun,
+        })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self.transport.dial(addr.clone())?;
         let p = ConnectedPoint::Dialer { address: addr };
-        Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
+        Ok(MapFuture {
+            inner: future,
+            args: Some((self.fun, p)),
+        })
     }
 }
 
@@ -62,13 +71,16 @@ where
 ///
 /// Maps a function over every stream item.
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> { stream: T, fun: F }
+pub struct MapStream<T, F> {
+    stream: T,
+    fun: F,
+}
 
 impl<T, F, A, B, X> Stream for MapStream<T, F>
 where
     T: Stream<Item = ListenerEvent<X>>,
     X: Future<Item = A>,
-    F: FnOnce(A, ConnectedPoint) -> B + Clone
+    F: FnOnce(A, ConnectedPoint) -> B + Clone,
 {
     type Item = ListenerEvent<MapFuture<X, F>>;
     type Error = T::Error;
@@ -77,27 +89,31 @@ where
         match self.stream.poll()? {
             Async::Ready(Some(event)) => {
                 let event = match event {
-                    ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
+                    ListenerEvent::Upgrade {
+                        upgrade,
+                        listen_addr,
+                        remote_addr,
+                    } => {
                         let point = ConnectedPoint::Listener {
                             listen_addr: listen_addr.clone(),
-                            send_back_addr: remote_addr.clone()
+                            send_back_addr: remote_addr.clone(),
                         };
                         ListenerEvent::Upgrade {
                             upgrade: MapFuture {
                                 inner: upgrade,
-                                args: Some((self.fun.clone(), point))
+                                args: Some((self.fun.clone(), point)),
                             },
                             listen_addr,
-                            remote_addr
+                            remote_addr,
                         }
                     }
                     ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
-                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
                 };
                 Ok(Async::Ready(Some(event)))
             }
             Async::Ready(None) => Ok(Async::Ready(None)),
-            Async::NotReady => Ok(Async::NotReady)
+            Async::NotReady => Ok(Async::NotReady),
         }
     }
 }
@@ -108,13 +124,13 @@ where
 #[derive(Clone, Debug)]
 pub struct MapFuture<T, F> {
     inner: T,
-    args: Option<(F, ConnectedPoint)>
+    args: Option<(F, ConnectedPoint)>,
 }
 
 impl<T, A, F, B> Future for MapFuture<T, F>
 where
     T: Future<Item = A>,
-    F: FnOnce(A, ConnectedPoint) -> B
+    F: FnOnce(A, ConnectedPoint) -> B,
 {
     type Item = B;
     type Error = T::Error;
@@ -125,4 +141,3 @@ where
         Ok(Async::Ready(f(item, a)))
     }
 }
-

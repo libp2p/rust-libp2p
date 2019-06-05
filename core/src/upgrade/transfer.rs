@@ -126,11 +126,7 @@ where
 /// > **Note**: Assumes that a variable-length prefix indicates the length of the message. This is
 /// >           compatible with what `write_one` does.
 #[inline]
-pub fn read_one<TSocket>(
-    socket: TSocket,
-    max_size: usize,
-) -> ReadOne<TSocket>
-{
+pub fn read_one<TSocket>(socket: TSocket, max_size: usize) -> ReadOne<TSocket> {
     ReadOne {
         inner: ReadOneInner::ReadLen {
             socket,
@@ -218,7 +214,7 @@ where
                                 // already in `len_buf`.
                                 let n = cmp::min(data_start.len(), len);
                                 let mut data_buf = vec![0; len];
-                                data_buf[.. n].copy_from_slice(&data_start[.. n]);
+                                data_buf[..n].copy_from_slice(&data_start[..n]);
                                 let mut data_buf = io::Window::new(data_buf);
                                 data_buf.set_start(data_start.len());
                                 *self = ReadOneInner::ReadRest(io::read_exact(socket, data_buf));
@@ -240,17 +236,15 @@ where
                         }
                     }
                 }
-                ReadOneInner::ReadRest(mut inner) => {
-                    match inner.poll()? {
-                        Async::Ready((socket, data)) => {
-                            return Ok(Async::Ready((socket, data.into_inner())));
-                        }
-                        Async::NotReady => {
-                            *self = ReadOneInner::ReadRest(inner);
-                            return Ok(Async::NotReady);
-                        }
+                ReadOneInner::ReadRest(mut inner) => match inner.poll()? {
+                    Async::Ready((socket, data)) => {
+                        return Ok(Async::Ready((socket, data.into_inner())));
                     }
-                }
+                    Async::NotReady => {
+                        *self = ReadOneInner::ReadRest(inner);
+                        return Ok(Async::NotReady);
+                    }
+                },
                 ReadOneInner::Poisoned => panic!(),
             }
         }
@@ -339,10 +333,12 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll()? {
             Async::Ready(buffer) => {
-                let (param, then) = self.then.take()
+                let (param, then) = self
+                    .then
+                    .take()
                     .expect("Future was polled after it was finished");
                 Ok(Async::Ready(then(buffer, param)?))
-            },
+            }
             Async::NotReady => Ok(Async::NotReady),
         }
     }
@@ -391,9 +387,12 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll()? {
             Async::Ready((socket, buffer)) => {
-                let (then, param) = self.then.take().expect("Future was polled after it was finished");
+                let (then, param) = self
+                    .then
+                    .take()
+                    .expect("Future was polled after it was finished");
                 Ok(Async::Ready(then(socket, buffer, param)?))
-            },
+            }
             Async::NotReady => Ok(Async::NotReady),
         }
     }
@@ -440,7 +439,8 @@ enum RequestResponseInner<TSocket, TData, TParam, TThen> {
     Poisoned,
 }
 
-impl<TSocket, TData, TParam, TThen, TOut, TErr> Future for RequestResponse<TSocket, TParam, TThen, TData>
+impl<TSocket, TData, TParam, TThen, TOut, TErr> Future
+    for RequestResponse<TSocket, TParam, TThen, TData>
 where
     TSocket: AsyncRead + AsyncWrite,
     TData: AsRef<[u8]>,
@@ -456,8 +456,9 @@ where
                 RequestResponseInner::Write(mut inner, max_size, param, then) => {
                     match inner.poll().map_err(ReadOneError::Io)? {
                         Async::Ready(socket) => {
-                            self.inner =
-                                RequestResponseInner::Read(read_one_then(socket, max_size, param, then));
+                            self.inner = RequestResponseInner::Read(read_one_then(
+                                socket, max_size, param, then,
+                            ));
                         }
                         Async::NotReady => {
                             self.inner = RequestResponseInner::Write(inner, max_size, param, then);
@@ -511,20 +512,30 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend_from_slice(&original_data);
 
-        let future = read_one_then(Cursor::new(in_buffer), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
-            assert_eq!(out, original_data);
-            Ok(())
-        });
+        let future = read_one_then(
+            Cursor::new(in_buffer),
+            10_000,
+            (),
+            move |out, ()| -> Result<_, ReadOneError> {
+                assert_eq!(out, original_data);
+                Ok(())
+            },
+        );
 
         Runtime::new().unwrap().block_on(future).unwrap();
     }
 
     #[test]
     fn read_one_zero_len() {
-        let future = read_one_then(Cursor::new(vec![0]), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
-            assert!(out.is_empty());
-            Ok(())
-        });
+        let future = read_one_then(
+            Cursor::new(vec![0]),
+            10_000,
+            (),
+            move |out, ()| -> Result<_, ReadOneError> {
+                assert!(out.is_empty());
+                Ok(())
+            },
+        );
 
         Runtime::new().unwrap().block_on(future).unwrap();
     }
@@ -537,9 +548,12 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend((0..5000).map(|_| 0));
 
-        let future = read_one_then(Cursor::new(in_buffer), 100, (), move |_, ()| -> Result<_, ReadOneError> {
-            Ok(())
-        });
+        let future = read_one_then(
+            Cursor::new(in_buffer),
+            100,
+            (),
+            move |_, ()| -> Result<_, ReadOneError> { Ok(()) },
+        );
 
         match Runtime::new().unwrap().block_on(future) {
             Err(ReadOneError::TooLarge { .. }) => (),
@@ -549,23 +563,31 @@ mod tests {
 
     #[test]
     fn read_one_accepts_empty() {
-        let future = read_one_then(Cursor::new([]), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
-            assert!(out.is_empty());
-            Ok(())
-        });
+        let future = read_one_then(
+            Cursor::new([]),
+            10_000,
+            (),
+            move |out, ()| -> Result<_, ReadOneError> {
+                assert!(out.is_empty());
+                Ok(())
+            },
+        );
 
         Runtime::new().unwrap().block_on(future).unwrap();
     }
 
     #[test]
     fn read_one_eof_before_len() {
-        let future = read_one_then(Cursor::new([0x80]), 10_000, (), move |_, ()| -> Result<(), ReadOneError> {
-            unreachable!()
-        });
+        let future = read_one_then(
+            Cursor::new([0x80]),
+            10_000,
+            (),
+            move |_, ()| -> Result<(), ReadOneError> { unreachable!() },
+        );
 
         match Runtime::new().unwrap().block_on(future) {
             Err(ReadOneError::Io(ref err)) if err.kind() == io::ErrorKind::UnexpectedEof => (),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 }

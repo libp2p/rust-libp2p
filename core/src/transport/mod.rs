@@ -25,11 +25,11 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
+use crate::{nodes::raw_swarm::ConnectedPoint, InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::{error, fmt};
 use std::time::Duration;
+use std::{error, fmt};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub mod and_then;
@@ -129,10 +129,11 @@ pub trait Transport {
 
     /// Turns this `Transport` into an abstract boxed transport.
     fn boxed(self) -> boxed::Boxed<Self::Output, Self::Error>
-    where Self: Sized + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
+    where
+        Self: Sized + Clone + Send + Sync + 'static,
+        Self::Dial: Send + 'static,
+        Self::Listener: Send + 'static,
+        Self::ListenerUpgrade: Send + 'static,
     {
         boxed::boxed(self)
     }
@@ -141,7 +142,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
+        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone,
     {
         map::Map::new(self, map)
     }
@@ -150,7 +151,7 @@ pub trait Transport {
     fn map_err<F, TNewErr>(self, map_err: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> TNewErr + Clone
+        F: FnOnce(Self::Error) -> TNewErr + Clone,
     {
         map_err::MapErr::new(self, map_err)
     }
@@ -179,7 +180,7 @@ pub trait Transport {
         Self: Sized,
         Self::Output: AsyncRead + AsyncWrite,
         U: InboundUpgrade<Self::Output, Output = O, Error = E>,
-        U: OutboundUpgrade<Self::Output, Output = O, Error = E>
+        U: OutboundUpgrade<Self::Output, Output = O, Error = E>,
     {
         Upgrade::new(self, upgrade)
     }
@@ -194,7 +195,7 @@ pub trait Transport {
     where
         Self: Sized,
         C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
-        F: IntoFuture<Item = O>
+        F: IntoFuture<Item = O>,
     {
         and_then::AndThen::new(self, upgrade)
     }
@@ -244,10 +245,10 @@ pub enum ListenerEvent<T> {
         /// The listening address which produced this upgrade.
         listen_addr: Multiaddr,
         /// The remote address which produced this upgrade.
-        remote_addr: Multiaddr
+        remote_addr: Multiaddr,
     },
     /// A [`Multiaddr`] is no longer used for listening.
-    AddressExpired(Multiaddr)
+    AddressExpired(Multiaddr),
 }
 
 impl<T> ListenerEvent<T> {
@@ -256,17 +257,23 @@ impl<T> ListenerEvent<T> {
     /// based the the function's result.
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> ListenerEvent<U> {
         match self {
-            ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
-                ListenerEvent::Upgrade { upgrade: f(upgrade), listen_addr, remote_addr }
-            }
+            ListenerEvent::Upgrade {
+                upgrade,
+                listen_addr,
+                remote_addr,
+            } => ListenerEvent::Upgrade {
+                upgrade: f(upgrade),
+                listen_addr,
+                remote_addr,
+            },
             ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
-            ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+            ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
         }
     }
 
     /// Returns `true` if this is an `Upgrade` listener event.
     pub fn is_upgrade(&self) -> bool {
-        if let ListenerEvent::Upgrade {..} = self {
+        if let ListenerEvent::Upgrade { .. } = self {
             true
         } else {
             false
@@ -278,7 +285,12 @@ impl<T> ListenerEvent<T> {
     /// Returns `None` if the event is not actually an upgrade,
     /// otherwise the upgrade and the remote address.
     pub fn into_upgrade(self) -> Option<(T, Multiaddr)> {
-        if let ListenerEvent::Upgrade { upgrade, remote_addr, .. } = self {
+        if let ListenerEvent::Upgrade {
+            upgrade,
+            remote_addr,
+            ..
+        } = self
+        {
             Some((upgrade, remote_addr))
         } else {
             None
@@ -345,25 +357,31 @@ impl<TErr> TransportError<TErr> {
     /// Applies a function to the the error in [`TransportError::Other`].
     pub fn map<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {
         match self {
-            TransportError::MultiaddrNotSupported(addr) => TransportError::MultiaddrNotSupported(addr),
+            TransportError::MultiaddrNotSupported(addr) => {
+                TransportError::MultiaddrNotSupported(addr)
+            }
             TransportError::Other(err) => TransportError::Other(map(err)),
         }
     }
 }
 
 impl<TErr> fmt::Display for TransportError<TErr>
-where TErr: fmt::Display,
+where
+    TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TransportError::MultiaddrNotSupported(addr) => write!(f, "Multiaddr is not supported: {}", addr),
+            TransportError::MultiaddrNotSupported(addr) => {
+                write!(f, "Multiaddr is not supported: {}", addr)
+            }
             TransportError::Other(err) => write!(f, "{}", err),
         }
     }
 }
 
 impl<TErr> error::Error for TransportError<TErr>
-where TErr: error::Error + 'static,
+where
+    TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {

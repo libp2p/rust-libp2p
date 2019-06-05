@@ -1,19 +1,18 @@
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr) in Rust.
-
 pub use multihash;
 
-mod protocol;
 mod errors;
 mod from_url;
+mod protocol;
 mod util;
 
+pub use self::errors::{Error, Result};
+pub use self::from_url::{from_url, from_url_lossy, FromUrlErr};
+pub use self::protocol::Protocol;
 use bytes::{Bytes, BytesMut};
 use serde::{
-    Deserialize,
-    Deserializer,
-    Serialize,
-    Serializer,
-    de::{self, Error as DeserializerError}
+    de::{self, Error as DeserializerError},
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 use std::{
     convert::TryFrom,
@@ -21,25 +20,28 @@ use std::{
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     result::Result as StdResult,
-    str::FromStr
+    str::FromStr,
 };
-pub use self::errors::{Result, Error};
-pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
-pub use self::protocol::Protocol;
 
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]
-pub struct Multiaddr { bytes: Bytes }
+pub struct Multiaddr {
+    bytes: Bytes,
+}
 
 impl Multiaddr {
     /// Create a new, empty multiaddress.
     pub fn empty() -> Self {
-        Self { bytes: Bytes::new() }
+        Self {
+            bytes: Bytes::new(),
+        }
     }
 
     /// Create a new, empty multiaddress with the given capacity.
     pub fn with_capacity(n: usize) -> Self {
-        Self { bytes: Bytes::with_capacity(n) }
+        Self {
+            bytes: Bytes::with_capacity(n),
+        }
     }
 
     /// Return the length in bytes of this multiaddress.
@@ -66,7 +68,8 @@ impl Multiaddr {
     ///
     pub fn push(&mut self, p: Protocol<'_>) {
         let mut w = Vec::new();
-        p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
+        p.write_bytes(&mut w)
+            .expect("Writing to a `Vec` never fails.");
         self.bytes.extend_from_slice(&w);
     }
 
@@ -83,12 +86,12 @@ impl Multiaddr {
     pub fn pop<'a>(&mut self) -> Option<Protocol<'a>> {
         let mut slice = &self.bytes[..]; // the remaining multiaddr slice
         if slice.is_empty() {
-            return None
+            return None;
         }
         let protocol = loop {
             let (p, s) = Protocol::from_bytes(slice).expect("`slice` is a valid `Protocol`.");
             if s.is_empty() {
-                break p.acquire()
+                break p.acquire();
             }
             slice = s
         };
@@ -102,12 +105,16 @@ impl Multiaddr {
         match self.bytes.try_mut() {
             Ok(bytes) => {
                 let mut w = util::BytesWriter(bytes);
-                p.write_bytes(&mut w).expect("Writing to a `BytesWriter` never fails.");
-                Multiaddr { bytes: w.0.freeze() }
+                p.write_bytes(&mut w)
+                    .expect("Writing to a `BytesWriter` never fails.");
+                Multiaddr {
+                    bytes: w.0.freeze(),
+                }
             }
             Err(mut bytes) => {
                 let mut w = Vec::new();
-                p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
+                p.write_bytes(&mut w)
+                    .expect("Writing to a `Vec` never fails.");
                 bytes.extend_from_slice(&w);
                 Multiaddr { bytes }
             }
@@ -142,7 +149,7 @@ impl Multiaddr {
     /// updated `Protocol` at position `at` will be returned.
     pub fn replace<'a, F>(&self, at: usize, by: F) -> Option<Multiaddr>
     where
-        F: FnOnce(&Protocol) -> Option<Protocol<'a>>
+        F: FnOnce(&Protocol) -> Option<Protocol<'a>>,
     {
         let mut address = Multiaddr::with_capacity(self.len());
         let mut fun = Some(by);
@@ -154,14 +161,18 @@ impl Multiaddr {
                 if let Some(q) = f(&p) {
                     address = address.with(q);
                     replaced = true;
-                    continue
+                    continue;
                 }
-                return None
+                return None;
             }
             address = address.with(p)
         }
 
-        if replaced { Some(address) } else { None }
+        if replaced {
+            Some(address)
+        } else {
+            None
+        }
     }
 }
 
@@ -213,9 +224,12 @@ impl<'a> FromIterator<Protocol<'a>> for Multiaddr {
     {
         let mut writer = Vec::new();
         for cmp in iter {
-            cmp.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
+            cmp.write_bytes(&mut writer)
+                .expect("Writing to a `Vec` never fails.");
         }
-        Multiaddr { bytes: writer.into() }
+        Multiaddr {
+            bytes: writer.into(),
+        }
     }
 }
 
@@ -228,15 +242,18 @@ impl FromStr for Multiaddr {
 
         if Some("") != parts.next() {
             // A multiaddr must start with `/`
-            return Err(Error::InvalidMultiaddr)
+            return Err(Error::InvalidMultiaddr);
         }
 
         while parts.peek().is_some() {
             let p = Protocol::from_str_parts(&mut parts)?;
-            p.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
+            p.write_bytes(&mut writer)
+                .expect("Writing to a `Vec` never fails.");
         }
 
-        Ok(Multiaddr { bytes: writer.into() })
+        Ok(Multiaddr {
+            bytes: writer.into(),
+        })
     }
 }
 
@@ -262,7 +279,8 @@ impl<'a> Iterator for Iter<'a> {
 impl<'a> From<Protocol<'a>> for Multiaddr {
     fn from(p: Protocol<'a>) -> Multiaddr {
         let mut w = Vec::new();
-        p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
+        p.write_bytes(&mut w)
+            .expect("Writing to a `Vec` never fails.");
         Multiaddr { bytes: w.into() }
     }
 }
@@ -271,7 +289,7 @@ impl From<IpAddr> for Multiaddr {
     fn from(v: IpAddr) -> Multiaddr {
         match v {
             IpAddr::V4(a) => a.into(),
-            IpAddr::V6(a) => a.into()
+            IpAddr::V6(a) => a.into(),
         }
     }
 }
@@ -352,7 +370,9 @@ impl<'de> Deserialize<'de> for Multiaddr {
     where
         D: Deserializer<'de>,
     {
-        struct Visitor { is_human_readable: bool };
+        struct Visitor {
+            is_human_readable: bool,
+        };
 
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = Multiaddr;
@@ -360,9 +380,14 @@ impl<'de> Deserialize<'de> for Multiaddr {
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("multiaddress")
             }
-            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> StdResult<Self::Value, A::Error> {
+            fn visit_seq<A: de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> StdResult<Self::Value, A::Error> {
                 let mut buf: Vec<u8> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-                while let Some(e) = seq.next_element()? { buf.push(e); }
+                while let Some(e) = seq.next_element()? {
+                    buf.push(e);
+                }
                 if self.is_human_readable {
                     let s = String::from_utf8(buf).map_err(DeserializerError::custom)?;
                     s.parse().map_err(DeserializerError::custom)
@@ -391,9 +416,13 @@ impl<'de> Deserialize<'de> for Multiaddr {
         }
 
         if deserializer.is_human_readable() {
-            deserializer.deserialize_str(Visitor { is_human_readable: true })
+            deserializer.deserialize_str(Visitor {
+                is_human_readable: true,
+            })
         } else {
-            deserializer.deserialize_bytes(Visitor { is_human_readable: false })
+            deserializer.deserialize_bytes(Visitor {
+                is_human_readable: false,
+            })
         }
     }
 }
@@ -427,4 +456,3 @@ macro_rules! multiaddr {
         }
     }
 }
-
