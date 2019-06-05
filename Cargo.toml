@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -27,7 +27,7 @@ libp2p-ping = { version = "0.9.0", path = "./protocols/ping" }
 libp2p-plaintext = { version = "0.9.0", path = "./protocols/plaintext" }
 libp2p-deflate = { version = "0.1.0", path = "./protocols/deflate" }
 libp2p-ratelimit = { version = "0.9.0", path = "./transports/ratelimit" }
-libp2p-core = { version = "0.9.0", path = "./core" }
+libp2p-core = { version = "0.9.1", path = "./core" }
 libp2p-core-derive = { version = "0.9.0", path = "./misc/core-derive" }
 libp2p-secio = { version = "0.9.0", path = "./protocols/secio", default-features = false }
 libp2p-uds = { version = "0.9.0", path = "./transports/uds" }
@@ -45,7 +45,7 @@ libp2p-dns = { version = "0.9.0", path = "./transports/dns" }
 libp2p-mdns = { version = "0.9.0", path = "./misc/mdns" }
 libp2p-noise = { version = "0.7.0", path = "./protocols/noise" }
 libp2p-tcp = { version = "0.9.0", path = "./transports/tcp" }
-libp2p-websocket = { version = "0.9.0", path = "./transports/websocket", optional = true }
+libp2p-websocket = { version = "0.9.1", path = "./transports/websocket", optional = true }
 
 [dev-dependencies]
 env_logger = "0.6.0"

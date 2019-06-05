@@ -1,3 +1,8 @@
+# Version 0.9.1 (2019-06-05)
+
+- `EitherOutput` now implements `Stream` and `Sink` if their variants also implement these traits.
+- `libp2p::websocket::error::Error` now implements `Sync`.
+
 # Version 0.9.0 (2019-06-04)
 
 - Major fixes and performance improvements to libp2p-kad.
