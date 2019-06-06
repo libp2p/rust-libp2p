@@ -7,14 +7,18 @@ pub use self::error::TlsError;
 use bytes::BytesMut;
 use futures::stream::MapErr as StreamMapErr;
 use tokio_io::{AsyncRead, AsyncWrite};
-use libp2p_core::{PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
-use futures::{Future, Poll, Sink, StartSend, Stream};
+use log::debug;
+use libp2p_core::{Keypair, PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
+use futures::{Future, Poll, Sink, StartSend, Stream, Async};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
+use tokio_io::codec::length_delimited;
+use crate::codec::FullCodec;
 
 mod error;
 mod codec;
+mod handshake;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// tls on any connection.
@@ -36,6 +40,19 @@ impl TlsConfig {
             digests_prop: None
         }
     }
+
+    fn handshake<T>(self, socket: T) -> impl Future<Item = TlsOutput<T>, Error = TlsError>
+    where
+        T: AsyncRead + AsyncWrite + Send
+    {
+        TlsMiddleware::handshake(socket, self).map(|(stream_sink, pubkey)| {
+            let mapped = stream_sink.map_err(map_err as fn(_) -> _);
+            TlsOutput {
+                stream: RwStreamSink::new(mapped),
+                remote_key: pubkey
+            }
+        })
+    }
 }
 
 impl UpgradeInfo for TlsConfig {
@@ -47,7 +64,6 @@ impl UpgradeInfo for TlsConfig {
     }
 }
 
-/*
 impl <T> InboundUpgrade<T> for TlsConfig
     where T: AsyncRead + AsyncWrite + Send + 'static,
 {
@@ -72,35 +88,50 @@ where
         Box::new(self.handshake(socket))
     }
 }
-*/
 
 /// Output of the tls protocol.
 pub struct TlsOutput<S>
 where
-    S: Sink<SinkItem = BytesMut, SinkError = IoError> + Stream<Item = Vec<u8>, Error = TlsError>,
+    S: AsyncRead + AsyncWrite,
 {
     /// The encrypted stream.
-    pub stream: RwStreamSink<StreamMapErr<TlsMiddleware<S>, fn(TlsError) -> IoError>>,
-    /// The public key of the remote.
+    pub stream: RwStreamSink<StreamMapErr<TlsMiddleware<S>, fn(IoError) -> IoError>>,
     pub remote_key: PublicKey,
-    /// Ephemeral public key used during the negotiation.
-    pub ephemeral_public_key: Vec<u8>,
+}
+
+#[inline]
+fn map_err(err: IoError) -> IoError {
+    debug!("error during tls handshake {:?}", err);
+    IoError::new(IoErrorKind::InvalidData, err)
 }
 
 pub struct TlsMiddleware<S>
 {
-    inner: S,
+    inner: codec::FullCodec<S>,
+}
+
+impl<S> TlsMiddleware<S>
+where
+    S: AsyncRead + AsyncWrite + Send,
+{
+    pub fn handshake(socket: S, config: TlsConfig)
+        -> impl Future<Item = (TlsMiddleware<S>, PublicKey), Error = TlsError> {
+        handshake::handshake(socket, config).map(|(inner, pubkey)| {
+            (TlsMiddleware{ inner }, pubkey)
+        })
+    }
 }
 
 impl<S> Sink for TlsMiddleware<S>
 where
-    S: Sink<SinkItem = BytesMut, SinkError = IoError>,
+    S: AsyncRead + AsyncWrite,
 {
     type SinkItem = BytesMut;
     type SinkError = IoError;
 
     #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        println!("middleware sink: {}", item.len());
         self.inner.start_send(item)
     }
 
@@ -117,10 +148,10 @@ where
 
 impl<S> Stream for TlsMiddleware<S>
 where
-    S: Stream<Item = Vec<u8>, Error = TlsError>,
+    S: AsyncRead + AsyncWrite,
 {
-    type Item = Vec<u8>;
-    type Error = TlsError;
+    type Item = BytesMut;
+    type Error = IoError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {

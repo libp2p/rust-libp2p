@@ -18,6 +18,13 @@ impl error::Error for TlsError {
     }
 }
 
+impl From<IoError> for TlsError {
+    #[inline]
+    fn from(err: IoError) -> TlsError {
+        TlsError::IoError(err)
+    }
+}
+
 impl fmt::Display for TlsError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {

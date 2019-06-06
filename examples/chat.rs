@@ -67,7 +67,8 @@ fn main() {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key);
+    let transport =
+        libp2p::build_tcp_ws_tls_mplex_yamux(local_key);
 
     // Create a Floodsub topic
     let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
@@ -145,7 +146,10 @@ fn main() {
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match framed_stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
+                Async::Ready(Some(line)) => {
+                    println!("stdin: {}", line);
+                    swarm.floodsub.publish(&floodsub_topic, line.as_bytes())
+                },
                 Async::Ready(None) => panic!("Stdin closed"),
                 Async::NotReady => break,
             };

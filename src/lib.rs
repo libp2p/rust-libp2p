@@ -188,6 +188,8 @@ pub use libp2p_plaintext as plaintext;
 pub use libp2p_ratelimit as ratelimit;
 #[doc(inline)]
 pub use libp2p_secio as secio;
+#[doc(inline)]
+pub use libp2p_tls as tls;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
@@ -241,6 +243,24 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(keypair))
+        .and_then(move |output, endpoint| {
+            let peer_id = output.remote_key.into_peer_id();
+            let peer_id2 = peer_id.clone();
+            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+                // TODO: use a single `.map` instead of two maps
+                .map_inbound(move |muxer| (peer_id, muxer))
+                .map_outbound(move |muxer| (peer_id2, muxer));
+            core::upgrade::apply(output.stream, upgrade, endpoint)
+                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
+        })
+        .with_timeout(Duration::from_secs(20))
+}
+
+pub fn build_tcp_ws_tls_mplex_yamux(keypair: identity::Keypair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+    CommonTransport::new()
+        .with_upgrade(tls::TlsConfig::new(keypair))
         .and_then(move |output, endpoint| {
             let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();

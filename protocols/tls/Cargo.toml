@@ -15,3 +15,4 @@ libp2p-core = { version = "0.8.0", path = "../../core" }
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
 bytes = "0.4"
+log = "0.4.6"
