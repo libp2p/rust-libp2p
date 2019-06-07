@@ -252,7 +252,8 @@ fn get_value_not_found() {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
-                            if let GetValueResult::NotFound { closest_peers} = result {
+                            if let GetValueResult::NotFound { key, closest_peers } = result {
+                                assert_eq!(key, target_key);
                                 assert_eq!(closest_peers.len(), 2);
                                 assert!(closest_peers.contains(&swarm_ids[1]));
                                 assert!(closest_peers.contains(&swarm_ids[2]));

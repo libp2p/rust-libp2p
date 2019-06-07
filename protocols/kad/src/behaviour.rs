@@ -972,9 +972,10 @@ where
                             self.queued_events.push(event);
                         }
                     },
-                    QueryInfoInner::GetValue { key: _, results, .. } => {
+                    QueryInfoInner::GetValue { key, results, .. } => {
                         let result = match results.len() {
                             0 => GetValueResult::NotFound{
+                                key,
                                 closest_peers: closer_peers.collect()
                             },
                             _ => GetValueResult::Found{ results },
@@ -1023,7 +1024,10 @@ pub enum GetValueResult {
     /// The results received from peers. Always contains non-zero number of results.
     Found { results: Vec<Record> },
     /// The record wasn't found.
-    NotFound { closest_peers: Vec<PeerId> }
+    NotFound {
+        key: Multihash,
+        closest_peers: Vec<PeerId>
+    }
 }
 
 /// The result of a `PUT_VALUE` query.
