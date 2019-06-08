@@ -18,20 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Kademlia protocol. Allows peer discovery, records store and records fetch.
+//! Implementation of the Kademlia protocol for libp2p.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store
 #![allow(dead_code)]
 
-pub use self::behaviour::{Kademlia, KademliaOut};
+pub use self::behaviour::{Kademlia, KademliaOut, GetValueResult, PutValueResult};
 pub use self::protocol::KadConnectionType;
+pub use self::record::{RecordStore, RecordStorageError, MemoryRecordStorage};
 
 pub mod handler;
 pub mod kbucket;
 pub mod protocol;
+pub mod record;
 
 mod addresses;
 mod behaviour;
 mod protobuf_structs;
 mod query;
+mod write;

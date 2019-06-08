@@ -51,7 +51,6 @@ where
     S::Item: IntoBuf,
 {
     /// Wraps around `inner`.
-    #[inline]
     pub fn new(inner: S) -> RwStreamSink<S> {
         RwStreamSink { inner, current_item: None }
     }
@@ -102,7 +101,6 @@ where
     S::SinkItem: for<'r> From<&'r [u8]>,
     S::Item: IntoBuf,
 {
-    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let len = buf.len();
         match self.inner.start_send(buf.into())? {
@@ -111,7 +109,6 @@ where
         }
     }
 
-    #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
         match self.inner.poll_complete()? {
             Async::Ready(()) => Ok(()),
@@ -126,7 +123,6 @@ where
     S::SinkItem: for<'r> From<&'r [u8]>,
     S::Item: IntoBuf,
 {
-    #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
         self.inner.close()
     }

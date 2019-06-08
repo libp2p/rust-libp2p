@@ -36,9 +36,14 @@ impl Addresses {
         }
     }
 
-    /// Returns the list of addresses.
+    /// Returns an iterator over the list of addresses.
     pub fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
         self.addrs.iter()
+    }
+
+    /// Converts the addresses into a `Vec`.
+    pub fn into_vec(self) -> Vec<Multiaddr> {
+        self.addrs.into_vec()
     }
 
     /// Returns true if the list of addresses is empty.

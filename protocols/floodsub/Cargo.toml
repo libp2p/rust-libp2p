@@ -2,7 +2,7 @@
 name = "libp2p-floodsub"
 edition = "2018"
 description = "Floodsub protocol for libp2p"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,7 +15,7 @@ bytes = "0.4"
 cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
-libp2p-core = { version = "0.8.0", path = "../../core" }
+libp2p-core = { version = "0.9.0", path = "../../core" }
 protobuf = "2.3"
 rand = "0.6"
 smallvec = "0.6.5"

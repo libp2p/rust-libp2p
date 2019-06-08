@@ -1,7 +1,7 @@
 [package]
-name = "libp2p-relay"
+name = "libp2p-deflate"
 edition = "2018"
-description = "Communications relaying for libp2p"
+description = "Deflate encryption protocol for libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -10,15 +10,14 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-fnv = "1.0"
 futures = "0.1"
 libp2p-core = { version = "0.9.0", path = "../../core" }
+tokio-io = "0.1.12"
+flate2 = { version = "1.0", features = ["tokio"] }
+
+[dev-dependencies]
+env_logger = "0.6"
+libp2p-tcp = { version = "0.9.0", path = "../../transports/tcp" }
+quickcheck = "0.8"
+tokio = "0.1"
 log = "0.4"
-protobuf = "2.0.2"
-rand = "0.6"
-smallvec = "0.6.9"
-tokio-codec = "0.1"
-tokio-io = "0.1"
-unsigned-varint = { version = "0.2.1", features = ["codec"] }
-void = "1.0"

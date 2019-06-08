@@ -57,11 +57,11 @@ fn from_url_inner(url: &str, lossy: bool) -> std::result::Result<Multiaddr, From
 
 /// Called when `url.scheme()` is an Internet-like URL.
 fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Multiaddr, FromUrlErr> {
-    let (protocol, default_port) = match url.scheme() {
-        "ws" => (Protocol::Ws, 80),
-        "wss" => (Protocol::Wss, 443),
-        "http" => (Protocol::Http, 80),
-        "https" => (Protocol::Https, 443),
+    let (protocol, lost_path, default_port) = match url.scheme() {
+        "ws" => (Protocol::Ws(url.path().to_owned().into()), false, 80),
+        "wss" => (Protocol::Wss(url.path().to_owned().into()), false, 443),
+        "http" => (Protocol::Http, true, 80),
+        "https" => (Protocol::Https, true, 443),
         _ => unreachable!("We only call this function for one of the given schemes; qed")
     };
 
@@ -78,7 +78,7 @@ fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Mul
 
     if !lossy {
         if !url.username().is_empty() || url.password().is_some() ||
-            (url.path() != "/" && !url.path().is_empty()) ||
+            (lost_path && url.path() != "/" && !url.path().is_empty()) ||
             url.query().is_some() || url.fragment().is_some()
         {
             return Err(FromUrlErr::InformationLoss);
@@ -259,5 +259,20 @@ mod tests {
     fn unix() {
         let addr = from_url("unix:/foo/bar").unwrap();
         assert_eq!(addr, Multiaddr::from(Protocol::Unix("/foo/bar".into())));
+    }
+
+    #[test]
+    fn ws_path() {
+        let addr = from_url("ws://1.2.3.4:1000/foo/bar").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/x-parity-ws/%2ffoo%2fbar".parse().unwrap());
+
+        let addr = from_url("ws://1.2.3.4:1000/").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/ws".parse().unwrap());
+
+        let addr = from_url("wss://1.2.3.4:1000/foo/bar").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/x-parity-wss/%2ffoo%2fbar".parse().unwrap());
+
+        let addr = from_url("wss://1.2.3.4:1000").unwrap();
+        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/wss".parse().unwrap());
     }
 }

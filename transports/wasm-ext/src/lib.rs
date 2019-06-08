@@ -34,7 +34,7 @@
 
 use futures::{future::FutureResult, prelude::*, stream::Stream, try_ready};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
-use send_wrapper::SendWrapper;
+use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem};
 use wasm_bindgen::{JsCast, prelude::*};
 
@@ -302,6 +302,10 @@ impl Stream for Listen {
 }
 
 /// Active stream of data with a remote.
+///
+/// It is guaranteed that each call to `io::Write::write` on this object maps to exactly one call
+/// to `write` on the FFI. In other words, no internal buffering happens for writes, and data can't
+/// be split.
 pub struct Connection {
     /// The FFI object.
     inner: SendWrapper<ffi::Connection>,
@@ -419,6 +423,9 @@ impl tokio_io::AsyncRead for Connection {
 
 impl io::Write for Connection {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        // Note: as explained in the doc-comments of `Connection`, each call to this function must
+        // map to exactly one call to `self.inner.write()`.
+
         if let Some(mut promise) = self.previous_write_promise.take() {
             match promise.poll().map_err(JsErr::from)? {
                 Async::Ready(_) => (),
