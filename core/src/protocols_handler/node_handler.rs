@@ -20,6 +20,7 @@
 
 use crate::{
     PeerId,
+    nodes::collection::ConnectionInfo,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     nodes::handled_node_tasks::IntoNodeHandler,
     nodes::raw_swarm::ConnectedPoint,
@@ -69,17 +70,18 @@ where
     }
 }
 
-impl<TIntoProtoHandler, TProtoHandler> IntoNodeHandler<(PeerId, ConnectedPoint)>
+impl<TIntoProtoHandler, TProtoHandler, TConnInfo> IntoNodeHandler<(TConnInfo, ConnectedPoint)>
     for NodeHandlerWrapperBuilder<TIntoProtoHandler>
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
     TProtoHandler: ProtocolsHandler,
+    TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
 
-    fn into_handler(self, remote_info: &(PeerId, ConnectedPoint)) -> Self::Handler {
+    fn into_handler(self, remote_info: &(TConnInfo, ConnectedPoint)) -> Self::Handler {
         NodeHandlerWrapper {
-            handler: self.handler.into_handler(&remote_info.0, &remote_info.1),
+            handler: self.handler.into_handler(&remote_info.0.peer_id(), &remote_info.1),
             negotiating_in: Vec::new(),
             negotiating_out: Vec::new(),
             queued_dial_upgrades: Vec::new(),

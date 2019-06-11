@@ -1622,8 +1622,20 @@ where
             .close();
     }
 
+    /// Returns the connection info for this node.
+    // TODO: we would love to return a `&'a TConnInfo`, but this isn't possible because of lifetime
+    //       issues; see the corresponding method in collection.rs module
+    // TODO: should take a `&self`, but the API in collection.rs requires &mut
+    pub fn connection_info(&mut self) -> TConnInfo
+    where
+        TConnInfo: Clone,
+    {
+        self.active_nodes.peer_mut(&self.peer_id)
+            .expect("A PeerConnected is always created with a PeerId in active_nodes; QED")
+            .info().0.clone()
+    }
+
     /// Returns the endpoint we're connected to.
-    #[inline]
     pub fn endpoint(&self) -> &ConnectedPoint {
         self.connected_points.get(&self.peer_id)
             .expect("We insert into connected_points whenever a connection is opened and remove \
