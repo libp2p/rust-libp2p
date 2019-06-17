@@ -287,7 +287,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
                     }
                 },
-                Async::Ready(RawSwarmEvent::NodeClosed { conn_info, endpoint, error }) => {
+                Async::Ready(RawSwarmEvent::NodeClosed { conn_info, endpoint, .. }) => {
                     self.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { new_info, closed_endpoint, endpoint, .. }) => {
