@@ -44,8 +44,8 @@ where
 
 impl<A, B> std::error::Error for EitherError<A, B>
 where
-    A: fmt::Debug + std::error::Error,
-    B: fmt::Debug + std::error::Error
+    A: std::error::Error,
+    B: std::error::Error
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -68,11 +68,17 @@ where
     A: AsyncRead,
     B: AsyncRead,
 {
-    #[inline]
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         match self {
             EitherOutput::First(a) => a.prepare_uninitialized_buffer(buf),
             EitherOutput::Second(b) => b.prepare_uninitialized_buffer(buf),
+        }
+    }
+
+    fn read_buf<Bu: bytes::BufMut>(&mut self, buf: &mut Bu) -> Poll<usize, IoError> {
+        match self {
+            EitherOutput::First(a) => a.read_buf(buf),
+            EitherOutput::Second(b) => b.read_buf(buf),
         }
     }
 }
@@ -82,7 +88,6 @@ where
     A: Read,
     B: Read,
 {
-    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         match self {
             EitherOutput::First(a) => a.read(buf),
@@ -96,7 +101,6 @@ where
     A: AsyncWrite,
     B: AsyncWrite,
 {
-    #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
         match self {
             EitherOutput::First(a) => a.shutdown(),
@@ -110,7 +114,6 @@ where
     A: Write,
     B: Write,
 {
-    #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         match self {
             EitherOutput::First(a) => a.write(buf),
@@ -118,11 +121,56 @@ where
         }
     }
 
-    #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
         match self {
             EitherOutput::First(a) => a.flush(),
             EitherOutput::Second(b) => b.flush(),
+        }
+    }
+}
+
+impl<A, B, I> Stream for EitherOutput<A, B>
+where
+    A: Stream<Item = I>,
+    B: Stream<Item = I>,
+{
+    type Item = I;
+    type Error = EitherError<A::Error, B::Error>;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match self {
+            EitherOutput::First(a) => a.poll().map_err(EitherError::A),
+            EitherOutput::Second(b) => b.poll().map_err(EitherError::B),
+        }
+    }
+}
+
+impl<A, B, I> Sink for EitherOutput<A, B>
+where
+    A: Sink<SinkItem = I>,
+    B: Sink<SinkItem = I>,
+{
+    type SinkItem = I;
+    type SinkError = EitherError<A::SinkError, B::SinkError>;
+
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        match self {
+            EitherOutput::First(a) => a.start_send(item).map_err(EitherError::A),
+            EitherOutput::Second(b) => b.start_send(item).map_err(EitherError::B),
+        }
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        match self {
+            EitherOutput::First(a) => a.poll_complete().map_err(EitherError::A),
+            EitherOutput::Second(b) => b.poll_complete().map_err(EitherError::B),
+        }
+    }
+
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        match self {
+            EitherOutput::First(a) => a.close().map_err(EitherError::A),
+            EitherOutput::Second(b) => b.close().map_err(EitherError::B),
         }
     }
 }
@@ -176,6 +224,13 @@ where
                     _ => panic!("Wrong API usage")
                 }
             },
+        }
+    }
+
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        match self {
+            EitherOutput::First(ref inner) => inner.prepare_uninitialized_buffer(buf),
+            EitherOutput::Second(ref inner) => inner.prepare_uninitialized_buffer(buf),
         }
     }
 
@@ -289,7 +344,6 @@ where
     type Item = ListenerEvent<EitherFuture<AInner, BInner>>;
     type Error = EitherError<AStream::Error, BStream::Error>;
 
-    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self {
             EitherListenStream::First(a) => a.poll()
@@ -318,7 +372,6 @@ where
     type Item = EitherOutput<AInner, BInner>;
     type Error = EitherError<AFuture::Error, BFuture::Error>;
 
-    #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
             EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)).map_err(EitherError::A),

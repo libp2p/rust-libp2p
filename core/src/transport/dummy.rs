@@ -94,6 +94,9 @@ impl io::Write for DummyStream {
 }
 
 impl tokio_io::AsyncRead for DummyStream {
+    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
+        false
+    }
 }
 
 impl tokio_io::AsyncWrite for DummyStream {

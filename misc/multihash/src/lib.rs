@@ -158,6 +158,12 @@ impl Multihash {
     }
 }
 
+impl AsRef<[u8]> for Multihash {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
     #[inline]
     fn eq(&self, other: &MultihashRef<'a>) -> bool {

@@ -132,6 +132,20 @@ pub trait StreamMuxer {
     /// happened.
     fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error>;
 
+    /// Mimics the `prepare_uninitialized_buffer` method of the `AsyncRead` trait.
+    ///
+    /// This function isn't actually unsafe to call but unsafe to implement. The implementer must
+    /// ensure that either the whole buf has been zeroed or that `read_substream` overwrites the
+    /// buffer without reading it and returns correct value.
+    ///
+    /// If this function returns true, then the memory has been zeroed out. This allows
+    /// implementations of `AsyncRead` which are composed of multiple subimplementations to
+    /// efficiently implement `prepare_uninitialized_buffer`.
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        for b in buf.iter_mut() { *b = 0; }
+        true
+    }
+
     /// Write data to a substream. The behaviour is the same as `tokio_io::AsyncWrite::poll_write`.
     ///
     /// If `NotReady` is returned, then the current task will be notified once the substream
@@ -369,7 +383,10 @@ where
     P: Deref,
     P::Target: StreamMuxer,
 {
-    #[inline]
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.muxer.prepare_uninitialized_buffer(buf)
+    }
+
     fn poll_read(&mut self, buf: &mut [u8]) -> Poll<usize, io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
         self.muxer.read_substream(s, buf).map_err(|e| e.into())
@@ -488,6 +505,10 @@ impl StreamMuxer for StreamMuxerBox {
         self.inner.destroy_outbound(substream)
     }
 
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.inner.prepare_uninitialized_buffer(buf)
+    }
+
     #[inline]
     fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error> {
         self.inner.read_substream(s, buf)
@@ -577,6 +598,10 @@ where
     fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
         let mut list = self.outbound.lock();
         self.inner.destroy_outbound(list.remove(&substream).unwrap())
+    }
+
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.inner.prepare_uninitialized_buffer(buf)
     }
 
     #[inline]

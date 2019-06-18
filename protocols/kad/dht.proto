@@ -1,7 +1,24 @@
-syntax = "proto2";
+syntax = "proto3";
 package dht.pb;
 
-import "record.proto";
+// Record represents a dht record that contains a value
+// for a key value pair
+message Record {
+	// The key that references this record
+	bytes key = 1;
+
+	// The actual value this record is storing
+	bytes value = 2;
+
+	// Note: These fields were removed from the Record message
+	// hash of the authors public key
+	//optional string author = 3;
+	// A PKI signature for the key+value+author
+	//optional bytes signature = 4;
+
+	// Time the record was received, set by receiver
+	string timeReceived = 5;
+};
 
 message Message {
 	enum MessageType {
@@ -30,28 +47,29 @@ message Message {
 
 	message Peer {
 		// ID of a given peer.
-		optional bytes id = 1;
+		bytes id = 1;
 
 		// multiaddrs for a given peer
 		repeated bytes addrs = 2;
 
 		// used to signal the sender's connection capabilities to the peer
-		optional ConnectionType connection = 3;
+		ConnectionType connection = 3;
 	}
 
 	// defines what type of message it is.
-	optional MessageType type = 1;
+	MessageType type = 1;
 
 	// defines what coral cluster level this query/response belongs to.
-	optional int32 clusterLevelRaw = 10;
+	// in case we want to implement coral's cluster rings in the future.
+	int32 clusterLevelRaw = 10; // NOT USED
 
 	// Used to specify the key associated with this message.
 	// PUT_VALUE, GET_VALUE, ADD_PROVIDER, GET_PROVIDERS
-	optional bytes key = 2;
+	bytes key = 2;
 
 	// Used to return a value
 	// PUT_VALUE, GET_VALUE
-	optional record.pb.Record record = 3;
+	Record record = 3;
 
 	// Used to return peers closer to a key in a query
 	// GET_VALUE, GET_PROVIDERS, FIND_NODE

@@ -1,3 +1,44 @@
+# Version 0.9.1 (2019-06-05)
+
+- `EitherOutput` now implements `Stream` and `Sink` if their variants also implement these traits.
+- `libp2p::websocket::error::Error` now implements `Sync`.
+
+# Version 0.9.0 (2019-06-04)
+
+- Major fixes and performance improvements to libp2p-kad.
+- Initial prototype for record storage in libp2p-kad.
+- Rewrote the implementation of WebSockets. It now properly supports WebSockets Secure (WSS).
+- Removed `BrowserWsConfig`. Please use `libp2p::wasm_ext::ExtTransport` instead.
+- Added a `Path` parameter to `multiaddr::Protocol::WS` and `WSS`. The string representation when a path is present is respectively `x-parity-ws/<path>` and `x-parity-wss/<path>` where `<path>` is percent-encoded.
+- Fixed an issue with `libp2p-tcp` where the wrong listened address was returned, if the actual address was loopback.
+- Added `core::upgrade::OptionalUpgrade`.
+- Added some utility functions in `core::identity::secp256k1`.
+- It is now possible to inject an artificial connection in the `RawSwarm`.
+
+# Version 0.8.1 (2019-05-15)
+
+- Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
+
+# Version 0.8.0 (2019-05-15)
+
+- Crate now successfully runs from within the browser when compiled to WASM.
+- Modified the constructors of `NoiseConfig` to accept any type of public key. The Noise handshake has consequently been modified.
+- Changed the `StreamMuxer` trait to have an `Error` associated type.
+- The `Swarm` now ranks externally-visible multiaddresses by how often they have been reported, ensuring that weird or malicious reports don't affect connectivity too much.
+- Added `IntoProtocolsHandler::inbound_protocol`. Must return the same value as what `ProtocolsHandler::listen_protocol` would return.
+- `IntoProtocolsHandler::into_handler` now takes a second parameter with the `&ConnectedPoint` to the node we are connected to.
+- Replaced the `secp256k1` crate with `libsecp256k1`.
+- Fixed `Kademlia::add_providing` taking a `PeerId` instead of a `Multihash`.
+- Fixed various bugs in the implementation of `Kademlia`.
+- Added `OneSubstreamMuxer`.
+- Added the `libp2p-wasm-ext` crate.
+- Added `multiaddr::from_url`.
+- Added `OptionalTransport`.
+
+# Version 0.7.1 (2019-05-15)
+
+- Fixed a vulnerability in ED25519 signatures verification in libp2p-core.
+
 # Version 0.7.0 (2019-04-23)
 
 - Fixed the inactive connections shutdown mechanism not working.

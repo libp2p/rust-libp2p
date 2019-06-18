@@ -163,6 +163,8 @@ pub use tokio_io;
 
 #[doc(inline)]
 pub use libp2p_core as core;
+#[doc(inline)]
+pub use libp2p_deflate as deflate;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
@@ -195,7 +197,9 @@ pub use libp2p_secio as secio;
 pub use libp2p_tcp as tcp;
 #[doc(inline)]
 pub use libp2p_uds as uds;
-#[cfg(feature = "libp2p-websocket")]
+#[doc(inline)]
+pub use libp2p_wasm_ext as wasm_ext;
+#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
 #[doc(inline)]
@@ -269,18 +273,14 @@ pub fn build_tcp_ws_secio_mplex_yamux(
 > + Clone {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(keypair))
-        .and_then(move |out, endpoint| {
-            let peer_id = PeerId::from(out.remote_key);
+        .and_then(move |output, endpoint| {
+            let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(
-                yamux::Config::default(),
-                mplex::MplexConfig::new(),
-            )
-            // TODO: use a single `.map` instead of two maps
-            .map_inbound(move |muxer| (peer_id, muxer))
-            .map_outbound(move |muxer| (peer_id2, muxer));
-
-            core::upgrade::apply(out.stream, upgrade, endpoint)
+            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+                // TODO: use a single `.map` instead of two maps
+                .map_inbound(move |muxer| (peer_id, muxer))
+                .map_outbound(move |muxer| (peer_id2, muxer));
+            core::upgrade::apply(output.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })
         .with_timeout(Duration::from_secs(20))
@@ -309,15 +309,7 @@ type InnerImplementation = core::transport::OrTransport<
     not(feature = "libp2p-websocket")
 ))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(all(
-    any(target_os = "emscripten", target_os = "unknown"),
-    feature = "libp2p-websocket"
-))]
-type InnerImplementation = websocket::BrowserWsConfig;
-#[cfg(all(
-    any(target_os = "emscripten", target_os = "unknown"),
-    not(feature = "libp2p-websocket")
-))]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 type InnerImplementation = core::transport::dummy::DummyTransport;
 
 #[derive(Debug, Clone)]
@@ -343,22 +335,7 @@ impl CommonTransport {
     }
 
     /// Initializes the `CommonTransport`.
-    #[cfg(all(
-        any(target_os = "emscripten", target_os = "unknown"),
-        feature = "libp2p-websocket"
-    ))]
-    pub fn new() -> CommonTransport {
-        let inner = websocket::BrowserWsConfig::new();
-        CommonTransport {
-            inner: CommonTransportInner { inner },
-        }
-    }
-
-    /// Initializes the `CommonTransport`.
-    #[cfg(all(
-        any(target_os = "emscripten", target_os = "unknown"),
-        not(feature = "libp2p-websocket")
-    ))]
+    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
     pub fn new() -> CommonTransport {
         let inner = core::transport::dummy::DummyTransport::new();
         CommonTransport {
