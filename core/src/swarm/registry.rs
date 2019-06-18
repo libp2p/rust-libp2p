@@ -27,7 +27,7 @@ use std::num::NonZeroUsize;
 /// Every address has an associated score and iterating over addresses will return them
 /// in order from highest to lowest. When reaching the limit, addresses with the lowest
 /// score will be dropped first.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Addresses {
     /// Max. length of `registry`.
     limit: NonZeroUsize,
@@ -82,6 +82,13 @@ impl Addresses {
     pub fn iter(&self) -> AddressIter<'_> {
         AddressIter { items: &self.registry, offset: 0 }
     }
+
+    /// Return an iterator over all [`Multiaddr`] values.
+    ///
+    /// The iteration is ordered by descending score.
+    pub fn into_iter(self) -> AddressIntoIter {
+        AddressIntoIter { items: self.registry }
+    }
 }
 
 /// An iterator over [`Multiaddr`] values.
@@ -110,6 +117,31 @@ impl<'a> Iterator for AddressIter<'a> {
 }
 
 impl<'a> ExactSizeIterator for AddressIter<'a> {}
+
+/// An iterator over [`Multiaddr`] values.
+#[derive(Clone)]
+pub struct AddressIntoIter {
+    items: SmallVec<[Record; 8]>,
+}
+
+impl Iterator for AddressIntoIter {
+    type Item = Multiaddr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.items.is_empty() {
+            Some(self.items.remove(0).addr)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.items.len();
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for AddressIntoIter {}
 
 // Reverse insertion sort.
 fn isort(xs: &mut [Record]) {

@@ -172,7 +172,7 @@ where
 
     fn poll(
         &mut self,
-        params: &mut PollParameters<'_>,
+        params: &mut impl PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -214,7 +214,7 @@ where
                 MdnsPacket::Query(query) => {
                     let _ = query.respond(
                         params.local_peer_id().clone(),
-                        params.listened_addresses().cloned(),
+                        params.listened_addresses(),
                         Duration::from_secs(5 * 60)
                     );
                 },
