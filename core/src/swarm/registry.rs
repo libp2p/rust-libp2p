@@ -20,7 +20,7 @@
 
 use crate::Multiaddr;
 use smallvec::SmallVec;
-use std::num::NonZeroUsize;
+use std::{collections::VecDeque, num::NonZeroUsize};
 
 /// Hold a ranked collection of [`Multiaddr`] values.
 ///
@@ -32,7 +32,10 @@ pub struct Addresses {
     /// Max. length of `registry`.
     limit: NonZeroUsize,
     /// The ranked sequence of addresses.
-    registry: SmallVec<[Record; 8]>
+    registry: SmallVec<[Record; 8]>,
+    /// Queue of last reports. Every new report is added to the queue. If the queue reaches its
+    /// capacity, we also pop the first element.
+    reports: VecDeque<Multiaddr>,
 }
 
 // An address record associates a score to a Multiaddr.
@@ -53,7 +56,8 @@ impl Addresses {
     pub fn new(limit: NonZeroUsize) -> Self {
         Addresses {
             limit,
-            registry: SmallVec::new()
+            registry: SmallVec::new(),
+            reports: VecDeque::with_capacity(200),
         }
     }
 
@@ -62,17 +66,41 @@ impl Addresses {
     /// Adding an existing address is interpreted as additional
     /// confirmation and thus increases its score.
     pub fn add(&mut self, a: Multiaddr) {
+        debug_assert_ne!(self.reports.capacity(), 0);
+
+        let oldest = if self.reports.len() == self.reports.capacity() {
+            self.reports.pop_front()
+        } else {
+            None
+        };
+
+        if let Some(oldest) = oldest {
+            if let Some(in_registry) = self.registry.iter_mut().find(|r| r.addr == oldest) {
+                in_registry.score = in_registry.score.saturating_sub(1);
+                isort(&mut self.registry);
+            }
+        }
+
+        // Remove addresses that have a score of 0.
+        while self.registry.last_mut().map(|e| e.score == 0).unwrap_or(false) {
+            self.registry.pop();
+        }
+
+        self.reports.push_back(a.clone());
+
         for r in &mut self.registry {
             if &r.addr == &a {
                 r.score = r.score.saturating_add(1);
                 isort(&mut self.registry);
-                return ()
+                return
             }
         }
+
         if self.registry.len() == self.limit.get() {
             self.registry.pop();
         }
-        let r = Record { score: 0, addr: a };
+
+        let r = Record { score: 1, addr: a };
         self.registry.push(r)
     }
 
@@ -159,7 +187,7 @@ fn isort(xs: &mut [Record]) {
 mod tests {
     use crate::Multiaddr;
     use quickcheck::QuickCheck;
-    use super::{isort, Record};
+    use super::{isort, Addresses, Record};
 
     #[test]
     fn isort_sorts() {
@@ -177,5 +205,24 @@ mod tests {
             true
         }
         QuickCheck::new().quickcheck(property as fn(Vec<u32>) -> bool)
+    }
+
+    #[test]
+    fn old_reports_disappear() {
+        let mut addresses = Addresses::default();
+
+        // Add an address a single time.
+        let single: Multiaddr = "/tcp/2108".parse().unwrap();
+        addresses.add(single.clone());
+        assert!(addresses.iter().find(|a| **a == single).is_some());
+
+        // Then fill `addresses` with random stuff.
+        let other: Multiaddr = "/tcp/120".parse().unwrap();
+        for _ in 0 .. 2000 {
+            addresses.add(other.clone());
+        }
+
+        // Check that `single` disappeared from the list.
+        assert!(addresses.iter().find(|a| **a == single).is_none());
     }
 }
