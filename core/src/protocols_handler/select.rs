@@ -209,41 +209,38 @@ where
     }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
-        loop {
-            match self.proto1.poll().map_err(EitherError::A)? {
-                Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event))));
-                },
-                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol,
-                    info,
-                }) => {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: protocol.map_upgrade(EitherUpgrade::A),
-                        info: EitherOutput::First(info),
-                    }));
-                },
-                Async::NotReady => ()
-            };
 
-            match self.proto2.poll().map_err(EitherError::B)? {
-                Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event))));
-                },
-                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol,
-                    info,
-                }) => {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: protocol.map_upgrade(EitherUpgrade::B),
-                        info: EitherOutput::Second(info),
-                    }));
-                },
-                Async::NotReady => ()
-            };
+        match self.proto1.poll().map_err(EitherError::A)? {
+            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event))));
+            },
+            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                protocol,
+                info,
+            }) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: protocol.map_upgrade(EitherUpgrade::A),
+                    info: EitherOutput::First(info),
+                }));
+            },
+            Async::NotReady => ()
+        };
 
-            break;
-        }
+        match self.proto2.poll().map_err(EitherError::B)? {
+            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event))));
+            },
+            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                protocol,
+                info,
+            }) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: protocol.map_upgrade(EitherUpgrade::B),
+                    info: EitherOutput::Second(info),
+                }));
+            },
+            Async::NotReady => ()
+        };
 
         Ok(Async::NotReady)
     }
