@@ -123,7 +123,7 @@ where
         }
     }
 
-    fn poll(&mut self, params: &mut PollParameters<'_>)
+    fn poll(&mut self, params: &mut impl PollParameters)
         -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
         if let Some(inner) = self.inner.as_mut() {

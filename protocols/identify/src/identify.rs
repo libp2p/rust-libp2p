@@ -129,7 +129,7 @@ where
 
     fn poll(
         &mut self,
-        params: &mut PollParameters<'_>,
+        params: &mut impl PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -145,11 +145,11 @@ where
             // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
             let protocols = params
                 .supported_protocols()
-                .map(|p| String::from_utf8_lossy(p).to_string())
+                .map(|p| String::from_utf8_lossy(&p).to_string())
                 .collect();
 
-            let mut listen_addrs: Vec<_> = params.external_addresses().cloned().collect();
-            listen_addrs.extend(params.listened_addresses().cloned());
+            let mut listen_addrs: Vec<_> = params.external_addresses().collect();
+            listen_addrs.extend(params.listened_addresses());
 
             let send_back_info = IdentifyInfo {
                 public_key: self.local_public_key.clone(),
