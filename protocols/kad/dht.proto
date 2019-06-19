@@ -18,6 +18,14 @@ message Record {
 
 	// Time the record was received, set by receiver
 	string timeReceived = 5;
+
+    // The original publisher of the record.
+    // Currently specific to rust-libp2p.
+    bytes publisher = 666;
+
+    // The remaining TTL of the record, in seconds.
+    // Currently specific to rust-libp2p.
+    uint32 ttl = 777;
 };
 
 message Message {

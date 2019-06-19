@@ -35,15 +35,15 @@ pub struct EntryRefView<'a, TPeerId, TVal> {
 }
 
 /// An immutable by-reference view of a `Node`.
-pub struct NodeRefView<'a, TPeerId, TVal> {
-    pub key: &'a Key<TPeerId>,
+pub struct NodeRefView<'a, TKey, TVal> {
+    pub key: &'a TKey,
     pub value: &'a TVal
 }
 
-impl<TPeerId, TVal> EntryRefView<'_, TPeerId, TVal> {
-    pub fn to_owned(&self) -> EntryView<TPeerId, TVal>
+impl<TKey, TVal> EntryRefView<'_, TKey, TVal> {
+    pub fn to_owned(&self) -> EntryView<TKey, TVal>
     where
-        TPeerId: Clone,
+        TKey: Clone,
         TVal: Clone
     {
         EntryView {
@@ -59,16 +59,16 @@ impl<TPeerId, TVal> EntryRefView<'_, TPeerId, TVal> {
 /// A cloned, immutable view of an entry that is either present in a bucket
 /// or pending insertion.
 #[derive(Clone, Debug)]
-pub struct EntryView<TPeerId, TVal> {
+pub struct EntryView<TKey, TVal> {
     /// The node represented by the entry.
-    pub node: Node<TPeerId, TVal>,
+    pub node: Node<TKey, TVal>,
     /// The status of the node.
     pub status: NodeStatus
 }
 
-impl<TPeerId, TVal> AsRef<Key<TPeerId>> for EntryView<TPeerId, TVal> {
-    fn as_ref(&self) -> &Key<TPeerId> {
-        &self.node.key
+impl<TKey: AsRef<KeyBytes>, TVal> AsRef<KeyBytes> for EntryView<TKey, TVal> {
+    fn as_ref(&self) -> &KeyBytes {
+        self.node.key.as_ref()
     }
 }
 
@@ -88,17 +88,18 @@ pub enum Entry<'a, TPeerId, TVal> {
 /// The internal representation of the different states of an `Entry`,
 /// referencing the associated key and bucket.
 #[derive(Debug)]
-struct EntryRef<'a, TPeerId, TVal> {
-    bucket: &'a mut KBucket<TPeerId, TVal>,
-    key: &'a Key<TPeerId>,
+struct EntryRef<'a, TKey, TVal> {
+    bucket: &'a mut KBucket<TKey, TVal>,
+    key: &'a TKey,
 }
 
-impl<'a, TPeerId, TVal> Entry<'a, TPeerId, TVal>
+impl<'a, TKey, TVal> Entry<'a, TKey, TVal>
 where
-    TPeerId: Clone,
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone
 {
     /// Creates a new `Entry` for a `Key`, encapsulating access to a bucket.
-    pub(super) fn new(bucket: &'a mut KBucket<TPeerId, TVal>, key: &'a Key<TPeerId>) -> Self {
+    pub(super) fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         if let Some(pos) = bucket.position(key) {
             let status = bucket.status(pos);
             Entry::Present(PresentEntry::new(bucket, key), status)
@@ -114,7 +115,7 @@ where
     ///
     /// Returns `None` if the entry is neither present in a bucket nor
     /// pending insertion into a bucket.
-    pub fn view(&'a mut self) -> Option<EntryRefView<'a, TPeerId, TVal>> {
+    pub fn view(&'a mut self) -> Option<EntryRefView<'a, TKey, TVal>> {
         match self {
             Entry::Present(entry, status) => Some(EntryRefView {
                 node: NodeRefView {
@@ -139,7 +140,7 @@ where
     /// Returns `None` if the `Key` used to construct this `Entry` is not a valid
     /// key for an entry in a bucket, which is the case for the `local_key` of
     /// the `KBucketsTable` referring to the local node.
-    pub fn key(&self) -> Option<&Key<TPeerId>> {
+    pub fn key(&self) -> Option<&TKey> {
         match self {
             Entry::Present(entry, _) => Some(entry.key()),
             Entry::Pending(entry, _) => Some(entry.key()),
@@ -150,7 +151,7 @@ where
 
     /// Returns the value associated with the entry.
     ///
-    /// Returns `None` if the entry absent from any bucket or refers to the
+    /// Returns `None` if the entry is absent from any bucket or refers to the
     /// local node.
     pub fn value(&mut self) -> Option<&mut TVal> {
         match self {
@@ -164,18 +165,19 @@ where
 
 /// An entry present in a bucket.
 #[derive(Debug)]
-pub struct PresentEntry<'a, TPeerId, TVal>(EntryRef<'a, TPeerId, TVal>);
+pub struct PresentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
 
-impl<'a, TPeerId, TVal> PresentEntry<'a, TPeerId, TVal>
+impl<'a, TKey, TVal> PresentEntry<'a, TKey, TVal>
 where
-    TPeerId: Clone,
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone
 {
-    fn new(bucket: &'a mut KBucket<TPeerId, TVal>, key: &'a Key<TPeerId>) -> Self {
+    fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         PresentEntry(EntryRef { bucket, key })
     }
 
     /// Returns the key of the entry.
-    pub fn key(&self) -> &Key<TPeerId> {
+    pub fn key(&self) -> &TKey {
         self.0.key
     }
 
@@ -196,18 +198,19 @@ where
 
 /// An entry waiting for a slot to be available in a bucket.
 #[derive(Debug)]
-pub struct PendingEntry<'a, TPeerId, TVal>(EntryRef<'a, TPeerId, TVal>);
+pub struct PendingEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
 
-impl<'a, TPeerId, TVal> PendingEntry<'a, TPeerId, TVal>
+impl<'a, TKey, TVal> PendingEntry<'a, TKey, TVal>
 where
-    TPeerId: Clone,
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone
 {
-    fn new(bucket: &'a mut KBucket<TPeerId, TVal>, key: &'a Key<TPeerId>) -> Self {
+    fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         PendingEntry(EntryRef { bucket, key })
     }
 
     /// Returns the key of the entry.
-    pub fn key(&self) -> &Key<TPeerId> {
+    pub fn key(&self) -> &TKey {
         self.0.key
     }
 
@@ -220,7 +223,7 @@ where
     }
 
     /// Updates the status of the pending entry.
-    pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TPeerId, TVal> {
+    pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TKey, TVal> {
         self.0.bucket.update_pending(status);
         PendingEntry::new(self.0.bucket, self.0.key)
     }
@@ -228,23 +231,24 @@ where
 
 /// An entry that is not present in any bucket.
 #[derive(Debug)]
-pub struct AbsentEntry<'a, TPeerId, TVal>(EntryRef<'a, TPeerId, TVal>);
+pub struct AbsentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
 
-impl<'a, TPeerId, TVal> AbsentEntry<'a, TPeerId, TVal>
+impl<'a, TKey, TVal> AbsentEntry<'a, TKey, TVal>
 where
-    TPeerId: Clone,
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone
 {
-    fn new(bucket: &'a mut KBucket<TPeerId, TVal>, key: &'a Key<TPeerId>) -> Self {
+    fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         AbsentEntry(EntryRef { bucket, key })
     }
 
     /// Returns the key of the entry.
-    pub fn key(&self) -> &Key<TPeerId> {
+    pub fn key(&self) -> &TKey {
         self.0.key
     }
 
     /// Attempts to insert the entry into a bucket.
-    pub fn insert(self, value: TVal, status: NodeStatus) -> InsertResult<TPeerId> {
+    pub fn insert(self, value: TVal, status: NodeStatus) -> InsertResult<TKey> {
         self.0.bucket.insert(Node {
             key: self.0.key.clone(),
             value
