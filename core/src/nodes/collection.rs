@@ -572,6 +572,8 @@ pub struct PeerMut<'a, TInEvent, TUserData, TConnInfo = PeerId, TPeerId = PeerId
 
 impl<'a, TInEvent, TUserData, TConnInfo, TPeerId> PeerMut<'a, TInEvent, TUserData, TConnInfo, TPeerId> {
     /// Returns the information of the connection with the peer.
+    // TODO: we would love to return a `&'a TConnInfo`, but this isn't possible because we have
+    //       a mutable borrow.
     pub fn info(&self) -> &TConnInfo {
         match self.inner.user_data() {
             TaskState::Connected(conn_info, _) => conn_info,
