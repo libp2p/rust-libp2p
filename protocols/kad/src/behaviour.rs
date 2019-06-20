@@ -800,7 +800,7 @@ where
 
     fn poll(
         &mut self,
-        parameters: &mut PollParameters<'_>,
+        parameters: &mut impl PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -937,7 +937,7 @@ where
                                     key: target.clone(),
                                     provider_peer: KadPeer {
                                         node_id: parameters.local_peer_id().clone(),
-                                        multiaddrs: parameters.external_addresses().cloned().collect(),
+                                        multiaddrs: parameters.external_addresses().collect(),
                                         connection_ty: KadConnectionType::Connected,
                                     }
                                 },
