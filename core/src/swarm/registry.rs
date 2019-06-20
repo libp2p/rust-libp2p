@@ -29,10 +29,10 @@ use std::{collections::VecDeque, num::NonZeroUsize};
 /// score will be dropped first.
 #[derive(Debug, Clone)]
 pub struct Addresses {
-    /// Max. length of `registry`.
-    limit: NonZeroUsize,
     /// The ranked sequence of addresses.
     registry: SmallVec<[Record; 8]>,
+    /// Number of historical reports. Similar to `reports.capacity()`.
+    limit: NonZeroUsize,
     /// Queue of last reports. Every new report is added to the queue. If the queue reaches its
     /// capacity, we also pop the first element.
     reports: VecDeque<Multiaddr>,
@@ -47,7 +47,7 @@ struct Record {
 
 impl Default for Addresses {
     fn default() -> Self {
-        Addresses::new(NonZeroUsize::new(30).expect("30 > 0"))
+        Addresses::new(NonZeroUsize::new(200).expect("200 > 0"))
     }
 }
 
@@ -55,9 +55,9 @@ impl Addresses {
     /// Create a new address collection of bounded length.
     pub fn new(limit: NonZeroUsize) -> Self {
         Addresses {
-            limit,
             registry: SmallVec::new(),
-            reports: VecDeque::with_capacity(200),
+            limit,
+            reports: VecDeque::with_capacity(limit.get()),
         }
     }
 
@@ -68,7 +68,7 @@ impl Addresses {
     pub fn add(&mut self, a: Multiaddr) {
         debug_assert_ne!(self.reports.capacity(), 0);
 
-        let oldest = if self.reports.len() == self.reports.capacity() {
+        let oldest = if self.reports.len() == self.limit.get() {
             self.reports.pop_front()
         } else {
             None
@@ -82,22 +82,18 @@ impl Addresses {
         }
 
         // Remove addresses that have a score of 0.
-        while self.registry.last_mut().map(|e| e.score == 0).unwrap_or(false) {
+        while self.registry.last().map(|e| e.score == 0).unwrap_or(false) {
             self.registry.pop();
         }
 
         self.reports.push_back(a.clone());
 
         for r in &mut self.registry {
-            if &r.addr == &a {
+            if r.addr == a {
                 r.score = r.score.saturating_add(1);
                 isort(&mut self.registry);
                 return
             }
-        }
-
-        if self.registry.len() == self.limit.get() {
-            self.registry.pop();
         }
 
         let r = Record { score: 1, addr: a };
@@ -224,5 +220,43 @@ mod tests {
 
         // Check that `single` disappeared from the list.
         assert!(addresses.iter().find(|a| **a == single).is_none());
+    }
+
+    #[test]
+    fn record_score_equals_last_n_reports() {
+        use multiaddr::Protocol;
+        use quickcheck::{Arbitrary, Gen};
+        use rand::Rng;
+        use std::num::NonZeroUsize;
+
+        #[derive(PartialEq, Eq, Clone, Hash, Debug)]
+        struct Ma(Multiaddr);
+
+        impl Arbitrary for Ma {
+            fn arbitrary<G: Gen>(g: &mut G) -> Self {
+                Ma(Protocol::Tcp(g.gen::<u16>() % 16).into())
+            }
+        }
+
+        fn property(xs: Vec<Ma>, n: u8) -> bool {
+            let n = std::cmp::max(n, 1);
+            let mut addresses = Addresses::new(NonZeroUsize::new(usize::from(n)).unwrap());
+            for Ma(a) in &xs {
+                addresses.add(a.clone())
+            }
+            for r in &addresses.registry {
+                let count = xs.iter()
+                    .rev()
+                    .take(usize::from(n))
+                    .filter(|Ma(x)| x == &r.addr)
+                    .count();
+                if r.score as usize != count {
+                    return false
+                }
+            }
+            true
+        }
+
+        QuickCheck::new().quickcheck(property as fn(Vec<Ma>, u8) -> bool)
     }
 }
