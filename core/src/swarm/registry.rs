@@ -66,7 +66,6 @@ impl Addresses {
     /// Adding an existing address is interpreted as additional
     /// confirmation and thus increases its score.
     pub fn add(&mut self, a: Multiaddr) {
-        debug_assert_ne!(self.reports.capacity(), 0);
 
         let oldest = if self.reports.len() == self.limit.get() {
             self.reports.pop_front()
