@@ -75,6 +75,12 @@ impl<T> WsConfig<T> {
         self.transport.set_tls_config(c);
         self
     }
+
+    /// Should the deflate extension (RFC 7692) be used if supported?
+    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
+        self.transport.use_deflate(flag);
+        self
+    }
 }
 
 impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
