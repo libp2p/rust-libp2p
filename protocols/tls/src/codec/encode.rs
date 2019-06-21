@@ -1,8 +1,11 @@
 use futures::prelude::*;
 use bytes::BytesMut;
+use rustls::ServerSession;
 
 pub struct EncoderMiddleware<S> {
     pub raw_sink: S,
+    tls_session: ServerSession,
+
 }
 
 impl<S> Sink for EncoderMiddleware<S>

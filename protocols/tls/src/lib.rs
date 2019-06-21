@@ -92,7 +92,7 @@ where
 /// Output of the tls protocol.
 pub struct TlsOutput<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<TlsMiddleware<S>, fn(IoError) -> IoError>>,
@@ -106,6 +106,8 @@ fn map_err(err: IoError) -> IoError {
 }
 
 pub struct TlsMiddleware<S>
+where
+    S: AsyncRead + AsyncWrite + Send,
 {
     inner: codec::FullCodec<S>,
 }
@@ -124,9 +126,9 @@ where
 
 impl<S> Sink for TlsMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
-    type SinkItem = BytesMut;
+    type SinkItem = Vec<u8>;
     type SinkError = IoError;
 
     #[inline]
@@ -148,9 +150,9 @@ where
 
 impl<S> Stream for TlsMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
-    type Item = BytesMut;
+    type Item = Vec<u8>;
     type Error = IoError;
 
     #[inline]
