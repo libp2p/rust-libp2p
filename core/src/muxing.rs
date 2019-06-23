@@ -442,24 +442,12 @@ where
         loop {
             match self.shutdown_state {
                 ShutdownState::Shutdown => {
-                    match self.muxer.shutdown_substream(s).map_err(|e| e.into())? {
-                        Async::Ready(()) => {
-                            self.shutdown_state = ShutdownState::Flush;
-                        }
-                        Async::NotReady => {
-                            return Ok(Async::NotReady);
-                        }
-                    }
+                    let _ = try_ready!(self.muxer.shutdown_substream(s).map_err(|e| e.into()));
+                    self.shutdown_state = ShutdownState::Flush;
                 }
                 ShutdownState::Flush => {
-                    match self.muxer.flush_substream(s).map_err(|e| e.into())? {
-                        Async::Ready(()) => {
-                            self.shutdown_state = ShutdownState::Done;
-                        }
-                        Async::NotReady => {
-                            return Ok(Async::NotReady);
-                        }
-                    }
+                    let _ = try_ready!(self.muxer.flush_substream(s).map_err(|e| e.into()));
+                    self.shutdown_state = ShutdownState::Done;
                 }
                 ShutdownState::Done => {
                     return Ok(Async::Ready(()));
