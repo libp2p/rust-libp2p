@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, stream, sync::mpsc};
+use futures::{prelude::*, future::Executor, stream, sync::mpsc};
 use smallvec::SmallVec;
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
@@ -35,7 +35,6 @@ use std::{
     fmt,
     mem
 };
-use tokio_executor::Executor;
 
 mod tests;
 
@@ -361,11 +360,9 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TConn
             // We try to use the default executor, but fall back to polling the task manually if
             // no executor is available. This makes it possible to use the core in environments
             // outside of tokio.
-            let mut executor = tokio_executor::DefaultExecutor::current();
-            if executor.status().is_ok() {
-                executor.spawn(to_spawn).expect("failed to create a node task");
-            } else {
-                self.local_spawns.push(to_spawn);
+            let executor = tokio_executor::DefaultExecutor::current();
+            if let Err(err) = executor.execute(to_spawn) {
+                self.local_spawns.push(err.into_future());
             }
         }
 
