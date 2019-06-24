@@ -338,6 +338,7 @@ where
     SubstreamRef {
         muxer,
         substream: Some(substream),
+        shutdown_state: ShutdownState::Shutdown,
     }
 }
 
@@ -349,6 +350,13 @@ where
 {
     muxer: P,
     substream: Option<<P::Target as StreamMuxer>::Substream>,
+    shutdown_state: ShutdownState,
+}
+
+enum ShutdownState {
+    Shutdown,
+    Flush,
+    Done,
 }
 
 impl<P> fmt::Debug for SubstreamRef<P>
@@ -431,8 +439,21 @@ where
     #[inline]
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         let s = self.substream.as_mut().expect("substream was empty");
-        self.muxer.shutdown_substream(s).map_err(|e| e.into())?;
-        Ok(Async::Ready(()))
+        loop {
+            match self.shutdown_state {
+                ShutdownState::Shutdown => {
+                    try_ready!(self.muxer.shutdown_substream(s).map_err(|e| e.into()));
+                    self.shutdown_state = ShutdownState::Flush;
+                }
+                ShutdownState::Flush => {
+                    try_ready!(self.muxer.flush_substream(s).map_err(|e| e.into()));
+                    self.shutdown_state = ShutdownState::Done;
+                }
+                ShutdownState::Done => {
+                    return Ok(Async::Ready(()));
+                }
+            }
+        }
     }
 
     #[inline]
