@@ -442,11 +442,11 @@ where
         loop {
             match self.shutdown_state {
                 ShutdownState::Shutdown => {
-                    let _ = try_ready!(self.muxer.shutdown_substream(s).map_err(|e| e.into()));
+                    try_ready!(self.muxer.shutdown_substream(s).map_err(|e| e.into()));
                     self.shutdown_state = ShutdownState::Flush;
                 }
                 ShutdownState::Flush => {
-                    let _ = try_ready!(self.muxer.flush_substream(s).map_err(|e| e.into()));
+                    try_ready!(self.muxer.flush_substream(s).map_err(|e| e.into()));
                     self.shutdown_state = ShutdownState::Done;
                 }
                 ShutdownState::Done => {
