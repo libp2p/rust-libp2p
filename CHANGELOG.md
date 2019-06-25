@@ -1,3 +1,12 @@
+# Version 0.10.0 (2019-06-25)
+
+- `PollParameters` is now a trait instead of a struct.
+- The `Swarm` can now be customized with connection information.
+- Fixed write-only substreams now delivering data properly.
+- Fixed the TCP listener accidentally shutting down if an incoming socket was closed too quickly.
+- Improved the heuristics for determining external multiaddresses based on reports.
+- Various fixes to Kademlia iterative queries and the WebSockets transport.
+
 # Version 0.9.1 (2019-06-05)
 
 - `EitherOutput` now implements `Stream` and `Sink` if their variants also implement these traits.
