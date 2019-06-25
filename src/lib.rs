@@ -163,6 +163,7 @@ pub use tokio_io;
 
 #[doc(inline)]
 pub use libp2p_core as core;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]

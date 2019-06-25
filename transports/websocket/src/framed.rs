@@ -29,8 +29,13 @@ use libp2p_core::{
 };
 use log::{debug, trace};
 use tokio_rustls::{client, server};
-use soketto::{base, connection::{Connection, Mode}, handshake::{self, Redirect, Response}};
-use std::io;
+use soketto::{
+    base,
+    connection::{Connection, Mode},
+    extension::deflate::Deflate,
+    handshake::{self, Redirect, Response}
+};
+use std::{convert::TryFrom, io};
 use tokio_codec::{Framed, FramedParts};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_rustls::webpki;
@@ -47,7 +52,8 @@ pub struct WsConfig<T> {
     transport: T,
     max_data_size: u64,
     tls_config: tls::Config,
-    max_redirects: u8
+    max_redirects: u8,
+    use_deflate: bool
 }
 
 impl<T> WsConfig<T> {
@@ -57,7 +63,8 @@ impl<T> WsConfig<T> {
             transport,
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
-            max_redirects: 0
+            max_redirects: 0,
+            use_deflate: false
         }
     }
 
@@ -86,6 +93,12 @@ impl<T> WsConfig<T> {
     /// Set the TLS configuration if TLS support is desired.
     pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
         self.tls_config = c;
+        self
+    }
+
+    /// Should the deflate extension (RFC 7692) be used if supported?
+    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
+        self.use_deflate = flag;
         self
     }
 }
@@ -125,6 +138,7 @@ where
 
         let tls_config = self.tls_config;
         let max_size = self.max_data_size;
+        let use_deflate = self.use_deflate;
         let listen = self.transport.listen_on(inner_addr)
             .map_err(|e| e.map(Error::Transport))?
             .map_err(Error::Transport)
@@ -163,7 +177,11 @@ where
                         })
                         .and_then(move |stream| {
                             trace!("receiving websocket handshake request from {}", remote2);
-                            Framed::new(stream, handshake::Server::new())
+                            let mut s = handshake::Server::new();
+                            if use_deflate {
+                                s.add_extension(Box::new(Deflate::new(Mode::Server)));
+                            }
+                            Framed::new(stream, s)
                                 .into_future()
                                 .map_err(|(e, _framed)| Error::Handshake(Box::new(e)))
                                 .and_then(move |(request, framed)| {
@@ -174,7 +192,9 @@ where
                                             .map_err(|e| Error::Base(Box::new(e)))
                                             .map(move |f| {
                                                 trace!("websocket handshake with {} successful", remote2);
-                                                let c = new_connection(f, max_size, Mode::Server);
+                                                let (mut handshake, mut c) =
+                                                    new_connection(f, max_size, Mode::Server);
+                                                c.add_extensions(handshake.drain_extensions());
                                                 BytesConnection { inner: c }
                                             }))
                                     } else {
@@ -264,6 +284,7 @@ where
 
     let address1 = address.clone(); // used for logging
     let address2 = address.clone(); // used for logging
+    let use_deflate = config.use_deflate;
     let future = dial.map_err(Error::Transport)
         .and_then(move |stream| {
             trace!("connected to {}", address);
@@ -283,7 +304,10 @@ where
         })
         .and_then(move |stream| {
             trace!("sending websocket handshake request to {}", address1);
-            let client = handshake::Client::new(host_port, path);
+            let mut client = handshake::Client::new(host_port, path);
+            if use_deflate {
+                client.add_extension(Box::new(Deflate::new(Mode::Client)));
+            }
             Framed::new(stream, client)
                 .send(())
                 .map_err(|e| Error::Handshake(Box::new(e)))
@@ -306,7 +330,8 @@ where
                             trace!("websocket handshake with {} successful", address1)
                         }
                     }
-                    let c = new_connection(framed, max_data_size, Mode::Client);
+                    let (mut handshake, mut c) = new_connection(framed, max_data_size, Mode::Client);
+                    c.add_extensions(handshake.drain_extensions());
                     Ok(Either::B(BytesConnection { inner: c }))
                 })
         });
@@ -372,7 +397,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 }
 
 /// Create a `Connection` from an existing `Framed` value.
-fn new_connection<T, C>(framed: Framed<T, C>, max_size: u64, mode: Mode) -> Connection<T>
+fn new_connection<T, C>(framed: Framed<T, C>, max_size: u64, mode: Mode) -> (C, Connection<T>)
 where
     T: AsyncRead + AsyncWrite
 {
@@ -383,7 +408,9 @@ where
     new.read_buf = old.read_buf;
     new.write_buf = old.write_buf;
     let framed = Framed::from_parts(new);
-    Connection::from_framed(framed, mode)
+    let mut conn = Connection::from_framed(framed, mode);
+    conn.set_max_buffer_size(usize::try_from(max_size).unwrap_or(std::usize::MAX));
+    (old.codec, conn)
 }
 
 // BytesConnection ////////////////////////////////////////////////////////////////////////////////

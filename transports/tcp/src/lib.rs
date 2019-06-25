@@ -50,7 +50,7 @@ use libp2p_core::{
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
-use log::{debug, error, trace};
+use log::{debug, trace};
 use std::{
     collections::VecDeque,
     fmt,
@@ -448,16 +448,16 @@ impl Stream for TcpListenStream {
             let sock_addr = match sock.peer_addr() {
                 Ok(addr) => addr,
                 Err(err) => {
-                    error!("Failed to get peer address: {:?}", err);
-                    return Err(err)
+                    debug!("Failed to get peer address: {:?}", err);
+                    continue
                 }
             };
 
             let listen_addr = match sock.local_addr() {
                 Ok(addr) => map_addr(&addr, &mut self.addrs, &mut self.pending, self.port)?,
                 Err(err) => {
-                    error!("Failed to get local address of incoming socket: {:?}", err);
-                    return Err(err)
+                    debug!("Failed to get local address of incoming socket: {:?}", err);
+                    continue
                 }
             };
 

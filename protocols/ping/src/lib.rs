@@ -116,7 +116,7 @@ where
         self.events.push_front(PingEvent { peer, result })
     }
 
-    fn poll(&mut self, _: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<Void, PingEvent>>
+    fn poll(&mut self, _: &mut impl PollParameters) -> Async<NetworkBehaviourAction<Void, PingEvent>>
     {
         if let Some(e) = self.events.pop_back() {
             Async::Ready(NetworkBehaviourAction::GenerateEvent(e))

@@ -22,7 +22,6 @@ use crate::{
     Multiaddr, PeerId,
     nodes::raw_swarm::ConnectedPoint,
     protocols_handler::{IntoProtocolsHandler, ProtocolsHandler},
-    swarm::PollParameters,
 };
 use futures::prelude::*;
 use std::error;
@@ -129,8 +128,35 @@ pub trait NetworkBehaviour {
     ///
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
-    fn poll(&mut self, params: &mut PollParameters<'_>)
+    fn poll(&mut self, params: &mut impl PollParameters)
         -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+}
+
+/// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
+pub trait PollParameters {
+    /// Iterator returned by [`supported_protocols`].
+    type SupportedProtocolsIter: ExactSizeIterator<Item = Vec<u8>>;
+    /// Iterator returned by [`listened_addresses`].
+    type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
+    /// Iterator returned by [`external_addresses`].
+    type ExternalAddressesIter: ExactSizeIterator<Item = Multiaddr>;
+
+    /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
+    /// an inbound substream.
+    ///
+    /// The iterator's elements are the ASCII names as reported on the wire.
+    ///
+    /// Note that the list is computed once at initialization and never refreshed.
+    fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
+
+    /// Returns the list of the addresses we're listening on.
+    fn listened_addresses(&self) -> Self::ListenedAddressesIter;
+
+    /// Returns the list of the addresses nodes can use to reach us.
+    fn external_addresses(&self) -> Self::ExternalAddressesIter;
+
+    /// Returns the peer id of the local node.
+    fn local_peer_id(&self) -> &PeerId;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented

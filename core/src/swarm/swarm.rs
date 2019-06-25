@@ -28,7 +28,7 @@ use crate::{
         raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError, IntoProtocolsHandler, ProtocolsHandler},
-    swarm::{NetworkBehaviour, NetworkBehaviourAction, registry::{Addresses, AddressIter}},
+    swarm::{PollParameters, NetworkBehaviour, NetworkBehaviourAction, registry::{Addresses, AddressIntoIter}},
     transport::TransportError,
 };
 use futures::prelude::*;
@@ -321,11 +321,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             }
 
             let behaviour_poll = {
-                let mut parameters = PollParameters {
+                let mut parameters = SwarmPollParameters {
                     local_peer_id: &mut self.raw_swarm.local_peer_id(),
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
-                    external_addrs: self.external_addrs.iter()
+                    external_addrs: &self.external_addrs
                 };
                 self.behaviour.poll(&mut parameters)
             };
@@ -366,36 +366,31 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 // TODO: #[derive(Debug)]
-pub struct PollParameters<'a: 'a> {
+pub struct SwarmPollParameters<'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
-    external_addrs: AddressIter<'a>
+    external_addrs: &'a Addresses,
 }
 
-impl<'a> PollParameters<'a> {
-    /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
-    /// an inbound substream.
-    ///
-    /// The iterator's elements are the ASCII names as reported on the wire.
-    ///
-    /// Note that the list is computed once at initialization and never refreshed.
-    pub fn supported_protocols(&self) -> impl ExactSizeIterator<Item = &[u8]> {
-        self.supported_protocols.iter().map(AsRef::as_ref)
+impl<'a> PollParameters for SwarmPollParameters<'a> {
+    type SupportedProtocolsIter = std::vec::IntoIter<Vec<u8>>;
+    type ListenedAddressesIter = std::vec::IntoIter<Multiaddr>;
+    type ExternalAddressesIter = AddressIntoIter;
+
+    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
+        self.supported_protocols.to_vec().into_iter()
     }
 
-    /// Returns the list of the addresses we're listening on.
-    pub fn listened_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
-        self.listened_addrs.iter()
+    fn listened_addresses(&self) -> Self::ListenedAddressesIter {
+        self.listened_addrs.to_vec().into_iter()
     }
 
-    /// Returns the list of the addresses nodes can use to reach us.
-    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
-        self.external_addrs.clone()
+    fn external_addresses(&self) -> Self::ExternalAddressesIter {
+        self.external_addrs.clone().into_iter()
     }
 
-    /// Returns the peer id of the local node.
-    pub fn local_peer_id(&self) -> &PeerId {
+    fn local_peer_id(&self) -> &PeerId {
         self.local_peer_id
     }
 }
@@ -515,7 +510,7 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _: &mut PollParameters<'_>) ->
+        fn poll(&mut self, _: &mut impl PollParameters) ->
             Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {
