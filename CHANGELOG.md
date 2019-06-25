@@ -1,3 +1,7 @@
+# Version 0.9.2 (2019-06-25)
+
+- Updated `zeroize` to v0.9.
+
 # Version 0.9.1 (2019-06-05)
 
 - `EitherOutput` now implements `Stream` and `Sink` if their variants also implement these traits.

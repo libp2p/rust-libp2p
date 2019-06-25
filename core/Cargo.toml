@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.9.1"
+version = "0.9.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -35,7 +35,7 @@ tokio-io = "0.1"
 wasm-timer = "0.1"
 unsigned-varint = "0.2"
 void = "1"
-zeroize = "0.5"
+zeroize = "0.9"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 ring = { version = "0.14", features = ["use_heap"], default-features = false }
