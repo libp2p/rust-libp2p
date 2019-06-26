@@ -37,7 +37,7 @@ pub enum Hash {
 
 impl Hash {
     /// Get the corresponding hash code.
-    pub fn code(self) -> u16 {
+    pub fn code(&self) -> u16 {
         match self {
             Hash::SHA1 => 0x11,
             Hash::SHA2256 => 0x12,
@@ -58,7 +58,7 @@ impl Hash {
     }
 
     /// Get the hash length in bytes.
-    pub fn size(self) -> u8 {
+    pub fn size(&self) -> u8 {
         match self {
             Hash::SHA1 => 20,
             Hash::SHA2256 => 32,

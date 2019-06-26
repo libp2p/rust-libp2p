@@ -176,7 +176,7 @@ impl<'a> MultihashRef<'a> {
         }
 
         // Ensure `Hash::code` returns a `u16` so that our `decode::u16` here is correct.
-        std::convert::identity::<fn(Hash) -> u16>(Hash::code);
+        std::convert::identity::<fn(&'_ Hash) -> u16>(Hash::code);
         let (code, bytes) = decode::u16(&input).map_err(|_| DecodeError::BadInputLength)?;
 
         let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
