@@ -41,9 +41,9 @@ impl TlsConfig {
         }
     }
 
-    fn handshake<T>(self, socket: T) -> impl Future<Item = TlsOutput<T>, Error = TlsError>
+    fn handshake<T>(self, socket: T) -> impl Future<Item = TlsOutput<T>, Error = IoError>
     where
-        T: AsyncRead + AsyncWrite + Send
+        T: AsyncRead + AsyncWrite + Send + 'static
     {
         TlsMiddleware::handshake(socket, self).map(|(stream_sink, pubkey)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
@@ -68,7 +68,7 @@ impl <T> InboundUpgrade<T> for TlsConfig
     where T: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = TlsOutput<Negotiated<T>>;
-    type Error = TlsError;
+    type Error = IoError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
@@ -81,7 +81,7 @@ where
     T: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Output = TlsOutput<Negotiated<T>>;
-    type Error = TlsError;
+    type Error = IoError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
@@ -92,7 +92,7 @@ where
 /// Output of the tls protocol.
 pub struct TlsOutput<S>
 where
-    S: AsyncRead + AsyncWrite + Send,
+    S: AsyncRead + AsyncWrite + Send + 'static,
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<TlsMiddleware<S>, fn(IoError) -> IoError>>,
@@ -107,17 +107,17 @@ fn map_err(err: IoError) -> IoError {
 
 pub struct TlsMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Send,
+    S: AsyncRead + AsyncWrite + Send + 'static,
 {
     inner: codec::FullCodec<S>,
 }
 
 impl<S> TlsMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Send,
+    S: AsyncRead + AsyncWrite + Send + 'static,
 {
     pub fn handshake(socket: S, config: TlsConfig)
-        -> impl Future<Item = (TlsMiddleware<S>, PublicKey), Error = TlsError> {
+        -> impl Future<Item = (TlsMiddleware<S>, PublicKey), Error = IoError> {
         handshake::handshake(socket, config).map(|(inner, pubkey)| {
             (TlsMiddleware{ inner }, pubkey)
         })

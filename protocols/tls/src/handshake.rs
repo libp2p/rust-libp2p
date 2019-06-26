@@ -1,19 +1,18 @@
 use futures::*;
-use tokio_io::codec::length_delimited;
 use crate::codec::{FullCodec};
 use tokio_io::{AsyncRead, AsyncWrite};
 use crate::error::TlsError;
 use crate::{TlsConfig};
 use libp2p_core::{PublicKey, Negotiated};
-use bytes::BytesMut;
 use std::sync::Arc;
-use std::io::Write;
+use std::io::{Write, Read};
 use rustls::{RootCertStore, Session, NoClientAuth, AllowAnyAuthenticatedClient,
              AllowAnyAnonymousOrAuthenticatedClient};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 
-pub fn handshake<S>(mut socket: S, config: TlsConfig) -> impl Future<Item = (FullCodec<S>, PublicKey), Error = TlsError>
+pub fn handshake<S>(mut socket: S, config: TlsConfig) -> impl Future<Item = (FullCodec<S>, PublicKey), Error = IoError>
     where
-        S: AsyncRead + AsyncWrite + Send,
+        S: AsyncRead + AsyncWrite + Send + 'static,
 {
 
     let (certificates, private_key) = {
@@ -71,36 +70,49 @@ pub fn handshake<S>(mut socket: S, config: TlsConfig) -> impl Future<Item = (Ful
         (vec![rustls::Certificate(certif_gen.to_der().unwrap())], rustls::PrivateKey(pkey_bytes))
     };
 
-    let mut server_config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-    server_config.set_single_cert(certificates, private_key)
-        .expect("bad certificates/private key");
-    let mut server_session = rustls::ServerSession::new(&Arc::new(server_config));
+    struct DummyVerifier;//(Mutex<Option<PeerId>>);
+    impl rustls::ServerCertVerifier for DummyVerifier {
+        fn verify_server_cert(&self,
+                              _: &rustls::RootCertStore,
+                              certs: &[rustls::Certificate],
+                              _: webpki::DNSNameRef,
+                              _ocsp_response: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError>
+        {
+            println!("blocks: {:?}", simple_asn1::from_der(&certs[0].0));
+            Ok(rustls::ServerCertVerified::assertion())
+        }
+    }
 
-    let mut client_config = rustls::ClientConfig::new();
-    let libp2p_io = webpki::DNSNameRef::try_from_ascii_str("libp2p.io").unwrap();
-    let mut client_session = rustls::ClientSession::new(&Arc::new(client_config), libp2p_io);
+    let _1 = String::from("1");
+    let full_codec: FullCodec<S> = match std::env::var("SERVER") {
+        Ok(_1) => {
+            println!("I'm the server");
+            let mut server_config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+            server_config.set_single_cert(certificates.clone(), private_key.clone()).expect("bad certificates/private key");
+            let mut session = rustls::ServerSession::new(&Arc::new(server_config));
+            FullCodec::from_server(socket, session)
+        },
+        _ => {
+            println!("I'm the client");
+            let mut client_config = rustls::ClientConfig::new();
+            client_config.dangerous().set_certificate_verifier(Arc::new(DummyVerifier));
+            let libp2p_io = webpki::DNSNameRef::try_from_ascii_str("libp2p.io").unwrap();
+            let mut session = rustls::ClientSession::new(&Arc::new(client_config), libp2p_io);
+            FullCodec::from_client(socket, session)
+        }
+    };
 
-    let full_codec = FullCodec::new(
-        socket,
-        client_session,
-        server_session,
-    );
-
-    future::ok((full_codec, config.key.public()))
-    /*
-    socket.send(BytesMut::from(config.key.public().into_protobuf_encoding()))
+    println!("sending private key");
+    full_codec.send(config.key.public().into_protobuf_encoding())
         .from_err()
         .and_then(|s| {
+            println!("what goes on here?");
             s.into_future()
                 .map_err(|(e, _)| e.into())
                 .and_then(move |(bytes, s)| {
-                    let mut client_config = rustls::ClientConfig::new();
-                    let libp2p_io = webpki::DNSNameRef::try_from_ascii_str("libp2p.io").unwrap();
-                    let mut client_session = rustls::ClientSession::new(&Arc::new(client_config), libp2p_io);
-
+                    println!("reading private key");
                     let pubkey = PublicKey::from_protobuf_encoding(&bytes.unwrap());
-                    Ok((full_codec(s), pubkey.unwrap()))
+                    Ok((s, pubkey.unwrap()))
                 })
         })
-        */
 }
