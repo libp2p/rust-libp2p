@@ -18,19 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
+use crate::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters};
+use crate::protocols_handler::{
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr,
+    IntoProtocolsHandler
+};
+use libp2p_core::{
+    ConnectedPoint,
+    PeerId,
+    Multiaddr,
     either::EitherOutput,
-    protocols_handler::{
-        KeepAlive,
-        SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr,
-        IntoProtocolsHandler
-    },
-    swarm::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess},
-    upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade},
-    PeerId, Multiaddr, nodes::ConnectedPoint, swarm::PollParameters,
+    upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade}
 };
 use futures::prelude::*;
 use std::error;

@@ -37,31 +37,29 @@
 //! >           connection with a remote. In order to handle a protocol that requires knowledge of
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
-use crate::nodes::raw_swarm::ConnectedPoint;
-use crate::PeerId;
-use crate::upgrade::{
-    InboundUpgrade,
-    OutboundUpgrade,
-    UpgradeError,
-};
-use futures::prelude::*;
-use std::{cmp::Ordering, error, fmt, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
-use wasm_timer::Instant;
-
-pub use self::dummy::DummyProtocolsHandler;
-pub use self::map_in::MapInEvent;
-pub use self::map_out::MapOutEvent;
-pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
-pub use self::one_shot::OneShotHandler;
-pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
-
 mod dummy;
 mod map_in;
 mod map_out;
 mod node_handler;
 mod one_shot;
 mod select;
+
+use futures::prelude::*;
+use libp2p_core::{
+    ConnectedPoint,
+    PeerId,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError},
+};
+use std::{cmp::Ordering, error, fmt, time::Duration};
+use tokio_io::{AsyncRead, AsyncWrite};
+use wasm_timer::Instant;
+
+pub use dummy::DummyProtocolsHandler;
+pub use map_in::MapInEvent;
+pub use map_out::MapOutEvent;
+pub use node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
+pub use one_shot::OneShotHandler;
+pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///

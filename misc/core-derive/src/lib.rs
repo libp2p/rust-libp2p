@@ -47,15 +47,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let multiaddr = quote!{::libp2p::core::Multiaddr};
-    let trait_to_impl = quote!{::libp2p::core::swarm::NetworkBehaviour};
-    let net_behv_event_proc = quote!{::libp2p::core::swarm::NetworkBehaviourEventProcess};
+    let trait_to_impl = quote!{::libp2p::swarm::NetworkBehaviour};
+    let net_behv_event_proc = quote!{::libp2p::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
-    let network_behaviour_action = quote!{::libp2p::core::swarm::NetworkBehaviourAction};
-    let into_protocols_handler = quote!{::libp2p::core::protocols_handler::IntoProtocolsHandler};
-    let protocols_handler = quote!{::libp2p::core::protocols_handler::ProtocolsHandler};
-    let into_proto_select_ident = quote!{::libp2p::core::protocols_handler::IntoProtocolsHandlerSelect};
+    let network_behaviour_action = quote!{::libp2p::swarm::NetworkBehaviourAction};
+    let into_protocols_handler = quote!{::libp2p::swarm::IntoProtocolsHandler};
+    let protocols_handler = quote!{::libp2p::swarm::ProtocolsHandler};
+    let into_proto_select_ident = quote!{::libp2p::swarm::IntoProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
-    let connected_point = quote!{::libp2p::core::swarm::ConnectedPoint};
+    let connected_point = quote!{::libp2p::core::ConnectedPoint};
 
     // Name of the type parameter that represents the substream.
     let substream_generic = {
@@ -68,7 +68,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{#n}
     };
 
-    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters};
+    let poll_parameters = quote!{::libp2p::swarm::PollParameters};
 
     // Build the generics.
     let impl_generics = {

@@ -30,7 +30,6 @@ use crate::{
 use futures::{future, prelude::*};
 use libp2p_core::{
     PeerId,
-    Swarm,
     Transport,
     identity,
     transport::{MemoryTransport, boxed::Boxed},
@@ -40,6 +39,7 @@ use libp2p_core::{
     upgrade,
 };
 use libp2p_secio::SecioConfig;
+use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use rand::random;
 use std::{collections::HashSet, iter::FromIterator, io, num::NonZeroU8, u64};

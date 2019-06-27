@@ -20,15 +20,13 @@
 
 use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
-use libp2p_core::{
-    protocols_handler::{
-        KeepAlive,
-        SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
-    },
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated}
+use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated};
+use libp2p_swarm::{
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
 };
 use smallvec::SmallVec;
 use tokio_io::{AsyncRead, AsyncWrite};

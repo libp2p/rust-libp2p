@@ -22,9 +22,22 @@ use crate::listen_handler::IdentifyListenHandler;
 use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, PublicKey, either::EitherOutput, upgrade::Negotiated};
+use libp2p_core::{
+    ConnectedPoint,
+    Multiaddr,
+    PeerId,
+    PublicKey,
+    either::EitherOutput,
+    upgrade::Negotiated
+};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    PollParameters,
+    ProtocolsHandler,
+    ProtocolsHandlerSelect,
+    ProtocolsHandlerUpgrErr
+};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -227,11 +240,11 @@ mod tests {
         upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
         muxing::StreamMuxer,
         Multiaddr,
-        Swarm,
         Transport
     };
     use libp2p_tcp::TcpConfig;
     use libp2p_secio::SecioConfig;
+    use libp2p_swarm::Swarm;
     use libp2p_mplex::MplexConfig;
     use rand::Rng;
     use std::{fmt, io};

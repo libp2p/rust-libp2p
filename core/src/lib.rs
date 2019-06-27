@@ -74,18 +74,13 @@ pub mod either;
 pub mod identity;
 pub mod muxing;
 pub mod nodes;
-pub mod protocols_handler;
-pub mod swarm;
 pub mod transport;
 pub mod upgrade;
 
 pub use multiaddr::Multiaddr;
 pub use muxing::StreamMuxer;
-pub use nodes::raw_swarm::ConnectedPoint;
 pub use peer_id::PeerId;
-pub use protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use identity::PublicKey;
-pub use swarm::Swarm;
 pub use transport::Transport;
 pub use translation::address_translation;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
@@ -125,6 +120,61 @@ impl Endpoint {
             true
         } else {
             false
+        }
+    }
+}
+
+/// How we connected to a node.
+#[derive(Debug, Clone)]
+pub enum ConnectedPoint {
+    /// We dialed the node.
+    Dialer {
+        /// Multiaddress that was successfully dialed.
+        address: Multiaddr,
+    },
+    /// We received the node.
+    Listener {
+        /// Address of the listener that received the connection.
+        listen_addr: Multiaddr,
+        /// Stack of protocols used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    }
+}
+
+impl From<&'_ ConnectedPoint> for Endpoint {
+    fn from(endpoint: &'_ ConnectedPoint) -> Endpoint {
+        endpoint.to_endpoint()
+    }
+}
+
+impl From<ConnectedPoint> for Endpoint {
+    fn from(endpoint: ConnectedPoint) -> Endpoint {
+        endpoint.to_endpoint()
+    }
+}
+
+impl ConnectedPoint {
+    /// Turns the `ConnectedPoint` into the corresponding `Endpoint`.
+    pub fn to_endpoint(&self) -> Endpoint {
+        match self {
+            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
+            ConnectedPoint::Listener { .. } => Endpoint::Listener
+        }
+    }
+
+    /// Returns true if we are `Dialer`.
+    pub fn is_dialer(&self) -> bool {
+        match self {
+            ConnectedPoint::Dialer { .. } => true,
+            ConnectedPoint::Listener { .. } => false
+        }
+    }
+
+    /// Returns true if we are `Listener`.
+    pub fn is_listener(&self) -> bool {
+        match self {
+            ConnectedPoint::Dialer { .. } => false,
+            ConnectedPoint::Listener { .. } => true
         }
     }
 }

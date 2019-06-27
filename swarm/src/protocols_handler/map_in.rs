@@ -18,20 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    protocols_handler::{
-        KeepAlive,
-        SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
-    },
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-    }
+use crate::protocols_handler::{
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
 };
 use futures::prelude::*;
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use std::marker::PhantomData;
 
 /// Wrapper around a protocol handler that turns the input event into something else.
