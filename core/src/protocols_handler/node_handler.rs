@@ -21,8 +21,7 @@
 use crate::{
     PeerId,
     nodes::collection::ConnectionInfo,
-    nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
-    nodes::handled_node_tasks::IntoNodeHandler,
+    nodes::handled_node::{IntoNodeHandler, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     nodes::raw_swarm::ConnectedPoint,
     protocols_handler::{KeepAlive, ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{

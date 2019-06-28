@@ -84,6 +84,7 @@ where
 }
 
 #[test]
+#[ignore]
 fn raw_swarm_simultaneous_connect() {
     // Checks whether two swarms dialing each other simultaneously properly works.
 
