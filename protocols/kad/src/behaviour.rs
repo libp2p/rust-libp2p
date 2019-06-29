@@ -464,7 +464,7 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(&mut self, q: Query<QueryInner>, params: &mut PollParameters<'_>)
+    fn query_finished(&mut self, q: Query<QueryInner>, params: &mut impl PollParameters)
         -> Option<KademliaEvent>
     {
         let result = q.into_result();
@@ -533,7 +533,7 @@ where
             QueryInfo::PrepareAddProvider { target } => {
                 let closest_peers = result.peers.map(kbucket::Key::from);
                 let provider_id = params.local_peer_id().clone();
-                let external_addresses = params.external_addresses().cloned().collect();
+                let external_addresses = params.external_addresses().collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     target,
                     provider_id,
