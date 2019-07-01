@@ -274,7 +274,7 @@ impl AddProviderJob {
 
 #[cfg(test)]
 mod tests {
-    use crate::record::store::memory::MemoryStore;
+    use crate::record::store::MemoryStore;
     use quickcheck::*;
     use rand::Rng;
     use super::*;

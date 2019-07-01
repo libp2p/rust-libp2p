@@ -24,7 +24,7 @@ use super::*;
 
 use crate::K_VALUE;
 use crate::kbucket::Distance;
-use crate::record::store::memory::MemoryStore;
+use crate::record::store::MemoryStore;
 use futures::future;
 use libp2p_core::{
     Swarm,

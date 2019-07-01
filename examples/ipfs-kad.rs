@@ -31,7 +31,7 @@ use libp2p::{
     build_development_transport
 };
 use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent};
-use libp2p::kad::record::store::memory::MemoryStore;
+use libp2p::kad::record::store::MemoryStore;
 use std::env;
 use std::time::Duration;
 
