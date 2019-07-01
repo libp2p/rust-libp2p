@@ -25,7 +25,7 @@ pub mod store;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::hash::{Hash, Hasher};
-use std::time::Instant;
+use wasm_timer::Instant;
 
 /// A record stored in the DHT.
 #[derive(Clone, Debug, Eq, PartialEq)]

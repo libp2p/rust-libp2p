@@ -39,11 +39,12 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use multihash::Multihash;
 use protobuf::{self, Message};
-use std::{borrow::Cow, convert::TryFrom, time::{Duration, Instant}};
+use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
+use wasm_timer::Instant;
 
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
