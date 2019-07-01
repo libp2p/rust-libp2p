@@ -172,6 +172,8 @@ impl PutRecordJob {
                 self.next_publish = self.publish_interval.map(|i| now + i);
             }
 
+            self.skipped.clear();
+
             self.inner.state = PeriodicJobState::Running(records);
         }
 
@@ -189,9 +191,9 @@ impl PutRecordJob {
             }
 
             // Wait for the next run.
-            self.skipped.clear();
             let delay = Delay::new(now + self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay);
+            assert!(!self.inner.is_ready(now));
         }
 
         Async::NotReady
@@ -260,8 +262,10 @@ impl AddProviderJob {
                     break
                 }
             }
+
             let delay = Delay::new(now + self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay);
+            assert!(!self.inner.is_ready(now));
         }
 
         Async::NotReady
