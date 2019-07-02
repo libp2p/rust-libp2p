@@ -367,6 +367,13 @@ where
         }
     }
 
+    /// Retain the values that are in our storage.
+    pub fn retain<F>(&mut self, f: F)
+        where F: FnMut(&Multihash, &mut Record) -> bool
+    {
+        self.records.retain(f);
+    }
+
     /// Register the local node as the provider for the given key.
     ///
     /// This will periodically send `ADD_PROVIDER` messages to the nodes closest to the key. When
