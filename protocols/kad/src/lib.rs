@@ -34,7 +34,32 @@ mod behaviour;
 mod protobuf_structs;
 mod query;
 
-pub use behaviour::*;
+pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
+pub use behaviour::{
+    BootstrapResult,
+    BootstrapOk,
+    BootstrapError,
+
+    GetRecordResult,
+    GetRecordOk,
+    GetRecordError,
+
+    PutRecordResult,
+    PutRecordOk,
+    PutRecordError,
+
+    GetClosestPeersResult,
+    GetClosestPeersOk,
+    GetClosestPeersError,
+
+    AddProviderResult,
+    AddProviderOk,
+    AddProviderError,
+
+    GetProvidersResult,
+    GetProvidersOk,
+    GetProvidersError,
+};
 pub use protocol::KadConnectionType;
 pub use record::{RecordStore, RecordStorageError, MemoryRecordStorage};
 

@@ -254,7 +254,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
             core::upgrade::apply(output.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })
-        .with_timeout(Duration::from_secs(10))
+        .with_timeout(Duration::from_secs(20))
 }
 
 /// Implementation of `Transport` that supports the most common protocols.

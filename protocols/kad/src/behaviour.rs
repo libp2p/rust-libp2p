@@ -979,8 +979,6 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Quorum {
     One,
-    Two,
-    Three,
     Majority,
     All,
     N(NonZeroU8)
@@ -988,11 +986,9 @@ pub enum Quorum {
 
 impl Quorum {
     /// Evaluate the quorum w.r.t a given total (number of peers).
-    pub fn eval(&self, total: usize) -> usize {
+    fn eval(&self, total: usize) -> usize {
         match self {
             Quorum::One => 1,
-            Quorum::Two => 2,
-            Quorum::Three => 3,
             Quorum::Majority => total / 2 + 1,
             Quorum::All => total,
             Quorum::N(n) => usize::min(total, n.get() as usize)
