@@ -25,10 +25,8 @@
 //! > buckets in a `KBucketsTable` and hence is enforced by the public API
 //! > of the `KBucketsTable` and in particular the public `Entry` API.
 
+pub use crate::K_VALUE;
 use super::*;
-
-/// Maximum number of nodes in a bucket, i.e. the (fixed) `k` parameter.
-pub const MAX_NODES_PER_BUCKET: usize = 20;
 
 /// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
 #[derive(Debug, Clone)]
@@ -90,16 +88,16 @@ pub struct Node<TPeerId, TVal> {
 }
 
 /// The position of a node in a `KBucket`, i.e. a non-negative integer
-/// in the range `[0, MAX_NODES_PER_BUCKET)`.
+/// in the range `[0, K_VALUE)`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position(usize);
 
-/// A `KBucket` is a list of up to `MAX_NODES_PER_BUCKET` `Key`s and associated values,
+/// A `KBucket` is a list of up to `K_VALUE` `Key`s and associated values,
 /// ordered from least-recently connected to most-recently connected.
 #[derive(Debug, Clone)]
 pub struct KBucket<TPeerId, TVal> {
     /// The nodes contained in the bucket.
-    nodes: ArrayVec<[Node<TPeerId, TVal>; MAX_NODES_PER_BUCKET]>,
+    nodes: ArrayVec<[Node<TPeerId, TVal>; K_VALUE]>,
 
     /// The position (index) in `nodes` that marks the first connected node.
     ///
@@ -107,7 +105,7 @@ pub struct KBucket<TPeerId, TVal> {
     /// most-recently connected, all entries above this index are also considered
     /// connected, i.e. the range `[0, first_connected_pos)` marks the sub-list of entries
     /// that are considered disconnected and the range
-    /// `[first_connected_pos, MAX_NODES_PER_BUCKET)` marks sub-list of entries that are
+    /// `[first_connected_pos, K_VALUE)` marks sub-list of entries that are
     /// considered connected.
     ///
     /// `None` indicates that there are no connected entries in the bucket, i.e.
@@ -412,7 +410,7 @@ mod tests {
         fn arbitrary<G: Gen>(g: &mut G) -> KBucket<PeerId, ()> {
             let timeout = Duration::from_secs(g.gen_range(1, g.size() as u64));
             let mut bucket = KBucket::<PeerId, ()>::new(timeout);
-            let num_nodes = g.gen_range(1, MAX_NODES_PER_BUCKET + 1);
+            let num_nodes = g.gen_range(1, K_VALUE + 1);
             for _ in 0 .. num_nodes {
                 let key = Key::new(PeerId::random());
                 let node = Node { key: key.clone(), value: () };
@@ -438,14 +436,14 @@ mod tests {
 
     impl Arbitrary for Position {
         fn arbitrary<G: Gen>(g: &mut G) -> Position {
-            Position(g.gen_range(0, MAX_NODES_PER_BUCKET))
+            Position(g.gen_range(0, K_VALUE))
         }
     }
 
     // Fill a bucket with random nodes with the given status.
     fn fill_bucket(bucket: &mut KBucket<PeerId, ()>, status: NodeStatus) {
         let num_entries_start = bucket.num_entries();
-        for i in 0 .. MAX_NODES_PER_BUCKET - num_entries_start {
+        for i in 0 .. K_VALUE - num_entries_start {
             let key = Key::new(PeerId::random());
             let node = Node { key, value: () };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
@@ -466,7 +464,7 @@ mod tests {
             for status in status {
                 let key = Key::new(PeerId::random());
                 let node = Node { key: key.clone(), value: () };
-                let full = bucket.num_entries() == MAX_NODES_PER_BUCKET;
+                let full = bucket.num_entries() == K_VALUE;
                 match bucket.insert(node, status) {
                     InsertResult::Inserted => {
                         let vec = match status {
@@ -519,7 +517,7 @@ mod tests {
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
-        for i in 0 .. MAX_NODES_PER_BUCKET {
+        for i in 0 .. K_VALUE {
             let (first, first_status) = bucket.iter().next().unwrap();
             let first_disconnected = first.clone();
             assert_eq!(first_status, NodeStatus::Disconnected);
@@ -552,11 +550,11 @@ mod tests {
             }));
             assert_eq!(Some((&node, NodeStatus::Connected)), bucket.iter().last());
             assert!(bucket.pending().is_none());
-            assert_eq!(Some(MAX_NODES_PER_BUCKET - (i + 1)), bucket.first_connected_pos);
+            assert_eq!(Some(K_VALUE - (i + 1)), bucket.first_connected_pos);
         }
 
         assert!(bucket.pending().is_none());
-        assert_eq!(MAX_NODES_PER_BUCKET, bucket.num_entries());
+        assert_eq!(K_VALUE, bucket.num_entries());
 
         // Trying to insert another connected node fails.
         let key = Key::new(PeerId::random());
@@ -595,7 +593,7 @@ mod tests {
         assert_eq!(Some((&first_disconnected, NodeStatus::Connected)), bucket.iter().last());
         assert_eq!(bucket.position(&first_disconnected.key).map(|p| p.0), bucket.first_connected_pos);
         assert_eq!(1, bucket.num_connected());
-        assert_eq!(MAX_NODES_PER_BUCKET - 1, bucket.num_disconnected());
+        assert_eq!(K_VALUE - 1, bucket.num_disconnected());
     }
 
 
