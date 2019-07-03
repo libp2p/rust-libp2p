@@ -108,5 +108,4 @@ impl RecordStore for MemoryRecordStorage {
 
         Ok(())
     }
-
 }
