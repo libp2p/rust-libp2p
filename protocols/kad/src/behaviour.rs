@@ -277,7 +277,7 @@ where
     }
 
     /// Get a mutable reference to internal record store.
-    pub fn store_mut(&mut self) -> &mut TRecordStorage {
+    pub fn store_mut(&mut self) -> &mut RecordStore {
         &mut self.records
     }
 
