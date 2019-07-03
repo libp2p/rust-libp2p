@@ -161,17 +161,20 @@ impl<TSubstream> Floodsub<TSubstream> {
         true
     }
 
-    /// Publishes a message to the network.
-    ///
-    /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
+    /// Publishes a message to the network, if we're subscribed to the topic only.
     pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
-        self.publish_many(iter::once(topic), data)
+        self.publish_many(iter::once(topic), data, true)
+    }
+
+    /// Publishes a message to the network, even if we're not subscribed to the topic.
+    pub fn publish_any(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
+        self.publish_many(iter::once(topic), data, false)
     }
 
     /// Publishes a message with multiple topics to the network.
     ///
-    /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
-    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
+    /// > **Note**: By enabling `check_self_subscriptions`, message will be sent to the network, if we are subscribed to the topic only.
+    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
@@ -182,12 +185,15 @@ impl<TSubstream> Floodsub<TSubstream> {
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
 
-        // Don't publish the message if we're not subscribed ourselves to any of the topics.
-        if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
-            return;
+        let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u));
+        if self_subscribed {
+            self.received.add(&message);
         }
-
-        self.received.add(&message);
+        // Don't publish the message if we have to check subscriptions
+        // and we're not subscribed ourselves to any of the topics.
+        if check_self_subscriptions && !self_subscribed {
+            return
+        }
 
         // Send to peers we know are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
