@@ -163,18 +163,28 @@ impl<TSubstream> Floodsub<TSubstream> {
 
     /// Publishes a message to the network, if we're subscribed to the topic only.
     pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
-        self.publish_many(iter::once(topic), data, true)
+        self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message to the network, even if we're not subscribed to the topic.
     pub fn publish_any(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
-        self.publish_many(iter::once(topic), data, false)
+        self.publish_many_any(iter::once(topic), data)
     }
 
     /// Publishes a message with multiple topics to the network.
     ///
-    /// > **Note**: By enabling `check_self_subscriptions`, message will be sent to the network, if we are subscribed to the topic only.
-    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
+    ///
+    /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
+    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
+        self.publish_many_inner(topic, data, true)
+    }
+
+    /// Publishes a message with multiple topics to the network, even if we're not subscribed to any of the topics.
+    pub fn publish_many_any(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
+        self.publish_many_inner(topic, data, false)
+    }
+
+    fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
