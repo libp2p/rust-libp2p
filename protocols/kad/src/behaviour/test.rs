@@ -359,7 +359,8 @@ fn put_record() {
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::PutRecordResult(res))) => {
+                            Async::Ready(Some(KademliaEvent::PutRecordResult(res))) |
+                            Async::Ready(Some(KademliaEvent::RepublishRecordResult(res))) => {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
@@ -535,7 +536,8 @@ fn add_provider() {
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::AddProviderResult(res))) => {
+                            Async::Ready(Some(KademliaEvent::StartProvidingResult(res))) |
+                            Async::Ready(Some(KademliaEvent::RepublishProviderResult(res))) => {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
