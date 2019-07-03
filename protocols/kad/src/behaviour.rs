@@ -257,7 +257,10 @@ where
         if let Err(error) = self.records.put(record.clone()) {
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 KademliaEvent::PutRecordResult(Err(
-                    PutRecordError::LocalStorageError(error)
+                    PutRecordError::LocalStorageError {
+                        key: record.key,
+                        cause: error,
+                    }
                 ))
             ));
         } else {
@@ -1060,6 +1063,27 @@ pub enum GetRecordError {
     Timeout { key: Multihash, records: Vec<Record>, quorum: usize }
 }
 
+impl GetRecordError {
+    /// Gets the key of the record for which the operation failed.
+    pub fn key(&self) -> &Multihash {
+        match self {
+            GetRecordError::QuorumFailed { key, .. } => key,
+            GetRecordError::Timeout { key, .. } => key,
+            GetRecordError::NotFound { key, .. } => key,
+        }
+    }
+
+    /// Extracts the key of the record for which the operation failed,
+    /// consuming the error.
+    fn into_key(self) -> Multihash {
+        match self {
+            GetRecordError::QuorumFailed { key, .. } => key,
+            GetRecordError::Timeout { key, .. } => key,
+            GetRecordError::NotFound { key, .. } => key,
+        }
+    }
+}
+
 /// The result of [`Kademlia::put_record`].
 pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 
@@ -1074,7 +1098,28 @@ pub struct PutRecordOk {
 pub enum PutRecordError {
     QuorumFailed { key: Multihash, num_results: usize, quorum: usize },
     Timeout { key: Multihash, num_results: usize, quorum: usize },
-    LocalStorageError(RecordStorageError)
+    LocalStorageError { key: Multihash, cause: RecordStorageError },
+}
+
+impl PutRecordError {
+    /// Gets the key of the record for which the operation failed.
+    pub fn key(&self) -> &Multihash {
+        match self {
+            PutRecordError::QuorumFailed { key, .. } => key,
+            PutRecordError::Timeout { key, .. } => key,
+            PutRecordError::LocalStorageError { key, .. } => key
+        }
+    }
+
+    /// Extracts the key of the record for which the operation failed,
+    /// consuming the error.
+    pub fn into_key(self) -> Multihash {
+        match self {
+            PutRecordError::QuorumFailed { key, .. } => key,
+            PutRecordError::Timeout { key, .. } => key,
+            PutRecordError::LocalStorageError { key, .. } => key,
+        }
+    }
 }
 
 /// The result of [`Kademlia::bootstrap`].
@@ -1108,6 +1153,23 @@ pub enum GetClosestPeersError {
     Timeout { key: Multihash, peers: Vec<PeerId> }
 }
 
+impl GetClosestPeersError {
+    /// Gets the key for which the operation failed.
+    pub fn key(&self) -> &Multihash {
+        match self {
+            GetClosestPeersError::Timeout { key, .. } => key,
+        }
+    }
+
+    /// Extracts the key for which the operation failed,
+    /// consuming the error.
+    pub fn into_key(self) -> Multihash {
+        match self {
+            GetClosestPeersError::Timeout { key, .. } => key,
+        }
+    }
+}
+
 /// The result of [`Kademlia::get_providers`].
 pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 
@@ -1129,7 +1191,24 @@ pub enum GetProvidersError {
     }
 }
 
-/// The result of periodic queries initiate dby [`Kademlia::start_providing`].
+impl GetProvidersError {
+    /// Gets the key for which the operation failed.
+    pub fn key(&self) -> &Multihash {
+        match self {
+            GetProvidersError::Timeout { key, .. } => key,
+        }
+    }
+
+    /// Extracts the key for which the operation failed,
+    /// consuming the error.
+    pub fn into_key(self) -> Multihash {
+        match self {
+            GetProvidersError::Timeout { key, .. } => key,
+        }
+    }
+}
+
+/// The result of periodic queries initiated by [`Kademlia::start_providing`].
 pub type AddProviderResult = Result<AddProviderOk, AddProviderError>;
 
 /// The successful result of a periodic query initiated by [`Kademlia::start_providing`].
@@ -1143,6 +1222,23 @@ pub struct AddProviderOk {
 pub enum AddProviderError {
     Timeout {
         key: Multihash,
+    }
+}
+
+impl AddProviderError {
+    /// Gets the key for which the operation failed.
+    pub fn key(&self) -> &Multihash {
+        match self {
+            AddProviderError::Timeout { key, .. } => key,
+        }
+    }
+
+    /// Extracts the key for which the operation failed,
+    /// consuming the error.
+    pub fn into_key(self) -> Multihash {
+        match self {
+            AddProviderError::Timeout { key, .. } => key,
+        }
     }
 }
 
