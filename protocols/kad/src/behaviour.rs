@@ -482,7 +482,7 @@ where
         if let Err(err) = self.store.add_provider(record) {
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 KademliaEvent::AddProviderResult(Err(
-                    AddProviderError::LocalStorageError(err)
+                    AddProviderError::LocalStorageError { key, cause: err }
                 ))
             ));
         } else {
@@ -1545,7 +1545,10 @@ pub enum AddProviderError {
     Timeout {
         key: Multihash,
     },
-    LocalStorageError(store::Error)
+    LocalStorageError {
+        key: Multihash,
+        cause: store::Error
+    }
 }
 
 impl AddProviderError {
@@ -1553,6 +1556,7 @@ impl AddProviderError {
     pub fn key(&self) -> &Multihash {
         match self {
             AddProviderError::Timeout { key, .. } => key,
+            AddProviderError::LocalStorageError { key, .. } => key,
         }
     }
 
@@ -1561,6 +1565,7 @@ impl AddProviderError {
     pub fn into_key(self) -> Multihash {
         match self {
             AddProviderError::Timeout { key, .. } => key,
+            AddProviderError::LocalStorageError { key, .. } => key,
         }
     }
 }
