@@ -367,7 +367,7 @@ where
         }
     }
 
-    /// Retain the values that are in our storage.
+    /// Get a mutable reference to internal record store.
     pub fn store_mut(&mut self) -> &mut TRecordStorage {
         &mut self.records
     }
