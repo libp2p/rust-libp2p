@@ -98,8 +98,8 @@ fn three_fields() {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaOut> for Foo<TSubstream> {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaOut) {
+    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo<TSubstream> {
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {
         }
     }
 
