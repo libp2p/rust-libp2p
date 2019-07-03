@@ -368,10 +368,8 @@ where
     }
 
     /// Retain the values that are in our storage.
-    pub fn retain<F>(&mut self, f: F)
-        where F: FnMut(&Multihash, &mut Record) -> bool
-    {
-        self.records.retain(f);
+    pub fn store_mut(&mut self) -> &mut TRecordStorage {
+        &mut self.records
     }
 
     /// Register the local node as the provider for the given key.

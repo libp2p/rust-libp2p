@@ -46,7 +46,6 @@ pub struct Record {
 pub trait RecordStore {
     fn get(&self, k: &Multihash) -> Option<Cow<Record>>;
     fn put(&mut self, r: Record) -> Result<(), RecordStorageError>;
-    fn retain<F: FnMut(&Multihash, &mut Record) -> bool>(&mut self, f: F);
 }
 
 /// In-memory implementation of the record store.
@@ -79,6 +78,15 @@ impl Default for MemoryRecordStorage {
     }
 }
 
+impl MemoryRecordStorage {
+    /// Retain the elements by a predicate.
+    pub fn retain<F>(&mut self, f: F)
+        where F: FnMut(&Multihash, &mut Record) -> bool
+    {
+        self.records.retain(f);
+    }
+}
+
 impl RecordStore for MemoryRecordStorage {
     fn get(&self, k: &Multihash) -> Option<Cow<Record>> {
         match self.records.get(k) {
@@ -101,9 +109,4 @@ impl RecordStore for MemoryRecordStorage {
         Ok(())
     }
 
-    fn retain<F>(&mut self, f: F)
-        where F: FnMut(&Multihash, &mut Record) -> bool
-    {
-        self.records.retain(f);
-    }
 }
