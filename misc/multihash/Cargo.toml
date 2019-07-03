@@ -11,6 +11,7 @@ documentation = "https://docs.rs/parity-multihash/"
 
 [dependencies]
 blake2 = { version = "0.8", default-features = false }
+bytes = "0.4.12"
 rand = { version = "0.6", default-features = false, features = ["std"] }
 sha-1 = { version = "0.8", default-features = false }
 sha2 = { version = "0.8", default-features = false }
