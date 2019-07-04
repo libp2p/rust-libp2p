@@ -23,7 +23,6 @@
 use libp2p_core::{
     Multiaddr,
     PeerId,
-    Swarm,
     identity,
     muxing::StreamMuxer,
     upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
@@ -32,6 +31,7 @@ use libp2p_core::{
 use libp2p_ping::*;
 use libp2p_yamux as yamux;
 use libp2p_secio::SecioConfig;
+use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{future, prelude::*};
 use std::{fmt, io, time::Duration, sync::mpsc::sync_channel};

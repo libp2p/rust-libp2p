@@ -16,6 +16,7 @@ cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
 libp2p-core = { version = "0.10.0", path = "../../core" }
+libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
 protobuf = "2.3"
 rand = "0.6"
 smallvec = "0.6.5"

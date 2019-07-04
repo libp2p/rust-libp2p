@@ -22,7 +22,7 @@ use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, IncomingError};
 use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
-use libp2p_core::protocols_handler::{
+use libp2p_swarm::{
     ProtocolsHandler,
     KeepAlive,
     SubstreamProtocol,

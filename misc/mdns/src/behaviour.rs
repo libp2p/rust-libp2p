@@ -20,10 +20,15 @@
 
 use crate::service::{MdnsService, MdnsPacket};
 use futures::prelude::*;
+use libp2p_core::{address_translation, ConnectedPoint, Multiaddr, PeerId, multiaddr::Protocol};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    PollParameters,
+    ProtocolsHandler,
+    protocols_handler::DummyProtocolsHandler
+};
 use log::warn;
-use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{address_translation, Multiaddr, PeerId, multiaddr::Protocol};
 use smallvec::SmallVec;
 use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};

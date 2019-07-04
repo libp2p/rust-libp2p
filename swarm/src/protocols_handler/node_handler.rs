@@ -18,20 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
+use crate::protocols_handler::{
+    KeepAlive,
+    ProtocolsHandler,
+    IntoProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
+};
+use futures::prelude::*;
+use libp2p_core::{
+    ConnectedPoint,
     PeerId,
     nodes::collection::ConnectionInfo,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     nodes::handled_node_tasks::IntoNodeHandler,
-    nodes::raw_swarm::ConnectedPoint,
-    protocols_handler::{KeepAlive, ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
-    upgrade::{
-        self,
-        InboundUpgradeApply,
-        OutboundUpgradeApply,
-    }
+    upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply}
 };
-use futures::prelude::*;
 use std::{error, fmt, time::Duration};
 use wasm_timer::{Delay, Timeout};
 

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    nodes::raw_swarm::ConnectedPoint,
+    ConnectedPoint,
     transport::{Transport, TransportError, ListenerEvent}
 };
 use futures::{prelude::*, try_ready};
