@@ -20,7 +20,7 @@
 
 use crate::muxing::StreamMuxer;
 use crate::{
-    Endpoint, Multiaddr, PeerId, address_translation,
+    ConnectedPoint, Multiaddr, PeerId, address_translation,
     nodes::{
         collection::{
             CollectionEvent,
@@ -619,62 +619,6 @@ where TTrans: Transport
     /// Builds the `ConnectedPoint` corresponding to the incoming connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
         self.info().to_connected_point()
-    }
-}
-
-/// How we connected to a node.
-// TODO: move definition
-#[derive(Debug, Clone)]
-pub enum ConnectedPoint {
-    /// We dialed the node.
-    Dialer {
-        /// Multiaddress that was successfully dialed.
-        address: Multiaddr,
-    },
-    /// We received the node.
-    Listener {
-        /// Address of the listener that received the connection.
-        listen_addr: Multiaddr,
-        /// Stack of protocols used to send back data to the remote.
-        send_back_addr: Multiaddr,
-    },
-}
-
-impl<'a> From<&'a ConnectedPoint> for Endpoint {
-    fn from(endpoint: &'a ConnectedPoint) -> Endpoint {
-        endpoint.to_endpoint()
-    }
-}
-
-impl From<ConnectedPoint> for Endpoint {
-    fn from(endpoint: ConnectedPoint) -> Endpoint {
-        endpoint.to_endpoint()
-    }
-}
-
-impl ConnectedPoint {
-    /// Turns the `ConnectedPoint` into the corresponding `Endpoint`.
-    pub fn to_endpoint(&self) -> Endpoint {
-        match *self {
-            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener,
-        }
-    }
-
-    /// Returns true if we are `Dialer`.
-    pub fn is_dialer(&self) -> bool {
-        match *self {
-            ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false,
-        }
-    }
-
-    /// Returns true if we are `Listener`.
-    pub fn is_listener(&self) -> bool {
-        match *self {
-            ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true,
-        }
     }
 }
 

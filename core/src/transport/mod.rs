@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
+use crate::{InboundUpgrade, OutboundUpgrade, ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, fmt};
