@@ -95,7 +95,7 @@ pub struct KBucketsTable<TPeerId, TVal> {
 
 /// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in the
 /// interval `[0, NUM_BUCKETS)`.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 struct BucketIndex(usize);
 
 impl BucketIndex {
@@ -115,6 +115,20 @@ impl BucketIndex {
     /// Gets the index value as an unsigned integer.
     fn get(&self) -> usize {
         self.0
+    }
+
+    /// Generates a random distance that falls into the bucket for this index.
+    fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
+        let mut bytes = [0u8; 32];
+        let quot = self.0 / 8;
+        for i in 0 .. quot {
+            bytes[31 - i] = rng.gen();
+        }
+        let rem = self.0 % 8;
+        let lower = usize::pow(2, rem as u32);
+        let upper = usize::pow(2, rem as u32 + 1);
+        bytes[31 - quot] = rng.gen_range(lower, upper) as u8;
+        Distance(bigint::U256::from(bytes))
     }
 }
 
@@ -182,11 +196,14 @@ where
     /// bucket is the closest bucket (containing at most one key).
     pub fn buckets<'a>(&'a mut self) -> impl Iterator<Item = KBucketRef<'a, TPeerId, TVal>> + 'a {
         let applied_pending = &mut self.applied_pending;
-        self.buckets.iter_mut().map(move |b| {
+        self.buckets.iter_mut().enumerate().map(move |(i, b)| {
             if let Some(applied) = b.apply_pending() {
                 applied_pending.push_back(applied)
             }
-            KBucketRef(b)
+            KBucketRef {
+                index: BucketIndex(i),
+                bucket: b
+            }
         })
     }
 
@@ -263,7 +280,7 @@ struct ClosestIter<'a, TTarget, TPeerId, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<arrayvec::IntoIter<[TOut; MAX_NODES_PER_BUCKET]>>,
+    iter: Option<arrayvec::IntoIter<[TOut; K_VALUE]>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap
@@ -304,7 +321,7 @@ impl ClosestBucketsIter {
     fn new(distance: Distance) -> Self {
         let state = match BucketIndex::new(&distance) {
             Some(i) => ClosestBucketsIterState::Start(i),
-            None => ClosestBucketsIterState::Done
+            None => ClosestBucketsIterState::Start(BucketIndex(0))
         };
         Self { distance, state }
     }
@@ -363,7 +380,7 @@ impl<TTarget, TPeerId, TVal, TMap, TOut> Iterator
 for ClosestIter<'_, TTarget, TPeerId, TVal, TMap, TOut>
 where
     TPeerId: Clone,
-    TMap: Fn(&KBucket<TPeerId, TVal>) -> ArrayVec<[TOut; MAX_NODES_PER_BUCKET]>,
+    TMap: Fn(&KBucket<TPeerId, TVal>) -> ArrayVec<[TOut; K_VALUE]>,
     TOut: AsRef<Key<TPeerId>>
 {
     type Item = TOut;
@@ -396,7 +413,10 @@ where
 }
 
 /// A reference to a bucket in a `KBucketsTable`.
-pub struct KBucketRef<'a, TPeerId, TVal>(&'a mut KBucket<TPeerId, TVal>);
+pub struct KBucketRef<'a, TPeerId, TVal> {
+    index: BucketIndex,
+    bucket: &'a mut KBucket<TPeerId, TVal>
+}
 
 impl<TPeerId, TVal> KBucketRef<'_, TPeerId, TVal>
 where
@@ -404,19 +424,49 @@ where
 {
     /// Returns the number of entries in the bucket.
     pub fn num_entries(&self) -> usize {
-        self.0.num_entries()
+        self.bucket.num_entries()
     }
 
     /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.0.pending().map_or(false, |n| !n.is_ready())
+        self.bucket.pending().map_or(false, |n| !n.is_ready())
+    }
+
+    pub fn contains(&self, d: &Distance) -> bool {
+        BucketIndex::new(d).map_or(false, |i| i == self.index)
+    }
+
+    /// Generates a random distance that falls into this bucket.
+    ///
+    /// Together with a known key `a` (e.g. the local key), a random distance `d` for
+    /// this bucket w.r.t `k` gives rise to the corresponding (random) key `b` s.t.
+    /// the XOR distance between `a` and `b` is `d`. In other words, it gives
+    /// rise to a random key falling into this bucket. See [`Key::from_distance`].
+    pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
+        self.index.rand_distance(rng)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use bigint::U256;
     use super::*;
     use libp2p_core::PeerId;
+    use quickcheck::*;
+
+    #[test]
+    fn rand_distance() {
+        fn prop(ix: u8) -> bool {
+            let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
+            let n = U256::from(<[u8; 32]>::from(d.0));
+            let b = U256::from(2);
+            let e = U256::from(ix);
+            let lower = b.pow(e);
+            let upper = b.pow(e + U256::from(1)) - U256::from(1);
+            lower <= n && n <= upper
+        }
+        quickcheck(prop as fn(_) -> _);
+    }
 
     #[test]
     fn basic_closest() {

@@ -15,6 +15,7 @@ arrayvec = "0.4.7"
 bs58 = "0.2.0"
 bigint = "4.2"
 bytes = "0.4"
+either = "1.5"
 fnv = "1.0"
 futures = "0.1"
 libp2p-core = { version = "0.10.0", path = "../../core" }
