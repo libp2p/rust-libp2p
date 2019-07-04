@@ -335,6 +335,7 @@ fn put_record() {
         let (swarm_ids, mut swarms) = build_connected_nodes_with_config(num_total, num_group, config);
 
         let records = records.into_iter()
+            .take(num_total)
             .map(|mut r| {
                 // We don't want records to expire prematurely, as they would
                 // be removed from storage and no longer replicated, but we still
@@ -517,7 +518,7 @@ fn add_provider() {
 
         let (swarm_ids, mut swarms) = build_connected_nodes_with_config(num_total, num_group, config);
 
-        let keys: HashSet<_> = keys.into_iter().collect();
+        let keys: HashSet<_> = keys.into_iter().take(num_total).collect();
 
         // Each test run publishes all records twice.
         let mut published = false;
