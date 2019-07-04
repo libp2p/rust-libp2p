@@ -27,7 +27,7 @@ use crate::kbucket::Distance;
 use crate::record::store::MemoryStore;
 use futures::future;
 use libp2p_core::{
-    Swarm,
+    PeerId,
     Transport,
     identity,
     transport::{MemoryTransport, boxed::Boxed},
@@ -37,6 +37,7 @@ use libp2p_core::{
     upgrade,
 };
 use libp2p_secio::SecioConfig;
+use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng};

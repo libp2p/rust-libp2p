@@ -23,13 +23,13 @@ use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, RawSwarmReachError, PeerState, UnknownPeerDialErr, IncomingError};
 use libp2p_core::{PeerId, Transport, upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt};
-use libp2p_core::protocols_handler::{
+use libp2p_swarm::{
     ProtocolsHandler,
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr,
-    NodeHandlerWrapperBuilder
+    protocols_handler::NodeHandlerWrapperBuilder
 };
 use rand::seq::SliceRandom;
 use std::io;

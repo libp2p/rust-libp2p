@@ -24,14 +24,17 @@ use crate::protocol::{
 };
 use crate::record::Record;
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{
+use libp2p_swarm::{
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, upgrade::Negotiated};
+use libp2p_core::{
+    either::EitherOutput,
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, Negotiated}
+};
 use multihash::Multihash;
 use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};

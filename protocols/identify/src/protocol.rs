@@ -23,7 +23,8 @@ use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use futures::try_ready;
 use libp2p_core::{
-    Multiaddr, PublicKey,
+    Multiaddr,
+    PublicKey,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
 };
 use log::{debug, trace};
