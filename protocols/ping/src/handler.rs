@@ -20,12 +20,12 @@
 
 use crate::protocol;
 use futures::prelude::*;
-use libp2p_core::ProtocolsHandlerEvent;
-use libp2p_core::protocols_handler::{
+use libp2p_swarm::{
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr,
+    ProtocolsHandlerEvent
 };
 use std::{error::Error, io, fmt, num::NonZeroU32, time::Duration};
 use std::collections::VecDeque;

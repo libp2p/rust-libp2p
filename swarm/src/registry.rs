@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Multiaddr;
+use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, num::NonZeroUsize};
 
@@ -180,8 +180,10 @@ fn isort(xs: &mut [Record]) {
 
 #[cfg(test)]
 mod tests {
-    use crate::Multiaddr;
-    use quickcheck::QuickCheck;
+    use libp2p_core::multiaddr::{Multiaddr, Protocol};
+    use quickcheck::{Arbitrary, Gen, QuickCheck};
+    use rand::Rng;
+    use std::num::NonZeroUsize;
     use super::{isort, Addresses, Record};
 
     #[test]
@@ -223,11 +225,6 @@ mod tests {
 
     #[test]
     fn record_score_equals_last_n_reports() {
-        use multiaddr::Protocol;
-        use quickcheck::{Arbitrary, Gen};
-        use rand::Rng;
-        use std::num::NonZeroUsize;
-
         #[derive(PartialEq, Eq, Clone, Hash, Debug)]
         struct Ma(Multiaddr);
 

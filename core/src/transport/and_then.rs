@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    nodes::raw_swarm::ConnectedPoint,
+    ConnectedPoint,
     either::EitherError,
     transport::{Transport, TransportError, ListenerEvent}
 };

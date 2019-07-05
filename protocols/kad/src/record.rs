@@ -18,20 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Abstracts the Kademlia record store behaviour and provides default in-memory store
+//! Records and record storage abstraction of the libp2p Kademlia DHT.
 
 use fnv::FnvHashMap;
 use multihash::Multihash;
 use std::borrow::Cow;
-
-/// The error record store may return
-#[derive(Clone, Debug, PartialEq)]
-pub enum RecordStorageError {
-    /// Store reached the capacity limit.
-    AtCapacity,
-    /// Value being put is larger than the limit.
-    ValueTooLarge,
-}
 
 /// The records that are kept in the dht.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -46,6 +37,15 @@ pub struct Record {
 pub trait RecordStore {
     fn get(&self, k: &Multihash) -> Option<Cow<Record>>;
     fn put(&mut self, r: Record) -> Result<(), RecordStorageError>;
+}
+
+/// The error record store may return
+#[derive(Clone, Debug, PartialEq)]
+pub enum RecordStorageError {
+    /// Store reached the capacity limit.
+    AtCapacity,
+    /// Value being put is larger than the limit.
+    ValueTooLarge,
 }
 
 /// In-memory implementation of the record store.

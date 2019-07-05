@@ -23,8 +23,14 @@ use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
 use futures::prelude::*;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    PollParameters,
+    ProtocolsHandler,
+    OneShotHandler
+};
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};

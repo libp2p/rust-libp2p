@@ -18,11 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    Multiaddr, PeerId,
-    nodes::raw_swarm::ConnectedPoint,
-    protocols_handler::{IntoProtocolsHandler, ProtocolsHandler},
-};
+use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use futures::prelude::*;
 use std::error;
 

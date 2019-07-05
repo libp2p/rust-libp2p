@@ -20,15 +20,13 @@
 
 use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
-use libp2p_core::{
-    protocols_handler::{
-        KeepAlive,
-        SubstreamProtocol,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr
-    },
-    upgrade::{DeniedUpgrade, OutboundUpgrade}
+use libp2p_core::upgrade::{DeniedUpgrade, OutboundUpgrade};
+use libp2p_swarm::{
+    KeepAlive,
+    SubstreamProtocol,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr
 };
 use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};

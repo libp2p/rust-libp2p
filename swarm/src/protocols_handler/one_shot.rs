@@ -19,11 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{
-    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
+    KeepAlive,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr,
     SubstreamProtocol
 };
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use smallvec::SmallVec;
 use std::{error, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};

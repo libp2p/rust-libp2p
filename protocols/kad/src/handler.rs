@@ -24,14 +24,17 @@ use crate::protocol::{
 };
 use crate::record::Record;
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{
+use libp2p_swarm::{
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
+use libp2p_core::{
+    either::EitherOutput,
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, Negotiated}
+};
 use multihash::Multihash;
 use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -135,8 +138,8 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
-        /// Identifier of the node.
-        key: PeerId,
+        /// The key for which to locate the closest nodes.
+        key: Multihash,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -473,15 +476,8 @@ where
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
-                // FIXME: Change `KadRequestMsg::FindNode::key` to be a `Multihash`.
-                match PeerId::from_multihash(key.clone()) {
-                    Ok(key) => {
-                        let msg = KadRequestMsg::FindNode { key };
-                        self.substreams
-                            .push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
-                    },
-                    Err(_) => (),
-                }
+                let msg = KadRequestMsg::FindNode { key };
+                self.substreams.push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
