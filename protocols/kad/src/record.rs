@@ -78,6 +78,15 @@ impl Default for MemoryRecordStorage {
     }
 }
 
+impl MemoryRecordStorage {
+    /// Retain the elements by a predicate.
+    pub fn retain<F>(&mut self, f: F)
+        where F: FnMut(&Multihash, &mut Record) -> bool
+    {
+        self.records.retain(f);
+    }
+}
+
 impl RecordStore for MemoryRecordStorage {
     fn get(&self, k: &Multihash) -> Option<Cow<Record>> {
         match self.records.get(k) {
