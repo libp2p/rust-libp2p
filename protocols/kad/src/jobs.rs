@@ -18,6 +18,49 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Periodic (background) jobs.
+//!
+//! ## Record Persistence & Expiry
+//!
+//! To ensure persistence of records in the DHT, a Kademlia node
+//! must periodically (re-)publish and (re-)replicate its records:
+//!
+//!   1. (Re-)publishing: The original publisher or provider of a record
+//!      must regularly re-publish in order to prolong the expiration.
+//!
+//!   2. (Re-)replication: Every node storing a replica of a record must
+//!      regularly re-replicate it to the closest nodes to the key in
+//!      order to ensure the record is present at these nodes.
+//!
+//! Re-publishing primarily ensures persistence of the record beyond its
+//! initial TTL, for as long as the publisher stores (or provides) the record,
+//! whilst (re-)replication primarily ensures persistence for the duration
+//! of the TTL in the light of topology changes. Consequently, replication
+//! intervals should be shorter than publication intervals and
+//! publication intervals should be shorter than the TTL.
+//!
+//! This module implements two periodic jobs:
+//!
+//!   * [`jobs::PutRecordJob`]: For (re-)publication and (re-)replication of
+//!     regular (value-)records.
+//!
+//!   * [`jobs::AddProviderJob`]: For (re-)publication of provider records.
+//!     Provider records currently have no separate replication mechanism.
+//!
+//! A periodic job is driven like a `Future` or `Stream` by `poll`ing it.
+//! Once a job starts running it emits records to send to the `k` closest
+//! nodes to the key, where `k` is the replication factor.
+//!
+//! Furthermore, these jobs perform double-duty by removing expired records
+//! from the `RecordStore` on every run. Expired records are never emitted
+//! by the jobs.
+//!
+//! > **Note**: The current implementation takes a snapshot of the records
+//! > to replicate from the `RecordStore` when it starts and thus, to account
+//! > for the worst case, it temporarily requires additional memory proportional
+//! > to the size of all stored records. As a job runs, the records are moved
+//! > out of the job to the consumer, where they can be dropped after being sent.
+
 use crate::record::{Record, ProviderRecord, store::RecordStore};
 
 use libp2p_core::PeerId;

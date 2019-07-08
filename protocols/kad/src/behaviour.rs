@@ -912,6 +912,21 @@ where
 
     /// Processes a record received from a peer.
     fn record_received(&mut self, source: PeerId, request_id: KademliaRequestId, mut record: Record) {
+        if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
+            // If the (alleged) publisher is the local node, do nothing. The record of
+            // the original publisher should never change as a result of replication
+            // and the publisher is always assumed to have the "right" value.
+            self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: source,
+                event: KademliaHandlerIn::PutRecordRes {
+                    key: record.key,
+                    value: record.value,
+                    request_id,
+                },
+            });
+            return
+        }
+
         let now = Instant::now();
 
         // Calculate the expiration exponentially inversely proportional to the
@@ -925,7 +940,9 @@ where
         let expiration = self.record_ttl.map(|ttl|
             now + Duration::from_secs(ttl.as_secs() >> num_beyond_k)
         );
-        record.expires = record.expires.min(expiration);
+        // The smaller TTL prevails. Only if neither TTL is set is the record
+        // stored "forever".
+        record.expires = record.expires.or(expiration).min(expiration);
 
         if let Some(job) = self.put_record_job.as_mut() {
             // Ignore the record in the next run of the replication
@@ -936,13 +953,17 @@ where
             job.skip(record.key.clone())
         }
 
+        // The record is cloned because of the weird libp2p protocol requirement
+        // to send back the value in the response, although this is a waste of
+        // resources.
         match self.store.put(record.clone()) {
             Ok(()) => {
+                debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
                 self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
                     event: KademliaHandlerIn::PutRecordRes {
-                        key: record.key.clone(),
-                        value: record.value.clone(),
+                        key: record.key,
+                        value: record.value,
                         request_id,
                     },
                 })
