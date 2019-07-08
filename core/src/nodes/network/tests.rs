@@ -28,9 +28,9 @@ use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
 use crate::nodes::NodeHandlerEvent;
 use crate::transport::ListenerEvent;
 use assert_matches::assert_matches;
+use futures::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokio::runtime::{Builder, Runtime};
 
 #[test]
 fn query_transport() {
@@ -58,17 +58,16 @@ fn successful_dial_reaches_a_node() {
     // it's there and it's connected.
     let network = Arc::new(Mutex::new(network));
 
-    let mut rt = Runtime::new().unwrap();
     let mut peer_id : Option<PeerId> = None;
     // Drive forward until we're Connected
     while peer_id.is_none() {
         let network_fut = network.clone();
-        peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
+        peer_id = futures::executor::block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
             let mut network = network_fut.lock();
             let poll_res = network.poll();
             match poll_res {
-                Async::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
-                _ => Ok(Async::Ready(None))
+                Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Poll::Ready(Some(conn_info))),
+                _ => Ok(Poll::Ready(None))
             }
         })).expect("tokio works");
     }
@@ -100,18 +99,17 @@ fn num_incoming_negotiated() {
     // no incoming yet
     assert_eq!(network.incoming_negotiated().count(), 0);
 
-    let mut rt = Runtime::new().unwrap();
     let network = Arc::new(Mutex::new(network));
     let network_fut = network.clone();
     let fut = future::poll_fn(move || -> Poll<_, ()> {
         let mut network_fut = network_fut.lock();
-        assert_matches!(network_fut.poll(), Async::Ready(NetworkEvent::NewListenerAddress {..}));
-        assert_matches!(network_fut.poll(), Async::Ready(NetworkEvent::IncomingConnection(incoming)) => {
+        assert_matches!(network_fut.poll(), Poll::Ready(NetworkEvent::NewListenerAddress {..}));
+        assert_matches!(network_fut.poll(), Poll::Ready(NetworkEvent::IncomingConnection(incoming)) => {
             incoming.accept(Handler::default());
         });
-        Ok(Async::Ready(()))
+        Poll::Ready(Ok(()))
     });
-    rt.block_on(fut).expect("tokio works");
+    futures::executor::block_on(fut).expect("tokio works");
     let network = network.lock();
     // Now there's an incoming connection
     assert_eq!(network.incoming_negotiated().count(), 1);
@@ -130,27 +128,26 @@ fn broadcasted_events_reach_active_nodes() {
     assert!(dial_result.is_ok());
 
     let network = Arc::new(Mutex::new(network));
-    let mut rt = Runtime::new().unwrap();
     let network2 = network.clone();
-    rt.block_on(future::poll_fn(move || {
+    futures::executor::block_on(future::poll_fn(move || {
         if network2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
-            Ok::<_, ()>(Async::NotReady)
+            Ok::<_, ()>(Poll::Pending)
         } else {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         }
     })).unwrap();
     let mut peer_id : Option<PeerId> = None;
     while peer_id.is_none() {
         let network_fut = network.clone();
-        peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
+        peer_id = futures::executor::block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
             let mut network = network_fut.lock();
             if network.complete_broadcast().is_not_ready() {
-                return Ok(Async::NotReady)
+                return Ok(Poll::Pending)
             }
             let poll_res = network.poll();
             match poll_res {
-                Async::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
-                _ => Ok(Async::Ready(None))
+                Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Poll::Ready(Some(conn_info))),
+                _ => Ok(Poll::Ready(None))
             }
         })).expect("tokio works");
     }
@@ -158,17 +155,17 @@ fn broadcasted_events_reach_active_nodes() {
     let mut keep_polling = true;
     while keep_polling {
         let network_fut = network.clone();
-        keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+        keep_polling = futures::executor::block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut network = network_fut.lock();
             match network.poll() {
-                Async::Ready(event) => {
+                Poll::Ready(event) => {
                     assert_matches!(event, NetworkEvent::NodeEvent { conn_info: _, event: inner_event } => {
                         // The event we sent reached the node and triggered sending the out event we told it to return
                         assert_matches!(inner_event, OutEvent::Custom("from handler 1"));
                     });
-                    Ok(Async::Ready(false))
+                    Ok(Poll::Ready(false))
                 },
-                _ => Ok(Async::Ready(true))
+                _ => Ok(Poll::Ready(true))
             }
         })).expect("tokio works");
     }
@@ -204,17 +201,16 @@ fn querying_for_connected_peer() {
     network.dial(addr, Handler::default()).expect("dialing works");
 
     let network = Arc::new(Mutex::new(network));
-    let mut rt = Runtime::new().unwrap();
     // Drive it forward until we connect; extract the new PeerId.
     let mut peer_id : Option<PeerId> = None;
     while peer_id.is_none() {
         let network_fut = network.clone();
-        peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
+        peer_id = futures::executor::block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
             let mut network = network_fut.lock();
             let poll_res = network.poll();
             match poll_res {
-                Async::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
-                _ => Ok(Async::Ready(None))
+                Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Poll::Ready(Some(conn_info))),
+                _ => Ok(Poll::Ready(None))
             }
         })).expect("tokio works");
     }
@@ -229,21 +225,20 @@ fn querying_for_connected_peer() {
 fn poll_with_closed_listener() {
     let mut transport = DummyTransport::new();
     // Set up listener to be closed
-    transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(None)));
+    transport.set_initial_listener_state(ListenerState::Ok(Poll::Ready(None)));
 
     let mut network = Network::<_, _, _, Handler, _>::new(transport, PeerId::random());
     network.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-    let mut rt = Runtime::new().unwrap();
     let network = Arc::new(Mutex::new(network));
 
     let network_fut = network.clone();
     let fut = future::poll_fn(move || -> Poll<_, ()> {
         let mut network = network_fut.lock();
-        assert_matches!(network.poll(), Async::Ready(NetworkEvent::ListenerClosed { .. } ));
-        Ok(Async::Ready(()))
+        assert_matches!(network.poll(), Poll::Ready(NetworkEvent::ListenerClosed { .. } ));
+        Ok(Poll::Ready(()))
     });
-    rt.block_on(fut).expect("tokio works");
+    futures::executor::block_on(fut).expect("tokio works");
 }
 
 #[test]
@@ -257,18 +252,17 @@ fn unknown_peer_that_is_unreachable_yields_unknown_peer_dial_error() {
     assert!(dial_result.is_ok());
 
     let network = Arc::new(Mutex::new(network));
-    let mut rt = Runtime::new().unwrap();
     // Drive it forward until we hear back from the node.
     let mut keep_polling = true;
     while keep_polling {
         let network_fut = network.clone();
-        keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+        keep_polling = futures::executor::block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut network = network_fut.lock();
             match network.poll() {
-                Async::NotReady => Ok(Async::Ready(true)),
-                Async::Ready(event) => {
+                Poll::Pending => Ok(Poll::Ready(true)),
+                Poll::Ready(event) => {
                     assert_matches!(event, NetworkEvent::UnknownPeerDialError { .. } );
-                    Ok(Async::Ready(false))
+                    Ok(Poll::Ready(false))
                 },
             }
         })).expect("tokio works");
@@ -292,23 +286,22 @@ fn known_peer_that_is_unreachable_yields_dial_error() {
         let pending_peer = peer.into_not_connected().unwrap().connect(addr, Handler::default());
         assert_matches!(pending_peer, PeerPendingConnect { .. });
     }
-    let mut rt = Runtime::new().unwrap();
     // Drive it forward until we hear back from the node.
     let mut keep_polling = true;
     while keep_polling {
         let network_fut = network.clone();
         let peer_id = peer_id.clone();
-        keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+        keep_polling = futures::executor::block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut network = network_fut.lock();
             match network.poll() {
-                Async::NotReady => Ok(Async::Ready(true)),
-                Async::Ready(event) => {
+                Poll::Pending => Ok(Poll::Ready(true)),
+                Poll::Ready(event) => {
                     let failed_peer_id = assert_matches!(
                         event,
                         NetworkEvent::DialError { new_state: _, peer_id: failed_peer_id, .. } => failed_peer_id
                     );
                     assert_eq!(peer_id, failed_peer_id);
-                    Ok(Async::Ready(false))
+                    Ok(Poll::Ready(false))
                 },
             }
         })).expect("tokio works");
@@ -334,33 +327,30 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
         peer.into_not_connected().unwrap().connect(addr, handler);
     }
 
-    // Ensure we run on a single thread
-    let mut rt = Builder::new().core_threads(1).build().unwrap();
-
     // Drive it forward until we connect to the node.
     let mut keep_polling = true;
     while keep_polling {
         let network_fut = network.clone();
         let network2 = network.clone();
-        rt.block_on(future::poll_fn(move || {
+        futures::executor::block_on(future::poll_fn(move || {
             if network2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
-                Ok::<_, ()>(Async::NotReady)
+                Ok::<_, ()>(Poll::Pending)
             } else {
-                Ok(Async::Ready(()))
+                Ok(Poll::Ready(()))
             }
         })).unwrap();
-        keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+        keep_polling = futures::executor::block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut network = network_fut.lock();
             // Push the Handler into an error state on the next poll
             if network.complete_broadcast().is_not_ready() {
-                return Ok(Async::NotReady)
+                return Ok(Poll::Pending)
             }
             match network.poll() {
-                Async::NotReady => Ok(Async::Ready(true)),
-                Async::Ready(event) => {
+                Poll::Pending => Ok(Poll::Ready(true)),
+                Poll::Ready(event) => {
                     assert_matches!(event, NetworkEvent::Connected { .. });
                     // We're connected, we can move on
-                    Ok(Async::Ready(false))
+                    Ok(Poll::Ready(false))
                 },
             }
         })).expect("tokio works");
@@ -370,12 +360,12 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
     // handler's next state was set up.
     let network_fut = network.clone();
     let expected_peer_id = peer_id.clone();
-    rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+    futures::executor::block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut network = network_fut.lock();
-        assert_matches!(network.poll(), Async::Ready(NetworkEvent::NodeClosed { conn_info, .. }) => {
+        assert_matches!(network.poll(), Poll::Ready(NetworkEvent::NodeClosed { conn_info, .. }) => {
             assert_eq!(conn_info, expected_peer_id);
         });
-        Ok(Async::Ready(()))
+        Ok(Poll::Ready(()))
     })).expect("tokio works");
 }
 
@@ -411,21 +401,20 @@ fn limit_incoming_connections() {
     assert_eq!(network.incoming_negotiated().count(), 0);
 
     let network = Arc::new(Mutex::new(network));
-    let mut rt = Runtime::new().unwrap();
     for i in 1..10 {
         let network_fut = network.clone();
-        let fut = future::poll_fn(move || -> Poll<_, ()> {
+        let fut = future::poll_fn(move |cx| -> Poll<_, ()> {
             let mut network_fut = network_fut.lock();
             if i <= limit {
-                assert_matches!(network_fut.poll(), Async::Ready(NetworkEvent::NewListenerAddress {..}));
+                assert_matches!(network_fut.poll(), Poll::Ready(NetworkEvent::NewListenerAddress {..}));
                 assert_matches!(network_fut.poll(),
-                    Async::Ready(NetworkEvent::IncomingConnection(incoming)) => {
+                    Poll::Ready(NetworkEvent::IncomingConnection(incoming)) => {
                         incoming.accept(Handler::default());
                 });
             } else {
                 match network_fut.poll() {
-                    Async::NotReady => (),
-                    Async::Ready(x) => {
+                    Poll::Pending => (),
+                    Poll::Ready(x) => {
                         match x {
                             NetworkEvent::NewListenerAddress {..} => {}
                             NetworkEvent::ExpiredListenerAddress {..} => {}
@@ -436,9 +425,9 @@ fn limit_incoming_connections() {
                     },
                 }
              }
-            Ok(Async::Ready(()))
+            Poll::Ready(())
         });
-        rt.block_on(fut).expect("tokio works");
+        futures::executor::block_on(fut).expect("tokio works");
         let network = network.lock();
         assert!(network.incoming_negotiated().count() <= (limit as usize));
     }

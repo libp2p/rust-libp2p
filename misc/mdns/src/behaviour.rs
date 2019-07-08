@@ -30,8 +30,7 @@ use libp2p_swarm::{
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{cmp, fmt, io, iter, marker::PhantomData, pin::Pin, time::Duration, task::Context, task::Poll};
 use wasm_timer::{Delay, Instant};
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
@@ -57,9 +56,9 @@ pub struct Mdns<TSubstream> {
 
 impl<TSubstream> Mdns<TSubstream> {
     /// Builds a new `Mdns` behaviour.
-    pub fn new() -> io::Result<Mdns<TSubstream>> {
+    pub async fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(Mdns {
-            service: MdnsService::new()?,
+            service: MdnsService::new().await?,
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
             marker: PhantomData,
@@ -145,7 +144,7 @@ impl fmt::Debug for ExpiredAddrsIter {
 
 impl<TSubstream> NetworkBehaviour for Mdns<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
     type OutEvent = MdnsEvent;
@@ -177,8 +176,9 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context,
         params: &mut impl PollParameters,
-    ) -> Async<
+    ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
@@ -186,8 +186,8 @@ where
     > {
         // Remove expired peers.
         if let Some(ref mut closest_expiration) = self.closest_expiration {
-            match closest_expiration.poll() {
-                Ok(Async::Ready(())) => {
+            match Future::poll(Pin::new(closest_expiration), cx) {
+                Poll::Ready(Ok(())) => {
                     let now = Instant::now();
                     let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
                     while let Some(pos) = self.discovered_nodes.iter().position(|(_, _, exp)| *exp < now) {
@@ -200,19 +200,19 @@ where
                             inner: expired.into_iter(),
                         });
 
-                        return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                        return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     }
                 },
-                Ok(Async::NotReady) => (),
-                Err(err) => warn!("tokio timer has errored: {:?}", err),
+                Poll::Pending => (),
+                Poll::Ready(Err(err)) => warn!("tokio timer has errored: {:?}", err),
             }
         }
 
         // Polling the mDNS service, and obtain the list of nodes discovered this round.
         let discovered = loop {
-            let event = match self.service.poll() {
-                Async::Ready(ev) => ev,
-                Async::NotReady => return Async::NotReady,
+            let event = match self.service.poll(cx) {
+                Poll::Ready(ev) => ev,
+                Poll::Pending => return Poll::Pending,
             };
 
             match event {
@@ -274,8 +274,8 @@ where
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
-            .map(Delay::new);
-        Async::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
+            .map(Delay::new_at);
+        Poll::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
             inner: discovered.into_iter(),
         })))
     }

@@ -23,17 +23,13 @@
 //! an initial state to facilitate testing.
 
 use futures::prelude::*;
-use futures::{
-    future::{self, FutureResult},
-    stream,
-};
-use std::io;
+use std::{io, pin::Pin, task::Poll};
 use crate::{Multiaddr, PeerId, Transport, transport::{ListenerEvent, TransportError}};
 use crate::tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
-    Ok(Async<Option<ListenerEvent<(PeerId, DummyMuxer)>>>),
+    Ok(Poll<Option<ListenerEvent<(PeerId, DummyMuxer)>>>),
     Error,
     Events(Vec<ListenerEvent<(PeerId, DummyMuxer)>>)
 }
@@ -50,7 +46,7 @@ pub(crate) struct DummyTransport {
 impl DummyTransport {
     pub(crate) fn new() -> Self {
         DummyTransport {
-            listener_state: ListenerState::Ok(Async::NotReady),
+            listener_state: ListenerState::Poll::Pending,
             next_peer_id: None,
             dial_should_fail: false,
         }
@@ -70,9 +66,9 @@ impl DummyTransport {
 impl Transport for DummyTransport {
     type Output = (PeerId, DummyMuxer);
     type Error = io::Error;
-    type Listener = Box<dyn Stream<Item=ListenerEvent<Self::ListenerUpgrade>, Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<dyn Future<Item = Self::Output, Error = io::Error> + Send>;
+    type Listener = Pin<Box<dyn Stream<Item=Result<ListenerEvent<Self::ListenerUpgrade>, io::Error>> + Send>>;
+    type ListenerUpgrade = future::Ready<Result<Self::Output, io::Error>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, io::Error>> + Send>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>>
     where
@@ -80,15 +76,15 @@ impl Transport for DummyTransport {
     {
         match self.listener_state {
             ListenerState::Ok(state) => match state {
-                Async::NotReady => Ok(Box::new(stream::poll_fn(|| Ok(Async::NotReady)))),
-                Async::Ready(Some(event)) => Ok(Box::new(stream::poll_fn(move || {
-                    Ok(Async::Ready(Some(event.clone().map(future::ok))))
+                Poll::Pending => Ok(Box::pin(stream::poll_fn(|| Poll::Pending))),
+                Poll::Ready(Some(event)) => Ok(Box::pin(stream::poll_fn(move || {
+                    Poll::Ready(Some(Ok(event.clone().map(future::ok))))
                 }))),
-                Async::Ready(None) => Ok(Box::new(stream::empty()))
+                Poll::Ready(None) => Ok(Box::pin(stream::empty()))
             },
             ListenerState::Error => Err(TransportError::MultiaddrNotSupported(addr)),
             ListenerState::Events(events) =>
-                Ok(Box::new(stream::iter_ok(events.into_iter().map(|e| e.map(future::ok)))))
+                Ok(Box::pin(stream::iter(events.into_iter().map(|e| e.map(future::ok)))))
         }
     }
 
@@ -110,6 +106,6 @@ impl Transport for DummyTransport {
                 future::ok((peer_id, DummyMuxer::new()))
             };
 
-        Ok(Box::new(fut))
+        Ok(Box::pin(fut))
     }
 }

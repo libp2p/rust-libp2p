@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Negotiated,
     either::{EitherOutput, EitherError, EitherFuture2, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
-use multistream_select::Negotiated;
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
@@ -50,7 +50,9 @@ where
 impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for EitherUpgrade<A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
+    <A as InboundUpgrade<C>>::Future: Unpin,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
+    <B as InboundUpgrade<C>>::Future: Unpin,
 {
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
@@ -68,7 +70,9 @@ where
 impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for EitherUpgrade<A, B>
 where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
+    <A as OutboundUpgrade<C>>::Future: Unpin,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
+    <B as OutboundUpgrade<C>>::Future: Unpin,
 {
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;

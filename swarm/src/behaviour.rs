@@ -20,8 +20,7 @@
 
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, nodes::ListenerId};
-use futures::prelude::*;
-use std::error;
+use std::{error, task::Context, task::Poll};
 
 /// A behaviour for the network. Allows customizing the swarm.
 ///
@@ -133,8 +132,8 @@ pub trait NetworkBehaviour {
     ///
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
-    fn poll(&mut self, params: &mut impl PollParameters)
-        -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.

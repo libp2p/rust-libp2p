@@ -57,11 +57,10 @@ mod protocol;
 
 pub use error::NoiseError;
 pub use io::NoiseOutput;
-pub use io::handshake::{Handshake, RemoteIdentity, IdentityExchange};
+pub use io::handshake::{RemoteIdentity, IdentityExchange};
 pub use protocol::{Keypair, AuthenticKeypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
 
-use futures::{future::{self, FutureResult}, Future};
 use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated};
 use tokio_io::{AsyncRead, AsyncWrite};
 use zeroize::Zeroize;

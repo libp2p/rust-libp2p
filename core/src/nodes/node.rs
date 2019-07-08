@@ -21,9 +21,7 @@
 use futures::prelude::*;
 use crate::muxing;
 use smallvec::SmallVec;
-use std::fmt;
-use std::io::Error as IoError;
-use std::sync::Arc;
+use std::{fmt, io::Error as IoError, pin::Pin, sync::Arc, task::Context, task::Poll};
 
 // Implementation notes
 // =================
@@ -143,43 +141,44 @@ where
     }
 
     /// Provides an API similar to `Future`.
-    pub fn poll(&mut self) -> Poll<NodeEvent<TMuxer, TUserData>, IoError> {
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<NodeEvent<TMuxer, TUserData>, IoError>> {
         // Polling inbound substream.
-        match self.muxer.poll_inbound().map_err(|e| e.into())? {
-            Async::Ready(substream) => {
+        match self.muxer.poll_inbound(cx) {
+            Poll::Ready(Ok(substream)) => {
                 let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
-                return Ok(Async::Ready(NodeEvent::InboundSubstream {
+                return Poll::Ready(Ok(NodeEvent::InboundSubstream {
                     substream,
                 }));
             }
-            Async::NotReady => {}
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
+            Poll::Pending => {}
         }
 
         // Polling outbound substreams.
         // We remove each element from `outbound_substreams` one by one and add them back.
         for n in (0..self.outbound_substreams.len()).rev() {
             let (user_data, mut outbound) = self.outbound_substreams.swap_remove(n);
-            match self.muxer.poll_outbound(&mut outbound) {
-                Ok(Async::Ready(substream)) => {
+            match self.muxer.poll_outbound(cx, &mut outbound) {
+                Poll::Ready(Ok(substream)) => {
                     let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                     self.muxer.destroy_outbound(outbound);
-                    return Ok(Async::Ready(NodeEvent::OutboundSubstream {
+                    return Poll::Ready(Ok(NodeEvent::OutboundSubstream {
                         user_data,
                         substream,
                     }));
                 }
-                Ok(Async::NotReady) => {
+                Poll::Pending => {
                     self.outbound_substreams.push((user_data, outbound));
                 }
-                Err(err) => {
+                Poll::Ready(Err(err)) => {
                     self.muxer.destroy_outbound(outbound);
-                    return Err(err.into());
+                    return Poll::Ready(Err(err.into()));
                 }
             }
         }
 
         // Nothing happened. Register our task to be notified and return.
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
 
@@ -212,11 +211,14 @@ impl<TMuxer> Future for Close<TMuxer>
 where
     TMuxer: muxing::StreamMuxer,
 {
-    type Item = ();
-    type Error = IoError;
+    type Output = Result<(), IoError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.muxer.close().map_err(|e| e.into())
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match self.muxer.close(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+        }
     }
 }
 
@@ -259,6 +261,7 @@ mod node_stream {
     use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use assert_matches::assert_matches;
     use futures::prelude::*;
+    use std::task::Poll;
     use tokio_mock_task::MockTask;
 
     fn build_node_stream() -> NodeStream<DummyMuxer, Vec<u8>> {
@@ -284,22 +287,22 @@ mod node_stream {
         task.enter(|| {
             // ensure the address never resolves
             let mut muxer = DummyMuxer::new();
-            // ensure muxer.poll_inbound() returns Async::NotReady
+            // ensure muxer.poll_inbound() returns Poll::Pending
             muxer.set_inbound_connection_state(DummyConnectionState::Pending);
-            // ensure muxer.poll_outbound() returns Async::NotReady
+            // ensure muxer.poll_outbound() returns Poll::Pending
             muxer.set_outbound_connection_state(DummyConnectionState::Pending);
             let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
 
-            assert_matches!(ns.poll(), Ok(Async::NotReady));
+            assert_matches!(ns.poll(), Poll::Pending);
         });
     }
 
     #[test]
     fn poll_keeps_outbound_substreams_when_the_outgoing_connection_is_not_ready() {
         let mut muxer = DummyMuxer::new();
-        // ensure muxer.poll_inbound() returns Async::NotReady
+        // ensure muxer.poll_inbound() returns Poll::Pending
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
-        // ensure muxer.poll_outbound() returns Async::NotReady
+        // ensure muxer.poll_outbound() returns Poll::Pending
         muxer.set_outbound_connection_state(DummyConnectionState::Pending);
         let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
         ns.open_substream(vec![1]);
@@ -314,7 +317,7 @@ mod node_stream {
         // ensure muxer.poll_inbound() returns Async::Ready(subs)
         muxer.set_inbound_connection_state(DummyConnectionState::Opened);
         let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-        assert_matches!(ns.poll(), Ok(Async::Ready(node_event)) => {
+        assert_matches!(ns.poll(), Poll::Ready(Ok(node_event)) => {
             assert_matches!(node_event, NodeEvent::InboundSubstream{ substream: _ });
         });
     }

@@ -19,9 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{muxing::StreamMuxer, ProtocolName, transport::ListenerEvent};
-use futures::prelude::*;
-use std::{fmt, io::{Error as IoError, Read, Write}};
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures::{prelude::*, io::Initializer};
+use std::{fmt, io::{Error as IoError, Read, Write}, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
 pub enum EitherError<A, B> {
@@ -65,24 +64,25 @@ pub enum EitherOutput<A, B> {
 
 impl<A, B> AsyncRead for EitherOutput<A, B>
 where
-    A: AsyncRead,
-    B: AsyncRead,
+    A: AsyncRead + Unpin,
+    B: AsyncRead + Unpin,
 {
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+    unsafe fn initializer(&self) -> Initializer {
         match self {
-            EitherOutput::First(a) => a.prepare_uninitialized_buffer(buf),
-            EitherOutput::Second(b) => b.prepare_uninitialized_buffer(buf),
+            EitherOutput::First(a) => a.initializer(),
+            EitherOutput::Second(b) => b.initializer(),
         }
     }
 
-    fn read_buf<Bu: bytes::BufMut>(&mut self, buf: &mut Bu) -> Poll<usize, IoError> {
-        match self {
-            EitherOutput::First(a) => a.read_buf(buf),
-            EitherOutput::Second(b) => b.read_buf(buf),
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, IoError>> {
+        match &mut *self {
+            EitherOutput::First(a) => AsyncRead::poll_read(Pin::new(a), cx, buf),
+            EitherOutput::Second(b) => AsyncRead::poll_read(Pin::new(b), cx, buf),
         }
     }
 }
 
+// TODO: remove?
 impl<A, B> Read for EitherOutput<A, B>
 where
     A: Read,
@@ -98,17 +98,32 @@ where
 
 impl<A, B> AsyncWrite for EitherOutput<A, B>
 where
-    A: AsyncWrite,
-    B: AsyncWrite,
+    A: AsyncWrite + Unpin,
+    B: AsyncWrite + Unpin,
 {
-    fn shutdown(&mut self) -> Poll<(), IoError> {
-        match self {
-            EitherOutput::First(a) => a.shutdown(),
-            EitherOutput::Second(b) => b.shutdown(),
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, IoError>> {
+        match &mut *self {
+            EitherOutput::First(a) => AsyncWrite::poll_write(Pin::new(a), cx, buf),
+            EitherOutput::Second(b) => AsyncWrite::poll_write(Pin::new(b), cx, buf),
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), IoError>> {
+        match &mut *self {
+            EitherOutput::First(a) => AsyncWrite::poll_flush(Pin::new(a), cx),
+            EitherOutput::Second(b) => AsyncWrite::poll_flush(Pin::new(b), cx),
+        }
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), IoError>> {
+        match &mut *self {
+            EitherOutput::First(a) => AsyncWrite::poll_close(Pin::new(a), cx),
+            EitherOutput::Second(b) => AsyncWrite::poll_close(Pin::new(b), cx),
         }
     }
 }
 
+// TODO: remove?
 impl<A, B> Write for EitherOutput<A, B>
 where
     A: Write,
@@ -131,46 +146,53 @@ where
 
 impl<A, B, I> Stream for EitherOutput<A, B>
 where
-    A: Stream<Item = I>,
-    B: Stream<Item = I>,
+    A: TryStream<Ok = I> + Unpin,
+    B: TryStream<Ok = I> + Unpin,
 {
-    type Item = I;
-    type Error = EitherError<A::Error, B::Error>;
+    type Item = Result<I, EitherError<A::Error, B::Error>>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self {
-            EitherOutput::First(a) => a.poll().map_err(EitherError::A),
-            EitherOutput::Second(b) => b.poll().map_err(EitherError::B),
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match &mut *self {
+            EitherOutput::First(a) => TryStream::try_poll_next(Pin::new(a), cx)
+                .map(|v| v.map(|r| r.map_err(EitherError::A))),
+            EitherOutput::Second(b) => TryStream::try_poll_next(Pin::new(b), cx)
+                .map(|v| v.map(|r| r.map_err(EitherError::B))),
         }
     }
 }
 
-impl<A, B, I> Sink for EitherOutput<A, B>
+impl<A, B, I> Sink<I> for EitherOutput<A, B>
 where
-    A: Sink<SinkItem = I>,
-    B: Sink<SinkItem = I>,
+    A: Sink<I> + Unpin,
+    B: Sink<I> + Unpin,
 {
-    type SinkItem = I;
-    type SinkError = EitherError<A::SinkError, B::SinkError>;
+    type Error = EitherError<A::Error, B::Error>;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        match self {
-            EitherOutput::First(a) => a.start_send(item).map_err(EitherError::A),
-            EitherOutput::Second(b) => b.start_send(item).map_err(EitherError::B),
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        match &mut *self {
+            EitherOutput::First(a) => Sink::poll_ready(Pin::new(a), cx).map_err(EitherError::A),
+            EitherOutput::Second(b) => Sink::poll_ready(Pin::new(b), cx).map_err(EitherError::B),
         }
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        match self {
-            EitherOutput::First(a) => a.poll_complete().map_err(EitherError::A),
-            EitherOutput::Second(b) => b.poll_complete().map_err(EitherError::B),
+    fn start_send(mut self: Pin<&mut Self>, item: I) -> Result<(), Self::Error> {
+        match &mut *self {
+            EitherOutput::First(a) => Sink::start_send(Pin::new(a), item).map_err(EitherError::A),
+            EitherOutput::Second(b) => Sink::start_send(Pin::new(b), item).map_err(EitherError::B),
         }
     }
 
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        match self {
-            EitherOutput::First(a) => a.close().map_err(EitherError::A),
-            EitherOutput::Second(b) => b.close().map_err(EitherError::B),
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        match &mut *self {
+            EitherOutput::First(a) => Sink::poll_flush(Pin::new(a), cx).map_err(EitherError::A),
+            EitherOutput::Second(b) => Sink::poll_flush(Pin::new(b), cx).map_err(EitherError::B),
+        }
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        match &mut *self {
+            EitherOutput::First(a) => Sink::poll_close(Pin::new(a), cx).map_err(EitherError::A),
+            EitherOutput::Second(b) => Sink::poll_close(Pin::new(b), cx).map_err(EitherError::B),
         }
     }
 }
@@ -184,10 +206,10 @@ where
     type OutboundSubstream = EitherOutbound<A, B>;
     type Error = IoError;
 
-    fn poll_inbound(&self) -> Poll<Self::Substream, Self::Error> {
+    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::First)).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.poll_inbound(cx).map(|p| p.map(EitherOutput::First)).map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.poll_inbound(cx).map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into()),
         }
     }
 
@@ -198,13 +220,13 @@ where
         }
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, Self::Error> {
+    fn poll_outbound(&self, cx: &mut Context, substream: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, Self::Error>> {
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::First)).map_err(|e| e.into())
+                inner.poll_outbound(cx, substream).map(|p| p.map(EitherOutput::First)).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into())
+                inner.poll_outbound(cx, substream).map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
@@ -227,56 +249,56 @@ where
         }
     }
 
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+    unsafe fn initializer(&self) -> Initializer {
         match self {
-            EitherOutput::First(ref inner) => inner.prepare_uninitialized_buffer(buf),
-            EitherOutput::Second(ref inner) => inner.prepare_uninitialized_buffer(buf),
+            EitherOutput::First(ref inner) => inner.initializer(),
+            EitherOutput::Second(ref inner) => inner.initializer(),
         }
     }
 
-    fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, Self::Error> {
+    fn read_substream(&self, cx: &mut Context, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, Self::Error>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.read_substream(sub, buf).map_err(|e| e.into())
+                inner.read_substream(cx, sub, buf).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.read_substream(sub, buf).map_err(|e| e.into())
+                inner.read_substream(cx, sub, buf).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, Self::Error> {
+    fn write_substream(&self, cx: &mut Context, sub: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, Self::Error>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.write_substream(sub, buf).map_err(|e| e.into())
+                inner.write_substream(cx, sub, buf).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.write_substream(sub, buf).map_err(|e| e.into())
+                inner.write_substream(cx, sub, buf).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), Self::Error> {
+    fn flush_substream(&self, cx: &mut Context, sub: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.flush_substream(sub).map_err(|e| e.into())
+                inner.flush_substream(cx, sub).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.flush_substream(sub).map_err(|e| e.into())
+                inner.flush_substream(cx, sub).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), Self::Error> {
+    fn shutdown_substream(&self, cx: &mut Context, sub: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.shutdown_substream(sub).map_err(|e| e.into())
+                inner.shutdown_substream(cx, sub).map_err(|e| e.into())
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.shutdown_substream(sub).map_err(|e| e.into())
+                inner.shutdown_substream(cx, sub).map_err(|e| e.into())
             },
             _ => panic!("Wrong API usage")
         }
@@ -306,17 +328,17 @@ where
         }
     }
 
-    fn close(&self) -> Poll<(), Self::Error> {
+    fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.close().map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.close().map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.close(cx).map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.close(cx).map_err(|e| e.into()),
         }
     }
 
-    fn flush_all(&self) -> Poll<(), Self::Error> {
+    fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.flush_all().map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.flush_all().map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.flush_all(cx).map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.flush_all(cx).map_err(|e| e.into()),
         }
     }
 }
@@ -338,20 +360,25 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-    AStream: Stream<Item = ListenerEvent<AInner>>,
-    BStream: Stream<Item = ListenerEvent<BInner>>,
+    AStream: TryStream<Ok = ListenerEvent<AInner>> + Unpin,
+    BStream: TryStream<Ok = ListenerEvent<BInner>> + Unpin,
 {
-    type Item = ListenerEvent<EitherFuture<AInner, BInner>>;
-    type Error = EitherError<AStream::Error, BStream::Error>;
+    type Item = Result<ListenerEvent<EitherFuture<AInner, BInner>>, EitherError<AStream::Error, BStream::Error>>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self {
-            EitherListenStream::First(a) => a.poll()
-                .map(|i| (i.map(|v| (v.map(|e| e.map(EitherFuture::First))))))
-                .map_err(EitherError::A),
-            EitherListenStream::Second(a) => a.poll()
-                .map(|i| (i.map(|v| (v.map(|e| e.map(EitherFuture::Second))))))
-                .map_err(EitherError::B),
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match &mut *self {
+            EitherListenStream::First(a) => match TryStream::try_poll_next(Pin::new(a), cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(None) => Poll::Ready(None),
+                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::First)))),
+                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::A(err)))),
+            },
+            EitherListenStream::Second(a) => match TryStream::try_poll_next(Pin::new(a), cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(None) => Poll::Ready(None),
+                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::Second)))),
+                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::B(err)))),
+            },
         }
     }
 }
@@ -366,16 +393,17 @@ pub enum EitherFuture<A, B> {
 
 impl<AFuture, BFuture, AInner, BInner> Future for EitherFuture<AFuture, BFuture>
 where
-    AFuture: Future<Item = AInner>,
-    BFuture: Future<Item = BInner>,
+    AFuture: TryFuture<Ok = AInner> + Unpin,
+    BFuture: TryFuture<Ok = BInner> + Unpin,
 {
-    type Item = EitherOutput<AInner, BInner>;
-    type Error = EitherError<AFuture::Error, BFuture::Error>;
+    type Output = Result<EitherOutput<AInner, BInner>, EitherError<AFuture::Error, BFuture::Error>>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self {
-            EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)).map_err(EitherError::A),
-            EitherFuture::Second(a) => a.poll().map(|v| v.map(EitherOutput::Second)).map_err(EitherError::B),
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match &mut *self {
+            EitherFuture::First(a) => TryFuture::try_poll(Pin::new(a), cx)
+                .map_ok(EitherOutput::First).map_err(EitherError::A),
+            EitherFuture::Second(a) => TryFuture::try_poll(Pin::new(a), cx)
+                .map_ok(EitherOutput::Second).map_err(EitherError::B),
         }
     }
 }
@@ -386,21 +414,17 @@ pub enum EitherFuture2<A, B> { A(A), B(B) }
 
 impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
 where
-    AFut: Future<Item = AItem, Error = AError>,
-    BFut: Future<Item = BItem, Error = BError>
+    AFut: TryFuture<Ok = AItem, Error = AError> + Unpin,
+    BFut: TryFuture<Ok = BItem, Error = BError> + Unpin,
 {
-    type Item = EitherOutput<AItem, BItem>;
-    type Error = EitherError<AError, BError>;
+    type Output = Result<EitherOutput<AItem, BItem>, EitherError<AError, BError>>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self {
-            EitherFuture2::A(a) => a.poll()
-                .map(|v| v.map(EitherOutput::First))
-                .map_err(EitherError::A),
-
-            EitherFuture2::B(b) => b.poll()
-                .map(|v| v.map(EitherOutput::Second))
-                .map_err(EitherError::B)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match &mut *self {
+            EitherFuture2::A(a) => TryFuture::try_poll(Pin::new(a), cx)
+                .map_ok(EitherOutput::First).map_err(EitherError::A),
+            EitherFuture2::B(a) => TryFuture::try_poll(Pin::new(a), cx)
+                .map_ok(EitherOutput::Second).map_err(EitherError::B),
         }
     }
 }

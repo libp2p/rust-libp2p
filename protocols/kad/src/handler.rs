@@ -640,7 +640,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
         io::Error,
     > {
         // We remove each element from `substreams` one by one and add them back.

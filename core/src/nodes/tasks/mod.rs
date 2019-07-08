@@ -37,7 +37,7 @@ mod manager;
 mod task;
 
 pub use error::Error;
-pub use manager::{ClosedTask, TaskEntry, Manager, Event, StartTakeOver};
+pub use manager::{ClosedTask, TaskEntry, Manager, Event};
 
 /// Task identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

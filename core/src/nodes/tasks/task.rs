@@ -25,8 +25,9 @@ use crate::{
         node::{Close, Substream}
     }
 };
-use futures::{prelude::*, stream, sync::mpsc};
+use futures::{prelude::*, channel::mpsc, stream};
 use smallvec::SmallVec;
+use std::{pin::Pin, task::Context, task::Poll};
 use super::{TaskId, Error};
 
 /// Message to transmit from the public API to a task.
@@ -140,13 +141,6 @@ where
         event: FromTaskMessage<O, H, E, <H::Handler as NodeHandler>::Error, C>
     },
 
-    /// We started sending an event, now drive the sending to completion.
-    ///
-    /// The `bool` parameter determines if we transition to `State::Node`
-    /// afterwards or to `State::Closing` (assuming we have `Some` node,
-    /// otherwise the task will end).
-    PollComplete(Option<HandledNode<M, H::Handler>>, bool),
-
     /// Fully functional node.
     Node(HandledNode<M, H::Handler>),
 
@@ -158,94 +152,103 @@ where
     Undefined
 }
 
+impl<F, M, H, I, O, E, C> Unpin for Task<F, M, H, I, O, E, C>
+where
+    M: StreamMuxer,
+    H: IntoNodeHandler<C>,
+    H::Handler: NodeHandler<Substream = Substream<M>>
+{
+}
+
 impl<F, M, H, I, O, E, C> Future for Task<F, M, H, I, O, E, C>
 where
     M: StreamMuxer,
-    F: Future<Item = (C, M), Error = E>,
+    F: Future<Output = Result<(C, M), E>> + Unpin,
     H: IntoNodeHandler<C>,
     H::Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O>
 {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     // NOTE: It is imperative to always consume all incoming event messages
     // first in order to not prevent the outside from making progress because
     // they are blocked on the channel capacity.
-    fn poll(&mut self) -> Poll<(), ()> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+        // We use a `this` because the compiler isn't smart enough to allow mutably borrowing
+        // multiple different fields from the `Pin` at the same time.
+        let this = &mut *self;
+
         'poll: loop {
-            match std::mem::replace(&mut self.state, State::Undefined) {
+            match std::mem::replace(&mut this.state, State::Undefined) {
                 State::Future { mut future, handler, mut events_buffer } => {
-                    // If self.receiver is closed, we stop the task.
+                    // If this.receiver is closed, we stop the task.
                     loop {
-                        match self.receiver.poll() {
-                            Ok(Async::NotReady) => break,
-                            Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
-                            Ok(Async::Ready(Some(ToTaskMessage::HandlerEvent(event)))) =>
+                        match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
+                            Poll::Pending => break,
+                            Poll::Ready(None) => return Poll::Ready(()),
+                            Poll::Ready(Some(ToTaskMessage::HandlerEvent(event))) =>
                                 events_buffer.push(event),
-                            Ok(Async::Ready(Some(ToTaskMessage::TakeOver(take_over)))) =>
-                                self.taken_over.push(take_over),
-                            Err(()) => unreachable!("An `mpsc::Receiver` does not error.")
+                            Poll::Ready(Some(ToTaskMessage::TakeOver(take_over))) =>
+                                this.taken_over.push(take_over),
                         }
                     }
                     // Check if dialing succeeded.
-                    match future.poll() {
-                        Ok(Async::Ready((conn_info, muxer))) => {
+                    match Future::poll(Pin::new(&mut future), cx) {
+                        Poll::Ready(Ok((conn_info, muxer))) => {
                             let mut node = HandledNode::new(muxer, handler.into_handler(&conn_info));
                             for event in events_buffer {
                                 node.inject_event(event)
                             }
-                            self.state = State::SendEvent {
+                            this.state = State::SendEvent {
                                 node: Some(node),
                                 event: FromTaskMessage::NodeReached(conn_info)
                             }
                         }
-                        Ok(Async::NotReady) => {
-                            self.state = State::Future { future, handler, events_buffer };
-                            return Ok(Async::NotReady)
+                        Poll::Pending => {
+                            this.state = State::Future { future, handler, events_buffer };
+                            return Poll::Pending
                         }
-                        Err(e) => {
+                        Poll::Ready(Err(e)) => {
                             let event = FromTaskMessage::TaskClosed(Error::Reach(e), Some(handler));
-                            self.state = State::SendEvent { node: None, event }
+                            this.state = State::SendEvent { node: None, event }
                         }
                     }
                 }
                 State::Node(mut node) => {
                     // Start by handling commands received from the outside of the task.
                     loop {
-                        match self.receiver.poll() {
-                            Ok(Async::NotReady) => break,
-                            Ok(Async::Ready(Some(ToTaskMessage::HandlerEvent(event)))) =>
+                        match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
+                            Poll::Pending => break,
+                            Poll::Ready(Some(ToTaskMessage::HandlerEvent(event))) =>
                                 node.inject_event(event),
-                            Ok(Async::Ready(Some(ToTaskMessage::TakeOver(take_over)))) =>
-                                self.taken_over.push(take_over),
-                            Ok(Async::Ready(None)) => {
+                            Poll::Ready(Some(ToTaskMessage::TakeOver(take_over))) =>
+                                this.taken_over.push(take_over),
+                            Poll::Ready(None) => {
                                 // Node closed by the external API; start closing.
-                                self.state = State::Closing(node.close());
+                                this.state = State::Closing(node.close());
                                 continue 'poll
                             }
-                            Err(()) => unreachable!("An `mpsc::Receiver` does not error.")
                         }
                     }
                     // Process the node.
                     loop {
-                        if !self.taken_over.is_empty() && node.is_remote_acknowledged() {
-                            self.taken_over.clear()
+                        if !this.taken_over.is_empty() && node.is_remote_acknowledged() {
+                            this.taken_over.clear()
                         }
-                        match node.poll() {
-                            Ok(Async::NotReady) => {
-                                self.state = State::Node(node);
-                                return Ok(Async::NotReady)
+                        match HandledNode::poll(Pin::new(&mut node), cx) {
+                            Poll::Pending => {
+                                this.state = State::Node(node);
+                                return Poll::Pending
                             }
-                            Ok(Async::Ready(event)) => {
-                                self.state = State::SendEvent {
+                            Poll::Ready(Ok(event)) => {
+                                this.state = State::SendEvent {
                                     node: Some(node),
                                     event: FromTaskMessage::NodeEvent(event)
                                 };
                                 continue 'poll
                             }
-                            Err(err) => {
+                            Poll::Ready(Err(err)) => {
                                 let event = FromTaskMessage::TaskClosed(Error::Node(err), None);
-                                self.state = State::SendEvent { node: None, event };
+                                this.state = State::SendEvent { node: None, event };
                                 continue 'poll
                             }
                         }
@@ -254,23 +257,22 @@ where
                 // Deliver an event to the outside.
                 State::SendEvent { mut node, event } => {
                     loop {
-                        match self.receiver.poll() {
-                            Ok(Async::NotReady) => break,
-                            Ok(Async::Ready(Some(ToTaskMessage::HandlerEvent(event)))) =>
+                        match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
+                            Poll::Pending => break,
+                            Poll::Ready(Some(ToTaskMessage::HandlerEvent(event))) =>
                                 if let Some(ref mut n) = node {
                                     n.inject_event(event)
                                 }
-                            Ok(Async::Ready(Some(ToTaskMessage::TakeOver(take_over)))) =>
-                                self.taken_over.push(take_over),
-                            Ok(Async::Ready(None)) =>
+                            Poll::Ready(Some(ToTaskMessage::TakeOver(take_over))) =>
+                                this.taken_over.push(take_over),
+                            Poll::Ready(None) =>
                                 // Node closed by the external API; start closing.
                                 if let Some(n) = node {
-                                    self.state = State::Closing(n.close());
+                                    this.state = State::Closing(n.close());
                                     continue 'poll
                                 } else {
-                                    return Ok(Async::Ready(())) // end task
+                                    return Poll::Ready(()) // end task
                                 }
-                            Err(()) => unreachable!("An `mpsc::Receiver` does not error.")
                         }
                     }
                     // Check if this task is about to close. We pass the flag to
@@ -281,80 +283,46 @@ where
                         } else {
                             false
                         };
-                    match self.sender.start_send((event, self.id)) {
-                        Ok(AsyncSink::NotReady((event, _))) => {
+                    match this.sender.poll_ready(cx) {
+                        Poll::Pending => {
                             self.state = State::SendEvent { node, event };
-                            return Ok(Async::NotReady)
+                            return Poll::Pending
                         }
-                        Ok(AsyncSink::Ready) => self.state = State::PollComplete(node, close),
-                        Err(_) => {
-                            if let Some(n) = node {
-                                self.state = State::Closing(n.close());
-                                continue 'poll
-                            }
-                            // We can not communicate to the outside and there is no
-                            // node to handle, so this is the end of this task.
-                            return Ok(Async::Ready(()))
-                        }
-                    }
-                }
-                // We started delivering an event, now try to complete the sending.
-                State::PollComplete(mut node, close) => {
-                    loop {
-                        match self.receiver.poll() {
-                            Ok(Async::NotReady) => break,
-                            Ok(Async::Ready(Some(ToTaskMessage::HandlerEvent(event)))) =>
-                                if let Some(ref mut n) = node {
-                                    n.inject_event(event)
-                                }
-                            Ok(Async::Ready(Some(ToTaskMessage::TakeOver(take_over)))) =>
-                                self.taken_over.push(take_over),
-                            Ok(Async::Ready(None)) =>
-                                // Node closed by the external API; start closing.
-                                if let Some(n) = node {
-                                    self.state = State::Closing(n.close());
-                                    continue 'poll
-                                } else {
-                                    return Ok(Async::Ready(())) // end task
-                                }
-                            Err(()) => unreachable!("An `mpsc::Receiver` does not error.")
-                        }
-                    }
-                    match self.sender.poll_complete() {
-                        Ok(Async::NotReady) => {
-                            self.state = State::PollComplete(node, close);
-                            return Ok(Async::NotReady)
-                        }
-                        Ok(Async::Ready(())) =>
+                        Poll::Ready(Ok(())) => {
+                            // We assume that if `poll_ready` has succeeded, then sending the event
+                            // will succeed as well. If it turns out that it didn't, we will detect
+                            // the closing at the next loop iteration.
+                            let _ = this.sender.start_send((event, this.id));
                             if let Some(n) = node {
                                 if close {
-                                    self.state = State::Closing(n.close())
+                                    this.state = State::Closing(n.close())
                                 } else {
-                                    self.state = State::Node(n)
+                                    this.state = State::Node(n)
                                 }
                             } else {
                                 // Since we have no node we terminate this task.
                                 assert!(close);
-                                return Ok(Async::Ready(()))
+                                return Poll::Ready(())
                             }
-                        Err(_) => {
+                        },
+                        Poll::Ready(Err(_)) => {
                             if let Some(n) = node {
-                                self.state = State::Closing(n.close());
+                                this.state = State::Closing(n.close());
                                 continue 'poll
                             }
                             // We can not communicate to the outside and there is no
                             // node to handle, so this is the end of this task.
-                            return Ok(Async::Ready(()))
+                            return Poll::Ready(())
                         }
                     }
                 }
                 State::Closing(mut closing) =>
-                    match closing.poll() {
-                        Ok(Async::Ready(())) | Err(_) =>
-                            return Ok(Async::Ready(())), // end task
-                        Ok(Async::NotReady) => {
-                            self.state = State::Closing(closing);
-                            return Ok(Async::NotReady)
+                    match Future::poll(Pin::new(&mut closing), cx) {
+                        Poll::Ready(_) =>
+                            return Poll::Ready(()), // end task
+                        Poll::Pending => {
+                            this.state = State::Closing(closing);
+                            return Poll::Pending
                         }
                     }
                 // This happens if a previous poll has resolved the future.

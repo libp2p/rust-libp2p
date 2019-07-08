@@ -14,10 +14,9 @@ bs58 = "0.2.0"
 bytes = "0.4"
 cuckoofilter = "0.3.2"
 fnv = "1.0"
-futures = "0.1"
+futures-preview = "0.3.0-alpha.17"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 protobuf = "2.3"
 rand = "0.6"
 smallvec = "0.6.5"
-tokio-io = "0.1"

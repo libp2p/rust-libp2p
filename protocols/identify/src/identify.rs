@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{IdentifyHandler, IdentifyHandlerEvent};
-use crate::protocol::{IdentifyInfo, ReplySubstream, ReplyFuture};
+use crate::protocol::{IdentifyInfo, ReplySubstream};
 use futures::prelude::*;
 use libp2p_core::{
     ConnectedPoint,
     Multiaddr,
     PeerId,
     PublicKey,
-    upgrade::{Negotiated, UpgradeError}
+    upgrade::{Negotiated, ReadOneError, UpgradeError}
 };
 use libp2p_swarm::{
     NetworkBehaviour,
@@ -35,8 +35,7 @@ use libp2p_swarm::{
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr
 };
-use std::{collections::HashMap, collections::VecDeque, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{collections::HashMap, collections::VecDeque, io, pin::Pin, task::Context, task::Poll};
 use void::Void;
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
@@ -67,7 +66,7 @@ enum Reply<TSubstream> {
     /// The reply is being sent.
     Sending {
         peer: PeerId,
-        io: ReplyFuture<Negotiated<TSubstream>>
+        io: Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>,
     }
 }
 
@@ -87,7 +86,7 @@ impl<TSubstream> Identify<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Identify<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type ProtocolsHandler = IdentifyHandler<TSubstream>;
     type OutEvent = IdentifyEvent;
@@ -154,15 +153,16 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context,
         params: &mut impl PollParameters,
-    ) -> Async<
+    ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(event);
+            return Poll::Ready(event);
         }
 
         if let Some(r) = self.pending_replies.pop_front() {
@@ -189,17 +189,17 @@ where
                             listen_addrs: listen_addrs.clone(),
                             protocols: protocols.clone(),
                         };
-                        let io = io.send(info, &observed);
+                        let io = Box::pin(io.send(info, &observed));
                         reply = Some(Reply::Sending { peer, io });
                     }
                     Some(Reply::Sending { peer, mut io }) => {
                         sending += 1;
-                        match io.poll() {
-                            Ok(Async::Ready(())) => {
+                        match Future::poll(Pin::new(&mut io), cx) {
+                            Poll::Ready(Ok(())) => {
                                 let event = IdentifyEvent::Sent { peer_id: peer };
-                                return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             },
-                            Ok(Async::NotReady) => {
+                            Poll::Pending => {
                                 self.pending_replies.push_back(Reply::Sending { peer, io });
                                 if sending == to_send {
                                     // All remaining futures are NotReady
@@ -208,12 +208,12 @@ where
                                     reply = self.pending_replies.pop_front();
                                 }
                             }
-                            Err(err) => {
+                            Poll::Ready(Err(err)) => {
                                 let event = IdentifyEvent::Error {
                                     peer_id: peer,
-                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err))
+                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err.into()))
                                 };
-                                return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             },
                         }
                     }
@@ -222,7 +222,7 @@ where
             }
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
 
@@ -248,7 +248,7 @@ pub enum IdentifyEvent {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ProtocolsHandlerUpgrErr<io::Error>,
+        error: ProtocolsHandlerUpgrErr<ReadOneError>,
     },
 }
 
@@ -326,7 +326,7 @@ mod tests {
                             assert_eq!(info.agent_version, "d");
                             assert!(!info.protocols.is_empty());
                             assert!(info.listen_addrs.is_empty());
-                            return Ok(Async::Ready(()))
+                            return Ok(Poll::Ready(()))
                         },
                         Async::Ready(Some(IdentifyEvent::Sent { .. })) => (),
                         Async::Ready(e) => panic!("{:?}", e),
@@ -340,7 +340,7 @@ mod tests {
                             assert_eq!(info.agent_version, "b");
                             assert!(!info.protocols.is_empty());
                             assert_eq!(info.listen_addrs.len(), 1);
-                            return Ok(Async::Ready(()))
+                            return Ok(Poll::Ready(()))
                         },
                         Async::Ready(Some(IdentifyEvent::Sent { .. })) => (),
                         Async::Ready(e) => panic!("{:?}", e),
@@ -348,7 +348,7 @@ mod tests {
                     }
                 }
 
-                Ok(Async::NotReady)
+                Ok(Poll::Pending)
             }))
             .unwrap();
     }

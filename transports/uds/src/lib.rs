@@ -20,8 +20,6 @@
 
 //! Implementation of the libp2p `Transport` trait for Unix domain sockets.
 //!
-//! Uses [the *tokio* library](https://tokio.rs).
-//!
 //! # Platform support
 //!
 //! This transport only works on Unix platforms.
@@ -46,27 +44,27 @@
 
 #![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
 
-use futures::{future::{self, FutureResult}, prelude::*, try_ready};
+use futures::{prelude::*, ready, future::Ready};
 use futures::stream::Stream;
 use log::debug;
-use std::{io, path::PathBuf};
+use romio::uds::{UnixListener, UnixStream};
+use std::{io, path::PathBuf, pin::Pin, task::Context, task::Poll};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
-use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
 ///
-/// The Unixs sockets created by libp2p will need to be progressed by running the futures and
+/// The Unix sockets created by libp2p will need to be progressed by running the futures and
 /// streams obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone)]
 pub struct UdsConfig {
 }
 
 impl UdsConfig {
-    /// Creates a new configuration object for TCP/IP.
+    /// Creates a new configuration object for Unix domain sockets.
     #[inline]
     pub fn new() -> UdsConfig {
         UdsConfig {}
@@ -76,9 +74,9 @@ impl UdsConfig {
 impl Transport for UdsConfig {
     type Output = UnixStream;
     type Error = io::Error;
-    type Listener = ListenerStream<tokio_uds::Incoming>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = tokio_uds::ConnectFuture;
+    type Listener = ListenerStream<romio::uds::Incoming>;
+    type ListenerUpgrade = Ready<Result<Self::Output, io::Error>>;
+    type Dial = romio::uds::ConnectFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
@@ -145,43 +143,40 @@ pub struct ListenerStream<T> {
 
 impl<T> Stream for ListenerStream<T>
 where
-    T: Stream
+    T: TryStream + Unpin
 {
-    type Item = ListenerEvent<FutureResult<T::Item, T::Error>>;
-    type Error = T::Error;
+    type Item = Result<ListenerEvent<future::Ready<Result<T::Ok, T::Error>>>, T::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         if self.tell_new_addr {
             self.tell_new_addr = false;
-            return Ok(Async::Ready(Some(ListenerEvent::NewAddress(self.addr.clone()))))
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))))
         }
-        match try_ready!(self.stream.poll()) {
+
+        match ready!(TryStream::try_poll_next(Pin::new(&mut self.stream), cx)) {
             Some(item) => {
                 debug!("incoming connection on {}", self.addr);
-                Ok(Async::Ready(Some(ListenerEvent::Upgrade {
-                    upgrade: future::ok(item),
+                Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                    upgrade: future::ready(item),
                     local_addr: self.addr.clone(),
                     remote_addr: self.addr.clone()
                 })))
             }
-            None => Ok(Async::Ready(None))
+            None => Poll::Ready(None)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_path, UdsConfig};
     use futures::prelude::*;
     use std::{self, borrow::Cow, path::Path};
     use libp2p_core::{
         Transport,
-        multiaddr::{Protocol, Multiaddr},
-        transport::ListenerEvent
+        multiaddr::{Protocol, Multiaddr}
     };
     use tempfile;
-    use tokio_io;
 
     #[test]
     fn multiaddr_to_path_conversion() {
@@ -202,64 +197,46 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        use std::io::Write;
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
         let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
         let addr2 = addr.clone();
 
-        std::thread::spawn(move || {
-            let tcp = UdsConfig::new();
-
-            let mut rt = Runtime::new().unwrap();
-            let handle = rt.handle();
-            let listener = tcp.listen_on(addr2).unwrap()
-                .filter_map(ListenerEvent::into_upgrade)
-                .for_each(|(sock, _)| {
-                    sock.and_then(|sock| {
-                        // Define what to do with the socket that just connected to us
-                        // Which in this case is read 3 bytes
-                        let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
-                            .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
-                            .map_err(|err| panic!("IO error {:?}", err));
-
-                        // Spawn the future as a concurrent task
-                        handle.spawn(handle_conn).unwrap();
+        async_std::task::spawn(
+            UdsConfig::new().listen_on(addr2).unwrap()
+                .try_filter_map(|ev| future::ok(ev.into_upgrade()))
+                .try_for_each(|(sock, _)| {
+                    async {
+                        let mut sock = sock.await.unwrap();
+                        let mut buf = [0u8; 3];
+                        sock.read_exact(&mut buf).await.unwrap();
+                        assert_eq!(buf, [1, 2, 3]);
                         Ok(())
-                    })
-                });
+                    }
+                })
+        );
 
-            rt.block_on(listener).unwrap();
-            rt.run().unwrap();
+        futures::executor::block_on(async {
+            let uds = UdsConfig::new();
+            let mut socket = uds.dial(addr.clone()).unwrap().await.unwrap();
+            socket.write(&[0x1, 0x2, 0x3]).await.unwrap();
         });
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let tcp = UdsConfig::new();
-        // Obtain a future socket through dialing
-        let socket = tcp.dial(addr.clone()).unwrap();
-        // Define what to do with the socket once it's obtained
-        let action = socket.then(|sock| -> Result<(), ()> {
-            sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
-            Ok(())
-        });
-        // Execute the future in our event loop
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(action).unwrap();
     }
 
     #[test]
     #[ignore]       // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
-        let tcp = UdsConfig::new();
+        let uds = UdsConfig::new();
 
-        let addr = "/ip4/127.0.0.1/tcp/12345/unix//foo/bar"
+        let addr = "/unix//foo/bar"
             .parse::<Multiaddr>()
             .unwrap();
-        assert!(tcp.listen_on(addr).is_err());
+        assert!(uds.listen_on(addr).is_err());
     }
 
     #[test]
     #[ignore]       // TODO: for the moment unix addresses fail to parse
     fn relative_addr_denied() {
-        assert!("/ip4/127.0.0.1/tcp/12345/unix/./foo/bar".parse::<Multiaddr>().is_err());
+        assert!("/unix/./foo/bar".parse::<Multiaddr>().is_err());
     }
 }

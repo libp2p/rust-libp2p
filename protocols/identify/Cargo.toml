@@ -11,17 +11,16 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "0.4"
-futures = "0.1"
+futures_codec = "0.2"
+futures-preview = "0.3.0-alpha.17"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }
 protobuf = "2.3"
 smallvec = "0.6"
-tokio-codec = "0.1"
-tokio-io = "0.1.0"
-wasm-timer = "0.1"
-unsigned-varint = { version = "0.2.1", features = ["codec"] }
+wasm-timer = "0.2"
+unsigned-varint = { git = "https://github.com/tomaka/unsigned-varint", branch = "futures-codec", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
@@ -29,4 +28,3 @@ libp2p-mplex = { version = "0.12.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.12.0", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
 rand = "0.6"
-tokio = "0.1"

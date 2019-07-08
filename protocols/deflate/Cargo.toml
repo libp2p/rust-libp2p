@@ -10,14 +10,13 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.1"
+futures-preview = "0.3.0-alpha.17"
 libp2p-core = { version = "0.12.0", path = "../../core" }
-tokio-io = "0.1.12"
-flate2 = { version = "1.0", features = ["tokio"] }
+flate2 = "1.0"
 
 [dev-dependencies]
+async-std = "0.99"
 env_logger = "0.6"
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
+rand = "0.7"
 quickcheck = "0.8"
-tokio = "0.1"
-log = "0.4"

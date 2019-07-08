@@ -20,10 +20,10 @@
 
 use crate::rpc_proto;
 use crate::topic::TopicHash;
+use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use protobuf::{ProtobufError, Message as ProtobufMessage};
 use std::{error, fmt, io, iter};
-use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -49,7 +49,7 @@ impl UpgradeInfo for FloodsubConfig {
 
 impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = FloodsubRpc;
     type Error = FloodsubDecodeError;
@@ -164,7 +164,7 @@ impl UpgradeInfo for FloodsubRpc {
 
 impl<TSocket> OutboundUpgrade<TSocket> for FloodsubRpc
 where
-    TSocket: AsyncWrite + AsyncRead,
+    TSocket: AsyncWrite + AsyncRead + Unpin,
 {
     type Output = ();
     type Error = io::Error;

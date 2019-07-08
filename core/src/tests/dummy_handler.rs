@@ -26,7 +26,7 @@ use super::dummy_muxer::DummyMuxer;
 use futures::prelude::*;
 use crate::muxing::SubstreamRef;
 use crate::nodes::handled_node::{HandledNode, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
-use std::sync::Arc;
+use std::{pin::Pin, sync::Arc, task::Context, task::Poll};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Handler {
@@ -113,13 +113,13 @@ impl NodeHandler for Handler {
             _ => unreachable!(),
         }
     }
-    fn poll(&mut self) -> Poll<NodeHandlerEvent<usize, OutEvent>, IoError> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<NodeHandlerEvent<usize, OutEvent>, IoError>> {
         match self.state.take() {
             Some(ref state) => match state {
-                HandlerState::Ready(event) => Ok(Async::Ready(event.clone())),
-                HandlerState::Err => Err(io::Error::new(io::ErrorKind::Other, "oh noes")),
+                HandlerState::Ready(event) => Poll::Ready(Ok(event.clone())),
+                HandlerState::Err => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "oh noes"))),
             },
-            None => Ok(Async::NotReady),
+            None => Poll::Pending,
         }
     }
 }

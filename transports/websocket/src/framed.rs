@@ -20,7 +20,8 @@
 
 use bytes::BytesMut;
 use crate::{error::Error, tls};
-use futures::{future::{self, Either, Loop}, prelude::*, try_ready};
+use futures::{future::{self, Either, Loop}, prelude::*, ready};
+use futures_codec::{Framed, FramedParts};
 use libp2p_core::{
     Transport,
     either::EitherOutput,
@@ -35,9 +36,7 @@ use soketto::{
     extension::deflate::Deflate,
     handshake::{self, Redirect, Response}
 };
-use std::{convert::TryFrom, io};
-use tokio_codec::{Framed, FramedParts};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{convert::TryFrom, io, pin::Pin, task::Context, task::Poll};
 use tokio_rustls::webpki;
 use url::Url;
 
@@ -114,9 +113,9 @@ where
 {
     type Output = BytesConnection<T::Output>;
     type Error = Error<T::Error>;
-    type Listener = Box<dyn Stream<Item = ListenerEvent<Self::ListenerUpgrade>, Error = Self::Error> + Send>;
-    type ListenerUpgrade = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
-    type Dial = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>> + Send>>;
+    type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
@@ -170,9 +169,9 @@ where
                                         Error::Tls(tls::Error::from(e))
                                     })
                                     .map(|s| EitherOutput::First(EitherOutput::Second(s)));
-                                Either::A(future)
+                                Either::Left(future)
                             } else { // continue with plain stream
-                                Either::B(future::ok(EitherOutput::Second(stream)))
+                                Either::Right(future::ok(EitherOutput::Second(stream)))
                             }
                         })
                         .and_then(move |stream| {
@@ -188,7 +187,7 @@ where
                                     if let Some(r) = request {
                                         trace!("accepting websocket handshake request from {}", remote2);
                                         let key = Vec::from(r.key());
-                                        Either::A(framed.send(Ok(handshake::Accept::new(key)))
+                                        Either::Left(framed.send(Ok(handshake::Accept::new(key)))
                                             .map_err(|e| Error::Base(Box::new(e)))
                                             .map(move |f| {
                                                 trace!("websocket handshake with {} successful", remote2);
@@ -200,7 +199,7 @@ where
                                     } else {
                                         debug!("connection to {} terminated during handshake", remote2);
                                         let e: io::Error = io::ErrorKind::ConnectionAborted.into();
-                                        Either::B(future::err(Error::Handshake(Box::new(e))))
+                                        Either::Right(future::err(Error::Handshake(Box::new(e))))
                                     }
                                 })
                         });
@@ -211,7 +210,7 @@ where
                     }
                 }
             });
-        Ok(Box::new(listen) as Box<_>)
+        Ok(Box::pin(listen) as Box<_>)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -226,7 +225,7 @@ where
         let max_redirects = self.max_redirects;
         let future = future::loop_fn((addr, self, max_redirects), |(addr, cfg, remaining)| {
             dial(addr, cfg.clone()).and_then(move |result| match result {
-                Either::A(redirect) => {
+                Either::Left(redirect) => {
                     if remaining == 0 {
                         debug!("too many redirects");
                         return Err(Error::TooManyRedirects)
@@ -234,16 +233,16 @@ where
                     let a = location_to_multiaddr(redirect.location())?;
                     Ok(Loop::Continue((a, cfg, remaining - 1)))
                 }
-                Either::B(conn) => Ok(Loop::Break(conn))
+                Either::Right(conn) => Ok(Loop::Break(conn))
             })
         });
-        Ok(Box::new(future) as Box<_>)
+        Ok(Box::pin(future) as Box<_>)
     }
 }
 
 /// Attempty to dial the given address and perform a websocket handshake.
 fn dial<T>(address: Multiaddr, config: WsConfig<T>)
-    -> impl Future<Item = Either<Redirect, BytesConnection<T::Output>>, Error = Error<T::Error>>
+    -> impl Future<Output = Result<Either<Redirect, BytesConnection<T::Output>>, Error<T::Error>>>
 where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite
@@ -254,7 +253,7 @@ where
 
     let (host_port, dns_name) = match host_and_dnsname(&address) {
         Ok(x) => x,
-        Err(e) => return Either::A(future::err(e))
+        Err(e) => return Either::Left(future::err(e))
     };
 
     let mut inner_addr = address.clone();
@@ -264,22 +263,22 @@ where
         Some(Protocol::Wss(path)) => {
             if dns_name.is_none() {
                 debug!("no DNS name in {}", address);
-                return Either::A(future::err(Error::InvalidMultiaddr(address)))
+                return Either::Left(future::err(Error::InvalidMultiaddr(address)))
             }
             (true, path)
         }
         _ => {
             debug!("{} is not a websocket multiaddr", address);
-            return Either::A(future::err(Error::InvalidMultiaddr(address)))
+            return Either::Left(future::err(Error::InvalidMultiaddr(address)))
         }
     };
 
     let dial = match transport.dial(inner_addr) {
         Ok(dial) => dial,
         Err(TransportError::MultiaddrNotSupported(a)) =>
-            return Either::A(future::err(Error::InvalidMultiaddr(a))),
+            return Either::Left(future::err(Error::InvalidMultiaddr(a))),
         Err(TransportError::Other(e)) =>
-            return Either::A(future::err(Error::Transport(e)))
+            return Either::Left(future::err(Error::Transport(e)))
     };
 
     let address1 = address.clone(); // used for logging
@@ -297,10 +296,10 @@ where
                         Error::Tls(tls::Error::from(e))
                     })
                     .map(|s| EitherOutput::First(EitherOutput::First(s)));
-                return Either::A(future)
+                return Either::Left(future)
             }
             // continue with plain stream
-            Either::B(future::ok(EitherOutput::Second(stream)))
+            Either::Right(future::ok(EitherOutput::Second(stream)))
         })
         .and_then(move |stream| {
             trace!("sending websocket handshake request to {}", address1);
@@ -324,7 +323,7 @@ where
                         }
                         Some(Response::Redirect(r)) => {
                             debug!("received {}", r);
-                            return Ok(Either::A(r))
+                            return Ok(Either::Left(r))
                         }
                         Some(Response::Accepted(_)) => {
                             trace!("websocket handshake with {} successful", address1)
@@ -332,11 +331,11 @@ where
                     }
                     let (mut handshake, mut c) = new_connection(framed, max_data_size, Mode::Client);
                     c.add_extensions(handshake.drain_extensions());
-                    Ok(Either::B(BytesConnection { inner: c }))
+                    Ok(Either::Right(BytesConnection { inner: c }))
                 })
         });
 
-    Either::B(future)
+    Either::Right(future)
 }
 
 // Extract host, port and optionally the DNS name from the given [`Multiaddr`].
@@ -423,36 +422,35 @@ pub struct BytesConnection<T> {
 }
 
 impl<T: AsyncRead + AsyncWrite> Stream for BytesConnection<T> {
-    type Item = BytesMut;
-    type Error = io::Error;
+    type Item = Result<BytesMut, io::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let data = try_ready!(self.inner.poll().map_err(|e| io::Error::new(io::ErrorKind::Other, e)));
-        Ok(Async::Ready(data.map(base::Data::into_bytes)))
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let data = ready!(self.inner.poll(cx).map_err(|e| io::Error::new(io::ErrorKind::Other, e)));
+        Poll::Ready(data.map(base::Data::into_bytes))
     }
 }
 
-impl<T: AsyncRead + AsyncWrite> Sink for BytesConnection<T> {
-    type SinkItem = BytesMut;
-    type SinkError = io::Error;
+impl<T: AsyncRead + AsyncWrite> Sink<BytesMut> for BytesConnection<T> {
+    type Error = io::Error;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        let result = self.inner.start_send(base::Data::Binary(item))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-
-        if let AsyncSink::NotReady(data) = result? {
-            Ok(AsyncSink::NotReady(data.into_bytes()))
-        } else {
-            Ok(AsyncSink::Ready)
-        }
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_ready(Pin::new(&mut self.inner), cx)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.poll_complete().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    fn start_send(self: Pin<&mut Self>, item: BytesMut) -> Result<(), Self::Error> {
+        self.inner.start_send(base::Data::Binary(item))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.close().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_flush(Pin::new(&mut self.inner), cx)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_close(Pin::new(&mut self.inner), cx)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 

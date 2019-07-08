@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::Negotiated;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use futures::{prelude::*, try_ready};
-use multistream_select::Negotiated;
+use futures::prelude::*;
+use std::{pin::Pin, task::Context, task::Poll};
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
@@ -47,6 +48,7 @@ where
 impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
     U: InboundUpgrade<C>,
+    U::Future: Unpin,
     F: FnOnce(U::Output) -> T
 {
     type Output = T;
@@ -63,7 +65,8 @@ where
 
 impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
+    U::Future: Unpin,
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -98,7 +101,8 @@ where
 
 impl<C, U, F> InboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
-    U: InboundUpgrade<C>
+    U: InboundUpgrade<C>,
+    U::Future: Unpin,
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -112,6 +116,7 @@ where
 impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
     U: OutboundUpgrade<C>,
+    U::Future: Unpin,
     F: FnOnce(U::Output) -> T
 {
     type Output = T;
@@ -151,6 +156,7 @@ where
 impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
     U: InboundUpgrade<C>,
+    U::Future: Unpin,
     F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
@@ -167,7 +173,8 @@ where
 
 impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
+    U::Future: Unpin,
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -203,6 +210,7 @@ where
 impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgradeErr<U, F>
 where
     U: OutboundUpgrade<C>,
+    U::Future: Unpin,
     F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
@@ -235,18 +243,25 @@ pub struct MapFuture<TInnerFut, TMap> {
     map: Option<TMap>,
 }
 
+impl<TInnerFut, TMap> Unpin for MapFuture<TInnerFut, TMap> {
+}
+
 impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
 where
-    TInnerFut: Future<Item = TIn>,
+    TInnerFut: TryFuture<Ok = TIn> + Unpin,
     TMap: FnOnce(TIn) -> TOut,
 {
-    type Item = TOut;
-    type Error = TInnerFut::Error;
+    type Output = Result<TOut, TInnerFut::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let item = try_ready!(self.inner.poll());
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let item = match TryFuture::try_poll(Pin::new(&mut self.inner), cx) {
+            Poll::Ready(Ok(v)) => v,
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        };
+
         let map = self.map.take().expect("Future has already finished");
-        Ok(Async::Ready(map(item)))
+        Poll::Ready(Ok(map(item)))
     }
 }
 
@@ -255,21 +270,23 @@ pub struct MapErrFuture<T, F> {
     fun: Option<F>,
 }
 
+impl<T, F> Unpin for MapErrFuture<T, F> {
+}
+
 impl<T, E, F, A> Future for MapErrFuture<T, F>
 where
-    T: Future<Error = E>,
+    T: TryFuture<Error = E> + Unpin,
     F: FnOnce(E) -> A,
 {
-    type Item = T::Item;
-    type Error = A;
+    type Output = Result<T::Ok, A>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.fut.poll() {
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
-            Err(e) => {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match TryFuture::try_poll(Pin::new(&mut self.fut), cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(x)) => Poll::Ready(Ok(x)),
+            Poll::Ready(Err(e)) => {
                 let f = self.fun.take().expect("Future has not resolved yet");
-                Err(f(e))
+                Poll::Ready(Err(f(e)))
             }
         }
     }

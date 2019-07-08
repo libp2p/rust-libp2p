@@ -97,7 +97,7 @@ fn poll_with_unready_node_stream_and_handler_emits_custom_event() {
         .with_handler_state(HandlerState::Ready(expected_event))
         .handled_node();
 
-    assert_matches!(handled.poll(), Ok(Async::Ready(event)) => {
+    assert_matches!(handled.poll(), Poll::Ready(Ok(event)) => {
         assert_matches!(event, OutEvent::Custom("pineapple"))
     });
 }
