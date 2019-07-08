@@ -74,6 +74,13 @@ where
     incoming_limit: Option<u32>,
 
     /// Unfinished take over message to be delivered.
+    ///
+    /// If the pair's second element is `AsyncSink::NotReady`, the take over
+    /// message has yet to be sent using `PeerMut::start_take_over`.
+    ///
+    /// If the pair's second element is `AsyncSink::Ready`, the take over
+    /// message has been sent and needs to be flushed using
+    /// `PeerMut::complete_take_over`.
     take_over_to_complete: Option<(TPeerId, AsyncSink<InterruptedReachAttempt<TInEvent, (TConnInfo, ConnectedPoint), ()>>)>
 }
 

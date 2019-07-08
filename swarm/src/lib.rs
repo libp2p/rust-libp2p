@@ -139,6 +139,13 @@ where
     banned_peers: HashSet<PeerId>,
 
     /// Pending event message to be delivered.
+    ///
+    /// If the pair's second element is `AsyncSink::NotReady`, the event
+    /// message has yet to be sent using `PeerMut::start_send_event`.
+    ///
+    /// If the pair's second element is `AsyncSink::Ready`, the event
+    /// message has been sent and needs to be flushed using
+    /// `PeerMut::complete_send_event`.
     send_event_to_complete: Option<(PeerId, AsyncSink<TInEvent>)>
 }
 
