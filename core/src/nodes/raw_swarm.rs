@@ -45,7 +45,6 @@ use fnv::FnvHashMap;
 use futures::{prelude::*, future};
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
-    collections::VecDeque,
     error,
     fmt,
     hash::Hash,
@@ -74,8 +73,8 @@ where
     /// Max numer of incoming connections.
     incoming_limit: Option<u32>,
 
-    /// Unfinished take over messages to be delivered.
-    take_over_to_complete: VecDeque<(TPeerId, AsyncSink<InterruptedReachAttempt<TInEvent, (TConnInfo, ConnectedPoint), ()>>)>
+    /// Unfinished take over message to be delivered.
+    take_over_to_complete: Option<(TPeerId, AsyncSink<InterruptedReachAttempt<TInEvent, (TConnInfo, ConnectedPoint), ()>>)>
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
@@ -91,7 +90,7 @@ where
             .field("active_nodes", &self.active_nodes)
             .field("reach_attempts", &self.reach_attempts)
             .field("incoming_limit", &self.incoming_limit)
-            .field("take_over_to_complete", &self.take_over_to_complete.len())
+            .field("take_over_to_complete", &self.take_over_to_complete)
             .finish()
     }
 }
@@ -666,7 +665,7 @@ where
                 connected_points: Default::default(),
             },
             incoming_limit: None,
-            take_over_to_complete: VecDeque::new()
+            take_over_to_complete: None
         }
     }
 
@@ -684,7 +683,7 @@ where
                 other_reach_attempts: Vec::new(),
                 connected_points: Default::default(),
             },
-            take_over_to_complete: VecDeque::new()
+            take_over_to_complete: None
         }
     }
 
@@ -987,25 +986,20 @@ where
         }
 
         // Attempt to deliver any pending take over messages.
-        let mut remaining = self.take_over_to_complete.len();
-        while let Some((id, interrupted)) = self.take_over_to_complete.pop_front() {
+        if let Some((id, interrupted)) = self.take_over_to_complete.take() {
             if let Some(mut peer) = self.active_nodes.peer_mut(&id) {
                 if let AsyncSink::NotReady(i) = interrupted {
                     if let StartTakeOver::NotReady(i) = peer.start_take_over(i) {
-                        self.take_over_to_complete.push_back((id, AsyncSink::NotReady(i)))
+                        self.take_over_to_complete = Some((id, AsyncSink::NotReady(i)))
                     } else if let Ok(Async::NotReady) = peer.complete_take_over() {
-                        self.take_over_to_complete.push_back((id, AsyncSink::Ready))
+                        self.take_over_to_complete = Some((id, AsyncSink::Ready))
                     }
                 } else if let Ok(Async::NotReady) = peer.complete_take_over() {
-                    self.take_over_to_complete.push_back((id, AsyncSink::Ready))
+                    self.take_over_to_complete = Some((id, AsyncSink::Ready))
                 }
             }
-            remaining -= 1;
-            if remaining == 0 {
-                break
-            }
         }
-        if !self.take_over_to_complete.is_empty() {
+        if self.take_over_to_complete.is_some() {
             return Async::NotReady
         }
 
@@ -1063,11 +1057,11 @@ where
                          attempts; QED");
             let mut peer = self.active_nodes.peer_mut(&peer_id).unwrap();
             if let StartTakeOver::NotReady(i) = peer.start_take_over(interrupted) {
-                self.take_over_to_complete.push_back((peer_id, AsyncSink::NotReady(i)));
+                self.take_over_to_complete = Some((peer_id, AsyncSink::NotReady(i)));
                 return Async::NotReady
             }
             if let Ok(Async::NotReady) = peer.complete_take_over() {
-                self.take_over_to_complete.push_back((peer_id, AsyncSink::Ready));
+                self.take_over_to_complete = Some((peer_id, AsyncSink::Ready));
                 return Async::NotReady
             }
         }
