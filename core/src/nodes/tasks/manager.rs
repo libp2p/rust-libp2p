@@ -201,7 +201,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::channel(4);
         self.tasks.insert(task_id, TaskInfo { sender: tx, user_data, pending: None });
 
         let task: Task<futures::future::Empty<_, _>, _, _, _, _, _, _> =
