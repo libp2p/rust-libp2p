@@ -93,7 +93,7 @@ use libp2p_core::{
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}};
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 
 /// Contains the state of the network, plus the way it should behave.
 pub type Swarm<TTransport, TBehaviour, TConnInfo = PeerId> = ExpandedSwarm<
@@ -138,8 +138,8 @@ where
     /// List of nodes for which we deny any incoming connection.
     banned_peers: HashSet<PeerId>,
 
-    /// Pending event messages to be delivered.
-    send_events_to_complete: VecDeque<(PeerId, AsyncSink<TInEvent>)>
+    /// Pending event message to be delivered.
+    send_event_to_complete: Option<(PeerId, AsyncSink<TInEvent>)>
 }
 
 impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo> Deref for
@@ -382,26 +382,21 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 },
             }
 
-            // Try to deliver pending events.
-            let mut remaining = self.send_events_to_complete.len();
-            while let Some((id, pending)) = self.send_events_to_complete.pop_front() {
+            // Try to deliver pending event.
+            if let Some((id, pending)) = self.send_event_to_complete.take() {
                 if let Some(mut peer) = self.raw_swarm.peer(id.clone()).into_connected() {
                     if let AsyncSink::NotReady(e) = pending {
                         if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(e) {
-                            self.send_events_to_complete.push_back((id, a))
+                            self.send_event_to_complete = Some((id, a))
                         } else if let Ok(Async::NotReady) = peer.complete_send_event() {
-                            self.send_events_to_complete.push_back((id, AsyncSink::Ready))
+                            self.send_event_to_complete = Some((id, AsyncSink::Ready))
                         }
                     } else if let Ok(Async::NotReady) = peer.complete_send_event() {
-                        self.send_events_to_complete.push_back((id, AsyncSink::Ready))
+                        self.send_event_to_complete = Some((id, AsyncSink::Ready))
                     }
                 }
-                remaining -= 1;
-                if remaining == 0 {
-                    break
-                }
             }
-            if !self.send_events_to_complete.is_empty() {
+            if self.send_event_to_complete.is_some() {
                 return Ok(Async::NotReady)
             }
 
@@ -434,9 +429,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
                     if let Some(mut peer) = self.raw_swarm.peer(peer_id.clone()).into_connected() {
                         if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(event) {
-                            self.send_events_to_complete.push_back((peer_id, a))
+                            self.send_event_to_complete = Some((peer_id, a))
                         } else if let Ok(Async::NotReady) = peer.complete_send_event() {
-                            self.send_events_to_complete.push_back((peer_id, AsyncSink::Ready))
+                            self.send_event_to_complete = Some((peer_id, AsyncSink::Ready))
                         }
                     }
                 },
@@ -554,7 +549,7 @@ where TBehaviour: NetworkBehaviour,
             listened_addrs: SmallVec::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
-            send_events_to_complete: VecDeque::new()
+            send_event_to_complete: None
         }
     }
 }
