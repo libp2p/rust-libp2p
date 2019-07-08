@@ -42,8 +42,6 @@ ring = { version = "0.14", features = ["use_heap"], default-features = false }
 untrusted = { version = "0.6" }
 
 [dev-dependencies]
-env_logger = "0.6"
-libp2p-ping = { version = "0.10.0", path = "../protocols/ping" }
 libp2p-swarm = { version = "0.1.0", path = "../swarm" }
 libp2p-tcp = { version = "0.10.0", path = "../transports/tcp" }
 libp2p-mplex = { version = "0.10.0", path = "../muxers/mplex" }
@@ -51,7 +49,6 @@ libp2p-secio = { version = "0.10.0", path = "../protocols/secio" }
 rand = "0.6"
 quickcheck = "0.8"
 tokio = "0.1"
-tokio-codec = "0.1"
 wasm-timer = "0.1"
 assert_matches = "1.3"
 tokio-mock-task = "0.1"

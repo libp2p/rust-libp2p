@@ -50,10 +50,8 @@ libp2p-websocket = { version = "0.10.0", path = "transports/websocket", optional
 
 [dev-dependencies]
 env_logger = "0.6.0"
-rand = "0.6"
 tokio = "0.1"
 tokio-stdin-stdout = "0.1"
-void = "1.0"
 
 [workspace]
 members = [
