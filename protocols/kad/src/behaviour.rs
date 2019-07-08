@@ -435,6 +435,11 @@ where
         }
     }
 
+    /// Gets a mutable reference to the record store.
+    pub fn store_mut(&mut self) -> &mut TStore {
+        &mut self.store
+    }
+
     /// Bootstraps the local node to join the DHT.
     ///
     /// Bootstrapping is a multi-step operation that starts with a lookup of the local node's
