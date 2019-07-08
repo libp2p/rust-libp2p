@@ -304,7 +304,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<arrayvec::IntoIter<[TOut; K_VALUE]>>,
+    iter: Option<arrayvec::IntoIter<[TOut; K_VALUE.get()]>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap
@@ -406,7 +406,7 @@ where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<[TOut; K_VALUE]>,
+    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<[TOut; K_VALUE.get()]>,
     TOut: AsRef<KeyBytes>
 {
     type Item = TOut;
@@ -493,7 +493,7 @@ mod tests {
             let mut num_total = g.gen_range(0, 100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
-                let num = g.gen_range(0, usize::min(K_VALUE, num_total) + 1);
+                let num = g.gen_range(0, usize::min(K_VALUE.get(), num_total) + 1);
                 num_total -= num;
                 for _ in 0 .. num {
                     let distance = ix.rand_distance(g);

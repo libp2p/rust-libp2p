@@ -37,7 +37,7 @@ pub struct MemoryStore {
     /// The stored (regular) records.
     records: HashMap<Multihash, Record>,
     /// The stored provider records.
-    providers: HashMap<Multihash, SmallVec<[ProviderRecord; crate::K_VALUE]>>,
+    providers: HashMap<Multihash, SmallVec<[ProviderRecord; K_VALUE.get()]>>,
     /// The set of all provider records for the node identified by `local_key`.
     ///
     /// Must be kept in sync with `providers`.
@@ -65,7 +65,7 @@ impl Default for MemoryStoreConfig {
             max_records: 1024,
             max_value_bytes: 65 * 1024,
             max_provided_keys: 1024,
-            max_providers_per_key: crate::K_VALUE,
+            max_providers_per_key: K_VALUE.get(),
         }
     }
 }
@@ -183,7 +183,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn providers(&'a self, key: &Multihash) -> SmallVec<[ProviderRecord; K_VALUE]> {
+    fn providers(&'a self, key: &Multihash) -> SmallVec<[ProviderRecord; K_VALUE.get()]> {
         self.providers.get(&key).map_or_else(SmallVec::new, |ps| ps.clone())
     }
 

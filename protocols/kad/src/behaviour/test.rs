@@ -327,7 +327,7 @@ fn get_record_not_found() {
 #[test]
 fn put_record() {
     fn prop(replication_factor: usize, records: Vec<Record>) {
-        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE / 2) + 1).unwrap();
+        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
         let num_total = replication_factor.get() * 2;
         let num_group = replication_factor.get();
 
@@ -510,7 +510,7 @@ fn get_value_many() {
 #[test]
 fn add_provider() {
     fn prop(replication_factor: usize, keys: Vec<kbucket::Key<Multihash>>) {
-        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE / 2) + 1).unwrap();
+        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
         let num_total = replication_factor.get() * 2;
         let num_group = replication_factor.get();
 

@@ -65,6 +65,8 @@ pub use behaviour::{
 pub use protocol::KadConnectionType;
 pub use record::{store, Record, ProviderRecord};
 
+use std::num::NonZeroUsize;
+
 /// The `k` parameter of the Kademlia specification.
 ///
 /// This parameter determines:
@@ -79,7 +81,7 @@ pub use record::{store, Record, ProviderRecord};
 /// DHT should agree on the choices made for (1) and (2).
 ///
 /// The current value is `20`.
-pub const K_VALUE: usize = 20;
+pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 
 /// The `α` parameter of the Kademlia specification.
 ///
@@ -89,5 +91,5 @@ pub const K_VALUE: usize = 20;
 /// locating the closest peers to a key.
 ///
 /// The current value is `3`.
-pub const ALPHA_VALUE: usize = 3;
+pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
 

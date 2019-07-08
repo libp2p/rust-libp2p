@@ -97,7 +97,7 @@ pub struct Position(usize);
 #[derive(Debug, Clone)]
 pub struct KBucket<TKey, TVal> {
     /// The nodes contained in the bucket.
-    nodes: ArrayVec<[Node<TKey, TVal>; K_VALUE]>,
+    nodes: ArrayVec<[Node<TKey, TVal>; K_VALUE.get()]>,
 
     /// The position (index) in `nodes` that marks the first connected node.
     ///
@@ -411,7 +411,7 @@ mod tests {
         fn arbitrary<G: Gen>(g: &mut G) -> KBucket<Key<PeerId>, ()> {
             let timeout = Duration::from_secs(g.gen_range(1, g.size() as u64));
             let mut bucket = KBucket::<Key<PeerId>, ()>::new(timeout);
-            let num_nodes = g.gen_range(1, K_VALUE + 1);
+            let num_nodes = g.gen_range(1, K_VALUE.get() + 1);
             for _ in 0 .. num_nodes {
                 let key = Key::new(PeerId::random());
                 let node = Node { key: key.clone(), value: () };
@@ -437,14 +437,14 @@ mod tests {
 
     impl Arbitrary for Position {
         fn arbitrary<G: Gen>(g: &mut G) -> Position {
-            Position(g.gen_range(0, K_VALUE))
+            Position(g.gen_range(0, K_VALUE.get()))
         }
     }
 
     // Fill a bucket with random nodes with the given status.
     fn fill_bucket(bucket: &mut KBucket<Key<PeerId>, ()>, status: NodeStatus) {
         let num_entries_start = bucket.num_entries();
-        for i in 0 .. K_VALUE - num_entries_start {
+        for i in 0 .. K_VALUE.get() - num_entries_start {
             let key = Key::new(PeerId::random());
             let node = Node { key, value: () };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
@@ -465,7 +465,7 @@ mod tests {
             for status in status {
                 let key = Key::new(PeerId::random());
                 let node = Node { key: key.clone(), value: () };
-                let full = bucket.num_entries() == K_VALUE;
+                let full = bucket.num_entries() == K_VALUE.get();
                 match bucket.insert(node, status) {
                     InsertResult::Inserted => {
                         let vec = match status {
@@ -518,7 +518,7 @@ mod tests {
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
-        for i in 0 .. K_VALUE {
+        for i in 0 .. K_VALUE.get() {
             let (first, first_status) = bucket.iter().next().unwrap();
             let first_disconnected = first.clone();
             assert_eq!(first_status, NodeStatus::Disconnected);
@@ -551,11 +551,11 @@ mod tests {
             }));
             assert_eq!(Some((&node, NodeStatus::Connected)), bucket.iter().last());
             assert!(bucket.pending().is_none());
-            assert_eq!(Some(K_VALUE - (i + 1)), bucket.first_connected_pos);
+            assert_eq!(Some(K_VALUE.get() - (i + 1)), bucket.first_connected_pos);
         }
 
         assert!(bucket.pending().is_none());
-        assert_eq!(K_VALUE, bucket.num_entries());
+        assert_eq!(K_VALUE.get(), bucket.num_entries());
 
         // Trying to insert another connected node fails.
         let key = Key::new(PeerId::random());
@@ -594,7 +594,7 @@ mod tests {
         assert_eq!(Some((&first_disconnected, NodeStatus::Connected)), bucket.iter().last());
         assert_eq!(bucket.position(&first_disconnected.key).map(|p| p.0), bucket.first_connected_pos);
         assert_eq!(1, bucket.num_connected());
-        assert_eq!(K_VALUE - 1, bucket.num_disconnected());
+        assert_eq!(K_VALUE.get() - 1, bucket.num_disconnected());
     }
 
 

@@ -84,7 +84,7 @@ pub trait RecordStore<'a> {
     fn add_provider(&'a mut self, record: ProviderRecord) -> Result<()>;
 
     /// Gets a copy of the stored provider records for the given key.
-    fn providers(&'a self, key: &Multihash) -> SmallVec<[ProviderRecord; K_VALUE]>;
+    fn providers(&'a self, key: &Multihash) -> SmallVec<[ProviderRecord; K_VALUE.get()]>;
 
     /// Gets an iterator over all stored provider records for which the
     /// node owning the store is itself the provider.

@@ -195,7 +195,7 @@ impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
             timeout: Duration::from_secs(60),
-            replication_factor: NonZeroUsize::new(K_VALUE).expect("K_VALUE > 0")
+            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0")
         }
     }
 }
