@@ -86,6 +86,14 @@ impl MemoryStore {
             providers: HashMap::default(),
         }
     }
+
+    /// Retains the records satisfying a predicate.
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&Multihash, &mut Record) -> bool
+    {
+        self.records.retain(f);
+    }
 }
 
 impl<'a> RecordStore<'a> for MemoryStore {
