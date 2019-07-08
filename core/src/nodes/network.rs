@@ -53,7 +53,7 @@ use std::{
 mod tests;
 
 /// Implementation of `Stream` that handles the nodes.
-pub struct RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId>
+pub struct Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId>
 where
     TTrans: Transport,
 {
@@ -63,7 +63,7 @@ where
     /// The nodes currently active.
     active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
 
-    /// The reach attempts of the swarm.
+    /// The reach attempts of the network.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
     reach_attempts: ReachAttempts<TPeerId>,
 
@@ -72,7 +72,7 @@ where
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
-    RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: fmt::Debug + Transport,
     TConnInfo: fmt::Debug,
@@ -141,8 +141,8 @@ struct OutReachAttempt {
     next_attempts: Vec<Multiaddr>,
 }
 
-/// Event that can happen on the `RawSwarm`.
-pub enum RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId>
+/// Event that can happen on the `Network`.
+pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId>
 where
     TTrans: Transport,
 {
@@ -228,7 +228,7 @@ where
         multiaddr: Multiaddr,
 
         /// The error that happened.
-        error: RawSwarmReachError<TTrans::Error, TConnInfo>,
+        error: NetworkReachError<TTrans::Error, TConnInfo>,
     },
 
     /// Failed to reach a peer that we were trying to dial.
@@ -253,7 +253,7 @@ where
 }
 
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
-    RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TOutEvent: fmt::Debug,
     TTrans: Transport,
@@ -264,28 +264,28 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            RawSwarmEvent::NewListenerAddress { ref listen_addr } => {
+            NetworkEvent::NewListenerAddress { ref listen_addr } => {
                 f.debug_struct("NewListenerAddress")
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            RawSwarmEvent::ExpiredListenerAddress { ref listen_addr } => {
+            NetworkEvent::ExpiredListenerAddress { ref listen_addr } => {
                 f.debug_struct("ExpiredListenerAddress")
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            RawSwarmEvent::ListenerClosed { ref result, .. } => {
+            NetworkEvent::ListenerClosed { ref result, .. } => {
                 f.debug_struct("ListenerClosed")
                     .field("result", result)
                     .finish()
             }
-            RawSwarmEvent::IncomingConnection(ref event) => {
+            NetworkEvent::IncomingConnection(ref event) => {
                 f.debug_struct("IncomingConnection")
                     .field("listen_addr", &event.listen_addr)
                     .field("send_back_addr", &event.send_back_addr)
                     .finish()
             }
-            RawSwarmEvent::IncomingConnectionError {
+            NetworkEvent::IncomingConnectionError {
                 ref listen_addr,
                 ref send_back_addr,
                 ref error
@@ -296,13 +296,13 @@ where
                     .field("error", error)
                     .finish()
             }
-            RawSwarmEvent::Connected { ref conn_info, ref endpoint } => {
+            NetworkEvent::Connected { ref conn_info, ref endpoint } => {
                 f.debug_struct("Connected")
                     .field("conn_info", conn_info)
                     .field("endpoint", endpoint)
                     .finish()
             }
-            RawSwarmEvent::Replaced { ref new_info, ref old_info, ref closed_endpoint, ref endpoint } => {
+            NetworkEvent::Replaced { ref new_info, ref old_info, ref closed_endpoint, ref endpoint } => {
                 f.debug_struct("Replaced")
                     .field("new_info", new_info)
                     .field("old_info", old_info)
@@ -310,14 +310,14 @@ where
                     .field("endpoint", endpoint)
                     .finish()
             }
-            RawSwarmEvent::NodeClosed { ref conn_info, ref endpoint, ref error } => {
+            NetworkEvent::NodeClosed { ref conn_info, ref endpoint, ref error } => {
                 f.debug_struct("NodeClosed")
                     .field("conn_info", conn_info)
                     .field("endpoint", endpoint)
                     .field("error", error)
                     .finish()
             }
-            RawSwarmEvent::DialError { ref new_state, ref peer_id, ref multiaddr, ref error } => {
+            NetworkEvent::DialError { ref new_state, ref peer_id, ref multiaddr, ref error } => {
                 f.debug_struct("DialError")
                     .field("new_state", new_state)
                     .field("peer_id", peer_id)
@@ -325,13 +325,13 @@ where
                     .field("error", error)
                     .finish()
             }
-            RawSwarmEvent::UnknownPeerDialError { ref multiaddr, ref error, .. } => {
+            NetworkEvent::UnknownPeerDialError { ref multiaddr, ref error, .. } => {
                 f.debug_struct("UnknownPeerDialError")
                     .field("multiaddr", multiaddr)
                     .field("error", error)
                     .finish()
             }
-            RawSwarmEvent::NodeEvent { ref conn_info, ref event } => {
+            NetworkEvent::NodeEvent { ref conn_info, ref event } => {
                 f.debug_struct("NodeEvent")
                     .field("conn_info", conn_info)
                     .field("event", event)
@@ -404,7 +404,7 @@ pub enum PeerState {
 
 /// Error that can happen when trying to reach a node.
 #[derive(Debug)]
-pub enum RawSwarmReachError<TTransErr, TConnInfo> {
+pub enum NetworkReachError<TTransErr, TConnInfo> {
     /// Error in the transport layer.
     Transport(TransportError<TTransErr>),
 
@@ -416,30 +416,30 @@ pub enum RawSwarmReachError<TTransErr, TConnInfo> {
     }
 }
 
-impl<TTransErr, TConnInfo> fmt::Display for RawSwarmReachError<TTransErr, TConnInfo>
+impl<TTransErr, TConnInfo> fmt::Display for NetworkReachError<TTransErr, TConnInfo>
 where
     TTransErr: fmt::Display,
     TConnInfo: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RawSwarmReachError::Transport(err) => write!(f, "{}", err),
-            RawSwarmReachError::PeerIdMismatch { obtained } => {
+            NetworkReachError::Transport(err) => write!(f, "{}", err),
+            NetworkReachError::PeerIdMismatch { obtained } => {
                 write!(f, "Peer ID mismatch, obtained: {:?}", obtained)
             },
         }
     }
 }
 
-impl<TTransErr, TConnInfo> error::Error for RawSwarmReachError<TTransErr, TConnInfo>
+impl<TTransErr, TConnInfo> error::Error for NetworkReachError<TTransErr, TConnInfo>
 where
     TTransErr: error::Error + 'static,
     TConnInfo: fmt::Debug,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            RawSwarmReachError::Transport(err) => Some(err),
-            RawSwarmReachError::PeerIdMismatch { .. } => None,
+            NetworkReachError::Transport(err) => Some(err),
+            NetworkReachError::PeerIdMismatch { .. } => None,
         }
     }
 }
@@ -530,9 +530,9 @@ where TTrans: Transport
     listen_addr: Multiaddr,
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
-    /// Reference to the `active_nodes` field of the swarm.
+    /// Reference to the `active_nodes` field of the `Network`.
     active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
-    /// Reference to the `other_reach_attempts` field of the swarm.
+    /// Reference to the `other_reach_attempts` field of the `Network`.
     other_reach_attempts: &'a mut Vec<(ReachAttemptId, ConnectedPoint)>,
 }
 
@@ -640,7 +640,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, TPeerId>
-    RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
@@ -655,7 +655,7 @@ where
     #[inline]
     pub fn new(transport: TTrans, local_peer_id: TPeerId) -> Self {
         // TODO: with_capacity?
-        RawSwarm {
+        Network {
             listeners: ListenersStream::new(transport),
             active_nodes: CollectionStream::new(),
             reach_attempts: ReachAttempts {
@@ -673,7 +673,7 @@ where
     pub fn new_with_incoming_limit(transport: TTrans,
         local_peer_id: TPeerId, incoming_limit: Option<u32>) -> Self
     {
-        RawSwarm {
+        Network {
             incoming_limit,
             listeners: ListenersStream::new(transport),
             active_nodes: CollectionStream::new(),
@@ -933,7 +933,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<RawSwarmEvent<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>>
+    pub fn poll(&mut self) -> Async<NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -968,16 +968,16 @@ where
                             active_nodes: &mut self.active_nodes,
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
                         };
-                        return Async::Ready(RawSwarmEvent::IncomingConnection(event));
+                        return Async::Ready(NetworkEvent::IncomingConnection(event));
                     }
                     Async::Ready(ListenersEvent::NewAddress { listen_addr }) => {
-                        return Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr })
+                        return Async::Ready(NetworkEvent::NewListenerAddress { listen_addr })
                     }
                     Async::Ready(ListenersEvent::AddressExpired { listen_addr }) => {
-                        return Async::Ready(RawSwarmEvent::ExpiredListenerAddress { listen_addr })
+                        return Async::Ready(NetworkEvent::ExpiredListenerAddress { listen_addr })
                     }
                     Async::Ready(ListenersEvent::Closed { listener, result }) => {
-                        return Async::Ready(RawSwarmEvent::ListenerClosed { listener, result })
+                        return Async::Ready(NetworkEvent::ListenerClosed { listener, result })
                     }
                 }
             }
@@ -1009,7 +1009,7 @@ where
                              closed message after it has been opened, and no two closed \
                              messages; QED");
                 action = Default::default();
-                out_event = RawSwarmEvent::NodeClosed {
+                out_event = NetworkEvent::NodeClosed {
                     conn_info: conn_info.0,
                     endpoint,
                     error,
@@ -1017,7 +1017,7 @@ where
             }
             Async::Ready(CollectionEvent::NodeEvent { peer, event }) => {
                 action = Default::default();
-                out_event = RawSwarmEvent::NodeEvent { conn_info: peer.info().0.clone(), event };
+                out_event = NetworkEvent::NodeEvent { conn_info: peer.info().0.clone(), event };
             }
         }
 
@@ -1042,7 +1042,7 @@ where
     }
 }
 
-/// Internal struct indicating an action to perform of the swarm.
+/// Internal struct indicating an action to perform on the network.
 #[derive(Debug)]
 #[must_use]
 struct ActionItem<THandler, TPeerId> {
@@ -1070,7 +1070,7 @@ impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
 fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
     event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
-) -> (ActionItem<THandler, TPeerId>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
+) -> (ActionItem<THandler, TPeerId>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TMuxer: StreamMuxer + Send + Sync + 'static,
@@ -1096,7 +1096,7 @@ where
         if event.would_replace() && has_dial_prio {
             if let Some(ConnectedPoint::Dialer { .. }) = reach_attempts.connected_points.get(event.peer_id()) {
                 if let ConnectedPoint::Listener { listen_addr, send_back_addr } = opened_endpoint {
-                    return (Default::default(), RawSwarmEvent::IncomingConnectionError {
+                    return (Default::default(), NetworkEvent::IncomingConnectionError {
                         listen_addr,
                         send_back_addr,
                         error: IncomingError::DeniedLowerPriority,
@@ -1137,14 +1137,14 @@ where
                          remove only when a connection is closed; the underlying API is \
                          guaranteed to always deliver a connection closed message after it has \
                          been opened, and no two closed messages; QED");
-            return (action, RawSwarmEvent::Replaced {
+            return (action, NetworkEvent::Replaced {
                 new_info: conn_info.0,
                 old_info: old_info.0,
                 endpoint: opened_endpoint,
                 closed_endpoint,
             });
         } else {
-            return (action, RawSwarmEvent::Connected {
+            return (action, NetworkEvent::Connected {
                 conn_info: conn_info.0,
                 endpoint: opened_endpoint
             });
@@ -1179,7 +1179,7 @@ where
                         remove only when a connection is closed; the underlying API is guaranteed \
                         to always deliver a connection closed message after it has been opened, \
                         and no two closed messages; QED");
-            return (Default::default(), RawSwarmEvent::Replaced {
+            return (Default::default(), NetworkEvent::Replaced {
                 new_info: conn_info.0,
                 old_info: old_info.0,
                 endpoint: opened_endpoint,
@@ -1187,7 +1187,7 @@ where
             });
 
         } else {
-            return (Default::default(), RawSwarmEvent::Connected {
+            return (Default::default(), NetworkEvent::Connected {
                 conn_info: conn_info.0,
                 endpoint: opened_endpoint
             });
@@ -1226,7 +1226,7 @@ fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TC
     reach_id: ReachAttemptId,
     error: InternalReachErr<TTrans::Error, TConnInfo>,
     handler: THandler,
-) -> (ActionItem<THandler, TPeerId>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
+) -> (ActionItem<THandler, TPeerId>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
 where
     TTrans: Transport,
     TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
@@ -1269,9 +1269,9 @@ where
         };
 
         let error = match error {
-            InternalReachErr::Transport(err) => RawSwarmReachError::Transport(err),
+            InternalReachErr::Transport(err) => NetworkReachError::Transport(err),
             InternalReachErr::PeerIdMismatch { obtained } => {
-                RawSwarmReachError::PeerIdMismatch { obtained }
+                NetworkReachError::PeerIdMismatch { obtained }
             },
             InternalReachErr::FoundLocalPeerId => {
                 unreachable!("We only generate FoundLocalPeerId within dial() or accept(); neither \
@@ -1279,7 +1279,7 @@ where
             },
         };
 
-        return (action, RawSwarmEvent::DialError {
+        return (action, NetworkEvent::DialError {
             new_state,
             peer_id,
             multiaddr: failed_addr,
@@ -1304,7 +1304,7 @@ where
                                       which doesn't add any entry in other_reach_attempts; QED")
                     },
                 };
-                return (Default::default(), RawSwarmEvent::UnknownPeerDialError {
+                return (Default::default(), NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
                     handler,
@@ -1319,7 +1319,7 @@ where
                                       which doesn't add any entry in other_reach_attempts; QED")
                     },
                 };
-                return (Default::default(), RawSwarmEvent::IncomingConnectionError {
+                return (Default::default(), NetworkEvent::IncomingConnectionError {
                     listen_addr,
                     send_back_addr,
                     error
@@ -1664,7 +1664,7 @@ where
     TTrans: Transport,
 {
     peer_id: TPeerId,
-    nodes: &'a mut RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>,
+    nodes: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>,
 }
 
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
