@@ -12,6 +12,4 @@ publish = false
 
 [dependencies]
 libp2p-core = { version = "0.10.0", path = "../../core" }
-libp2p-secio = { version = "0.10.0", path = "../../protocols/secio" }
 num_cpus = "1.8"
-rand = "0.6"
