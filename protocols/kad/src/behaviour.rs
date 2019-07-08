@@ -1061,12 +1061,37 @@ where
         self.connected_peers.insert(peer);
     }
 
-    fn inject_addr_reach_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, _: &dyn error::Error) {
+    fn inject_addr_reach_failure(
+        &mut self,
+        peer_id: Option<&PeerId>,
+        addr: &Multiaddr,
+        err: &dyn error::Error
+    ) {
         if let Some(peer_id) = peer_id {
             let key = kbucket::Key::new(peer_id.clone());
 
             if let Some(addrs) = self.kbuckets.entry(&key).value() {
-                addrs.remove(addr);
+                // TODO: Ideally, the address should only be removed if the error can
+                // be classified as "permanent" but since `err` is currently a borrowed
+                // trait object without a `'static` bound, even downcasting for inspection
+                // of the error is not possible (and also not truly desirable or ergonomic).
+                // The error passed in should rather be a dedicated enum.
+                if addrs.remove(addr) {
+                    debug!("Address '{}' removed from peer '{}' due to error: {}.",
+                        addr, peer_id, err);
+                } else {
+                    // Despite apparently having no reachable address (any longer),
+                    // the peer is kept in the routing table with the last address to avoid
+                    // (temporary) loss of network connectivity to "flush" the routing
+                    // table. Once in, a peer is only removed from the routing table
+                    // if it is the least recently connected peer, currently disconnected
+                    // and is unreachable in the context of another peer pending insertion
+                    // into the same bucket. This is handled transparently by the
+                    // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
+                    // within `Kademlia::poll`.
+                    debug!("Last remaining address '{}' of peer '{}' is unreachable: {}.",
+                        addr, peer_id, err)
+                }
             }
 
             for query in self.queries.iter_mut() {

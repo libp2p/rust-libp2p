@@ -59,7 +59,7 @@ impl Addresses {
     /// Removes the given address from the list.
     ///
     /// Returns true if the address was found and removed, false otherwise.
-    /// The last remaining address in the list cannot be remvoved.
+    /// The last remaining address in the list cannot be removed.
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
