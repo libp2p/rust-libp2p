@@ -18,7 +18,68 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
+//! High level manager of the network.
+//!
+//! A [`Swarm`] contains the state of the network as a whole. The entire
+//! behaviour of a libp2p network can be controlled through the `Swarm`.
+//! The `Swarm` struct contains all active and pending connections to
+//! remotes and manages the state of all the substreams that have been
+//! opened, and all the upgrades that were built upon these substreams.
+//!
+//! # Initializing a Swarm
+//!
+//! Creating a `Swarm` requires three things:
+//!
+//!  1. A network identity of the local node in form of a [`PeerId`].
+//!  2. An implementation of the [`Transport`] trait. This is the type that
+//!     will be used in order to reach nodes on the network based on their
+//!     address. See the `transport` module for more information.
+//!  3. An implementation of the [`NetworkBehaviour`] trait. This is a state
+//!     machine that defines how the swarm should behave once it is connected
+//!     to a node.
+//!
+//! # Network Behaviour
+//!
+//! The [`NetworkBehaviour`] trait is implemented on types that indicate to
+//! the swarm how it should behave. This includes which protocols are supported
+//! and which nodes to try to connect to. It is the `NetworkBehaviour` that
+//! controls what happens on the network. Multiple types that implement
+//! `NetworkBehaviour` can be composed into a single behaviour.
+//!
+//! # Protocols Handler
+//!
+//! The [`ProtocolsHandler`] trait defines how each active connection to a
+//! remote should behave: how to handle incoming substreams, which protocols
+//! are supported, when to open a new outbound substream, etc.
+//!
+
+mod behaviour;
+mod registry;
+
+pub mod protocols_handler;
+pub mod toggle;
+
+pub use behaviour::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    NetworkBehaviourEventProcess,
+    PollParameters
+};
+pub use protocols_handler::{
+    IntoProtocolsHandler,
+    IntoProtocolsHandlerSelect,
+    KeepAlive,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerSelect,
+    ProtocolsHandlerUpgrErr,
+    OneShotHandler,
+    SubstreamProtocol
+};
+
+use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError};
+use futures::prelude::*;
+use libp2p_core::{
     Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
@@ -27,11 +88,9 @@ use crate::{
         node::Substream,
         raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
-    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError, IntoProtocolsHandler, ProtocolsHandler},
-    swarm::{PollParameters, NetworkBehaviour, NetworkBehaviourAction, registry::{Addresses, AddressIntoIter}},
-    transport::TransportError,
+    transport::TransportError
 };
-use futures::prelude::*;
+use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}};
 use std::collections::HashSet;
@@ -471,12 +530,18 @@ where TBehaviour: NetworkBehaviour,
 
 #[cfg(test)]
 mod tests {
-    use crate::{identity, PeerId, PublicKey};
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-    use crate::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmBuilder};
-    use crate::tests::dummy_transport::DummyTransport;
+    use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmBuilder};
+    use libp2p_core::{
+        ConnectedPoint,
+        identity,
+        Multiaddr,
+        PeerId,
+        PublicKey,
+        transport::dummy::{DummyStream, DummyTransport}
+    };
+    use libp2p_mplex::Multiplex;
     use futures::prelude::*;
-    use multiaddr::Multiaddr;
     use std::marker::PhantomData;
     use tokio_io::{AsyncRead, AsyncWrite};
     use void::Void;
@@ -526,7 +591,7 @@ mod tests {
     #[test]
     fn test_build_swarm() {
         let id = get_random_id();
-        let transport = DummyTransport::new();
+        let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
         let behaviour = DummyBehaviour{marker: PhantomData};
         let swarm = SwarmBuilder::new(transport, behaviour, id.into())
             .incoming_limit(Some(4)).build();
@@ -536,7 +601,7 @@ mod tests {
     #[test]
     fn test_build_swarm_with_max_listeners_none() {
         let id = get_random_id();
-        let transport = DummyTransport::new();
+        let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
         let behaviour = DummyBehaviour{marker: PhantomData};
         let swarm = SwarmBuilder::new(transport, behaviour, id.into()).build();
         assert!(swarm.raw_swarm.incoming_limit().is_none())

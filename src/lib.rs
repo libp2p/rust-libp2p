@@ -191,6 +191,8 @@ pub use libp2p_plaintext as plaintext;
 pub use libp2p_ratelimit as ratelimit;
 #[doc(inline)]
 pub use libp2p_secio as secio;
+#[doc(inline)]
+pub use libp2p_swarm as swarm;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
@@ -211,13 +213,15 @@ pub mod simple;
 
 pub use self::core::{
     identity,
-    Transport, PeerId, Swarm,
+    PeerId,
+    Transport,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
+pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 
 use futures::prelude::*;
