@@ -63,7 +63,7 @@ pub use behaviour::{
     GetProvidersError,
 };
 pub use protocol::KadConnectionType;
-pub use record::*;
+pub use record::{store, Record, ProviderRecord};
 
 /// The `k` parameter of the Kademlia specification.
 ///
