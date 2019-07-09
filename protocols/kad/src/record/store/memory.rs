@@ -191,8 +191,8 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn providers(&'a self, key: &Multihash) -> SmallVec<[ProviderRecord; K_VALUE.get()]> {
-        self.providers.get(&key).map_or_else(SmallVec::new, |ps| ps.clone())
+    fn providers(&'a self, key: &Multihash) -> Vec<ProviderRecord> {
+        self.providers.get(&key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
     fn provided(&'a self) -> Self::ProvidedIter {
