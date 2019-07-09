@@ -154,20 +154,40 @@ fn events_in_a_node_reaches_the_collection_stream() {
         Ok(Async::Ready(()))
     })).expect("tokio works");
 
+    let cs2 = cs.clone();
+    rt.block_on(future::poll_fn(move || {
+        if cs2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+            Ok::<_, ()>(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
+    })).unwrap();
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
-        cs.broadcast_event(&InEvent::NextState);
+        if cs.complete_broadcast().is_not_ready() {
+            return Ok(Async::NotReady)
+        }
         assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeReached(reach_ev)) => {
             reach_ev.accept(());
         });
         Ok(Async::Ready(()))
     })).expect("tokio works");
 
+    let cs2 = cs.clone();
+    rt.block_on(future::poll_fn(move || {
+        if cs2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+            Ok::<_, ()>(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
+    })).unwrap();
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
-        cs.broadcast_event(&InEvent::NextState);
+        if cs.complete_broadcast().is_not_ready() {
+            return Ok(Async::NotReady)
+        }
         assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer: _, event}) => {
             assert_matches!(event, OutEvent::Custom("init"));
         });
@@ -175,20 +195,40 @@ fn events_in_a_node_reaches_the_collection_stream() {
     })).expect("tokio works");
 
 
+    let cs2 = cs.clone();
+    rt.block_on(future::poll_fn(move || {
+        if cs2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+            Ok::<_, ()>(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
+    })).unwrap();
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
-        cs.broadcast_event(&InEvent::NextState);
+        if cs.complete_broadcast().is_not_ready() {
+            return Ok(Async::NotReady)
+        }
         assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer: _, event}) => {
             assert_matches!(event, OutEvent::Custom("from handler 1"));
         });
         Ok(Async::Ready(()))
     })).expect("tokio works");
 
+    let cs2 = cs.clone();
+    rt.block_on(future::poll_fn(move || {
+        if cs2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+            Ok::<_, ()>(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
+    })).unwrap();
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
-        cs.broadcast_event(&InEvent::NextState);
+        if cs.complete_broadcast().is_not_ready() {
+            return Ok(Async::NotReady)
+        }
         assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer: _, event}) => {
             assert_matches!(event, OutEvent::Custom("from handler 2"));
         });
@@ -238,13 +278,20 @@ fn task_closed_with_error_when_task_is_connected_yields_node_error() {
     let mut rt = Builder::new().core_threads(1).build().unwrap();
 
     // Kick it off
+    let cs2 = cs.clone();
+    rt.block_on(future::poll_fn(move || {
+        if cs2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+            Ok::<_, ()>(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
+    })).unwrap();
     let cs_fut = cs.clone();
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
         assert_matches!(cs.poll(), Async::NotReady);
         // send an event so the Handler errors in two polls
-        cs.broadcast_event(&InEvent::NextState);
-        Ok(Async::Ready(()))
+        Ok(cs.complete_broadcast())
     })).expect("tokio works");
 
     // Accept the new node

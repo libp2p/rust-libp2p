@@ -10,9 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-arrayref = "0.3"
 arrayvec = "0.4.7"
-bs58 = "0.2.0"
 bigint = "4.2"
 bytes = "0.4"
 either = "1.5"
@@ -20,10 +18,8 @@ fnv = "1.0"
 futures = "0.1"
 libp2p-core = { version = "0.10.0", path = "../../core" }
 libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
-log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../../misc/multihash" }
-parking_lot = "0.8"
 protobuf = "2.3"
 rand = "0.6.0"
 sha2 = "0.8.0"
@@ -35,7 +31,6 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
-libp2p-mplex = { version = "0.10.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.10.0", path = "../secio" }
 libp2p-tcp = { version = "0.10.0", path = "../../transports/tcp" }
 libp2p-yamux = { version = "0.10.0", path = "../../muxers/yamux" }

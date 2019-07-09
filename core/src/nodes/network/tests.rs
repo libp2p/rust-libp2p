@@ -129,14 +129,24 @@ fn broadcasted_events_reach_active_nodes() {
     let dial_result = network.dial(addr, handler);
     assert!(dial_result.is_ok());
 
-    network.broadcast_event(&InEvent::NextState);
     let network = Arc::new(Mutex::new(network));
     let mut rt = Runtime::new().unwrap();
+    let swarm2 = swarm.clone();
+    rt.block_on(future::poll_fn(move || {
+        if swarm2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+            Ok::<_, ()>(Async::NotReady)
+        } else {
+            Ok(Async::Ready(()))
+        }
+    })).unwrap();
     let mut peer_id : Option<PeerId> = None;
     while peer_id.is_none() {
         let network_fut = network.clone();
         peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
             let mut network = network_fut.lock();
+            if network.complete_broadcast().is_not_ready() {
+                return Ok(Async::NotReady)
+            }
             let poll_res = network.poll();
             match poll_res {
                 Async::Ready(NetworkEvent::Connected { conn_info, .. }) => Ok(Async::Ready(Some(conn_info))),
@@ -331,10 +341,20 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
     let mut keep_polling = true;
     while keep_polling {
         let network_fut = network.clone();
+        let network2 = network.clone();
+        rt.block_on(future::poll_fn(move || {
+            if network2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+                Ok::<_, ()>(Async::NotReady)
+            } else {
+                Ok(Async::Ready(()))
+            }
+        })).unwrap();
         keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut network = network_fut.lock();
             // Push the Handler into an error state on the next poll
-            network.broadcast_event(&InEvent::NextState);
+            if network.complete_broadcast().is_not_ready() {
+                return Ok(Async::NotReady)
+            }
             match network.poll() {
                 Async::NotReady => Ok(Async::Ready(true)),
                 Async::Ready(event) => {
