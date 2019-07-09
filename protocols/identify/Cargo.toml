@@ -11,13 +11,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "0.4"
-fnv = "1"
 futures = "0.1"
 libp2p-core = { version = "0.10.0", path = "../../core" }
 libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }
-parking_lot = "0.8"
 protobuf = "2.3"
 smallvec = "0.6"
 tokio-codec = "0.1"
