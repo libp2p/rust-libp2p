@@ -391,7 +391,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
             // Try to deliver pending event.
             if let Some((id, pending)) = self.send_event_to_complete.take() {
-                if let Some(mut peer) = self.raw_swarm.peer(id.clone()).into_connected() {
+                if let Some(mut peer) = self.network.peer(id.clone()).into_connected() {
                     if let AsyncSink::NotReady(e) = pending {
                         if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(e) {
                             self.send_event_to_complete = Some((id, a))

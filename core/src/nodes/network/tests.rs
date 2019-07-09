@@ -131,9 +131,9 @@ fn broadcasted_events_reach_active_nodes() {
 
     let network = Arc::new(Mutex::new(network));
     let mut rt = Runtime::new().unwrap();
-    let swarm2 = swarm.clone();
+    let network2 = network.clone();
     rt.block_on(future::poll_fn(move || {
-        if swarm2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
+        if network2.lock().start_broadcast(&InEvent::NextState).is_not_ready() {
             Ok::<_, ()>(Async::NotReady)
         } else {
             Ok(Async::Ready(()))
