@@ -14,8 +14,6 @@ libp2p-core = { version = "0.10.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
 tokio-dns-unofficial = "0.4"
-tokio-io = "0.1"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.10.0", path = "../../transports/tcp" }
-tokio = "0.1"

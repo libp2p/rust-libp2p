@@ -137,6 +137,16 @@ where
 
     /// List of nodes for which we deny any incoming connection.
     banned_peers: HashSet<PeerId>,
+
+    /// Pending event message to be delivered.
+    ///
+    /// If the pair's second element is `AsyncSink::NotReady`, the event
+    /// message has yet to be sent using `PeerMut::start_send_event`.
+    ///
+    /// If the pair's second element is `AsyncSink::Ready`, the event
+    /// message has been sent and needs to be flushed using
+    /// `PeerMut::complete_send_event`.
+    send_event_to_complete: Option<(PeerId, AsyncSink<TInEvent>)>
 }
 
 impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo> Deref for
@@ -379,6 +389,24 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 },
             }
 
+            // Try to deliver pending event.
+            if let Some((id, pending)) = self.send_event_to_complete.take() {
+                if let Some(mut peer) = self.raw_swarm.peer(id.clone()).into_connected() {
+                    if let AsyncSink::NotReady(e) = pending {
+                        if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(e) {
+                            self.send_event_to_complete = Some((id, a))
+                        } else if let Ok(Async::NotReady) = peer.complete_send_event() {
+                            self.send_event_to_complete = Some((id, AsyncSink::Ready))
+                        }
+                    } else if let Ok(Async::NotReady) = peer.complete_send_event() {
+                        self.send_event_to_complete = Some((id, AsyncSink::Ready))
+                    }
+                }
+            }
+            if self.send_event_to_complete.is_some() {
+                return Ok(Async::NotReady)
+            }
+
             let behaviour_poll = {
                 let mut parameters = SwarmPollParameters {
                     local_peer_id: &mut self.raw_swarm.local_peer_id(),
@@ -406,8 +434,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                 },
                 Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
-                    if let Some(mut peer) = self.raw_swarm.peer(peer_id).into_connected() {
-                        peer.send_event(event);
+                    if let Some(mut peer) = self.raw_swarm.peer(peer_id.clone()).into_connected() {
+                        if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(event) {
+                            self.send_event_to_complete = Some((peer_id, a))
+                        } else if let Ok(Async::NotReady) = peer.complete_send_event() {
+                            self.send_event_to_complete = Some((peer_id, AsyncSink::Ready))
+                        }
                     }
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
@@ -524,6 +556,7 @@ where TBehaviour: NetworkBehaviour,
             listened_addrs: SmallVec::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
+            send_event_to_complete: None
         }
     }
 }
