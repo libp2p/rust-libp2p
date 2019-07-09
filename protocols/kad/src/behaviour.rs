@@ -1522,7 +1522,7 @@ impl GetRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    fn into_key(self) -> Multihash {
+    pub fn into_key(self) -> Multihash {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
