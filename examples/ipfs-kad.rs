@@ -53,7 +53,7 @@ fn main() {
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
         let mut cfg = KademliaConfig::default();
-        cfg.set_query_timeout(Duration::from_secs(5 * 60));
+        cfg.set_query_timeout(Duration::from_secs(10 * 60));
         let store = MemoryStore::new(local_peer_id.clone());
         let mut behaviour = Kademlia::with_config(local_peer_id.clone(), store, cfg);
 
