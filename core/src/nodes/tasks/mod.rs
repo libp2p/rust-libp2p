@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,22 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Low-level networking primitives.
+//! Management of tasks handling nodes.
 //!
-//! Contains structs that are aiming at providing very precise control over what happens over the
-//! network.
+//! The core type is a [`task::Task`], which implements [`futures::Future`]
+//! and connects and handles a node. A task receives and sends messages
+//! ([`tasks::FromTaskMessage`], [`tasks::ToTaskMessage`]) to the outside.
 //!
-//! The more complete and highest-level struct is the `RawSwarm`. The `RawSwarm` directly or
-//! indirectly uses all the other structs of this module.
+//! A set of tasks is managed by a [`Manager`] which creates tasks when a
+//! node should be connected to (cf. [`Manager::add_reach_attempt`]) or
+//! an existing connection to a node should be driven forward (cf.
+//! [`Manager::add_connection`]). Tasks can be referred to by [`TaskId`]
+//! and messages can be sent to individual tasks or all (cf.
+//! [`Manager::start_broadcast`]). Messages produces by tasks can be
+//! retrieved by polling the manager (cf. [`Manager::poll`]).
 
-pub mod collection;
-pub mod handled_node;
-pub mod tasks;
-pub mod listeners;
-pub mod node;
-pub mod raw_swarm;
+mod error;
+mod manager;
+mod task;
 
-pub use collection::ConnectionInfo;
-pub use node::Substream;
-pub use handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
-pub use raw_swarm::{Peer, RawSwarm, RawSwarmEvent};
+pub use error::Error;
+pub use manager::{ClosedTask, TaskEntry, Manager, Event, StartTakeOver};
+
+/// Task identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TaskId(usize);
+
