@@ -82,7 +82,7 @@ pub use self::{
 
 /// Types serving as protocol names.
 ///
-/// # Why this trait?
+/// # Context
 ///
 /// In situations where we provide a list of protocols that we support, the elements of that list are required to
 /// implement the [`ProtocolName`] trait.
