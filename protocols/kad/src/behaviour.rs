@@ -958,6 +958,15 @@ where
             job.skip(record.key.clone())
         }
 
+        // While records received from a publisher, as well as records that do
+        // not exist locally should always (attempted to) be stored, there is a
+        // choice here w.r.t. the handling of replicated records whose keys refer
+        // to records that exist locally: The value and / or the publisher may
+        // either be overridden or left unchanged. At the moment and in the
+        // absence of a decisive argument for another option, both are always
+        // overridden as it avoids having to load the existing record in the
+        // first place.
+
         // The record is cloned because of the weird libp2p protocol requirement
         // to send back the value in the response, although this is a waste of
         // resources.
