@@ -32,7 +32,7 @@ mod tests;
 pub trait NodeHandler {
     /// Custom event that can be received from the outside.
     type InEvent;
-    /// Custom event that can be produced by the handler and that will be returned by the swarm.
+    /// Custom event that can be produced by the handler and that will be returned by the `Network`.
     type OutEvent;
     /// Error that can happen during the processing of the node.
     type Error;

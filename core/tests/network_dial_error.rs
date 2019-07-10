@@ -21,7 +21,7 @@
 use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
-use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, RawSwarmReachError, PeerState, UnknownPeerDialErr, IncomingError};
+use libp2p_core::nodes::network::{Network, NetworkEvent, NetworkReachError, PeerState, UnknownPeerDialErr, IncomingError};
 use libp2p_core::{PeerId, Transport, upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt};
 use libp2p_swarm::{
     ProtocolsHandler,
@@ -91,7 +91,7 @@ fn deny_incoming_connec() {
 
     // TODO: make creating the transport more elegant ; literaly half of the code of the test
     //       is about creating the transport
-    let mut swarm1: RawSwarm<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
+    let mut swarm1: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
@@ -104,7 +104,7 @@ fn deny_incoming_connec() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into())
     };
 
     let mut swarm2 = {
@@ -120,13 +120,13 @@ fn deny_incoming_connec() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into())
     };
 
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
     let address =
-        if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+        if let Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
             listen_addr
         } else {
             panic!("Was expecting the listen address to be reported")
@@ -139,17 +139,17 @@ fn deny_incoming_connec() {
 
     let future = future::poll_fn(|| -> Poll<(), io::Error> {
         match swarm1.poll() {
-            Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => drop(inc),
+            Async::Ready(NetworkEvent::IncomingConnection(inc)) => drop(inc),
             Async::Ready(_) => unreachable!(),
             Async::NotReady => (),
         }
 
         match swarm2.poll() {
-            Async::Ready(RawSwarmEvent::DialError {
+            Async::Ready(NetworkEvent::DialError {
                 new_state: PeerState::NotConnected,
                 peer_id,
                 multiaddr,
-                error: RawSwarmReachError::Transport(_)
+                error: NetworkReachError::Transport(_)
             }) => {
                 assert_eq!(peer_id, *swarm1.local_peer_id());
                 assert_eq!(multiaddr, address);
@@ -192,14 +192,14 @@ fn dial_self() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into())
     };
 
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
     let (address, mut swarm) =
         future::lazy(move || {
-            if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
+            if let Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
                 Ok::<_, void::Void>((listen_addr, swarm))
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -215,7 +215,7 @@ fn dial_self() {
     let future = future::poll_fn(|| -> Poll<(), io::Error> {
         loop {
             match swarm.poll() {
-                Async::Ready(RawSwarmEvent::UnknownPeerDialError {
+                Async::Ready(NetworkEvent::UnknownPeerDialError {
                     multiaddr,
                     error: UnknownPeerDialErr::FoundLocalPeerId,
                     handler: _
@@ -227,7 +227,7 @@ fn dial_self() {
                         return Ok(Async::Ready(()));
                     }
                 },
-                Async::Ready(RawSwarmEvent::IncomingConnectionError {
+                Async::Ready(NetworkEvent::IncomingConnectionError {
                     listen_addr,
                     send_back_addr: _,
                     error: IncomingError::FoundLocalPeerId
@@ -239,7 +239,7 @@ fn dial_self() {
                         return Ok(Async::Ready(()));
                     }
                 },
-                Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
+                Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                     assert_eq!(*inc.listen_addr(), address);
                     inc.accept(TestHandler::default().into_node_handler_builder());
                 },
@@ -259,7 +259,7 @@ fn dial_self_by_id() {
 
     // TODO: make creating the transport more elegant ; literaly half of the code of the test
     //       is about creating the transport
-    let mut swarm: RawSwarm<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
+    let mut swarm: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
@@ -272,7 +272,7 @@ fn dial_self_by_id() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into())
     };
 
     let peer_id = swarm.local_peer_id().clone();
@@ -298,7 +298,7 @@ fn multiple_addresses_err() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into())
     };
 
     let mut addresses = Vec::new();
@@ -319,11 +319,11 @@ fn multiple_addresses_err() {
     let future = future::poll_fn(|| -> Poll<(), io::Error> {
         loop {
             match swarm.poll() {
-                Async::Ready(RawSwarmEvent::DialError {
+                Async::Ready(NetworkEvent::DialError {
                     new_state,
                     peer_id,
                     multiaddr,
-                    error: RawSwarmReachError::Transport(_)
+                    error: NetworkReachError::Transport(_)
                 }) => {
                     assert_eq!(peer_id, target);
                     let expected = addresses.remove(0);
