@@ -30,9 +30,8 @@ use libp2p::{
     identity,
     build_development_transport
 };
-use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent};
+use libp2p::kad::Kademlia;
 use std::env;
-use std::time::Duration;
 
 fn main() {
     env_logger::init();
@@ -51,9 +50,8 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut cfg = KademliaConfig::new(local_peer_id.clone());
-        cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        let mut behaviour: Kademlia<_> = Kademlia::new(cfg);
+       
+        let mut behaviour: Kademlia<_> = Kademlia::new(local_peer_id.clone());
 
         // TODO: the /dnsaddr/ scheme is not supported (https://github.com/libp2p/rust-libp2p/issues/967)
         /*behaviour.add_address(&"QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
@@ -87,23 +85,15 @@ fn main() {
         identity::Keypair::generate_ed25519().public().into()
     };
 
-    println!("Searching for the closest peers to {:?}", to_search);
-    swarm.get_closest_peers(to_search);
+    println!("Searching for {:?}", to_search);
+    swarm.find_node(to_search);
 
     // Kick it off!
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(KademliaEvent::GetClosestPeersResult(res))) => {
-                    match res {
-                        Ok(ok) => {
-                            println!("Closest peers: {:#?}", ok.peers);
-                            return Ok(Async::Ready(()));
-                        }
-                        Err(err) => {
-                            println!("The search for closest peers failed: {:?}", err);
-                        }
-                    }
+                Async::Ready(Some(ev @ libp2p::kad::KademliaOut::FindNodeResult { .. })) => {
+                    println!("Result: {:#?}", ev);
                 },
                 Async::Ready(Some(_)) => {},
                 Async::Ready(None) | Async::NotReady => break,
