@@ -20,7 +20,7 @@
 
 use futures::{future, prelude::*};
 use libp2p_core::identity;
-use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, IncomingError};
+use libp2p_core::nodes::network::{Network, NetworkEvent, IncomingError};
 use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
 use libp2p_swarm::{
     ProtocolsHandler,
@@ -119,7 +119,7 @@ fn raw_swarm_simultaneous_connect() {
                         .map_inbound(move |muxer| (peer_id2, muxer));
                     upgrade::apply(out.stream, upgrade, endpoint)
                 });
-            RawSwarm::new(transport, local_public_key.into_peer_id())
+            Network::new(transport, local_public_key.into_peer_id())
         };
 
         let mut swarm2 = {
@@ -135,7 +135,7 @@ fn raw_swarm_simultaneous_connect() {
                         .map_inbound(move |muxer| (peer_id2, muxer));
                     upgrade::apply(out.stream, upgrade, endpoint)
                 });
-            RawSwarm::new(transport, local_public_key.into_peer_id())
+            Network::new(transport, local_public_key.into_peer_id())
         };
 
         swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -144,14 +144,14 @@ fn raw_swarm_simultaneous_connect() {
         let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) =
             future::lazy(move || {
                 let swarm1_listen_addr =
-                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+                    if let Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
                     };
 
                 let swarm2_listen_addr =
-                    if let Async::Ready(RawSwarmEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
+                    if let Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
@@ -207,21 +207,21 @@ fn raw_swarm_simultaneous_connect() {
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm1.poll() {
-                            Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                            Async::Ready(NetworkEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
-                            Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => {
+                            Async::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 1);
                                 swarm1_step = 2;
                             },
-                            Async::Ready(RawSwarmEvent::Replaced { new_info, .. }) => {
+                            Async::Ready(NetworkEvent::Replaced { new_info, .. }) => {
                                 assert_eq!(new_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
-                            Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
+                            Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
                             Async::Ready(_) => unreachable!(),
@@ -231,21 +231,21 @@ fn raw_swarm_simultaneous_connect() {
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm2.poll() {
-                            Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                            Async::Ready(NetworkEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
-                            Async::Ready(RawSwarmEvent::Connected { conn_info, .. }) => {
+                            Async::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 1);
                                 swarm2_step = 2;
                             },
-                            Async::Ready(RawSwarmEvent::Replaced { new_info, .. }) => {
+                            Async::Ready(NetworkEvent::Replaced { new_info, .. }) => {
                                 assert_eq!(new_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
-                            Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
+                            Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
                             Async::Ready(_) => unreachable!(),
