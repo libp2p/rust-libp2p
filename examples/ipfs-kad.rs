@@ -30,7 +30,7 @@ use libp2p::{
     identity,
     build_development_transport
 };
-use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent};
+use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
 use std::env;
 use std::time::Duration;
 
@@ -91,17 +91,30 @@ fn main() {
     swarm.get_closest_peers(to_search);
 
     // Kick it off!
-    tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
+    tokio::run(futures::future::poll_fn(move || {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(KademliaEvent::GetClosestPeersResult(res))) => {
                     match res {
                         Ok(ok) => {
-                            println!("Closest peers: {:#?}", ok.peers);
-                            return Ok(Async::Ready(()));
+                            if !ok.peers.is_empty() {
+                                println!("Query finished with closest peers: {:#?}", ok.peers);
+                                return Ok(Async::Ready(()));
+                            } else {
+                                // The example is considered failed as there
+                                // should always be at least 1 reachable peer.
+                                panic!("Query finished with no closest peers.");
+                            }
                         }
-                        Err(err) => {
-                            println!("The search for closest peers failed: {:?}", err);
+                        Err(GetClosestPeersError::Timeout { peers, .. }) => {
+                            if !peers.is_empty() {
+                                println!("Query timed out with closest peers: {:#?}", peers);
+                                return Ok(Async::Ready(()));
+                            } else {
+                                // The example is considered failed as there
+                                // should always be at least 1 reachable peer.
+                                panic!("Query timed out with no closest peers.");
+                            }
                         }
                     }
                 },
