@@ -30,8 +30,7 @@ use libp2p_core::{
     ConnectedPoint,
     PeerId,
     nodes::collection::ConnectionInfo,
-    nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
-    nodes::handled_node_tasks::IntoNodeHandler,
+    nodes::handled_node::{IntoNodeHandler, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply}
 };
 use std::{error, fmt, time::Duration};

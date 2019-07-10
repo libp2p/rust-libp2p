@@ -81,8 +81,40 @@ pub use self::{
 };
 
 /// Types serving as protocol names.
+///
+/// # Context
+///
+/// In situations where we provide a list of protocols that we support, the elements of that list are required to
+/// implement the [`ProtocolName`] trait.
+///
+/// Libp2p will call the [`ProtocolName::protocol_name`] trait method on each element of that list, and transmit the
+/// returned value on the network. If the remote accepts a given protocol, the element serves as the return value of
+/// the function that performed the negotiation.
+///
+/// # Example
+///
+/// ```
+/// use libp2p_core::ProtocolName;
+///
+/// enum MyProtocolName {
+///     Version1,
+///     Version2,
+///     Version3,
+/// }
+///
+/// impl ProtocolName for MyProtocolName {
+///     fn protocol_name(&self) -> &[u8] {
+///         match *self {
+///             MyProtocolName::Version1 => b"/myproto/1.0",
+///             MyProtocolName::Version2 => b"/myproto/2.0",
+///             MyProtocolName::Version3 => b"/myproto/3.0",
+///         }
+///     }
+/// }
+/// ```
+///
 pub trait ProtocolName {
-    /// The protocol name as bytes.
+    /// The protocol name as bytes. Transmitted on the network.
     fn protocol_name(&self) -> &[u8];
 }
 

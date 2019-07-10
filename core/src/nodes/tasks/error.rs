@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,22 +18,41 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Low-level networking primitives.
-//!
-//! Contains structs that are aiming at providing very precise control over what happens over the
-//! network.
-//!
-//! The more complete and highest-level struct is the `Network`. The `Network` directly or
-//! indirectly uses all the other structs of this module.
+use crate::nodes::handled_node::HandledNodeError;
+use std::{fmt, error};
 
-pub mod collection;
-pub mod handled_node;
-pub mod tasks;
-pub mod listeners;
-pub mod node;
-pub mod network;
+/// Error that can happen in a task.
+#[derive(Debug)]
+pub enum Error<R, H> {
+    /// An error happend while we were trying to reach the node.
+    Reach(R),
+    /// An error happened after the node has been reached.
+    Node(HandledNodeError<H>)
+}
 
-pub use collection::ConnectionInfo;
-pub use node::Substream;
-pub use handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
-pub use network::{Peer, Network, NetworkEvent};
+impl<R, H> fmt::Display for Error<R, H>
+where
+    R: fmt::Display,
+    H: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Reach(err) => write!(f, "reach error: {}", err),
+            Error::Node(err) => write!(f, "node error: {}", err)
+        }
+    }
+}
+
+impl<R, H> error::Error for Error<R, H>
+where
+    R: error::Error + 'static,
+    H: error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Error::Reach(err) => Some(err),
+            Error::Node(err) => Some(err)
+        }
+    }
+}
+
