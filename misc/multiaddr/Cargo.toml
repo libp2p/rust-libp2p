@@ -19,6 +19,7 @@ percent-encoding = "1.0.1"
 serde = "1.0.70"
 unsigned-varint = "0.2"
 url = { version = "1.7.2", default-features = false }
+parity-codec = { version = "4.1.2", features = ["derive"] }
 
 [dev-dependencies]
 bincode = "1"

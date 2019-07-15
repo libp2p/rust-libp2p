@@ -23,6 +23,7 @@ use std::{
     result::Result as StdResult,
     str::FromStr
 };
+use parity_codec::{Compact, Encode, Decode, Input, Output};
 pub use self::errors::{Result, Error};
 pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 pub use self::protocol::Protocol;
@@ -395,6 +396,37 @@ impl<'de> Deserialize<'de> for Multiaddr {
         } else {
             deserializer.deserialize_bytes(Visitor { is_human_readable: false })
         }
+    }
+}
+
+impl Encode for Multiaddr {
+    fn encode_to<T: Output>(&self, output: &mut T) {
+        let len: usize = self.bytes.len();
+        assert!(len <= u32::max_value() as usize, "Attempted to serialize a Multiaddr which is too long.");
+        output.push(&Compact(len as u32));
+
+        &self.bytes
+			.as_ref()
+			.iter()
+			.for_each(|&b| {
+				output.push_byte(b);
+			});
+    }
+}
+
+impl Decode for Multiaddr {
+    fn decode<I: Input>(input: &mut I) -> Option<Self> {
+		<Compact<u32>>::decode(input).and_then(move |Compact(len)| {
+			let len = len as usize;
+			let mut buffer = vec![0; len];
+			let len_read = input.read(&mut buffer[..len]);
+
+			if len_read == 0 {
+				return None;
+			}
+
+			Some(Multiaddr::from_vec(buffer))
+		})
     }
 }
 

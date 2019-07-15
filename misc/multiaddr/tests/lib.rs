@@ -2,6 +2,7 @@
 use data_encoding::HEXUPPER;
 use multihash::Multihash;
 use parity_multiaddr::*;
+use parity_codec::{Encode, Decode};
 use quickcheck::{Arbitrary, Gen, QuickCheck};
 use rand::Rng;
 use std::{
@@ -328,3 +329,18 @@ fn replace_ip4_with_ip6() {
     assert_eq!(result.unwrap(), "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap())
 }
 
+#[test]
+fn encode_decode_ipv4() {
+    let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
+	let enc = Encode::encode(&server);
+    let dec = Decode::decode(&mut &enc[..]).unwrap();
+    assert_eq!(server, dec);
+}
+
+#[test]
+fn encode_decode_ipv6() {
+    let server = multiaddr!(Ip6(Ipv6Addr::LOCALHOST), Tcp(10000u16));
+    let enc = Encode::encode(&server);
+    let dec = Decode::decode(&mut &enc[..]).unwrap();
+    assert_eq!(server, dec);
+}
