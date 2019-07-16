@@ -178,9 +178,12 @@ where
     type SinkError = io::Error;
 
     fn start_send(&mut self, msg: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        if !self.write_buffer.is_empty() {
+        // Use the maximum frame length also as a (soft) upper limit
+        // for the entire write buffer. The actual (hard) limit is thus
+        // implied to be roughly 2 * MAX_FRAME_SIZE.
+        if self.write_buffer.len() >= MAX_FRAME_SIZE as usize {
             self.poll_complete()?;
-            if !self.write_buffer.is_empty() {
+            if self.write_buffer.len() >= MAX_FRAME_SIZE as usize {
                 return Ok(AsyncSink::NotReady(msg))
             }
         }
