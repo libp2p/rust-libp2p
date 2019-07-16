@@ -26,6 +26,7 @@ use unsigned_varint as uvi;
 
 const MAX_LEN_BYTES: u16 = 2;
 const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
+const DEFAULT_BUFFER_SIZE: usize = 64;
 
 /// `Stream` and `Sink` wrapping some `AsyncRead + AsyncWrite` resource to read
 /// and write unsigned-varint prefixed frames.
@@ -69,8 +70,8 @@ impl<R> LengthDelimited<R> {
         LengthDelimited {
             inner,
             read_state: ReadState::default(),
-            read_buffer: BytesMut::with_capacity(MAX_FRAME_SIZE as usize),
-            write_buffer: BytesMut::with_capacity((MAX_FRAME_SIZE + MAX_LEN_BYTES) as usize),
+            read_buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE),
+            write_buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE + MAX_LEN_BYTES as usize),
         }
     }
 
@@ -191,8 +192,11 @@ where
                 "Maximum frame size exceeded."))
         }
 
-        self.write_buffer.put_slice(uvi::encode::u16(len, &mut [0; 3]));
-        self.write_buffer.extend(msg);
+        let mut uvi_buf = uvi::encode::u16_buffer();
+        let uvi_len = uvi::encode::u16(len, &mut uvi_buf);
+        self.write_buffer.reserve(len as usize + uvi_len.len());
+        self.write_buffer.put(uvi_len);
+        self.write_buffer.put(msg);
 
         Ok(AsyncSink::Ready)
     }
