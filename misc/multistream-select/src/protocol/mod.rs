@@ -20,11 +20,13 @@
 
 //! Contains lower-level structs to handle the multistream protocol.
 
+const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
+const MSG_PROTOCOL_NA: &[u8] = b"na\n";
+const MSG_LS: &[u8] = b"ls\n";
+
 mod dialer;
 mod error;
 mod listener;
-
-const MULTISTREAM_PROTOCOL_WITH_LF: &[u8] = b"/multistream/1.0.0\n";
 
 pub use self::dialer::{Dialer, DialerFuture};
 pub use self::error::MultistreamSelectError;
@@ -32,35 +34,35 @@ pub use self::listener::{Listener, ListenerFuture};
 
 /// Message sent from the dialer to the listener.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DialerToListenerMessage<N> {
+pub enum Request<N> {
     /// The dialer wants us to use a protocol.
     ///
     /// If this is accepted (by receiving back a `ProtocolAck`), then we immediately start
     /// communicating in the new protocol.
-    ProtocolRequest {
+    Protocol {
         /// Name of the protocol.
         name: N
     },
 
     /// The dialer requested the list of protocols that the listener supports.
-    ProtocolsListRequest,
+    ListProtocols,
 }
 
 /// Message sent from the listener to the dialer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ListenerToDialerMessage<N> {
+pub enum Response<N> {
     /// The protocol requested by the dialer is accepted. The socket immediately starts using the
     /// new protocol.
-    ProtocolAck { name: N },
+    Protocol { name: N },
 
     /// The protocol requested by the dialer is not supported or available.
-    NotAvailable,
+    ProtocolNotAvailable,
 
     /// Response to the request for the list of protocols.
-    ProtocolsListResponse {
+    SupportedProtocols {
         /// The list of protocols.
         // TODO: use some sort of iterator
-        list: Vec<N>,
+        protocols: Vec<N>,
     },
 }
 

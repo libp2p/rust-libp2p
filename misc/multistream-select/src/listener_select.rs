@@ -23,10 +23,10 @@
 
 use futures::{prelude::*, sink, stream::StreamFuture};
 use crate::protocol::{
-    DialerToListenerMessage,
+    Request,
+    Response,
     Listener,
     ListenerFuture,
-    ListenerToDialerMessage
 };
 use log::{debug, trace};
 use std::mem;
@@ -126,13 +126,13 @@ where
                         Err((e, _)) => return Err(ProtocolChoiceError::from(e))
                     };
                     match msg {
-                        Some(DialerToListenerMessage::ProtocolsListRequest) => {
+                        Some(Request::ListProtocols) => {
                             trace!("protocols list response: {:?}", protocols
                                    .into_iter()
                                    .map(|p| p.as_ref().into())
                                    .collect::<Vec<Vec<u8>>>());
-                            let list = protocols.into_iter().collect();
-                            let msg = ListenerToDialerMessage::ProtocolsListResponse { list };
+                            let supported = protocols.into_iter().collect();
+                            let msg = Response::SupportedProtocols { protocols: supported };
                             let sender = listener.send(msg);
                             self.inner = ListenerSelectState::Outgoing {
                                 sender,
@@ -140,12 +140,12 @@ where
                                 outcome: None
                             }
                         }
-                        Some(DialerToListenerMessage::ProtocolRequest { name }) => {
+                        Some(Request::Protocol { name }) => {
                             let mut outcome = None;
-                            let mut send_back = ListenerToDialerMessage::NotAvailable;
+                            let mut send_back = Response::ProtocolNotAvailable;
                             for supported in &protocols {
                                 if name.as_ref() == supported.as_ref() {
-                                    send_back = ListenerToDialerMessage::ProtocolAck {
+                                    send_back = Response::Protocol {
                                         name: supported.clone()
                                     };
                                     outcome = Some(supported);
