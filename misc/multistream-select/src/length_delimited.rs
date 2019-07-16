@@ -37,9 +37,9 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 pub struct LengthDelimited<R> {
     /// The inner I/O resource.
     inner: R,
-    /// Read buffer for a single unsigned-varint length-delimited frame.
+    /// Read buffer for a single incoming unsigned-varint length-delimited frame.
     read_buffer: BytesMut,
-    /// Write buffer for a single unsigned-varint length-delimited frame.
+    /// Write buffer for outgoing unsigned-varint length-delimited frames.
     write_buffer: BytesMut,
     /// The current read state, alternating between reading a frame
     /// length and reading a frame payload.
@@ -77,15 +77,14 @@ impl<R> LengthDelimited<R> {
 
     /// Destroys the `LengthDelimited` and returns the underlying socket.
     ///
-    /// Contrary to its equivalent `tokio_io::codec::length_delimited::FramedRead`, this method is
-    /// guaranteed not to skip any data from the socket.
+    /// This method is guaranteed not to skip any data from the socket.
     ///
     /// # Panic
     ///
-    /// Will panic if called while there is data inside the buffer. **This can only happen if
-    /// you call `poll()` manually**. Using this struct as it is intended to be used (i.e. through
-    /// the modifiers provided by the `futures` crate) will always leave the object in a state in
-    /// which `into_inner()` will not panic.
+    /// Will panic if called while there is data inside the read or write buffer.
+    /// **This can only happen if you call `poll()` manually**. Using this struct
+    /// as it is intended to be used (i.e. through the high-level `futures` API)
+    /// will always leave the object in a state in which `into_inner()` will not panic.
     pub fn into_inner(self) -> R {
         assert!(self.write_buffer.is_empty());
         assert!(self.read_buffer.is_empty());
