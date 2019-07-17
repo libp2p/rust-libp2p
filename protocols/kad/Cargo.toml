@@ -16,6 +16,7 @@ bytes = "0.4"
 either = "1.5"
 fnv = "1.0"
 futures = "0.1"
+log = "0.4"
 libp2p-core = { version = "0.10.0", path = "../../core" }
 libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }

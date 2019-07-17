@@ -31,6 +31,7 @@ use libp2p::{
     build_development_transport
 };
 use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
+use libp2p::kad::record::store::MemoryStore;
 use std::env;
 use std::time::Duration;
 
@@ -51,9 +52,10 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut cfg = KademliaConfig::new(local_peer_id.clone());
+        let mut cfg = KademliaConfig::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        let mut behaviour: Kademlia<_> = Kademlia::new(cfg);
+        let store = MemoryStore::new(local_peer_id.clone());
+        let mut behaviour = Kademlia::with_config(local_peer_id.clone(), store, cfg);
 
         // TODO: the /dnsaddr/ scheme is not supported (https://github.com/libp2p/rust-libp2p/issues/967)
         /*behaviour.add_address(&"QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());

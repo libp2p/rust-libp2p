@@ -26,11 +26,10 @@ use peers::fixed::FixedPeersIter;
 
 use crate::K_VALUE;
 use crate::kbucket::{Key, KeyBytes};
-use crate::handler::KademliaHandlerIn;
 use either::Either;
 use fnv::FnvHashMap;
 use libp2p_core::PeerId;
-use std::time::Duration;
+use std::{time::Duration, num::NonZeroUsize};
 use wasm_timer::Instant;
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
@@ -50,7 +49,7 @@ pub enum QueryPoolState<'a, TInner> {
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(&'a Query<TInner>, PeerId)>),
+    Waiting(Option<(&'a mut Query<TInner>, PeerId)>),
     /// A query has finished.
     Finished(Query<TInner>),
     /// A query has timed out.
@@ -77,6 +76,11 @@ impl<TInner> QueryPool<TInner> {
         self.queries.values()
     }
 
+    /// Gets the current size of the pool, i.e. the number of running queries.
+    pub fn size(&self) -> usize {
+        self.queries.len()
+    }
+
     /// Returns an iterator that allows modifying each query in the pool.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Query<TInner>> {
         self.queries.values_mut()
@@ -88,7 +92,7 @@ impl<TInner> QueryPool<TInner> {
         I: IntoIterator<Item = Key<PeerId>>
     {
         let peers = peers.into_iter().map(|k| k.into_preimage()).collect::<Vec<_>>();
-        let parallelism = self.config.replication_factor;
+        let parallelism = self.config.replication_factor.get();
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
         self.add(peer_iter, inner)
     }
@@ -100,7 +104,7 @@ impl<TInner> QueryPool<TInner> {
         I: IntoIterator<Item = Key<PeerId>>
     {
         let cfg = ClosestPeersIterConfig {
-            num_results: self.config.replication_factor,
+            num_results: self.config.replication_factor.get(),
             .. ClosestPeersIterConfig::default()
         };
         let peer_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers));
@@ -154,7 +158,7 @@ impl<TInner> QueryPool<TInner> {
         }
 
         if let Some((query_id, peer_id)) = waiting {
-            let query = self.queries.get(&query_id).expect("s.a.");
+            let query = self.queries.get_mut(&query_id).expect("s.a.");
             return QueryPoolState::Waiting(Some((query, peer_id)))
         }
 
@@ -181,17 +185,17 @@ impl<TInner> QueryPool<TInner> {
 pub struct QueryId(usize);
 
 /// The configuration for queries in a `QueryPool`.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct QueryConfig {
     pub timeout: Duration,
-    pub replication_factor: usize,
+    pub replication_factor: NonZeroUsize,
 }
 
 impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
             timeout: Duration::from_secs(60),
-            replication_factor: K_VALUE
+            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0")
         }
     }
 }

@@ -31,9 +31,11 @@ pub mod record;
 
 mod addresses;
 mod behaviour;
+mod jobs;
 mod protobuf_structs;
 mod query;
 
+pub use addresses::Addresses;
 pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
     BootstrapResult,
@@ -61,9 +63,9 @@ pub use behaviour::{
     GetProvidersError,
 };
 pub use protocol::KadConnectionType;
-pub use record::{RecordStore, RecordStorageError, MemoryRecordStorage};
+pub use record::{store, Record, ProviderRecord};
 
-use std::time::Duration;
+use std::num::NonZeroUsize;
 
 /// The `k` parameter of the Kademlia specification.
 ///
@@ -79,7 +81,7 @@ use std::time::Duration;
 /// DHT should agree on the choices made for (1) and (2).
 ///
 /// The current value is `20`.
-pub const K_VALUE: usize = 20;
+pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 
 /// The `α` parameter of the Kademlia specification.
 ///
@@ -89,8 +91,5 @@ pub const K_VALUE: usize = 20;
 /// locating the closest peers to a key.
 ///
 /// The current value is `3`.
-pub const ALPHA_VALUE: usize = 3;
-
-const KBUCKET_PENDING_TIMEOUT: Duration = Duration::from_secs(60);
-const ADD_PROVIDER_INTERVAL: Duration = Duration::from_secs(60);
+pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
 

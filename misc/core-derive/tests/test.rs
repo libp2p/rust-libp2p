@@ -83,7 +83,7 @@ fn three_fields() {
     struct Foo<TSubstream> {
         ping: libp2p::ping::Ping<TSubstream>,
         identify: libp2p::identify::Identify<TSubstream>,
-        kad: libp2p::kad::Kademlia<TSubstream>,
+        kad: libp2p::kad::Kademlia<TSubstream, libp2p::kad::record::store::MemoryStore>,
         #[behaviour(ignore)]
         foo: String,
     }

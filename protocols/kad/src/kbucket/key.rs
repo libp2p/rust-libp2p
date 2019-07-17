@@ -21,67 +21,26 @@
 use bigint::U256;
 use libp2p_core::PeerId;
 use multihash::Multihash;
-use sha2::{Digest, Sha256, digest::generic_array::{GenericArray, typenum::U32}};
+use sha2::{Digest, Sha256};
+use sha2::digest::generic_array::{GenericArray, typenum::U32};
+use std::hash::{Hash, Hasher};
 
-/// A `Key` identifies both the nodes participating in the Kademlia DHT, as well as
-/// records stored in the DHT.
+/// A `Key` in the DHT keyspace with preserved preimage.
 ///
-/// The set of all `Key`s defines the Kademlia keyspace.
+/// Keys in the DHT keyspace identify both the participating nodes, as well as
+/// the records stored in the DHT.
 ///
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
-///
-/// A `Key` preserves the preimage of type `T` of the hash function. See [`Key::preimage`].
 #[derive(Clone, Debug)]
 pub struct Key<T> {
     preimage: T,
     bytes: KeyBytes,
 }
 
-/// The raw bytes of a key in the DHT keyspace.
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct KeyBytes(GenericArray<u8, U32>);
-
-impl KeyBytes {
-    /// Computes the distance of the keys according to the XOR metric.
-    pub fn distance<U>(&self, other: &U) -> Distance
-    where
-        U: AsRef<KeyBytes>
-    {
-        let a = U256::from(self.0.as_ref());
-        let b = U256::from(other.as_ref().0.as_ref());
-        Distance(a ^ b)
-    }
-}
-
-impl AsRef<KeyBytes> for KeyBytes {
-    fn as_ref(&self) -> &KeyBytes {
-        self
-    }
-}
-
-impl<T> AsRef<KeyBytes> for Key<T> {
-    fn as_ref(&self) -> &KeyBytes {
-        &self.bytes
-    }
-}
-
-impl<T, U> PartialEq<Key<U>> for Key<T> {
-    fn eq(&self, other: &Key<U>) -> bool {
-        self.bytes == other.bytes
-    }
-}
-
-impl<T> Eq for Key<T> {}
-
-impl<TPeerId> AsRef<Key<TPeerId>> for Key<TPeerId> {
-    fn as_ref(&self) -> &Key<TPeerId> {
-        self
-    }
-}
-
 impl<T> Key<T> {
-    /// Construct a new `Key` by hashing the bytes of the given `preimage`.
+    /// Constructs a new `Key` by running the given value through a random
+    /// oracle.
     ///
     /// The preimage of type `T` is preserved. See [`Key::preimage`] and
     /// [`Key::into_preimage`].
@@ -89,18 +48,8 @@ impl<T> Key<T> {
     where
         T: AsRef<[u8]>
     {
-        let bytes = KeyBytes(Sha256::digest(preimage.as_ref()));
+        let bytes = KeyBytes::new(&preimage);
         Key { preimage, bytes }
-    }
-
-    /// Returns the uniquely determined key with the given distance to `self`.
-    ///
-    /// This implements the following equivalence:
-    ///
-    /// `self xor other = distance <==> other = self xor distance`
-    pub fn for_distance(&self, d: Distance) -> KeyBytes {
-        let key_int = U256::from(self.bytes.0.as_ref()) ^ d.0;
-        KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
     }
 
     /// Borrows the preimage of the key.
@@ -119,6 +68,15 @@ impl<T> Key<T> {
         U: AsRef<KeyBytes>
     {
         self.bytes.distance(other)
+    }
+
+    /// Returns the uniquely determined key with the given distance to `self`.
+    ///
+    /// This implements the following equivalence:
+    ///
+    /// `self xor other = distance <==> other = self xor distance`
+    pub fn for_distance(&self, d: Distance) -> KeyBytes {
+        self.bytes.for_distance(d)
     }
 }
 
@@ -140,7 +98,68 @@ impl From<PeerId> for Key<PeerId> {
     }
 }
 
-/// A distance between two `Key`s.
+impl<T> AsRef<KeyBytes> for Key<T> {
+    fn as_ref(&self) -> &KeyBytes {
+        &self.bytes
+    }
+}
+
+impl<T, U> PartialEq<Key<U>> for Key<T> {
+    fn eq(&self, other: &Key<U>) -> bool {
+        self.bytes == other.bytes
+    }
+}
+
+impl<T> Eq for Key<T> {}
+
+impl<T> Hash for Key<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes.0.hash(state);
+    }
+}
+
+/// The raw bytes of a key in the DHT keyspace.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct KeyBytes(GenericArray<u8, U32>);
+
+impl KeyBytes {
+    /// Creates a new key in the DHT keyspace by running the given
+    /// value through a random oracle.
+    pub fn new<T>(value: T) -> Self
+    where
+        T: AsRef<[u8]>
+    {
+        KeyBytes(Sha256::digest(value.as_ref()))
+    }
+
+    /// Computes the distance of the keys according to the XOR metric.
+    pub fn distance<U>(&self, other: &U) -> Distance
+    where
+        U: AsRef<KeyBytes>
+    {
+        let a = U256::from(self.0.as_ref());
+        let b = U256::from(other.as_ref().0.as_ref());
+        Distance(a ^ b)
+    }
+
+    /// Returns the uniquely determined key with the given distance to `self`.
+    ///
+    /// This implements the following equivalence:
+    ///
+    /// `self xor other = distance <==> other = self xor distance`
+    pub fn for_distance(&self, d: Distance) -> KeyBytes {
+        let key_int = U256::from(self.0.as_ref()) ^ d.0;
+        KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
+    }
+}
+
+impl AsRef<KeyBytes> for KeyBytes {
+    fn as_ref(&self) -> &KeyBytes {
+        self
+    }
+}
+
+/// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(pub(super) bigint::U256);
 
@@ -148,10 +167,17 @@ pub struct Distance(pub(super) bigint::U256);
 mod tests {
     use super::*;
     use quickcheck::*;
+    use multihash::Hash::SHA2256;
 
     impl Arbitrary for Key<PeerId> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<PeerId> {
             Key::from(PeerId::random())
+        }
+    }
+
+    impl Arbitrary for Key<Multihash> {
+        fn arbitrary<G: Gen>(_: &mut G) -> Key<Multihash> {
+            Key::from(Multihash::random(SHA2256))
         }
     }
 

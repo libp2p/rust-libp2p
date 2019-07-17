@@ -75,8 +75,8 @@ pub struct ClosestPeersIterConfig {
 impl Default for ClosestPeersIterConfig {
     fn default() -> Self {
         ClosestPeersIterConfig {
-            parallelism: ALPHA_VALUE as usize,
-            num_results: K_VALUE as usize,
+            parallelism: ALPHA_VALUE.get(),
+            num_results: K_VALUE.get(),
             peer_timeout: Duration::from_secs(10),
         }
     }

@@ -20,92 +20,111 @@
 
 //! Records and record storage abstraction of the libp2p Kademlia DHT.
 
-use fnv::FnvHashMap;
-use multihash::Multihash;
-use std::borrow::Cow;
+pub mod store;
 
-/// The records that are kept in the dht.
+use libp2p_core::PeerId;
+use multihash::Multihash;
+use std::hash::{Hash, Hasher};
+use wasm_timer::Instant;
+
+/// A record stored in the DHT.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
     /// Key of the record.
     pub key: Multihash,
     /// Value of the record.
     pub value: Vec<u8>,
+    /// The (original) publisher of the record.
+    pub publisher: Option<PeerId>,
+    /// The expiration time as measured by a local, monotonic clock.
+    pub expires: Option<Instant>,
 }
 
-/// Trait for a record store.
-pub trait RecordStore {
-    fn get(&self, k: &Multihash) -> Option<Cow<Record>>;
-    fn put(&mut self, r: Record) -> Result<(), RecordStorageError>;
+impl Record {
+    /// Creates a new record for insertion into the DHT.
+    pub fn new(key: Multihash, value: Vec<u8>) -> Self {
+        Record {
+            key,
+            value,
+            publisher: None,
+            expires: None,
+        }
+    }
+
+    /// Checks whether the record is expired w.r.t. the given `Instant`.
+    pub fn is_expired(&self, now: Instant) -> bool {
+        self.expires.map_or(false, |t| now >= t)
+    }
 }
 
-/// The error record store may return
-#[derive(Clone, Debug, PartialEq)]
-pub enum RecordStorageError {
-    /// Store reached the capacity limit.
-    AtCapacity,
-    /// Value being put is larger than the limit.
-    ValueTooLarge,
+/// A record stored in the DHT whose value is the ID of a peer
+/// who can provide the value on-demand.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderRecord {
+    /// The key whose value is provided by the provider.
+    pub key: Multihash,
+    /// The provider of the value for the key.
+    pub provider: PeerId,
+    /// The expiration time as measured by a local, monotonic clock.
+    pub expires: Option<Instant>,
 }
 
-/// In-memory implementation of the record store.
-pub struct MemoryRecordStorage {
-    /// Maximum number of records we will store.
-    max_records: usize,
-    /// Maximum size of the record we will store.
-    max_record_size: usize,
-    /// The records.
-    records: FnvHashMap<Multihash, Record>
+impl Hash for ProviderRecord {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+        self.provider.hash(state);
+    }
 }
 
-impl MemoryRecordStorage {
-    const MAX_RECORDS: usize = 1024;
-    const MAX_RECORD_SIZE: usize = 65535;
+impl ProviderRecord {
+    /// Creates a new provider record for insertion into a `RecordStore`.
+    pub fn new(key: Multihash, provider: PeerId) -> Self {
+        ProviderRecord {
+            key, provider, expires: None
+        }
+    }
 
-    /// Creates a new `MemoryRecordStorage`.
-    pub fn new(max_records: usize, max_record_size: usize) -> Self {
-        MemoryRecordStorage{
-            max_records,
-            max_record_size,
-            records: FnvHashMap::default()
+    /// Checks whether the provider record is expired w.r.t. the given `Instant`.
+    pub fn is_expired(&self, now: Instant) -> bool {
+        self.expires.map_or(false, |t| now >= t)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quickcheck::*;
+    use multihash::Hash::SHA2256;
+    use rand::Rng;
+    use std::time::Duration;
+
+    impl Arbitrary for Record {
+        fn arbitrary<G: Gen>(g: &mut G) -> Record {
+            Record {
+                key: Multihash::random(SHA2256),
+                value: Vec::arbitrary(g),
+                publisher: if g.gen() { Some(PeerId::random()) } else { None },
+                expires: if g.gen() {
+                    Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
+                } else {
+                    None
+                },
+            }
+        }
+    }
+
+    impl Arbitrary for ProviderRecord {
+        fn arbitrary<G: Gen>(g: &mut G) -> ProviderRecord {
+            ProviderRecord {
+                key: Multihash::random(SHA2256),
+                provider: PeerId::random(),
+                expires: if g.gen() {
+                    Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
+                } else {
+                    None
+                },
+            }
         }
     }
 }
 
-impl Default for MemoryRecordStorage {
-    fn default() -> Self {
-        MemoryRecordStorage::new(Self::MAX_RECORDS, Self::MAX_RECORD_SIZE)
-    }
-}
-
-impl MemoryRecordStorage {
-    /// Retain the elements by a predicate.
-    pub fn retain<F>(&mut self, f: F)
-        where F: FnMut(&Multihash, &mut Record) -> bool
-    {
-        self.records.retain(f);
-    }
-}
-
-impl RecordStore for MemoryRecordStorage {
-    fn get(&self, k: &Multihash) -> Option<Cow<Record>> {
-        match self.records.get(k) {
-            Some(rec) => Some(Cow::Borrowed(rec)),
-            None => None,
-        }
-    }
-
-    fn put(&mut self, r: Record) -> Result<(), RecordStorageError> {
-        if self.records.len() >= self.max_records {
-            return Err(RecordStorageError::AtCapacity);
-        }
-
-        if r.value.len() >= self.max_record_size {
-            return Err(RecordStorageError::ValueTooLarge)
-        }
-
-        self.records.insert(r.key.clone(), r);
-
-        Ok(())
-    }
-}

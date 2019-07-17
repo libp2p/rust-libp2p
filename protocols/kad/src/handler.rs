@@ -179,26 +179,26 @@ pub enum KademliaHandlerEvent<TUserData> {
         user_data: TUserData,
     },
 
-    /// The remote indicates that this list of providers is known for this key.
+    /// The peer announced itself as a provider of a key.
     AddProvider {
-        /// Key for which we should add providers.
+        /// The key for which the peer is a provider of the associated value.
         key: Multihash,
-        /// Known provider for this key.
-        provider_peer: KadPeer,
+        /// The peer that is the provider of the value for `key`.
+        provider: KadPeer,
     },
 
     /// Request to get a value from the dht records
-    GetValue {
+    GetRecord {
         /// Key for which we should look in the dht
         key: Multihash,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
 
-    /// Response to a `KademliaHandlerIn::GetValue`.
-    GetValueRes {
+    /// Response to a `KademliaHandlerIn::GetRecord`.
+    GetRecordRes {
         /// The result is present if the key has been found
-        result: Option<Record>,
+        record: Option<Record>,
         /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
         /// The user data passed to the `GetValue`.
@@ -206,20 +206,19 @@ pub enum KademliaHandlerEvent<TUserData> {
     },
 
     /// Request to put a value in the dht records
-    PutValue {
-        /// The key of the record
-        key: Multihash,
-        /// The value of the record
-        value: Vec<u8>,
+    PutRecord {
+        record: Record,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
 
-    /// Response to a request to put a value
-    PutValueRes {
-        /// The key we were putting in
+    /// Response to a request to store a record.
+    PutRecordRes {
+        /// The key of the stored record.
         key: Multihash,
-        /// The user data passed to the `GetValue`.
+        /// The value of the stored record.
+        value: Vec<u8>,
+        /// The user data passed to the `PutValue`.
         user_data: TUserData,
     }
 }
@@ -271,6 +270,15 @@ impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 /// Event to send to the handler.
 #[derive(Debug)]
 pub enum KademliaHandlerIn<TUserData> {
+    /// Resets the (sub)stream associated with the given request ID,
+    /// thus signaling an error to the remote.
+    ///
+    /// Explicitly resetting the (sub)stream associated with a request
+    /// can be used as an alternative to letting requests simply time
+    /// out on the remote peer, thus potentially avoiding some delay
+    /// for the query on the remote.
+    Reset(KademliaRequestId),
+
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
@@ -319,21 +327,21 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Key for which we should add providers.
         key: Multihash,
         /// Known provider for this key.
-        provider_peer: KadPeer,
+        provider: KadPeer,
     },
 
-    /// Request to get a node from the dht
-    GetValue {
-        /// The key of the value we are looking for
+    /// Request to retrieve a record from the DHT.
+    GetRecord {
+        /// The key of the record.
         key: Multihash,
         /// Custom data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
 
-    /// Response to a `GetValue`.
-    GetValueRes {
+    /// Response to a `GetRecord` request.
+    GetRecordRes {
         /// The value that might have been found in our storage.
-        result: Option<Record>,
+        record: Option<Record>,
         /// Nodes that are closer to the key we were searching for.
         closer_peers: Vec<KadPeer>,
         /// Identifier of the request that was made by the remote.
@@ -341,17 +349,14 @@ pub enum KademliaHandlerIn<TUserData> {
     },
 
     /// Put a value into the dht records.
-    PutValue {
-        /// The key of the record.
-        key: Multihash,
-        /// The value of the record.
-        value: Vec<u8>,
+    PutRecord {
+        record: Record,
         /// Custom data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
 
-    /// Response to a `PutValue`.
-    PutValueRes {
+    /// Response to a `PutRecord`.
+    PutRecordRes {
         /// Key of the value that was put.
         key: Multihash,
         /// Value that was put.
@@ -472,9 +477,18 @@ where
             .push(SubstreamState::InWaitingMessage(connec_unique_id, protocol));
     }
 
-    #[inline]
     fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
+            KademliaHandlerIn::Reset(request_id) => {
+                let pos = self.substreams.iter().position(|state| match state {
+                        SubstreamState::InWaitingUser(conn_id, _) =>
+                            conn_id == &request_id.connec_unique_id,
+                    _ => false,
+                });
+                if let Some(pos) = pos {
+                    let _ = self.substreams.remove(pos).try_close();
+                }
+            }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
                 self.substreams.push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
@@ -535,31 +549,27 @@ where
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
                 }
             }
-            KademliaHandlerIn::AddProvider { key, provider_peer } => {
+            KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider {
                     key: key.clone(),
-                    provider_peer: provider_peer.clone(),
+                    provider: provider.clone(),
                 };
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, None));
             }
-            KademliaHandlerIn::GetValue { key, user_data } => {
+            KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
 
             }
-            KademliaHandlerIn::PutValue { key, value, user_data } => {
-                let msg = KadRequestMsg::PutValue {
-                    key,
-                    value,
-                };
-
+            KademliaHandlerIn::PutRecord { record, user_data } => {
+                let msg = KadRequestMsg::PutValue { record };
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
             }
-            KademliaHandlerIn::GetValueRes {
-                result,
+            KademliaHandlerIn::GetRecordRes {
+                record,
                 closer_peers,
                 request_id,
             } => {
@@ -576,14 +586,14 @@ where
                     };
 
                     let msg = KadResponseMsg::GetValue {
-                        result,
+                        record,
                         closer_peers: closer_peers.clone(),
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
                 }
             }
-            KademliaHandlerIn::PutValueRes {
+            KademliaHandlerIn::PutRecordRes {
                 key,
                 request_id,
                 value,
@@ -883,16 +893,15 @@ fn process_kad_request<TUserData>(
             key,
             request_id: KademliaRequestId { connec_unique_id },
         }),
-        KadRequestMsg::AddProvider { key, provider_peer } => {
-            Ok(KademliaHandlerEvent::AddProvider { key, provider_peer })
+        KadRequestMsg::AddProvider { key, provider } => {
+            Ok(KademliaHandlerEvent::AddProvider { key, provider })
         }
-        KadRequestMsg::GetValue { key } => Ok(KademliaHandlerEvent::GetValue {
+        KadRequestMsg::GetValue { key } => Ok(KademliaHandlerEvent::GetRecord {
             key,
             request_id: KademliaRequestId { connec_unique_id },
         }),
-        KadRequestMsg::PutValue { key, value } => Ok(KademliaHandlerEvent::PutValue {
-            key,
-            value,
+        KadRequestMsg::PutValue { record } => Ok(KademliaHandlerEvent::PutRecord {
+            record,
             request_id: KademliaRequestId { connec_unique_id },
         })
     }
@@ -927,16 +936,17 @@ fn process_kad_response<TUserData>(
             user_data,
         },
         KadResponseMsg::GetValue {
-            result,
+            record,
             closer_peers,
-        } => KademliaHandlerEvent::GetValueRes {
-            result,
+        } => KademliaHandlerEvent::GetRecordRes {
+            record,
             closer_peers,
             user_data,
         },
-        KadResponseMsg::PutValue { key, .. } => {
-            KademliaHandlerEvent::PutValueRes {
+        KadResponseMsg::PutValue { key, value, .. } => {
+            KademliaHandlerEvent::PutRecordRes {
                 key,
+                value,
                 user_data,
             }
         }
