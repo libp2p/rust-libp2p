@@ -721,6 +721,8 @@ where
     /// example with the identify protocol.
     ///
     /// For each listener, calls `nat_traversal` with the observed address and returns the outcome.
+    // TODO: This has nothing to do with nat traversal but with the fact that
+    // tcp can not listen and dial on the same port.
     pub fn nat_traversal<'a>(&'a self, observed_addr: &'a Multiaddr)
         -> impl Iterator<Item = Multiaddr> + 'a
     where
