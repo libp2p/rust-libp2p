@@ -58,14 +58,15 @@ impl Addresses {
 
     /// Removes the given address from the list.
     ///
-    /// Returns true if the address was found and removed, false otherwise.
-    /// The last remaining address in the list cannot be removed.
+    /// Returns `Ok(())` if the address is either not in the list or was found and
+    /// removed. Returns `Err(())` if the address is the last remaining address,
+    /// which cannot be removed.
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
-    pub fn remove(&mut self, addr: &Multiaddr) -> bool {
+    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(),()> {
         if self.addrs.len() == 1 {
-            return false
+            return Err(())
         }
 
         if let Some(pos) = self.addrs.iter().position(|a| a == addr) {
@@ -73,10 +74,9 @@ impl Addresses {
             if self.addrs.len() <= self.addrs.inline_size() {
                 self.addrs.shrink_to_fit();
             }
-            return true
         }
 
-        false
+        Ok(())
     }
 
     /// Adds a new address to the end of the list.

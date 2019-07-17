@@ -1090,7 +1090,7 @@ where
                 // trait object without a `'static` bound, even downcasting for inspection
                 // of the error is not possible (and also not truly desirable or ergonomic).
                 // The error passed in should rather be a dedicated enum.
-                if addrs.remove(addr) {
+                if addrs.remove(addr).is_ok() {
                     debug!("Address '{}' removed from peer '{}' due to error: {}.",
                         addr, peer_id, err);
                 } else {
