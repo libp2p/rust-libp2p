@@ -32,6 +32,24 @@ pub use self::dialer::{Dialer, DialerFuture};
 pub use self::error::MultistreamSelectError;
 pub use self::listener::{Listener, ListenerFuture};
 
+use bytes::{BytesMut, BufMut};
+use unsigned_varint as uvi;
+
+pub enum Header {
+    Multistream10
+}
+
+impl Header {
+    fn encode(&self, dest: &mut BytesMut) {
+        match self {
+            Header::Multistream10 => {
+                dest.reserve(MSG_MULTISTREAM_1_0.len());
+                dest.put(MSG_MULTISTREAM_1_0);
+            }
+        }
+    }
+}
+
 /// Message sent from the dialer to the listener.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request<N> {
@@ -47,6 +65,29 @@ pub enum Request<N> {
     /// The dialer requested the list of protocols that the listener supports.
     ListProtocols,
 }
+
+impl<N: AsRef<[u8]>> Request<N> {
+    fn encode(&self, dest: &mut BytesMut) -> Result<(), MultistreamSelectError> {
+        match self {
+            Request::Protocol { name } => {
+                if !name.as_ref().starts_with(b"/") {
+                    return Err(MultistreamSelectError::InvalidProtocolName)
+                }
+                let len = name.as_ref().len() + 1; // + 1 for \n
+                dest.reserve(len);
+                dest.put(name.as_ref());
+                dest.put(&b"\n"[..]);
+                Ok(())
+            }
+            Request::ListProtocols => {
+                dest.reserve(MSG_LS.len());
+                dest.put(MSG_LS);
+                Ok(())
+            }
+        }
+    }
+}
+
 
 /// Message sent from the listener to the dialer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,4 +106,39 @@ pub enum Response<N> {
         protocols: Vec<N>,
     },
 }
+
+impl<N: AsRef<[u8]>> Response<N> {
+    fn encode(&self, dest: &mut BytesMut) -> Result<(), MultistreamSelectError> {
+        match self {
+            Response::Protocol { name } => {
+                if !name.as_ref().starts_with(b"/") {
+                    return Err(MultistreamSelectError::InvalidProtocolName)
+                }
+                let len = name.as_ref().len() + 1; // + 1 for \n
+                dest.reserve(len);
+                dest.put(name.as_ref());
+                dest.put(&b"\n"[..]);
+                Ok(())
+            }
+            Response::SupportedProtocols { protocols } => {
+                let mut buf = uvi::encode::usize_buffer();
+                let mut out_msg = Vec::from(uvi::encode::usize(protocols.len(), &mut buf));
+                for p in protocols {
+                    out_msg.extend(uvi::encode::usize(p.as_ref().len() + 1, &mut buf)); // +1 for '\n'
+                    out_msg.extend_from_slice(p.as_ref());
+                    out_msg.push(b'\n')
+                }
+                dest.reserve(out_msg.len());
+                dest.put(out_msg);
+                Ok(())
+            }
+            Response::ProtocolNotAvailable => {
+                dest.reserve(MSG_PROTOCOL_NA.len());
+                dest.put(MSG_PROTOCOL_NA);
+                Ok(())
+            }
+        }
+    }
+}
+
 

@@ -22,7 +22,7 @@
 
 use super::*;
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use crate::length_delimited::LengthDelimited;
 use crate::protocol::{Request, Response, MultistreamSelectError};
 use futures::{prelude::*, sink, Async, StartSend, try_ready};
@@ -47,11 +47,11 @@ where
     N: AsRef<[u8]>
 {
     pub fn dial(inner: R) -> DialerFuture<R, N> {
-        let sender = LengthDelimited::new(inner);
+        let io = LengthDelimited::new(inner);
         let mut buf = BytesMut::new();
-        let _ = Message::<N>::Header.encode(&mut buf);
+        Header::Multistream10.encode(&mut buf);
         DialerFuture {
-            inner: sender.send(buf.freeze()),
+            inner: io.send(buf.freeze()),
             _protocol_name: marker::PhantomData,
         }
     }
@@ -70,11 +70,11 @@ where
     type SinkItem = Request<N>;
     type SinkError = MultistreamSelectError;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn start_send(&mut self, request: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         let mut msg = BytesMut::new();
-        Message::Body(&item).encode(&mut msg)?;
+        request.encode(&mut msg)?;
         match self.inner.start_send(msg.freeze())? {
-            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(item)),
+            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(request)),
             AsyncSink::Ready => Ok(AsyncSink::Ready),
         }
     }
@@ -161,38 +161,6 @@ impl<T: AsyncWrite, N: AsRef<[u8]>> Future for DialerFuture<T, N> {
             handshake_finished: false,
             _protocol_name: marker::PhantomData,
         }))
-    }
-}
-
-enum Message<'a, N> {
-    Header,
-    Body(&'a Request<N>)
-}
-
-impl<N: AsRef<[u8]>> Message<'_, N> {
-    fn encode(&self, dest: &mut BytesMut) -> Result<(), MultistreamSelectError> {
-        match self {
-            Message::Header => {
-                dest.reserve(MSG_MULTISTREAM_1_0.len());
-                dest.put(MSG_MULTISTREAM_1_0);
-                Ok(())
-            }
-            Message::Body(Request::Protocol { name }) => {
-                if !name.as_ref().starts_with(b"/") {
-                    return Err(MultistreamSelectError::InvalidProtocolName)
-                }
-                let len = name.as_ref().len() + 1; // + 1 for \n
-                dest.reserve(len);
-                dest.put(name.as_ref());
-                dest.put(&b"\n"[..]);
-                Ok(())
-            }
-            Message::Body(Request::ListProtocols) => {
-                dest.reserve(MSG_LS.len());
-                dest.put(MSG_LS);
-                Ok(())
-            }
-        }
     }
 }
 

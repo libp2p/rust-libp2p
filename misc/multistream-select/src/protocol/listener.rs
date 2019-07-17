@@ -22,14 +22,13 @@
 
 use super::*;
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use crate::length_delimited::LengthDelimited;
 use crate::protocol::{Request, Response, MultistreamSelectError};
 use futures::{prelude::*, sink, stream::StreamFuture};
 use log::{debug, trace};
 use std::{marker, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint as uvi;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
@@ -55,7 +54,6 @@ where
 
     /// Grants back the socket. Typically used after a `ProtocolRequest` has been received and a
     /// `ProtocolAck` has been sent back.
-    #[inline]
     pub fn into_inner(self) -> R {
         self.inner.into_inner()
     }
@@ -69,11 +67,11 @@ where
     type SinkItem = Response<N>;
     type SinkError = MultistreamSelectError;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn start_send(&mut self, response: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         let mut msg = BytesMut::new();
-        Message::Body(&item).encode(&mut msg)?;
+        response.encode(&mut msg)?;
         match self.inner.start_send(msg.freeze())? {
-            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(item)),
+            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(response)),
             AsyncSink::Ready => Ok(AsyncSink::Ready)
         }
     }
@@ -159,7 +157,7 @@ impl<T: AsyncRead + AsyncWrite, N: AsRef<[u8]>> Future for ListenerFuture<T, N> 
                     }
                     trace!("sending back /multistream/<version> to finish the handshake");
                     let mut frame = BytesMut::new();
-                    Message::<N>::Header.encode(&mut frame)?;
+                    Header::Multistream10.encode(&mut frame);
                     let sender = socket.send(frame.freeze());
                     self.inner = ListenerFutureState::Reply { sender }
                 }
@@ -178,51 +176,6 @@ impl<T: AsyncRead + AsyncWrite, N: AsRef<[u8]>> Future for ListenerFuture<T, N> 
                 }
                 ListenerFutureState::Undefined =>
                     panic!("ListenerFutureState::poll called after completion")
-            }
-        }
-    }
-}
-
-enum Message<'a, N> {
-    Header,
-    Body(&'a Response<N>)
-}
-
-impl<N: AsRef<[u8]>> Message<'_, N> {
-
-    fn encode(&self, dest: &mut BytesMut) -> Result<(), MultistreamSelectError> {
-        match self {
-            Message::Header => {
-                dest.reserve(MSG_MULTISTREAM_1_0.len());
-                dest.put(MSG_MULTISTREAM_1_0);
-                Ok(())
-            }
-            Message::Body(Response::Protocol { name }) => {
-                if !name.as_ref().starts_with(b"/") {
-                    return Err(MultistreamSelectError::InvalidProtocolName)
-                }
-                let len = name.as_ref().len() + 1; // + 1 for \n
-                dest.reserve(len);
-                dest.put(name.as_ref());
-                dest.put(&b"\n"[..]);
-                Ok(())
-            }
-            Message::Body(Response::SupportedProtocols { protocols }) => {
-                let mut buf = uvi::encode::usize_buffer();
-                let mut out_msg = Vec::from(uvi::encode::usize(protocols.len(), &mut buf));
-                for p in protocols {
-                    out_msg.extend(uvi::encode::usize(p.as_ref().len() + 1, &mut buf)); // +1 for '\n'
-                    out_msg.extend_from_slice(p.as_ref());
-                    out_msg.push(b'\n')
-                }
-                dest.reserve(out_msg.len());
-                dest.put(out_msg);
-                Ok(())
-            }
-            Message::Body(Response::ProtocolNotAvailable) => {
-                dest.reserve(MSG_PROTOCOL_NA.len());
-                dest.put(MSG_PROTOCOL_NA);
-                Ok(())
             }
         }
     }
