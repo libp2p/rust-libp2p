@@ -270,6 +270,13 @@ impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 /// Event to send to the handler.
 #[derive(Debug)]
 pub enum KademliaHandlerIn<TUserData> {
+    /// Resets the (sub)stream associated with the given request ID,
+    /// thus signaling an error to the remote.
+    ///
+    /// Explicitly resetting the (sub)stream associated with a request
+    /// can be used as an alternative to letting requests simply time
+    /// out on the remote peer, thus potentially avoiding some delay
+    /// for the query on the remote.
     Reset(KademliaRequestId),
 
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
