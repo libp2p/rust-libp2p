@@ -714,14 +714,23 @@ where
         self.incoming_limit
     }
 
-    /// Call this function in order to know which address remotes should dial in order to access
-    /// your local node.
+    /// Call this function in order to know which address remotes should dial to
+    /// access your local node.
     ///
-    /// `observed_addr` should be an address a remote observes you as, which can be obtained for
+    /// When receiving an observed address on a tcp connection that we initiated, the observed
+    /// address contains our tcp dial port, not our tcp listen port. We know which port we are
+    /// listening on, thereby we can replace the port within the observed address.
+    ///
+    /// When receiving an observed address on a tcp connection that we did **not** initiated, the
+    /// observed address should contain our listening port. In case it differs from our listening
+    /// port there might be a proxy along the path.
+    ///
+    /// # Arguments
+    ///
+    /// * `observed_addr` - should be an address a remote observes you as, which can be obtained for
     /// example with the identify protocol.
     ///
-    /// For each listener, calls `nat_traversal` with the observed address and returns the outcome.
-    pub fn nat_traversal<'a>(&'a self, observed_addr: &'a Multiaddr)
+    pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
         -> impl Iterator<Item = Multiaddr> + 'a
     where
         TMuxer: 'a,

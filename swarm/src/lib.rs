@@ -443,7 +443,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    for addr in self.network.nat_traversal(&address) {
+                    for addr in self.network.address_translation(&address) {
                         if self.external_addrs.iter().all(|a| *a != addr) {
                             self.behaviour.inject_new_external_addr(&addr);
                         }
