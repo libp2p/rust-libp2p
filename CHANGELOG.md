@@ -1,3 +1,12 @@
+# Version 0.11.0 (2019-07-18)
+
+- Refactored `libp2p-kad`. Records storage is now properly implemented.
+- Extracted the `swarm` and `protocols_handler`-related contents from `libp2p-core` to a new `libp2p-swarm` crate.
+- Renamed `RawSwarm` to `Network`.
+- Added `Floodsub::publish_any`.
+- Replaced unbounded channels with bounded ones at the boundary between the `Network` (formerly `RawSwarm`) and `NodeHandler`. The node handlers will now wait if the main task is busy, instead of continuing to push events to the channel.
+- Fixed the `address_translation` function ignoring `/dns` addresses.
+
 # Version 0.10.0 (2019-06-25)
 
 - `PollParameters` is now a trait instead of a struct.
