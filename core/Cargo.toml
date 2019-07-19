@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -43,9 +43,9 @@ untrusted = { version = "0.6" }
 
 [dev-dependencies]
 libp2p-swarm = { version = "0.1.0", path = "../swarm" }
-libp2p-tcp = { version = "0.10.0", path = "../transports/tcp" }
-libp2p-mplex = { version = "0.10.0", path = "../muxers/mplex" }
-libp2p-secio = { version = "0.10.0", path = "../protocols/secio" }
+libp2p-tcp = { version = "0.11.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.11.0", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.11.0", path = "../protocols/secio" }
 rand = "0.6"
 quickcheck = "0.8"
 tokio = "0.1"

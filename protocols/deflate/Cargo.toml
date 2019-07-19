@@ -2,7 +2,7 @@
 name = "libp2p-deflate"
 edition = "2018"
 description = "Deflate encryption protocol for libp2p"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,13 +11,13 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.1"
-libp2p-core = { version = "0.10.0", path = "../../core" }
+libp2p-core = { version = "0.11.0", path = "../../core" }
 tokio-io = "0.1.12"
 flate2 = { version = "1.0", features = ["tokio"] }
 
 [dev-dependencies]
 env_logger = "0.6"
-libp2p-tcp = { version = "0.10.0", path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.11.0", path = "../../transports/tcp" }
 quickcheck = "0.8"
 tokio = "0.1"
 log = "0.4"

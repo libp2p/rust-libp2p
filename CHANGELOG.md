@@ -1,3 +1,14 @@
+# Version 0.11.0 (2019-07-18)
+
+- `libp2p-kad`: Completed the core functionality of the record storage API, thereby extending the `RecordStore` for provider records. All records expire by default and are subject to regular republication and caching as per the Kademlia spec(s). Expiration and publication intervals are configurable through the `KademliaConfig`.
+- `libp2p-kad`: The routing table now never stores peers without a known (listen) address. In particular, on receiving a new inbound connection, the Kademlia behaviour now emits `KademliaEvent::UnroutablePeer` to indicate that in order for the peer to be added to the routing table and hence considered a reachable node in the DHT, a listen address of the peer must be discovered and reported via `Kademlia::add_address`. This is usually achieved through the use of the `Identify` protocol on the same connection(s).
+- `libp2p-kad`: Documentation updates.
+- Extracted the `swarm` and `protocols_handler`-related contents from `libp2p-core` to a new `libp2p-swarm` crate.
+- Renamed `RawSwarm` to `Network`.
+- Added `Floodsub::publish_any`.
+- Replaced unbounded channels with bounded ones at the boundary between the `Network` (formerly `RawSwarm`) and `NodeHandler`. The node handlers will now wait if the main task is busy, instead of continuing to push events to the channel.
+- Fixed the `address_translation` function ignoring `/dns` addresses.
+
 # Version 0.10.0 (2019-06-25)
 
 - `PollParameters` is now a trait instead of a struct.
