@@ -22,65 +22,13 @@
 
 #![cfg(test)]
 
-use crate::ProtocolChoiceError;
+use crate::NegotiationError;
 use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
-use crate::protocol::{Dialer, Request, Listener, Response};
 use crate::{dialer_select_proto, listener_select_proto};
 use futures::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio_tcp::{TcpListener, TcpStream};
-
-/// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
-struct VecRefIntoIter<T>(Vec<T>);
-
-impl<'a, T> IntoIterator for &'a VecRefIntoIter<T>
-where T: Clone
-{
-    type Item = T;
-    type IntoIter = std::vec::IntoIter<T>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.clone().into_iter()
-    }
-}
-
-#[test]
-fn negotiate_with_self_succeeds() {
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-    let listener_addr = listener.local_addr().unwrap();
-
-    let server = listener
-        .incoming()
-        .into_future()
-        .map_err(|(e, _)| e.into())
-        .and_then(move |(connec, _)| Listener::listen(connec.unwrap()))
-        .and_then(|l| l.into_future().map_err(|(e, _)| e))
-        .and_then(|(msg, rest)| {
-            let proto = match msg {
-                Some(Request::Protocol { name }) => name,
-                _ => panic!(),
-            };
-            rest.send(Response::Protocol { name: proto })
-        });
-
-    let client = TcpStream::connect(&listener_addr)
-        .from_err()
-        .and_then(move |stream| Dialer::dial(stream))
-        .and_then(move |dialer| {
-            let name = b"/hello/1.0.0";
-            dialer.send(Request::Protocol { name })
-        })
-        .and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e))
-        .and_then(move |(msg, _)| {
-            let proto = match msg {
-                Some(Response::Protocol { name }) => name,
-                _ => panic!(),
-            };
-            assert_eq!(proto, "/hello/1.0.0");
-            Ok(())
-        });
-    let mut rt = Runtime::new().unwrap();
-    let _ = rt.block_on(server.join(client)).unwrap();
-}
+use tokio_io::io as nio;
 
 #[test]
 fn select_proto_basic() {
@@ -94,18 +42,32 @@ fn select_proto_basic() {
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
+            listener_select_proto(connec, protos)
+        })
+        .and_then(|(proto, io)| {
+            nio::write_all(io, b"pong").from_err().map(move |_| proto)
         });
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![b"/proto3", b"/proto2"];
-            dialer_select_proto(connec, protos).map(|r| r.0)
+            dialer_select_proto(connec, protos)
+        })
+        .and_then(|(proto, io)| {
+            nio::write_all(io, b"ping").from_err().map(move |(io, _)| (proto, io))
+        })
+        .and_then(|(proto, io)| {
+            nio::read_exact(io, [0; 4]).from_err().map(move |(_, msg)| {
+                assert_eq!(&msg, b"pong");
+                proto
+            })
         });
+
     let mut rt = Runtime::new().unwrap();
     let (dialer_chosen, listener_chosen) =
         rt.block_on(client.join(server)).unwrap();
+
     assert_eq!(dialer_chosen, b"/proto2");
     assert_eq!(listener_chosen, b"/proto2");
 }
@@ -122,19 +84,22 @@ fn no_protocol_found() {
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
-        });
+            listener_select_proto(connec, protos)
+        })
+        .and_then(|(proto, io)| io.complete().map(move |_| proto));
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![b"/proto3", b"/proto4"];
-            dialer_select_proto(connec, protos).map(|r| r.0)
-        });
+            dialer_select_proto(connec, protos)
+        })
+        .and_then(|(proto, io)| io.complete().map(move |_| proto));
+
     let mut rt = Runtime::new().unwrap();
     match rt.block_on(client.join(server)) {
-        Err(ProtocolChoiceError::NoProtocolFound) => (),
-        _ => panic!(),
+        Err(NegotiationError::Failed) => (),
+        e => panic!("{:?}", e),
     }
 }
 
@@ -150,19 +115,22 @@ fn select_proto_parallel() {
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
-        });
+            listener_select_proto(connec, protos)
+        })
+        .and_then(|(proto, io)| io.complete().map(move |_| proto));
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![b"/proto3", b"/proto2"];
-            dialer_select_proto_parallel(connec, protos.into_iter()).map(|r| r.0)
-        });
+            dialer_select_proto_parallel(connec, protos.into_iter())
+        })
+        .and_then(|(proto, io)| io.complete().map(move |_| proto));
 
     let mut rt = Runtime::new().unwrap();
     let (dialer_chosen, listener_chosen) =
         rt.block_on(client.join(server)).unwrap();
+
     assert_eq!(dialer_chosen, b"/proto2");
     assert_eq!(listener_chosen, b"/proto2");
 }
@@ -179,19 +147,22 @@ fn select_proto_serial() {
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![b"/proto1", b"/proto2"];
-            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
-        });
+            listener_select_proto(connec, protos)
+        })
+        .and_then(|(proto, io)| io.complete().map(move |_| proto));
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![b"/proto3", b"/proto2"];
-            dialer_select_proto_serial(connec, protos.into_iter()).map(|r| r.0)
-        });
+            dialer_select_proto_serial(connec, protos.into_iter())
+        })
+        .and_then(|(proto, io)| io.complete().map(move |_| proto));
 
     let mut rt = Runtime::new().unwrap();
     let (dialer_chosen, listener_chosen) =
         rt.block_on(client.join(server)).unwrap();
+
     assert_eq!(dialer_chosen, b"/proto2");
     assert_eq!(listener_chosen, b"/proto2");
 }

@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod util;
+
 use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::nodes::network::{Network, NetworkEvent, IncomingError};
@@ -118,6 +120,11 @@ fn raw_swarm_simultaneous_connect() {
                         .map_outbound(move |muxer| (peer_id, muxer))
                         .map_inbound(move |muxer| (peer_id2, muxer));
                     upgrade::apply(out.stream, upgrade, endpoint)
+                })
+                .and_then(|(peer, mplex), _| {
+                    // Gracefully close the connection to allow protocol
+                    // negotiation to complete.
+                    util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
                 });
             Network::new(transport, local_public_key.into_peer_id())
         };
@@ -134,6 +141,11 @@ fn raw_swarm_simultaneous_connect() {
                         .map_outbound(move |muxer| (peer_id, muxer))
                         .map_inbound(move |muxer| (peer_id2, muxer));
                     upgrade::apply(out.stream, upgrade, endpoint)
+                })
+                .and_then(|(peer, mplex), _| {
+                    // Gracefully close the connection to allow protocol
+                    // negotiation to complete.
+                    util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
                 });
             Network::new(transport, local_public_key.into_peer_id())
         };
@@ -224,7 +236,7 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
-                            Async::Ready(_) => unreachable!(),
+                            Async::Ready(ev) => panic!("swarm1: unexpected event: {:?}", ev),
                             Async::NotReady => swarm1_not_ready = true,
                         }
                     }
@@ -248,7 +260,7 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
-                            Async::Ready(_) => unreachable!(),
+                            Async::Ready(ev) => panic!("swarm2: unexpected event: {:?}", ev),
                             Async::NotReady => swarm2_not_ready = true,
                         }
                     }
