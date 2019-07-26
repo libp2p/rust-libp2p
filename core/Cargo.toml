@@ -45,7 +45,6 @@ untrusted = { version = "0.6" }
 libp2p-swarm = { version = "0.1.0", path = "../swarm" }
 libp2p-tcp = { version = "0.11.0", path = "../transports/tcp" }
 libp2p-mplex = { version = "0.11.0", path = "../muxers/mplex" }
-libp2p-yamux = { version = "0.11.0", path = "../muxers/yamux" }
 libp2p-secio = { version = "0.11.0", path = "../protocols/secio" }
 rand = "0.6"
 quickcheck = "0.8"
