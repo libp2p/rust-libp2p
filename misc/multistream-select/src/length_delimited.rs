@@ -88,25 +88,31 @@ impl<R> LengthDelimited<R> {
         &mut self.inner
     }
 
-    /// Destroys the `LengthDelimited` and returns the underlying I/O stream.
+    /// Drops the `LengthDelimited` resource, yielding the underlying I/O stream
+    /// together with the remaining write buffer containing the uvi-framed data
+    /// that has not yet been written to the underlying I/O stream.
     ///
-    /// This method is guaranteed not to drop any data read from or not yet
-    /// submitted to the underlying I/O stream.
+    /// The returned remaining write buffer may be prepended to follow-up
+    /// protocol data to send with a single `write`. Either way, if non-empty,
+    /// the write buffer _must_ eventually be written to the I/O stream
+    /// _before_ any follow-up data, in order to maintain a correct data stream.
     ///
     /// # Panic
     ///
-    /// Will panic if called while there is data in the read or write buffer.
-    /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
-    /// a new `Message`. The write buffer is guaranteed to be empty whenever
-    /// [`poll_write_buffer`] yields `Async::Ready` or after the `Sink` has been
-    /// completely flushed via [`Sink::poll_complete`].
+    /// Will panic if called while there is data in the read buffer. The read buffer is
+    /// guaranteed to be empty whenever `Stream::poll` yields a new `Bytes` frame.
     pub fn into_inner(self) -> (R, BytesMut) {
-        // assert!(self.write_buffer.is_empty());
         assert!(self.read_buffer.is_empty());
         (self.inner, self.write_buffer)
     }
 
-    /// TODO
+    /// Converts the `LengthDelimited` into a `LengthDelimitedReader`, dropping the
+    /// uvi-framed `Sink` in favour of direct `AsyncWrite` access to the underlying
+    /// I/O stream.
+    ///
+    /// This is typically done if further uvi-framed messages are expected to be
+    /// received but no more such messages are written, allowing the writing of
+    /// follow-up protocol data to commence.
     pub fn into_reader(self) -> LengthDelimitedReader<R> {
         LengthDelimitedReader { inner: self }
     }
@@ -261,13 +267,25 @@ where
     }
 }
 
-/// TODO
+/// A `LengthDelimitedReader` implements a `Stream` of uvi-length-delimited
+/// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
 pub struct LengthDelimitedReader<R> {
     inner: LengthDelimited<R>
 }
 
 impl<R> LengthDelimitedReader<R> {
-    /// TODO
+    /// Destroys the `LengthDelimitedReader` and returns the underlying I/O stream.
+    ///
+    /// This method is guaranteed not to drop any data read from or not yet
+    /// submitted to the underlying I/O stream.
+    ///
+    /// # Panic
+    ///
+    /// Will panic if called while there is data in the read or write buffer.
+    /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
+    /// a new `Message`. The write buffer is guaranteed to be empty whenever
+    /// [`poll_write_buffer`] yields `Async::Ready` or after the `Sink` has been
+    /// completely flushed via [`Sink::poll_complete`].
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
     }
