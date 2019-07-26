@@ -76,10 +76,12 @@ impl<TInner: AsyncRead + AsyncWrite> Future for NegotiatedComplete<TInner> {
     type Error = NegotiationError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        try_ready!(self.inner.as_mut()
-            .expect("NegotiatedFuture called after completion.")
-            .poll());
-        Ok(Async::Ready(self.inner.take().expect("")))
+        let mut io = self.inner.take().expect("NegotiatedFuture called after completion.");
+        if io.poll()?.is_not_ready() {
+            self.inner = Some(io);
+            return Ok(Async::NotReady)
+        }
+        return Ok(Async::Ready(io))
     }
 }
 
