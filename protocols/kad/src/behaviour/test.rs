@@ -20,17 +20,14 @@
 
 #![cfg(test)]
 
-use crate::{
-    GetValueResult,
-    Kademlia,
-    KademliaOut,
-    kbucket::{self, Distance},
-    record::{Record, RecordStore},
-};
-use futures::{future, prelude::*};
+use super::*;
+
+use crate::K_VALUE;
+use crate::kbucket::Distance;
+use crate::record::store::MemoryStore;
+use futures::future;
 use libp2p_core::{
     PeerId,
-    Swarm,
     Transport,
     identity,
     transport::{MemoryTransport, boxed::Boxed},
@@ -40,19 +37,26 @@ use libp2p_core::{
     upgrade,
 };
 use libp2p_secio::SecioConfig;
+use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
-use rand::random;
-use std::{collections::HashSet, iter::FromIterator, io, num::NonZeroU8, u64};
-use tokio::runtime::Runtime;
-use multihash::Hash;
+use quickcheck::*;
+use rand::{Rng, random, thread_rng};
+use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
+use tokio::runtime::current_thread;
+use multihash::Hash::SHA2256;
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
-    Kademlia<Substream<StreamMuxerBox>>
+    Kademlia<Substream<StreamMuxerBox>, MemoryStore>
 >;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
 fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
+    build_nodes_with_config(num, Default::default())
+}
+
+/// Builds swarms, each listening on a port. Does *not* connect the nodes together.
+fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<TestSwarm>) {
     let port_base = 1 + random::<u64>() % (u64::MAX - num as u64);
     let mut result: Vec<Swarm<_, _>> = Vec::with_capacity(num);
 
@@ -72,67 +76,67 @@ fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
             .map_err(|e| panic!("Failed to create transport: {:?}", e))
             .boxed();
 
-        let kad = Kademlia::new(local_public_key.clone().into_peer_id());
-        result.push(Swarm::new(transport, kad, local_public_key.into_peer_id()));
+        let local_id = local_public_key.clone().into_peer_id();
+        let store = MemoryStore::new(local_id.clone());
+        let behaviour = Kademlia::with_config(local_id.clone(), store, cfg.clone());
+        result.push(Swarm::new(transport, behaviour, local_id));
     }
 
-    let mut i = 0;
-    for s in result.iter_mut() {
-        Swarm::listen_on(s, Protocol::Memory(port_base + i).into()).unwrap();
-        i += 1
+    for (i, s) in result.iter_mut().enumerate() {
+        Swarm::listen_on(s, Protocol::Memory(port_base + i as u64).into()).unwrap();
     }
 
     (port_base, result)
 }
 
-#[test]
-fn query_iter() {
-    fn distances(key: &kbucket::Key<PeerId>, peers: Vec<PeerId>) -> Vec<Distance> {
-        peers.into_iter()
-            .map(kbucket::Key::from)
-            .map(|k| k.distance(key))
-            .collect()
+fn build_connected_nodes(total: usize, step: usize) -> (Vec<PeerId>, Vec<TestSwarm>) {
+    build_connected_nodes_with_config(total, step, Default::default())
+}
+
+fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaConfig)
+    -> (Vec<PeerId>, Vec<TestSwarm>)
+{
+    let (port_base, mut swarms) = build_nodes_with_config(total, cfg);
+    let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
+
+    let mut i = 0;
+    for (j, peer) in swarm_ids.iter().enumerate().skip(1) {
+        if i < swarm_ids.len() {
+            swarms[i].add_address(&peer, Protocol::Memory(port_base + j as u64).into());
+        }
+        if j % step == 0 {
+            i += step;
+        }
     }
 
-    fn run(n: usize) {
-        // Build `n` nodes. Node `n` knows about node `n-1`, node `n-1` knows about node `n-2`, etc.
-        // Node `n` is queried for a random peer and should return nodes `1..n-1` sorted by
-        // their distances to that peer.
+    (swarm_ids, swarms)
+}
 
-        let (port_base, mut swarms) = build_nodes(n);
-        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
+#[test]
+fn bootstrap() {
+    fn run(rng: &mut impl Rng) {
+        let num_total = rng.gen_range(2, 20);
+        let num_group = rng.gen_range(1, num_total);
+        let (swarm_ids, mut swarms) = build_connected_nodes(num_total, num_group);
 
-        // Connect each swarm in the list to its predecessor in the list.
-        for (i, (swarm, peer)) in &mut swarms.iter_mut().skip(1).zip(swarm_ids.clone()).enumerate() {
-            swarm.add_address(&peer, Protocol::Memory(port_base + i as u64).into())
-        }
+        swarms[0].bootstrap();
 
-        // Ask the last peer in the list to search a random peer. The search should
-        // propagate backwards through the list of peers.
-        let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::from(search_target.clone());
-        swarms.last_mut().unwrap().find_node(search_target.clone());
-
-        // Set up expectations.
-        let expected_swarm_id = swarm_ids.last().unwrap().clone();
-        let expected_peer_ids: Vec<_> = swarm_ids.iter().cloned().take(n - 1).collect();
-        let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
-        expected_distances.sort();
+        // Expected known peers
+        let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
 
         // Run test
-        Runtime::new().unwrap().block_on(
-            future::poll_fn(move || -> Result<_, io::Error> {
+        current_thread::run(
+            future::poll_fn(move || {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaOut::FindNodeResult {
-                                key, closer_peers
-                            })) => {
-                                assert_eq!(key, search_target);
-                                assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert!(expected_peer_ids.iter().all(|p| closer_peers.contains(p)));
-                                let key = kbucket::Key::from(key);
-                                assert_eq!(expected_distances, distances(&key, closer_peers));
+                            Async::Ready(Some(KademliaEvent::BootstrapResult(Ok(ok)))) => {
+                                assert_eq!(i, 0);
+                                assert_eq!(ok.peer, swarm_ids[0]);
+                                let known = swarm.kbuckets.iter()
+                                    .map(|e| e.node.key.preimage().clone())
+                                    .collect::<HashSet<_>>();
+                                assert_eq!(expected_known, known);
                                 return Ok(Async::Ready(()));
                             }
                             Async::Ready(_) => (),
@@ -142,10 +146,66 @@ fn query_iter() {
                 }
                 Ok(Async::NotReady)
             }))
-            .unwrap()
     }
 
-    for n in 2..=8 { run(n) }
+    let mut rng = thread_rng();
+    for _ in 0 .. 10 {
+        run(&mut rng)
+    }
+}
+
+#[test]
+fn query_iter() {
+    fn distances<K>(key: &kbucket::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
+        peers.into_iter()
+            .map(kbucket::Key::from)
+            .map(|k| k.distance(key))
+            .collect()
+    }
+
+    fn run(rng: &mut impl Rng) {
+        let num_total = rng.gen_range(2, 20);
+        let (swarm_ids, mut swarms) = build_connected_nodes(num_total, 1);
+
+        // Ask the first peer in the list to search a random peer. The search should
+        // propagate forwards through the list of peers.
+        let search_target = PeerId::random();
+        let search_target_key = kbucket::Key::from(search_target.clone());
+        swarms[0].get_closest_peers(search_target.clone());
+
+        // Set up expectations.
+        let expected_swarm_id = swarm_ids[0].clone();
+        let expected_peer_ids: Vec<_> = swarm_ids.iter().skip(1).cloned().collect();
+        let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
+        expected_distances.sort();
+
+        // Run test
+        current_thread::run(
+            future::poll_fn(move || {
+                for (i, swarm) in swarms.iter_mut().enumerate() {
+                    loop {
+                        match swarm.poll().unwrap() {
+                            Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                                assert_eq!(ok.key, search_target);
+                                assert_eq!(swarm_ids[i], expected_swarm_id);
+                                assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
+                                let key = kbucket::Key::new(ok.key);
+                                assert_eq!(expected_distances, distances(&key, ok.peers));
+                                return Ok(Async::Ready(()));
+                            }
+                            Async::Ready(_) => (),
+                            Async::NotReady => break,
+                        }
+                    }
+                }
+                Ok(Async::NotReady)
+            }))
+    }
+
+    let mut rng = thread_rng();
+    for _ in 0 .. 10 {
+        run(&mut rng)
+    }
 }
 
 #[test]
@@ -162,16 +222,16 @@ fn unresponsive_not_returned_direct() {
 
     // Ask first to search a random value.
     let search_target = PeerId::random();
-    swarms[0].find_node(search_target.clone());
+    swarms[0].get_closest_peers(search_target.clone());
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
+    current_thread::run(
+        future::poll_fn(move || {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
-                            assert_eq!(key, search_target);
-                            assert_eq!(closer_peers.len(), 0);
+                        Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                            assert_eq!(ok.key, search_target);
+                            assert_eq!(ok.peers.len(), 0);
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
@@ -182,7 +242,6 @@ fn unresponsive_not_returned_direct() {
 
             Ok(Async::NotReady)
         }))
-        .unwrap();
 }
 
 #[test]
@@ -196,10 +255,7 @@ fn unresponsive_not_returned_indirect() {
     // Add fake addresses to first.
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
     for _ in 0 .. 10 {
-        swarms[0].add_address(
-            &PeerId::random(),
-            multiaddr![Udp(10u16)]
-        );
+        swarms[0].add_address(&PeerId::random(), multiaddr![Udp(10u16)]);
     }
 
     // Connect second to first.
@@ -207,17 +263,17 @@ fn unresponsive_not_returned_indirect() {
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
-    swarms[1].find_node(search_target.clone());
+    swarms[1].get_closest_peers(search_target.clone());
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
+    current_thread::run(
+        future::poll_fn(move || {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
-                            assert_eq!(key, search_target);
-                            assert_eq!(closer_peers.len(), 1);
-                            assert_eq!(closer_peers[0], first_peer_id);
+                        Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                            assert_eq!(ok.key, search_target);
+                            assert_eq!(ok.peers.len(), 1);
+                            assert_eq!(ok.peers[0], first_peer_id);
                             return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
@@ -228,38 +284,34 @@ fn unresponsive_not_returned_indirect() {
 
             Ok(Async::NotReady)
         }))
-        .unwrap();
 }
 
-
 #[test]
-fn get_value_not_found() {
+fn get_record_not_found() {
     let (port_base, mut swarms) = build_nodes(3);
 
-    let swarm_ids: Vec<_> = swarms.iter()
-        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+    let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
     swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
-    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    let num_results = NonZeroU8::new(1).unwrap();
-    swarms[0].get_value(&target_key, num_results);
+    let target_key = multihash::encode(SHA2256, &vec![1,2,3]).unwrap();
+    swarms[0].get_record(&target_key, Quorum::One);
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
+    current_thread::run(
+        future::poll_fn(move || {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
-                            if let GetValueResult::NotFound { key, closest_peers } = result {
+                        Async::Ready(Some(KademliaEvent::GetRecordResult(Err(e)))) => {
+                            if let GetRecordError::NotFound { key, closest_peers, } = e {
                                 assert_eq!(key, target_key);
                                 assert_eq!(closest_peers.len(), 2);
                                 assert!(closest_peers.contains(&swarm_ids[1]));
                                 assert!(closest_peers.contains(&swarm_ids[2]));
                                 return Ok(Async::Ready(()));
                             } else {
-                                panic!("Expected GetValueResult::NotFound event");
+                                panic!("Unexpected error result: {:?}", e);
                             }
                         }
                         Async::Ready(_) => (),
@@ -270,63 +322,55 @@ fn get_value_not_found() {
 
             Ok(Async::NotReady)
         }))
-        .unwrap()
 }
 
 #[test]
-fn put_value() {
-    fn run() {
-        // Build a test that checks if PUT_VALUE gets correctly propagated in
-        // a nontrivial topology:
-        //                [31]
-        //               /    \
-        //             [29]  [30]
-        //            /|\      /|\
-        //         [0]..[14] [15]..[28]
-        //
-        // Nodes [29] and [30] have less than kbuckets::MAX_NODES_PER_BUCKET
-        // peers to avoid the situation when the bucket may be overflowed and
-        // some of the connections are dropped from the routing table
-        let (port_base, mut swarms) = build_nodes(32);
+fn put_record() {
+    fn prop(replication_factor: usize, records: Vec<Record>) {
+        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
+        let num_total = replication_factor.get() * 2;
+        let num_group = replication_factor.get();
 
-        let swarm_ids: Vec<_> = swarms.iter()
-            .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+        let mut config = KademliaConfig::default();
+        config.set_replication_factor(replication_factor);
+        let (swarm_ids, mut swarms) = build_connected_nodes_with_config(num_total, num_group, config);
 
-        // Connect swarm[30] to each swarm in swarms[..15]
-        for (i, peer) in swarm_ids.iter().take(15).enumerate() {
-            swarms[30].add_address(&peer, Protocol::Memory(port_base + i as u64).into());
+        let records = records.into_iter()
+            .take(num_total)
+            .map(|mut r| {
+                // We don't want records to expire prematurely, as they would
+                // be removed from storage and no longer replicated, but we still
+                // want to check that an explicitly set expiration is preserved.
+                r.expires = r.expires.map(|t| t + Duration::from_secs(60));
+                (r.key.clone(), r)
+            })
+            .collect::<HashMap<_,_>>();
+
+        for r in records.values() {
+            swarms[0].put_record(r.clone(), Quorum::All);
         }
 
-        // Connect swarm[29] to each swarm in swarms[15..29]
-        for (i, peer) in swarm_ids.iter().skip(15).take(14).enumerate() {
-            swarms[29].add_address(&peer, Protocol::Memory(port_base + (i + 15) as u64).into());
-        }
+        // Each test run republishes all records once.
+        let mut republished = false;
+        // The accumulated results for one round of publishing.
+        let mut results = Vec::new();
 
-        // Connect swarms[31] to swarms[29, 30]
-        swarms[31].add_address(&swarm_ids[30], Protocol::Memory(port_base + 30 as u64).into());
-        swarms[31].add_address(&swarm_ids[29], Protocol::Memory(port_base + 29 as u64).into());
-
-        let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-
-        let mut sorted_peer_ids: Vec<_> = swarm_ids
-            .iter()
-            .map(|id| (id.clone(), kbucket::Key::from(id.clone()).distance(&kbucket::Key::from(target_key.clone()))))
-            .collect();
-
-        sorted_peer_ids.sort_by(|(_, d1), (_, d2)| d1.cmp(d2));
-
-        let closest: HashSet<PeerId> = HashSet::from_iter(sorted_peer_ids.into_iter().map(|(id, _)| id));
-
-        swarms[31].put_value(target_key.clone(), vec![4,5,6]);
-
-        Runtime::new().unwrap().block_on(
-            future::poll_fn(move || -> Result<_, io::Error> {
-                let mut check_results = false;
+        current_thread::run(
+            future::poll_fn(move || loop {
+                // Poll all swarms until they are "NotReady".
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaOut::PutValueResult{ .. })) => {
-                                check_results = true;
+                            Async::Ready(Some(KademliaEvent::PutRecordResult(res))) |
+                            Async::Ready(Some(KademliaEvent::RepublishRecordResult(res))) => {
+                                match res {
+                                    Err(e) => panic!(e),
+                                    Ok(ok) => {
+                                        assert!(records.contains_key(&ok.key));
+                                        let record = swarm.store.get(&ok.key).unwrap();
+                                        results.push(record.into_owned());
+                                    }
+                                }
                             }
                             Async::Ready(_) => (),
                             Async::NotReady => break,
@@ -334,65 +378,89 @@ fn put_value() {
                     }
                 }
 
-                if check_results {
-                    let mut have: HashSet<_> = Default::default();
+                // All swarms are NotReady and not enough results have been collected
+                // so far, thus wait to be polled again for further progress.
+                if results.len() != records.len() {
+                    return Ok(Async::NotReady)
+                }
 
-                    for (i, swarm) in swarms.iter().take(31).enumerate() {
-                        if swarm.records.get(&target_key).is_some() {
-                            have.insert(swarm_ids[i].clone());
-                        }
+                // Consume the results, checking that each record was replicated
+                // correctly to the closest peers to the key.
+                while let Some(r) = results.pop() {
+                    let expected = records.get(&r.key).unwrap();
+
+                    assert_eq!(r.key, expected.key);
+                    assert_eq!(r.value, expected.value);
+                    assert_eq!(r.expires, expected.expires);
+                    assert_eq!(r.publisher.as_ref(), Some(&swarm_ids[0]));
+
+                    let key = kbucket::Key::new(r.key.clone());
+                    let mut expected = swarm_ids.clone().split_off(1);
+                    expected.sort_by(|id1, id2|
+                        kbucket::Key::new(id1).distance(&key).cmp(
+                            &kbucket::Key::new(id2).distance(&key)));
+
+                    let expected = expected
+                        .into_iter()
+                        .take(replication_factor.get())
+                        .collect::<HashSet<_>>();
+
+                    let actual = swarms.iter().enumerate().skip(1)
+                        .filter_map(|(i, s)|
+                            if s.store.get(key.preimage()).is_some() {
+                                Some(swarm_ids[i].clone())
+                            } else {
+                                None
+                            })
+                        .collect::<HashSet<_>>();
+
+                    assert_eq!(actual.len(), replication_factor.get());
+                    assert_eq!(actual, expected);
+                }
+
+                if republished {
+                    assert_eq!(swarms[0].store.records().count(), records.len());
+                    for k in records.keys() {
+                        swarms[0].store.remove(&k);
                     }
-
-                    let intersection: HashSet<_> = have.intersection(&closest).collect();
-
-                    assert_eq!(have.len(), kbucket::MAX_NODES_PER_BUCKET);
-                    assert_eq!(intersection.len(), kbucket::MAX_NODES_PER_BUCKET);
+                    assert_eq!(swarms[0].store.records().count(), 0);
+                    // All records have been republished, thus the test is complete.
                     return Ok(Async::Ready(()));
                 }
 
-                Ok(Async::NotReady)
-            }))
-            .unwrap()
+                // Tell the replication job to republish asap.
+                swarms[0].put_record_job.as_mut().unwrap().asap(true);
+                republished = true;
+            })
+        )
     }
-    for _ in 0 .. 10 {
-        run();
-    }
+
+    QuickCheck::new().tests(3).quickcheck(prop as fn(_,_))
 }
 
 #[test]
 fn get_value() {
     let (port_base, mut swarms) = build_nodes(3);
 
-    let swarm_ids: Vec<_> = swarms.iter()
-        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+    let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
     swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
-    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    let target_value = vec![4,5,6];
 
-    let num_results = NonZeroU8::new(1).unwrap();
-    swarms[1].records.put(Record {
-        key: target_key.clone(),
-        value: target_value.clone()
-    }).unwrap();
-    swarms[0].get_value(&target_key, num_results);
+    let record = Record::new(multihash::encode(SHA2256, &vec![1,2,3]).unwrap(), vec![4,5,6]);
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
+    swarms[1].store.put(record.clone()).unwrap();
+    swarms[0].get_record(&record.key, Quorum::One);
+
+    current_thread::run(
+        future::poll_fn(move || {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
-                            if let GetValueResult::Found { results } = result {
-                                assert_eq!(results.len(), 1);
-                                let record = results.first().unwrap();
-                                assert_eq!(record.key, target_key);
-                                assert_eq!(record.value, target_value);
-                                return Ok(Async::Ready(()));
-                            } else {
-                                panic!("Expected GetValueResult::Found event");
-                            }
+                        Async::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
+                            assert_eq!(ok.records.len(), 1);
+                            assert_eq!(ok.records.first(), Some(&record));
+                            return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
                         Async::NotReady => break,
@@ -402,56 +470,159 @@ fn get_value() {
 
             Ok(Async::NotReady)
         }))
-        .unwrap()
 }
 
 #[test]
-fn get_value_multiple() {
-    // Check that if we have responses from multiple peers, a correct number of
-    // results is returned.
-    let num_results = NonZeroU8::new(10).unwrap();
-    let (port_base, mut swarms) = build_nodes(2 + num_results.get() as usize);
+fn get_value_many() {
+    // TODO: Randomise
+    let num_nodes = 12;
+    let (_, mut swarms) = build_connected_nodes(num_nodes, num_nodes);
+    let num_results = 10;
 
-    let swarm_ids: Vec<_> = swarms.iter()
-        .map(|swarm| Swarm::local_peer_id(&swarm).clone()).collect();
+    let record = Record::new(multihash::encode(SHA2256, &vec![1,2,3]).unwrap(), vec![4,5,6]);
 
-    let target_key = multihash::encode(Hash::SHA2256, &vec![1,2,3]).unwrap();
-    let target_value = vec![4,5,6];
-
-    for (i, swarm_id) in swarm_ids.iter().skip(1).enumerate() {
-        swarms[i + 1].records.put(Record {
-            key: target_key.clone(),
-            value: target_value.clone()
-        }).unwrap();
-        swarms[0].add_address(&swarm_id, Protocol::Memory(port_base + (i + 1) as u64).into());
+    for i in 0 .. num_nodes {
+        swarms[i].store.put(record.clone()).unwrap();
     }
 
-    swarms[0].records.put(Record { key: target_key.clone(), value: target_value.clone() }).unwrap();
-    swarms[0].get_value(&target_key, num_results);
+    let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
+    swarms[0].get_record(&record.key, quorum);
 
-    Runtime::new().unwrap().block_on(
-        future::poll_fn(move || -> Result<_, io::Error> {
+    current_thread::run(
+        future::poll_fn(move || {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::GetValueResult(result))) => {
-                            if let GetValueResult::Found { results } = result {
-                                assert_eq!(results.len(), num_results.get() as usize);
-                                let record = results.first().unwrap();
-                                assert_eq!(record.key, target_key);
-                                assert_eq!(record.value, target_value);
-                                return Ok(Async::Ready(()));
-                            } else {
-                                panic!("Expected GetValueResult::Found event");
-                            }
+                        Async::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
+                            assert_eq!(ok.records.len(), num_results);
+                            assert_eq!(ok.records.first(), Some(&record));
+                            return Ok(Async::Ready(()));
                         }
                         Async::Ready(_) => (),
                         Async::NotReady => break,
                     }
                 }
             }
-
             Ok(Async::NotReady)
         }))
-        .unwrap()
 }
+
+#[test]
+fn add_provider() {
+    fn prop(replication_factor: usize, keys: Vec<kbucket::Key<Multihash>>) {
+        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
+        let num_total = replication_factor.get() * 2;
+        let num_group = replication_factor.get();
+
+        let mut config = KademliaConfig::default();
+        config.set_replication_factor(replication_factor);
+
+        let (swarm_ids, mut swarms) = build_connected_nodes_with_config(num_total, num_group, config);
+
+        let keys: HashSet<_> = keys.into_iter().take(num_total).collect();
+
+        // Each test run publishes all records twice.
+        let mut published = false;
+        let mut republished = false;
+        // The accumulated results for one round of publishing.
+        let mut results = Vec::new();
+
+        // Initiate the first round of publishing.
+        for k in &keys {
+            swarms[0].start_providing(k.preimage().clone());
+        }
+
+        current_thread::run(
+            future::poll_fn(move || loop {
+                // Poll all swarms until they are "NotReady".
+                for swarm in &mut swarms {
+                    loop {
+                        match swarm.poll().unwrap() {
+                            Async::Ready(Some(KademliaEvent::StartProvidingResult(res))) |
+                            Async::Ready(Some(KademliaEvent::RepublishProviderResult(res))) => {
+                                match res {
+                                    Err(e) => panic!(e),
+                                    Ok(ok) => {
+                                        let key = kbucket::Key::new(ok.key.clone());
+                                        assert!(keys.contains(&key));
+                                        results.push(key);
+                                    }
+                                }
+                            }
+                            Async::Ready(_) => (),
+                            Async::NotReady => break,
+                        }
+                    }
+                }
+
+                if results.len() == keys.len() {
+                    // All requests have been sent for one round of publishing.
+                    published = true
+                }
+
+                if !published {
+                    // Still waiting for all requests to be sent for one round
+                    // of publishing.
+                    return Ok(Async::NotReady)
+                }
+
+                // A round of publishing is complete. Consume the results, checking that
+                // each key was published to the `replication_factor` closest peers.
+                while let Some(key) = results.pop() {
+                    // Collect the nodes that have a provider record for `key`.
+                    let actual = swarms.iter().enumerate().skip(1)
+                        .filter_map(|(i, s)|
+                            if s.store.providers(key.preimage()).len() == 1 {
+                                Some(swarm_ids[i].clone())
+                            } else {
+                                None
+                            })
+                        .collect::<HashSet<_>>();
+
+                    if actual.len() != replication_factor.get() {
+                        // Still waiting for some nodes to process the request.
+                        results.push(key);
+                        return Ok(Async::NotReady)
+                    }
+
+                    let mut expected = swarm_ids.clone().split_off(1);
+                    expected.sort_by(|id1, id2|
+                        kbucket::Key::new(id1).distance(&key).cmp(
+                            &kbucket::Key::new(id2).distance(&key)));
+
+                    let expected = expected
+                        .into_iter()
+                        .take(replication_factor.get())
+                        .collect::<HashSet<_>>();
+
+                    assert_eq!(actual, expected);
+                }
+
+                // One round of publishing is complete.
+                assert!(results.is_empty());
+                for s in &swarms {
+                    assert_eq!(s.queries.size(), 0);
+                }
+
+                if republished {
+                    assert_eq!(swarms[0].store.provided().count(), keys.len());
+                    for k in &keys {
+                        swarms[0].stop_providing(k.preimage());
+                    }
+                    assert_eq!(swarms[0].store.provided().count(), 0);
+                    // All records have been republished, thus the test is complete.
+                    return Ok(Async::Ready(()));
+                }
+
+                // Initiate the second round of publishing by telling the
+                // periodic provider job to run asap.
+                swarms[0].add_provider_job.as_mut().unwrap().asap();
+                published = false;
+                republished = true;
+            })
+        )
+    }
+
+    QuickCheck::new().tests(3).quickcheck(prop as fn(_,_))
+}
+

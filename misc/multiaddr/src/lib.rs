@@ -116,7 +116,9 @@ impl Multiaddr {
 
     /// Returns the components of this multiaddress.
     ///
-    /// ```
+    /// # Example
+    ///
+    /// ```rust
     /// use std::net::Ipv4Addr;
     /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
@@ -174,7 +176,7 @@ impl fmt::Debug for Multiaddr {
 impl fmt::Display for Multiaddr {
     /// Convert a Multiaddr to a string
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use parity_multiaddr::Multiaddr;

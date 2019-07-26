@@ -29,7 +29,8 @@ use rw_stream_sink::RwStreamSink;
 use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64};
 
 lazy_static! {
-    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Bytes>>>> = Mutex::new(FnvHashMap::default());
+    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Bytes>>>> =
+        Mutex::new(FnvHashMap::default());
 }
 
 /// Transport that supports `/memory/N` multiaddresses.
@@ -184,7 +185,7 @@ impl Stream for Listener {
             return Ok(Async::Ready(Some(ListenerEvent::NewAddress(self.addr.clone()))))
         }
         let channel = try_ready!(Ok(self.receiver.poll()
-            .expect("An unbounded receiver never panics; QED")));
+            .expect("Life listeners always have a sender.")));
         let channel = match channel {
             Some(c) => c,
             None => return Ok(Async::Ready(None))

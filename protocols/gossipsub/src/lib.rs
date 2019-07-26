@@ -105,31 +105,13 @@
 //! println!("Listening on {:?}", addr);
 //! ```
 
-extern crate bs58;
-extern crate byteorder;
-extern crate bytes;
-extern crate cuckoofilter;
-extern crate fnv;
-extern crate futures;
-extern crate libp2p_core;
-extern crate libp2p_floodsub;
-extern crate protobuf;
-extern crate rand;
-#[macro_use]
-extern crate log;
-extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate tokio_timer;
-extern crate unsigned_varint;
-
 pub mod protocol;
 
+mod behaviour;
 mod gossipsub_config;
-mod layer;
 mod mcache;
 mod rpc_proto;
 
+pub use self::behaviour::{Gossipsub, GossipsubEvent};
 pub use self::gossipsub_config::{GossipsubConfig, GossipsubConfigBuilder};
-pub use self::layer::{Gossipsub, GossipsubEvent};
 pub use self::protocol::{GossipsubMessage, GossipsubRpc};

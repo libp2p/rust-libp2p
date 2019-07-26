@@ -23,17 +23,17 @@
 //! Contains structs that are aiming at providing very precise control over what happens over the
 //! network.
 //!
-//! The more complete and highest-level struct is the `RawSwarm`. The `RawSwarm` directly or
+//! The more complete and highest-level struct is the `Network`. The `Network` directly or
 //! indirectly uses all the other structs of this module.
 
 pub mod collection;
 pub mod handled_node;
-pub mod handled_node_tasks;
+pub mod tasks;
 pub mod listeners;
 pub mod node;
-pub mod raw_swarm;
+pub mod network;
 
-pub use self::collection::ConnectionInfo;
-pub use self::node::Substream;
-pub use self::handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
-pub use self::raw_swarm::{ConnectedPoint, Peer, RawSwarm, RawSwarmEvent};
+pub use collection::ConnectionInfo;
+pub use node::Substream;
+pub use handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
+pub use network::{Peer, Network, NetworkEvent};

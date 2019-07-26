@@ -1,10 +1,12 @@
 [package]
 name = "libp2p-gossipsub"
+edition = "2018"
 version = "0.1.0"
-authors = ["Age Manning <age@agemanning.com>"]
+authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 
 [dependencies]
+libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
 libp2p-core = { path = "../../core" }
 libp2p-floodsub = { path = "../floodsub" }
 bs58 = "0.2.2"
@@ -21,7 +23,6 @@ tokio-io = "0.1.11"
 tokio-timer = "0.2.8"
 unsigned-varint = "0.2.1"
 log = "0.4.6"
-
 
 [dev-dependencies]
 libp2p = { path = "../../" }

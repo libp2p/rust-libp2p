@@ -19,22 +19,21 @@
 // DEALINGS IN THE SOFTWARE.
 //
 
-use cuckoofilter::CuckooFilter;
-use futures::prelude::*;
-use gossipsub_config::GossipsubConfig;
-use libp2p_core::swarm::{
-    ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-};
-use libp2p_core::{
-    protocols_handler::{OneShotHandler, ProtocolsHandler, SubstreamProtocol},
-    Multiaddr, PeerId,
-};
-use libp2p_floodsub::{Topic, TopicHash};
-use mcache::MessageCache;
-use protocol::{
+use crate::gossipsub_config::GossipsubConfig;
+use crate::mcache::MessageCache;
+use crate::protocol::{
     GossipsubControlAction, GossipsubMessage, GossipsubRpc, GossipsubSubscription,
     GossipsubSubscriptionAction, ProtocolConfig,
 };
+use cuckoofilter::CuckooFilter;
+use futures::prelude::*;
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_floodsub::{Topic, TopicHash};
+use libp2p_swarm::{
+    NetworkBehaviour, NetworkBehaviourAction, OneShotHandler, PollParameters, ProtocolsHandler,
+    SubstreamProtocol,
+};
+use log::{debug, error, info, trace, warn};
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use smallvec::SmallVec;

@@ -18,28 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    PeerId,
-    either::EitherError,
-    either::EitherOutput,
-    protocols_handler::{
-        KeepAlive,
-        SubstreamProtocol,
-        IntoProtocolsHandler,
-        ProtocolsHandler,
-        ProtocolsHandlerEvent,
-        ProtocolsHandlerUpgrErr,
-    },
-    nodes::raw_swarm::ConnectedPoint,
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-        EitherUpgrade,
-        SelectUpgrade,
-        UpgradeError,
-    }
+use crate::protocols_handler::{
+    KeepAlive,
+    SubstreamProtocol,
+    IntoProtocolsHandler,
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr,
 };
 use futures::prelude::*;
+use libp2p_core::{
+    ConnectedPoint,
+    PeerId,
+    either::{EitherError, EitherOutput},
+    upgrade::{InboundUpgrade, OutboundUpgrade, EitherUpgrade, SelectUpgrade, UpgradeError}
+};
 use std::cmp;
 use tokio_io::{AsyncRead, AsyncWrite};
 

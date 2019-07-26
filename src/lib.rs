@@ -193,6 +193,8 @@ pub use libp2p_plaintext as plaintext;
 pub use libp2p_ratelimit as ratelimit;
 #[doc(inline)]
 pub use libp2p_secio as secio;
+#[doc(inline)]
+pub use libp2p_swarm as swarm;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
@@ -200,7 +202,10 @@ pub use libp2p_tcp as tcp;
 pub use libp2p_uds as uds;
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(all(
+    feature = "libp2p-websocket",
+    not(any(target_os = "emscripten", target_os = "unknown"))
+))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
 #[doc(inline)]
@@ -215,10 +220,11 @@ pub use self::core::{
     identity,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
-    PeerId, Swarm, Transport,
+    PeerId, Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;
+pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 pub use libp2p_core_derive::NetworkBehaviour;
 
@@ -277,10 +283,13 @@ pub fn build_tcp_ws_secio_mplex_yamux(
         .and_then(move |output, endpoint| {
             let peer_id = output.remote_key.into_peer_id();
             let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
-                // TODO: use a single `.map` instead of two maps
-                .map_inbound(move |muxer| (peer_id, muxer))
-                .map_outbound(move |muxer| (peer_id2, muxer));
+            let upgrade = core::upgrade::SelectUpgrade::new(
+                yamux::Config::default(),
+                mplex::MplexConfig::new(),
+            )
+            // TODO: use a single `.map` instead of two maps
+            .map_inbound(move |muxer| (peer_id, muxer))
+            .map_outbound(move |muxer| (peer_id2, muxer));
             core::upgrade::apply(output.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })

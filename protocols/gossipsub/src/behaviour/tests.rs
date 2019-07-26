@@ -246,7 +246,7 @@ mod tests {
         gs.fanout.insert(topic_hashes[1].clone(), vec![]);
         let new_peers = vec![];
         for _ in 0..3 {
-            let mut fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
+            let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
             fanout_peers.push(PeerId::random());
         }
 
@@ -576,8 +576,10 @@ mod tests {
             _ => false,
         };
 
-        assert!(iwant_exists
-            "Expected to send an IWANT control message for unkown message id");
+        assert!(
+            iwant_exists,
+            "Expected to send an IWANT control message for unkown message id"
+        );
     }
 
     #[test]
