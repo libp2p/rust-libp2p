@@ -200,7 +200,7 @@ where
                 }
             }
 
-            // Poll the `Future`, driving protocol negotiation to completion,
+            // Poll the `Negotiated`, driving protocol negotiation to completion,
             // including flushing of any remaining data.
             let result = self.poll();
 
