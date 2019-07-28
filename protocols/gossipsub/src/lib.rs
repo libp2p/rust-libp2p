@@ -109,9 +109,10 @@ pub mod protocol;
 
 mod behaviour;
 mod gossipsub_config;
+mod handler;
 mod mcache;
 mod rpc_proto;
 
-pub use self::behaviour::{Gossipsub, GossipsubEvent};
+pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc};
 pub use self::gossipsub_config::{GossipsubConfig, GossipsubConfigBuilder};
-pub use self::protocol::{GossipsubMessage, GossipsubRpc};
+pub use self::protocol::GossipsubMessage;

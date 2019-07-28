@@ -1,38 +1,14 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
-//
-
 use crate::gossipsub_config::GossipsubConfig;
+use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::protocol::{
-    GossipsubControlAction, GossipsubMessage, GossipsubRpc, GossipsubSubscription,
-    GossipsubSubscriptionAction, ProtocolConfig,
+    GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
 };
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_floodsub::{Topic, TopicHash};
-use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, OneShotHandler, PollParameters, ProtocolsHandler,
-    SubstreamProtocol,
-};
+use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
 use log::{debug, error, info, trace, warn};
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
@@ -56,7 +32,7 @@ pub struct Gossipsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<Arc<GossipsubRpc>, GossipsubEvent>>,
 
-    // pool non-urgent control messages between heartbeats
+    /// Pools non-urgent control messages between heartbeats
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
@@ -534,7 +510,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         propagation_source: &PeerId,
     ) {
         trace!(
-            "Handling subscriptions from source: {:?}",
+            "Handling subscriptions: {:?}, from source: {:?}",
+            subscriptions,
             propagation_source
         );
         let subscribed_topics = match self.peer_topics.get_mut(&propagation_source) {
@@ -915,13 +892,13 @@ impl<TSubstream> NetworkBehaviour for Gossipsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = OneShotHandler<TSubstream, ProtocolConfig, GossipsubRpc, InnerMessage>;
+    type ProtocolsHandler = GossipsubHandler<TSubstream>;
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        OneShotHandler::new(
-            SubstreamProtocol::new(ProtocolConfig::new(self.config.max_gossip_size)),
-            self.config.inactivity_timeout,
+        GossipsubHandler::new(
+            self.config.protocol_id.clone(),
+            self.config.max_transmit_size,
         )
     }
 
@@ -1008,12 +985,7 @@ where
         debug_assert!(was_in.is_some());
     }
 
-    fn inject_node_event(&mut self, propagation_source: PeerId, event: InnerMessage) {
-        // ignore successful sends event
-        let event = match event {
-            InnerMessage::Rx(event) => event,
-            InnerMessage::Sent => return,
-        };
+    fn inject_node_event(&mut self, propagation_source: PeerId, event: GossipsubRpc) {
         // Handle subscriptions
         // Update connected peers topics
         self.handle_received_subscriptions(&event.subscriptions, &propagation_source);
@@ -1107,27 +1079,15 @@ where
     }
 }
 
-/// Transmission between the `OneShotHandler` and the `GossipsubRpc`.
-#[derive(Debug)]
-pub enum InnerMessage {
-    /// We received an RPC from a remote.
-    Rx(GossipsubRpc),
-    /// We successfully sent an RPC request.
-    Sent,
-}
-
-impl From<GossipsubRpc> for InnerMessage {
-    #[inline]
-    fn from(rpc: GossipsubRpc) -> InnerMessage {
-        InnerMessage::Rx(rpc)
-    }
-}
-
-impl From<()> for InnerMessage {
-    #[inline]
-    fn from(_: ()) -> InnerMessage {
-        InnerMessage::Sent
-    }
+/// An RPC received/sent.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GossipsubRpc {
+    /// List of messages that were part of this RPC query.
+    pub messages: Vec<GossipsubMessage>,
+    /// List of subscriptions.
+    pub subscriptions: Vec<GossipsubSubscription>,
+    /// List of Gossipsub control messages.
+    pub control_msgs: Vec<GossipsubControlAction>,
 }
 
 /// Event that can happen on the gossipsub behaviour.

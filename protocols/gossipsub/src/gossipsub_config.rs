@@ -1,11 +1,16 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Debug, Clone)]
 pub struct GossipsubConfig {
+    /// The protocol id to negotiate this protocol.
+    pub protocol_id: Cow<'static, [u8]>,
+
     /// Overlay network parameters.
     /// Number of heartbeats to keep in the `memcache`.
     pub history_length: usize,
+
     /// Number of past heartbeats to gossip about.
     pub history_gossip: usize,
 
@@ -21,19 +26,21 @@ pub struct GossipsubConfig {
 
     /// Initial delay in each heartbeat.
     pub heartbeat_initial_delay: Duration,
+
     /// Time between each heartbeat.
     pub heartbeat_interval: Duration,
+
     /// Time to live for fanout peers.
     pub fanout_ttl: Duration,
+
     /// The maximum byte size for each gossip.
-    pub max_gossip_size: usize,
-    /// Timeout before the protocol handler terminates the stream.
-    pub inactivity_timeout: Duration,
+    pub max_transmit_size: usize,
 }
 
 impl Default for GossipsubConfig {
     fn default() -> GossipsubConfig {
         GossipsubConfig {
+            protocol_id: Cow::Borrowed(b"/meshsub/1.0.0"),
             history_length: 5,
             history_gossip: 3,
             mesh_n: 6,
@@ -43,13 +50,15 @@ impl Default for GossipsubConfig {
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
-            max_gossip_size: 2048,
-            inactivity_timeout: Duration::from_secs(60),
+            max_transmit_size: 2048,
         }
     }
 }
 
 pub struct GossipsubConfigBuilder {
+    /// The protocol id to negotiate this protocol.
+    protocol_id: Cow<'static, [u8]>,
+
     history_length: usize,
     /// Number of past heartbeats to gossip about.
     history_gossip: usize,
@@ -70,15 +79,14 @@ pub struct GossipsubConfigBuilder {
     heartbeat_interval: Duration,
     /// Time to live for fanout peers.
     fanout_ttl: Duration,
-    /// The maximum byte size for each gossip.
-    max_gossip_size: usize,
-    /// The inactivity time before a peer is disconnected.
-    inactivity_timeout: Duration,
+    /// The maximum byte size for each message.
+    max_transmit_size: usize,
 }
 
 impl Default for GossipsubConfigBuilder {
     fn default() -> GossipsubConfigBuilder {
         GossipsubConfigBuilder {
+            protocol_id: Cow::Borrowed(b"/meshsub/1.0.0"),
             history_length: 5,
             history_gossip: 3,
             mesh_n: 6,
@@ -88,8 +96,7 @@ impl Default for GossipsubConfigBuilder {
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
-            max_gossip_size: 2048,
-            inactivity_timeout: Duration::from_secs(60),
+            max_transmit_size: 2048,
         }
     }
 }
@@ -98,6 +105,11 @@ impl GossipsubConfigBuilder {
     // set default values
     pub fn new() -> GossipsubConfigBuilder {
         GossipsubConfigBuilder::default()
+    }
+
+    pub fn protocol_id(&mut self, protocol_id: impl Into<Cow<'static, [u8]>>) -> &mut Self {
+        self.protocol_id = protocol_id.into();
+        self
     }
 
     pub fn history_length(&mut self, history_length: usize) -> &mut Self {
@@ -162,18 +174,14 @@ impl GossipsubConfigBuilder {
         self.fanout_ttl = fanout_ttl;
         self
     }
-    pub fn max_gossip_size(&mut self, max_gossip_size: usize) -> &mut Self {
-        self.max_gossip_size = max_gossip_size;
-        self
-    }
-
-    pub fn inactivity_timeout(&mut self, inactivity_timeout: Duration) -> &mut Self {
-        self.inactivity_timeout = inactivity_timeout;
+    pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
+        self.max_transmit_size = max_transmit_size;
         self
     }
 
     pub fn build(&self) -> GossipsubConfig {
         GossipsubConfig {
+            protocol_id: self.protocol_id.clone(),
             history_length: self.history_length,
             history_gossip: self.history_gossip,
             mesh_n: self.mesh_n,
@@ -183,8 +191,7 @@ impl GossipsubConfigBuilder {
             heartbeat_initial_delay: self.heartbeat_initial_delay,
             heartbeat_interval: self.heartbeat_interval,
             fanout_ttl: self.fanout_ttl,
-            max_gossip_size: self.max_gossip_size,
-            inactivity_timeout: self.inactivity_timeout,
+            max_transmit_size: self.max_transmit_size,
         }
     }
 }

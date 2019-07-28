@@ -30,8 +30,9 @@ fn main() {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        // set default parameters for gossipsub
+        // to set default parameters for gossipsub use:
         // let gossipsub_config = gossipsub::GossipsubConfig::default();
+
         // set custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
             .heartbeat_interval(Duration::from_secs(10))
