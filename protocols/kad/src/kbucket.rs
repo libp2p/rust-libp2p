@@ -128,7 +128,7 @@ impl BucketIndex {
         let lower = usize::pow(2, rem);
         let upper = usize::pow(2, rem + 1);
         bytes[31 - quot] = rng.gen_range(lower, upper) as u8;
-        Distance(bigint::U256::from(bytes))
+        Distance(U256::from(bytes))
     }
 }
 
@@ -477,7 +477,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bigint::U256;
     use super::*;
     use libp2p_core::PeerId;
     use quickcheck::*;
