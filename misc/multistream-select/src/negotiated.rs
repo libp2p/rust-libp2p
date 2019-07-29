@@ -28,8 +28,8 @@ use std::{mem, io, fmt, error::Error};
 /// An I/O stream that has settled on an (application-layer) protocol to use.
 ///
 /// A `Negotiated` represents an I/O stream that has _settled_ on a protocol
-/// to use. In particular, it does not imply that all of the protocol negotiation
-/// frames have been sent and / or received, just that the selected protocol
+/// to use. In particular, it is not implied that all of the protocol negotiation
+/// frames have yet been sent and / or received, just that the selected protocol
 /// is fully determined. This is to allow the last protocol negotiation frames
 /// sent by a peer to be combined in a single write, possibly piggy-backing
 /// data from the negotiated protocol on top.
@@ -40,16 +40,13 @@ use std::{mem, io, fmt, error::Error};
 ///     the protocol negotiation, not a single negotiation message may yet have
 ///     been sent, if the dialer only supports a single protocol. In that case,
 ///     the dialer "settles" on that protocol immediately and expects it to
-///     be confirmed by the remote, as it has no alternatives. Once the
-///     `Negotiated` I/O resource is flushed, possibly after writing additional
-///     data related to the negotiated protocol, all of the buffered frames relating to
-///     protocol selection are sent together with that data. The dialer still expects
-///     to receive acknowledgment of the protocol before it can continue reading data
-///     from the remote related to the negotiated protocol.
-///     The `Negotiated` stream may ultimately still fail protocol negotiation, if
-///     the protocol that the dialer has settled on is not actually supported
+///     be confirmed by the remote. Once the `Negotiated` I/O stream is flushed,
+///     possibly after writing additional data related to the negotiated protocol,
+///     all of the buffered frames relating to protocol selection are sent together
+///     with that data. The `Negotiated` stream may ultimately still fail protocol
+///     negotiation, if the protocol that the dialer has settled on is not actually supported
 ///     by the listener, but having settled on that protocol the dialer has by
-///     definition no more alternatives and hence such a failed negotiation is
+///     definition no further alternatives and hence such a failed negotiation is
 ///     usually equivalent to a failed request made using the desired protocol.
 ///     If an application wishes to only start using the `Negotiated` stream
 ///     once protocol negotiation fully completed, it may wait on completion
@@ -58,10 +55,12 @@ use std::{mem, io, fmt, error::Error};
 ///  * If a `Negotiated` is obtained by the peer with the role of the listener in
 ///    the protocol negotiation, the final confirmation message for the remote's
 ///    selected protocol may not yet have been sent. Once the `Negotiated` I/O
-///    resource is flushed, possibly after writing additional data related to the
+///    stream is flushed, possibly after writing additional data related to the
 ///    negotiated protocol, e.g. a response, the buffered frames relating to protocol
 ///    acknowledgement are sent together with that data.
 ///
+/// See also the [crate documentation](crate) for details about lazy protocol
+/// negotiation.
 pub struct Negotiated<TInner> {
     state: State<TInner>
 }

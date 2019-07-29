@@ -19,7 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::ConnectedPoint;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{ProtocolName, NegotiatedComplete};
 use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
@@ -84,6 +85,11 @@ where
         future: ListenerSelectFuture<C, NameWrap<U::Info>>,
         upgrade: U,
     },
+    AwaitNegotiated {
+        io: NegotiatedComplete<C>,
+        protocol: U::Info,
+        upgrade: U
+    },
     Upgrade {
         future: U::Future
     },
@@ -109,8 +115,24 @@ where
                             return Ok(Async::NotReady)
                         }
                     };
+                    self.inner = InboundUpgradeApplyState::AwaitNegotiated {
+                        io: connection.complete(),
+                        protocol: info.0,
+                        upgrade
+                    };
+                }
+                InboundUpgradeApplyState::AwaitNegotiated { mut io, protocol, upgrade } => {
+                    let io = match io.poll()? {
+                        Async::NotReady => {
+                            self.inner = InboundUpgradeApplyState::AwaitNegotiated {
+                                io, protocol, upgrade
+                            };
+                            return Ok(Async::NotReady)
+                        }
+                        Async::Ready(io) => io
+                    };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_inbound(connection, info.0)
+                        future: upgrade.upgrade_inbound(io, protocol)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -154,6 +176,11 @@ where
         future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
         upgrade: U
     },
+    AwaitNegotiated {
+        io: NegotiatedComplete<C>,
+        upgrade: U,
+        protocol: U::Info
+    },
     Upgrade {
         future: U::Future
     },
@@ -179,8 +206,24 @@ where
                             return Ok(Async::NotReady)
                         }
                     };
+                    self.inner = OutboundUpgradeApplyState::AwaitNegotiated {
+                        io: connection.complete(),
+                        protocol: info.0,
+                        upgrade
+                    };
+                }
+                OutboundUpgradeApplyState::AwaitNegotiated { mut io, protocol, upgrade } => {
+                    let io = match io.poll()? {
+                        Async::NotReady => {
+                            self.inner = OutboundUpgradeApplyState::AwaitNegotiated {
+                                io, protocol, upgrade
+                            };
+                            return Ok(Async::NotReady)
+                        }
+                        Async::Ready(io) => io
+                    };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(connection, info.0)
+                        future: upgrade.upgrade_outbound(io, protocol)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {

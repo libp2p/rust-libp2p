@@ -30,9 +30,9 @@
 //! ## Roles
 //!
 //! Two peers using the multistream-select negotiation protocol on an I/O stream
-//! are distinguished by their role as a _dialer_ or a _listener_. Thereby the dialer
-//! (or _initiator_) plays the active part, driving the protocol, whereas the listener
-//! (or _responder_) reacts to the messages received.
+//! are distinguished by their role as a _dialer_ (or _initiator_) or as a _listener_
+//! (or _responder_). Thereby the dialer plays the active part, driving the protocol,
+//! whereas the listener reacts to the messages received.
 //!
 //! The dialer has two options: it can either pick a protocol from the complete list
 //! of protocols that the listener supports, or it can directly suggest a protocol.
@@ -40,10 +40,58 @@
 //! echoing the same protocol) or reject (by responding with a message stating
 //! "not available"). If a suggested protocol is not available, the dialer may
 //! suggest another protocol. This process continues until a protocol is agreed upon,
-//! yielding a [`Negotiated`](self::Negotiated) stream, or the dialer has run out of alternatives.
+//! yielding a [`Negotiated`](self::Negotiated) stream, or the dialer has run out of
+//! alternatives.
 //!
 //! See [`dialer_select_proto`](self::dialer_select_proto) and
 //! [`listener_select_proto`](self::listener_select_proto).
+//!
+//! ## [`Negotiated`](self::Negotiated)
+//!
+//! When a dialer or listener participating in a negotiation settles
+//! on a protocol to use, the [`DialerSelectFuture`] respectively
+//! [`ListenerSelectFuture`] yields a [`Negotiated`](self::Negotiated)
+//! I/O stream.
+//!
+//! Notably, when a `DialerSelectFuture` resolves to a `Negotiated`, it may not yet
+//! have written the last negotiation message to the underlying I/O stream and may
+//! still be expecting confirmation for that protocol, despite having settled on
+//! a protocol to use.
+//!
+//! Similarly, when a `ListenerSelectFuture` resolves to a `Negotiated`, it may not
+//! yet have sent the last negotiation message despite having settled on a protocol
+//! proposed by the dialer that it supports.
+//!
+//! This behaviour allows both the dialer and the listener to send data
+//! relating to the negotiated protocol together with the last negotiation
+//! message(s), which, in the case of the dialer only supporting a single
+//! protocol, results in 0-RTT negotiation.
+//!
+//! However, to avoid pitfalls, the following rules should be observed:
+//!
+//!   1. When a dialer nests multiple `DialerSelectFuture`s, i.e. performs
+//!      multiple nested protocol negotiations, it should ensure completion
+//!      of the previous negotiation before starting the next negotiation,
+//!      which can be accomplished by waiting for the future returned by
+//!      [`Negotiated::complete`] of the previous negotiation to resolve.
+//!      This avoids problematic cases like \[[1]\] whereby the listener may
+//!      erroneously process a request for which the dialer considers the
+//!      negotiation to have failed.
+//!
+//!   2. When a listener cannot assume that a dialer will always sent request
+//!      data together with its last protocol proposal, i.e. the dialer may wait for
+//!      protocol confirmation before sending request data, the listener should
+//!      always flush its negotiation responses before processing request data
+//!      and any sending of response data. Otherwise a dialer may be waiting for
+//!      protocol confirmation from the listener before sending a request while
+//!      the listener waits for the request before sending the response together with the
+//!      protocol confirmation. Just like for the dialer, this can be accomplished
+//!      by waiting for the future returned by [`Negotiated::complete`]
+//!      to resolve before continuing to process (and possibly wait for) the
+//!      request data, followed by sending any response data.
+//!
+//! [1]: https://github.com/multiformats/go-multistream/issues/20
+//! [`Negotiated::complete`]: self::Negotiated::complete
 //!
 //! ## Examples
 //!
@@ -82,7 +130,7 @@ mod negotiated;
 mod protocol;
 mod tests;
 
-pub use self::negotiated::{Negotiated, NegotiationError};
+pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
 pub use self::protocol::ProtocolError;
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
