@@ -1,13 +1,13 @@
-use crate::gossipsub_config::GossipsubConfig;
+use crate::config::GossipsubConfig;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::protocol::{
     GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
 };
+use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_floodsub::{Topic, TopicHash};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
 use log::{debug, error, info, trace, warn};
 use rand;
@@ -94,18 +94,19 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
-        debug!("Subscribing to topic: {:?}", topic);
-        if self.mesh.get(&topic.hash()).is_some() {
-            debug!("Topic: {:?} is already in the mesh.", topic);
+        debug!("Subscribing to topic: {}", topic);
+        let topic_hash = self.topic_hash(topic.clone());
+        if self.mesh.get(&topic_hash).is_some() {
+            debug!("Topic: {} is already in the mesh.", topic);
             return false;
         }
 
         // send subscription request to all peers in the topic
-        if let Some(peer_list) = self.topic_peers.get(&topic.hash()) {
+        if let Some(peer_list) = self.topic_peers.get(&topic_hash) {
             let event = Arc::new(GossipsubRpc {
                 messages: Vec::new(),
                 subscriptions: vec![GossipsubSubscription {
-                    topic_hash: topic.hash().clone(),
+                    topic_hash: topic_hash.clone(),
                     action: GossipsubSubscriptionAction::Subscribe,
                 }],
                 control_msgs: Vec::new(),
@@ -122,19 +123,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
-        self.join(topic.hash());
-        info!("Subscribed to topic: {:?}", topic);
+        self.join(&topic_hash);
+        info!("Subscribed to topic: {}", topic);
         true
     }
 
     /// Unsubscribes from a topic.
     ///
-    /// Note that this only requires a `TopicHash` and not a full `Topic`.
-    ///
     /// Returns true if we were subscribed to this topic.
-    pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
-        let topic_hash = topic.as_ref();
-        debug!("Unsubscribing from topic: {:?}", topic_hash);
+    pub fn unsubscribe(&mut self, topic: Topic) -> bool {
+        debug!("Unsubscribing from topic: {}", topic);
+        let topic_hash = &self.topic_hash(topic);
 
         if self.mesh.get(topic_hash).is_none() {
             debug!("Already unsubscribed to topic: {:?}", topic_hash);
@@ -170,14 +169,14 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 
     /// Publishes a message to the network.
-    pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
+    pub fn publish(&mut self, topic: Topic, data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message with multiple topics to the network.
     pub fn publish_many(
         &mut self,
-        topic: impl IntoIterator<Item = impl Into<TopicHash>>,
+        topic: impl IntoIterator<Item = Topic>,
         data: impl Into<Vec<u8>>,
     ) {
         let message = GossipsubMessage {
@@ -190,7 +189,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // To be interoperable with the go-implementation this is treated as a 64-bit
             // big-endian uint.
             sequence_number: rand::random::<[u8; 8]>().to_vec(),
-            topics: topic.into_iter().map(Into::into).collect(),
+            topics: topic.into_iter().map(|t| self.topic_hash(t)).collect(),
         };
 
         debug!("Publishing message: {:?}", message.id());
@@ -871,6 +870,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
             .entry(peer.clone())
             .or_insert_with(|| Vec::new()))
         .push(control.clone());
+    }
+
+    /// Produces a `TopicHash` for a topic given the gossipsub configuration.
+    fn topic_hash(&self, topic: Topic) -> TopicHash {
+        if self.config.hash_topics {
+            topic.sha256_hash()
+        } else {
+            topic.no_hash()
+        }
     }
 
     // takes each control action mapping and turns it into a message

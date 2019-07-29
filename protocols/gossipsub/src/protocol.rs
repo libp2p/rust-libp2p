@@ -1,11 +1,11 @@
 use crate::behaviour::GossipsubRpc;
 use crate::rpc_proto;
+use crate::topic::TopicHash;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use bytes::BytesMut;
 use futures::future;
 use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
-use libp2p_floodsub::TopicHash;
 use protobuf::Message as ProtobufMessage;
 use std::borrow::Cow;
 use std::{io, iter};

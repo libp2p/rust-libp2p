@@ -5,8 +5,7 @@ use libp2p_core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-
-use log::{error, trace, warn};
+use log::{error, trace};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::io;
@@ -60,23 +59,6 @@ where
     /// An error occurred during processing.
     Poisoned,
 }
-
-/*
-impl<TSubstream> SubstreamState<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    /// Consumes this state and produces the substream.
-    fn into_substream(self) -> Framed<Negotiated<TSubstream>, GossipsubCodec> {
-        match self {
-            SubstreamState::WaitingInput(substream) => substream,
-            SubstreamState::PendingSend(substream, _) => substream,
-            SubstreamState::PendingFlush(substream) => substream,
-            SubstreamState::Closing(substream) => substream,
-        }
-    }
-}
-*/
 
 impl<TSubstream> GossipsubHandler<TSubstream>
 where
@@ -164,7 +146,7 @@ where
             <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
         >,
     ) {
-        // ignore upgrade errors for now.
+        // Ignore upgrade errors for now.
         // If a peer doesn't support this protocol, this will just ignore them, but not disconnect
         // them.
     }

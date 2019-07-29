@@ -1,7 +1,7 @@
 extern crate fnv;
 
 use crate::protocol::GossipsubMessage;
-use libp2p_floodsub::TopicHash;
+use crate::topic::TopicHash;
 use std::collections::HashMap;
 
 /// CacheEntry stored in the history

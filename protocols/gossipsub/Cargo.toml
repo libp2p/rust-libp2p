@@ -23,6 +23,8 @@ tokio-io = "0.1.11"
 tokio-timer = "0.2.8"
 unsigned-varint = "0.2.2"
 log = "0.4.6"
+sha2 = "0.8.0"
+base64 = "0.10.1"
 
 [dev-dependencies]
 libp2p = { path = "../../" }
