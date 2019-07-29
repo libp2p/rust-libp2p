@@ -20,23 +20,21 @@
 
 //! Contains the `Listener` wrapper, which allows raw communications with a dialer.
 
-use bytes::{BufMut, Bytes, BytesMut};
+use super::*;
+
+use bytes::{Bytes, BytesMut};
 use crate::length_delimited::LengthDelimited;
-use crate::protocol::DialerToListenerMessage;
-use crate::protocol::ListenerToDialerMessage;
-use crate::protocol::MultistreamSelectError;
-use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+use crate::protocol::{Request, Response, MultistreamSelectError};
 use futures::{prelude::*, sink, stream::StreamFuture};
 use log::{debug, trace};
-use std::{io, mem};
-use tokio_codec::Encoder;
+use std::{marker, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint::{encode, codec::Uvi};
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
 pub struct Listener<R, N> {
-    inner: LengthDelimited<R, MessageEncoder<N>>
+    inner: LengthDelimited<R>,
+    _protocol_name: marker::PhantomData<N>,
 }
 
 impl<R, N> Listener<R, N>
@@ -47,16 +45,15 @@ where
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Listener`.
     pub fn listen(inner: R) -> ListenerFuture<R, N> {
-        let codec = MessageEncoder(std::marker::PhantomData);
-        let inner = LengthDelimited::new(inner, codec);
+        let inner = LengthDelimited::new(inner);
         ListenerFuture {
-            inner: ListenerFutureState::Await { inner: inner.into_future() }
+            inner: ListenerFutureState::Await { inner: inner.into_future() },
+            _protocol_name: marker::PhantomData,
         }
     }
 
     /// Grants back the socket. Typically used after a `ProtocolRequest` has been received and a
     /// `ProtocolAck` has been sent back.
-    #[inline]
     pub fn into_inner(self) -> R {
         self.inner.into_inner()
     }
@@ -67,24 +64,22 @@ where
     R: AsyncRead + AsyncWrite,
     N: AsRef<[u8]>
 {
-    type SinkItem = ListenerToDialerMessage<N>;
+    type SinkItem = Response<N>;
     type SinkError = MultistreamSelectError;
 
-    #[inline]
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        match self.inner.start_send(Message::Body(item))? {
-            AsyncSink::NotReady(Message::Body(item)) => Ok(AsyncSink::NotReady(item)),
-            AsyncSink::NotReady(Message::Header) => unreachable!(),
+    fn start_send(&mut self, response: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        let mut msg = BytesMut::new();
+        response.encode(&mut msg)?;
+        match self.inner.start_send(msg.freeze())? {
+            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(response)),
             AsyncSink::Ready => Ok(AsyncSink::Ready)
         }
     }
 
-    #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         Ok(self.inner.poll_complete()?)
     }
 
-    #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
         Ok(self.inner.close()?)
     }
@@ -94,26 +89,26 @@ impl<R, N> Stream for Listener<R, N>
 where
     R: AsyncRead + AsyncWrite,
 {
-    type Item = DialerToListenerMessage<Bytes>;
+    type Item = Request<Bytes>;
     type Error = MultistreamSelectError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let mut frame = match self.inner.poll() {
-            Ok(Async::Ready(Some(frame))) => frame,
+        let mut msg = match self.inner.poll() {
+            Ok(Async::Ready(Some(msg))) => msg,
             Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
             Ok(Async::NotReady) => return Ok(Async::NotReady),
             Err(err) => return Err(err.into()),
         };
 
-        if frame.get(0) == Some(&b'/') && frame.last() == Some(&b'\n') {
-            let frame_len = frame.len();
-            let protocol = frame.split_to(frame_len - 1);
+        if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') {
+            let len = msg.len();
+            let name = msg.split_to(len - 1);
             Ok(Async::Ready(Some(
-                DialerToListenerMessage::ProtocolRequest { name: protocol },
+                Request::Protocol { name },
             )))
-        } else if frame == b"ls\n"[..] {
+        } else if msg == MSG_LS {
             Ok(Async::Ready(Some(
-                DialerToListenerMessage::ProtocolsListRequest,
+                Request::ListProtocols,
             )))
         } else {
             Err(MultistreamSelectError::UnknownMessage)
@@ -124,16 +119,17 @@ where
 
 /// Future, returned by `Listener::new` which performs the handshake and returns
 /// the `Listener` if successful.
-pub struct ListenerFuture<T: AsyncRead + AsyncWrite, N: AsRef<[u8]>> {
-    inner: ListenerFutureState<T, N>
+pub struct ListenerFuture<T: AsyncRead + AsyncWrite, N> {
+    inner: ListenerFutureState<T>,
+    _protocol_name: marker::PhantomData<N>,
 }
 
-enum ListenerFutureState<T: AsyncRead + AsyncWrite, N: AsRef<[u8]>> {
+enum ListenerFutureState<T: AsyncRead + AsyncWrite> {
     Await {
-        inner: StreamFuture<LengthDelimited<T, MessageEncoder<N>>>
+        inner: StreamFuture<LengthDelimited<T>>
     },
     Reply {
-        sender: sink::Send<LengthDelimited<T, MessageEncoder<N>>>
+        sender: sink::Send<LengthDelimited<T>>
     },
     Undefined
 }
@@ -155,12 +151,14 @@ impl<T: AsyncRead + AsyncWrite, N: AsRef<[u8]>> Future for ListenerFuture<T, N> 
                             }
                             Err((e, _)) => return Err(MultistreamSelectError::from(e))
                         };
-                    if msg.as_ref().map(|b| &b[..]) != Some(MULTISTREAM_PROTOCOL_WITH_LF) {
-                        debug!("failed handshake; received: {:?}", msg);
+                    if msg.as_ref().map(|b| &b[..]) != Some(MSG_MULTISTREAM_1_0) {
+                        debug!("Unexpected message: {:?}", msg);
                         return Err(MultistreamSelectError::FailedHandshake)
                     }
                     trace!("sending back /multistream/<version> to finish the handshake");
-                    let sender = socket.send(Message::Header);
+                    let mut frame = BytesMut::new();
+                    Header::Multistream10.encode(&mut frame);
+                    let sender = socket.send(frame.freeze());
                     self.inner = ListenerFutureState::Reply { sender }
                 }
                 ListenerFutureState::Reply { mut sender } => {
@@ -171,70 +169,13 @@ impl<T: AsyncRead + AsyncWrite, N: AsRef<[u8]>> Future for ListenerFuture<T, N> 
                             return Ok(Async::NotReady)
                         }
                     };
-                    return Ok(Async::Ready(Listener { inner: listener }))
+                    return Ok(Async::Ready(Listener {
+                        inner: listener,
+                        _protocol_name: marker::PhantomData
+                    }))
                 }
-                ListenerFutureState::Undefined => panic!("ListenerFutureState::poll called after completion")
-            }
-        }
-    }
-}
-
-/// tokio-codec `Encoder` handling `ListenerToDialerMessage` values.
-struct MessageEncoder<N>(std::marker::PhantomData<N>);
-
-enum Message<N> {
-    Header,
-    Body(ListenerToDialerMessage<N>)
-}
-
-impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
-    type Item = Message<N>;
-    type Error = MultistreamSelectError;
-
-    fn encode(&mut self, item: Self::Item, dest: &mut BytesMut) -> Result<(), Self::Error> {
-        match item {
-            Message::Header => {
-                Uvi::<usize>::default().encode(MULTISTREAM_PROTOCOL_WITH_LF.len(), dest)?;
-                dest.reserve(MULTISTREAM_PROTOCOL_WITH_LF.len());
-                dest.put(MULTISTREAM_PROTOCOL_WITH_LF);
-                Ok(())
-            }
-            Message::Body(ListenerToDialerMessage::ProtocolAck { name }) => {
-                if !name.as_ref().starts_with(b"/") {
-                    return Err(MultistreamSelectError::WrongProtocolName)
-                }
-                let len = name.as_ref().len() + 1; // + 1 for \n
-                if len > std::u16::MAX as usize {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "name too long").into())
-                }
-                Uvi::<usize>::default().encode(len, dest)?;
-                dest.reserve(len);
-                dest.put(name.as_ref());
-                dest.put(&b"\n"[..]);
-                Ok(())
-            }
-            Message::Body(ListenerToDialerMessage::ProtocolsListResponse { list }) => {
-                let mut buf = encode::usize_buffer();
-                let mut out_msg = Vec::from(encode::usize(list.len(), &mut buf));
-                for e in &list {
-                    if e.as_ref().len() + 1 > std::u16::MAX as usize {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "name too long").into())
-                    }
-                    out_msg.extend(encode::usize(e.as_ref().len() + 1, &mut buf)); // +1 for '\n'
-                    out_msg.extend_from_slice(e.as_ref());
-                    out_msg.push(b'\n')
-                }
-                let len = encode::usize(out_msg.len(), &mut buf);
-                dest.reserve(len.len() + out_msg.len());
-                dest.put(len);
-                dest.put(out_msg);
-                Ok(())
-            }
-            Message::Body(ListenerToDialerMessage::NotAvailable) => {
-                Uvi::<usize>::default().encode(3, dest)?;
-                dest.reserve(3);
-                dest.put(&b"na\n"[..]);
-                Ok(())
+                ListenerFutureState::Undefined =>
+                    panic!("ListenerFutureState::poll called after completion")
             }
         }
     }
@@ -242,12 +183,12 @@ impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use tokio::runtime::current_thread::Runtime;
     use tokio_tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
     use futures::{Sink, Stream};
-    use crate::protocol::{Dialer, Listener, ListenerToDialerMessage, MultistreamSelectError};
 
     #[test]
     fn wrong_proto_name() {
@@ -260,8 +201,8 @@ mod tests {
             .map_err(|(e, _)| e.into())
             .and_then(move |(connec, _)| Listener::listen(connec.unwrap()))
             .and_then(|listener| {
-                let proto_name = Bytes::from("invalid-proto");
-                listener.send(ListenerToDialerMessage::ProtocolAck { name: proto_name })
+                let name = Bytes::from("invalid-proto");
+                listener.send(Response::Protocol { name })
             });
 
         let client = TcpStream::connect(&listener_addr)
@@ -270,7 +211,7 @@ mod tests {
 
         let mut rt = Runtime::new().unwrap();
         match rt.block_on(server.join(client)) {
-            Err(MultistreamSelectError::WrongProtocolName) => (),
+            Err(MultistreamSelectError::InvalidProtocolName) => (),
             _ => panic!(),
         }
     }

@@ -18,78 +18,81 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use futures::{Async, Poll, Sink, StartSend, Stream};
-use smallvec::SmallVec;
+use bytes::{Bytes, BytesMut, BufMut};
+use futures::{try_ready, Async, Poll, Sink, StartSend, Stream, AsyncSink};
 use std::{io, u16};
-use tokio_codec::{Encoder, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint::decode;
+use unsigned_varint as uvi;
 
-/// `Stream` and `Sink` wrapping some `AsyncRead + AsyncWrite` object to read
+const MAX_LEN_BYTES: u16 = 2;
+const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
+const DEFAULT_BUFFER_SIZE: usize = 64;
+
+/// `Stream` and `Sink` wrapping some `AsyncRead + AsyncWrite` resource to read
 /// and write unsigned-varint prefixed frames.
 ///
-/// We purposely only support a frame length of under 64kiB. Frames mostly consist
-/// in a short protocol name, which is highly unlikely to be more than 64kiB long.
-pub struct LengthDelimited<R, C> {
-    // The inner socket where data is pulled from.
-    inner: FramedWrite<R, C>,
-    // Intermediary buffer where we put either the length of the next frame of data, or the frame
-    // of data itself before it is returned.
-    // Must always contain enough space to read data from `inner`.
-    internal_buffer: SmallVec<[u8; 64]>,
-    // Number of bytes within `internal_buffer` that contain valid data.
-    internal_buffer_pos: usize,
-    // State of the decoder.
-    state: State
+/// We purposely only support a frame sizes up to 16KiB (2 bytes unsigned varint
+/// frame length). Frames mostly consist in a short protocol name, which is highly
+/// unlikely to be more than 16KiB long.
+pub struct LengthDelimited<R> {
+    /// The inner I/O resource.
+    inner: R,
+    /// Read buffer for a single incoming unsigned-varint length-delimited frame.
+    read_buffer: BytesMut,
+    /// Write buffer for outgoing unsigned-varint length-delimited frames.
+    write_buffer: BytesMut,
+    /// The current read state, alternating between reading a frame
+    /// length and reading a frame payload.
+    read_state: ReadState,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum State {
-    // We are currently reading the length of the next frame of data.
-    ReadingLength,
-    // We are currently reading the frame of data itself.
-    ReadingData { frame_len: u16 },
+enum ReadState {
+    /// We are currently reading the length of the next frame of data.
+    ReadLength { buf: [u8; MAX_LEN_BYTES as usize], pos: usize },
+    /// We are currently reading the frame of data itself.
+    ReadData { len: u16, pos: usize },
 }
 
-impl<R, C> LengthDelimited<R, C>
-where
-    R: AsyncWrite,
-    C: Encoder
-{
-    pub fn new(inner: R, codec: C) -> LengthDelimited<R, C> {
+impl Default for ReadState {
+    fn default() -> Self {
+        ReadState::ReadLength {
+            buf: [0; MAX_LEN_BYTES as usize],
+            pos: 0
+        }
+    }
+}
+
+impl<R> LengthDelimited<R> {
+    /// Creates a new I/O resource for reading and writing unsigned-varint
+    /// length delimited frames.
+    pub fn new(inner: R) -> LengthDelimited<R> {
         LengthDelimited {
-            inner: FramedWrite::new(inner, codec),
-            internal_buffer: {
-                let mut v = SmallVec::new();
-                v.push(0);
-                v
-            },
-            internal_buffer_pos: 0,
-            state: State::ReadingLength
+            inner,
+            read_state: ReadState::default(),
+            read_buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE),
+            write_buffer: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE + MAX_LEN_BYTES as usize),
         }
     }
 
     /// Destroys the `LengthDelimited` and returns the underlying socket.
     ///
-    /// Contrary to its equivalent `tokio_io::codec::length_delimited::FramedRead`, this method is
-    /// guaranteed not to skip any data from the socket.
+    /// This method is guaranteed not to skip any data from the socket.
     ///
     /// # Panic
     ///
-    /// Will panic if called while there is data inside the buffer. **This can only happen if
-    /// you call `poll()` manually**. Using this struct as it is intended to be used (i.e. through
-    /// the modifiers provided by the `futures` crate) will always leave the object in a state in
-    /// which `into_inner()` will not panic.
-    #[inline]
+    /// Will panic if called while there is data inside the read or write buffer.
+    /// **This can only happen if you call `poll()` manually**. Using this struct
+    /// as it is intended to be used (i.e. through the high-level `futures` API)
+    /// will always leave the object in a state in which `into_inner()` will not panic.
     pub fn into_inner(self) -> R {
-        assert_eq!(self.state, State::ReadingLength);
-        assert_eq!(self.internal_buffer_pos, 0);
-        self.inner.into_inner()
+        assert!(self.write_buffer.is_empty());
+        assert!(self.read_buffer.is_empty());
+        self.inner
     }
 }
 
-impl<R, C> Stream for LengthDelimited<R, C>
+impl<R> Stream for LengthDelimited<R>
 where
     R: AsyncRead
 {
@@ -98,16 +101,11 @@ where
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
-            debug_assert!(!self.internal_buffer.is_empty());
-            debug_assert!(self.internal_buffer_pos < self.internal_buffer.len());
-
-            match self.state {
-                State::ReadingLength => {
-                    let slice = &mut self.internal_buffer[self.internal_buffer_pos..];
-                    match self.inner.get_mut().read(slice) {
+            match &mut self.read_state {
+                ReadState::ReadLength { buf, pos } => {
+                    match self.inner.read(&mut buf[*pos .. *pos + 1]) {
                         Ok(0) => {
-                            // EOF
-                            if self.internal_buffer_pos == 0 {
+                            if *pos == 0 {
                                 return Ok(Async::Ready(None));
                             } else {
                                 return Err(io::ErrorKind::UnexpectedEof.into());
@@ -115,7 +113,7 @@ where
                         }
                         Ok(n) => {
                             debug_assert_eq!(n, 1);
-                            self.internal_buffer_pos += n;
+                            *pos += n;
                         }
                         Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
                             return Ok(Async::NotReady);
@@ -125,56 +123,45 @@ where
                         }
                     };
 
-                    debug_assert_eq!(self.internal_buffer.len(), self.internal_buffer_pos);
-
-                    if (*self.internal_buffer.last().unwrap_or(&0) & 0x80) == 0 {
-                        // End of length prefix. Most of the time we will switch to reading data,
-                        // but we need to handle a few corner cases first.
-                        let (frame_len, _) = decode::u16(&self.internal_buffer).map_err(|e| {
+                    if (buf[*pos - 1] & 0x80) == 0 {
+                        // MSB is not set, indicating the end of the length prefix.
+                        let (len, _) = uvi::decode::u16(buf).map_err(|e| {
                             log::debug!("invalid length prefix: {}", e);
                             io::Error::new(io::ErrorKind::InvalidData, "invalid length prefix")
                         })?;
 
-                        if frame_len >= 1 {
-                            self.state = State::ReadingData { frame_len };
-                            self.internal_buffer.clear();
-                            self.internal_buffer.reserve(frame_len as usize);
-                            self.internal_buffer.extend((0..frame_len).map(|_| 0));
-                            self.internal_buffer_pos = 0;
+                        if len >= 1 {
+                            self.read_state = ReadState::ReadData { len, pos: 0 };
+                            self.read_buffer.resize(len as usize, 0);
                         } else {
-                            debug_assert_eq!(frame_len, 0);
-                            self.state = State::ReadingLength;
-                            self.internal_buffer.clear();
-                            self.internal_buffer.push(0);
-                            self.internal_buffer_pos = 0;
-                            return Ok(Async::Ready(Some(From::from(&[][..]))));
+                            debug_assert_eq!(len, 0);
+                            self.read_state = ReadState::default();
+                            return Ok(Async::Ready(Some(Bytes::new())));
                         }
-                    } else if self.internal_buffer_pos >= 2 {
-                        // Length prefix is too long. See module doc for info about max frame len.
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "frame length too long"));
-                    } else {
-                        // Prepare for next read.
-                        self.internal_buffer.push(0);
+                    } else if *pos == MAX_LEN_BYTES as usize {
+                        // MSB signals more length bytes but we have already read the maximum.
+                        // See the module documentation about the max frame len.
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Maximum frame length exceeded"));
                     }
                 }
-                State::ReadingData { frame_len } => {
-                    let slice = &mut self.internal_buffer[self.internal_buffer_pos..];
-                    match self.inner.get_mut().read(slice) {
+                ReadState::ReadData { len, pos } => {
+                    match self.inner.read(&mut self.read_buffer[*pos..]) {
                         Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
-                        Ok(n) => self.internal_buffer_pos += n,
-                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                            return Ok(Async::NotReady)
-                        }
-                        Err(err) => return Err(err)
+                        Ok(n) => *pos += n,
+                        Err(err) =>
+                            if err.kind() == io::ErrorKind::WouldBlock {
+                                return Ok(Async::NotReady)
+                            } else {
+                                return Err(err)
+                            }
                     };
-                    if self.internal_buffer_pos >= frame_len as usize {
-                        // Finished reading the frame of data.
-                        self.state = State::ReadingLength;
-                        let out_data = From::from(&self.internal_buffer[..]);
-                        self.internal_buffer.clear();
-                        self.internal_buffer.push(0);
-                        self.internal_buffer_pos = 0;
-                        return Ok(Async::Ready(Some(out_data)));
+                    if *pos == *len as usize {
+                        // Finished reading the frame.
+                        let frame = self.read_buffer.split_off(0).freeze();
+                        self.read_state = ReadState::default();
+                        return Ok(Async::Ready(Some(frame)));
                     }
                 }
             }
@@ -182,27 +169,60 @@ where
     }
 }
 
-impl<R, C> Sink for LengthDelimited<R, C>
+impl<R> Sink for LengthDelimited<R>
 where
     R: AsyncWrite,
-    C: Encoder
 {
-    type SinkItem = <FramedWrite<R, C> as Sink>::SinkItem;
-    type SinkError = <FramedWrite<R, C> as Sink>::SinkError;
+    type SinkItem = Bytes;
+    type SinkError = io::Error;
 
-    #[inline]
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        self.inner.start_send(item)
+    fn start_send(&mut self, msg: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        // Use the maximum frame length also as a (soft) upper limit
+        // for the entire write buffer. The actual (hard) limit is thus
+        // implied to be roughly 2 * MAX_FRAME_SIZE.
+        if self.write_buffer.len() >= MAX_FRAME_SIZE as usize {
+            self.poll_complete()?;
+            if self.write_buffer.len() >= MAX_FRAME_SIZE as usize {
+                return Ok(AsyncSink::NotReady(msg))
+            }
+        }
+
+        let len = msg.len() as u16;
+        if len > MAX_FRAME_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Maximum frame size exceeded."))
+        }
+
+        let mut uvi_buf = uvi::encode::u16_buffer();
+        let uvi_len = uvi::encode::u16(len, &mut uvi_buf);
+        self.write_buffer.reserve(len as usize + uvi_len.len());
+        self.write_buffer.put(uvi_len);
+        self.write_buffer.put(msg);
+
+        Ok(AsyncSink::Ready)
     }
 
-    #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.poll_complete()
+        while !self.write_buffer.is_empty() {
+            let n = try_ready!(self.inner.poll_write(&self.write_buffer));
+
+            if n == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "Failed to write buffered frame."))
+            }
+
+            let _ = self.write_buffer.split_to(n);
+        }
+
+        try_ready!(self.inner.poll_flush());
+        return Ok(Async::Ready(()));
     }
 
-    #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.close()
+        try_ready!(self.poll_complete());
+        Ok(self.inner.shutdown()?)
     }
 }
 
@@ -211,12 +231,11 @@ mod tests {
     use futures::{Future, Stream};
     use crate::length_delimited::LengthDelimited;
     use std::io::{Cursor, ErrorKind};
-    use unsigned_varint::codec::UviBytes;
 
     #[test]
     fn basic_read() {
         let data = vec![6, 9, 8, 7, 6, 5, 4];
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed.collect().wait().unwrap();
         assert_eq!(recved, vec![vec![9, 8, 7, 6, 5, 4]]);
     }
@@ -224,7 +243,7 @@ mod tests {
     #[test]
     fn basic_read_two() {
         let data = vec![6, 9, 8, 7, 6, 5, 4, 3, 9, 8, 7];
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed.collect().wait().unwrap();
         assert_eq!(recved, vec![vec![9, 8, 7, 6, 5, 4], vec![9, 8, 7]]);
     }
@@ -236,7 +255,7 @@ mod tests {
         let frame = (0..len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
         let mut data = vec![(len & 0x7f) as u8 | 0x80, (len >> 7) as u8];
         data.extend(frame.clone().into_iter());
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed
             .into_future()
             .map(|(m, _)| m)
@@ -250,7 +269,7 @@ mod tests {
     fn packet_len_too_long() {
         let mut data = vec![0x81, 0x81, 0x1];
         data.extend((0..16513).map(|_| 0));
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed
             .into_future()
             .map(|(m, _)| m)
@@ -267,7 +286,7 @@ mod tests {
     #[test]
     fn empty_frames() {
         let data = vec![0, 0, 6, 9, 8, 7, 6, 5, 4, 0, 3, 9, 8, 7];
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed.collect().wait().unwrap();
         assert_eq!(
             recved,
@@ -284,7 +303,7 @@ mod tests {
     #[test]
     fn unexpected_eof_in_len() {
         let data = vec![0x89];
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed.collect().wait();
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::UnexpectedEof)
@@ -296,7 +315,7 @@ mod tests {
     #[test]
     fn unexpected_eof_in_data() {
         let data = vec![5];
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed.collect().wait();
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::UnexpectedEof)
@@ -308,7 +327,7 @@ mod tests {
     #[test]
     fn unexpected_eof_in_data2() {
         let data = vec![5, 9, 8, 7];
-        let framed = LengthDelimited::new(Cursor::new(data), UviBytes::<Vec<_>>::default());
+        let framed = LengthDelimited::new(Cursor::new(data));
         let recved = framed.collect().wait();
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::UnexpectedEof)
