@@ -43,7 +43,7 @@ use quickcheck::*;
 use rand::{Rng, random, thread_rng};
 use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
 use tokio::runtime::current_thread;
-use multihash::Hash::SHA2256;
+use multihash::{Multihash, Hash::SHA2256};
 
 type TestSwarm = Swarm<
     Boxed<(PeerId, StreamMuxerBox), io::Error>,
@@ -170,7 +170,7 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::from(search_target.clone());
+        let search_target_key = kbucket::Key::new(search_target.clone());
         swarms[0].get_closest_peers(search_target.clone());
 
         // Set up expectations.
@@ -186,7 +186,7 @@ fn query_iter() {
                     loop {
                         match swarm.poll().unwrap() {
                             Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
-                                assert_eq!(ok.key, search_target);
+                                assert_eq!(&ok.key[..], search_target.as_bytes());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert_eq!(swarm.queries.size(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
@@ -231,7 +231,7 @@ fn unresponsive_not_returned_direct() {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
-                            assert_eq!(ok.key, search_target);
+                            assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 0);
                             return Ok(Async::Ready(()));
                         }
@@ -272,7 +272,7 @@ fn unresponsive_not_returned_indirect() {
                 loop {
                     match swarm.poll().unwrap() {
                         Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
-                            assert_eq!(ok.key, search_target);
+                            assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
                             return Ok(Async::Ready(()));
@@ -296,7 +296,7 @@ fn get_record_not_found() {
     swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
-    let target_key = multihash::encode(SHA2256, &vec![1,2,3]).unwrap();
+    let target_key = record::Key::from(Multihash::random(SHA2256));
     swarms[0].get_record(&target_key, Quorum::One);
 
     current_thread::run(
@@ -449,7 +449,7 @@ fn get_value() {
     swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
-    let record = Record::new(multihash::encode(SHA2256, &vec![1,2,3]).unwrap(), vec![4,5,6]);
+    let record = Record::new(Multihash::random(SHA2256), vec![4,5,6]);
 
     swarms[1].store.put(record.clone()).unwrap();
     swarms[0].get_record(&record.key, Quorum::One);
@@ -481,7 +481,7 @@ fn get_value_many() {
     let (_, mut swarms) = build_connected_nodes(num_nodes, num_nodes);
     let num_results = 10;
 
-    let record = Record::new(multihash::encode(SHA2256, &vec![1,2,3]).unwrap(), vec![4,5,6]);
+    let record = Record::new(Multihash::random(SHA2256), vec![4,5,6]);
 
     for i in 0 .. num_nodes {
         swarms[i].store.put(record.clone()).unwrap();
@@ -511,7 +511,7 @@ fn get_value_many() {
 
 #[test]
 fn add_provider() {
-    fn prop(replication_factor: usize, keys: Vec<kbucket::Key<Multihash>>) {
+    fn prop(replication_factor: usize, keys: Vec<record::Key>) {
         let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
         let num_total = replication_factor.get() * 2;
         let num_group = replication_factor.get();
@@ -531,7 +531,7 @@ fn add_provider() {
 
         // Initiate the first round of publishing.
         for k in &keys {
-            swarms[0].start_providing(k.preimage().clone());
+            swarms[0].start_providing(k.clone());
         }
 
         current_thread::run(
@@ -545,9 +545,8 @@ fn add_provider() {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
-                                        let key = kbucket::Key::new(ok.key.clone());
-                                        assert!(keys.contains(&key));
-                                        results.push(key);
+                                        assert!(keys.contains(&ok.key));
+                                        results.push(ok.key);
                                     }
                                 }
                             }
@@ -574,7 +573,7 @@ fn add_provider() {
                     // Collect the nodes that have a provider record for `key`.
                     let actual = swarms.iter().enumerate().skip(1)
                         .filter_map(|(i, s)|
-                            if s.store.providers(key.preimage()).len() == 1 {
+                            if s.store.providers(&key).len() == 1 {
                                 Some(swarm_ids[i].clone())
                             } else {
                                 None
@@ -588,9 +587,10 @@ fn add_provider() {
                     }
 
                     let mut expected = swarm_ids.clone().split_off(1);
+                    let kbucket_key = kbucket::Key::new(key);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1).distance(&key).cmp(
-                            &kbucket::Key::new(id2).distance(&key)));
+                        kbucket::Key::new(id1).distance(&kbucket_key).cmp(
+                            &kbucket::Key::new(id2).distance(&kbucket_key)));
 
                     let expected = expected
                         .into_iter()
@@ -609,7 +609,7 @@ fn add_provider() {
                 if republished {
                     assert_eq!(swarms[0].store.provided().count(), keys.len());
                     for k in &keys {
-                        swarms[0].stop_providing(k.preimage());
+                        swarms[0].stop_providing(&k);
                     }
                     assert_eq!(swarms[0].store.provided().count(), 0);
                     // All records have been republished, thus the test is complete.
