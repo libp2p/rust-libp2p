@@ -62,36 +62,15 @@
 //! yet have sent the last negotiation message despite having settled on a protocol
 //! proposed by the dialer that it supports.
 //!
+//!
 //! This behaviour allows both the dialer and the listener to send data
 //! relating to the negotiated protocol together with the last negotiation
 //! message(s), which, in the case of the dialer only supporting a single
-//! protocol, results in 0-RTT negotiation.
-//!
-//! However, to avoid pitfalls, the following rules should be observed:
-//!
-//!   1. When a dialer nests multiple `DialerSelectFuture`s, i.e. performs
-//!      multiple nested protocol negotiations, it should ensure completion
-//!      of the previous negotiation before starting the next negotiation,
-//!      which can be accomplished by waiting for the future returned by
-//!      [`Negotiated::complete`] of the previous negotiation to resolve.
-//!      This avoids problematic cases like \[[1]\] whereby the listener may
-//!      erroneously process a request for which the dialer considers the
-//!      negotiation to have failed.
-//!
-//!   2. When a listener cannot assume that a dialer will always sent request
-//!      data together with its last protocol proposal, i.e. the dialer may wait for
-//!      protocol confirmation before sending request data, the listener should
-//!      always flush its negotiation responses before processing request data
-//!      and any sending of response data. Otherwise a dialer may be waiting for
-//!      protocol confirmation from the listener before sending a request while
-//!      the listener waits for the request before sending the response together with the
-//!      protocol confirmation. Just like for the dialer, this can be accomplished
-//!      by waiting for the future returned by [`Negotiated::complete`]
-//!      to resolve before continuing to process (and possibly wait for) the
-//!      request data, followed by sending any response data.
-//!
-//! [1]: https://github.com/multiformats/go-multistream/issues/20
-//! [`Negotiated::complete`]: self::Negotiated::complete
+//! protocol, results in 0-RTT negotiation. Note, however, that a dialer
+//! that performs multiple 0-RTT negotiations in sequence for different
+//! protocols layered on top of each other may trigger undesirable behaviour
+//! for a listener not supporting one of the intermediate protocols.
+//! See [`dialer_select_proto`](self::dialer_select_proto).
 //!
 //! ## Examples
 //!

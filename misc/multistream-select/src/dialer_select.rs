@@ -41,6 +41,18 @@ use crate::{Negotiated, NegotiationError};
 /// based on the number of protocols given. The number of protocols is
 /// determined through the `size_hint` of the given iterator and thus
 /// an inaccurate size estimate may result in a suboptimal choice.
+///
+/// > **Note**: When multiple `DialerSelectFuture`s are composed, i.e. a
+/// > dialer performs multiple, nested protocol negotiations with just a
+/// > single supported protocol (0-RTT negotiations), a listener that
+/// > does not support one of the intermediate protocols may still process
+/// > the request data associated with a supported follow-up protocol.
+/// > See \[[1]\]. To avoid this behaviour, a dialer should ensure completion
+/// > of the previous negotiation before starting the next negotiation,
+/// > which can be accomplished by waiting for the future returned by
+/// > [`Negotiated::complete`] to resolve.
+///
+/// [1]: https://github.com/multiformats/go-multistream/issues/20
 pub fn dialer_select_proto<R, I>(inner: R, protocols: I) -> DialerSelectFuture<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,

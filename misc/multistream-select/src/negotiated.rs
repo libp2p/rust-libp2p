@@ -34,33 +34,8 @@ use std::{mem, io, fmt, error::Error};
 /// sent by a peer to be combined in a single write, possibly piggy-backing
 /// data from the negotiated protocol on top.
 ///
-/// Specifically that means:
-///
-///   * If a `Negotiated` is obtained by the peer with the role of the dialer in
-///     the protocol negotiation, not a single negotiation message may yet have
-///     been sent, if the dialer only supports a single protocol. In that case,
-///     the dialer "settles" on that protocol immediately and expects it to
-///     be confirmed by the remote. Once the `Negotiated` I/O stream is flushed,
-///     possibly after writing additional data related to the negotiated protocol,
-///     all of the buffered frames relating to protocol selection are sent together
-///     with that data. The `Negotiated` stream may ultimately still fail protocol
-///     negotiation, if the protocol that the dialer has settled on is not actually supported
-///     by the listener, but having settled on that protocol the dialer has by
-///     definition no further alternatives and hence such a failed negotiation is
-///     usually equivalent to a failed request made using the desired protocol.
-///     If an application wishes to only start using the `Negotiated` stream
-///     once protocol negotiation fully completed, it may wait on completion
-///     of the `Future` obtained from [`Negotiated::complete`].
-///
-///  * If a `Negotiated` is obtained by the peer with the role of the listener in
-///    the protocol negotiation, the final confirmation message for the remote's
-///    selected protocol may not yet have been sent. Once the `Negotiated` I/O
-///    stream is flushed, possibly after writing additional data related to the
-///    negotiated protocol, e.g. a response, the buffered frames relating to protocol
-///    acknowledgement are sent together with that data.
-///
-/// See also the [crate documentation](crate) for details about lazy protocol
-/// negotiation.
+/// Reading from a `Negotiated` I/O stream that still has pending negotiation
+/// protocol data to send implicitly triggers flushing of all yet unsent data.
 pub struct Negotiated<TInner> {
     state: State<TInner>
 }

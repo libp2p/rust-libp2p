@@ -85,11 +85,6 @@ where
         future: ListenerSelectFuture<C, NameWrap<U::Info>>,
         upgrade: U,
     },
-    AwaitNegotiated {
-        io: NegotiatedComplete<C>,
-        protocol: U::Info,
-        upgrade: U
-    },
     Upgrade {
         future: U::Future
     },
@@ -108,31 +103,15 @@ where
         loop {
             match mem::replace(&mut self.inner, InboundUpgradeApplyState::Undefined) {
                 InboundUpgradeApplyState::Init { mut future, upgrade } => {
-                    let (info, connection) = match future.poll()? {
+                    let (info, io) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
                             self.inner = InboundUpgradeApplyState::Init { future, upgrade };
                             return Ok(Async::NotReady)
                         }
                     };
-                    self.inner = InboundUpgradeApplyState::AwaitNegotiated {
-                        io: connection.complete(),
-                        protocol: info.0,
-                        upgrade
-                    };
-                }
-                InboundUpgradeApplyState::AwaitNegotiated { mut io, protocol, upgrade } => {
-                    let io = match io.poll()? {
-                        Async::NotReady => {
-                            self.inner = InboundUpgradeApplyState::AwaitNegotiated {
-                                io, protocol, upgrade
-                            };
-                            return Ok(Async::NotReady)
-                        }
-                        Async::Ready(io) => io
-                    };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_inbound(io, protocol)
+                        future: upgrade.upgrade_inbound(io, info.0)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
