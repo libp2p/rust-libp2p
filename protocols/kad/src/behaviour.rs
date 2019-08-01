@@ -663,10 +663,10 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(&mut self, query: Query<QueryInner>, params: &mut impl PollParameters)
+    fn query_finished(&mut self, q: Query<QueryInner>, params: &mut impl PollParameters)
         -> Option<KademliaEvent>
     {
-        let result = query.into_result();
+        let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap { peer } => {
                 let local_key = self.kbuckets.local_key().clone();
@@ -817,7 +817,7 @@ where
     }
 
     /// Handles a query that timed out.
-    fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
+    fn query_timeout(&self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap { peer } =>
