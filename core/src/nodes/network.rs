@@ -38,7 +38,7 @@ use crate::{
         handled_node::IntoNodeHandler,
         node::Substream
     },
-    nodes::listeners::{ListenersEvent, ListenersStream},
+    nodes::listeners::{ListenersEvent, ListenerId, ListenersStream},
     transport::{Transport, TransportError}
 };
 use fnv::FnvHashMap;
@@ -162,20 +162,32 @@ where
 {
     /// One of the listeners gracefully closed.
     ListenerClosed {
+        /// The listener ID that closed.
+        listener_id: ListenerId,
         /// The listener which closed.
         listener: TTrans::Listener,
-        /// The error that happened. `Ok` if gracefully closed.
-        result: Result<(), <TTrans::Listener as Stream>::Error>,
+    },
+
+    /// One of the listeners errored.
+    ListenerError {
+        /// The listener that errored.
+        listener_id: ListenerId,
+        /// The listener error.
+        error: <TTrans::Listener as Stream>::Error
     },
 
     /// One of the listeners is now listening on an additional address.
     NewListenerAddress {
+        /// The listener that is listening on the new address.
+        listener_id: ListenerId,
         /// The new address the listener is now also listening on.
         listen_addr: Multiaddr
     },
 
     /// One of the listeners is no longer listening on some address.
     ExpiredListenerAddress {
+        /// The listener that is no longer listening on some address.
+        listener_id: ListenerId,
         /// The expired address.
         listen_addr: Multiaddr
     },
@@ -277,46 +289,50 @@ where
     TPeerId: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match *self {
-            NetworkEvent::NewListenerAddress { ref listen_addr } => {
+        match self {
+            NetworkEvent::NewListenerAddress { listener_id, listen_addr } => {
                 f.debug_struct("NewListenerAddress")
+                    .field("listener_id", listener_id)
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ExpiredListenerAddress { ref listen_addr } => {
+            NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr } => {
                 f.debug_struct("ExpiredListenerAddress")
+                    .field("listener_id", listener_id)
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ListenerClosed { ref result, .. } => {
+            NetworkEvent::ListenerClosed { listener_id, .. } => {
                 f.debug_struct("ListenerClosed")
-                    .field("result", result)
+                    .field("listener_id", listener_id)
                     .finish()
             }
-            NetworkEvent::IncomingConnection(ref event) => {
+            NetworkEvent::ListenerError { listener_id, error } => {
+                f.debug_struct("ListenerError")
+                    .field("listener_id", listener_id)
+                    .field("error", error)
+                    .finish()
+            }
+            NetworkEvent::IncomingConnection(event) => {
                 f.debug_struct("IncomingConnection")
                     .field("listen_addr", &event.listen_addr)
                     .field("send_back_addr", &event.send_back_addr)
                     .finish()
             }
-            NetworkEvent::IncomingConnectionError {
-                ref listen_addr,
-                ref send_back_addr,
-                ref error
-            } => {
+            NetworkEvent::IncomingConnectionError { listen_addr, send_back_addr, error } => {
                 f.debug_struct("IncomingConnectionError")
                     .field("listen_addr", listen_addr)
                     .field("send_back_addr", send_back_addr)
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::Connected { ref conn_info, ref endpoint } => {
+            NetworkEvent::Connected { conn_info, endpoint } => {
                 f.debug_struct("Connected")
                     .field("conn_info", conn_info)
                     .field("endpoint", endpoint)
                     .finish()
             }
-            NetworkEvent::Replaced { ref new_info, ref old_info, ref closed_endpoint, ref endpoint } => {
+            NetworkEvent::Replaced { new_info, old_info, closed_endpoint, endpoint } => {
                 f.debug_struct("Replaced")
                     .field("new_info", new_info)
                     .field("old_info", old_info)
@@ -324,14 +340,14 @@ where
                     .field("endpoint", endpoint)
                     .finish()
             }
-            NetworkEvent::NodeClosed { ref conn_info, ref endpoint, ref error } => {
+            NetworkEvent::NodeClosed { conn_info, endpoint, error } => {
                 f.debug_struct("NodeClosed")
                     .field("conn_info", conn_info)
                     .field("endpoint", endpoint)
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::DialError { ref new_state, ref peer_id, ref multiaddr, ref error } => {
+            NetworkEvent::DialError { new_state, peer_id, multiaddr, error } => {
                 f.debug_struct("DialError")
                     .field("new_state", new_state)
                     .field("peer_id", peer_id)
@@ -339,13 +355,13 @@ where
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::UnknownPeerDialError { ref multiaddr, ref error, .. } => {
+            NetworkEvent::UnknownPeerDialError { multiaddr, error, .. } => {
                 f.debug_struct("UnknownPeerDialError")
                     .field("multiaddr", multiaddr)
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::NodeEvent { ref conn_info, ref event } => {
+            NetworkEvent::NodeEvent { conn_info, event } => {
                 f.debug_struct("NodeEvent")
                     .field("conn_info", conn_info)
                     .field("event", event)
@@ -536,6 +552,8 @@ where TTransErr: error::Error + 'static
 pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where TTrans: Transport
 {
+    /// The listener who received the connection.
+    listener_id: ListenerId,
     /// The produced upgrade.
     upgrade: TTrans::ListenerUpgrade,
     /// PeerId of the local node.
@@ -568,6 +586,11 @@ where
     TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
     TPeerId: Eq + Hash + Clone + Send + 'static,
 {
+    /// The ID of the listener with the incoming connection.
+    pub fn listener_id(&self) -> ListenerId {
+        self.listener_id
+    }
+
     /// Starts processing the incoming connection and sets the handler to use for it.
     pub fn accept(self, handler: THandler) {
         self.accept_with_builder(|_| handler)
@@ -700,8 +723,13 @@ where
     }
 
     /// Start listening on the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<(), TransportError<TTrans::Error>> {
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<TTrans::Error>> {
         self.listeners.listen_on(addr)
+    }
+
+    /// Remove a previously added listener.
+    pub fn remove_listener(&mut self, id: ListenerId) -> Option<TTrans::Listener> {
+        self.listeners.remove_listener(id)
     }
 
     /// Returns an iterator that produces the list of addresses we are listening on.
@@ -977,8 +1005,9 @@ where
             _ => {
                 match self.listeners.poll() {
                     Async::NotReady => (),
-                    Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
+                    Async::Ready(ListenersEvent::Incoming { listener_id, upgrade, listen_addr, send_back_addr }) => {
                         let event = IncomingConnectionEvent {
+                            listener_id,
                             upgrade,
                             local_peer_id: self.reach_attempts.local_peer_id.clone(),
                             listen_addr,
@@ -988,14 +1017,17 @@ where
                         };
                         return Async::Ready(NetworkEvent::IncomingConnection(event));
                     }
-                    Async::Ready(ListenersEvent::NewAddress { listen_addr }) => {
-                        return Async::Ready(NetworkEvent::NewListenerAddress { listen_addr })
+                    Async::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
+                        return Async::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr })
                     }
-                    Async::Ready(ListenersEvent::AddressExpired { listen_addr }) => {
-                        return Async::Ready(NetworkEvent::ExpiredListenerAddress { listen_addr })
+                    Async::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
+                        return Async::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
                     }
-                    Async::Ready(ListenersEvent::Closed { listener, result }) => {
-                        return Async::Ready(NetworkEvent::ListenerClosed { listener, result })
+                    Async::Ready(ListenersEvent::Closed { listener_id, listener }) => {
+                        return Async::Ready(NetworkEvent::ListenerClosed { listener_id, listener })
+                    }
+                    Async::Ready(ListenersEvent::Error { listener_id, error }) => {
+                        return Async::Ready(NetworkEvent::ListenerError { listener_id, error })
                     }
                 }
             }
