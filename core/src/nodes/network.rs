@@ -200,8 +200,8 @@ where
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
     IncomingConnectionError {
-        /// The address of the listener which received the connection.
-        listen_addr: Multiaddr,
+        /// Local connection address.
+        local_addr: Multiaddr,
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
@@ -315,13 +315,13 @@ where
             }
             NetworkEvent::IncomingConnection(event) => {
                 f.debug_struct("IncomingConnection")
-                    .field("listen_addr", &event.listen_addr)
+                    .field("local_addr", &event.local_addr)
                     .field("send_back_addr", &event.send_back_addr)
                     .finish()
             }
-            NetworkEvent::IncomingConnectionError { listen_addr, send_back_addr, error } => {
+            NetworkEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
                 f.debug_struct("IncomingConnectionError")
-                    .field("listen_addr", listen_addr)
+                    .field("local_addr", local_addr)
                     .field("send_back_addr", send_back_addr)
                     .field("error", error)
                     .finish()
@@ -558,8 +558,8 @@ where TTrans: Transport
     upgrade: TTrans::ListenerUpgrade,
     /// PeerId of the local node.
     local_peer_id: TPeerId,
-    /// Addresses of the listener which received the connection.
-    listen_addr: Multiaddr,
+    /// Local connection address.
+    local_addr: Multiaddr,
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
     /// Reference to the `active_nodes` field of the `Network`.
@@ -630,14 +630,14 @@ where TTrans: Transport
     /// Returns the `IncomingInfo` corresponding to this incoming connection.
     pub fn info(&self) -> IncomingInfo<'_> {
         IncomingInfo {
-            listen_addr: &self.listen_addr,
+            local_addr: &self.local_addr,
             send_back_addr: &self.send_back_addr,
         }
     }
 
-    /// Address of the listener that received the connection.
-    pub fn listen_addr(&self) -> &Multiaddr {
-        &self.listen_addr
+    /// Local connection address.
+    pub fn local_addr(&self) -> &Multiaddr {
+        &self.local_addr
     }
 
     /// Address used to send back data to the dialer.
@@ -654,8 +654,8 @@ where TTrans: Transport
 /// Information about an incoming connection currently being negotiated.
 #[derive(Debug, Copy, Clone)]
 pub struct IncomingInfo<'a> {
-    /// Listener address that received the connection.
-    pub listen_addr: &'a Multiaddr,
+    /// Local connection address.
+    pub local_addr: &'a Multiaddr,
     /// Stack of protocols used to send back data to the remote.
     pub send_back_addr: &'a Multiaddr,
 }
@@ -664,7 +664,7 @@ impl<'a> IncomingInfo<'a> {
     /// Builds the `ConnectedPoint` corresponding to the incoming connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Listener {
-            listen_addr: self.listen_addr.clone(),
+            local_addr: self.local_addr.clone(),
             send_back_addr: self.send_back_addr.clone(),
         }
     }
@@ -831,8 +831,8 @@ where
             .iter()
             .filter_map(|&(_, ref endpoint)| {
                 match endpoint {
-                    ConnectedPoint::Listener { listen_addr, send_back_addr } => {
-                        Some(IncomingInfo { listen_addr, send_back_addr })
+                    ConnectedPoint::Listener { local_addr, send_back_addr } => {
+                        Some(IncomingInfo { local_addr, send_back_addr })
                     },
                     ConnectedPoint::Dialer { .. } => None,
                 }
@@ -1005,12 +1005,12 @@ where
             _ => {
                 match self.listeners.poll() {
                     Async::NotReady => (),
-                    Async::Ready(ListenersEvent::Incoming { listener_id, upgrade, listen_addr, send_back_addr }) => {
+                    Async::Ready(ListenersEvent::Incoming { listener_id, upgrade, local_addr, send_back_addr }) => {
                         let event = IncomingConnectionEvent {
                             listener_id,
                             upgrade,
                             local_peer_id: self.reach_attempts.local_peer_id.clone(),
-                            listen_addr,
+                            local_addr,
                             send_back_addr,
                             active_nodes: &mut self.active_nodes,
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
@@ -1171,9 +1171,9 @@ where
         // If we have a lower peer ID than the incoming one, we drop an incoming connection.
         if event.would_replace() && has_dial_prio {
             if let Some(ConnectedPoint::Dialer { .. }) = reach_attempts.connected_points.get(event.peer_id()) {
-                if let ConnectedPoint::Listener { listen_addr, send_back_addr } = opened_endpoint {
+                if let ConnectedPoint::Listener { local_addr, send_back_addr } = opened_endpoint {
                     return (Default::default(), NetworkEvent::IncomingConnectionError {
-                        listen_addr,
+                        local_addr,
                         send_back_addr,
                         error: IncomingError::DeniedLowerPriority,
                     });
@@ -1385,7 +1385,7 @@ where
                     handler,
                 });
             }
-            ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+            ConnectedPoint::Listener { local_addr, send_back_addr } => {
                 let error = match error {
                     InternalReachErr::Transport(err) => IncomingError::Transport(err),
                     InternalReachErr::FoundLocalPeerId => IncomingError::FoundLocalPeerId,
@@ -1395,7 +1395,7 @@ where
                     },
                 };
                 return (Default::default(), NetworkEvent::IncomingConnectionError {
-                    listen_addr,
+                    local_addr,
                     send_back_addr,
                     error
                 });

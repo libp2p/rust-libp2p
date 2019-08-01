@@ -77,9 +77,9 @@ where
         match self.stream.poll()? {
             Async::Ready(Some(event)) => {
                 let event = match event {
-                    ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
+                    ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
                         let point = ConnectedPoint::Listener {
-                            listen_addr: listen_addr.clone(),
+                            local_addr: local_addr.clone(),
                             send_back_addr: remote_addr.clone()
                         };
                         ListenerEvent::Upgrade {
@@ -87,7 +87,7 @@ where
                                 inner: upgrade,
                                 args: Some((self.fun.clone(), point))
                             },
-                            listen_addr,
+                            local_addr,
                             remote_addr
                         }
                     }

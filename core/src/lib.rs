@@ -110,8 +110,8 @@ pub enum ConnectedPoint {
     },
     /// We received the node.
     Listener {
-        /// Address of the listener that received the connection.
-        listen_addr: Multiaddr,
+        /// Local connection address.
+        local_addr: Multiaddr,
         /// Stack of protocols used to send back data to the remote.
         send_back_addr: Multiaddr,
     }
