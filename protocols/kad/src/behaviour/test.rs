@@ -188,6 +188,7 @@ fn query_iter() {
                             Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
                                 assert_eq!(ok.key, search_target);
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
+                                assert_eq!(swarm.queries.size(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
                                 let key = kbucket::Key::new(ok.key);
                                 assert_eq!(expected_distances, distances(&key, ok.peers));
@@ -420,6 +421,7 @@ fn put_record() {
 
                 if republished {
                     assert_eq!(swarms[0].store.records().count(), records.len());
+                    assert_eq!(swarms[0].queries.size(), 0);
                     for k in records.keys() {
                         swarms[0].store.remove(&k);
                     }
