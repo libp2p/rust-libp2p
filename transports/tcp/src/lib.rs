@@ -360,7 +360,7 @@ struct Listener<S> {
     /// The current pause if any.
     pause: Option<Delay>,
     /// How long to pause after an error.
-    duration: Duration
+    pause_duration: Duration
 }
 
 impl<S> Listener<S>
@@ -369,7 +369,7 @@ where
     S::Error: std::fmt::Display
 {
     fn new(stream: S, duration: Duration) -> Self {
-        Listener { stream, pause: None, duration }
+        Listener { stream, pause: None, pause_duration: duration }
     }
 }
 
@@ -383,21 +383,17 @@ where
 
     /// Polls for incoming connections, pausing if an error is encountered.
     fn poll(&mut self) -> Poll<Option<S::Item>, S::Error> {
-        if let Some(mut delay) = self.pause.take() {
-            match delay.poll() {
-                Ok(Async::NotReady) => {
-                    self.pause = Some(delay);
-                    return Ok(Async::NotReady)
-                }
-                Ok(Async::Ready(())) | Err(_) => ()
-            }
+        match self.pause.as_mut().map(|p| p.poll()) {
+            Some(Ok(Async::NotReady)) => return Ok(Async::NotReady),
+            Some(Ok(Async::Ready(()))) | Some(Err(_)) => { self.pause.take(); }
+            None => ()
         }
 
         match self.stream.poll() {
             Ok(x) => Ok(x),
             Err(e) => {
                 debug!("error accepting incoming connection: {}", e);
-                self.pause = Some(Delay::new(Instant::now() + self.duration));
+                self.pause = Some(Delay::new(Instant::now() + self.pause_duration));
                 Err(e)
             }
         }

@@ -156,6 +156,9 @@ where
         listener: TTrans::Listener,
     },
     /// A listener errored.
+    ///
+    /// The listener will continue to be polled for new events and the event
+    /// is for informational purposes only.
     Error {
         /// The ID of the listener that errored.
         listener_id: ListenerId,
