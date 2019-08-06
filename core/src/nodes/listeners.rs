@@ -54,19 +54,19 @@ use void::Void;
 /// let future = listeners.for_each(move |event| {
 ///     match event {
 ///         ListenersEvent::NewAddress { listener_id, listen_addr } => {
-///             println!("Listener {} is listening at address {}", listener_id, listen_addr);
+///             println!("Listener {:?} is listening at address {}", listener_id, listen_addr);
 ///         },
 ///         ListenersEvent::AddressExpired { listener_id, listen_addr } => {
-///             println!("Listener {} is no longer listening at address {}", listener_id, listen_addr);
+///             println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
 ///         },
 ///         ListenersEvent::Closed { listener_id, .. } => {
-///             println!("Listener {} has been closed", listener_id);
+///             println!("Listener {:?} has been closed", listener_id);
 ///         },
 ///         ListenersEvent::Error { listener_id, error } => {
-///             println!("Listener {} has experienced an error: {}", listener_id, error);
+///             println!("Listener {:?} has experienced an error: {}", listener_id, error);
 ///         },
 ///         ListenersEvent::Incoming { listener_id, upgrade, listen_addr, .. } => {
-///             println!("Listener {} has a new connection on {}", listener_id, listen_addr);
+///             println!("Listener {:?} has a new connection on {}", listener_id, listen_addr);
 ///             // We don't do anything with the newly-opened connection, but in a real-life
 ///             // program you probably want to use it!
 ///             drop(upgrade);
@@ -97,12 +97,6 @@ where
 /// individual listeners from the [`ListenersStream`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ListenerId(u64);
-
-impl fmt::Display for ListenerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 /// A single active listener.
 #[derive(Debug)]
