@@ -22,6 +22,7 @@
 
 mod test;
 
+use crate::K_VALUE;
 use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
@@ -57,10 +58,6 @@ pub struct Kademlia<TSubstream, TStore> {
     ///
     /// This is a superset of the connected peers currently in the routing table.
     connected_peers: FnvHashSet<PeerId>,
-
-    /// A list of pending request to peers that are not currently connected.
-    /// These requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); 8]>,
 
     /// Periodic job for re-publication of provider records for keys
     /// provided by the local node.
@@ -233,7 +230,6 @@ where
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
         let local_key = kbucket::Key::new(id.clone());
-        let pending_rpcs = SmallVec::with_capacity(config.query_config.replication_factor.get());
 
         let put_record_job = config
             .record_replication_interval
@@ -256,7 +252,6 @@ where
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
-            pending_rpcs,
             add_provider_job,
             put_record_job,
             record_ttl: config.record_ttl,
@@ -1054,12 +1049,14 @@ where
     }
 
     fn inject_connected(&mut self, peer: PeerId, endpoint: ConnectedPoint) {
-        while let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == &peer) {
-            let (_, rpc) = self.pending_rpcs.remove(pos);
-            self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer.clone(),
-                event: rpc,
-            });
+        // Queue events for sending pending RPCs to the connected peer.
+        // There can be only one pending RPC for a particular peer and query per definition.
+        for (peer_id, event) in self.queries.iter_mut().filter_map(|q|
+            q.inner.pending_rpcs.iter()
+                .position(|(p, _)| p == &peer)
+                .map(|p| q.inner.pending_rpcs.remove(p)))
+        {
+            self.queued_events.push_back(NetworkBehaviourAction::SendEvent { peer_id, event });
         }
 
         // The remote's address can only be put into the routing table,
@@ -1396,7 +1393,7 @@ where
                                 peer_id, event
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
-                            self.pending_rpcs.push((peer_id.clone(), event));
+                            query.inner.pending_rpcs.push((peer_id.clone(), event));
                             self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                                 peer_id
                             });
@@ -1741,13 +1738,19 @@ struct QueryInner {
     info: QueryInfo,
     /// Addresses of peers discovered during a query.
     addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
+    /// A map of pending requests to peers.
+    ///
+    /// A request is pending if the targeted peer is not currently connected
+    /// and these requests are sent as soon as a connection to the peer is established.
+    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>
 }
 
 impl QueryInner {
     fn new(info: QueryInfo) -> Self {
         QueryInner {
             info,
-            addresses: Default::default()
+            addresses: Default::default(),
+            pending_rpcs: SmallVec::default()
         }
     }
 }
