@@ -22,19 +22,14 @@
 //! `multistream-select` for the dialer.
 
 use futures::{future::Either, prelude::*, stream::StreamFuture};
-use crate::protocol::{
-    Dialer,
-    DialerFuture,
-    DialerToListenerMessage,
-    ListenerToDialerMessage
-};
+use crate::protocol::{Dialer, DialerFuture, Request, Response};
 use log::trace;
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 use crate::{Negotiated, ProtocolChoiceError};
 
 /// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
-/// either sequentially of by considering all protocols in parallel.
+/// either sequentially or by considering all protocols in parallel.
 pub type DialerSelectFuture<R, I> = Either<DialerSelectSeq<R, I>, DialerSelectPar<R, I>>;
 
 /// Helps selecting a protocol amongst the ones supported.
@@ -75,7 +70,10 @@ where
 {
     let protocols = protocols.into_iter();
     DialerSelectSeq {
-        inner: DialerSelectSeqState::AwaitDialer { dialer_fut: Dialer::dial(inner), protocols }
+        inner: DialerSelectSeqState::AwaitDialer {
+            dialer_fut: Dialer::dial(inner),
+            protocols
+        }
     }
 }
 
@@ -148,9 +146,7 @@ where
                 }
                 DialerSelectSeqState::NextProtocol { mut dialer, protocols, proto_name } => {
                     trace!("sending {:?}", proto_name.as_ref());
-                    let req = DialerToListenerMessage::ProtocolRequest {
-                        name: proto_name.clone()
-                    };
+                    let req = Request::Protocol { name: proto_name.clone() };
                     match dialer.start_send(req)? {
                         AsyncSink::Ready => {
                             self.inner = DialerSelectSeqState::FlushProtocol {
@@ -204,12 +200,12 @@ where
                     };
                     trace!("received {:?}", m);
                     match m.ok_or(ProtocolChoiceError::UnexpectedMessage)? {
-                        ListenerToDialerMessage::ProtocolAck { ref name }
+                        Response::Protocol { ref name }
                             if name.as_ref() == proto_name.as_ref() =>
                         {
                             return Ok(Async::Ready((proto_name, Negotiated(r.into_inner()))))
                         }
-                        ListenerToDialerMessage::NotAvailable => {
+                        Response::ProtocolNotAvailable => {
                             let proto_name = protocols.next()
                                 .ok_or(ProtocolChoiceError::NoProtocolFound)?;
                             self.inner = DialerSelectSeqState::NextProtocol {
@@ -244,9 +240,8 @@ where
     }
 }
 
-
 /// Future, returned by `dialer_select_proto_parallel`, which selects a protocol and dialer in
-/// parellel, by first requesting the liste of protocols supported by the remote endpoint and
+/// parallel, by first requesting the list of protocols supported by the remote endpoint and
 /// then selecting the most appropriate one by applying a match predicate to the result.
 pub struct DialerSelectPar<R, I>
 where
@@ -319,7 +314,7 @@ where
                 }
                 DialerSelectParState::ProtocolList { mut dialer, protocols } => {
                     trace!("requesting protocols list");
-                    match dialer.start_send(DialerToListenerMessage::ProtocolsListRequest)? {
+                    match dialer.start_send(Request::ListProtocols)? {
                         AsyncSink::Ready => {
                             self.inner = DialerSelectParState::FlushListRequest {
                                 dialer,
@@ -359,15 +354,15 @@ where
                         Err((e, _)) => return Err(ProtocolChoiceError::from(e))
                     };
                     trace!("protocols list response: {:?}", resp);
-                    let list =
-                        if let Some(ListenerToDialerMessage::ProtocolsListResponse { list }) = resp {
-                            list
+                    let supported =
+                        if let Some(Response::SupportedProtocols { protocols }) = resp {
+                            protocols
                         } else {
                             return Err(ProtocolChoiceError::UnexpectedMessage)
                         };
                     let mut found = None;
                     for local_name in protocols {
-                        for remote_name in &list {
+                        for remote_name in &supported {
                             if remote_name.as_ref() == local_name.as_ref() {
                                 found = Some(local_name);
                                 break;
@@ -381,10 +376,8 @@ where
                     self.inner = DialerSelectParState::Protocol { dialer, proto_name }
                 }
                 DialerSelectParState::Protocol { mut dialer, proto_name } => {
-                    trace!("requesting protocol: {:?}", proto_name.as_ref());
-                    let req = DialerToListenerMessage::ProtocolRequest {
-                        name: proto_name.clone()
-                    };
+                    trace!("Requesting protocol: {:?}", proto_name.as_ref());
+                    let req = Request::Protocol { name: proto_name.clone() };
                     match dialer.start_send(req)? {
                         AsyncSink::Ready => {
                             self.inner = DialerSelectParState::FlushProtocol { dialer, proto_name }
@@ -420,7 +413,7 @@ where
                     };
                     trace!("received {:?}", resp);
                     match resp {
-                        Some(ListenerToDialerMessage::ProtocolAck { ref name })
+                        Some(Response::Protocol { ref name })
                             if name.as_ref() == proto_name.as_ref() =>
                         {
                             return Ok(Async::Ready((proto_name, Negotiated(dialer.into_inner()))))

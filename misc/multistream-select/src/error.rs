@@ -21,9 +21,8 @@
 //! Main `ProtocolChoiceError` error.
 
 use crate::protocol::MultistreamSelectError;
-use std::error;
-use std::fmt;
-use std::io::Error as IoError;
+use std::error::Error;
+use std::{fmt, io};
 
 /// Error that can happen when negotiating a protocol with the remote.
 #[derive(Debug)]
@@ -39,21 +38,18 @@ pub enum ProtocolChoiceError {
 }
 
 impl From<MultistreamSelectError> for ProtocolChoiceError {
-    #[inline]
     fn from(err: MultistreamSelectError) -> ProtocolChoiceError {
         ProtocolChoiceError::MultistreamSelectError(err)
     }
 }
 
-impl From<IoError> for ProtocolChoiceError {
-    #[inline]
-    fn from(err: IoError) -> ProtocolChoiceError {
+impl From<io::Error> for ProtocolChoiceError {
+    fn from(err: io::Error) -> ProtocolChoiceError {
         MultistreamSelectError::from(err).into()
     }
 }
 
-impl error::Error for ProtocolChoiceError {
-    #[inline]
+impl Error for ProtocolChoiceError {
     fn description(&self) -> &str {
         match *self {
             ProtocolChoiceError::MultistreamSelectError(_) => "error in the protocol",
@@ -66,7 +62,7 @@ impl error::Error for ProtocolChoiceError {
         }
     }
 
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
             ProtocolChoiceError::MultistreamSelectError(ref err) => Some(err),
             _ => None,
@@ -75,8 +71,7 @@ impl error::Error for ProtocolChoiceError {
 }
 
 impl fmt::Display for ProtocolChoiceError {
-    #[inline]
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(fmt, "{}", error::Error::description(self))
+        write!(fmt, "{}", Error::description(self))
     }
 }

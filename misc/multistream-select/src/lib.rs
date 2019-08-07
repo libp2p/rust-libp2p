@@ -21,7 +21,7 @@
 //! # Multistream-select
 //!
 //! This crate implements the `multistream-select` protocol, which is the protocol used by libp2p
-//! to negotiate which protocol to use with the remote.
+//! to negotiate which protocol to use with the remote on a connection or substream.
 //!
 //! > **Note**: This crate is used by the internals of *libp2p*, and it is not required to
 //! > understand it in order to use *libp2p*.
@@ -76,6 +76,7 @@ mod protocol;
 
 use futures::prelude::*;
 use std::io;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::error::ProtocolChoiceError;
@@ -93,9 +94,9 @@ where
     }
 }
 
-impl<TInner> tokio_io::AsyncRead for Negotiated<TInner>
+impl<TInner> AsyncRead for Negotiated<TInner>
 where
-    TInner: tokio_io::AsyncRead
+    TInner: AsyncRead
 {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         self.0.prepare_uninitialized_buffer(buf)
@@ -119,9 +120,9 @@ where
     }
 }
 
-impl<TInner> tokio_io::AsyncWrite for Negotiated<TInner>
+impl<TInner> AsyncWrite for Negotiated<TInner>
 where
-    TInner: tokio_io::AsyncWrite
+    TInner: AsyncWrite
 {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.0.shutdown()

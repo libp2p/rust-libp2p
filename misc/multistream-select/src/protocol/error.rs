@@ -20,7 +20,7 @@
 
 //! Contains the error structs for the low-level protocol handling.
 
-use std::error;
+use std::error::Error;
 use std::fmt;
 use std::io;
 use unsigned_varint::decode;
@@ -38,29 +38,25 @@ pub enum MultistreamSelectError {
     UnknownMessage,
 
     /// Protocol names must always start with `/`, otherwise this error is returned.
-    WrongProtocolName,
+    InvalidProtocolName,
 
-    /// Failure to parse variable-length integer.
-    // TODO: we don't include the actual error, because that would remove Send from the enum
-    VarintParseError(String),
+    /// Too many protocols have been returned by the remote.
+    TooManyProtocols,
 }
 
 impl From<io::Error> for MultistreamSelectError {
-    #[inline]
     fn from(err: io::Error) -> MultistreamSelectError {
         MultistreamSelectError::IoError(err)
     }
 }
 
 impl From<decode::Error> for MultistreamSelectError {
-    #[inline]
     fn from(err: decode::Error) -> MultistreamSelectError {
-        MultistreamSelectError::VarintParseError(err.to_string())
+        Self::from(io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
     }
 }
 
-impl error::Error for MultistreamSelectError {
-    #[inline]
+impl Error for MultistreamSelectError {
     fn description(&self) -> &str {
         match *self {
             MultistreamSelectError::IoError(_) => "I/O error",
@@ -68,16 +64,15 @@ impl error::Error for MultistreamSelectError {
                 "the remote doesn't use the same multistream-select protocol as we do"
             }
             MultistreamSelectError::UnknownMessage => "received an unknown message from the remote",
-            MultistreamSelectError::WrongProtocolName => {
+            MultistreamSelectError::InvalidProtocolName => {
                 "protocol names must always start with `/`, otherwise this error is returned"
             }
-            MultistreamSelectError::VarintParseError(_) => {
-                "failure to parse variable-length integer"
-            }
+            MultistreamSelectError::TooManyProtocols =>
+                "Too many protocols."
         }
     }
 
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
             MultistreamSelectError::IoError(ref err) => Some(err),
             _ => None,
@@ -86,8 +81,7 @@ impl error::Error for MultistreamSelectError {
 }
 
 impl fmt::Display for MultistreamSelectError {
-    #[inline]
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(fmt, "{}", error::Error::description(self))
+        write!(fmt, "{}", Error::description(self))
     }
 }

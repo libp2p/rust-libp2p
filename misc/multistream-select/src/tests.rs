@@ -24,7 +24,7 @@
 
 use crate::ProtocolChoiceError;
 use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
-use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
+use crate::protocol::{Dialer, Request, Listener, Response};
 use crate::{dialer_select_proto, listener_select_proto};
 use futures::prelude::*;
 use tokio::runtime::current_thread::Runtime;
@@ -56,23 +56,23 @@ fn negotiate_with_self_succeeds() {
         .and_then(|l| l.into_future().map_err(|(e, _)| e))
         .and_then(|(msg, rest)| {
             let proto = match msg {
-                Some(DialerToListenerMessage::ProtocolRequest { name }) => name,
+                Some(Request::Protocol { name }) => name,
                 _ => panic!(),
             };
-            rest.send(ListenerToDialerMessage::ProtocolAck { name: proto })
+            rest.send(Response::Protocol { name: proto })
         });
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |stream| Dialer::dial(stream))
         .and_then(move |dialer| {
-            let p = b"/hello/1.0.0";
-            dialer.send(DialerToListenerMessage::ProtocolRequest { name: p })
+            let name = b"/hello/1.0.0";
+            dialer.send(Request::Protocol { name })
         })
         .and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e))
         .and_then(move |(msg, _)| {
             let proto = match msg {
-                Some(ListenerToDialerMessage::ProtocolAck { name }) => name,
+                Some(Response::Protocol { name }) => name,
                 _ => panic!(),
             };
             assert_eq!(proto, "/hello/1.0.0");

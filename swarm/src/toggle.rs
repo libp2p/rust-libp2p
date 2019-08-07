@@ -44,6 +44,13 @@ pub struct Toggle<TBehaviour> {
     inner: Option<TBehaviour>,
 }
 
+impl<TBehaviour> Toggle<TBehaviour> {
+    /// Returns `true` if `Toggle` is enabled and `false` if it's disabled.
+    pub fn is_enabled(&self) -> bool {
+        self.inner.is_some()
+    }
+}
+
 impl<TBehaviour> From<Option<TBehaviour>> for Toggle<TBehaviour> {
     fn from(inner: Option<TBehaviour>) -> Self {
         Toggle { inner }

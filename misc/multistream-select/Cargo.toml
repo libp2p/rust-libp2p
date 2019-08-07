@@ -14,9 +14,8 @@ bytes = "0.4"
 futures = { version = "0.1" }
 log = "0.4"
 smallvec = "0.6"
-tokio-codec = "0.1"
 tokio-io = "0.1"
-unsigned-varint = { version = "0.2.1", features = ["codec"] }
+unsigned-varint = { version = "0.2.2" }
 
 [dev-dependencies]
 tokio = "0.1"
