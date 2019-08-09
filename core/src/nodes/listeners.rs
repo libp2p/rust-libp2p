@@ -188,9 +188,11 @@ where
                     if remaining == 0 { break }
                 }
                 Ok(Async::Ready(Some(ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr }))) => {
-                    debug_assert!(listener.addresses.contains(&listen_addr),
-                        "Transport reported listen address {} not in the list: {:?}",
-                        listen_addr, listener.addresses);
+                    if cfg!(debug_assertions) && !listener.addresses.contains(&listen_addr) {
+                        log::warn!("Transport reported listen address {} not in the list: {:?}",
+                            listen_addr,
+                            listener.addresses)
+                    }
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::Incoming {
                         upgrade,
@@ -199,8 +201,9 @@ where
                     })
                 }
                 Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) => {
-                    debug_assert!(!listener.addresses.contains(&a),
-                        "Transport has reported address {} multiple times", a);
+                    if cfg!(debug_assertions) && listener.addresses.contains(&a) {
+                        log::debug!("Transport has reported address {} multiple times", a)
+                    }
                     if !listener.addresses.contains(&a) {
                         listener.addresses.push(a.clone());
                     }
