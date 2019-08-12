@@ -20,3 +20,5 @@ unsigned-varint = { version = "0.2.2" }
 [dev-dependencies]
 tokio = "0.1"
 tokio-tcp = "0.1"
+quickcheck = "0.8"
+rand = "0.6"

@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod util;
+
 use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
@@ -167,6 +169,7 @@ fn deny_incoming_connec() {
 
 #[test]
 fn dial_self() {
+
     // Check whether dialing ourselves correctly fails.
     //
     // Dialing the same address we're listening should result in three events:
@@ -191,7 +194,13 @@ fn dial_self() {
                     .map_outbound(move |muxer| (peer_id, muxer))
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
+            })
+            .and_then(|(peer, mplex), _| {
+                // Gracefully close the connection to allow protocol
+                // negotiation to complete.
+                util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
             });
+
         Network::new(transport, local_public_key.into())
     };
 
@@ -243,7 +252,9 @@ fn dial_self() {
                     assert_eq!(*inc.listen_addr(), address);
                     inc.accept(TestHandler::default().into_node_handler_builder());
                 },
-                Async::Ready(ev) => unreachable!("{:?}", ev),
+                Async::Ready(ev) => {
+                    panic!("Unexpected event: {:?}", ev)
+                }
                 Async::NotReady => break Ok(Async::NotReady),
             }
         }

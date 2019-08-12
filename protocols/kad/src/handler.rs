@@ -35,6 +35,7 @@ use libp2p_core::{
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
+use log::trace;
 use multihash::Multihash;
 use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -80,7 +81,6 @@ where
         KadRequestMsg,
         Option<TUserData>,
     ),
-    /// Waiting to send a message to the remote.
     /// Waiting to flush the substream so that the data arrives to the remote.
     OutPendingFlush(KadOutStreamSink<TSubstream>, Option<TUserData>),
     /// Waiting for an answer back from the remote.
@@ -830,7 +830,14 @@ where
                 None,
                 false,
             ),
-            Ok(Async::Ready(None)) | Err(_) => (None, None, false),
+            Ok(Async::Ready(None)) => {
+                trace!("Inbound substream: EOF");
+                (None, None, false)
+            }
+            Err(e) => {
+                trace!("Inbound substream error: {:?}", e);
+                (None, None, false)
+            },
         },
         SubstreamState::InWaitingUser(id, substream) => (
             Some(SubstreamState::InWaitingUser(id, substream)),
