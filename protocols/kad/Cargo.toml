@@ -11,7 +11,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 arrayvec = "0.4.7"
-bigint = "4.2"
 bytes = "0.4"
 either = "1.5"
 fnv = "1.0"
@@ -28,6 +27,7 @@ smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 wasm-timer = "0.1"
+uint = "0.8"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 

@@ -18,12 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bigint::U256;
+use uint::*;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::{GenericArray, typenum::U32};
 use std::hash::{Hash, Hasher};
+
+construct_uint! {
+    /// 256-bit unsigned integer.
+    pub(super) struct U256(4);
+}
 
 /// A `Key` in the DHT keyspace with preserved preimage.
 ///
@@ -161,7 +166,7 @@ impl AsRef<KeyBytes> for KeyBytes {
 
 /// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
-pub struct Distance(pub(super) bigint::U256);
+pub struct Distance(pub(super) U256);
 
 #[cfg(test)]
 mod tests {
