@@ -122,7 +122,7 @@ pub trait NetworkBehaviour {
     }
 
     /// A listener experienced an error.
-    fn inject_listener_error(&mut self, _id: ListenerId, _err: &dyn std::error::Error) {
+    fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
     }
 
     /// A listener closed.

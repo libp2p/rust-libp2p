@@ -494,7 +494,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_new_external_addr_stmts);*
             }
 
-            fn inject_listener_error(&mut self, id: #listener_id, err: &dyn std::error::Error) {
+            fn inject_listener_error(&mut self, id: #listener_id, err: &(dyn std::error::Error + 'static)) {
                 #(#inject_listener_error_stmts);*
             }
 
