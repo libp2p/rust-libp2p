@@ -27,7 +27,7 @@ use bytes::Bytes;
 use libp2p_core::{
     Endpoint,
     StreamMuxer,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated},
 };
 use log::{debug, trace};
 use parking_lot::Mutex;

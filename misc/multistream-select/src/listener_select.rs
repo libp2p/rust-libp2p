@@ -18,167 +18,196 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Contains the `listener_select_proto` code, which allows selecting a protocol thanks to
-//! `multistream-select` for the listener.
+//! Protocol negotiation strategies for the peer acting as the listener
+//! in a multistream-select protocol negotiation.
 
-use futures::{prelude::*, sink, stream::StreamFuture};
-use crate::protocol::{
-    Request,
-    Response,
-    Listener,
-    ListenerFuture,
-};
-use log::{debug, trace};
-use std::mem;
+use futures::prelude::*;
+use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
+use log::{debug, warn};
+use smallvec::SmallVec;
+use std::{io, iter::FromIterator, mem, convert::TryFrom};
 use tokio_io::{AsyncRead, AsyncWrite};
-use crate::{Negotiated, ProtocolChoiceError};
+use crate::{Negotiated, NegotiationError};
 
-/// Helps selecting a protocol amongst the ones supported.
+/// Returns a `Future` that negotiates a protocol on the given I/O stream
+/// for a peer acting as the _listener_ (or _responder_).
 ///
-/// This function expects a socket and an iterator of the list of supported protocols. The iterator
-/// must be clonable (i.e. iterable multiple times), because the list may need to be accessed
-/// multiple times.
-///
-/// The iterator must produce tuples of the name of the protocol that is advertised to the remote,
-/// a function that will check whether a remote protocol matches ours, and an identifier for the
-/// protocol of type `P` (you decide what `P` is). The parameters of the function are the name
-/// proposed by the remote, and the protocol name that we passed (so that you don't have to clone
-/// the name).
-///
-/// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
-/// socket now uses this protocol.
-pub fn listener_select_proto<R, I, X>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, X>
+/// This function is given an I/O stream and a list of protocols and returns a
+/// computation that performs the protocol negotiation with the remote. The
+/// returned `Future` resolves with the name of the negotiated protocol and
+/// a [`Negotiated`] I/O stream.
+pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFuture<R, I::Item>
 where
     R: AsyncRead + AsyncWrite,
-    for<'r> &'r I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    I: IntoIterator,
+    I::Item: AsRef<[u8]>
 {
+    let protocols = protocols.into_iter().filter_map(|n|
+        match Protocol::try_from(n.as_ref()) {
+            Ok(p) => Some((n, p)),
+            Err(e) => {
+                warn!("Listener: Ignoring invalid protocol: {} due to {}",
+                      String::from_utf8_lossy(n.as_ref()), e);
+                None
+            }
+        });
     ListenerSelectFuture {
-        inner: ListenerSelectState::AwaitListener {
-            listener_fut: Listener::listen(inner),
-            protocols
+        protocols: SmallVec::from_iter(protocols),
+        state: State::RecvHeader {
+            io: MessageIO::new(inner)
         }
     }
 }
 
-/// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
-pub struct ListenerSelectFuture<R, I, X>
+/// The `Future` returned by [`listener_select_proto`] that performs a
+/// multistream-select protocol negotiation on an underlying I/O stream.
+pub struct ListenerSelectFuture<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    N: AsRef<[u8]>
 {
-    inner: ListenerSelectState<R, I, X>
+    // TODO: It would be nice if eventually N = Protocol, which has a
+    // few more implications on the API.
+    protocols: SmallVec<[(N, Protocol); 8]>,
+    state: State<R, N>
 }
 
-enum ListenerSelectState<R, I, X>
+enum State<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]>
+    N: AsRef<[u8]>
 {
-    AwaitListener {
-        listener_fut: ListenerFuture<R, X>,
-        protocols: I
+    RecvHeader { io: MessageIO<R> },
+    SendHeader { io: MessageIO<R> },
+    RecvMessage { io: MessageIO<R> },
+    SendMessage {
+        io: MessageIO<R>,
+        message: Message,
+        protocol: Option<N>
     },
-    Incoming {
-        stream: StreamFuture<Listener<R, X>>,
-        protocols: I
-    },
-    Outgoing {
-        sender: sink::Send<Listener<R, X>>,
-        protocols: I,
-        outcome: Option<X>
-    },
-    Undefined
+    Flush { io: MessageIO<R> },
+    Done
 }
 
-impl<R, I, X> Future for ListenerSelectFuture<R, I, X>
+impl<R, N> Future for ListenerSelectFuture<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    for<'a> &'a I: IntoIterator<Item = X>,
-    X: AsRef<[u8]> + Clone
+    N: AsRef<[u8]> + Clone
 {
-    type Item = (X, Negotiated<R>, I);
-    type Error = ProtocolChoiceError;
+    type Item = (N, Negotiated<R>);
+    type Error = NegotiationError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(&mut self.inner, ListenerSelectState::Undefined) {
-                ListenerSelectState::AwaitListener { mut listener_fut, protocols } => {
-                    let listener = match listener_fut.poll()? {
-                        Async::Ready(l) => l,
+            match mem::replace(&mut self.state, State::Done) {
+                State::RecvHeader { mut io } => {
+                    match io.poll()? {
+                        Async::Ready(Some(Message::Header(Version::V1))) => {
+                            self.state = State::SendHeader { io }
+                        }
+                        Async::Ready(Some(Message::Header(Version::V2))) => {
+                            // The V2 protocol is not yet supported and not even
+                            // yet fully specified or implemented anywhere. For
+                            // now we just return 'na' to force any dialer to
+                            // fall back to V1, according to the current plans
+                            // for the "transition period".
+                            //
+                            // See: https://github.com/libp2p/specs/pull/95.
+                            self.state = State::SendMessage {
+                                io,
+                                message: Message::NotAvailable,
+                                protocol: None,
+                            }
+                        }
+                        Async::Ready(Some(_)) => {
+                            return Err(ProtocolError::InvalidMessage.into())
+                        }
+                        Async::Ready(None) =>
+                            return Err(NegotiationError::from(
+                                ProtocolError::IoError(
+                                    io::ErrorKind::UnexpectedEof.into()))),
                         Async::NotReady => {
-                            self.inner = ListenerSelectState::AwaitListener { listener_fut, protocols };
+                            self.state = State::RecvHeader { io };
                             return Ok(Async::NotReady)
                         }
-                    };
-                    let stream = listener.into_future();
-                    self.inner = ListenerSelectState::Incoming { stream, protocols };
+                    }
                 }
-                ListenerSelectState::Incoming { mut stream, protocols } => {
-                    let (msg, listener) = match stream.poll() {
-                        Ok(Async::Ready(x)) => x,
+                State::SendHeader { mut io } => {
+                    if io.start_send(Message::Header(Version::V1))?.is_not_ready() {
+                        return Ok(Async::NotReady)
+                    }
+                    self.state = State::RecvMessage { io };
+                }
+                State::RecvMessage { mut io } => {
+                    let msg = match io.poll() {
+                        Ok(Async::Ready(Some(msg))) => msg,
+                        Ok(Async::Ready(None)) =>
+                            return Err(NegotiationError::from(
+                                ProtocolError::IoError(
+                                    io::ErrorKind::UnexpectedEof.into()))),
                         Ok(Async::NotReady) => {
-                            self.inner = ListenerSelectState::Incoming { stream, protocols };
+                            self.state = State::RecvMessage { io };
                             return Ok(Async::NotReady)
                         }
-                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
+                        Err(e) => return Err(e.into())
                     };
+
                     match msg {
-                        Some(Request::ListProtocols) => {
-                            trace!("protocols list response: {:?}", protocols
-                                   .into_iter()
-                                   .map(|p| p.as_ref().into())
-                                   .collect::<Vec<Vec<u8>>>());
-                            let supported = protocols.into_iter().collect();
-                            let msg = Response::SupportedProtocols { protocols: supported };
-                            let sender = listener.send(msg);
-                            self.inner = ListenerSelectState::Outgoing {
-                                sender,
-                                protocols,
-                                outcome: None
-                            }
+                        Message::ListProtocols => {
+                            let supported = self.protocols.iter().map(|(_,p)| p).cloned().collect();
+                            let message = Message::Protocols(supported);
+                            self.state = State::SendMessage { io, message, protocol: None }
                         }
-                        Some(Request::Protocol { name }) => {
-                            let mut outcome = None;
-                            let mut send_back = Response::ProtocolNotAvailable;
-                            for supported in &protocols {
-                                if name.as_ref() == supported.as_ref() {
-                                    send_back = Response::Protocol {
-                                        name: supported.clone()
-                                    };
-                                    outcome = Some(supported);
-                                    break;
+                        Message::Protocol(p) => {
+                            let protocol = self.protocols.iter().find_map(|(name, proto)| {
+                                if &p == proto {
+                                    Some(name.clone())
+                                } else {
+                                    None
                                 }
-                            }
-                            trace!("requested: {:?}, supported: {}", name, outcome.is_some());
-                            let sender = listener.send(send_back);
-                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome }
+                            });
+
+                            let message = if protocol.is_some() {
+                                debug!("Listener: confirming protocol: {}", p);
+                                Message::Protocol(p.clone())
+                            } else {
+                                debug!("Listener: rejecting protocol: {}",
+                                    String::from_utf8_lossy(p.as_ref()));
+                                Message::NotAvailable
+                            };
+
+                            self.state = State::SendMessage { io, message, protocol };
                         }
-                        None => {
-                            debug!("no protocol request received");
-                            return Err(ProtocolChoiceError::NoProtocolFound)
-                        }
+                        _ => return Err(ProtocolError::InvalidMessage.into())
                     }
                 }
-                ListenerSelectState::Outgoing { mut sender, protocols, outcome } => {
-                    let listener = match sender.poll()? {
-                        Async::Ready(l) => l,
-                        Async::NotReady => {
-                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome };
-                            return Ok(Async::NotReady)
-                        }
+                State::SendMessage { mut io, message, protocol } => {
+                    if let AsyncSink::NotReady(message) = io.start_send(message)? {
+                        self.state = State::SendMessage { io, message, protocol };
+                        return Ok(Async::NotReady)
                     };
-                    if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, Negotiated(listener.into_inner()), protocols)))
-                    } else {
-                        let stream = listener.into_future();
-                        self.inner = ListenerSelectState::Incoming { stream, protocols }
-                    }
+                    // If a protocol has been selected, finish negotiation.
+                    // Otherwise flush the sink and expect to receive another
+                    // message.
+                    self.state = match protocol {
+                        Some(protocol) => {
+                            debug!("Listener: sent confirmed protocol: {}",
+                                String::from_utf8_lossy(protocol.as_ref()));
+                            let (io, remaining) = io.into_inner();
+                            let io = Negotiated::completed(io, remaining);
+                            return Ok(Async::Ready((protocol, io)))
+                        }
+                        None => State::Flush { io }
+                    };
                 }
-                ListenerSelectState::Undefined =>
-                    panic!("ListenerSelectState::poll called after completion")
+                State::Flush { mut io } => {
+                    if io.poll_complete()?.is_not_ready() {
+                        self.state = State::Flush { io };
+                        return Ok(Async::NotReady)
+                    }
+                    self.state = State::RecvMessage { io }
+                }
+                State::Done => panic!("State::poll called after completion")
             }
         }
     }

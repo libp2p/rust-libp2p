@@ -18,24 +18,59 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! # Multistream-select
+//! # Multistream-select Protocol Negotiation
 //!
-//! This crate implements the `multistream-select` protocol, which is the protocol used by libp2p
-//! to negotiate which protocol to use with the remote on a connection or substream.
+//! This crate implements the `multistream-select` protocol, which is the protocol
+//! used by libp2p to negotiate which application-layer protocol to use with the
+//! remote on a connection or substream.
 //!
-//! > **Note**: This crate is used by the internals of *libp2p*, and it is not required to
-//! > understand it in order to use *libp2p*.
+//! > **Note**: This crate is used primarily by core components of *libp2p* and it
+//! > is usually not used directly on its own.
 //!
-//! Whenever a new connection or a new multiplexed substream is opened, libp2p uses
-//! `multistream-select` to negotiate with the remote which protocol to use. After a protocol has
-//! been successfully negotiated, the stream (i.e. the connection or the multiplexed substream)
-//! immediately stops using `multistream-select` and starts using the negotiated protocol.
+//! ## Roles
 //!
-//! ## Protocol explanation
+//! Two peers using the multistream-select negotiation protocol on an I/O stream
+//! are distinguished by their role as a _dialer_ (or _initiator_) or as a _listener_
+//! (or _responder_). Thereby the dialer plays the active part, driving the protocol,
+//! whereas the listener reacts to the messages received.
 //!
-//! The dialer has two options available: either request the list of protocols that the listener
-//! supports, or suggest a protocol. If a protocol is suggested, the listener can either accept (by
-//! answering with the same protocol name) or refuse the choice (by answering "not available").
+//! The dialer has two options: it can either pick a protocol from the complete list
+//! of protocols that the listener supports, or it can directly suggest a protocol.
+//! Either way, a selected protocol is sent to the listener who can either accept (by
+//! echoing the same protocol) or reject (by responding with a message stating
+//! "not available"). If a suggested protocol is not available, the dialer may
+//! suggest another protocol. This process continues until a protocol is agreed upon,
+//! yielding a [`Negotiated`](self::Negotiated) stream, or the dialer has run out of
+//! alternatives.
+//!
+//! See [`dialer_select_proto`](self::dialer_select_proto) and
+//! [`listener_select_proto`](self::listener_select_proto).
+//!
+//! ## [`Negotiated`](self::Negotiated)
+//!
+//! When a dialer or listener participating in a negotiation settles
+//! on a protocol to use, the [`DialerSelectFuture`] respectively
+//! [`ListenerSelectFuture`] yields a [`Negotiated`](self::Negotiated)
+//! I/O stream.
+//!
+//! Notably, when a `DialerSelectFuture` resolves to a `Negotiated`, it may not yet
+//! have written the last negotiation message to the underlying I/O stream and may
+//! still be expecting confirmation for that protocol, despite having settled on
+//! a protocol to use.
+//!
+//! Similarly, when a `ListenerSelectFuture` resolves to a `Negotiated`, it may not
+//! yet have sent the last negotiation message despite having settled on a protocol
+//! proposed by the dialer that it supports.
+//!
+//!
+//! This behaviour allows both the dialer and the listener to send data
+//! relating to the negotiated protocol together with the last negotiation
+//! message(s), which, in the case of the dialer only supporting a single
+//! protocol, results in 0-RTT negotiation. Note, however, that a dialer
+//! that performs multiple 0-RTT negotiations in sequence for different
+//! protocols layered on top of each other may trigger undesirable behaviour
+//! for a listener not supporting one of the intermediate protocols.
+//! See [`dialer_select_proto`](self::dialer_select_proto).
 //!
 //! ## Examples
 //!
@@ -54,77 +89,28 @@
 //!
 //! let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap())
 //!     .from_err()
-//!     .and_then(move |connec| {
+//!     .and_then(move |io| {
 //!         let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
-//!         dialer_select_proto(connec, protos).map(|r| r.0)
-//!     });
+//!         dialer_select_proto(io, protos) // .map(|r| r.0)
+//!     })
+//!     .map(|(protocol, _io)| protocol);
 //!
 //! let mut rt = Runtime::new().unwrap();
-//! let negotiated_protocol = rt.block_on(client).expect("failed to find a protocol");
-//! println!("negotiated: {:?}", negotiated_protocol);
+//! let protocol = rt.block_on(client).expect("failed to find a protocol");
+//! println!("Negotiated protocol: {:?}", protocol);
 //! # }
 //! ```
 //!
 
 mod dialer_select;
-mod error;
 mod length_delimited;
 mod listener_select;
+mod negotiated;
+mod protocol;
 mod tests;
 
-mod protocol;
-
-use futures::prelude::*;
-use std::io;
-use tokio_io::{AsyncRead, AsyncWrite};
-
+pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
+pub use self::protocol::ProtocolError;
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
-pub use self::error::ProtocolChoiceError;
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
 
-/// A stream after it has been negotiated.
-pub struct Negotiated<TInner>(pub(crate) TInner);
-
-impl<TInner> io::Read for Negotiated<TInner>
-where
-    TInner: io::Read
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.read(buf)
-    }
-}
-
-impl<TInner> AsyncRead for Negotiated<TInner>
-where
-    TInner: AsyncRead
-{
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        self.0.prepare_uninitialized_buffer(buf)
-    }
-
-    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        self.0.read_buf(buf)
-    }
-}
-
-impl<TInner> io::Write for Negotiated<TInner>
-where
-    TInner: io::Write
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.0.flush()
-    }
-}
-
-impl<TInner> AsyncWrite for Negotiated<TInner>
-where
-    TInner: AsyncWrite
-{
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.0.shutdown()
-    }
-}

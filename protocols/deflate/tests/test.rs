@@ -85,7 +85,7 @@ where
         .unwrap()
         .map_err(|e| panic!("client error: {}", e))
         .and_then(move |server| {
-            io::write_all(server, message2).and_then(|(client, _)| io::flush(client))
+            io::write_all(server, message2).and_then(|(client, _)| io::shutdown(client))
         })
         .map(|_| ());
 
