@@ -66,7 +66,6 @@
 //! it.
 
 pub use self::identify::{Identify, IdentifyEvent};
-pub use self::id_transport::IdentifyTransport;
 pub use self::protocol::IdentifyInfo;
 
 pub mod listen_handler;
@@ -74,5 +73,4 @@ pub mod periodic_id_handler;
 pub mod protocol;
 
 mod identify;
-mod id_transport;
 mod structs_proto;
