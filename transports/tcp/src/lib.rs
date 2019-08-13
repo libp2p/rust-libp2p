@@ -53,15 +53,14 @@ use libp2p_core::{
 use log::{debug, trace};
 use std::{
     collections::VecDeque,
-    fmt,
     io::{self, Read, Write},
     iter::{self, FromIterator},
     net::{IpAddr, SocketAddr},
-    time::Duration,
+    time::{Duration, Instant},
     vec::IntoIter
 };
-use tk_listen::{ListenExt, SleepOnError};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_timer::Delay;
 use tokio_tcp::{ConnectFuture, Incoming, TcpStream};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
@@ -178,7 +177,7 @@ impl Transport for TcpConfig {
         };
 
         let stream = TcpListenStream {
-            inner: Ok(listener.incoming().sleep_on_error(self.sleep_on_error)),
+            inner: Listener::new(listener.incoming(), self.sleep_on_error),
             port,
             addrs,
             pending: VecDeque::new(),
@@ -353,10 +352,59 @@ enum Addresses {
 
 type Buffer = VecDeque<ListenerEvent<FutureResult<TcpTransStream, io::Error>>>;
 
+/// Incoming connection stream which pauses after errors.
+#[derive(Debug)]
+struct Listener<S> {
+    /// The incoming connections.
+    stream: S,
+    /// The current pause if any.
+    pause: Option<Delay>,
+    /// How long to pause after an error.
+    pause_duration: Duration
+}
+
+impl<S> Listener<S>
+where
+    S: Stream,
+    S::Error: std::fmt::Display
+{
+    fn new(stream: S, duration: Duration) -> Self {
+        Listener { stream, pause: None, pause_duration: duration }
+    }
+}
+
+impl<S> Stream for Listener<S>
+where
+    S: Stream,
+    S::Error: std::fmt::Display
+{
+    type Item = S::Item;
+    type Error = S::Error;
+
+    /// Polls for incoming connections, pausing if an error is encountered.
+    fn poll(&mut self) -> Poll<Option<S::Item>, S::Error> {
+        match self.pause.as_mut().map(|p| p.poll()) {
+            Some(Ok(Async::NotReady)) => return Ok(Async::NotReady),
+            Some(Ok(Async::Ready(()))) | Some(Err(_)) => { self.pause.take(); }
+            None => ()
+        }
+
+        match self.stream.poll() {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                debug!("error accepting incoming connection: {}", e);
+                self.pause = Some(Delay::new(Instant::now() + self.pause_duration));
+                Err(e)
+            }
+        }
+    }
+}
+
 /// Stream that listens on an TCP/IP address.
+#[derive(Debug)]
 pub struct TcpListenStream {
     /// Stream of incoming sockets.
-    inner: Result<SleepOnError<Incoming>, Option<io::Error>>,
+    inner: Listener<Incoming>,
     /// The port which we use as our listen port in listener event addresses.
     port: u16,
     /// The set of known addresses.
@@ -428,21 +476,16 @@ impl Stream for TcpListenStream {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, io::Error> {
-        let inner = match self.inner {
-            Ok(ref mut inc) => inc,
-            Err(ref mut err) => return Err(err.take().expect("poll called again after error"))
-        };
-
         loop {
             if let Some(event) = self.pending.pop_front() {
                 return Ok(Async::Ready(Some(event)))
             }
 
-            let sock = match inner.poll() {
+            let sock = match self.inner.poll() {
                 Ok(Async::Ready(Some(sock))) => sock,
                 Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(()) => unreachable!("sleep_on_error never produces an error")
+                Err(e) => return Err(e)
             };
 
             let sock_addr = match sock.peer_addr() {
@@ -481,16 +524,6 @@ impl Stream for TcpListenStream {
                     })
                 }
             }
-        }
-    }
-}
-
-impl fmt::Debug for TcpListenStream {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.inner {
-            Ok(_) => write!(f, "TcpListenStream"),
-            Err(None) => write!(f, "TcpListenStream(Errored)"),
-            Err(Some(ref err)) => write!(f, "TcpListenStream({:?})", err),
         }
     }
 }
@@ -545,12 +578,31 @@ impl Drop for TcpTransStream {
 
 #[cfg(test)]
 mod tests {
-    use futures::prelude::*;
+    use futures::{prelude::*, future::{self, Loop}, stream};
     use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use super::{multiaddr_to_socketaddr, TcpConfig};
-    use tokio::runtime::current_thread::Runtime;
+    use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, time::Duration};
+    use super::{multiaddr_to_socketaddr, TcpConfig, Listener};
+    use tokio::runtime::current_thread::{self, Runtime};
     use tokio_io;
+
+    #[test]
+    fn pause_on_error() {
+        // We create a stream of values and errors and continue polling even after errors
+        // have been encountered. We count the number of items (including errors) and assert
+        // that no item has been missed.
+        let rs = stream::iter_result(vec![Ok(1), Err(1), Ok(1), Err(1)]);
+        let ls = Listener::new(rs, Duration::from_secs(1));
+        let sum = future::loop_fn((0, ls), |(acc, ls)| {
+            ls.into_future().then(move |item| {
+                match item {
+                    Ok((None, _)) => Ok::<_, std::convert::Infallible>(Loop::Break(acc)),
+                    Ok((Some(n), rest)) => Ok(Loop::Continue((acc + n, rest))),
+                    Err((n, rest)) => Ok(Loop::Continue((acc + n, rest)))
+                }
+            })
+        });
+        assert_eq!(4, current_thread::block_on_all(sum).unwrap())
+    }
 
     #[test]
     fn wildcard_expansion() {

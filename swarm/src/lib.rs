@@ -83,6 +83,7 @@ use libp2p_core::{
     Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
+        ListenerId,
         collection::ConnectionInfo,
         handled_node::NodeHandler,
         node::Substream,
@@ -218,8 +219,13 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Starts listening on the given address.
     ///
     /// Returns an error if the address is not supported.
-    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<(), TransportError<TTransport::Error>> {
+    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<ListenerId, TransportError<TTransport::Error>> {
         me.network.listen_on(addr)
+    }
+
+    /// Remove some listener.
+    pub fn remove_listener(me: &mut Self, id: ListenerId) -> Option<TTransport::Listener> {
+        me.network.remove_listener(id)
     }
 
     /// Tries to dial the given address.
@@ -366,17 +372,20 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     let handler = self.behaviour.new_handler();
                     incoming.accept(handler.into_node_handler_builder());
                 },
-                Async::Ready(NetworkEvent::NewListenerAddress { listen_addr }) => {
+                Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
                     if !self.listened_addrs.contains(&listen_addr) {
                         self.listened_addrs.push(listen_addr.clone())
                     }
                     self.behaviour.inject_new_listen_addr(&listen_addr);
                 }
-                Async::Ready(NetworkEvent::ExpiredListenerAddress { listen_addr }) => {
+                Async::Ready(NetworkEvent::ExpiredListenerAddress { listen_addr, .. }) => {
                     self.listened_addrs.retain(|a| a != &listen_addr);
                     self.behaviour.inject_expired_listen_addr(&listen_addr);
                 }
-                Async::Ready(NetworkEvent::ListenerClosed { .. }) => {},
+                Async::Ready(NetworkEvent::ListenerClosed { listener_id, .. }) =>
+                    self.behaviour.inject_listener_closed(listener_id),
+                Async::Ready(NetworkEvent::ListenerError { listener_id, error }) =>
+                    self.behaviour.inject_listener_error(listener_id, &error),
                 Async::Ready(NetworkEvent::IncomingConnectionError { .. }) => {},
                 Async::Ready(NetworkEvent::DialError { peer_id, multiaddr, error, new_state }) => {
                     self.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);

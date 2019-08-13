@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, nodes::ListenerId};
 use futures::prelude::*;
 use std::error;
 
@@ -119,6 +119,14 @@ pub trait NetworkBehaviour {
 
     /// Indicates to the behaviour that we have discovered a new external address for us.
     fn inject_new_external_addr(&mut self, _addr: &Multiaddr) {
+    }
+
+    /// A listener experienced an error.
+    fn inject_listener_error(&mut self, _id: ListenerId, _err: &(dyn std::error::Error + 'static)) {
+    }
+
+    /// A listener closed.
+    fn inject_listener_closed(&mut self, _id: ListenerId) {
     }
 
     /// Polls for things that swarm should do.

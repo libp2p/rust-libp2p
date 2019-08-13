@@ -56,6 +56,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let into_proto_select_ident = quote!{::libp2p::swarm::IntoProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
     let connected_point = quote!{::libp2p::core::ConnectedPoint};
+    let listener_id = quote!{::libp2p::core::nodes::ListenerId};
 
     // Name of the type parameter that represents the substream.
     let substream_generic = {
@@ -284,6 +285,32 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_listener_error()`.
+    let inject_listener_error_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None
+            }
+            Some(match field.ident {
+                Some(ref i) => quote!(self.#i.inject_listener_error(id, err);),
+                None => quote!(self.#field_n.inject_listener_error(id, err);)
+            })
+        })
+    };
+
+    // Build the list of statements to put in the body of `inject_listener_closed()`.
+    let inject_listener_closed_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None
+            }
+            Some(match field.ident {
+                Some(ref i) => quote!(self.#i.inject_listener_closed(id);),
+                None => quote!(self.#field_n.inject_listener_closed(id);)
+            })
+        })
+    };
+
     // Build the list of variants to put in the body of `inject_node_event()`.
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
@@ -465,6 +492,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             fn inject_new_external_addr(&mut self, addr: &#multiaddr) {
                 #(#inject_new_external_addr_stmts);*
+            }
+
+            fn inject_listener_error(&mut self, id: #listener_id, err: &(dyn std::error::Error + 'static)) {
+                #(#inject_listener_error_stmts);*
+            }
+
+            fn inject_listener_closed(&mut self, id: #listener_id) {
+                #(#inject_listener_closed_stmts);*
             }
 
             fn inject_node_event(

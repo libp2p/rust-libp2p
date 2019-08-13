@@ -16,8 +16,8 @@ ipnet = "2.0.0"
 libp2p-core = { version = "0.11.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-tk-listen = "0.2.0"
 tokio-io = "0.1"
+tokio-timer = "0.2"
 tokio-tcp = "0.1"
 
 [dev-dependencies]
