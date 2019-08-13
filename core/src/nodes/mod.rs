@@ -37,3 +37,5 @@ pub use collection::ConnectionInfo;
 pub use node::Substream;
 pub use handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
 pub use network::{Peer, Network, NetworkEvent};
+pub use listeners::ListenerId;
+

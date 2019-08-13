@@ -53,17 +53,20 @@ use void::Void;
 /// // The `listeners` will now generate events when polled.
 /// let future = listeners.for_each(move |event| {
 ///     match event {
-///         ListenersEvent::NewAddress { listen_addr } => {
-///             println!("Listener is listening at address {}", listen_addr);
+///         ListenersEvent::NewAddress { listener_id, listen_addr } => {
+///             println!("Listener {:?} is listening at address {}", listener_id, listen_addr);
 ///         },
-///         ListenersEvent::AddressExpired { listen_addr } => {
-///             println!("Listener is no longer listening at address {}", listen_addr);
+///         ListenersEvent::AddressExpired { listener_id, listen_addr } => {
+///             println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
 ///         },
-///         ListenersEvent::Closed { result, .. } => {
-///             println!("Listener has been closed: {:?}", result);
+///         ListenersEvent::Closed { listener_id, .. } => {
+///             println!("Listener {:?} has been closed", listener_id);
 ///         },
-///         ListenersEvent::Incoming { upgrade, listen_addr, .. } => {
-///             println!("A connection has arrived on {}", listen_addr);
+///         ListenersEvent::Error { listener_id, error } => {
+///             println!("Listener {:?} has experienced an error: {}", listener_id, error);
+///         },
+///         ListenersEvent::Incoming { listener_id, upgrade, listen_addr, .. } => {
+///             println!("Listener {:?} has a new connection on {}", listener_id, listen_addr);
 ///             // We don't do anything with the newly-opened connection, but in a real-life
 ///             // program you probably want to use it!
 ///             drop(upgrade);
@@ -83,8 +86,17 @@ where
     /// Transport used to spawn listeners.
     transport: TTrans,
     /// All the active listeners.
-    listeners: VecDeque<Listener<TTrans>>
+    listeners: VecDeque<Listener<TTrans>>,
+    /// The next listener ID to assign.
+    next_id: ListenerId
 }
+
+/// The ID of a single listener.
+///
+/// It is part of most [`ListenersEvent`]s and can be used to remove
+/// individual listeners from the [`ListenersStream`].
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ListenerId(u64);
 
 /// A single active listener.
 #[derive(Debug)]
@@ -92,6 +104,8 @@ struct Listener<TTrans>
 where
     TTrans: Transport,
 {
+    /// The ID of this listener.
+    id: ListenerId,
     /// The object that actually listens.
     listener: TTrans::Listener,
     /// Addresses it is listening on.
@@ -105,16 +119,22 @@ where
 {
     /// A new address is being listened on.
     NewAddress {
+        /// The listener that is listening on the new address.
+        listener_id: ListenerId,
         /// The new address that is being listened on.
         listen_addr: Multiaddr
     },
     /// An address is no longer being listened on.
     AddressExpired {
+        /// The listener that is no longer listening on the address.
+        listener_id: ListenerId,
         /// The new address that is being listened on.
         listen_addr: Multiaddr
     },
     /// A connection is incoming on one of the listeners.
     Incoming {
+        /// The listener that produced the upgrade.
+        listener_id: ListenerId,
         /// The produced upgrade.
         upgrade: TTrans::ListenerUpgrade,
         /// Address of the listener which received the connection.
@@ -122,13 +142,23 @@ where
         /// Address used to send back data to the incoming client.
         send_back_addr: Multiaddr,
     },
-    /// A listener has closed, either gracefully or with an error.
+    /// A listener closed.
     Closed {
+        /// The ID of the listener that closed.
+        listener_id: ListenerId,
         /// The listener that closed.
         listener: TTrans::Listener,
-        /// The error that happened. `Ok` if gracefully closed.
-        result: Result<(), <TTrans::Listener as Stream>::Error>,
     },
+    /// A listener errored.
+    ///
+    /// The listener will continue to be polled for new events and the event
+    /// is for informational purposes only.
+    Error {
+        /// The ID of the listener that errored.
+        listener_id: ListenerId,
+        /// The error value.
+        error: <TTrans::Listener as Stream>::Error
+    }
 }
 
 impl<TTrans> ListenersStream<TTrans>
@@ -136,34 +166,49 @@ where
     TTrans: Transport,
 {
     /// Starts a new stream of listeners.
-    #[inline]
     pub fn new(transport: TTrans) -> Self {
         ListenersStream {
             transport,
-            listeners: VecDeque::new()
+            listeners: VecDeque::new(),
+            next_id: ListenerId(1)
         }
     }
 
     /// Same as `new`, but pre-allocates enough memory for the given number of
     /// simultaneous listeners.
-    #[inline]
     pub fn with_capacity(transport: TTrans, capacity: usize) -> Self {
         ListenersStream {
             transport,
-            listeners: VecDeque::with_capacity(capacity)
+            listeners: VecDeque::with_capacity(capacity),
+            next_id: ListenerId(1)
         }
     }
 
     /// Start listening on a multiaddress.
     ///
     /// Returns an error if the transport doesn't support the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<(), TransportError<TTrans::Error>>
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<TTrans::Error>>
     where
         TTrans: Clone,
     {
         let listener = self.transport.clone().listen_on(addr)?;
-        self.listeners.push_back(Listener { listener, addresses: SmallVec::new() });
-        Ok(())
+        self.listeners.push_back(Listener {
+            id: self.next_id,
+            listener,
+            addresses: SmallVec::new()
+        });
+        let id = self.next_id;
+        self.next_id = ListenerId(self.next_id.0 + 1);
+        Ok(id)
+    }
+
+    /// Remove the listener matching the given `ListenerId`.
+    pub fn remove_listener(&mut self, id: ListenerId) -> Option<TTrans::Listener> {
+        if let Some(i) = self.listeners.iter().position(|l| l.id == id) {
+            self.listeners.remove(i).map(|l| l.listener)
+        } else {
+            None
+        }
     }
 
     /// Returns the transport passed when building this object.
@@ -191,8 +236,10 @@ where
                     debug_assert!(listener.addresses.contains(&listen_addr),
                         "Transport reported listen address {} not in the list: {:?}",
                         listen_addr, listener.addresses);
+                    let id = listener.id;
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::Incoming {
+                        listener_id: id,
                         upgrade,
                         listen_addr,
                         send_back_addr: remote_addr
@@ -204,24 +251,32 @@ where
                     if !listener.addresses.contains(&a) {
                         listener.addresses.push(a.clone());
                     }
+                    let id = listener.id;
                     self.listeners.push_front(listener);
-                    return Async::Ready(ListenersEvent::NewAddress { listen_addr: a })
+                    return Async::Ready(ListenersEvent::NewAddress {
+                        listener_id: id,
+                        listen_addr: a
+                    })
                 }
                 Ok(Async::Ready(Some(ListenerEvent::AddressExpired(a)))) => {
                     listener.addresses.retain(|x| x != &a);
+                    let id = listener.id;
                     self.listeners.push_front(listener);
-                    return Async::Ready(ListenersEvent::AddressExpired { listen_addr: a })
+                    return Async::Ready(ListenersEvent::AddressExpired {
+                        listener_id: id,
+                        listen_addr: a
+                    })
                 }
                 Ok(Async::Ready(None)) => {
                     return Async::Ready(ListenersEvent::Closed {
-                        listener: listener.listener,
-                        result: Ok(()),
+                        listener_id: listener.id,
+                        listener: listener.listener
                     })
                 }
                 Err(err) => {
-                    return Async::Ready(ListenersEvent::Closed {
-                        listener: listener.listener,
-                        result: Err(err),
+                    return Async::Ready(ListenersEvent::Error {
+                        listener_id: listener.id,
+                        error: err
                     })
                 }
             }
@@ -239,7 +294,6 @@ where
     type Item = ListenersEvent<TTrans>;
     type Error = Void; // TODO: use ! once stable
 
-    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         Ok(self.poll().map(Option::Some))
     }
@@ -264,22 +318,30 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            ListenersEvent::NewAddress { listen_addr } => f
+            ListenersEvent::NewAddress { listener_id, listen_addr } => f
                 .debug_struct("ListenersEvent::NewAddress")
+                .field("listener_id", listener_id)
                 .field("listen_addr", listen_addr)
                 .finish(),
-            ListenersEvent::AddressExpired { listen_addr } => f
+            ListenersEvent::AddressExpired { listener_id, listen_addr } => f
                 .debug_struct("ListenersEvent::AddressExpired")
+                .field("listener_id", listener_id)
                 .field("listen_addr", listen_addr)
                 .finish(),
-            ListenersEvent::Incoming { listen_addr, .. } => f
+            ListenersEvent::Incoming { listener_id, listen_addr, .. } => f
                 .debug_struct("ListenersEvent::Incoming")
+                .field("listener_id", listener_id)
                 .field("listen_addr", listen_addr)
                 .finish(),
-            ListenersEvent::Closed { result, .. } => f
+            ListenersEvent::Closed { listener_id, .. } => f
                 .debug_struct("ListenersEvent::Closed")
-                .field("result", result)
+                .field("listener_id", listener_id)
                 .finish(),
+            ListenersEvent::Error { listener_id, error } => f
+                .debug_struct("ListenersEvent::Error")
+                .field("listener_id", listener_id)
+                .field("error", error)
+                .finish()
         }
     }
 }
@@ -478,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn listener_stream_poll_with_erroring_listener_emits_closed_event() {
+    fn listener_stream_poll_with_erroring_listener_emits_error_event() {
         let mut t = DummyTransport::new();
         let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
@@ -493,7 +555,7 @@ mod tests {
         ls.listen_on(addr).expect("listen_on failed");
         set_listener_state(&mut ls, 0, ListenerState::Error); // simulate an error on the socket
         assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Closed{..})
+            assert_matches!(listeners_event, ListenersEvent::Error{..})
         });
         assert_eq!(ls.listeners.len(), 0); // it's gone
     }
