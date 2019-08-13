@@ -28,8 +28,8 @@ const MAX_LEN_BYTES: u16 = 2;
 const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
 const DEFAULT_BUFFER_SIZE: usize = 64;
 
-/// `Stream` and `Sink` wrapping some `AsyncRead + AsyncWrite` resource to read
-/// and write unsigned-varint prefixed frames.
+/// A `Stream` and `Sink` for unsigned-varint length-delimited frames,
+/// wrapping an underlying `AsyncRead + AsyncWrite` I/O resource.
 ///
 /// We purposely only support a frame sizes up to 16KiB (2 bytes unsigned varint
 /// frame length). Frames mostly consist in a short protocol name, which is highly
@@ -75,20 +75,70 @@ impl<R> LengthDelimited<R> {
         }
     }
 
-    /// Destroys the `LengthDelimited` and returns the underlying socket.
+    /// Returns a reference to the underlying I/O stream.
+    pub fn inner_ref(&self) -> &R {
+        &self.inner
+    }
+
+    /// Returns a mutable reference to the underlying I/O stream.
     ///
-    /// This method is guaranteed not to skip any data from the socket.
+    /// > **Note**: Care should be taken to not tamper with the underlying stream of data
+    /// > coming in, as it may corrupt the stream of frames.
+    pub fn inner_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+
+    /// Drops the `LengthDelimited` resource, yielding the underlying I/O stream
+    /// together with the remaining write buffer containing the uvi-framed data
+    /// that has not yet been written to the underlying I/O stream.
+    ///
+    /// The returned remaining write buffer may be prepended to follow-up
+    /// protocol data to send with a single `write`. Either way, if non-empty,
+    /// the write buffer _must_ eventually be written to the I/O stream
+    /// _before_ any follow-up data, in order to maintain a correct data stream.
     ///
     /// # Panic
     ///
-    /// Will panic if called while there is data inside the read or write buffer.
-    /// **This can only happen if you call `poll()` manually**. Using this struct
-    /// as it is intended to be used (i.e. through the high-level `futures` API)
-    /// will always leave the object in a state in which `into_inner()` will not panic.
-    pub fn into_inner(self) -> R {
-        assert!(self.write_buffer.is_empty());
+    /// Will panic if called while there is data in the read buffer. The read buffer is
+    /// guaranteed to be empty whenever `Stream::poll` yields a new `Bytes` frame.
+    pub fn into_inner(self) -> (R, BytesMut) {
         assert!(self.read_buffer.is_empty());
-        self.inner
+        (self.inner, self.write_buffer)
+    }
+
+    /// Converts the `LengthDelimited` into a `LengthDelimitedReader`, dropping the
+    /// uvi-framed `Sink` in favour of direct `AsyncWrite` access to the underlying
+    /// I/O stream.
+    ///
+    /// This is typically done if further uvi-framed messages are expected to be
+    /// received but no more such messages are written, allowing the writing of
+    /// follow-up protocol data to commence.
+    pub fn into_reader(self) -> LengthDelimitedReader<R> {
+        LengthDelimitedReader { inner: self }
+    }
+
+    /// Writes all buffered frame data to the underlying I/O stream,
+    /// _without flushing it_.
+    ///
+    /// After this method returns `Async::Ready`, the write buffer of frames
+    /// submitted to the `Sink` is guaranteed to be empty.
+    pub fn poll_write_buffer(&mut self) -> Poll<(), io::Error>
+    where
+        R: AsyncWrite
+    {
+        while !self.write_buffer.is_empty() {
+            let n = try_ready!(self.inner.poll_write(&self.write_buffer));
+
+            if n == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "Failed to write buffered frame."))
+            }
+
+            self.write_buffer.split_to(n);
+        }
+
+        Ok(Async::Ready(()))
     }
 }
 
@@ -204,18 +254,9 @@ where
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        while !self.write_buffer.is_empty() {
-            let n = try_ready!(self.inner.poll_write(&self.write_buffer));
-
-            if n == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::WriteZero,
-                    "Failed to write buffered frame."))
-            }
-
-            let _ = self.write_buffer.split_to(n);
-        }
-
+        // Write all buffered frame data to the underlying I/O stream.
+        try_ready!(self.poll_write_buffer());
+        // Flush the underlying I/O stream.
         try_ready!(self.inner.poll_flush());
         return Ok(Async::Ready(()));
     }
@@ -223,6 +264,102 @@ where
     fn close(&mut self) -> Poll<(), Self::SinkError> {
         try_ready!(self.poll_complete());
         Ok(self.inner.shutdown()?)
+    }
+}
+
+/// A `LengthDelimitedReader` implements a `Stream` of uvi-length-delimited
+/// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
+pub struct LengthDelimitedReader<R> {
+    inner: LengthDelimited<R>
+}
+
+impl<R> LengthDelimitedReader<R> {
+    /// Destroys the `LengthDelimitedReader` and returns the underlying I/O stream.
+    ///
+    /// This method is guaranteed not to drop any data read from or not yet
+    /// submitted to the underlying I/O stream.
+    ///
+    /// # Panic
+    ///
+    /// Will panic if called while there is data in the read or write buffer.
+    /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
+    /// a new `Message`. The write buffer is guaranteed to be empty whenever
+    /// [`poll_write_buffer`] yields `Async::Ready` or after the `Sink` has been
+    /// completely flushed via [`Sink::poll_complete`].
+    pub fn into_inner(self) -> (R, BytesMut) {
+        self.inner.into_inner()
+    }
+
+    /// Returns a reference to the underlying I/O stream.
+    pub fn inner_ref(&self) -> &R {
+        self.inner.inner_ref()
+    }
+
+    /// Returns a mutable reference to the underlying I/O stream.
+    ///
+    /// > **Note**: Care should be taken to not tamper with the underlying stream of data
+    /// > coming in, as it may corrupt the stream of frames.
+    pub fn inner_mut(&mut self) -> &mut R {
+        self.inner.inner_mut()
+    }
+}
+
+impl<R> Stream for LengthDelimitedReader<R>
+where
+    R: AsyncRead
+{
+    type Item = Bytes;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        self.inner.poll()
+    }
+}
+
+impl<R> io::Write for LengthDelimitedReader<R>
+where
+    R: AsyncWrite
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // Try to drain the write buffer together with writing `buf`.
+        if !self.inner.write_buffer.is_empty() {
+            let n = self.inner.write_buffer.len();
+            self.inner.write_buffer.extend_from_slice(buf);
+            let result = self.inner.poll_write_buffer();
+            let written = n - self.inner.write_buffer.len();
+            if written == 0 {
+                if let Err(e) = result {
+                    return Err(e)
+                }
+                return Err(io::ErrorKind::WouldBlock.into())
+            }
+            if written < buf.len() {
+                if self.inner.write_buffer.len() > n {
+                    self.inner.write_buffer.split_off(n); // Never grow the buffer.
+                }
+                return Ok(written)
+            }
+            return Ok(buf.len())
+        }
+
+        self.inner_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self.inner.poll_complete()? {
+            Async::Ready(()) => Ok(()),
+            Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
+        }
+    }
+}
+
+impl<R> AsyncWrite for LengthDelimitedReader<R>
+where
+    R: AsyncWrite
+{
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        try_ready!(self.inner.poll_complete());
+        self.inner_mut().shutdown()
     }
 }
 

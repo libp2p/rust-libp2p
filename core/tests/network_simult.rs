@@ -18,9 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod util;
+
 use futures::{future, prelude::*};
 use libp2p_core::identity;
-use libp2p_core::nodes::network::{Network, NetworkEvent, IncomingError};
+use libp2p_core::nodes::{Network, NetworkEvent, Peer};
+use libp2p_core::nodes::network::IncomingError;
 use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
 use libp2p_swarm::{
     ProtocolsHandler,
@@ -118,6 +121,11 @@ fn raw_swarm_simultaneous_connect() {
                         .map_outbound(move |muxer| (peer_id, muxer))
                         .map_inbound(move |muxer| (peer_id2, muxer));
                     upgrade::apply(out.stream, upgrade, endpoint)
+                })
+                .and_then(|(peer, mplex), _| {
+                    // Gracefully close the connection to allow protocol
+                    // negotiation to complete.
+                    util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
                 });
             Network::new(transport, local_public_key.into_peer_id())
         };
@@ -134,6 +142,11 @@ fn raw_swarm_simultaneous_connect() {
                         .map_outbound(move |muxer| (peer_id, muxer))
                         .map_inbound(move |muxer| (peer_id2, muxer));
                     upgrade::apply(out.stream, upgrade, endpoint)
+                })
+                .and_then(|(peer, mplex), _| {
+                    // Gracefully close the connection to allow protocol
+                    // negotiation to complete.
+                    util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
                 });
             Network::new(transport, local_public_key.into_peer_id())
         };
@@ -164,14 +177,14 @@ fn raw_swarm_simultaneous_connect() {
 
         let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
 
-        for _ in 0 .. 10 {
+        loop {
             let mut swarm1_step = 0;
             let mut swarm2_step = 0;
 
             let mut swarm1_dial_start = Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
             let mut swarm2_dial_start = Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
 
-            let future = future::poll_fn(|| -> Poll<(), io::Error> {
+            let future = future::poll_fn(|| -> Poll<bool, io::Error> {
                 loop {
                     let mut swarm1_not_ready = false;
                     let mut swarm2_not_ready = false;
@@ -183,10 +196,11 @@ fn raw_swarm_simultaneous_connect() {
                         match swarm1_dial_start.poll().unwrap() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
-                                swarm1.peer(swarm2.local_peer_id().clone()).into_not_connected().unwrap()
+                                swarm1.peer(swarm2.local_peer_id().clone())
+                                    .into_not_connected()
+                                    .unwrap()
                                     .connect(swarm2_listen_addr.clone(), handler);
                                 swarm1_step = 1;
-                                swarm1_not_ready = false;
                             },
                             Async::NotReady => swarm1_not_ready = true,
                         }
@@ -196,10 +210,11 @@ fn raw_swarm_simultaneous_connect() {
                         match swarm2_dial_start.poll().unwrap() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
-                                swarm2.peer(swarm1.local_peer_id().clone()).into_not_connected().unwrap()
+                                swarm2.peer(swarm1.local_peer_id().clone())
+                                    .into_not_connected()
+                                    .unwrap()
                                     .connect(swarm1_listen_addr.clone(), handler);
                                 swarm2_step = 1;
-                                swarm2_not_ready = false;
                             },
                             Async::NotReady => swarm2_not_ready = true,
                         }
@@ -207,12 +222,19 @@ fn raw_swarm_simultaneous_connect() {
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm1.poll() {
-                            Async::Ready(NetworkEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                            Async::Ready(NetworkEvent::IncomingConnectionError {
+                                error: IncomingError::DeniedLowerPriority, ..
+                            }) => {
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
                             Async::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm2.local_peer_id());
+                                if swarm1_step == 0 {
+                                    // The connection was established before
+                                    // swarm1 started dialing; discard the test run.
+                                    return Ok(Async::Ready(false))
+                                }
                                 assert_eq!(swarm1_step, 1);
                                 swarm1_step = 2;
                             },
@@ -224,19 +246,26 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
-                            Async::Ready(_) => unreachable!(),
+                            Async::Ready(ev) => panic!("swarm1: unexpected event: {:?}", ev),
                             Async::NotReady => swarm1_not_ready = true,
                         }
                     }
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm2.poll() {
-                            Async::Ready(NetworkEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                            Async::Ready(NetworkEvent::IncomingConnectionError {
+                                error: IncomingError::DeniedLowerPriority, ..
+                            }) => {
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
                             Async::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm1.local_peer_id());
+                                if swarm2_step == 0 {
+                                    // The connection was established before
+                                    // swarm2 started dialing; discard the test run.
+                                    return Ok(Async::Ready(false))
+                                }
                                 assert_eq!(swarm2_step, 1);
                                 swarm2_step = 2;
                             },
@@ -248,14 +277,14 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
-                            Async::Ready(_) => unreachable!(),
+                            Async::Ready(ev) => panic!("swarm2: unexpected event: {:?}", ev),
                             Async::NotReady => swarm2_not_ready = true,
                         }
                     }
 
                     // TODO: make sure that >= 5 is correct
                     if swarm1_step + swarm2_step >= 5 {
-                        return Ok(Async::Ready(()));
+                        return Ok(Async::Ready(true));
                     }
 
                     if swarm1_not_ready && swarm2_not_ready {
@@ -264,11 +293,23 @@ fn raw_swarm_simultaneous_connect() {
                 }
             });
 
-            reactor.block_on(future).unwrap();
-
-            // We now disconnect them again.
-            swarm1.peer(swarm2.local_peer_id().clone()).into_connected().unwrap().close();
-            swarm2.peer(swarm1.local_peer_id().clone()).into_connected().unwrap().close();
+            if reactor.block_on(future).unwrap() {
+                // The test exercised what we wanted to exercise: a simultaneous connect.
+                break
+            } else {
+                // The test did not trigger a simultaneous connect; ensure the nodes
+                // are disconnected and re-run the test.
+                match swarm1.peer(swarm2.local_peer_id().clone()) {
+                    Peer::Connected(p) => p.close(),
+                    Peer::PendingConnect(p) => p.interrupt(),
+                    x => panic!("Unexpected state for swarm1: {:?}", x)
+                }
+                match swarm2.peer(swarm1.local_peer_id().clone()) {
+                    Peer::Connected(p) => p.close(),
+                    Peer::PendingConnect(p) => p.interrupt(),
+                    x => panic!("Unexpected state for swarm2: {:?}", x)
+                }
+            }
         }
     }
 }
