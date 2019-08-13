@@ -22,6 +22,7 @@
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
 use futures::prelude::*;
+use log::debug;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, fmt};
 use void::Void;
@@ -243,8 +244,9 @@ where
                     })
                 }
                 Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) => {
-                    debug_assert!(!listener.addresses.contains(&a),
-                        "Transport has reported address {} multiple times", a);
+                    if listener.addresses.contains(&a) {
+                        debug!("Transport has reported address {} multiple times", a)
+                    }
                     if !listener.addresses.contains(&a) {
                         listener.addresses.push(a.clone());
                     }
