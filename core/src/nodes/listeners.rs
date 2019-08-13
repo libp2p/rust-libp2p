@@ -22,6 +22,7 @@
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
 use futures::prelude::*;
+use log::{debug, warn};
 use smallvec::SmallVec;
 use std::{collections::VecDeque, fmt};
 use void::Void;
@@ -233,9 +234,11 @@ where
                     if remaining == 0 { break }
                 }
                 Ok(Async::Ready(Some(ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr }))) => {
-                    debug_assert!(listener.addresses.contains(&listen_addr),
-                        "Transport reported listen address {} not in the list: {:?}",
-                        listen_addr, listener.addresses);
+                    if !listener.addresses.contains(&listen_addr) {
+                        warn!("Transport reported listen address {} not in the list: {:?}",
+                            listen_addr,
+                            listener.addresses)
+                    }
                     let id = listener.id;
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::Incoming {
@@ -246,8 +249,9 @@ where
                     })
                 }
                 Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) => {
-                    debug_assert!(!listener.addresses.contains(&a),
-                        "Transport has reported address {} multiple times", a);
+                    if listener.addresses.contains(&a) {
+                        debug!("Transport has reported address {} multiple times", a)
+                    }
                     if !listener.addresses.contains(&a) {
                         listener.addresses.push(a.clone());
                     }
