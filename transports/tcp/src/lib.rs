@@ -417,7 +417,7 @@ pub struct TcpListenStream {
 
 // If we listen on all interfaces, find out to which interface the given
 // socket address belongs. In case we think the address is new, check
-// all host interfaces again an report new and expired listen addresses.
+// all host interfaces again and report new and expired listen addresses.
 fn check_for_interface_changes(
     socket_addr: &SocketAddr,
     listen_port: u16,
