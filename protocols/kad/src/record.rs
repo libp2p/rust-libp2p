@@ -23,6 +23,7 @@
 pub mod store;
 
 use bytes::Bytes;
+use crate::kbucket;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::hash::{Hash, Hasher};
@@ -102,7 +103,7 @@ pub struct ProviderRecord {
     /// The key whose value is provided by the provider.
     pub key: Key,
     /// The provider of the value for the key.
-    pub provider: PeerId,
+    pub provider: kbucket::Key<PeerId>,
     /// The expiration time as measured by a local, monotonic clock.
     pub expires: Option<Instant>,
 }
@@ -116,12 +117,15 @@ impl Hash for ProviderRecord {
 
 impl ProviderRecord {
     /// Creates a new provider record for insertion into a `RecordStore`.
-    pub fn new<K>(key: K, provider: PeerId) -> Self
+    pub fn new<K, P>(key: K, provider: P) -> Self
     where
-        K: Into<Key>
+        K: Into<Key>,
+        P: Into<kbucket::Key<PeerId>>
     {
         ProviderRecord {
-            key: key.into(), provider, expires: None
+            key: key.into(),
+            provider: provider.into(),
+            expires: None
         }
     }
 
@@ -164,7 +168,7 @@ mod tests {
         fn arbitrary<G: Gen>(g: &mut G) -> ProviderRecord {
             ProviderRecord {
                 key: Key::arbitrary(g),
-                provider: PeerId::random(),
+                provider: kbucket::Key::new(PeerId::random()),
                 expires: if g.gen() {
                     Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
                 } else {

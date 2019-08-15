@@ -295,7 +295,7 @@ impl AddProviderJob {
             loop {
                 if let Some(r) = keys.next() {
                     if r.is_expired(now) {
-                        store.remove_provider(&r.key, &r.provider)
+                        store.remove_provider(&r.key, r.provider.preimage())
                     } else {
                         return Async::Ready(r)
                     }
@@ -379,7 +379,7 @@ mod tests {
             // Fill a record store.
             let mut store = MemoryStore::new(id.clone());
             for mut r in records {
-                r.provider = id.clone();
+                r.provider = id.clone().into();
                 let _ = store.add_provider(r);
             }
             // Polling with an instant beyond the deadline for the next run

@@ -59,6 +59,7 @@ fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
 fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<TestSwarm>) {
     let port_base = 1 + random::<u64>() % (u64::MAX - num as u64);
     let mut result: Vec<Swarm<_, _>> = Vec::with_capacity(num);
+    let mut rng = StdThreadGen::new(100);
 
     for _ in 0 .. num {
         // TODO: make creating the transport more elegant ; literaly half of the code of the test
@@ -77,9 +78,11 @@ fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<TestSwa
             .boxed();
 
         let local_id = local_public_key.clone().into_peer_id();
-        let store = MemoryStore::new(local_id.clone());
-        let behaviour = Kademlia::with_config(local_id.clone(), store, cfg.clone());
-        result.push(Swarm::new(transport, behaviour, local_id));
+        let prefix = kbucket::KeyPrefix::arbitrary(&mut rng);
+        let local_key = kbucket::Key::new(local_id).with_prefix(prefix);
+        let store = MemoryStore::new(local_key.clone());
+        let behaviour = Kademlia::with_config(local_key.clone(), store, cfg.clone());
+        result.push(Swarm::new(transport, behaviour, local_key.into_preimage()));
     }
 
     for (i, s) in result.iter_mut().enumerate() {
@@ -89,20 +92,20 @@ fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<TestSwa
     (port_base, result)
 }
 
-fn build_connected_nodes(total: usize, step: usize) -> (Vec<PeerId>, Vec<TestSwarm>) {
+fn build_connected_nodes(total: usize, step: usize) -> (Vec<kbucket::Key<PeerId>>, Vec<TestSwarm>) {
     build_connected_nodes_with_config(total, step, Default::default())
 }
 
 fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaConfig)
-    -> (Vec<PeerId>, Vec<TestSwarm>)
+    -> (Vec<kbucket::Key<PeerId>>, Vec<TestSwarm>)
 {
     let (port_base, mut swarms) = build_nodes_with_config(total, cfg);
-    let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
+    let swarm_ids: Vec<kbucket::Key<PeerId>> = swarms.iter().map(|s| s.kbuckets.local_key().clone()).collect();
 
     let mut i = 0;
     for (j, peer) in swarm_ids.iter().enumerate().skip(1) {
         if i < swarm_ids.len() {
-            swarms[i].add_address(&peer, Protocol::Memory(port_base + j as u64).into());
+            swarms[i].add_address(peer.clone(), Protocol::Memory(port_base + j as u64).into());
         }
         if j % step == 0 {
             i += step;
@@ -130,16 +133,21 @@ fn bootstrap() {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::BootstrapResult(Ok(ok)))) => {
-                                assert_eq!(i, 0);
-                                assert_eq!(ok.peer, swarm_ids[0]);
-                                let known = swarm.kbuckets.iter()
-                                    .map(|e| e.node.key.preimage().clone())
-                                    .collect::<HashSet<_>>();
-                                assert_eq!(expected_known, known);
-                                return Ok(Async::Ready(()));
+                            Async::Ready(Some(e)) => {
+                                if let KademliaEvent::BootstrapResult(Ok(ok)) = e {
+                                    assert_eq!(&ok.peer, swarm_ids[0].preimage());
+                                }
+                                if i == 0 {
+                                    let known = swarm.kbuckets.iter()
+                                        .map(|n| n.node.key.clone())
+                                        .collect::<HashSet<_>>();
+                                    if known.len() == expected_known.len() {
+                                        assert_eq!(expected_known, known);
+                                        return Ok(Async::Ready(()));
+                                    }
+                                }
                             }
-                            Async::Ready(_) => (),
+                            Async::Ready(None) => panic!(),
                             Async::NotReady => break,
                         }
                     }
@@ -155,10 +163,9 @@ fn bootstrap() {
 }
 
 #[test]
-fn query_iter() {
-    fn distances<K>(key: &kbucket::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
+fn get_closest_peers_iter() {
+    fn distances<K>(key: &kbucket::Key<K>, peers: Vec<kbucket::Key<PeerId>>) -> Vec<Distance> {
         peers.into_iter()
-            .map(kbucket::Key::from)
             .map(|k| k.distance(key))
             .collect()
     }
@@ -170,14 +177,16 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::new(search_target.clone());
         swarms[0].get_closest_peers(search_target.clone());
 
         // Set up expectations.
         let expected_swarm_id = swarm_ids[0].clone();
-        let expected_peer_ids: Vec<_> = swarm_ids.iter().skip(1).cloned().collect();
-        let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
-        expected_distances.sort();
+        let expected_peer_ids: HashSet<_> = swarm_ids
+            .iter()
+            .skip(1)
+            .cloned()
+            .map(|k| k.into_preimage())
+            .collect();
 
         // Run test
         current_thread::run(
@@ -188,10 +197,8 @@ fn query_iter() {
                             Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
                                 assert_eq!(&ok.key[..], search_target.as_bytes());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert_eq!(swarm.queries.size(), 0);
-                                assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
-                                let key = kbucket::Key::new(ok.key);
-                                assert_eq!(expected_distances, distances(&key, ok.peers));
+                                let peers = ok.peers.into_iter().collect::<HashSet<_>>();
+                                assert_eq!(peers, expected_peer_ids);
                                 return Ok(Async::Ready(()));
                             }
                             Async::Ready(_) => (),
@@ -218,7 +225,7 @@ fn unresponsive_not_returned_direct() {
 
     // Add fake addresses.
     for _ in 0 .. 10 {
-        swarms[0].add_address(&PeerId::random(), Protocol::Udp(10u16).into());
+        swarms[0].add_address(PeerId::random(), Protocol::Udp(10u16).into());
     }
 
     // Ask first to search a random value.
@@ -256,11 +263,11 @@ fn unresponsive_not_returned_indirect() {
     // Add fake addresses to first.
     let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
     for _ in 0 .. 10 {
-        swarms[0].add_address(&PeerId::random(), multiaddr![Udp(10u16)]);
+        swarms[0].add_address(PeerId::random(), multiaddr![Udp(10u16)]);
     }
 
     // Connect second to first.
-    swarms[1].add_address(&first_peer_id, Protocol::Memory(port_base).into());
+    swarms[1].add_address(first_peer_id.clone(), Protocol::Memory(port_base).into());
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
@@ -293,8 +300,8 @@ fn get_record_not_found() {
 
     let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
-    swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
-    swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
+    swarms[0].add_address(swarm_ids[1].clone(), Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(swarm_ids[2].clone(), Protocol::Memory(port_base + 2).into());
 
     let target_key = record::Key::from(Multihash::random(SHA2256));
     swarms[0].get_record(&target_key, Quorum::One);
@@ -373,7 +380,7 @@ fn put_record() {
                                     }
                                 }
                             }
-                            Async::Ready(_) => (),
+                            Async::Ready(_) => {},
                             Async::NotReady => break,
                         }
                     }
@@ -393,13 +400,13 @@ fn put_record() {
                     assert_eq!(r.key, expected.key);
                     assert_eq!(r.value, expected.value);
                     assert_eq!(r.expires, expected.expires);
-                    assert_eq!(r.publisher.as_ref(), Some(&swarm_ids[0]));
+                    assert_eq!(r.publisher.as_ref(), Some(swarm_ids[0].preimage()));
 
                     let key = kbucket::Key::new(r.key.clone());
                     let mut expected = swarm_ids.clone().split_off(1);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1).distance(&key).cmp(
-                            &kbucket::Key::new(id2).distance(&key)));
+                        id1.distance(&key).cmp(
+                            &id2.distance(&key)));
 
                     let expected = expected
                         .into_iter()
@@ -421,7 +428,6 @@ fn put_record() {
 
                 if republished {
                     assert_eq!(swarms[0].store.records().count(), records.len());
-                    assert_eq!(swarms[0].queries.size(), 0);
                     for k in records.keys() {
                         swarms[0].store.remove(&k);
                     }
@@ -446,8 +452,8 @@ fn get_value() {
 
     let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
-    swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
-    swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
+    swarms[0].add_address(swarm_ids[1].clone(), Protocol::Memory(port_base + 1).into());
+    swarms[1].add_address(swarm_ids[2].clone(), Protocol::Memory(port_base + 2).into());
 
     let record = Record::new(Multihash::random(SHA2256), vec![4,5,6]);
 
@@ -589,8 +595,8 @@ fn add_provider() {
                     let mut expected = swarm_ids.clone().split_off(1);
                     let kbucket_key = kbucket::Key::new(key);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1).distance(&kbucket_key).cmp(
-                            &kbucket::Key::new(id2).distance(&kbucket_key)));
+                        id1.distance(&kbucket_key).cmp(
+                            &id2.distance(&kbucket_key)));
 
                     let expected = expected
                         .into_iter()
@@ -602,9 +608,6 @@ fn add_provider() {
 
                 // One round of publishing is complete.
                 assert!(results.is_empty());
-                for s in &swarms {
-                    assert_eq!(s.queries.size(), 0);
-                }
 
                 if republished {
                     assert_eq!(swarms[0].store.provided().count(), keys.len());

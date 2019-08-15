@@ -22,6 +22,7 @@ use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
+use crate::kbucket;
 use crate::record::{self, Record};
 use futures::prelude::*;
 use libp2p_swarm::{
@@ -139,6 +140,8 @@ pub enum KademliaHandlerEvent<TUserData> {
     FindNodeReq {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
+        /// The key prefix to associated with the (hashed) `key`.
+        key_prefix: kbucket::KeyPrefix,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -283,6 +286,8 @@ pub enum KademliaHandlerIn<TUserData> {
     FindNodeReq {
         /// Identifier of the node.
         key: Vec<u8>,
+        /// The key prefix to associated with the (hashed) `key`.
+        key_prefix: kbucket::KeyPrefix,
         /// Custom user data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -488,8 +493,8 @@ where
                     let _ = self.substreams.remove(pos).try_close();
                 }
             }
-            KademliaHandlerIn::FindNodeReq { key, user_data } => {
-                let msg = KadRequestMsg::FindNode { key };
+            KademliaHandlerIn::FindNodeReq { key, key_prefix, user_data } => {
+                let msg = KadRequestMsg::FindNode { key, key_prefix };
                 self.substreams.push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
             }
             KademliaHandlerIn::FindNodeRes {
@@ -886,8 +891,9 @@ fn process_kad_request<TUserData>(
                 "the PING Kademlia message is not implemented",
             ))
         }
-        KadRequestMsg::FindNode { key } => Ok(KademliaHandlerEvent::FindNodeReq {
+        KadRequestMsg::FindNode { key, key_prefix } => Ok(KademliaHandlerEvent::FindNodeReq {
             key,
+            key_prefix,
             request_id: KademliaRequestId { connec_unique_id },
         }),
         KadRequestMsg::GetProviders { key } => Ok(KademliaHandlerEvent::GetProvidersReq {

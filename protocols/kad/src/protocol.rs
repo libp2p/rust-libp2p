@@ -32,6 +32,7 @@
 
 use bytes::BytesMut;
 use codec::UviBytes;
+use crate::kbucket;
 use crate::protobuf_structs::dht as proto;
 use crate::record::{self, Record};
 use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
@@ -93,9 +94,11 @@ impl Into<proto::Message_ConnectionType> for KadConnectionType {
 pub struct KadPeer {
     /// Identifier of the peer.
     pub node_id: PeerId,
-    /// The multiaddresses that the sender think can be used in order to reach the peer.
+    /// The DHT key prefix to associate with the `node_id`.
+    pub key_prefix: crate::kbucket::KeyPrefix,
+    /// The multiaddresses of the peer known to the sender.
     pub multiaddrs: Vec<Multiaddr>,
-    /// How the sender is connected to that remote.
+    /// The connection status w.r.t. the peer as seen by the sender.
     pub connection_ty: KadConnectionType,
 }
 
@@ -109,17 +112,22 @@ impl TryFrom<&mut proto::Message_Peer> for KadPeer {
         let node_id = PeerId::from_bytes(peer.get_id().to_vec())
             .map_err(|_| invalid_data("invalid peer id"))?;
 
+        let key_prefix = crate::kbucket::KeyPrefix::try_from(peer.get_key_prefix())
+            .map_err(invalid_data)?;
+
         let mut addrs = Vec::with_capacity(peer.get_addrs().len());
         for addr in peer.take_addrs().into_iter() {
             let as_ma = Multiaddr::try_from(addr).map_err(invalid_data)?;
             addrs.push(as_ma);
         }
+
         debug_assert_eq!(addrs.len(), addrs.capacity());
 
         let connection_ty = peer.get_connection().into();
 
         Ok(KadPeer {
             node_id,
+            key_prefix,
             multiaddrs: addrs,
             connection_ty
         })
@@ -134,6 +142,7 @@ impl Into<proto::Message_Peer> for KadPeer {
             out.mut_addrs().push(addr.to_vec());
         }
         out.set_connection(self.connection_ty.into());
+        out.set_key_prefix(self.key_prefix.to_vec());
         out
     }
 }
@@ -253,11 +262,12 @@ pub enum KadRequestMsg {
     /// Ping request.
     Ping,
 
-    /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
-    /// returned is not specified, but should be around 20.
+    /// Request for a list of nodes whose IDs are the closest to `key`.
     FindNode {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
+        /// The key prefix to associate with the (hashed) `key`.
+        key_prefix: kbucket::KeyPrefix,
     },
 
     /// Same as `FindNode`, but should also return the entries of the local providers list for
@@ -332,10 +342,11 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             msg.set_field_type(proto::Message_MessageType::PING);
             msg
         }
-        KadRequestMsg::FindNode { key } => {
+        KadRequestMsg::FindNode { key, key_prefix } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::FIND_NODE);
             msg.set_key(key);
+            msg.set_key_prefix(key_prefix.to_vec());
             msg.set_clusterLevelRaw(10);
             msg
         }
@@ -359,7 +370,6 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             msg.set_field_type(proto::Message_MessageType::GET_VALUE);
             msg.set_clusterLevelRaw(10);
             msg.set_key(key.to_vec());
-
             msg
         }
         KadRequestMsg::PutValue { record } => {
@@ -456,7 +466,9 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
 
         proto::Message_MessageType::FIND_NODE => {
             let key = message.take_key();
-            Ok(KadRequestMsg::FindNode { key })
+            let key_prefix = kbucket::KeyPrefix::try_from(message.get_key_prefix())
+                .map_err(invalid_data)?;
+            Ok(KadRequestMsg::FindNode { key, key_prefix })
         }
 
         proto::Message_MessageType::GET_PROVIDERS => {
@@ -602,97 +614,4 @@ where
     E: Into<Box<dyn std::error::Error + Send + Sync>>
 {
     io::Error::new(io::ErrorKind::InvalidData, e)
-}
-
-#[cfg(test)]
-mod tests {
-
-    /*// TODO: restore
-    use self::libp2p_tcp::TcpConfig;
-    use self::tokio::runtime::current_thread::Runtime;
-    use futures::{Future, Sink, Stream};
-    use libp2p_core::{PeerId, PublicKey, Transport};
-    use multihash::{encode, Hash};
-    use protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
-    use std::sync::mpsc;
-    use std::thread;
-
-    #[test]
-    fn correct_transfer() {
-        // We open a server and a client, send a message between the two, and check that they were
-        // successfully received.
-
-        test_one(KadMsg::Ping);
-        test_one(KadMsg::FindNodeReq {
-            key: PeerId::random(),
-        });
-        test_one(KadMsg::FindNodeRes {
-            closer_peers: vec![KadPeer {
-                node_id: PeerId::random(),
-                multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
-            }],
-        });
-        test_one(KadMsg::GetProvidersReq {
-            key: encode(Hash::SHA2256, &[9, 12, 0, 245, 245, 201, 28, 95]).unwrap(),
-        });
-        test_one(KadMsg::GetProvidersRes {
-            closer_peers: vec![KadPeer {
-                node_id: PeerId::random(),
-                multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
-            }],
-            provider_peers: vec![KadPeer {
-                node_id: PeerId::random(),
-                multiaddrs: vec!["/ip4/200.201.202.203/tcp/1999".parse().unwrap()],
-                connection_ty: KadConnectionType::NotConnected,
-            }],
-        });
-        test_one(KadMsg::AddProvider {
-            key: encode(Hash::SHA2256, &[9, 12, 0, 245, 245, 201, 28, 95]).unwrap(),
-            provider_peer: KadPeer {
-                node_id: PeerId::random(),
-                multiaddrs: vec!["/ip4/9.1.2.3/udp/23".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
-            },
-        });
-        // TODO: all messages
-
-        fn test_one(msg_server: KadMsg) {
-            let msg_client = msg_server.clone();
-            let (tx, rx) = mpsc::channel();
-
-            let bg_thread = thread::spawn(move || {
-                let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
-
-                let (listener, addr) = transport
-                    .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-                    .unwrap();
-                tx.send(addr).unwrap();
-
-                let future = listener
-                    .into_future()
-                    .map_err(|(err, _)| err)
-                    .and_then(|(client, _)| client.unwrap().0)
-                    .and_then(|proto| proto.into_future().map_err(|(err, _)| err).map(|(v, _)| v))
-                    .map(|recv_msg| {
-                        assert_eq!(recv_msg.unwrap(), msg_server);
-                        ()
-                    });
-                let mut rt = Runtime::new().unwrap();
-                let _ = rt.block_on(future).unwrap();
-            });
-
-            let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
-
-            let future = transport
-                .dial(rx.recv().unwrap())
-                .unwrap()
-                .and_then(|proto| proto.send(msg_client))
-                .map(|_| ());
-            let mut rt = Runtime::new().unwrap();
-            let _ = rt.block_on(future).unwrap();
-            bg_thread.join().unwrap();
-        }
-    }*/
 }

@@ -18,12 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use arrayvec::ArrayVec;
 use uint::*;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::{GenericArray, typenum::U32};
+use std::convert::TryFrom;
+use std::error::Error;
+use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::iter::FromIterator;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -83,6 +88,26 @@ impl<T> Key<T> {
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
         self.bytes.for_distance(d)
     }
+
+    /// Creates a new key by establishing a fixed `num_bytes` prefix,
+    /// computed by running the `src` bytes through a random oracle.
+    ///
+    /// Any keys `k1` and `k2` with the same prefix satisfy:
+    ///
+    /// `k1.distance(k2) < 2^(8 * (32 - num_bytes))`
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num_bytes > 32`.
+    pub fn with_prefix(self, prefix: KeyPrefix) -> Self {
+        let bytes = self.bytes.with_prefix(prefix);
+        Key { bytes, .. self }
+    }
+
+    /// Gets the prefix of the key.
+    pub fn prefix(&self) -> KeyPrefix {
+        self.bytes.prefix()
+    }
 }
 
 impl<T> Into<KeyBytes> for Key<T> {
@@ -119,13 +144,22 @@ impl<T> Eq for Key<T> {}
 
 impl<T> Hash for Key<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.bytes.0.hash(state);
+        self.bytes.hash(state);
     }
 }
 
 /// The raw bytes of a key in the DHT keyspace.
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub struct KeyBytes(GenericArray<u8, U32>);
+pub struct KeyBytes {
+    bytes: GenericArray<u8, U32>,
+    prefix_len: u8,
+}
+
+impl Hash for KeyBytes {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes.hash(state);
+    }
+}
 
 impl KeyBytes {
     /// Creates a new key in the DHT keyspace by running the given
@@ -134,7 +168,10 @@ impl KeyBytes {
     where
         T: AsRef<[u8]>
     {
-        KeyBytes(Sha256::digest(value.as_ref()))
+        KeyBytes {
+            bytes: Sha256::digest(value.as_ref()),
+            prefix_len: 0
+        }
     }
 
     /// Computes the distance of the keys according to the XOR metric.
@@ -142,8 +179,8 @@ impl KeyBytes {
     where
         U: AsRef<KeyBytes>
     {
-        let a = U256::from(self.0.as_ref());
-        let b = U256::from(other.as_ref().0.as_ref());
+        let a = U256::from(self.bytes.as_ref());
+        let b = U256::from(other.as_ref().bytes.as_ref());
         Distance(a ^ b)
     }
 
@@ -153,8 +190,34 @@ impl KeyBytes {
     ///
     /// `self xor other = distance <==> other = self xor distance`
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
-        let key_int = U256::from(self.0.as_ref()) ^ d.0;
-        KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
+        let key_int = U256::from(self.bytes.as_ref()) ^ d.0;
+        KeyBytes {
+            bytes: GenericArray::from(<[u8; 32]>::from(key_int)),
+            prefix_len: 0,
+        }
+    }
+
+    /// Creates a new key by establishing a fixed `num_bytes` prefix,
+    /// computed by running the `src` bytes through a random oracle.
+    ///
+    /// Any keys `k1` and `k2` with the same prefix satisfy:
+    ///
+    /// `k1.distance(k2) < 2^(8 * (32 - num_bytes))`
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num_bytes > 32`.
+    pub fn with_prefix(mut self, prefix: KeyPrefix) -> KeyBytes {
+        let dst_prefix = self.bytes.as_mut().split_at_mut(prefix.0.len()).0;
+        dst_prefix.copy_from_slice(&prefix.0);
+        self.prefix_len = prefix.0.len() as u8;
+        self
+    }
+
+    /// Gets the prefix of the key.
+    pub fn prefix(&self) -> KeyPrefix {
+        KeyPrefix(ArrayVec::from_iter(
+            self.bytes[0..self.prefix_len as usize].iter().cloned()))
     }
 }
 
@@ -168,11 +231,93 @@ impl AsRef<KeyBytes> for KeyBytes {
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(pub(super) U256);
 
+/// A prefix of a key in the DHT keyspace.
+///
+/// Equipping multiple keys with the same prefix creates
+/// additional structure in the DHT keyspace by intentionally
+/// grouping these keys closer together.
+///
+/// By default keys have an empty (0-length) prefix, resulting
+/// in a fully uniformly random distribution of keys in the
+/// keyspace. The more keys are equipped with prefixes, and
+/// the longer these prefixes, the more clustered the distribution
+/// of keys in the DHT keyspace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyPrefix(ArrayVec<[u8; 32]>);
+
+impl KeyPrefix {
+    /// Creates a new key prefix of length `num_bytes` by truncating
+    /// the output of running the `src` bytes through a random oracle
+    /// with 32 byte output range.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num_bytes > 32`.
+    pub fn new<P: AsRef<[u8]>>(src: P, num_bytes: usize) -> Self {
+        assert!(num_bytes <= 32);
+        let src = Sha256::digest(src.as_ref());
+        KeyPrefix(ArrayVec::from_iter((&src[..num_bytes]).iter().cloned()))
+    }
+
+    /// Creates a raw byte vector from the key prefix.
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
+impl Default for KeyPrefix {
+    fn default() -> Self {
+        KeyPrefix(ArrayVec::new())
+    }
+}
+
+/// Possible errors from reconstructing a `KeyPrefix` from
+/// its raw byte representation.
+#[derive(Debug)]
+pub enum InvalidKeyPrefix {
+    PrefixTooLong
+}
+
+impl fmt::Display for InvalidKeyPrefix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InvalidKeyPrefix::PrefixTooLong => write!(f, "Key prefix is too long.")
+        }
+    }
+}
+
+impl Error for InvalidKeyPrefix {}
+
+impl TryFrom<&[u8]> for KeyPrefix {
+    type Error = InvalidKeyPrefix;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        if bytes.len() > 32 {
+            Err(InvalidKeyPrefix::PrefixTooLong)
+        } else {
+            Ok(KeyPrefix(ArrayVec::from_iter(bytes.iter().cloned())))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use quickcheck::*;
     use multihash::Hash::SHA2256;
+    use rand::Rng;
+
+    impl Arbitrary for KeyBytes {
+        fn arbitrary<G: Gen>(g: &mut G) -> KeyBytes {
+            KeyBytes::new(Vec::<u8>::arbitrary(g))
+        }
+    }
+
+    impl Arbitrary for KeyPrefix {
+        fn arbitrary<G: Gen>(g: &mut G) -> KeyPrefix {
+            KeyPrefix::new(Vec::<u8>::arbitrary(g), g.gen_range(0, 32))
+        }
+    }
 
     impl Arbitrary for Key<PeerId> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<PeerId> {
@@ -227,5 +372,21 @@ mod tests {
             })
         }
         quickcheck(prop as fn(_,_) -> _)
+    }
+
+    #[test]
+    fn prefix_max_distance() {
+        fn prop(keys: Vec<KeyBytes>, prefix: KeyPrefix) {
+            let num_bytes = prefix.0.len();
+            let keys = keys.into_iter()
+                .map(|k| k.with_prefix(prefix.clone()))
+                .collect::<Vec<_>>();
+            for k1 in &keys {
+                for k2 in &keys {
+                    assert!(k1.distance(k2).0.leading_zeros() >= (num_bytes * 8) as u32);
+                }
+            }
+        }
+        quickcheck(prop as fn(_,_))
     }
 }

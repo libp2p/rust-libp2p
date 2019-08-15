@@ -20,6 +20,7 @@
 
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
+use std::convert::TryFrom;
 use std::fmt;
 
 /// A non-empty list of (unique) addresses of a peer in the routing table.
@@ -44,6 +45,11 @@ impl Addresses {
     /// Returns an iterator over the addresses.
     pub fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
         self.addrs.iter()
+    }
+
+    /// Returns an iterator over the addresses.
+    pub fn into_iter(self) -> impl Iterator<Item = Multiaddr> {
+        self.addrs.into_iter()
     }
 
     /// Returns the number of addresses in the list.
@@ -98,5 +104,16 @@ impl fmt::Debug for Addresses {
         f.debug_list()
             .entries(self.addrs.iter())
             .finish()
+    }
+}
+
+impl TryFrom<Vec<Multiaddr>> for Addresses {
+    type Error = ();
+
+    fn try_from(addrs: Vec<Multiaddr>) -> Result<Addresses, ()> {
+        if addrs.len() == 0 {
+            return Err(())
+        }
+        Ok(Addresses { addrs: SmallVec::from(addrs) })
     }
 }

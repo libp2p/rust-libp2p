@@ -89,9 +89,9 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that contacts a fixed set of peers.
     pub fn add_fixed<I>(&mut self, peers: I, inner: TInner) -> QueryId
     where
-        I: IntoIterator<Item = Key<PeerId>>
+        I: IntoIterator<Item = PeerId>
     {
-        let peers = peers.into_iter().map(|k| k.into_preimage()).collect::<Vec<_>>();
+        let peers = peers.into_iter().collect::<Vec<_>>();
         let parallelism = self.config.replication_factor.get();
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
         self.add(peer_iter, inner)
@@ -195,12 +195,13 @@ impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
             timeout: Duration::from_secs(60),
-            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0")
+            replication_factor: K_VALUE
         }
     }
 }
 
 /// A query in a `QueryPool`.
+#[derive(Debug)]
 pub struct Query<TInner> {
     /// The unique ID of the query.
     id: QueryId,
@@ -214,6 +215,7 @@ pub struct Query<TInner> {
 }
 
 /// The peer selection strategies that can be used by queries.
+#[derive(Debug)]
 enum QueryPeerIter {
     Closest(ClosestPeersIter),
     Fixed(FixedPeersIter)
@@ -241,9 +243,10 @@ impl<TInner> Query<TInner> {
     /// Informs the query that the attempt to contact `peer` succeeded,
     /// possibly resulting in new peers that should be incorporated into
     /// the query, if applicable.
-    pub fn on_success<I>(&mut self, peer: &PeerId, new_peers: I)
+    pub fn on_success<P, I>(&mut self, peer: &PeerId, new_peers: I)
     where
-        I: IntoIterator<Item = PeerId>
+        P: Into<Key<PeerId>>,
+        I: IntoIterator<Item = P>
     {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),

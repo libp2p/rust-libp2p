@@ -25,6 +25,7 @@ use libp2p_core::PeerId;
 use std::{vec, collections::hash_map::Entry};
 
 /// A peer iterator for a fixed set of peers.
+#[derive(Debug)]
 pub struct FixedPeersIter {
     /// Ther permitted parallelism, i.e. number of pending results.
     parallelism: usize,
@@ -39,12 +40,13 @@ pub struct FixedPeersIter {
     state: State,
 }
 
+#[derive(Debug)]
 enum State {
     Waiting { num_waiting: usize },
     Finished
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum PeerState {
     /// The iterator is waiting for a result to be reported back for the peer.
     Waiting,

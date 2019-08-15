@@ -71,15 +71,21 @@ impl Default for MemoryStoreConfig {
 
 impl MemoryStore {
     /// Creates a new `MemoryRecordStore` with a default configuration.
-    pub fn new(local_id: PeerId) -> Self {
-        Self::with_config(local_id, Default::default())
+    pub fn new<K>(local_key: K) -> Self
+    where
+        K: Into<kbucket::Key<PeerId>>
+    {
+        Self::with_config(local_key, Default::default())
     }
 
     /// Creates a new `MemoryRecordStore` with the given configuration.
-    pub fn with_config(local_id: PeerId, config: MemoryStoreConfig) -> Self {
+    pub fn with_config<K>(local_key: K, config: MemoryStoreConfig) -> Self
+    where
+        K: Into<kbucket::Key<PeerId>>
+    {
         MemoryStore {
-            local_key: kbucket::Key::new(local_id),
             config,
+            local_key: local_key.into(),
             records: HashMap::default(),
             provided: HashSet::default(),
             providers: HashMap::default(),
@@ -161,13 +167,13 @@ impl<'a> RecordStore<'a> for MemoryStore {
             // It is a new provider record for that key.
             let local_key = self.local_key.clone();
             let key = kbucket::Key::new(record.key.clone());
-            let provider = kbucket::Key::new(record.provider.clone());
+            let provider = record.provider.clone();
             if let Some(i) = providers.iter().position(|p| {
-                let pk = kbucket::Key::new(p.provider.clone());
+                let pk = p.provider.clone();
                 provider.distance(&key) < pk.distance(&key)
             }) {
                 // Insert the new provider.
-                if local_key.preimage() == &record.provider {
+                if &local_key == &record.provider {
                     self.provided.insert(record.clone());
                 }
                 providers.insert(i, record);
@@ -181,7 +187,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
             else if providers.len() < self.config.max_providers_per_key {
                 // The distance of the new provider to the key is larger than
                 // the distance of any existing provider, but there is still room.
-                if local_key.preimage() == &record.provider {
+                if &local_key == &record.provider {
                     self.provided.insert(record.clone());
                 }
                 providers.push(record);
@@ -201,7 +207,10 @@ impl<'a> RecordStore<'a> for MemoryStore {
     fn remove_provider(&'a mut self, key: &Key, provider: &PeerId) {
         if let hash_map::Entry::Occupied(mut e) = self.providers.entry(key.clone()) {
             let providers = e.get_mut();
-            if let Some(i) = providers.iter().position(|p| &p.provider == provider) {
+            while let Some(i) = providers
+                .iter()
+                .position(|p| p.provider.preimage() == provider)
+            {
                 let p = providers.remove(i);
                 self.provided.remove(&p);
             }
@@ -219,8 +228,7 @@ mod tests {
     use quickcheck::*;
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {
-        kbucket::Key::new(r.key.clone())
-            .distance(&kbucket::Key::new(r.provider.clone()))
+        kbucket::Key::new(r.key.clone()).distance(&r.provider)
     }
 
     #[test]
@@ -241,7 +249,7 @@ mod tests {
             let mut store = MemoryStore::new(PeerId::random());
             assert!(store.add_provider(r.clone()).is_ok());
             assert!(store.providers(&r.key).contains(&r));
-            store.remove_provider(&r.key, &r.provider);
+            store.remove_provider(&r.key, r.provider.preimage());
             assert!(!store.providers(&r.key).contains(&r));
         }
         quickcheck(prop as fn(_))

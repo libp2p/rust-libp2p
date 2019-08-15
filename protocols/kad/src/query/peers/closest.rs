@@ -24,7 +24,7 @@ use crate::{K_VALUE, ALPHA_VALUE};
 use crate::kbucket::{Key, KeyBytes, Distance};
 use libp2p_core::PeerId;
 use std::{time::Duration, iter::FromIterator};
-use std::collections::btree_map::{BTreeMap, Entry};
+use std::collections::BTreeMap;
 use wasm_timer::Instant;
 
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
@@ -137,33 +137,35 @@ impl ClosestPeersIter {
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect.
-    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I)
+    pub fn on_success<P, I>(&mut self, peer: &PeerId, closer_peers: I)
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = P>,
+        P: Into<Key<PeerId>>
     {
         if let State::Finished = self.state {
             return
         }
 
-        let key = Key::from(peer.clone());
-        let distance = key.distance(&self.target);
-
-        // Mark the peer as succeeded.
-        match self.closest_peers.entry(distance) {
-            Entry::Vacant(..) => return,
-            Entry::Occupied(mut e) => match e.get().state {
+        if let Some(p) = self.closest_peers
+            .values_mut()
+            .find(|p| p.key.preimage() == peer)
+        {
+            // Mark the peer as succeeded.
+            match p.state {
                 PeerState::Waiting(..) => {
                     debug_assert!(self.num_waiting > 0);
                     self.num_waiting -= 1;
-                    e.get_mut().state = PeerState::Succeeded;
+                    p.state = PeerState::Succeeded;
                 }
                 PeerState::Unresponsive => {
-                    e.get_mut().state = PeerState::Succeeded;
+                    p.state = PeerState::Succeeded;
                 }
                 PeerState::NotContacted
                     | PeerState::Failed
                     | PeerState::Succeeded => return
             }
+        } else {
+            return
         }
 
         let num_closest = self.closest_peers.len();
@@ -216,19 +218,18 @@ impl ClosestPeersIter {
             return
         }
 
-        let key = Key::from(peer.clone());
-        let distance = key.distance(&self.target);
-
-        match self.closest_peers.entry(distance) {
-            Entry::Vacant(_) => return,
-            Entry::Occupied(mut e) => match e.get().state {
+        if let Some(p) = self.closest_peers
+            .values_mut()
+            .find(|p| p.key.preimage() == peer)
+        {
+            match p.state {
                 PeerState::Waiting(_) => {
                     debug_assert!(self.num_waiting > 0);
                     self.num_waiting -= 1;
-                    e.get_mut().state = PeerState::Failed
+                    p.state = PeerState::Failed
                 }
                 PeerState::Unresponsive => {
-                    e.get_mut().state = PeerState::Failed
+                    p.state = PeerState::Failed
                 }
                 _ => {}
             }
@@ -674,7 +675,7 @@ mod tests {
             }
 
             let finished = iter.finished();
-            iter.on_success(&peer, iter::empty());
+            iter.on_success(&peer, iter::empty::<PeerId>());
             let closest = iter.into_result().collect::<Vec<_>>();
 
             if finished {

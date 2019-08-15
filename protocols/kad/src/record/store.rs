@@ -89,7 +89,7 @@ pub trait RecordStore<'a> {
     /// node owning the store is itself the provider.
     fn provided(&'a self) -> Self::ProvidedIter;
 
-    /// Removes a provider record from the store.
+    /// Removes provider records for the given key and provider.
     fn remove_provider(&'a mut self, k: &Key, p: &PeerId);
 }
 
