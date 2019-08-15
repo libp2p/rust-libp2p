@@ -33,11 +33,10 @@
 use bytes::BytesMut;
 use codec::UviBytes;
 use crate::protobuf_structs::dht as proto;
-use crate::record::Record;
+use crate::record::{self, Record};
 use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
-use multihash::Multihash;
 use protobuf::{self, Message};
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
@@ -258,20 +257,20 @@ pub enum KadRequestMsg {
     /// returned is not specified, but should be around 20.
     FindNode {
         /// The key for which to locate the closest nodes.
-        key: Multihash,
+        key: Vec<u8>,
     },
 
     /// Same as `FindNode`, but should also return the entries of the local providers list for
     /// this key.
     GetProviders {
         /// Identifier being searched.
-        key: Multihash,
+        key: record::Key,
     },
 
     /// Indicates that this list of providers is known for this key.
     AddProvider {
         /// Key for which we should add providers.
-        key: Multihash,
+        key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -279,7 +278,7 @@ pub enum KadRequestMsg {
     /// Request to get a value from the dht records.
     GetValue {
         /// The key we are searching for.
-        key: Multihash,
+        key: record::Key,
     },
 
     /// Request to put a value into the dht records.
@@ -319,7 +318,7 @@ pub enum KadResponseMsg {
     /// Response to a `PutValue`.
     PutValue {
         /// The key of the record.
-        key: Multihash,
+        key: record::Key,
         /// Value of the record.
         value: Vec<u8>,
     },
@@ -336,14 +335,14 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
         KadRequestMsg::FindNode { key } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::FIND_NODE);
-            msg.set_key(key.into_bytes());
+            msg.set_key(key);
             msg.set_clusterLevelRaw(10);
             msg
         }
         KadRequestMsg::GetProviders { key } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::GET_PROVIDERS);
-            msg.set_key(key.into_bytes());
+            msg.set_key(key.to_vec());
             msg.set_clusterLevelRaw(10);
             msg
         }
@@ -351,7 +350,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::ADD_PROVIDER);
             msg.set_clusterLevelRaw(10);
-            msg.set_key(key.into_bytes());
+            msg.set_key(key.to_vec());
             msg.mut_providerPeers().push(provider.into());
             msg
         }
@@ -359,7 +358,7 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::GET_VALUE);
             msg.set_clusterLevelRaw(10);
-            msg.set_key(key.into_bytes());
+            msg.set_key(key.to_vec());
 
             msg
         }
@@ -426,10 +425,10 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
         } => {
             let mut msg = proto::Message::new();
             msg.set_field_type(proto::Message_MessageType::PUT_VALUE);
-            msg.set_key(key.clone().into_bytes());
+            msg.set_key(key.to_vec());
 
             let mut record = proto::Record::new();
-            record.set_key(key.into_bytes());
+            record.set_key(key.to_vec());
             record.set_value(value);
             msg.set_record(record);
 
@@ -451,18 +450,17 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
         }
 
         proto::Message_MessageType::GET_VALUE => {
-            let key = Multihash::from_bytes(message.take_key()).map_err(invalid_data)?;
+            let key = record::Key::from(message.take_key());
             Ok(KadRequestMsg::GetValue { key })
         }
 
         proto::Message_MessageType::FIND_NODE => {
-            let key = Multihash::from_bytes(message.take_key())
-                .map_err(|_| invalid_data("Invalid key in FIND_NODE"))?;
+            let key = message.take_key();
             Ok(KadRequestMsg::FindNode { key })
         }
 
         proto::Message_MessageType::GET_PROVIDERS => {
-            let key = Multihash::from_bytes(message.take_key()).map_err(invalid_data)?;
+            let key = record::Key::from(message.take_key());
             Ok(KadRequestMsg::GetProviders { key })
         }
 
@@ -476,7 +474,7 @@ fn proto_to_req_msg(mut message: proto::Message) -> Result<KadRequestMsg, io::Er
                 .find_map(|peer| KadPeer::try_from(peer).ok());
 
             if let Some(provider) = provider {
-                let key = Multihash::from_bytes(message.take_key()).map_err(invalid_data)?;
+                let key = record::Key::from(message.take_key());
                 Ok(KadRequestMsg::AddProvider { key, provider })
             } else {
                 Err(invalid_data("ADD_PROVIDER message with no valid peer."))
@@ -539,7 +537,7 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
         }
 
         proto::Message_MessageType::PUT_VALUE => {
-            let key = Multihash::from_bytes(message.take_key()).map_err(invalid_data)?;
+            let key = record::Key::from(message.take_key());
             if !message.has_record() {
                 return Err(invalid_data("received PUT_VALUE message with no record"));
             }
@@ -557,7 +555,7 @@ fn proto_to_resp_msg(mut message: proto::Message) -> Result<KadResponseMsg, io::
 }
 
 fn record_from_proto(mut record: proto::Record) -> Result<Record, io::Error> {
-    let key = Multihash::from_bytes(record.take_key()).map_err(invalid_data)?;
+    let key = record::Key::from(record.take_key());
     let value = record.take_value();
 
     let publisher =
@@ -581,7 +579,7 @@ fn record_from_proto(mut record: proto::Record) -> Result<Record, io::Error> {
 
 fn record_to_proto(record: Record) -> proto::Record {
     let mut pb_record = proto::Record::new();
-    pb_record.key = record.key.into_bytes();
+    pb_record.key = record.key.to_vec();
     pb_record.value = record.value;
     if let Some(p) = record.publisher {
         pb_record.publisher = p.into_bytes();

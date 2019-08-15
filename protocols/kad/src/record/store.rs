@@ -64,13 +64,13 @@ pub trait RecordStore<'a> {
     type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord>>;
 
     /// Gets a record from the store, given its key.
-    fn get(&'a self, k: &Multihash) -> Option<Cow<Record>>;
+    fn get(&'a self, k: &Key) -> Option<Cow<Record>>;
 
     /// Puts a record into the store.
     fn put(&'a mut self, r: Record) -> Result<()>;
 
     /// Removes the record with the given key from the store.
-    fn remove(&'a mut self, k: &Multihash);
+    fn remove(&'a mut self, k: &Key);
 
     /// Gets an iterator over all (value-) records currently stored.
     fn records(&'a self) -> Self::RecordsIter;
@@ -83,13 +83,13 @@ pub trait RecordStore<'a> {
     fn add_provider(&'a mut self, record: ProviderRecord) -> Result<()>;
 
     /// Gets a copy of the stored provider records for the given key.
-    fn providers(&'a self, key: &Multihash) -> Vec<ProviderRecord>;
+    fn providers(&'a self, key: &Key) -> Vec<ProviderRecord>;
 
     /// Gets an iterator over all stored provider records for which the
     /// node owning the store is itself the provider.
     fn provided(&'a self) -> Self::ProvidedIter;
 
     /// Removes a provider record from the store.
-    fn remove_provider(&'a mut self, k: &Multihash, p: &PeerId);
+    fn remove_provider(&'a mut self, k: &Key, p: &PeerId);
 }
 

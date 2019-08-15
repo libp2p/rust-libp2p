@@ -22,7 +22,7 @@ use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
-use crate::record::Record;
+use crate::record::{self, Record};
 use futures::prelude::*;
 use libp2p_swarm::{
     KeepAlive,
@@ -36,7 +36,6 @@ use libp2p_core::{
     upgrade::{self, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
 use log::trace;
-use multihash::Multihash;
 use std::{borrow::Cow, error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::Instant;
@@ -139,7 +138,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// returned is not specified, but should be around 20.
     FindNodeReq {
         /// The key for which to locate the closest nodes.
-        key: Multihash,
+        key: Vec<u8>,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -155,8 +154,8 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
     /// this key.
     GetProvidersReq {
-        /// Identifier being searched.
-        key: Multihash,
+        /// The key for which providers are requested.
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -182,7 +181,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// The peer announced itself as a provider of a key.
     AddProvider {
         /// The key for which the peer is a provider of the associated value.
-        key: Multihash,
+        key: record::Key,
         /// The peer that is the provider of the value for `key`.
         provider: KadPeer,
     },
@@ -190,7 +189,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Request to get a value from the dht records
     GetRecord {
         /// Key for which we should look in the dht
-        key: Multihash,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -215,7 +214,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Response to a request to store a record.
     PutRecordRes {
         /// The key of the stored record.
-        key: Multihash,
+        key: record::Key,
         /// The value of the stored record.
         value: Vec<u8>,
         /// The user data passed to the `PutValue`.
@@ -283,7 +282,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// returned is not specified, but should be around 20.
     FindNodeReq {
         /// Identifier of the node.
-        key: Multihash,
+        key: Vec<u8>,
         /// Custom user data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -302,7 +301,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// this key.
     GetProvidersReq {
         /// Identifier being searched.
-        key: Multihash,
+        key: record::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -325,7 +324,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// succeeded.
     AddProvider {
         /// Key for which we should add providers.
-        key: Multihash,
+        key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -333,7 +332,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// Request to retrieve a record from the DHT.
     GetRecord {
         /// The key of the record.
-        key: Multihash,
+        key: record::Key,
         /// Custom data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -358,7 +357,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// Response to a `PutRecord`.
     PutRecordRes {
         /// Key of the value that was put.
-        key: Multihash,
+        key: record::Key,
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
@@ -517,7 +516,7 @@ where
                 }
             }
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
-                let msg = KadRequestMsg::GetProviders { key: key.clone() };
+                let msg = KadRequestMsg::GetProviders { key };
                 self.substreams
                     .push(SubstreamState::OutPendingOpen(msg, Some(user_data.clone())));
             }
@@ -550,17 +549,12 @@ where
                 }
             }
             KademliaHandlerIn::AddProvider { key, provider } => {
-                let msg = KadRequestMsg::AddProvider {
-                    key: key.clone(),
-                    provider: provider.clone(),
-                };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, None));
+                let msg = KadRequestMsg::AddProvider { key, provider };
+                self.substreams.push(SubstreamState::OutPendingOpen(msg, None));
             }
             KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.substreams
-                    .push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
+                self.substreams.push(SubstreamState::OutPendingOpen(msg, Some(user_data)));
 
             }
             KademliaHandlerIn::PutRecord { record, user_data } => {
