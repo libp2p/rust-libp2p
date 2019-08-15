@@ -20,7 +20,7 @@ lazy_static = "1.2"
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/multihash" }
-multistream-select = { version = "0.4.0", path = "../misc/multistream-select" }
+multistream-select = { version = "0.5.0", path = "../misc/multistream-select" }
 futures = "0.1"
 parking_lot = "0.8"
 protobuf = "2.3"
