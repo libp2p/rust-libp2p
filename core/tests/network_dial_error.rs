@@ -237,11 +237,11 @@ fn dial_self() {
                     }
                 },
                 Async::Ready(NetworkEvent::IncomingConnectionError {
-                    listen_addr,
+                    local_addr,
                     send_back_addr: _,
                     error: IncomingError::FoundLocalPeerId
                 }) => {
-                    assert_eq!(address, listen_addr);
+                    assert_eq!(address, local_addr);
                     assert!(!got_inc_err);
                     got_inc_err = true;
                     if got_dial_err {
@@ -249,7 +249,7 @@ fn dial_self() {
                     }
                 },
                 Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
-                    assert_eq!(*inc.listen_addr(), address);
+                    assert_eq!(*inc.local_addr(), address);
                     inc.accept(TestHandler::default().into_node_handler_builder());
                 },
                 Async::Ready(ev) => {

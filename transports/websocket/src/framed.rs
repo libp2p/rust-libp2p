@@ -152,8 +152,8 @@ where
                     a = a.with(proto.clone());
                     ListenerEvent::AddressExpired(a)
                 }
-                ListenerEvent::Upgrade { upgrade, mut listen_addr, mut remote_addr } => {
-                    listen_addr = listen_addr.with(proto.clone());
+                ListenerEvent::Upgrade { upgrade, mut local_addr, mut remote_addr } => {
+                    local_addr = local_addr.with(proto.clone());
                     remote_addr = remote_addr.with(proto.clone());
                     let remote1 = remote_addr.clone(); // used for logging
                     let remote2 = remote_addr.clone(); // used for logging
@@ -206,7 +206,7 @@ where
                         });
                     ListenerEvent::Upgrade {
                         upgrade: Box::new(upgraded) as Box<dyn Future<Item = _, Error = _> + Send>,
-                        listen_addr,
+                        local_addr,
                         remote_addr
                     }
                 }

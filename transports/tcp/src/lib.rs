@@ -415,60 +415,59 @@ pub struct TcpListenStream {
     config: TcpConfig
 }
 
-// Map a `SocketAddr` to the corresponding `Multiaddr`.
-// If not found, check for host address changes.
-// This is a function rather than a method due to borrowing issues.
-fn map_addr(addr: &SocketAddr, addrs: &mut Addresses, pending: &mut Buffer, port: u16)
-    -> Result<Multiaddr, io::Error>
-{
-    match addrs {
-        Addresses::One(ref ma) => Ok(ma.clone()),
-        Addresses::Many(ref mut addrs) => {
-            // Check for exact match:
-            if let Some((_, _, ma)) = addrs.iter().find(|(i, ..)| i == &addr.ip()) {
-                return Ok(ma.clone())
-            }
+// If we listen on all interfaces, find out to which interface the given
+// socket address belongs. In case we think the address is new, check
+// all host interfaces again and report new and expired listen addresses.
+fn check_for_interface_changes(
+    socket_addr: &SocketAddr,
+    listen_port: u16,
+    listen_addrs: &mut Vec<(IpAddr, IpNet, Multiaddr)>,
+    pending: &mut Buffer
+) -> Result<(), io::Error> {
+    // Check for exact match:
+    if listen_addrs.iter().find(|(ip, ..)| ip == &socket_addr.ip()).is_some() {
+        return Ok(())
+    }
 
-            // No exact match => check netmask
-            if let Some((_, _, ma)) = addrs.iter().find(|(_, i, _)| i.contains(&addr.ip())) {
-                return Ok(ma.clone())
-            }
+    // No exact match => check netmask
+    if listen_addrs.iter().find(|(_, net, _)| net.contains(&socket_addr.ip())).is_some() {
+        return Ok(())
+    }
 
-            // The local IP address of this socket is new to us.
-            // We need to check for changes in the set of host addresses and report new
-            // and expired addresses.
-            //
-            // TODO: We do not detect expired addresses unless there is a new address.
+    // The local IP address of this socket is new to us.
+    // We check for changes in the set of host addresses and report new
+    // and expired addresses.
+    //
+    // TODO: We do not detect expired addresses unless there is a new address.
+    let old_listen_addrs = std::mem::replace(listen_addrs, host_addresses(listen_port)?);
 
-            let new_addrs = host_addresses(port)?;
-            let old_addrs = std::mem::replace(addrs, new_addrs);
-
-            // Check for addresses no longer in use.
-            for (ip, _, ma) in old_addrs.iter() {
-                if addrs.iter().find(|(i, ..)| i == ip).is_none() {
-                    debug!("Expired listen address: {}", ma);
-                    pending.push_back(ListenerEvent::AddressExpired(ma.clone()));
-                }
-            }
-
-            // Check for new addresses.
-            for (ip, _, ma) in addrs.iter() {
-                if old_addrs.iter().find(|(i, ..)| i == ip).is_none() {
-                    debug!("New listen address: {}", ma);
-                    pending.push_back(ListenerEvent::NewAddress(ma.clone()));
-                }
-            }
-
-            // We should now be able to find the listen address of the local socket address,
-            // if not something is seriously wrong and we report an error.
-            if addrs.iter().find(|(i, j, _)| i == &addr.ip() || j.contains(&addr.ip())).is_none() {
-                let msg = format!("{} does not match any listen address", addr.ip());
-                return Err(io::Error::new(io::ErrorKind::Other, msg))
-            }
-
-            Ok(ip_to_multiaddr(addr.ip(), port))
+    // Check for addresses no longer in use.
+    for (ip, _, ma) in old_listen_addrs.iter() {
+        if listen_addrs.iter().find(|(i, ..)| i == ip).is_none() {
+            debug!("Expired listen address: {}", ma);
+            pending.push_back(ListenerEvent::AddressExpired(ma.clone()));
         }
     }
+
+    // Check for new addresses.
+    for (ip, _, ma) in listen_addrs.iter() {
+        if old_listen_addrs.iter().find(|(i, ..)| i == ip).is_none() {
+            debug!("New listen address: {}", ma);
+            pending.push_back(ListenerEvent::NewAddress(ma.clone()));
+        }
+    }
+
+    // We should now be able to find the local address, if not something
+    // is seriously wrong and we report an error.
+    if listen_addrs.iter()
+        .find(|(ip, net, _)| ip == &socket_addr.ip() || net.contains(&socket_addr.ip()))
+        .is_none()
+    {
+        let msg = format!("{} does not match any listen address", socket_addr.ip());
+        return Err(io::Error::new(io::ErrorKind::Other, msg))
+    }
+
+    Ok(())
 }
 
 impl Stream for TcpListenStream {
@@ -496,8 +495,13 @@ impl Stream for TcpListenStream {
                 }
             };
 
-            let listen_addr = match sock.local_addr() {
-                Ok(addr) => map_addr(&addr, &mut self.addrs, &mut self.pending, self.port)?,
+            let local_addr = match sock.local_addr() {
+                Ok(sock_addr) => {
+                    if let Addresses::Many(ref mut addrs) = self.addrs {
+                        check_for_interface_changes(&sock_addr, self.port, addrs, &mut self.pending)?
+                    }
+                    ip_to_multiaddr(sock_addr.ip(), sock_addr.port())
+                }
                 Err(err) => {
                     debug!("Failed to get local address of incoming socket: {:?}", err);
                     continue
@@ -508,10 +512,10 @@ impl Stream for TcpListenStream {
 
             match apply_config(&self.config, &sock) {
                 Ok(()) => {
-                    trace!("Incoming connection from {} on {}", remote_addr, listen_addr);
+                    trace!("Incoming connection from {} at {}", remote_addr, local_addr);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::ok(TcpTransStream { inner: sock }),
-                        listen_addr,
+                        local_addr,
                         remote_addr
                     })
                 }
@@ -519,7 +523,7 @@ impl Stream for TcpListenStream {
                     debug!("Error upgrading incoming connection from {}: {:?}", remote_addr, err);
                     self.pending.push_back(ListenerEvent::Upgrade {
                         upgrade: future::err(err),
-                        listen_addr,
+                        local_addr,
                         remote_addr
                     })
                 }

@@ -192,7 +192,7 @@ impl Stream for Listener {
         };
         let event = ListenerEvent::Upgrade {
             upgrade: future::ok(channel),
-            listen_addr: self.addr.clone(),
+            local_addr: self.addr.clone(),
             remote_addr: Protocol::Memory(self.port.get()).into()
         };
         Ok(Async::Ready(Some(event)))

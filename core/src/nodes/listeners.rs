@@ -22,7 +22,7 @@
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
 use futures::prelude::*;
-use log::{debug, warn};
+use log::debug;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, fmt};
 use void::Void;
@@ -66,8 +66,8 @@ use void::Void;
 ///         ListenersEvent::Error { listener_id, error } => {
 ///             println!("Listener {:?} has experienced an error: {}", listener_id, error);
 ///         },
-///         ListenersEvent::Incoming { listener_id, upgrade, listen_addr, .. } => {
-///             println!("Listener {:?} has a new connection on {}", listener_id, listen_addr);
+///         ListenersEvent::Incoming { listener_id, upgrade, local_addr, .. } => {
+///             println!("Listener {:?} has a new connection on {}", listener_id, local_addr);
 ///             // We don't do anything with the newly-opened connection, but in a real-life
 ///             // program you probably want to use it!
 ///             drop(upgrade);
@@ -138,8 +138,8 @@ where
         listener_id: ListenerId,
         /// The produced upgrade.
         upgrade: TTrans::ListenerUpgrade,
-        /// Address of the listener which received the connection.
-        listen_addr: Multiaddr,
+        /// Local connection address.
+        local_addr: Multiaddr,
         /// Address used to send back data to the incoming client.
         send_back_addr: Multiaddr,
     },
@@ -233,18 +233,13 @@ where
                     remaining -= 1;
                     if remaining == 0 { break }
                 }
-                Ok(Async::Ready(Some(ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr }))) => {
-                    if !listener.addresses.contains(&listen_addr) {
-                        warn!("Transport reported listen address {} not in the list: {:?}",
-                            listen_addr,
-                            listener.addresses)
-                    }
+                Ok(Async::Ready(Some(ListenerEvent::Upgrade { upgrade, local_addr, remote_addr }))) => {
                     let id = listener.id;
                     self.listeners.push_front(listener);
                     return Async::Ready(ListenersEvent::Incoming {
                         listener_id: id,
                         upgrade,
-                        listen_addr,
+                        local_addr,
                         send_back_addr: remote_addr
                     })
                 }
@@ -332,10 +327,10 @@ where
                 .field("listener_id", listener_id)
                 .field("listen_addr", listen_addr)
                 .finish(),
-            ListenersEvent::Incoming { listener_id, listen_addr, .. } => f
+            ListenersEvent::Incoming { listener_id, local_addr, .. } => f
                 .debug_struct("ListenersEvent::Incoming")
                 .field("listener_id", listener_id)
-                .field("listen_addr", listen_addr)
+                .field("local_addr", local_addr)
                 .finish(),
             ListenersEvent::Closed { listener_id, .. } => f
                 .debug_struct("ListenersEvent::Closed")
@@ -401,8 +396,8 @@ mod tests {
             .map_err(|(err, _)| err)
             .and_then(|(event, _)| {
                 match event {
-                    Some(ListenersEvent::Incoming { listen_addr, upgrade, send_back_addr, .. }) => {
-                        assert_eq!(listen_addr, address);
+                    Some(ListenersEvent::Incoming { local_addr, upgrade, send_back_addr, .. }) => {
+                        assert_eq!(local_addr, address);
                         assert_eq!(send_back_addr, address);
                         upgrade.map(|_| ()).map_err(|_| panic!())
                     },
@@ -475,17 +470,17 @@ mod tests {
             ListenerEvent::NewAddress(tcp4([127, 0, 0, 1], 9090)),
             ListenerEvent::Upgrade {
                 upgrade: (peer_id.clone(), muxer.clone()),
-                listen_addr: tcp4([127, 0, 0, 1], 9090),
+                local_addr: tcp4([127, 0, 0, 1], 9090),
                 remote_addr: tcp4([127, 0, 0, 1], 32000)
             },
             ListenerEvent::Upgrade {
                 upgrade: (peer_id.clone(), muxer.clone()),
-                listen_addr: tcp4([127, 0, 0, 1], 9090),
+                local_addr: tcp4([127, 0, 0, 1], 9090),
                 remote_addr: tcp4([127, 0, 0, 1], 32000)
             },
             ListenerEvent::Upgrade {
                 upgrade: (peer_id.clone(), muxer.clone()),
-                listen_addr: tcp4([127, 0, 0, 1], 9090),
+                local_addr: tcp4([127, 0, 0, 1], 9090),
                 remote_addr: tcp4([127, 0, 0, 1], 32000)
             }
         ]));
@@ -550,7 +545,7 @@ mod tests {
         let muxer = DummyMuxer::new();
         let event = ListenerEvent::Upgrade {
             upgrade: (peer_id, muxer),
-            listen_addr: tcp4([127, 0, 0, 1], 1234),
+            local_addr: tcp4([127, 0, 0, 1], 1234),
             remote_addr: tcp4([127, 0, 0, 1], 32000)
         };
         t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(event))));

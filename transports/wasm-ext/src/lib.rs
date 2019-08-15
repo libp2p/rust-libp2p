@@ -282,7 +282,7 @@ impl Stream for Listen {
             {
                 let upgrade: ffi::ConnectionEvent = upgrade.into();
                 self.pending_events.push_back(ListenerEvent::Upgrade {
-                    listen_addr: upgrade.local_addr().parse()?,
+                    local_addr: upgrade.local_addr().parse()?,
                     remote_addr: upgrade.observed_addr().parse()?,
                     upgrade: futures::future::ok(Connection::new(upgrade.connection())),
                 });
