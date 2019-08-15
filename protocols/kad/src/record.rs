@@ -22,16 +22,51 @@
 
 pub mod store;
 
+use bytes::Bytes;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::hash::{Hash, Hasher};
 use wasm_timer::Instant;
 
+/// The (opaque) key of a record.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Key(Bytes);
+
+impl Key {
+    /// Creates a new key from the bytes of the input.
+    pub fn new<K: AsRef<[u8]>>(key: &K) -> Self {
+        Key(Bytes::from(key.as_ref()))
+    }
+
+    /// Copies the bytes of the key into a new vector.
+    pub fn to_vec(&self) -> Vec<u8> {
+        Vec::from(&self.0[..])
+    }
+}
+
+impl AsRef<[u8]> for Key {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+impl From<Vec<u8>> for Key {
+    fn from(v: Vec<u8>) -> Key {
+        Key(Bytes::from(v))
+    }
+}
+
+impl From<Multihash> for Key {
+    fn from(m: Multihash) -> Key {
+        Key::from(m.into_bytes())
+    }
+}
+
 /// A record stored in the DHT.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
     /// Key of the record.
-    pub key: Multihash,
+    pub key: Key,
     /// Value of the record.
     pub value: Vec<u8>,
     /// The (original) publisher of the record.
@@ -42,9 +77,12 @@ pub struct Record {
 
 impl Record {
     /// Creates a new record for insertion into the DHT.
-    pub fn new(key: Multihash, value: Vec<u8>) -> Self {
+    pub fn new<K>(key: K, value: Vec<u8>) -> Self
+    where
+        K: Into<Key>
+    {
         Record {
-            key,
+            key: key.into(),
             value,
             publisher: None,
             expires: None,
@@ -62,7 +100,7 @@ impl Record {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProviderRecord {
     /// The key whose value is provided by the provider.
-    pub key: Multihash,
+    pub key: Key,
     /// The provider of the value for the key.
     pub provider: PeerId,
     /// The expiration time as measured by a local, monotonic clock.
@@ -78,9 +116,12 @@ impl Hash for ProviderRecord {
 
 impl ProviderRecord {
     /// Creates a new provider record for insertion into a `RecordStore`.
-    pub fn new(key: Multihash, provider: PeerId) -> Self {
+    pub fn new<K>(key: K, provider: PeerId) -> Self
+    where
+        K: Into<Key>
+    {
         ProviderRecord {
-            key, provider, expires: None
+            key: key.into(), provider, expires: None
         }
     }
 
@@ -98,10 +139,16 @@ mod tests {
     use rand::Rng;
     use std::time::Duration;
 
+    impl Arbitrary for Key {
+        fn arbitrary<G: Gen>(_: &mut G) -> Key {
+            Key::from(Multihash::random(SHA2256))
+        }
+    }
+
     impl Arbitrary for Record {
         fn arbitrary<G: Gen>(g: &mut G) -> Record {
             Record {
-                key: Multihash::random(SHA2256),
+                key: Key::arbitrary(g),
                 value: Vec::arbitrary(g),
                 publisher: if g.gen() { Some(PeerId::random()) } else { None },
                 expires: if g.gen() {
@@ -116,7 +163,7 @@ mod tests {
     impl Arbitrary for ProviderRecord {
         fn arbitrary<G: Gen>(g: &mut G) -> ProviderRecord {
             ProviderRecord {
-                key: Multihash::random(SHA2256),
+                key: Key::arbitrary(g),
                 provider: PeerId::random(),
                 expires: if g.gen() {
                     Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))

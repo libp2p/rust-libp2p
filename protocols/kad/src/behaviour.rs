@@ -29,13 +29,12 @@ use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
-use crate::record::{store::{self, RecordStore}, Record, ProviderRecord};
+use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
 use log::{info, debug, warn};
-use multihash::Multihash;
 use smallvec::SmallVec;
 use std::{borrow::Cow, error, iter, marker::PhantomData, time::Duration};
 use std::collections::VecDeque;
@@ -337,11 +336,11 @@ where
     /// The result of this operation is delivered in [`KademliaEvent::GetClosestPeersResult`].
     pub fn get_closest_peers<K>(&mut self, key: K)
     where
-        K: Into<Multihash> + Clone
+        K: AsRef<[u8]> + Clone
     {
-        let multihash = key.into();
-        let info = QueryInfo::GetClosestPeers { key: multihash.clone() };
-        let target = kbucket::Key::new(multihash);
+        let key = key.as_ref().to_vec();
+        let info = QueryInfo::GetClosestPeers { key: key.clone() };
+        let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner);
@@ -350,7 +349,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in [`KademliaEvent::GetRecordResult`].
-    pub fn get_record(&mut self, key: &Multihash, quorum: Quorum) {
+    pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
 
@@ -368,7 +367,7 @@ where
             }
         }
 
-        let target = kbucket::Key::from(key.clone());
+        let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord { key: key.clone(), records, quorum, cache_at: None };
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
@@ -404,7 +403,7 @@ where
             record.expires = record.expires.or_else(||
                 self.record_ttl.map(|ttl| Instant::now() + ttl));
             let quorum = quorum.eval(self.queries.config().replication_factor);
-            let target = kbucket::Key::from(record.key.clone());
+            let target = kbucket::Key::new(record.key.clone());
             let peers = self.kbuckets.closest_keys(&target);
             let context = PutRecordContext::Publish;
             let info = QueryInfo::PreparePutRecord { record, quorum, context };
@@ -422,7 +421,7 @@ where
     /// This is a _local_ operation. However, it also has the effect that
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
-    pub fn remove_record(&mut self, key: &Multihash) {
+    pub fn remove_record(&mut self, key: &record::Key) {
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
                 self.store.remove(key)
@@ -478,7 +477,7 @@ where
     ///
     /// The results of the (repeated) provider announcements sent by this node are
     /// delivered in [`KademliaEvent::AddProviderResult`].
-    pub fn start_providing(&mut self, key: Multihash) {
+    pub fn start_providing(&mut self, key: record::Key) {
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         if let Err(err) = self.store.add_provider(record) {
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -487,7 +486,7 @@ where
                 ))
             ));
         } else {
-            let target = kbucket::Key::from(key.clone());
+            let target = kbucket::Key::new(key.clone());
             let peers = self.kbuckets.closest_keys(&target);
             let context = AddProviderContext::Publish;
             let info = QueryInfo::PrepareAddProvider { key, context };
@@ -500,19 +499,19 @@ where
     ///
     /// This is a local operation. The local node will still be considered as a
     /// provider for the key by other nodes until these provider records expire.
-    pub fn stop_providing(&mut self, key: &Multihash) {
+    pub fn stop_providing(&mut self, key: &record::Key) {
         self.store.remove_provider(key, self.kbuckets.local_key().preimage());
     }
 
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in [`KademliaEvent::GetProvidersResult`].
-    pub fn get_providers(&mut self, key: Multihash) {
+    pub fn get_providers(&mut self, key: record::Key) {
         let info = QueryInfo::GetProviders {
             key: key.clone(),
             providers: Vec::new(),
         };
-        let target = kbucket::Key::from(key);
+        let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner);
@@ -562,7 +561,7 @@ where
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
-    fn provider_peers(&mut self, key: &Multihash, source: &PeerId) -> Vec<KadPeer> {
+    fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         self.store.providers(key)
             .into_iter()
@@ -578,9 +577,9 @@ where
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
-    fn start_add_provider(&mut self, key: Multihash, context: AddProviderContext) {
+    fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
         let info = QueryInfo::PrepareAddProvider { key: key.clone(), context };
-        let target = kbucket::Key::from(key);
+        let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner);
@@ -589,7 +588,7 @@ where
     /// Starts an iterative `PUT_VALUE` query for the given record.
     fn start_put_record(&mut self, record: Record, quorum: Quorum, context: PutRecordContext) {
         let quorum = quorum.eval(self.queries.config().replication_factor);
-        let target = kbucket::Key::from(record.key.clone());
+        let target = kbucket::Key::new(record.key.clone());
         let peers = self.kbuckets.closest_keys(&target);
         let info = QueryInfo::PreparePutRecord { record, quorum, context };
         let inner = QueryInner::new(info);
@@ -791,7 +790,7 @@ where
             }
 
             QueryInfo::PutRecord { record, quorum, num_results, context } => {
-                let result = |key: Multihash| {
+                let result = |key: record::Key| {
                     if num_results >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
@@ -933,7 +932,7 @@ where
         // number of nodes between the local node and the closest node to the key
         // (beyond the replication factor). This ensures avoiding over-caching
         // outside of the k closest nodes to a key.
-        let target = kbucket::Key::from(record.key.clone());
+        let target = kbucket::Key::new(record.key.clone());
         let num_between = self.kbuckets.count_nodes_between(&target);
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
@@ -988,7 +987,7 @@ where
     }
 
     /// Processes a provider record received from a peer.
-    fn provider_received(&mut self, key: Multihash, provider: KadPeer) {
+    fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
             KademliaEvent::Discovered {
                 peer_id: provider.node_id.clone(),
@@ -1167,7 +1166,7 @@ where
 
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
-                let closer_peers = self.find_closest(&kbucket::Key::from(key), &source);
+                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
                 self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: source,
                     event: KademliaHandlerIn::GetProvidersRes {
@@ -1230,7 +1229,7 @@ where
                 // If no record is found, at least report known closer peers.
                 let closer_peers =
                     if record.is_none() {
-                        self.find_closest(&kbucket::Key::from(key), &source)
+                        self.find_closest(&kbucket::Key::new(key), &source)
                     } else {
                         Vec::new()
                     };
@@ -1266,7 +1265,7 @@ where
                             // that node if the query turns out to be successful.
                             let source_key = kbucket::Key::from(source.clone());
                             if let Some(cache_key) = cache_at {
-                                let key = kbucket::Key::from(key.clone());
+                                let key = kbucket::Key::new(key.clone());
                                 if source_key.distance(&key) < cache_key.distance(&key) {
                                     *cache_at = Some(source_key)
                                 }
@@ -1511,14 +1510,25 @@ pub struct GetRecordOk {
 /// The error result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
 pub enum GetRecordError {
-    NotFound { key: Multihash, closest_peers: Vec<PeerId> },
-    QuorumFailed { key: Multihash, records: Vec<Record>, quorum: NonZeroUsize },
-    Timeout { key: Multihash, records: Vec<Record>, quorum: NonZeroUsize }
+    NotFound {
+        key: record::Key,
+        closest_peers: Vec<PeerId>
+    },
+    QuorumFailed {
+        key: record::Key,
+        records: Vec<Record>,
+        quorum: NonZeroUsize
+    },
+    Timeout {
+        key: record::Key,
+        records: Vec<Record>,
+        quorum: NonZeroUsize
+    }
 }
 
 impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &Multihash {
+    pub fn key(&self) -> &record::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -1528,7 +1538,7 @@ impl GetRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> Multihash {
+    pub fn into_key(self) -> record::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -1543,31 +1553,31 @@ pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 /// The successful result of [`Kademlia::put_record`].
 #[derive(Debug, Clone)]
 pub struct PutRecordOk {
-    pub key: Multihash
+    pub key: record::Key
 }
 
 /// The error result of [`Kademlia::put_record`].
 #[derive(Debug)]
 pub enum PutRecordError {
     QuorumFailed {
-        key: Multihash,
+        key: record::Key,
         num_results: usize,
         quorum: NonZeroUsize
     },
     Timeout {
-        key: Multihash,
+        key: record::Key,
         num_results: usize,
         quorum: NonZeroUsize
     },
     LocalStorageError {
-        key: Multihash,
+        key: record::Key,
         cause: store::Error
     }
 }
 
 impl PutRecordError {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &Multihash {
+    pub fn key(&self) -> &record::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -1577,7 +1587,7 @@ impl PutRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> Multihash {
+    pub fn into_key(self) -> record::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -1607,7 +1617,7 @@ pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>
 /// The successful result of [`Kademlia::get_closest_peers`].
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
-    pub key: Multihash,
+    pub key: Vec<u8>,
     pub peers: Vec<PeerId>
 }
 
@@ -1615,14 +1625,14 @@ pub struct GetClosestPeersOk {
 #[derive(Debug, Clone)]
 pub enum GetClosestPeersError {
     Timeout {
-        key: Multihash,
+        key: Vec<u8>,
         peers: Vec<PeerId>
     }
 }
 
 impl GetClosestPeersError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &Multihash {
+    pub fn key(&self) -> &Vec<u8> {
         match self {
             GetClosestPeersError::Timeout { key, .. } => key,
         }
@@ -1630,7 +1640,7 @@ impl GetClosestPeersError {
 
     /// Extracts the key for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> Multihash {
+    pub fn into_key(self) -> Vec<u8> {
         match self {
             GetClosestPeersError::Timeout { key, .. } => key,
         }
@@ -1643,7 +1653,7 @@ pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 /// The successful result of [`Kademlia::get_providers`].
 #[derive(Debug, Clone)]
 pub struct GetProvidersOk {
-    pub key: Multihash,
+    pub key: record::Key,
     pub providers: Vec<PeerId>,
     pub closest_peers: Vec<PeerId>
 }
@@ -1652,7 +1662,7 @@ pub struct GetProvidersOk {
 #[derive(Debug, Clone)]
 pub enum GetProvidersError {
     Timeout {
-        key: Multihash,
+        key: record::Key,
         providers: Vec<PeerId>,
         closest_peers: Vec<PeerId>
     }
@@ -1660,7 +1670,7 @@ pub enum GetProvidersError {
 
 impl GetProvidersError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &Multihash {
+    pub fn key(&self) -> &record::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -1668,7 +1678,7 @@ impl GetProvidersError {
 
     /// Extracts the key for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> Multihash {
+    pub fn into_key(self) -> record::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -1681,7 +1691,7 @@ pub type AddProviderResult = Result<AddProviderOk, AddProviderError>;
 /// The successful result of publishing a provider record.
 #[derive(Debug, Clone)]
 pub struct AddProviderOk {
-    pub key: Multihash,
+    pub key: record::Key,
 }
 
 /// The possible errors when publishing a provider record.
@@ -1689,18 +1699,18 @@ pub struct AddProviderOk {
 pub enum AddProviderError {
     /// The query timed out.
     Timeout {
-        key: Multihash,
+        key: record::Key,
     },
     /// The provider record could not be stored.
     LocalStorageError {
-        key: Multihash,
+        key: record::Key,
         cause: store::Error
     }
 }
 
 impl AddProviderError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &Multihash {
+    pub fn key(&self) -> &record::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
             AddProviderError::LocalStorageError { key, .. } => key,
@@ -1709,7 +1719,7 @@ impl AddProviderError {
 
     /// Extracts the key for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> Multihash {
+    pub fn into_key(self) -> record::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
             AddProviderError::LocalStorageError { key, .. } => key,
@@ -1779,12 +1789,12 @@ enum QueryInfo {
     },
 
     /// A query to find the closest peers to a key.
-    GetClosestPeers { key: Multihash },
+    GetClosestPeers { key: Vec<u8> },
 
     /// A query for the providers of a key.
     GetProviders {
         /// The key for which to search for providers.
-        key: Multihash,
+        key: record::Key,
         /// The found providers.
         providers: Vec<PeerId>,
     },
@@ -1792,13 +1802,13 @@ enum QueryInfo {
     /// A query that searches for the closest closest nodes to a key to be
     /// used in a subsequent `AddProvider` query.
     PrepareAddProvider {
-        key: Multihash,
+        key: record::Key,
         context: AddProviderContext,
     },
 
     /// A query that advertises the local node as a provider for a key.
     AddProvider {
-        key: Multihash,
+        key: record::Key,
         provider_id: PeerId,
         external_addresses: Vec<Multiaddr>,
         context: AddProviderContext,
@@ -1823,7 +1833,7 @@ enum QueryInfo {
     /// A query that searches for values for a key.
     GetRecord {
         /// The key to look for.
-        key: Multihash,
+        key: record::Key,
         /// The records found.
         records: Vec<Record>,
         /// The number of records to look for.
@@ -1842,7 +1852,7 @@ impl QueryInfo {
     fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
         match &self {
             QueryInfo::Bootstrap { peer } => KademliaHandlerIn::FindNodeReq {
-                key: peer.clone().into(),
+                key: peer.clone().into_bytes(),
                 user_data: query_id,
             },
             QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {
@@ -1854,7 +1864,7 @@ impl QueryInfo {
                 user_data: query_id,
             },
             QueryInfo::PrepareAddProvider { key, .. } => KademliaHandlerIn::FindNodeReq {
-                key: key.clone(),
+                key: key.to_vec(),
                 user_data: query_id,
             },
             QueryInfo::AddProvider {
@@ -1875,7 +1885,7 @@ impl QueryInfo {
                 user_data: query_id,
             },
             QueryInfo::PreparePutRecord { record, .. } => KademliaHandlerIn::FindNodeReq {
-                key: record.key.clone(),
+                key: record.key.to_vec(),
                 user_data: query_id,
             },
             QueryInfo::PutRecord { record, .. } => KademliaHandlerIn::PutRecord {

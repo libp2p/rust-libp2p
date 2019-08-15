@@ -61,11 +61,9 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record::{Record, ProviderRecord, store::RecordStore};
-
+use crate::record::{self, Record, ProviderRecord, store::RecordStore};
 use libp2p_core::PeerId;
 use futures::prelude::*;
-use multihash::Multihash;
 use std::collections::HashSet;
 use std::time::Duration;
 use std::vec;
@@ -131,7 +129,7 @@ pub struct PutRecordJob {
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
-    skipped: HashSet<Multihash>,
+    skipped: HashSet<record::Key>,
     inner: PeriodicJob<vec::IntoIter<Record>>,
 }
 
@@ -162,7 +160,7 @@ impl PutRecordJob {
 
     /// Adds the key of a record that is ignored on the current or
     /// next run of the job.
-    pub fn skip(&mut self, key: Multihash) {
+    pub fn skip(&mut self, key: record::Key) {
         self.skipped.insert(key);
     }
 
