@@ -2,7 +2,7 @@
 name = "libp2p-kad"
 edition = "2018"
 description = "Kademlia protocol for libp2p"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,8 +16,8 @@ either = "1.5"
 fnv = "1.0"
 futures = "0.1"
 log = "0.4"
-libp2p-core = { version = "0.11.0", path = "../../core" }
-libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
+libp2p-core = { version = "0.12.0", path = "../../core" }
+libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../../misc/multihash" }
 protobuf = "2.3"
@@ -32,9 +32,9 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
-libp2p-secio = { version = "0.11.0", path = "../secio" }
-libp2p-tcp = { version = "0.11.0", path = "../../transports/tcp" }
-libp2p-yamux = { version = "0.11.0", path = "../../muxers/yamux" }
+libp2p-secio = { version = "0.12.0", path = "../secio" }
+libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
+libp2p-yamux = { version = "0.12.0", path = "../../muxers/yamux" }
 quickcheck = "0.8"
 rand = "0.6.0"
 tokio = "0.1"
