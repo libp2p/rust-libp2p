@@ -36,11 +36,13 @@ use std::{mem, io, fmt, error::Error};
 ///
 /// Reading from a `Negotiated` I/O stream that still has pending negotiation
 /// protocol data to send implicitly triggers flushing of all yet unsent data.
+#[derive(Debug)]
 pub struct Negotiated<TInner> {
     state: State<TInner>
 }
 
 /// A `Future` that waits on the completion of protocol negotiation.
+#[derive(Debug)]
 pub struct NegotiatedComplete<TInner> {
     inner: Option<Negotiated<TInner>>
 }
@@ -146,6 +148,7 @@ impl<TInner> Negotiated<TInner> {
 }
 
 /// The states of a `Negotiated` I/O stream.
+#[derive(Debug)]
 enum State<R> {
     /// In this state, a `Negotiated` is still expecting to
     /// receive confirmation of the protocol it as settled on.
