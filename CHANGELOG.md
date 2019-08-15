@@ -1,3 +1,14 @@
+# Version 0.12.0 (2019-08-15)
+
+- In some situations, `multistream-select` will now assume that protocol negotiation immediately succeeds. If it turns out that it failed, an error is generated when reading or writing from/to the stream.
+- Replaced `listen_addr` with `local_addr` in events related to incoming connections. The address no longer has to match a previously-reported address.
+- Listeners now have an identifier and can be stopped.
+- Added `NetworkBehaviour::inject_listener_error` and `NetworkBehaviour::inject_listener_closed`. For diagnostic purposes, listeners can now report errors on incoming connections, such as when calling `accept(2)` fails.
+- Fixed tasks sometimes not being notified when a network event happens in `libp2p-mplex`.
+- Fixed a memory leak in `libp2p-kad`.
+- Added `Toggle::is_enabled()`.
+- Removed `IdentifyTransport`.
+
 # Version 0.11.0 (2019-07-18)
 
 - `libp2p-kad`: Completed the core functionality of the record storage API, thereby extending the `RecordStore` for provider records. All records expire by default and are subject to regular republication and caching as per the Kademlia spec(s). Expiration and publication intervals are configurable through the `KademliaConfig`.
