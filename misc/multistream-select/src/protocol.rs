@@ -297,6 +297,7 @@ where
 
 /// A `MessageReader` implements a `Stream` of `Message`s on an underlying
 /// I/O resource combined with direct `AsyncWrite` access.
+#[derive(Debug)]
 pub struct MessageReader<R> {
     inner: LengthDelimitedReader<R>
 }

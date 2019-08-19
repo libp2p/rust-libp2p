@@ -34,6 +34,7 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 /// We purposely only support a frame sizes up to 16KiB (2 bytes unsigned varint
 /// frame length). Frames mostly consist in a short protocol name, which is highly
 /// unlikely to be more than 16KiB long.
+#[derive(Debug)]
 pub struct LengthDelimited<R> {
     /// The inner I/O resource.
     inner: R,
@@ -269,6 +270,7 @@ where
 
 /// A `LengthDelimitedReader` implements a `Stream` of uvi-length-delimited
 /// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
+#[derive(Debug)]
 pub struct LengthDelimitedReader<R> {
     inner: LengthDelimited<R>
 }
