@@ -27,6 +27,7 @@ use futures::prelude::*;
 use libp2p::{
     Swarm,
     PeerId,
+    Multiaddr,
     identity,
     build_development_transport
 };
@@ -34,6 +35,7 @@ use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError}
 use libp2p::kad::record::store::MemoryStore;
 use std::env;
 use std::time::Duration;
+use std::str::FromStr;
 
 fn main() {
     env_logger::init();
@@ -64,7 +66,9 @@ fn main() {
         behaviour.add_address(&"QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());*/
 
         // The only address that currently works.
-        behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse().unwrap(), "/ip4/104.131.131.82/tcp/4001".parse().unwrap());
+        behaviour.add_address(
+            PeerId::from_str("QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ").unwrap(),
+            Multiaddr::from_str("/ip4/104.131.131.82/tcp/4001").unwrap());
 
         // The following addresses always fail signature verification, possibly due to
         // RSA keys with < 2048 bits.
