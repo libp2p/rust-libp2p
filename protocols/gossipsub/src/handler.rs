@@ -28,6 +28,9 @@ where
 
     /// Queue of values that we want to send to the remote.
     send_queue: SmallVec<[GossipsubRpc; 16]>,
+
+    /// Flag determining whether to maintain the connection to the peer.
+    keep_alive: KeepAlive,
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
@@ -74,6 +77,7 @@ where
             inbound_substream: None,
             outbound_substream: None,
             send_queue: SmallVec::new(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -88,6 +92,7 @@ where
             inbound_substream: None,
             outbound_substream: None,
             send_queue: SmallVec::new(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -154,11 +159,7 @@ where
     #[inline]
     //TODO: Implement a manual shutdown.
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.inbound_substream.is_none() && self.outbound_substream.is_none() {
-            KeepAlive::No
-        } else {
-            KeepAlive::Yes
-        }
+        self.keep_alive
     }
 
     fn poll(
@@ -210,6 +211,9 @@ where
                 Some(InboundSubstreamState::Closing(mut substream)) => match substream.close() {
                     Ok(Async::Ready(())) => {
                         self.inbound_substream = None;
+                        if self.outbound_substream.is_none() {
+                            self.keep_alive = KeepAlive::No;
+                        }
                         break;
                     }
                     Ok(Async::NotReady) => {
@@ -281,6 +285,9 @@ where
                 Some(OutboundSubstreamState::_Closing(mut substream)) => match substream.close() {
                     Ok(Async::Ready(())) => {
                         self.outbound_substream = None;
+                        if self.inbound_substream.is_none() {
+                            self.keep_alive = KeepAlive::No;
+                        }
                         break;
                     }
                     Ok(Async::NotReady) => {

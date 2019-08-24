@@ -1,3 +1,33 @@
+//! A basic chat application with logs demonstrating libp2p and the gossipsub protocol.
+//!
+//! Using two terminal windows, start two instances. Type a message in either terminal and hit return: the
+//! message is sent and printed in the other terminal. Close with Ctrl-c.
+//!
+//! You can of course open more terminal windows and add more participants.
+//! Dialing any of the other peers will propagate the new participant to all
+//! chat members and everyone will receive all messages.
+//!
+//! # If they don't automatically connect
+//!
+//! If the nodes don't automatically connect, take note of the listening address of the first
+//! instance and start the second with this address as the first argument. In the first terminal
+//! window, run:
+//!
+//! ```sh
+//! cargo run --example chat
+//! ```
+//!
+//! It will print the PeerId and the listening address, e.g. `Listening on
+//! "/ip4/0.0.0.0/tcp/24915"`
+//!
+//! In the second terminal window, start a new instance of the example with:
+//!
+//! ```sh
+//! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
+//! ```
+//!
+//! The two nodes then connect.
+
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
@@ -6,7 +36,7 @@ extern crate tokio;
 
 use env_logger::{Builder, Env};
 use futures::prelude::*;
-use libp2p::gossipsub::GossipsubEvent;
+use libp2p::gossipsub::{GossipsubEvent, Topic};
 use libp2p::{
     gossipsub, identity,
     tokio_codec::{FramedRead, LinesCodec},
@@ -26,7 +56,7 @@ fn main() {
     let transport = libp2p::build_development_transport(local_key);
 
     // Create a Floodsub/Gossipsub topic
-    let topic = libp2p::floodsub::TopicBuilder::new("test").build();
+    let topic = Topic::new("test".into());
 
     // Create a Swarm to manage peers and events
     let mut swarm = {

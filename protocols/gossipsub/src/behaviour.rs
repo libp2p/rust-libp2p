@@ -169,8 +169,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 
     /// Publishes a message to the network.
-    pub fn publish(&mut self, topic: Topic, data: impl Into<Vec<u8>>) {
-        self.publish_many(iter::once(topic), data)
+    pub fn publish(&mut self, topic: &Topic, data: impl Into<Vec<u8>>) {
+        self.publish_many(iter::once(topic.clone()), data)
     }
 
     /// Publishes a message with multiple topics to the network.
@@ -546,6 +546,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
                         );
                         subscribed_topics.push(subscription.topic_hash.clone());
                     }
+
+                    // if the mesh needs peers add the peer to the mesh
+                    if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
+                        if peers.len() < self.config.mesh_n_low {
+                            debug!(
+                                "SUBSCRIPTION: Adding peer {:?} to the mesh",
+                                propagation_source,
+                            );
+                        }
+                        peers.push(propagation_source.clone());
+                    }
                     // generates a subscription event to be polled
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Subscribed {
@@ -569,6 +580,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     {
                         subscribed_topics.remove(pos);
                     }
+                    // remove the peer from the mesh if it exists
+                    if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
+                        peers.retain(|peer| peer != propagation_source);
+                    }
+
                     // generate a subscription even to be polled
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Unsubscribed {
