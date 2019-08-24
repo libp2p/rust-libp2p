@@ -88,7 +88,7 @@ fn num_incoming_negotiated() {
         ListenerEvent::NewAddress("/ip4/127.0.0.1/tcp/1234".parse().unwrap()),
         ListenerEvent::Upgrade {
             upgrade: (peer_id.clone(), muxer.clone()),
-            listen_addr: "/ip4/127.0.0.1/tcp/1234".parse().unwrap(),
+            local_addr: "/ip4/127.0.0.1/tcp/1234".parse().unwrap(),
             remote_addr: "/ip4/127.0.0.1/tcp/32111".parse().unwrap()
         }
     ];
@@ -399,7 +399,7 @@ fn limit_incoming_connections() {
     events.extend(std::iter::repeat(
         ListenerEvent::Upgrade {
             upgrade: (peer_id.clone(), muxer.clone()),
-            listen_addr: "/ip4/127.0.0.1/tcp/1234".parse().unwrap(),
+            local_addr: "/ip4/127.0.0.1/tcp/1234".parse().unwrap(),
             remote_addr: "/ip4/127.0.0.1/tcp/32111".parse().unwrap()
         }
     ).take(10));

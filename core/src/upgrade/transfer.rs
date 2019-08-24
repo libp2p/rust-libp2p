@@ -28,7 +28,6 @@ use tokio_io::{io, AsyncRead, AsyncWrite};
 ///
 /// > **Note**: Prepends a variable-length prefix indicate the length of the message. This is
 /// >           compatible with what `read_one` expects.
-#[inline]
 pub fn write_one<TSocket, TData>(socket: TSocket, data: TData) -> WriteOne<TSocket, TData>
 where
     TSocket: AsyncWrite,
@@ -50,10 +49,12 @@ fn build_int_buffer(num: usize) -> io::Window<[u8; 10]> {
 }
 
 /// Future that makes `write_one` work.
+#[derive(Debug)]
 pub struct WriteOne<TSocket, TData = Vec<u8>> {
     inner: WriteOneInner<TSocket, TData>,
 }
 
+#[derive(Debug)]
 enum WriteOneInner<TSocket, TData> {
     /// We need to write the data length to the socket.
     WriteLen(io::WriteAll<TSocket, io::Window<[u8; 10]>>, TData),
@@ -73,7 +74,6 @@ where
     type Item = ();
     type Error = std::io::Error;
 
-    #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         Ok(self.inner.poll()?.map(|_socket| ()))
     }
@@ -125,7 +125,6 @@ where
 ///
 /// > **Note**: Assumes that a variable-length prefix indicates the length of the message. This is
 /// >           compatible with what `write_one` does.
-#[inline]
 pub fn read_one<TSocket>(
     socket: TSocket,
     max_size: usize,
@@ -141,10 +140,12 @@ pub fn read_one<TSocket>(
 }
 
 /// Future that makes `read_one` work.
+#[derive(Debug)]
 pub struct ReadOne<TSocket> {
     inner: ReadOneInner<TSocket>,
 }
 
+#[derive(Debug)]
 enum ReadOneInner<TSocket> {
     // We need to read the data length from the socket.
     ReadLen {
@@ -272,7 +273,6 @@ pub enum ReadOneError {
 }
 
 impl From<std::io::Error> for ReadOneError {
-    #[inline]
     fn from(err: std::io::Error) -> ReadOneError {
         ReadOneError::Io(err)
     }
@@ -303,7 +303,6 @@ impl error::Error for ReadOneError {
 /// >           ownership of any data we want. In practice, though, this would make the
 /// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
 /// >           syntax is allowed within traits, we can remove this parameter.
-#[inline]
 pub fn read_one_then<TSocket, TParam, TThen, TOut, TErr>(
     socket: TSocket,
     max_size: usize,
@@ -322,6 +321,7 @@ where
 }
 
 /// Future that makes `read_one_then` work.
+#[derive(Debug)]
 pub struct ReadOneThen<TSocket, TParam, TThen> {
     inner: ReadOne<TSocket>,
     then: Option<(TParam, TThen)>,
@@ -355,7 +355,6 @@ where
 /// >           ownership of any data we want. In practice, though, this would make the
 /// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
 /// >           syntax is allowed within traits, we can remove this parameter.
-#[inline]
 pub fn read_respond<TSocket, TThen, TParam, TOut, TErr>(
     socket: TSocket,
     max_size: usize,
@@ -374,6 +373,7 @@ where
 }
 
 /// Future that makes `read_respond` work.
+#[derive(Debug)]
 pub struct ReadRespond<TSocket, TParam, TThen> {
     inner: ReadOneInner<TSocket>,
     then: Option<(TThen, TParam)>,
@@ -408,7 +408,6 @@ where
 /// >           ownership of any data we want. In practice, though, this would make the
 /// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
 /// >           syntax is allowed within traits, we can remove this parameter.
-#[inline]
 pub fn request_response<TSocket, TData, TParam, TThen, TOut, TErr>(
     socket: TSocket,
     data: TData,
@@ -427,10 +426,12 @@ where
 }
 
 /// Future that makes `request_response` work.
+#[derive(Debug)]
 pub struct RequestResponse<TSocket, TParam, TThen, TData = Vec<u8>> {
     inner: RequestResponseInner<TSocket, TData, TParam, TThen>,
 }
 
+#[derive(Debug)]
 enum RequestResponseInner<TSocket, TData, TParam, TThen> {
     // We need to write data to the socket.
     Write(WriteOneInner<TSocket, TData>, usize, TParam, TThen),

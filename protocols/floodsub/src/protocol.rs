@@ -49,7 +49,7 @@ impl UpgradeInfo for FloodsubConfig {
 
 impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
 where
-    TSocket: AsyncRead,
+    TSocket: AsyncRead + AsyncWrite,
 {
     type Output = FloodsubRpc;
     type Error = FloodsubDecodeError;
@@ -164,7 +164,7 @@ impl UpgradeInfo for FloodsubRpc {
 
 impl<TSocket> OutboundUpgrade<TSocket> for FloodsubRpc
 where
-    TSocket: AsyncWrite,
+    TSocket: AsyncWrite + AsyncRead,
 {
     type Output = ();
     type Error = io::Error;

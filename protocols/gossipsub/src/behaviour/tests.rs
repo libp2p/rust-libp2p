@@ -3,7 +3,6 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use libp2p_floodsub::TopicBuilder;
 
     // helper functions for testing
 
@@ -27,9 +26,9 @@ mod tests {
 
         // subscribe to the topics
         for t in topics {
-            let topic = TopicBuilder::new(t).build();
+            let topic = Topic::new(t);
             gs.subscribe(topic.clone());
-            topic_hashes.push(topic.hash().clone());
+            topic_hashes.push(topic.no_hash().clone());
         }
 
         // build and connect peer_no random peers
@@ -76,7 +75,7 @@ mod tests {
         let (gs, _, topic_hashes) = build_and_inject_nodes(20, subscribe_topic, true);
 
         assert!(
-            *gs.mesh.get(&topic_hashes[0]).expect("Mesh should exist") == Vec::<PeerId>::new(),
+            gs.mesh.get(&topic_hashes[0]).is_some(),
             "Subscribe should add a new entry to the mesh[topic] hashmap"
         );
 
@@ -117,7 +116,7 @@ mod tests {
         let topic_strings = vec![String::from("topic1"), String::from("topic2")];
         let topics = topic_strings
             .iter()
-            .map(|t| TopicBuilder::new(t.clone()).build())
+            .map(|t| Topic::new(t.clone()))
             .collect::<Vec<Topic>>();
 
         // subscribe to topic_strings
@@ -192,7 +191,7 @@ mod tests {
         let topic_strings = vec![String::from("topic1"), String::from("topic2")];
         let topics = topic_strings
             .iter()
-            .map(|t| TopicBuilder::new(t.clone()).build())
+            .map(|t| Topic::new(t.clone()))
             .collect::<Vec<Topic>>();
 
         let (mut gs, _, topic_hashes) = build_and_inject_nodes(20, topic_strings, true);
@@ -435,7 +434,7 @@ mod tests {
         let mut gs: Gossipsub<usize> = Gossipsub::new(PeerId::random(), gs_config);
 
         // create a topic and fill it with some peers
-        let topic_hash = TopicBuilder::new("Test").build().hash().clone();
+        let topic_hash = Topic::new("Test".into()).no_hash().clone();
         let mut peers = vec![];
         for _ in 0..20 {
             peers.push(PeerId::random())
@@ -631,11 +630,6 @@ mod tests {
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
-        assert!(
-            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
-            "Expected peer to not be in mesh"
-        );
-
         gs.handle_graft(&peers[7], topic_hashes.clone());
 
         assert!(
@@ -651,18 +645,13 @@ mod tests {
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
-        assert!(
-            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
-            "Expected peer to not be in mesh"
-        );
-
         gs.handle_graft(
             &peers[7],
             vec![TopicHash::from_raw(String::from("unsubscribed topic"))],
         );
 
         assert!(
-            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
             "Expected peer to have been added to mesh"
         );
     }
@@ -676,14 +665,6 @@ mod tests {
             .collect();
 
         let (mut gs, peers, topic_hashes) = build_and_inject_nodes(20, topics.clone(), true);
-
-        // sanity check: mesh does not already contain peer
-        for topic_hash in topic_hashes.clone() {
-            assert!(
-                !gs.mesh.get(&topic_hash).unwrap().contains(&peers[7]),
-                "Expected peer to not be in mesh for any topic"
-            );
-        }
 
         let mut their_topics = topic_hashes.clone();
         // their_topics = [topic1, topic2, topic3]
@@ -703,11 +684,6 @@ mod tests {
         assert!(
             gs.mesh.get(&topic_hashes[2]).is_none(),
             "Expected the second topic to not be in the mesh"
-        );
-
-        assert!(
-            !gs.mesh.get(&topic_hashes[3]).unwrap().contains(&peers[7]),
-            "Expected peer to not be in the mesh for the fourth topic"
         );
     }
 

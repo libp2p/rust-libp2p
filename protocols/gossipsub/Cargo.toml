@@ -6,9 +6,8 @@ authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 
 [dependencies]
-libp2p-swarm = { version = "0.1.0", path = "../../swarm" }
+libp2p-swarm = { path = "../../swarm" }
 libp2p-core = { path = "../../core" }
-libp2p-floodsub = { path = "../floodsub" }
 bs58 = "0.2.2"
 bytes = "0.4.11"
 byteorder = "1.3.1"

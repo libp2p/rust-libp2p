@@ -160,7 +160,7 @@ where
                 debug!("incoming connection on {}", self.addr);
                 Ok(Async::Ready(Some(ListenerEvent::Upgrade {
                     upgrade: future::ok(item),
-                    listen_addr: self.addr.clone(),
+                    local_addr: self.addr.clone(),
                     remote_addr: self.addr.clone()
                 })))
             }

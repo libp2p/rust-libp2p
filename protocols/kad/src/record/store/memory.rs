@@ -22,7 +22,6 @@ use super::*;
 
 use crate::kbucket;
 use libp2p_core::PeerId;
-use multihash::Multihash;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};
@@ -35,9 +34,9 @@ pub struct MemoryStore {
     /// The configuration of the store.
     config: MemoryStoreConfig,
     /// The stored (regular) records.
-    records: HashMap<Multihash, Record>,
+    records: HashMap<Key, Record>,
     /// The stored provider records.
-    providers: HashMap<Multihash, SmallVec<[ProviderRecord; K_VALUE.get()]>>,
+    providers: HashMap<Key, SmallVec<[ProviderRecord; K_VALUE.get()]>>,
     /// The set of all provider records for the node identified by `local_key`.
     ///
     /// Must be kept in sync with `providers`.
@@ -90,7 +89,7 @@ impl MemoryStore {
     /// Retains the records satisfying a predicate.
     pub fn retain<F>(&mut self, f: F)
     where
-        F: FnMut(&Multihash, &mut Record) -> bool
+        F: FnMut(&Key, &mut Record) -> bool
     {
         self.records.retain(f);
     }
@@ -98,7 +97,7 @@ impl MemoryStore {
 
 impl<'a> RecordStore<'a> for MemoryStore {
     type RecordsIter = iter::Map<
-        hash_map::Values<'a, Multihash, Record>,
+        hash_map::Values<'a, Key, Record>,
         fn(&'a Record) -> Cow<'a, Record>
     >;
 
@@ -107,7 +106,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
         fn(&'a ProviderRecord) -> Cow<'a, ProviderRecord>
     >;
 
-    fn get(&'a self, k: &Multihash) -> Option<Cow<Record>> {
+    fn get(&'a self, k: &Key) -> Option<Cow<Record>> {
         self.records.get(k).map(Cow::Borrowed)
     }
 
@@ -133,7 +132,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn remove(&'a mut self, k: &Multihash) {
+    fn remove(&'a mut self, k: &Key) {
         self.records.remove(k);
     }
 
@@ -191,7 +190,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn providers(&'a self, key: &Multihash) -> Vec<ProviderRecord> {
+    fn providers(&'a self, key: &Key) -> Vec<ProviderRecord> {
         self.providers.get(&key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
@@ -199,7 +198,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
         self.provided.iter().map(Cow::Borrowed)
     }
 
-    fn remove_provider(&'a mut self, key: &Multihash, provider: &PeerId) {
+    fn remove_provider(&'a mut self, key: &Key, provider: &PeerId) {
         if let hash_map::Entry::Occupied(mut e) = self.providers.entry(key.clone()) {
             let providers = e.get_mut();
             if let Some(i) = providers.iter().position(|p| &p.provider == provider) {
@@ -252,7 +251,7 @@ mod tests {
     fn providers_ordered_by_distance_to_key() {
         fn prop(providers: Vec<kbucket::Key<PeerId>>) -> bool {
             let mut store = MemoryStore::new(PeerId::random());
-            let key = Multihash::random(SHA2256);
+            let key = Key::from(Multihash::random(SHA2256));
 
             let mut records = providers.into_iter().map(|p| {
                 ProviderRecord::new(key.clone(), p.into_preimage())
