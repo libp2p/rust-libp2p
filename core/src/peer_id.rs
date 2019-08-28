@@ -61,8 +61,8 @@ impl PeerId {
         } else {
             multihash::Hash::SHA2256
         };
-        let multihash =
-            multihash::encode(hash_algorithm, &key_enc).expect("identity and sha2-256 are always supported by known public key types");
+        let multihash = multihash::encode(hash_algorithm, &key_enc)
+            .expect("identity and sha2-256 are always supported by known public key types");
         PeerId { multihash }
     }
 
@@ -72,12 +72,14 @@ impl PeerId {
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
-                if multihash.algorithm() == multihash::Hash::SHA2256 || multihash.algorithm() == multihash::Hash::Identity {
+                if multihash.algorithm() == multihash::Hash::SHA2256
+                    || multihash.algorithm() == multihash::Hash::Identity
+                {
                     Ok(PeerId { multihash })
                 } else {
                     Err(multihash.into_bytes())
                 }
-            },
+            }
             Err(err) => Err(err.data),
         }
     }

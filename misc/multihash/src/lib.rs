@@ -59,12 +59,11 @@ macro_rules! match_encoder {
 pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
     // Custom length encoding for the identity multihash
     if let Hash::Identity = hash {
-        if input.len() as u32 >= std::u32::MAX {
+        if u64::from(std::u32::MAX) < as_u64(input.len()) {
             return Err(EncodeError::UnsupportedInputLength);
         }
         let mut buf = encode::u16_buffer();
         let code = encode::u16(hash.code(), &mut buf);
-        dbg!(code.len());
         let mut len_buf = encode::u32_buffer();
         let size = encode::u32(input.len() as u32, &mut len_buf);
 
@@ -74,7 +73,6 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
         output.put_slice(code);
         output.put_slice(size);
         output.put_slice(input);
-        output.resize(total_len, 0);
         Ok(Multihash {
             bytes: output.freeze(),
         })
@@ -208,7 +206,7 @@ impl<'a> MultihashRef<'a> {
         // handle the identity case
         if alg == Hash::Identity {
             let (hash_len, bytes) = decode::u32(&bytes).map_err(|_| DecodeError::BadInputLength)?;
-            if bytes.len() as u32 != hash_len {
+            if as_u64(bytes.len()) != u64::from(hash_len) {
                 return Err(DecodeError::BadInputLength);
             }
             return Ok(MultihashRef { bytes: input });
@@ -263,6 +261,11 @@ impl<'a> PartialEq<Multihash> for MultihashRef<'a> {
     fn eq(&self, other: &Multihash) -> bool {
         self.bytes == &*other.bytes
     }
+}
+
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+fn as_u64(a: usize) -> u64 {
+    a as u64
 }
 
 /// Convert bytes to a hex representation
