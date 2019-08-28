@@ -24,6 +24,10 @@ use quick_error::quick_error;
 use multihash;
 use std::{convert::TryFrom, fmt, str::FromStr};
 
+/// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
+/// automatically used as the peer id using an identity multihash.
+const MAX_INLINE_KEY_LENGTH: usize = 42;
+
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
@@ -52,8 +56,13 @@ impl PeerId {
     #[inline]
     pub fn from_public_key(key: PublicKey) -> PeerId {
         let key_enc = key.into_protobuf_encoding();
-        let multihash = multihash::encode(multihash::Hash::SHA2256, &key_enc)
-            .expect("sha2-256 is always supported");
+        let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+            multihash::Hash::Identity
+        } else {
+            multihash::Hash::SHA2256
+        };
+        let multihash =
+            multihash::encode(hash_algorithm, &key_enc).expect("identity and sha2-256 are always supported by known public key types");
         PeerId { multihash }
     }
 
@@ -63,7 +72,7 @@ impl PeerId {
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
-                if multihash.algorithm() == multihash::Hash::SHA2256 {
+                if multihash.algorithm() == multihash::Hash::SHA2256 || multihash.algorithm() == multihash::Hash::Identity {
                     Ok(PeerId { multihash })
                 } else {
                     Err(multihash.into_bytes())
@@ -131,7 +140,8 @@ impl PeerId {
         let enc = public_key.clone().into_protobuf_encoding();
         match multihash::encode(alg, &enc) {
             Ok(h) => Some(h == self.multihash),
-            Err(multihash::EncodeError::UnsupportedType) => None
+            Err(multihash::EncodeError::UnsupportedType) => None,
+            Err(multihash::EncodeError::UnsupportedInputLength) => None,
         }
     }
 }
