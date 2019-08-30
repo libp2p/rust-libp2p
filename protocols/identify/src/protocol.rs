@@ -59,7 +59,7 @@ pub struct ReplySubstream<T> {
 
 impl<T> fmt::Debug for ReplySubstream<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "identify::protocol::ReplySubstream")
+        f.debug_tuple("ReplySubstream").finish()
     }
 }
 
