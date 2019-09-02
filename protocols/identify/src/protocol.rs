@@ -33,12 +33,12 @@ use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
 use std::convert::TryFrom;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::iter;
+use std::{fmt, iter};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
 
-/// Configuration for an upgrade to the identity protocol.
+/// Configuration for an upgrade to the `Identify` protocol.
 #[derive(Debug, Clone)]
 pub struct IdentifyProtocolConfig;
 
@@ -52,15 +52,26 @@ pub struct RemoteInfo {
     _priv: ()
 }
 
-/// Object used to send back information to the client.
-pub struct IdentifySender<T> {
+/// The substream on which a reply is expected to be sent.
+pub struct ReplySubstream<T> {
     inner: Framed<T, codec::UviBytes<Vec<u8>>>,
 }
 
-impl<T> IdentifySender<T> where T: AsyncWrite {
-    /// Sends back information to the client. Returns a future that is signalled whenever the
-    /// info have been sent.
-    pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr) -> IdentifySenderFuture<T> {
+impl<T> fmt::Debug for ReplySubstream<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ReplySubstream").finish()
+    }
+}
+
+impl<T> ReplySubstream<T>
+where
+    T: AsyncWrite
+{
+    /// Sends back the requested information on the substream.
+    ///
+    /// Consumes the substream, returning a `ReplyFuture` that resolves
+    /// when the reply has been sent on the underlying connection.
+    pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr) -> ReplyFuture<T> {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
@@ -83,7 +94,7 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
             .write_to_bytes()
             .expect("writing protobuf failed; should never happen");
 
-        IdentifySenderFuture {
+        ReplyFuture {
             inner: self.inner,
             item: Some(bytes),
         }
@@ -96,14 +107,14 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
 //       means that we would require `T: AsyncWrite` in this struct definition. This requirement
 //       would then propagate everywhere.
 #[must_use = "futures do nothing unless polled"]
-pub struct IdentifySenderFuture<T> {
+pub struct ReplyFuture<T> {
     /// The Sink where to send the data.
     inner: Framed<T, codec::UviBytes<Vec<u8>>>,
     /// Bytes to send, or `None` if we've already sent them.
     item: Option<Vec<u8>>,
 }
 
-impl<T> Future for IdentifySenderFuture<T>
+impl<T> Future for ReplyFuture<T>
 where T: AsyncWrite
 {
     type Item = ();
@@ -123,19 +134,20 @@ where T: AsyncWrite
     }
 }
 
-/// Information sent from the listener to the dialer.
+/// Information of a peer sent in `Identify` protocol responses.
 #[derive(Debug, Clone)]
 pub struct IdentifyInfo {
-    /// Public key of the node.
+    /// The public key underlying the peer's `PeerId`.
     pub public_key: PublicKey,
-    /// Version of the "global" protocol, e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
+    /// Version of the protocol family used by the peer, e.g. `ipfs/1.0.0`
+    /// or `polkadot/1.0.0`.
     pub protocol_version: String,
-    /// Name and version of the client. Can be thought as similar to the `User-Agent` header
-    /// of HTTP.
+    /// Name and version of the peer, similar to the `User-Agent` header in
+    /// the HTTP protocol.
     pub agent_version: String,
-    /// Addresses that the node is listening on.
+    /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
-    /// Protocols supported by the node, e.g. `/ipfs/ping/1.0.0`.
+    /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
     pub protocols: Vec<String>,
 }
 
@@ -152,15 +164,14 @@ impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = IdentifySender<Negotiated<C>>;
+    type Output = ReplySubstream<Negotiated<C>>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
 
     fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
-        let socket = Framed::new(socket, codec::UviBytes::default());
-        let sender = IdentifySender { inner: socket };
-        future::ok(sender)
+        let inner = Framed::new(socket, codec::UviBytes::default());
+        future::ok(ReplySubstream { inner })
     }
 }
 

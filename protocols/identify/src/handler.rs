@@ -18,9 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
+use crate::protocol::{RemoteInfo, IdentifyProtocolConfig, ReplySubstream};
 use futures::prelude::*;
-use libp2p_core::upgrade::{DeniedUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::{
+    InboundUpgrade,
+    OutboundUpgrade,
+    Negotiated
+};
 use libp2p_swarm::{
     KeepAlive,
     SubstreamProtocol,
@@ -28,10 +32,11 @@ use libp2p_swarm::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
+use smallvec::SmallVec;
 use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::{Delay, Instant};
-use void::{Void, unreachable};
+use void::Void;
 
 /// Delay between the moment we connect and the first time we identify.
 const DELAY_TO_FIRST_ID: Duration = Duration::from_millis(500);
@@ -40,67 +45,73 @@ const DELAY_TO_NEXT_ID: Duration = Duration::from_secs(5 * 60);
 /// After we failed to identify the remote, try again after the given delay.
 const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 
-/// Protocol handler that identifies the remote at a regular period.
-pub struct PeriodicIdHandler<TSubstream> {
+/// Protocol handler for sending and receiving identification requests.
+///
+/// Outbound requests are sent periodically. The handler performs expects
+/// at least one identification request to be answered by the remote before
+/// permitting the underlying connection to be closed.
+pub struct IdentifyHandler<TSubstream> {
     /// Configuration for the protocol.
     config: IdentifyProtocolConfig,
 
-    /// If `Some`, we successfully generated an `PeriodicIdHandlerEvent` and we will produce
-    /// it the next time `poll()` is invoked.
-    pending_result: Option<PeriodicIdHandlerEvent>,
+    /// Pending events to yield.
+    events: SmallVec<[IdentifyHandlerEvent<TSubstream>; 4]>,
 
     /// Future that fires when we need to identify the node again.
     next_id: Delay,
 
-    /// If `true`, we have started an identification of the remote at least once in the past.
-    first_id_happened: bool,
+    /// Whether the handler should keep the connection alive.
+    keep_alive: KeepAlive,
 
     /// Marker for strong typing.
     marker: PhantomData<TSubstream>,
 }
 
-/// Event produced by the periodic identifier.
+/// Event produced by the `IdentifyHandler`.
 #[derive(Debug)]
-pub enum PeriodicIdHandlerEvent {
+pub enum IdentifyHandlerEvent<TSubstream> {
     /// We obtained identification information from the remote
     Identified(RemoteInfo),
+    /// We received a request for identification.
+    Identify(ReplySubstream<Negotiated<TSubstream>>),
     /// Failed to identify the remote.
     IdentificationError(ProtocolsHandlerUpgrErr<io::Error>),
 }
 
-impl<TSubstream> PeriodicIdHandler<TSubstream> {
-    /// Builds a new `PeriodicIdHandler`.
-    #[inline]
+impl<TSubstream> IdentifyHandler<TSubstream> {
+    /// Creates a new `IdentifyHandler`.
     pub fn new() -> Self {
-        PeriodicIdHandler {
+        IdentifyHandler {
             config: IdentifyProtocolConfig,
-            pending_result: None,
+            events: SmallVec::new(),
             next_id: Delay::new(Instant::now() + DELAY_TO_FIRST_ID),
-            first_id_happened: false,
+            keep_alive: KeepAlive::Yes,
             marker: PhantomData,
         }
     }
 }
 
-impl<TSubstream> ProtocolsHandler for PeriodicIdHandler<TSubstream>
+impl<TSubstream> ProtocolsHandler for IdentifyHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
-    type OutEvent = PeriodicIdHandlerEvent;
+    type OutEvent = IdentifyHandlerEvent<TSubstream>;
     type Error = wasm_timer::Error;
     type Substream = TSubstream;
-    type InboundProtocol = DeniedUpgrade;
+    type InboundProtocol = IdentifyProtocolConfig;
     type OutboundProtocol = IdentifyProtocolConfig;
     type OutboundOpenInfo = ();
 
-    #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        SubstreamProtocol::new(DeniedUpgrade)
+        SubstreamProtocol::new(self.config.clone())
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
-        unreachable(protocol)
+    fn inject_fully_negotiated_inbound(
+        &mut self,
+        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+    ) {
+        self.events.push(IdentifyHandlerEvent::Identify(protocol))
     }
 
     fn inject_fully_negotiated_outbound(
@@ -108,42 +119,39 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
-        self.pending_result = Some(PeriodicIdHandlerEvent::Identified(protocol));
-        self.first_id_happened = true;
+        self.events.push(IdentifyHandlerEvent::Identified(protocol));
+        self.keep_alive = KeepAlive::No;
     }
 
-    #[inline]
     fn inject_event(&mut self, _: Self::InEvent) {}
 
-    #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
-        self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
-        self.first_id_happened = true;
+    fn inject_dial_upgrade_error(
+        &mut self,
+        _info: Self::OutboundOpenInfo,
+        err: ProtocolsHandlerUpgrErr<
+            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error
+        >
+    ) {
+        self.events.push(IdentifyHandlerEvent::IdentificationError(err));
+        self.keep_alive = KeepAlive::No;
         self.next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
     }
 
-    #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.first_id_happened {
-            KeepAlive::No
-        } else {
-            KeepAlive::Yes
-        }
+        self.keep_alive
     }
 
-    fn poll(
-        &mut self,
-    ) -> Poll<
+    fn poll(&mut self) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            PeriodicIdHandlerEvent,
+            IdentifyHandlerEvent<TSubstream>,
         >,
         Self::Error,
     > {
-        if let Some(pending_result) = self.pending_result.take() {
+        if !self.events.is_empty() {
             return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
-                pending_result,
+                self.events.remove(0),
             )));
         }
 
