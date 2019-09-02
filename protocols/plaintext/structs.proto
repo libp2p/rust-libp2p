@@ -1,0 +1,5 @@
+package spipe.pb;
+
+message Propose {
+	optional bytes pubkey = 1;
+}
