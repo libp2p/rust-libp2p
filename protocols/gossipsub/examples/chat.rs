@@ -56,7 +56,7 @@ fn main() {
     let transport = libp2p::build_development_transport(local_key);
 
     // Create a Floodsub/Gossipsub topic
-    let topic = Topic::new("test".into());
+    let topic = Topic::new("test-net".into());
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
@@ -106,9 +106,11 @@ fn main() {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(gossip_event)) => match gossip_event {
-                    GossipsubEvent::Message(message) => {
-                        println!("Got message: {:?}", String::from_utf8_lossy(&message.data))
-                    }
+                    GossipsubEvent::Message(peer_id, message) => println!(
+                        "Got message: {:?} from peer {:?}",
+                        String::from_utf8_lossy(&message.data),
+                        peer_id
+                    ),
                     _ => {}
                 },
                 Async::Ready(None) | Async::NotReady => break,

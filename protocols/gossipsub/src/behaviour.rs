@@ -196,7 +196,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // forward the message to mesh and floodsub peers
         let local_peer_id = self.local_peer_id.clone();
-        self.forward_msg(message.clone(), local_peer_id);
+        self.forward_msg(message.clone(), &local_peer_id);
 
         let mut recipient_peers = HashMap::new();
         for topic_hash in &message.topics {
@@ -244,6 +244,25 @@ impl<TSubstream> Gossipsub<TSubstream> {
             });
         }
         info!("Published message: {:?}", message.id());
+    }
+
+    /// This function should be called when `config.propagate_messages` is false to order to
+    /// propagate messages. Messages are stored in the Memcache and validation is expected to be
+    /// fast enough that the messages should still exist in the cache.
+    ///
+    /// Calling this function will propagate a message stored in the cache, if it still exists.
+    pub fn propagate_message(&mut self, message_id: &str, propagation_source: &PeerId) {
+        let message = match self.mcache.get(message_id) {
+            Some(message) => message.clone(),
+            None => {
+                warn!(
+                    "Message not in cache. Ignoring forwarding. Message Id: {}",
+                    message_id
+                );
+                return;
+            }
+        };
+        self.forward_msg(message, propagation_source)
     }
 
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
@@ -468,7 +487,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 
     /// Handles a newly received GossipsubMessage.
-    /// Forwards the message to all floodsub peers and peers in the mesh.
+    /// Forwards the message to all peers in the mesh.
     fn handle_received_message(&mut self, msg: GossipsubMessage, propagation_source: &PeerId) {
         debug!(
             "Handling message: {:?} from peer: {:?}",
@@ -491,15 +510,18 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // dispatch the message to the user
         if self.mesh.keys().any(|t| msg.topics.iter().any(|u| t == u)) {
-            debug!("Sending received message to poll");
+            debug!("Sending received message to user");
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                GossipsubEvent::Message(msg.clone()),
+                GossipsubEvent::Message(propagation_source.clone(), msg.clone()),
             ));
         }
 
-        // forward the message to floodsub and mesh peers
-        self.forward_msg(msg.clone(), propagation_source.clone());
-        debug!("Completed message handling for message: {:?}", msg.id());
+        // forward the message to mesh peers, if no validation is required
+        if self.config.propagate_messages {
+            let message_id = msg.id();
+            self.forward_msg(msg, propagation_source);
+            debug!("Completed message handling for message: {:?}", message_id);
+        }
     }
 
     /// Handles received subscriptions.
@@ -814,17 +836,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
-    fn forward_msg(&mut self, message: GossipsubMessage, source: PeerId) {
+    /// Helper function which forwards a message to mesh[topic] peers.
+    fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
         debug!("Forwarding message: {:?}", message.id());
         let mut recipient_peers = HashSet::new();
 
-        // add floodsub and mesh peers
+        // add mesh peers
         for topic in &message.topics {
             // mesh
             if let Some(mesh_peers) = self.mesh.get(&topic) {
                 for peer_id in mesh_peers {
-                    if *peer_id != source {
+                    if peer_id != source {
                         recipient_peers.insert(peer_id.clone());
                     }
                 }
@@ -1117,8 +1139,9 @@ pub struct GossipsubRpc {
 /// Event that can happen on the gossipsub behaviour.
 #[derive(Debug)]
 pub enum GossipsubEvent {
-    /// A message has been received.
-    Message(GossipsubMessage),
+    /// A message has been received. This contains the PeerId that we received the message from
+    /// and the actual message.
+    Message(PeerId, GossipsubMessage),
 
     /// A remote subscribed to a topic.
     Subscribed {
