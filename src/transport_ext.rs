@@ -20,43 +20,12 @@
 
 //! Provides the `TransportExt` trait.
 
-use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, ratelimit::RateLimited, Transport};
-use std::{io, sync::Arc, time::Duration};
-use tokio_executor::DefaultExecutor;
+use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, Transport};
+use std::{sync::Arc, time::Duration};
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
-///
-/// # Example
-///
-/// ```
-/// use libp2p::TransportExt;
-/// use libp2p::tcp::TcpConfig;
-/// use std::time::Duration;
-///
-/// let _transport = TcpConfig::new()
-///     .with_rate_limit(1024 * 1024, 1024 * 1024);
-/// ```
-///
 pub trait TransportExt: Transport {
-    /// Adds a maximum transfer rate to the sockets created with the transport.
-    #[inline]
-    fn with_rate_limit(
-        self,
-        max_read_bytes_per_sec: usize,
-        max_write_bytes_per_sec: usize,
-    ) -> io::Result<RateLimited<Self>>
-    where
-        Self: Sized,
-    {
-        RateLimited::new(
-            &mut DefaultExecutor::current(),
-            self,
-            max_read_bytes_per_sec,
-            max_write_bytes_per_sec,
-        )
-    }
-
     /// Adds a layer on the `Transport` that logs all trafic that passes through the sockets
     /// created by it.
     ///
