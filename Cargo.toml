@@ -68,7 +68,6 @@ members = [
     "protocols/identify",
     "protocols/kad",
     "protocols/noise",
-    "protocols/observed",
     "protocols/ping",
     "protocols/plaintext",
     "protocols/secio",
