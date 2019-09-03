@@ -24,7 +24,7 @@ use futures::{future, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::nodes::network::{Network, NetworkEvent, NetworkReachError, PeerState, UnknownPeerDialErr, IncomingError};
-use libp2p_core::{PeerId, Transport, upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt};
+use libp2p_core::{PeerId, Transport, upgrade};
 use libp2p_swarm::{
     ProtocolsHandler,
     KeepAlive,
@@ -91,21 +91,13 @@ where
 fn deny_incoming_connec() {
     // Checks whether refusing an incoming connection on a swarm triggers the correct events.
 
-    // TODO: make creating the transport more elegant ; literaly half of the code of the test
-    //       is about creating the transport
     let mut swarm1: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = libp2p_mplex::MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            });
+            .upgrade()
+            .authenticate(libp2p_secio::SecioConfig::new(local_key))
+            .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
     };
 
@@ -113,15 +105,9 @@ fn deny_incoming_connec() {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = libp2p_mplex::MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            });
+            .upgrade()
+            .authenticate(libp2p_secio::SecioConfig::new(local_key))
+            .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
     };
 
@@ -180,27 +166,18 @@ fn dial_self() {
     //
     // The last two items can happen in any order.
 
-    // TODO: make creating the transport more elegant ; literaly half of the code of the test
-    //       is about creating the transport
     let mut swarm = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = libp2p_mplex::MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            })
+            .upgrade()
+            .authenticate(libp2p_secio::SecioConfig::new(local_key))
+            .multiplex(libp2p_mplex::MplexConfig::new())
             .and_then(|(peer, mplex), _| {
                 // Gracefully close the connection to allow protocol
                 // negotiation to complete.
                 util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
             });
-
         Network::new(transport, local_public_key.into())
     };
 
@@ -268,21 +245,13 @@ fn dial_self_by_id() {
     // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
     // place.
 
-    // TODO: make creating the transport more elegant ; literaly half of the code of the test
-    //       is about creating the transport
     let mut swarm: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = libp2p_mplex::MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            });
+            .upgrade()
+            .authenticate(libp2p_secio::SecioConfig::new(local_key))
+            .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
     };
 
@@ -294,21 +263,13 @@ fn dial_self_by_id() {
 fn multiple_addresses_err() {
     // Tries dialing multiple addresses, and makes sure there's one dialing error per addresses.
 
-    // TODO: make creating the transport more elegant ; literaly half of the code of the test
-    //       is about creating the transport
     let mut swarm = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = libp2p_mplex::MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            });
+            .upgrade()
+            .authenticate(libp2p_secio::SecioConfig::new(local_key))
+            .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
     };
 
