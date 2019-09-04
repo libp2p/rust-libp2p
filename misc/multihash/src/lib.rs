@@ -57,24 +57,46 @@ macro_rules! match_encoder {
 /// ```
 ///
 pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
-    let (offset, mut output) = encode_hash(hash);
-    match_encoder!(hash for (input, &mut output[offset ..]) {
-        SHA1 => sha1::Sha1,
-        SHA2256 => sha2::Sha256,
-        SHA2512 => sha2::Sha512,
-        SHA3224 => sha3::Sha3_224,
-        SHA3256 => sha3::Sha3_256,
-        SHA3384 => sha3::Sha3_384,
-        SHA3512 => sha3::Sha3_512,
-        Keccak224 => sha3::Keccak224,
-        Keccak256 => sha3::Keccak256,
-        Keccak384 => sha3::Keccak384,
-        Keccak512 => sha3::Keccak512,
-        Blake2b512 => blake2::Blake2b,
-        Blake2s256 => blake2::Blake2s,
-    });
+    // Custom length encoding for the identity multihash
+    if let Hash::Identity = hash {
+        if u64::from(std::u32::MAX) < as_u64(input.len()) {
+            return Err(EncodeError::UnsupportedInputLength);
+        }
+        let mut buf = encode::u16_buffer();
+        let code = encode::u16(hash.code(), &mut buf);
+        let mut len_buf = encode::u32_buffer();
+        let size = encode::u32(input.len() as u32, &mut len_buf);
 
-    Ok(Multihash { bytes: output.freeze() })
+        let total_len = code.len() + size.len() + input.len();
+
+        let mut output = BytesMut::with_capacity(total_len);
+        output.put_slice(code);
+        output.put_slice(size);
+        output.put_slice(input);
+        Ok(Multihash {
+            bytes: output.freeze(),
+        })
+    } else {
+        let (offset, mut output) = encode_hash(hash);
+        match_encoder!(hash for (input, &mut output[offset ..]) {
+            SHA1 => sha1::Sha1,
+            SHA2256 => sha2::Sha256,
+            SHA2512 => sha2::Sha512,
+            SHA3224 => sha3::Sha3_224,
+            SHA3256 => sha3::Sha3_256,
+            SHA3384 => sha3::Sha3_384,
+            SHA3512 => sha3::Sha3_512,
+            Keccak224 => sha3::Keccak224,
+            Keccak256 => sha3::Keccak256,
+            Keccak384 => sha3::Keccak384,
+            Keccak512 => sha3::Keccak512,
+            Blake2b512 => blake2::Blake2b,
+            Blake2s256 => blake2::Blake2s,
+        });
+        Ok(Multihash {
+            bytes: output.freeze(),
+        })
+    }
 }
 
 // Encode the given [`Hash`] value and ensure the returned [`BytesMut`]
@@ -180,15 +202,25 @@ impl<'a> MultihashRef<'a> {
         let (code, bytes) = decode::u16(&input).map_err(|_| DecodeError::BadInputLength)?;
 
         let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
+
+        // handle the identity case
+        if alg == Hash::Identity {
+            let (hash_len, bytes) = decode::u32(&bytes).map_err(|_| DecodeError::BadInputLength)?;
+            if as_u64(bytes.len()) != u64::from(hash_len) {
+                return Err(DecodeError::BadInputLength);
+            }
+            return Ok(MultihashRef { bytes: input });
+        }
+
         let hash_len = usize::from(alg.size());
 
         // Length of input after hash code should be exactly hash_len + 1
         if bytes.len() != hash_len + 1 {
-            return Err(DecodeError::BadInputLength)
+            return Err(DecodeError::BadInputLength);
         }
 
         if usize::from(bytes[0]) != hash_len {
-            return Err(DecodeError::BadInputLength)
+            return Err(DecodeError::BadInputLength);
         }
 
         Ok(MultihashRef { bytes: input })
@@ -229,6 +261,11 @@ impl<'a> PartialEq<Multihash> for MultihashRef<'a> {
     fn eq(&self, other: &Multihash) -> bool {
         self.bytes == &*other.bytes
     }
+}
+
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+fn as_u64(a: usize) -> u64 {
+    a as u64
 }
 
 /// Convert bytes to a hex representation
