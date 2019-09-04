@@ -25,8 +25,10 @@ use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use libp2p_core::PublicKey;
+use libp2p_core::identity::Keypair;
 use log::{debug, trace};
-use crate::structs_proto::Propose;
+use crate::pb::keys::{PublicKey as PbPublicKey, KeyType};
+use crate::pb::structs::Exchange;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
 use tokio_io::codec::length_delimited::Framed;
@@ -66,8 +68,11 @@ impl HandShakeContext<()> {
 
     fn with_local(self) -> Result<HandShakeContext<Local>, PlainTextError> {
         let public_key_encoded = self.config.key.public().into_protobuf_encoding();
-        let mut proposition = Propose::new();
-        proposition.set_pubkey(public_key_encoded.clone());
+        let mut proposition = Exchange::new();
+        let mut pb_pubkey = PbPublicKey::new();
+        pb_pubkey.set_Type(HandShakeContext::keypair_to_keytype(&self.config.key));
+        pb_pubkey.set_Data(public_key_encoded.clone());
+        proposition.set_pubkey(pb_pubkey);
 
         let proposition_bytes = proposition.write_to_bytes()?;
 
@@ -79,11 +84,19 @@ impl HandShakeContext<()> {
             }
         })
     }
+
+    fn keypair_to_keytype(keypair: &Keypair) -> KeyType {
+        match keypair {
+            Keypair::Ed25519(_) => KeyType::Ed25519,
+            Keypair::Rsa(_) => KeyType::RSA,
+            Keypair::Secp256k1(_) => KeyType::Secp256k1,
+        }
+    }
 }
 
 impl HandShakeContext<Local> {
     fn with_remote(self, proposition_bytes: BytesMut) -> Result<HandShakeContext<Remote>, PlainTextError> {
-        let mut prop = match protobuf::parse_from_bytes::<Propose>(&proposition_bytes) {
+        let mut prop = match protobuf::parse_from_bytes::<Exchange>(&proposition_bytes) {
             Ok(prop) => prop,
             Err(_) => {
                 debug!("failed to parse remote's proposition protobuf message");
@@ -91,8 +104,8 @@ impl HandShakeContext<Local> {
             },
         };
 
-        let public_key_encoded = prop.take_pubkey();
-        let public_key = match PublicKey::from_protobuf_encoding(&public_key_encoded) {
+        let pb_pubkey = prop.take_pubkey();
+        let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.get_Data()) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's proposition's pubkey protobuf");

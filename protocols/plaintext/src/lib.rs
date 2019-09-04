@@ -34,7 +34,7 @@ use crate::error::PlainTextError;
 
 mod error;
 mod handshake;
-mod structs_proto;
+mod pb;
 
 #[derive(Clone)]
 pub struct PlainTextConfig {

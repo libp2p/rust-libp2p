@@ -1,5 +1,8 @@
-package spipe.pb;
+syntax = "proto2";
 
-message Propose {
-	optional bytes pubkey = 1;
+import "core/keys.proto";
+
+message Exchange {
+  optional bytes id = 1;
+  optional PublicKey pubkey = 2;
 }
