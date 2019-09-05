@@ -322,6 +322,16 @@ where
 
 // RecvIdentity --------------------------------------------------------------
 
+async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
+where
+    T: AsyncRead,
+{
+    state.read_exact([0,0]).await?;
+    // TODO: Replace the logic below in `impl Future for REcvIdentity` with what
+    // we have done for e.g. recv_empty.
+    unimplemented!()
+}
+
 /// A future for receiving a Noise handshake message with a payload
 /// identifying the remote.
 ///
