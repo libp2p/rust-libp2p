@@ -45,15 +45,15 @@ struct HandShakeContext<T> {
 struct Local {
     // Our encoded local public key
     public_key_encoded: Vec<u8>,
-    // Our local proposition's raw bytes:
-    proposition_bytes: Vec<u8>,
+    // Our local exchange's raw bytes:
+    exchange_bytes: Vec<u8>,
 }
 
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
 struct Remote {
     local: Local,
-    // The remote's proposition's raw bytes:
-    proposition_bytes: BytesMut,
+    // The remote's exchange's raw bytes:
+    exchange_bytes: BytesMut,
     // The remote's public key:
     public_key: PublicKey,
 }
@@ -68,19 +68,19 @@ impl HandShakeContext<()> {
 
     fn with_local(self) -> Result<HandShakeContext<Local>, PlainTextError> {
         let public_key_encoded = self.config.pubkey.clone().into_protobuf_encoding();
-        let mut proposition = Exchange::new();
+        let mut exchange = Exchange::new();
         let mut pb_pubkey = PbPublicKey::new();
         pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.pubkey));
         pb_pubkey.set_Data(public_key_encoded.clone());
-        proposition.set_pubkey(pb_pubkey);
+        exchange.set_pubkey(pb_pubkey);
 
-        let proposition_bytes = proposition.write_to_bytes()?;
+        let exchange_bytes = exchange.write_to_bytes()?;
 
         Ok(HandShakeContext {
             config: self.config,
             state: Local {
                 public_key_encoded,
-                proposition_bytes,
+                exchange_bytes,
             }
         })
     }
@@ -95,11 +95,11 @@ impl HandShakeContext<()> {
 }
 
 impl HandShakeContext<Local> {
-    fn with_remote(self, proposition_bytes: BytesMut) -> Result<HandShakeContext<Remote>, PlainTextError> {
-        let mut prop = match protobuf::parse_from_bytes::<Exchange>(&proposition_bytes) {
+    fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandShakeContext<Remote>, PlainTextError> {
+        let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
             Ok(prop) => prop,
             Err(_) => {
-                debug!("failed to parse remote's proposition protobuf message");
+                debug!("failed to parse remote's exchange protobuf message");
                 return Err(PlainTextError::HandshakeParsingFailure);
             },
         };
@@ -108,7 +108,7 @@ impl HandShakeContext<Local> {
         let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.get_Data()) {
             Ok(p) => p,
             Err(_) => {
-                debug!("failed to parse remote's proposition's pubkey protobuf");
+                debug!("failed to parse remote's exchange's pubkey protobuf");
                 return Err(PlainTextError::HandshakeParsingFailure);
             },
         };
@@ -117,7 +117,7 @@ impl HandShakeContext<Local> {
             config: self.config,
             state: Remote {
                 local: self.state,
-                proposition_bytes,
+                exchange_bytes,
                 public_key,
             }
         })
@@ -140,26 +140,26 @@ where
             Ok(context.with_local()?)
         })
         .and_then(|context| {
-            trace!("sending proposition to remote");
-            socket.send(BytesMut::from(context.state.proposition_bytes.clone()))
+            trace!("sending exchange to remote");
+            socket.send(BytesMut::from(context.state.exchange_bytes.clone()))
                 .from_err()
                 .map(|s| (s, context))
         })
         .and_then(move |(socket, context)| {
-            trace!("receiving the remote's proposition");
+            trace!("receiving the remote's exchange");
             socket.into_future()
                 .map_err(|(e, _)| e.into())
                 .and_then(move |(prop_raw, socket)| {
                     let context = match prop_raw {
                         Some(p) => context.with_remote(p)?,
                         None => {
-                            debug!("unexpected eof while waiting for remote's proposition");
+                            debug!("unexpected eof while waiting for remote's exchange");
                             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
                             return Err(err.into());
                         }
                     };
 
-                    trace!("received proposition from remote; pubkey = {:?}", context.state.public_key);
+                    trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
                     Ok((socket, context.state.public_key))
                 })
         })
