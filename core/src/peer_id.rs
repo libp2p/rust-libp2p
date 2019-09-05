@@ -24,6 +24,10 @@ use quick_error::quick_error;
 use multihash;
 use std::{convert::TryFrom, fmt, str::FromStr};
 
+/// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
+/// automatically used as the peer id using an identity multihash.
+const MAX_INLINE_KEY_LENGTH: usize = 42;
+
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
@@ -52,8 +56,23 @@ impl PeerId {
     #[inline]
     pub fn from_public_key(key: PublicKey) -> PeerId {
         let key_enc = key.into_protobuf_encoding();
-        let multihash = multihash::encode(multihash::Hash::SHA2256, &key_enc)
-            .expect("sha2-256 is always supported");
+
+        // Note: the correct behaviour, according to the libp2p specifications, is the
+        // commented-out code, which consists it transmitting small keys un-hashed. However, this
+        // version and all previous versions of rust-libp2p always hash the key. Starting from
+        // version 0.13, rust-libp2p accepts both hashed and non-hashed keys as input
+        // (see `from_bytes`). Starting from version 0.14, rust-libp2p will switch to not hashing
+        // the key (a.k.a. the correct behaviour).
+        // In other words, rust-libp2p 0.13 is compatible with all versions of rust-libp2p.
+        // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.14 and above.
+        /*let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+            multihash::Hash::Identity
+        } else {
+            multihash::Hash::SHA2256
+        };*/
+        let hash_algorithm = multihash::Hash::SHA2256;
+        let multihash = multihash::encode(hash_algorithm, &key_enc)
+            .expect("identity and sha2-256 are always supported by known public key types");
         PeerId { multihash }
     }
 
@@ -63,12 +82,14 @@ impl PeerId {
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
-                if multihash.algorithm() == multihash::Hash::SHA2256 {
+                if multihash.algorithm() == multihash::Hash::SHA2256
+                    || multihash.algorithm() == multihash::Hash::Identity
+                {
                     Ok(PeerId { multihash })
                 } else {
                     Err(multihash.into_bytes())
                 }
-            },
+            }
             Err(err) => Err(err.data),
         }
     }
@@ -131,7 +152,8 @@ impl PeerId {
         let enc = public_key.clone().into_protobuf_encoding();
         match multihash::encode(alg, &enc) {
             Ok(h) => Some(h == self.multihash),
-            Err(multihash::EncodeError::UnsupportedType) => None
+            Err(multihash::EncodeError::UnsupportedType) => None,
+            Err(multihash::EncodeError::UnsupportedInputLength) => None,
         }
     }
 }

@@ -5,6 +5,8 @@ use std::{error, fmt};
 pub enum EncodeError {
     /// The requested hash algorithm isn't supported by this library.
     UnsupportedType,
+    /// The input length is too large for the hash algorithm.
+    UnsupportedInputLength,
 }
 
 impl fmt::Display for EncodeError {
@@ -12,6 +14,10 @@ impl fmt::Display for EncodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             EncodeError::UnsupportedType => write!(f, "This type is not supported yet"),
+            EncodeError::UnsupportedInputLength => write!(
+                f,
+                "The length of the input for the given hash is not yet supported"
+            ),
         }
     }
 }
