@@ -163,7 +163,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Handshake<Negotiated<T>, C>;
+    type Future = Result<(C, Negotiated<T>), NoiseError>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
@@ -184,7 +184,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Handshake<Negotiated<T>, C>;
+    type Future = Result<(C, Negotiated<T>), NoiseError>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
@@ -207,7 +207,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Handshake<Negotiated<T>, C>;
+    type Future = Result<(C, Negotiated<T>), NoiseError>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
@@ -228,7 +228,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Handshake<Negotiated<T>, C>;
+    type Future = Result<(C, Negotiated<T>), NoiseError>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
@@ -251,7 +251,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Handshake<Negotiated<T>, C>;
+    type Future = Result<(C, Negotiated<T>), NoiseError>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
@@ -272,7 +272,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Handshake<Negotiated<T>, C>;
+    type Future = Result<(C, Negotiated<T>), NoiseError>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
