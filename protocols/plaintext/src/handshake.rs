@@ -178,7 +178,19 @@ where
         })
         // Check the validity of the remote's `Exchange`.
         .and_then(|(socket, context)| {
-            // TODO
+            let is_valid = match context.state.peer_id.is_public_key(&context.state.public_key) {
+                Some(b) => b,
+                None => {
+                    debug!("the remote's `PeerId`s hash algorithm is not unsupported");
+                    return Err(PlainTextError::NoSupportIntersection)
+                }
+            };
+
+            if !is_valid {
+                return Err(PlainTextError::PeerIdValidationFailed)
+            }
+
+            trace!("successfully validated the remote's peer ID");
             Ok((socket, context.state.public_key))
         })
 }
