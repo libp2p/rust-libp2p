@@ -342,7 +342,7 @@ impl<T: AsyncRead> AsyncRead for NoiseOutput<T> {
 }
 
 impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
+    fn shutdown(&mut self) -> Poll<Result<(), io::Error>> {
         self.io.shutdown()
     }
 }
