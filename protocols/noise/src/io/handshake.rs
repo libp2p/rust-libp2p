@@ -293,11 +293,7 @@ impl<T> State<T>
 //////////////////////////////////////////////////////////////////////////////
 // Handshake Message Futures
 
-// RecvEmpty -----------------------------------------------------------------
-
 /// A future for receiving a Noise handshake message with an empty payload.
-///
-/// Obtained from [`Handshake::recv_empty`].
 async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead
@@ -306,11 +302,7 @@ where
     Ok(())
 }
 
-// SendEmpty -----------------------------------------------------------------
-
 /// A future for sending a Noise handshake message with an empty payload.
-///
-/// Obtained from [`Handshake::send_empty`].
 async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite
@@ -320,103 +312,51 @@ where
     Ok(())
 }
 
-// RecvIdentity --------------------------------------------------------------
-
+/// A future for receiving a Noise handshake message with a payload
+/// identifying the remote.
 async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead,
 {
-    state.read_exact([0,0]).await?;
-    // TODO: Replace the logic below in `impl Future for REcvIdentity` with what
-    // we have done for e.g. recv_empty.
-    unimplemented!()
-}
+    let len_buf = [0,0];
+    state.read_exact(len_buf).await?;
+    let len = u16::from_be_bytes(len_buf) as usize;
 
-/// A future for receiving a Noise handshake message with a payload
-/// identifying the remote.
-///
-/// Obtained from [`Handshake::recv_identity`].
-struct RecvIdentity<T> {
-    state: RecvIdentityState<T>
-}
+    let payload_buf = vec![0; len];
+    state.read_exact(payload_buf).await?;
+    let pb: payload::Identity = protobuf::parse_from_bytes(&payload_buf)?;
 
-enum RecvIdentityState<T> {
-    Init(State<T>),
-    ReadPayloadLen(ReadExact<State<T>, [u8; 2]>),
-    ReadPayload(ReadExact<State<T>, Vec<u8>>),
-    Done
-}
-
-impl<T> Future for RecvIdentity<T>
-where
-    T: AsyncRead,
-{
-    type Output = Result<State<T>, NoiseError>;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            match mem::replace(&mut self.state, RecvIdentityState::Done) {
-                RecvIdentityState::Init(st) => {
-                    self.state = RecvIdentityState::ReadPayloadLen(read_exact(st, [0, 0]));
-                },
-                RecvIdentityState::ReadPayloadLen(mut read_len) => {
-                    if let Poll::Ready((st, bytes)) = read_len.poll()? {
-                        let len = u16::from_be_bytes(bytes) as usize;
-                        let buf = vec![0; len];
-                        self.state = RecvIdentityState::ReadPayload(std.read_exact(buf));
-                    } else {
-                        self.state = RecvIdentityState::ReadPayloadLen(read_len);
-                        return Ok(Poll::Pending);
-                    }
-                },
-                RecvIdentityState::ReadPayload(mut read_payload) => {
-                    if let Poll::Ready((mut st, bytes)) = read_payload.poll()? {
-                        let pb: payload::Identity = protobuf::parse_from_bytes(&bytes)?;
-                        if !pb.pubkey.is_empty() {
-                            let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
-                                .map_err(|_| NoiseError::InvalidKey)?;
-                            if let Some(ref k) = st.id_remote_pubkey {
-                                if k != &pk {
-                                    return Err(NoiseError::InvalidKey)
-                                }
-                            }
-                            st.id_remote_pubkey = Some(pk);
-                        }
-                        if !pb.signature.is_empty() {
-                            st.dh_remote_pubkey_sig = Some(pb.signature)
-                        }
-                        return Ok(Poll::Ready(st))
-                    } else {
-                        self.state = RecvIdentityState::ReadPayload(read_payload);
-                        return Ok(Poll::Pending)
-                    }
-                },
-                RecvIdentityState::Done => panic!("RecvIdentity polled after completion")
+    if !pb.pubkey.is_empty() {
+        let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
+            .map_err(|_| NoiseError::InvalidKey)?;
+        if let Some(ref k) = state.id_remote_pubkey {
+            if k != &pk {
+                return Err(NoiseError::InvalidKey)
             }
         }
+        state.id_remote_pubkey = Some(pk);
+    }
+    if !pb.signature.is_empty() {
+        state.dh_remote_pubkey_sig = Some(pb.signature)
     }
 }
 
-// SendIdentity --------------------------------------------------------------
-
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
-///
-/// Obtained from [`Handshake::send_identity`].
 async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite
 {
     let mut pb = payload::Identity::new();
-    if st.send_identity {
-        pb.set_pubkey(st.identity.public.clone().into_protobuf_encoding());
+    if state.send_identity {
+        pb.set_pubkey(state.identity.public.clone().into_protobuf_encoding());
     }
-    if let Some(ref sig) = st.identity.signature {
+    if let Some(ref sig) = state.identity.signature {
         pb.set_signature(sig.clone());
     }
     let pb_bytes = pb.write_to_bytes()?;
     let len = (pb_bytes.len() as u16).to_be_bytes();
-    st.write_all(&len).await?;
-    st.write_all(&pb_bytes).await?;
-    st.flush().await?;
+    state.write_all(&len).await?;
+    state.write_all(&pb_bytes).await?;
+    state.flush().await?;
     Ok(())
 }
