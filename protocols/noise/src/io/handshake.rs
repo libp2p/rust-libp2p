@@ -26,6 +26,7 @@ use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use libp2p_core::identity;
 use futures::prelude::*;
+use futures::io::{ReadExact};
 use std::{mem, io, task::Poll};
 use protobuf::Message;
 
@@ -336,8 +337,8 @@ struct RecvIdentity<T> {
 
 enum RecvIdentityState<T> {
     Init(State<T>),
-    ReadPayloadLen(nio::ReadExact<State<T>, [u8; 2]>),
-    ReadPayload(nio::ReadExact<State<T>, Vec<u8>>),
+    ReadPayloadLen(ReadExact<State<T>, [u8; 2]>),
+    ReadPayload(ReadExact<State<T>, Vec<u8>>),
     Done
 }
 
@@ -345,27 +346,26 @@ impl<T> Future for RecvIdentity<T>
 where
     T: AsyncRead,
 {
-    type Error = NoiseError;
-    type Item = State<T>;
+    type Output = Result<State<T>, NoiseError>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.state, RecvIdentityState::Done) {
                 RecvIdentityState::Init(st) => {
-                    self.state = RecvIdentityState::ReadPayloadLen(nio::read_exact(st, [0, 0]));
+                    self.state = RecvIdentityState::ReadPayloadLen(read_exact(st, [0, 0]));
                 },
                 RecvIdentityState::ReadPayloadLen(mut read_len) => {
-                    if let Async::Ready((st, bytes)) = read_len.poll()? {
+                    if let Poll::Ready((st, bytes)) = read_len.poll()? {
                         let len = u16::from_be_bytes(bytes) as usize;
                         let buf = vec![0; len];
-                        self.state = RecvIdentityState::ReadPayload(nio::read_exact(st, buf));
+                        self.state = RecvIdentityState::ReadPayload(std.read_exact(buf));
                     } else {
                         self.state = RecvIdentityState::ReadPayloadLen(read_len);
-                        return Ok(Async::NotReady);
+                        return Ok(Poll::Pending);
                     }
                 },
                 RecvIdentityState::ReadPayload(mut read_payload) => {
-                    if let Async::Ready((mut st, bytes)) = read_payload.poll()? {
+                    if let Poll::Ready((mut st, bytes)) = read_payload.poll()? {
                         let pb: payload::Identity = protobuf::parse_from_bytes(&bytes)?;
                         if !pb.pubkey.is_empty() {
                             let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
@@ -380,10 +380,10 @@ where
                         if !pb.signature.is_empty() {
                             st.dh_remote_pubkey_sig = Some(pb.signature)
                         }
-                        return Ok(Async::Ready(st))
+                        return Ok(Poll::Ready(st))
                     } else {
                         self.state = RecvIdentityState::ReadPayload(read_payload);
-                        return Ok(Async::NotReady)
+                        return Ok(Poll::Pending)
                     }
                 },
                 RecvIdentityState::Done => panic!("RecvIdentity polled after completion")

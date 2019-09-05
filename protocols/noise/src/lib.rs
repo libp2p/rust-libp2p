@@ -25,11 +25,11 @@
 //!
 //! This crate provides `libp2p_core::InboundUpgrade` and `libp2p_core::OutboundUpgrade`
 //! implementations for various noise handshake patterns (currently `IK`, `IX`, and `XX`)
-//! over a particular choice of DH key agreement (currently only X25519).
+//! over a particular choice of Diffie–Hellman key agreement (currently only X25519).
 //!
 //! All upgrades produce as output a pair, consisting of the remote's static public key
 //! and a `NoiseOutput` which represents the established cryptographic session with the
-//! remote, implementing `tokio_io::AsyncRead` and `tokio_io::AsyncWrite`.
+//! remote, implementing `futures::io::AsyncRead` and `futures::io::AsyncWrite`.
 //!
 //! # Usage
 //!
