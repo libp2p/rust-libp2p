@@ -20,7 +20,7 @@
 
 use bytes::BytesMut;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use futures::{Future, StartSend, Poll};
+use futures::{Future, StartSend, Poll, future};
 use futures::sink::Sink;
 use futures::stream::MapErr as StreamMapErr;
 use futures::stream::Stream;
@@ -31,10 +31,44 @@ use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited::Framed;
 use crate::error::PlainTextError;
+use void::Void;
+use futures::future::FutureResult;
 
 mod error;
 mod handshake;
 mod pb;
+
+#[derive(Debug, Copy, Clone)]
+pub struct PlainText1Config;
+
+impl UpgradeInfo for PlainText1Config {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/plaintext/1.0.0")
+    }
+}
+
+impl<C> InboundUpgrade<C> for PlainText1Config {
+    type Output = Negotiated<C>;
+    type Error = Void;
+    type Future = FutureResult<Negotiated<C>, Self::Error>;
+
+    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
+        future::ok(i)
+    }
+}
+
+impl<C> OutboundUpgrade<C> for PlainText1Config {
+    type Output = Negotiated<C>;
+    type Error = Void;
+    type Future = FutureResult<Negotiated<C>, Self::Error>;
+
+    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
+        future::ok(i)
+    }
+}
 
 #[derive(Clone)]
 pub struct PlainText2Config {
