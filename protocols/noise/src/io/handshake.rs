@@ -236,14 +236,14 @@ impl<T> State<T> {
         session: Result<snow::Session, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
-    ) -> FutureResult<Self, NoiseError> {
+    ) -> Result<Self, NoiseError> {
         let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
             IdentityExchange::Send { remote } => (Some(remote), true),
             IdentityExchange::Receive => (None, false),
             IdentityExchange::None { remote } => (Some(remote), false)
         };
-        future::result(session.map(|s|
+        session.map(|s|
             State {
                 identity,
                 io: NoiseOutput::new(io, s),
@@ -251,7 +251,7 @@ impl<T> State<T> {
                 id_remote_pubkey,
                 send_identity
             }
-        ))
+        )
     }
 }
 
@@ -259,19 +259,19 @@ impl<T> State<T>
 {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`NoiseOutput`] for communicating on the encrypted channel.
-    fn finish<C>(self) -> FutureResult<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+    fn finish<C>(self) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
     where
         C: Protocol<C> + AsRef<[u8]>
     {
         let dh_remote_pubkey = match self.io.session.get_remote_static() {
             None => None,
             Some(k) => match C::public_from_bytes(k) {
-                Err(e) => return future::err(e),
+                Err(e) => return Err(e),
                 Ok(dh_pk) => Some(dh_pk)
             }
         };
         match self.io.session.into_transport_mode() {
-            Err(e) => future::err(e.into()),
+            Err(e) => Err(e.into()),
             Ok(s) => {
                 let remote = match (self.id_remote_pubkey, dh_remote_pubkey) {
                     (_, None) => RemoteIdentity::Unknown,
@@ -284,7 +284,7 @@ impl<T> State<T>
                         }
                     }
                 };
-                future::ok((remote, NoiseOutput { session: s, .. self.io }))
+                Ok((remote, NoiseOutput { session: s, .. self.io }))
             }
         }
     }
