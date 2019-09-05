@@ -34,10 +34,10 @@ use tokio_io::codec::length_delimited;
 use tokio_io::codec::length_delimited::Framed;
 use protobuf::Message;
 use crate::error::PlainTextError;
-use crate::PlainTextConfig;
+use crate::PlainText2Config;
 
 struct HandShakeContext<T> {
-    config: PlainTextConfig,
+    config: PlainText2Config,
     state: T
 }
 
@@ -59,7 +59,7 @@ struct Remote {
 }
 
 impl HandShakeContext<()> {
-    fn new(config: PlainTextConfig) -> Self {
+    fn new(config: PlainText2Config) -> Self {
         Self {
             config,
             state: (),
@@ -124,7 +124,7 @@ impl HandShakeContext<Local> {
     }
 }
 
-pub fn handshake<S>(socket: S, config: PlainTextConfig)
+pub fn handshake<S>(socket: S, config: PlainText2Config)
     -> impl Future<Item = (Framed<S, BytesMut>, PublicKey), Error = PlainTextError>
 where
     S: AsyncRead + AsyncWrite + Send,

@@ -37,12 +37,12 @@ mod handshake;
 mod pb;
 
 #[derive(Clone)]
-pub struct PlainTextConfig {
+pub struct PlainText2Config {
 //    peerId: PeerId,
     pub key: identity::Keypair,
 }
 
-impl UpgradeInfo for PlainTextConfig {
+impl UpgradeInfo for PlainText2Config {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -51,7 +51,7 @@ impl UpgradeInfo for PlainTextConfig {
     }
 }
 
-impl<C> InboundUpgrade<C> for PlainTextConfig
+impl<C> InboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + 'static
 {
@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for PlainTextConfig
+impl<C> OutboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + 'static
 {
@@ -77,7 +77,7 @@ where
     }
 }
 
-impl PlainTextConfig {
+impl PlainText2Config {
     fn handshake<T>(self, socket: T) -> impl Future<Item = PlainTextOutput<T>, Error = PlainTextError>
     where
         T: AsyncRead + AsyncWrite + Send + 'static
@@ -108,7 +108,7 @@ impl<S> PlainTextMiddleware<S>
 where
     S: AsyncRead + AsyncWrite + Send,
 {
-    fn handshake(socket: S, config: PlainTextConfig)
+    fn handshake(socket: S, config: PlainText2Config)
         -> impl Future<Item = (PlainTextMiddleware<S>, PublicKey), Error = PlainTextError>
     {
         handshake::handshake(socket, config).map(|(inner, public_key)| {
