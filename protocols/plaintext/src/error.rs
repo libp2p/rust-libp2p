@@ -54,11 +54,16 @@ impl error::Error for PlainTextError {
 impl fmt::Display for PlainTextError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PlainTextError::IoError(e) => write!(f, "I/O error: {}", e),
-            PlainTextError::ProtobufError(e) => write!(f, "Protobuf error: {}", e),
-            PlainTextError::HandshakeParsingFailure => f.write_str("Failed to parse one of the handshake protobuf messages"),
-            PlainTextError::NoSupportIntersection => f.write_str("There is no protocol supported by both the local and remote hosts"),
-            PlainTextError::PeerIdValidationFailed => f.write_str("The peer id of the exchange isn't consist with the remote public key"),
+            PlainTextError::IoError(e) =>
+                write!(f, "I/O error: {}", e),
+            PlainTextError::ProtobufError(e) =>
+                write!(f, "Protobuf error: {}", e),
+            PlainTextError::HandshakeParsingFailure =>
+                f.write_str("Failed to parse one of the handshake protobuf messages"),
+            PlainTextError::NoSupportIntersection =>
+                f.write_str("There is no protocol supported by both the local and remote hosts"),
+            PlainTextError::PeerIdValidationFailed =>
+                f.write_str("The peer id of the exchange isn't consist with the remote public key"),
         }
     }
 }
