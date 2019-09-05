@@ -122,6 +122,16 @@ pub trait Transport {
     where
         Self: Sized;
 
+    /// Turns the transport into an abstract boxed (i.e. heap-allocated) transport.
+    fn boxed(self) -> boxed::Boxed<Self::Output, Self::Error>
+    where Self: Sized + Clone + Send + Sync + 'static,
+          Self::Dial: Send + 'static,
+          Self::Listener: Send + 'static,
+          Self::ListenerUpgrade: Send + 'static,
+    {
+        boxed::boxed(self)
+    }
+
     /// Applies a function on the connections created by the transport.
     fn map<F, O>(self, f: F) -> map::Map<Self, F>
     where
@@ -135,10 +145,23 @@ pub trait Transport {
     fn map_err<F, E>(self, f: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        E: Error + 'static,
         F: FnOnce(Self::Error) -> E + Clone
     {
         map_err::MapErr::new(self, f)
+    }
+
+    /// Adds a fallback transport that is used when encountering errors
+    /// while establishing inbound or outbound connections.
+    ///
+    /// The returned transport will act like `self`, except that if `listen_on` or `dial`
+    /// return an error then `other` will be tried.
+    fn or_transport<U>(self, other: U) -> OrTransport<Self, U>
+    where
+        Self: Sized,
+        U: Transport,
+        <U as Transport>::Error: 'static
+    {
+        OrTransport::new(self, other)
     }
 
     /// Applies a function producing an asynchronous result to every connection
@@ -156,30 +179,6 @@ pub trait Transport {
         <F as IntoFuture>::Error: Error + 'static
     {
         and_then::AndThen::new(self, f)
-    }
-
-    /// Turns the transport into an abstract boxed (i.e. heap-allocated) transport.
-    fn boxed(self) -> boxed::Boxed<Self::Output, Self::Error>
-    where Self: Sized + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
-    {
-        boxed::boxed(self)
-    }
-
-    /// Adds a fallback transport that is used when encountering errors
-    /// while establishing inbound or outbound connections.
-    ///
-    /// The returned transport will act like `self`, except that if `listen_on` or `dial`
-    /// return an error then `other` will be tried.
-    fn or_transport<U>(self, other: U) -> OrTransport<Self, U>
-    where
-        Self: Sized,
-        U: Transport,
-        <U as Transport>::Error: 'static
-    {
-        OrTransport::new(self, other)
     }
 
     /// Adds a timeout to the connection setup (including upgrades) for all

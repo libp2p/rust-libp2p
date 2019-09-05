@@ -28,6 +28,7 @@ use log::info;
 use quickcheck::QuickCheck;
 use tokio::{self, io};
 
+#[allow(dead_code)]
 fn core_upgrade_compat() {
     // Tests API compaibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.

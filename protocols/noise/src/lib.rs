@@ -45,7 +45,7 @@
 //! let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
 //! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
 //! let builder = TcpConfig::new().upgrade().authenticate(noise);
-//! // let transport = builder.multiplex(...).get();
+//! // let transport = builder.multiplex(...);
 //! # }
 //! ```
 //!
