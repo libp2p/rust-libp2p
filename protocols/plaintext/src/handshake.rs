@@ -24,7 +24,7 @@ use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
-use libp2p_core::PublicKey;
+use libp2p_core::{PublicKey, PeerId};
 use libp2p_core::identity::Keypair;
 use log::{debug, trace};
 use crate::pb::keys::{PublicKey as PbPublicKey, KeyType};
@@ -55,6 +55,8 @@ struct Remote {
     // The remote's exchange's raw bytes:
     exchange_bytes: BytesMut,
     // The remote's public key:
+    peer_id: PeerId,
+    // The remote's public key:
     public_key: PublicKey,
 }
 
@@ -73,6 +75,7 @@ impl HandShakeContext<()> {
         pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.pubkey));
         pb_pubkey.set_Data(public_key_encoded.clone());
         exchange.set_pubkey(pb_pubkey);
+        exchange.set_id(self.config.peer_id.clone().into_bytes());
 
         let exchange_bytes = exchange.write_to_bytes()?;
 
@@ -112,11 +115,19 @@ impl HandShakeContext<Local> {
                 return Err(PlainTextError::HandshakeParsingFailure);
             },
         };
+        let peer_id = match PeerId::from_bytes(prop.take_id()) {
+            Ok(p) => p,
+            Err(_) => {
+                debug!("failed to parse remote's exchange's id protobuf");
+                return Err(PlainTextError::HandshakeParsingFailure);
+            },
+        };
 
         Ok(HandShakeContext {
             config: self.config,
             state: Remote {
                 local: self.state,
+                peer_id,
                 exchange_bytes,
                 public_key,
             }
@@ -139,12 +150,14 @@ where
             trace!("starting handshake");
             Ok(context.with_local()?)
         })
+        // Send our local `Exchange`.
         .and_then(|context| {
             trace!("sending exchange to remote");
             socket.send(BytesMut::from(context.state.exchange_bytes.clone()))
                 .from_err()
                 .map(|s| (s, context))
         })
+        // Receive the remote's `Exchange`.
         .and_then(move |(socket, context)| {
             trace!("receiving the remote's exchange");
             socket.into_future()
@@ -160,7 +173,12 @@ where
                     };
 
                     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-                    Ok((socket, context.state.public_key))
+                    Ok((socket, context))
                 })
+        })
+        // Check the validity of the remote's `Exchange`.
+        .and_then(|(socket, context)| {
+            // TODO
+            Ok((socket, context.state.public_key))
         })
 }
