@@ -110,7 +110,7 @@ pub async fn rt1_initiator<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-    let mut state = State::new(io, session, identity, identity_x);
+    let mut state = State::new(io, session, identity, identity_x)?;
     send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
     state.finish.await
@@ -138,7 +138,7 @@ pub async fn rt1_responder<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-    let mut state = State::new(io, session, identity, identity_x);
+    let mut state = State::new(io, session, identity, identity_x)?;
     recv_identity(&mut state).await?;
     send_identity(&mut state).await?;
     state.finish.await
@@ -168,7 +168,7 @@ pub async fn rt15_initiator<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-    let mut state = State::new(io, session, identity, identity_x);
+    let mut state = State::new(io, session, identity, identity_x)?;
     send_empty(&mut state).await?;
     send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
@@ -199,7 +199,7 @@ pub async fn rt15_responder<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-    let mut state = State::new(io, session, identity, identity_x);
+    let mut state = State::new(io, session, identity, identity_x)?;
     recv_empty(&mut state).await?;
     send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
