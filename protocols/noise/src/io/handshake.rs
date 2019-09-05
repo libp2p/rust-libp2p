@@ -104,7 +104,7 @@ pub enum IdentityExchange {
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-pub async fn rt1_initiator(
+pub async fn rt1_initiator<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
@@ -132,7 +132,7 @@ pub async fn rt1_initiator(
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-pub async fn rt1_responder(
+pub async fn rt1_responder<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
@@ -162,7 +162,7 @@ pub async fn rt1_responder(
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
-pub async fn rt15_initiator(
+pub async fn rt15_initiator<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
@@ -193,7 +193,7 @@ pub async fn rt15_initiator(
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
-pub async fn rt15_responder(
+pub async fn rt15_responder<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
