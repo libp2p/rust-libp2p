@@ -73,7 +73,7 @@ impl<C> OutboundUpgrade<C> for PlainText1Config {
 #[derive(Clone)]
 pub struct PlainText2Config {
 //    peerId: PeerId,
-    pub key: identity::Keypair,
+    pub pubkey: identity::PublicKey,
 }
 
 impl UpgradeInfo for PlainText2Config {

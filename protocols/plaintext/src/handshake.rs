@@ -67,10 +67,10 @@ impl HandShakeContext<()> {
     }
 
     fn with_local(self) -> Result<HandShakeContext<Local>, PlainTextError> {
-        let public_key_encoded = self.config.key.public().into_protobuf_encoding();
+        let public_key_encoded = self.config.pubkey.clone().into_protobuf_encoding();
         let mut proposition = Exchange::new();
         let mut pb_pubkey = PbPublicKey::new();
-        pb_pubkey.set_Type(HandShakeContext::keypair_to_keytype(&self.config.key));
+        pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.pubkey));
         pb_pubkey.set_Data(public_key_encoded.clone());
         proposition.set_pubkey(pb_pubkey);
 
@@ -85,11 +85,11 @@ impl HandShakeContext<()> {
         })
     }
 
-    fn keypair_to_keytype(keypair: &Keypair) -> KeyType {
-        match keypair {
-            Keypair::Ed25519(_) => KeyType::Ed25519,
-            Keypair::Rsa(_) => KeyType::RSA,
-            Keypair::Secp256k1(_) => KeyType::Secp256k1,
+    fn pubkey_to_keytype(pubkey: &PublicKey) -> KeyType {
+        match pubkey {
+            PublicKey::Ed25519(_) => KeyType::Ed25519,
+            PublicKey::Rsa(_) => KeyType::RSA,
+            PublicKey::Secp256k1(_) => KeyType::Secp256k1,
         }
     }
 }
