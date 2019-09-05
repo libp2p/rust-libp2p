@@ -87,135 +87,130 @@ pub enum IdentityExchange {
     None { remote: identity::PublicKey }
 }
 
-impl<T, C> Handshake<T, C>
-where
-    T: AsyncRead + AsyncWrite + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Send + 'static,
-{
-    /// Creates an authenticated Noise handshake for the initiator of a
-    /// single roundtrip (2 message) handshake pattern.
-    ///
-    /// Subject to the chosen [`IdentityExchange`], this message sequence
-    /// identifies the local node to the remote with the first message payload
-    /// (i.e. unencrypted) and expects the remote to identify itself in the
-    /// second message payload.
-    ///
-    /// This message sequence is suitable for authenticated 2-message Noise handshake
-    /// patterns where the static keys of the initiator and responder are either
-    /// known (i.e. appear in the pre-message pattern) or are sent with
-    /// the first and second message, respectively (e.g. `IK` or `IX`).
-    ///
-    /// ```raw
-    /// initiator -{id}-> responder
-    /// initiator <-{id}- responder
-    /// ```
-    pub fn rt1_initiator(
-        io: T,
-        session: Result<snow::Session, NoiseError>,
-        identity: KeypairIdentity,
-        identity_x: IdentityExchange
-    ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-        let mut state = State::new(io, session, identity, identity_x);
-        send_identity(&mut state).await?;
-        recv_identity(&mut state).await?;
-        state.finish.await
-    }
+/// Creates an authenticated Noise handshake for the initiator of a
+/// single roundtrip (2 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence
+/// identifies the local node to the remote with the first message payload
+/// (i.e. unencrypted) and expects the remote to identify itself in the
+/// second message payload.
+///
+/// This message sequence is suitable for authenticated 2-message Noise handshake
+/// patterns where the static keys of the initiator and responder are either
+/// known (i.e. appear in the pre-message pattern) or are sent with
+/// the first and second message, respectively (e.g. `IK` or `IX`).
+///
+/// ```raw
+/// initiator -{id}-> responder
+/// initiator <-{id}- responder
+/// ```
+pub async fn rt1_initiator(
+    io: T,
+    session: Result<snow::Session, NoiseError>,
+    identity: KeypairIdentity,
+    identity_x: IdentityExchange
+) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
+    let mut state = State::new(io, session, identity, identity_x);
+    send_identity(&mut state).await?;
+    recv_identity(&mut state).await?;
+    state.finish.await
+}
 
-    /// Creates an authenticated Noise handshake for the responder of a
-    /// single roundtrip (2 message) handshake pattern.
-    ///
-    /// Subject to the chosen [`IdentityExchange`], this message sequence expects the
-    /// remote to identify itself in the first message payload (i.e. unencrypted)
-    /// and identifies the local node to the remote in the second message payload.
-    ///
-    /// This message sequence is suitable for authenticated 2-message Noise handshake
-    /// patterns where the static keys of the initiator and responder are either
-    /// known (i.e. appear in the pre-message pattern) or are sent with the first
-    /// and second message, respectively (e.g. `IK` or `IX`).
-    ///
-    /// ```raw
-    /// initiator -{id}-> responder
-    /// initiator <-{id}- responder
-    /// ```
-    pub fn rt1_responder(
-        io: T,
-        session: Result<snow::Session, NoiseError>,
-        identity: KeypairIdentity,
-        identity_x: IdentityExchange,
-    ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-        let mut state = State::new(io, session, identity, identity_x);
-        recv_identity(&mut state).await?;
-        send_identity(&mut state).await?;
-        state.finish.await
-    }
+/// Creates an authenticated Noise handshake for the responder of a
+/// single roundtrip (2 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence expects the
+/// remote to identify itself in the first message payload (i.e. unencrypted)
+/// and identifies the local node to the remote in the second message payload.
+///
+/// This message sequence is suitable for authenticated 2-message Noise handshake
+/// patterns where the static keys of the initiator and responder are either
+/// known (i.e. appear in the pre-message pattern) or are sent with the first
+/// and second message, respectively (e.g. `IK` or `IX`).
+///
+/// ```raw
+/// initiator -{id}-> responder
+/// initiator <-{id}- responder
+/// ```
+pub async fn rt1_responder(
+    io: T,
+    session: Result<snow::Session, NoiseError>,
+    identity: KeypairIdentity,
+    identity_x: IdentityExchange,
+) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
+    let mut state = State::new(io, session, identity, identity_x);
+    recv_identity(&mut state).await?;
+    send_identity(&mut state).await?;
+    state.finish.await
+}
 
-    /// Creates an authenticated Noise handshake for the initiator of a
-    /// 1.5-roundtrip (3 message) handshake pattern.
-    ///
-    /// Subject to the chosen [`IdentityExchange`], this message sequence expects
-    /// the remote to identify itself in the second message payload and
-    /// identifies the local node to the remote in the third message payload.
-    /// The first (unencrypted) message payload is always empty.
-    ///
-    /// This message sequence is suitable for authenticated 3-message Noise handshake
-    /// patterns where the static keys of the responder and initiator are either known
-    /// (i.e. appear in the pre-message pattern) or are sent with the second and third
-    /// message, respectively (e.g. `XX`).
-    ///
-    /// ```raw
-    /// initiator --{}--> responder
-    /// initiator <-{id}- responder
-    /// initiator -{id}-> responder
-    /// ```
-    pub fn rt15_initiator(
-        io: T,
-        session: Result<snow::Session, NoiseError>,
-        identity: KeypairIdentity,
-        identity_x: IdentityExchange
-    ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-        let mut state = State::new(io, session, identity, identity_x);
-        send_empty(&mut state).await?;
-        send_identity(&mut state).await?;
-        recv_identity(&mut state).await?;
-        state.finish.await
-    }
+/// Creates an authenticated Noise handshake for the initiator of a
+/// 1.5-roundtrip (3 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence expects
+/// the remote to identify itself in the second message payload and
+/// identifies the local node to the remote in the third message payload.
+/// The first (unencrypted) message payload is always empty.
+///
+/// This message sequence is suitable for authenticated 3-message Noise handshake
+/// patterns where the static keys of the responder and initiator are either known
+/// (i.e. appear in the pre-message pattern) or are sent with the second and third
+/// message, respectively (e.g. `XX`).
+///
+/// ```raw
+/// initiator --{}--> responder
+/// initiator <-{id}- responder
+/// initiator -{id}-> responder
+/// ```
+pub async fn rt15_initiator(
+    io: T,
+    session: Result<snow::Session, NoiseError>,
+    identity: KeypairIdentity,
+    identity_x: IdentityExchange
+) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
+    let mut state = State::new(io, session, identity, identity_x);
+    send_empty(&mut state).await?;
+    send_identity(&mut state).await?;
+    recv_identity(&mut state).await?;
+    state.finish.await
+}
 
-    /// Creates an authenticated Noise handshake for the responder of a
-    /// 1.5-roundtrip (3 message) handshake pattern.
-    ///
-    /// Subject to the chosen [`IdentityExchange`], this message sequence
-    /// identifies the local node in the second message payload and expects
-    /// the remote to identify itself in the third message payload. The first
-    /// (unencrypted) message payload is always empty.
-    ///
-    /// This message sequence is suitable for authenticated 3-message Noise handshake
-    /// patterns where the static keys of the responder and initiator are either known
-    /// (i.e. appear in the pre-message pattern) or are sent with the second and third
-    /// message, respectively (e.g. `XX`).
-    ///
-    /// ```raw
-    /// initiator --{}--> responder
-    /// initiator <-{id}- responder
-    /// initiator -{id}-> responder
-    /// ```
-    pub async fn rt15_responder(
-        io: T,
-        session: Result<snow::Session, NoiseError>,
-        identity: KeypairIdentity,
-        identity_x: IdentityExchange
-    ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
-        let mut state = State::new(io, session, identity, identity_x);
-        recv_empty(&mut state).await?;
-        send_identity(&mut state).await?;
-        recv_identity(&mut state).await?;
-        state.finish().await
-    }
+/// Creates an authenticated Noise handshake for the responder of a
+/// 1.5-roundtrip (3 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence
+/// identifies the local node in the second message payload and expects
+/// the remote to identify itself in the third message payload. The first
+/// (unencrypted) message payload is always empty.
+///
+/// This message sequence is suitable for authenticated 3-message Noise handshake
+/// patterns where the static keys of the responder and initiator are either known
+/// (i.e. appear in the pre-message pattern) or are sent with the second and third
+/// message, respectively (e.g. `XX`).
+///
+/// ```raw
+/// initiator --{}--> responder
+/// initiator <-{id}- responder
+/// initiator -{id}-> responder
+/// ```
+pub async fn rt15_responder(
+    io: T,
+    session: Result<snow::Session, NoiseError>,
+    identity: KeypairIdentity,
+    identity_x: IdentityExchange
+) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
+    let mut state = State::new(io, session, identity, identity_x);
+    recv_empty(&mut state).await?;
+    send_identity(&mut state).await?;
+    recv_identity(&mut state).await?;
+    state.finish().await
 }
 
 //////////////////////////////////////////////////////////////////////////////
 // Internal
 
 /// Handshake state.
+// TODO: Can this be removed?
 struct State<T> {
     /// The underlying I/O resource.
     io: NoiseOutput<T>,

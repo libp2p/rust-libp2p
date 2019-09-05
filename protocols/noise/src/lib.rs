@@ -57,6 +57,7 @@ mod protocol;
 
 pub use error::NoiseError;
 pub use io::NoiseOutput;
+pub use io::handshake;
 pub use io::handshake::{RemoteIdentity, IdentityExchange};
 pub use protocol::{Keypair, AuthenticKeypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
@@ -169,7 +170,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        Handshake::rt1_responder(socket, session,
+        handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -190,7 +191,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        Handshake::rt1_initiator(socket, session,
+        handshake::rt1_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -213,7 +214,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        Handshake::rt15_responder(socket, session,
+        handshake::rt15_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -234,7 +235,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        Handshake::rt15_initiator(socket, session,
+        handshake::rt15_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -257,7 +258,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        Handshake::rt1_responder(socket, session,
+        handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Receive)
     }
@@ -279,7 +280,7 @@ where
             .remote_public_key(self.remote.0.as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        Handshake::rt1_initiator(socket, session,
+        handshake::rt1_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Send { remote: self.remote.1 })
     }
