@@ -135,7 +135,7 @@ fn map_err(err: IoError) -> IoError {
 }
 
 pub struct PlainTextMiddleware<S> {
-    pub inner: Framed<S, BytesMut>,
+    inner: Framed<S, BytesMut>,
 }
 
 impl<S> PlainTextMiddleware<S>
