@@ -42,8 +42,6 @@ struct HandShakeContext<T> {
 
 // HandshakeContext<()> --with_local-> HandshakeContext<Local>
 struct Local {
-    // Our encoded local public key
-    public_key_encoded: Vec<u8>,
     // Our local exchange's raw bytes:
     exchange_bytes: Vec<u8>,
 }
@@ -68,11 +66,10 @@ impl HandShakeContext<()> {
     }
 
     fn with_local(self) -> Result<HandShakeContext<Local>, PlainTextError> {
-        let public_key_encoded = self.config.pubkey.clone().into_protobuf_encoding();
         let mut exchange = Exchange::new();
         let mut pb_pubkey = PbPublicKey::new();
         pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.pubkey));
-        pb_pubkey.set_Data(public_key_encoded.clone());
+        pb_pubkey.set_Data(self.config.pubkey.clone().into_protobuf_encoding());
         exchange.set_pubkey(pb_pubkey);
         exchange.set_id(self.config.peer_id.clone().into_bytes());
 
@@ -81,7 +78,6 @@ impl HandShakeContext<()> {
         Ok(HandShakeContext {
             config: self.config,
             state: Local {
-                public_key_encoded,
                 exchange_bytes,
             }
         })
