@@ -25,8 +25,9 @@ pub mod handshake;
 use futures::Poll;
 use log::{debug, trace};
 use snow;
-use std::{fmt, io};
-use futures::io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+use std::{fmt, io, pin::Pin};
+use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::prelude::*;
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
@@ -336,14 +337,29 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
-    unsafe fn initializer(&self) -> futures::io::Initializer{
-        // TODO: Is this a good idea?
-        self.io.initializer()
+    fn poll_read(self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
+        // TODO: We could also do something along the lines of
+        // https://docs.rs/tokio-io/0.1.12/src/tokio_io/async_read.rs.html#80
+        // that way we are using our custom std::io::Read::read function defined
+        // above.
+        AsyncRead::poll_read(Pin::new(&mut self.io), cx, buf)
     }
 }
 
 // TODO: Can this be removed all together?
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
+    fn poll_write(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &[u8]) -> futures::task::Poll<std::result::Result<usize, std::io::Error>>{
+        // TODO: Fix. See comment on poll_read.
+        unimplemented!()
+    }
+    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>> {
+        // TODO: Fix. See comment on poll_read.
+        unimplemented!()
+    }
+    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>>{
+        // TODO: Fix. See comment on poll_read.
+       unimplemented!()
+    }
 }
 
 // impl<T> AsyncWriteExt for NoiseOutput<T>{}
