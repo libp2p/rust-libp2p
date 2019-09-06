@@ -48,8 +48,6 @@ struct Local {
 
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
 struct Remote {
-    // The remote's exchange's raw bytes:
-    exchange_bytes: BytesMut,
     // The remote's public key:
     peer_id: PeerId,
     // The remote's public key:
@@ -121,7 +119,6 @@ impl HandShakeContext<Local> {
             config: self.config,
             state: Remote {
                 peer_id,
-                exchange_bytes,
                 public_key,
             }
         })
