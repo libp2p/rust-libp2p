@@ -26,7 +26,7 @@ use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use libp2p_core::identity;
 use futures::prelude::*;
-use futures::io::{ReadExact};
+use futures::io::{ReadExact, AsyncReadExt, AsyncWriteExt};
 use std::{mem, io, task::Poll};
 use protobuf::Message;
 
@@ -111,7 +111,7 @@ pub async fn rt1_initiator<T, C>(
     identity_x: IdentityExchange
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
-    T: AsyncWrite + AsyncRead,
+    T: AsyncWrite + AsyncRead + Unpin,
     C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
@@ -143,7 +143,7 @@ pub async fn rt1_responder<T, C>(
     identity_x: IdentityExchange,
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
-    T: AsyncWrite + AsyncRead,
+    T: AsyncWrite + AsyncRead + Unpin,
     C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
@@ -177,7 +177,7 @@ pub async fn rt15_initiator<T, C>(
     identity_x: IdentityExchange
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
-    T: AsyncWrite + AsyncRead,
+    T: AsyncWrite + AsyncRead + Unpin,
     C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
@@ -212,7 +212,7 @@ pub async fn rt15_responder<T, C>(
     identity_x: IdentityExchange
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
-    T: AsyncWrite + AsyncRead,
+    T: AsyncWrite + AsyncRead + Unpin,
     C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
@@ -312,8 +312,10 @@ impl<T> State<T>
 /// A future for receiving a Noise handshake message with an empty payload.
 async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncRead
+    T: AsyncReadExt + Unpin
 {
+    // TODO: Do we want to `read` here? Don't we want to read nothing at all
+    // (empty)?
     state.io.read(&mut []).await?;
     Ok(())
 }
@@ -321,10 +323,10 @@ where
 /// A future for sending a Noise handshake message with an empty payload.
 async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncWrite
+    T: AsyncWriteExt + Unpin
 {
-    state.write(&[]).await?;
-    state.flush().await?;
+    state.io.write(&[]).await?;
+    state.io.flush().await?;
     Ok(())
 }
 
@@ -332,14 +334,14 @@ where
 /// identifying the remote.
 async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncRead,
+    T: AsyncReadExt + Unpin,
 {
     let len_buf = [0,0];
-    state.read_exact(len_buf).await?;
+    state.io.read_exact(&mut len_buf).await?;
     let len = u16::from_be_bytes(len_buf) as usize;
 
     let payload_buf = vec![0; len];
-    state.read_exact(payload_buf).await?;
+    state.io.read_exact(&mut payload_buf).await?;
     let pb: payload::Identity = protobuf::parse_from_bytes(&payload_buf)?;
 
     if !pb.pubkey.is_empty() {
@@ -353,14 +355,16 @@ where
         state.id_remote_pubkey = Some(pk);
     }
     if !pb.signature.is_empty() {
-        state.dh_remote_pubkey_sig = Some(pb.signature)
+        state.dh_remote_pubkey_sig = Some(pb.signature);
     }
+
+    Ok(())
 }
 
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
 async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncWrite
+    T: AsyncWriteExt + Unpin,
 {
     let mut pb = payload::Identity::new();
     if state.send_identity {
@@ -371,8 +375,8 @@ where
     }
     let pb_bytes = pb.write_to_bytes()?;
     let len = (pb_bytes.len() as u16).to_be_bytes();
-    state.write_all(&len).await?;
-    state.write_all(&pb_bytes).await?;
-    state.flush().await?;
+    state.io.write_all(&len).await?;
+    state.io.write_all(&pb_bytes).await?;
+    state.io.flush().await?;
     Ok(())
 }

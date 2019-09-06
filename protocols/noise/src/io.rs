@@ -26,7 +26,7 @@ use futures::Poll;
 use log::{debug, trace};
 use snow;
 use std::{fmt, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures::io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
@@ -335,17 +335,18 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncRead> AsyncRead for NoiseOutput<T> {
-    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
-        false
+impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
+    unsafe fn initializer(&self) -> futures::io::Initializer{
+        // TODO: Is this a good idea?
+        self.io.initializer()
     }
 }
 
-impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
-    fn shutdown(&mut self) -> Poll<Result<(), io::Error>> {
-        self.io.shutdown()
-    }
+// TODO: Can this be removed all together?
+impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 }
+
+// impl<T> AsyncWriteExt for NoiseOutput<T>{}
 
 /// Read 2 bytes as frame length from the given source into the given buffer.
 ///
