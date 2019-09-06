@@ -25,7 +25,6 @@ use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use libp2p_core::{PublicKey, PeerId};
-use libp2p_core::identity::Keypair;
 use log::{debug, trace};
 use crate::pb::keys::{PublicKey as PbPublicKey, KeyType};
 use crate::pb::structs::Exchange;
