@@ -26,7 +26,6 @@ use futures::Poll;
 use log::{debug, trace};
 use snow;
 use std::{fmt, io, pin::Pin};
-use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::prelude::*;
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
@@ -348,15 +347,15 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
 
 // TODO: Can this be removed all together?
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
-    fn poll_write(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &[u8]) -> futures::task::Poll<std::result::Result<usize, std::io::Error>>{
+    fn poll_write(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>, _buf: &[u8]) -> futures::task::Poll<std::result::Result<usize, std::io::Error>>{
         // TODO: Fix. See comment on poll_read.
         unimplemented!()
     }
-    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>> {
+    fn poll_flush(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>> {
         // TODO: Fix. See comment on poll_read.
         unimplemented!()
     }
-    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>>{
+    fn poll_close(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>>{
         // TODO: Fix. See comment on poll_read.
        unimplemented!()
     }

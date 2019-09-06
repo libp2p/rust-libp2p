@@ -26,8 +26,7 @@ use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use libp2p_core::identity;
 use futures::prelude::*;
-use futures::io::{ReadExact, AsyncReadExt, AsyncWriteExt};
-use std::{mem, io, task::Poll};
+use futures::io::{AsyncReadExt, AsyncWriteExt};
 use protobuf::Message;
 
 use super::NoiseOutput;
