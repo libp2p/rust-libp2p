@@ -186,6 +186,7 @@ where
             };
 
             if !is_valid {
+                debug!("The remote's `PeerId` of the exchange isn't consist with the remote public key");
                 return Err(PlainTextError::PeerIdValidationFailed)
             }
 
