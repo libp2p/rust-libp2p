@@ -112,11 +112,12 @@ pub async fn rt1_initiator<T, C>(
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
     T: AsyncWrite + AsyncRead,
+    C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
     send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
-    state.finish().await
+    state.finish()
 }
 
 /// Creates an authenticated Noise handshake for the responder of a
@@ -143,11 +144,12 @@ pub async fn rt1_responder<T, C>(
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
     T: AsyncWrite + AsyncRead,
+    C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
     recv_identity(&mut state).await?;
     send_identity(&mut state).await?;
-    state.finish().await
+    state.finish()
 }
 
 /// Creates an authenticated Noise handshake for the initiator of a
@@ -176,12 +178,13 @@ pub async fn rt15_initiator<T, C>(
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
     T: AsyncWrite + AsyncRead,
+    C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
     send_empty(&mut state).await?;
     send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
-    state.finish().await
+    state.finish()
 }
 
 /// Creates an authenticated Noise handshake for the responder of a
@@ -210,12 +213,13 @@ pub async fn rt15_responder<T, C>(
 ) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
 where
     T: AsyncWrite + AsyncRead,
+    C: Protocol<C> + AsRef<[u8]>
 {
     let mut state = State::new(io, session, identity, identity_x)?;
     recv_empty(&mut state).await?;
     send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
-    state.finish().await
+    state.finish()
 }
 
 //////////////////////////////////////////////////////////////////////////////
