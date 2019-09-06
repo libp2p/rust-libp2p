@@ -337,7 +337,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
-    fn poll_read(self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
+    fn poll_read(mut self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
         // TODO: We could also do something along the lines of
         // https://docs.rs/tokio-io/0.1.12/src/tokio_io/async_read.rs.html#80
         // that way we are using our custom std::io::Read::read function defined
