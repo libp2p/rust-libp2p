@@ -336,11 +336,11 @@ async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncReadExt + Unpin,
 {
-    let len_buf = [0,0];
+    let mut len_buf = [0,0];
     state.io.read_exact(&mut len_buf).await?;
     let len = u16::from_be_bytes(len_buf) as usize;
 
-    let payload_buf = vec![0; len];
+    let mut payload_buf = vec![0; len];
     state.io.read_exact(&mut payload_buf).await?;
     let pb: payload::Identity = protobuf::parse_from_bytes(&payload_buf)?;
 
