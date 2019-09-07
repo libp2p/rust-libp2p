@@ -80,10 +80,21 @@ impl HandShakeContext<()> {
         })
     }
 
+    // See `libp2p_core::identity`
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     fn pubkey_to_keytype(pubkey: &PublicKey) -> KeyType {
         match pubkey {
             PublicKey::Ed25519(_) => KeyType::Ed25519,
             PublicKey::Rsa(_) => KeyType::RSA,
+            PublicKey::Secp256k1(_) => KeyType::Secp256k1,
+        }
+    }
+
+    // See `libp2p_core::identity`
+    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+    fn pubkey_to_keytype(pubkey: &PublicKey) -> KeyType {
+        match pubkey {
+            PublicKey::Ed25519(_) => KeyType::Ed25519,
             PublicKey::Secp256k1(_) => KeyType::Secp256k1,
         }
     }
