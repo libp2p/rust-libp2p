@@ -23,10 +23,11 @@
 pub mod handshake;
 
 use futures::Poll;
+use futures::prelude::*;
+use futures::io::AsyncReadExt;
 use log::{debug, trace};
 use snow;
 use std::{fmt, io, pin::Pin};
-use futures::prelude::*;
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
@@ -121,57 +122,75 @@ enum WriteState {
     EncErr
 }
 
-impl<T: io::Read> io::Read for NoiseOutput<T> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let buffer = self.buffer.borrow_mut();
+impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
+    fn poll_read(mut self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
+        // We use a `this` because the compiler isn't smart enough to allow
+        // mutably borrowing multiple different fields from the `Pin` at the
+        // same time.
+        let mut this = &mut *self;
+
+        let buffer = this.buffer.borrow_mut();
+
         loop {
-            trace!("read state: {:?}", self.read_state);
-            match self.read_state {
+            trace!("read state: {:?}", this.read_state);
+            match this.read_state {
                 ReadState::Init => {
-                    self.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
+                    this.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
                 }
                 ReadState::ReadLen { mut buf, mut off } => {
-                    let n = match read_frame_len(&mut self.io, &mut buf, &mut off) {
-                        Ok(Some(n)) => n,
-                        Ok(None) => {
+                    let n = match read_frame_len(cx, &mut this.io, &mut buf, &mut off) {
+                        Poll::Ready(Ok(Some(n))) => n,
+                        Poll::Ready(Ok(None)) => {
                             trace!("read: eof");
-                            self.read_state = ReadState::Eof(Ok(()));
-                            return Ok(0)
+                            this.read_state = ReadState::Eof(Ok(()));
+                            return Poll::Ready(Ok(0))
                         }
-                        Err(e) => {
-                            if e.kind() == io::ErrorKind::WouldBlock {
-                                // Preserve read state
-                                self.read_state = ReadState::ReadLen { buf, off };
-                            }
-                            return Err(e)
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(Err(e))
+                        }
+                        Poll::Pending => {
+                            // TODO: Is this needed?
+                            this.read_state = ReadState::ReadLen { buf, off };
+
+                            return Poll::Pending;
                         }
                     };
                     trace!("read: next frame len = {}", n);
                     if n == 0 {
                         trace!("read: empty frame");
-                        self.read_state = ReadState::Init;
+                        this.read_state = ReadState::Init;
                         continue
                     }
-                    self.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
+                    this.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = self.io.read(&mut buffer.read[*off .. len])?;
+                    let n = match AsyncRead::poll_read(
+                        Pin::new(&mut this.io),
+                        cx,
+                        &mut buffer.read[*off ..len]
+                    ) {
+                        Poll::Ready(Ok(n)) => n,
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                        Poll::Pending => return Poll::Pending,
+                    };
+
                     trace!("read: read {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("read: eof");
-                        self.read_state = ReadState::Eof(Err(()));
-                        return Err(io::ErrorKind::UnexpectedEof.into())
+                        this.read_state = ReadState::Eof(Err(()));
+                        return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
                     }
+
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
-                        if let Ok(n) = self.session.read_message(&buffer.read[.. len], buffer.read_crypto) {
+                        if let Ok(n) = this.session.read_message(&buffer.read[.. len], buffer.read_crypto) {
                             trace!("read: payload len = {} bytes", n);
-                            self.read_state = ReadState::CopyData { len: n, off: 0 }
+                            this.read_state = ReadState::CopyData { len: n, off: 0 }
                         } else {
                             debug!("decryption error");
-                            self.read_state = ReadState::DecErr;
-                            return Err(io::ErrorKind::InvalidData.into())
+                            this.read_state = ReadState::DecErr;
+                            return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
                         }
                     }
                 }
@@ -181,19 +200,19 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     trace!("read: copied {}/{} bytes", *off + n, len);
                     *off += n;
                     if len == *off {
-                        self.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
+                        this.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
                     }
-                    return Ok(n)
+                    return Poll::Ready(Ok(n))
                 }
                 ReadState::Eof(Ok(())) => {
                     trace!("read: eof");
-                    return Ok(0)
+                    return Poll::Ready(Ok(0))
                 }
                 ReadState::Eof(Err(())) => {
                     trace!("read: eof (unexpected)");
-                    return Err(io::ErrorKind::UnexpectedEof.into())
+                    return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
                 }
-                ReadState::DecErr => return Err(io::ErrorKind::InvalidData.into())
+                ReadState::DecErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
             }
         }
     }
@@ -335,16 +354,6 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
-    fn poll_read(mut self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
-        // TODO: We could also do something along the lines of
-        // https://docs.rs/tokio-io/0.1.12/src/tokio_io/async_read.rs.html#80
-        // that way we are using our custom std::io::Read::read function defined
-        // above.
-        AsyncRead::poll_read(Pin::new(&mut self.io), cx, buf)
-    }
-}
-
 // TODO: Can this be removed all together?
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
     fn poll_write(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>, _buf: &[u8]) -> futures::task::Poll<std::result::Result<usize, std::io::Error>>{
@@ -365,6 +374,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 
 /// Read 2 bytes as frame length from the given source into the given buffer.
 ///
+// TODO: This is not the case, right?
 /// Panics if `off >= 2`.
 ///
 /// When [`io::ErrorKind::WouldBlock`] is returned, the given buffer and offset
@@ -372,17 +382,28 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 /// for the next invocation.
 ///
 /// Returns `None` if EOF has been encountered.
-fn read_frame_len<R: io::Read>(io: &mut R, buf: &mut [u8; 2], off: &mut usize)
-    -> io::Result<Option<u16>>
+fn read_frame_len<R: AsyncRead + Unpin>(cx: &mut futures::task::Context<'_>, mut io: &mut R, buf: &mut [u8; 2], off: &mut usize)
+    -> Poll<Result<Option<u16>, futures::io::Error>>
 {
     loop {
-        let n = io.read(&mut buf[*off ..])?;
-        if n == 0 {
-            return Ok(None)
-        }
-        *off += n;
-        if *off == 2 {
-            return Ok(Some(u16::from_be_bytes(*buf)))
+        match AsyncRead::poll_read(Pin::new(&mut io), cx, &mut buf[*off ..]) {
+            Poll::Ready(Ok(n)) => {
+                // TODO: Why does a reader signal eof via returning "0 written
+                // bytes" instead of just throwing an eof error?
+                if n == 0 {
+                    return Poll::Ready(Ok(None));
+                }
+                *off += n;
+                if *off == 2 {
+                    return Poll::Ready(Ok(Some(u16::from_be_bytes(*buf))));
+                }
+            },
+            Poll::Ready(Err(e)) => {
+                return Poll::Ready(Err(e));
+            },
+            Poll::Pending => {
+                return Poll::Pending;
+            }
         }
     }
 }
