@@ -68,7 +68,7 @@ impl HandShakeContext<()> {
         pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.pubkey));
         pb_pubkey.set_Data(self.config.pubkey.clone().into_protobuf_encoding());
         exchange.set_pubkey(pb_pubkey);
-        exchange.set_id(self.config.peer_id.clone().into_bytes());
+        exchange.set_id(self.config.pubkey.clone().into_peer_id().into_bytes());
 
         let exchange_bytes = exchange.write_to_bytes()?;
 
