@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{muxing, Transport, transport::ListenerEvent};
+use libp2p_core::{muxing, upgrade, Transport, transport::ListenerEvent};
 use libp2p_tcp::TcpConfig;
 use futures::prelude::*;
 use std::sync::{Arc, mpsc};
@@ -32,8 +32,9 @@ fn async_write() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+        let mplex = libp2p_mplex::MplexConfig::new();
+
+        let transport = TcpConfig::new().and_then(move |c, e| upgrade::apply(c, mplex, e));
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -67,7 +68,8 @@ fn async_write() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+    let mplex = libp2p_mplex::MplexConfig::new();
+    let transport = TcpConfig::new().and_then(move |c, e| upgrade::apply(c, mplex, e));
 
     let future = transport
         .dial(rx.recv().unwrap())

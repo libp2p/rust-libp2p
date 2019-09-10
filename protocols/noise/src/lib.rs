@@ -43,9 +43,9 @@
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
-//! let noise = NoiseConfig::xx(dh_keys);
-//! let transport = TcpConfig::new().with_upgrade(noise);
-//! // ...
+//! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+//! let builder = TcpConfig::new().upgrade().authenticate(noise);
+//! // let transport = builder.multiplex(...);
 //! # }
 //! ```
 //!
@@ -61,7 +61,8 @@ pub use io::handshake::{Handshake, RemoteIdentity, IdentityExchange};
 pub use protocol::{Keypair, AuthenticKeypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
 
-use libp2p_core::{identity, UpgradeInfo, InboundUpgrade, OutboundUpgrade, upgrade::Negotiated};
+use futures::{future::{self, FutureResult}, Future};
+use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated};
 use tokio_io::{AsyncRead, AsyncWrite};
 use zeroize::Zeroize;
 
@@ -72,6 +73,14 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     params: ProtocolParams,
     remote: R,
     _marker: std::marker::PhantomData<P>
+}
+
+impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
+    /// Turn the `NoiseConfig` into an authenticated upgrade for use
+    /// with a [`Network`](libp2p_core::nodes::Network).
+    pub fn into_authenticated(self) -> NoiseAuthenticated<H, C, R> {
+        NoiseAuthenticated { config: self }
+    }
 }
 
 impl<C> NoiseConfig<IX, C>
@@ -274,6 +283,87 @@ where
         Handshake::rt1_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Send { remote: self.remote.1 })
+    }
+}
+
+// Authenticated Upgrades /////////////////////////////////////////////////////
+
+/// A `NoiseAuthenticated` transport upgrade that wraps around any
+/// `NoiseConfig` handshake and verifies that the remote identified with a
+/// [`RemoteIdentity::IdentityKey`], aborting otherwise.
+///
+/// See [`NoiseConfig::into_authenticated`].
+///
+/// On success, the upgrade yields the [`PeerId`] obtained from the
+/// `RemoteIdentity`. The output of this upgrade is thus directly suitable
+/// for creating an [`authenticated`](libp2p_core::TransportBuilder::authenticate)
+/// transport for use with a [`Network`](libp2p_core::nodes::Network).
+#[derive(Clone)]
+pub struct NoiseAuthenticated<P, C: Zeroize, R> {
+    config: NoiseConfig<P, C, R>
+}
+
+impl<P, C: Zeroize, R> UpgradeInfo for NoiseAuthenticated<P, C, R>
+where
+    NoiseConfig<P, C, R>: UpgradeInfo
+{
+    type Info = <NoiseConfig<P, C, R> as UpgradeInfo>::Info;
+    type InfoIter = <NoiseConfig<P, C, R> as UpgradeInfo>::InfoIter;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        self.config.protocol_info()
+    }
+}
+
+impl<T, P, C, R> InboundUpgrade<T> for NoiseAuthenticated<P, C, R>
+where
+    NoiseConfig<P, C, R>: UpgradeInfo + InboundUpgrade<T,
+        Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
+        Error = NoiseError
+    >,
+    T: AsyncRead + AsyncWrite + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+{
+    type Output = (PeerId, NoiseOutput<Negotiated<T>>);
+    type Error = NoiseError;
+    type Future = future::AndThen<
+        <NoiseConfig<P, C, R> as InboundUpgrade<T>>::Future,
+        FutureResult<Self::Output, Self::Error>,
+        fn((RemoteIdentity<C>, NoiseOutput<Negotiated<T>>)) -> FutureResult<Self::Output, Self::Error>
+    >;
+
+    fn upgrade_inbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
+        self.config.upgrade_inbound(socket, info)
+            .and_then(|(remote, io)| future::result(match remote {
+                RemoteIdentity::IdentityKey(pk) => Ok((pk.into_peer_id(), io)),
+                _ => Err(NoiseError::AuthenticationFailed)
+            }))
+    }
+}
+
+impl<T, P, C, R> OutboundUpgrade<T> for NoiseAuthenticated<P, C, R>
+where
+    NoiseConfig<P, C, R>: UpgradeInfo + OutboundUpgrade<T,
+        Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
+        Error = NoiseError
+    >,
+    T: AsyncRead + AsyncWrite + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+{
+    type Output = (PeerId, NoiseOutput<Negotiated<T>>);
+    type Error = NoiseError;
+    type Future = future::AndThen<
+        <NoiseConfig<P, C, R> as OutboundUpgrade<T>>::Future,
+        FutureResult<Self::Output, Self::Error>,
+        fn((RemoteIdentity<C>, NoiseOutput<Negotiated<T>>)) -> FutureResult<Self::Output, Self::Error>
+    >;
+
+    fn upgrade_outbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
+        self.config.upgrade_outbound(socket, info)
+            .and_then(|(remote, io)| future::result(match remote {
+                RemoteIdentity::IdentityKey(pk) => Ok((pk.into_peer_id(), io)),
+                _ => Err(NoiseError::AuthenticationFailed)
+            }))
     }
 }
 

@@ -259,10 +259,9 @@ mod tests {
     use libp2p_core::{
         identity,
         PeerId,
-        upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
         muxing::StreamMuxer,
         Multiaddr,
-        Transport
+        Transport,
     };
     use libp2p_tcp::TcpConfig;
     use libp2p_secio::SecioConfig;
@@ -283,15 +282,9 @@ mod tests {
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
             .nodelay(true)
-            .with_upgrade(SecioConfig::new(id_keys))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            });
+            .upgrade()
+            .authenticate(SecioConfig::new(id_keys))
+            .multiplex(MplexConfig::new());
         (pubkey, transport)
     }
 
