@@ -130,7 +130,7 @@ where
     ) {
         // Should never establish a new outbound substream if one already exists.
         // If this happens, an outbound message is not sent.
-        if !self.outbound_substream.is_none() {
+        if self.outbound_substream.is_some() {
             error!("Established an outbound substream with one already available");
             return;
         }
