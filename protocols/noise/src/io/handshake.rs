@@ -181,8 +181,8 @@ where
 {
     let mut state = State::new(io, session, identity, identity_x)?;
     send_empty(&mut state).await?;
-    send_identity(&mut state).await?;
     recv_identity(&mut state).await?;
+    send_identity(&mut state).await?;
     state.finish()
 }
 
@@ -225,7 +225,6 @@ where
 // Internal
 
 /// Handshake state.
-// TODO: Can this be removed?
 struct State<T> {
     /// The underlying I/O resource.
     io: NoiseOutput<T>,

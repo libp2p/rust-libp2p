@@ -24,7 +24,6 @@ pub mod handshake;
 
 use futures::Poll;
 use futures::prelude::*;
-use futures::io::AsyncReadExt;
 use log::{debug, trace};
 use snow;
 use std::{fmt, io, pin::Pin};
@@ -149,7 +148,6 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
                             return Poll::Ready(Err(e))
                         }
                         Poll::Pending => {
-                            // TODO: Is this needed?
                             this.read_state = ReadState::ReadLen { buf, off };
 
                             return Poll::Pending;
@@ -240,17 +238,20 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     *off += n;
                     if *off == MAX_WRITE_BUF_LEN {
                         trace!("write: encrypting {} bytes", *off);
-                        if let Ok(n) = this.session.write_message(buffer.write, buffer.write_crypto) {
-                            trace!("write: cipher text len = {} bytes", n);
-                            this.write_state = WriteState::WriteLen {
-                                len: n,
-                                buf: u16::to_be_bytes(n as u16),
-                                off: 0
+                        match this.session.write_message(buffer.write, buffer.write_crypto) {
+                            Ok(n) => {
+                                trace!("write: cipher text len = {} bytes", n);
+                                this.write_state = WriteState::WriteLen {
+                                    len: n,
+                                    buf: u16::to_be_bytes(n as u16),
+                                    off: 0
+                                }
                             }
-                        } else {
-                            debug!("encryption error");
-                            this.write_state = WriteState::EncErr;
-                            return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                            Err(e) => {
+                                debug!("encryption error: {:?}", e);
+                                this.write_state = WriteState::EncErr;
+                                return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                            }
                         }
                     }
                     return Poll::Ready(Ok(n))
@@ -268,7 +269,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                             return Poll::Ready(Err(e))
                         }
                         Poll::Pending => {
-                            // TODO: Is this needed?
                             this.write_state = WriteState::WriteLen{ len, buf, off };
 
                             return Poll::Pending
@@ -280,8 +280,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     let n = match Pin::new(&mut this.io).poll_write( cx, &buffer.write_crypto[*off .. len]) {
                         Poll::Ready(Ok(n)) => n,
                         Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                        // TODO: Do we need to persist the state like we do in
-                        // in Poll::Pending on `WriteState::WriteLen`?
                         Poll::Pending => return Poll::Pending,
                     };
                     trace!("write: wrote {}/{} bytes", *off + n, len);
@@ -318,22 +316,22 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                 WriteState::Init => return Poll::Ready(Ok(())),
                 WriteState::BufferData { off } => {
                     trace!("flush: encrypting {} bytes", off);
-                    if let Ok(n) = this.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
-                        trace!("flush: cipher text len = {} bytes", n);
-                        this.write_state = WriteState::WriteLen {
-                            len: n,
-                            buf: u16::to_be_bytes(n as u16),
-                            off: 0
+                    match this.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
+                        Ok(n) => {
+                            trace!("flush: cipher text len = {} bytes", n);
+                            this.write_state = WriteState::WriteLen {
+                                len: n,
+                                buf: u16::to_be_bytes(n as u16),
+                                off: 0
+                            }
                         }
-                    } else {
-                        debug!("encryption error");
-                        this.write_state = WriteState::EncErr;
-                        return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                        Err(e) => {
+                            debug!("encryption error: {:?}", e);
+                            this.write_state = WriteState::EncErr;
+                            return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                        }
                     }
                 }
-                // TODO: `WriteLen` and `WriteData` duplicate lots of logic from
-                // their respective `poll_write` state transition functions.
-                // Should we deduplicate this?
                 WriteState::WriteLen { len, mut buf, mut off } => {
                     trace!("flush: writing len ({}, {:?}, {}/2)", len, buf, off);
                     match write_frame_len(&mut this.io, cx, &mut buf, &mut off) {
@@ -347,10 +345,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                             return Poll::Ready(Err(e))
                         }
                         Poll::Pending => {
-                            // Preserve write state
-                            // TODO: Do we need to persist the state here? We
-                            // pass these by reference to any other function,
-                            // right?
                             this.write_state = WriteState::WriteLen { len, buf, off };
 
                             return Poll::Pending
@@ -362,8 +356,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     let n = match Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len]) {
                         Poll::Ready(Ok(n)) => n,
                         Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                        // TODO: Do we need to persist the state like we do in
-                        // in Poll::Pending on `WriteState::WriteLen`?
                         Poll::Pending => return Poll::Pending,
                     };
                     trace!("flush: wrote {}/{} bytes", *off + n, len);
@@ -411,8 +403,6 @@ fn read_frame_len<R: AsyncRead + Unpin>(mut io: &mut R, cx: &mut futures::task::
     loop {
         match AsyncRead::poll_read(Pin::new(&mut io), cx, &mut buf[*off ..]) {
             Poll::Ready(Ok(n)) => {
-                // TODO: Why does a reader signal eof via returning "0 written
-                // bytes" instead of just throwing an eof error?
                 if n == 0 {
                     return Poll::Ready(Ok(None));
                 }

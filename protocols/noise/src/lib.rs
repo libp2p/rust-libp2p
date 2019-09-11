@@ -165,7 +165,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -188,7 +188,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -213,7 +213,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -236,7 +236,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -261,7 +261,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -284,7 +284,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
