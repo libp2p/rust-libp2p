@@ -20,8 +20,7 @@
 
 mod util;
 
-use futures::future::Future;
-use futures::stream::Stream;
+use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{Transport, MemoryTransport, ListenerEvent};
 use libp2p_core::upgrade::{UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
@@ -30,7 +29,6 @@ use libp2p_secio::SecioConfig;
 use multiaddr::Multiaddr;
 use rand::random;
 use std::io;
-use tokio_io::{io as nio, AsyncWrite, AsyncRead};
 
 #[derive(Clone)]
 struct HelloUpgrade {}

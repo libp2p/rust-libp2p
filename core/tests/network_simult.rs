@@ -20,7 +20,7 @@
 
 mod util;
 
-use futures::{future, prelude::*};
+use futures::prelude::*;
 use libp2p_core::{identity, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
 use libp2p_core::nodes::network::IncomingError;

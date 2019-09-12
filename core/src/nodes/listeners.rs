@@ -361,13 +361,11 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use std::{io, iter::FromIterator};
     use futures::{future::{self}, stream};
-    use crate::tests::dummy_transport::{DummyTransport, ListenerState};
-    use crate::tests::dummy_muxer::DummyMuxer;
     use crate::PeerId;
 
     #[test]
     fn incoming_event() {
-        futures::executor::block_on(async {
+        futures::executor::block_on(async move {
             let mem_transport = transport::MemoryTransport::default();
 
             let mut listeners = ListenersStream::new(mem_transport);
@@ -382,8 +380,9 @@ mod tests {
                 }
             };
 
+            let address2 = address.clone();
             async_std::task::spawn(async move {
-                mem_transport.dial(address.clone()).unwrap().await.unwrap();
+                mem_transport.dial(address2).unwrap().await.unwrap();
             });
 
             match listeners.next().await.unwrap() {

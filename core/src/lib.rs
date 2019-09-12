@@ -45,9 +45,6 @@ mod keys_proto;
 mod peer_id;
 mod translation;
 
-#[cfg(test)]
-mod tests;
-
 pub mod either;
 pub mod identity;
 pub mod muxing;

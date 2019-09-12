@@ -180,8 +180,9 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut out = vec![0; 10_000];
-        let future = write_one(Cursor::new(&mut out[..]), data.clone());
-        futures::executor::block_on(future).unwrap();
+        futures::executor::block_on(
+            write_one(&mut Cursor::new(&mut out[..]), data.clone())
+        ).unwrap();
 
         let (out_len, out_data) = unsigned_varint::decode::usize(&out).unwrap();
         assert_eq!(out_len, data.len());

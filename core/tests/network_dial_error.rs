@@ -20,7 +20,7 @@
 
 mod util;
 
-use futures::{future, prelude::*};
+use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::nodes::network::{Network, NetworkEvent, NetworkReachError, PeerState, UnknownPeerDialErr, IncomingError};

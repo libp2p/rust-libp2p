@@ -31,8 +31,6 @@ use fnv::FnvHashMap;
 use futures::prelude::*;
 use std::{error, fmt, hash::Hash, mem, task::Context, task::Poll};
 
-mod tests;
-
 /// Implementation of `Stream` that handles a collection of nodes.
 pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo = PeerId, TPeerId = PeerId> {
     /// Object that handles the tasks.

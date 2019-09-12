@@ -22,8 +22,6 @@ use crate::{PeerId, muxing::StreamMuxer};
 use crate::nodes::node::{NodeEvent, NodeStream, Substream, Close};
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll};
 
-mod tests;
-
 /// Handler for the substreams of a node.
 // TODO: right now it is possible for a node handler to be built, then shut down right after if we
 //       realize we dialed the wrong peer for example; this could be surprising and should either
