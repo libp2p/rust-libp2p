@@ -22,7 +22,6 @@ use crate::{PeerId, muxing::StreamMuxer};
 use crate::nodes::node::{NodeEvent, NodeStream, Substream, Close};
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll};
 
-mod from_fn;
 mod tests;
 
 /// Handler for the substreams of a node.
