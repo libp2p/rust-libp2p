@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::algo_support;
-use bytes::BytesMut;
 use crate::codec::{full_codec, FullCodec, Hmac};
 use crate::stream_cipher::ctr;
 use crate::error::SecioError;
@@ -53,7 +52,7 @@ where
     // The handshake messages all start with a variable-length integer indicating the size.
     let mut socket = futures_codec::Framed::new(
         socket,
-        unsigned_varint::codec::UviBytes::<BytesMut>::default()
+        unsigned_varint::codec::UviBytes::<Vec<u8>>::default()
     );
 
     let local_nonce = {
@@ -99,7 +98,7 @@ where
     trace!("starting handshake; local nonce = {:?}", local_nonce);
 
     trace!("sending proposition to remote");
-    socket.send(BytesMut::from(local_proposition_bytes.clone())).await?;
+    socket.send(local_proposition_bytes.clone()).await?;
 
     // Receive the remote's proposition.
     let remote_proposition_bytes = match socket.next().await {
@@ -222,7 +221,7 @@ where
 
     // Send our local `Exchange`.
     trace!("sending exchange to remote");
-    socket.send(BytesMut::from(local_exch)).await?;
+    socket.send(local_exch).await?;
 
     // Receive the remote's `Exchange`.
     let remote_exch = {
@@ -316,7 +315,7 @@ where
 
     // We send back their nonce to check if the connection works.
     trace!("checking encryption by sending back remote's nonce");
-    codec.send(BytesMut::from(remote_nonce)).await?;
+    codec.send(remote_nonce).await?;
 
     Ok((codec, remote_public_key, tmp_pub_key))
 }

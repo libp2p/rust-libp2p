@@ -20,7 +20,6 @@
 
 //! Individual messages encoding.
 
-use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
 use futures::prelude::*;
 use std::{pin::Pin, task::Context, task::Poll};
@@ -48,9 +47,9 @@ impl<S> EncoderMiddleware<S> {
     }
 }
 
-impl<S> Sink<BytesMut> for EncoderMiddleware<S>
+impl<S> Sink<Vec<u8>> for EncoderMiddleware<S>
 where
-    S: Sink<BytesMut> + Unpin,
+    S: Sink<Vec<u8>> + Unpin,
 {
     type Error = S::Error;
 
@@ -58,7 +57,7 @@ where
         Sink::poll_ready(Pin::new(&mut self.raw_sink), cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, mut data_buf: BytesMut) -> Result<(), Self::Error> {
+    fn start_send(mut self: Pin<&mut Self>, mut data_buf: Vec<u8>) -> Result<(), Self::Error> {
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
         self.cipher_state.encrypt(&mut data_buf[..]);
         let signature = self.hmac.sign(&data_buf[..]);

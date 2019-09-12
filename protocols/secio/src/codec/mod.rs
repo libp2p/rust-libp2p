@@ -25,7 +25,6 @@ use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
 use crate::algo_support::Digest;
-use bytes::BytesMut;
 use futures::prelude::*;
 use aes_ctr::stream_cipher;
 use hmac::{self, Mac};
@@ -36,7 +35,7 @@ mod decode;
 mod encode;
 
 /// Type returned by `full_codec`.
-pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<futures_codec::Framed<S, UviBytes<BytesMut>>>>;
+pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<futures_codec::Framed<S, UviBytes<Vec<u8>>>>>;
 
 pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
@@ -109,7 +108,7 @@ impl Hmac {
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
-    socket: futures_codec::Framed<S, unsigned_varint::codec::UviBytes<BytesMut>>,
+    socket: futures_codec::Framed<S, unsigned_varint::codec::UviBytes<Vec<u8>>>,
     cipher_encoding: StreamCipher,
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
@@ -139,7 +138,8 @@ mod tests {
 
     #[test]
     fn raw_encode_then_decode() {
-        let (data_tx, data_rx) = mpsc::channel::<BytesMut>(256);
+        let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(256);
+        let data_rx = data_rx.map(BytesMut::from);
 
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
@@ -159,7 +159,7 @@ mod tests {
 
         let data = b"hello world";
         futures::executor::block_on(async move {
-            encoder.send(BytesMut::from(data.to_vec())).await.unwrap();
+            encoder.send(data.to_vec()).await.unwrap();
             let rx = decoder.next().await.unwrap().unwrap();
             assert_eq!(rx, data);
         });

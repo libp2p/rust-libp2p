@@ -57,7 +57,6 @@
 
 pub use self::error::SecioError;
 
-use bytes::BytesMut;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{prelude::*, io::Initializer};
 use libp2p_core::{PeerId, PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
@@ -152,7 +151,7 @@ where
     S: AsyncRead + AsyncWrite,
 {
     /// The encrypted stream.
-    pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> io::Error>, BytesMut>,
+    pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> io::Error>>,
     /// The public key of the remote.
     pub remote_key: PublicKey,
     /// Ephemeral public key used during the negotiation.
@@ -195,7 +194,7 @@ where
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
         AsyncRead::poll_read(Pin::new(&mut self.stream), cx, buf)
@@ -207,19 +206,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for SecioOutput<S> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
         AsyncWrite::poll_write(Pin::new(&mut self.stream), cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context)
         -> Poll<Result<(), io::Error>>
     {
         AsyncWrite::poll_flush(Pin::new(&mut self.stream), cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context)
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context)
         -> Poll<Result<(), io::Error>>
     {
         AsyncWrite::poll_close(Pin::new(&mut self.stream), cx)
@@ -257,7 +256,7 @@ where
     }
 }
 
-impl<S> Sink<BytesMut> for SecioMiddleware<S>
+impl<S> Sink<Vec<u8>> for SecioMiddleware<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -267,7 +266,7 @@ where
         Sink::poll_ready(Pin::new(&mut self.inner), cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> Result<(), Self::Error> {
+    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
         Sink::start_send(Pin::new(&mut self.inner), item)
     }
 

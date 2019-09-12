@@ -20,7 +20,6 @@
 
 //! Individual messages decoding.
 
-use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
 
 use crate::error::SecioError;
@@ -28,7 +27,7 @@ use futures::prelude::*;
 use log::debug;
 use std::{cmp::min, pin::Pin, task::Context, task::Poll};
 
-/// Wraps around a `Stream<Item = BytesMut>`. The buffers produced by the underlying stream
+/// Wraps around a `Stream<Item = Vec<u8>>`. The buffers produced by the underlying stream
 /// are decoded using the cipher and hmac.
 ///
 /// This struct implements `Stream`, whose stream item are frames of data without the length
@@ -60,7 +59,7 @@ impl<S> DecoderMiddleware<S> {
 
 impl<S> Stream for DecoderMiddleware<S>
 where
-    S: TryStream<Ok = BytesMut> + Unpin,
+    S: TryStream<Ok = bytes::BytesMut> + Unpin,
     S::Error: Into<SecioError>,
 {
     type Item = Result<Vec<u8>, SecioError>;

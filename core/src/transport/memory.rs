@@ -225,7 +225,7 @@ fn parse_memory_addr(a: &Multiaddr) -> Result<u64, ()> {
 /// A channel represents an established, in-memory, logical connection between two endpoints.
 ///
 /// Implements `AsyncRead` and `AsyncWrite`.
-pub type Channel<T> = RwStreamSink<Chan<T>, Vec<u8>>;
+pub type Channel<T> = RwStreamSink<Chan<T>>;
 
 /// A channel represents an established, in-memory, logical connection between two endpoints.
 ///
@@ -271,9 +271,9 @@ impl<T> Sink<T> for Chan<T> {
     }
 }
 
-impl<T: IntoBuf> Into<RwStreamSink<Chan<T>, Vec<u8>>> for Chan<T> {
+impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
     #[inline]
-    fn into(self) -> RwStreamSink<Chan<T>, Vec<u8>> {
+    fn into(self) -> RwStreamSink<Chan<T>> {
         RwStreamSink::new(self)
     }
 }

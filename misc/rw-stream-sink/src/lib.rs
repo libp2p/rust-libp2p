@@ -27,40 +27,40 @@
 //! > **Note**: Although this crate is hosted in the libp2p repo, it is purely a utility crate and
 //! >           not at all specific to libp2p.
 
-use bytes::{Buf, IntoBuf};
 use futures::{prelude::*, io::Initializer};
-use std::{cmp, io, pin::Pin, task::Context, task::Poll};
+use std::{cmp, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
 
-/// Wraps around a `Stream + Sink` whose items are buffers. Implements `PollRead` and `PollWrite`.
-pub struct RwStreamSink<S, I> {
+/// Wraps around a `Stream + Sink` whose items are buffers. Implements `AsyncRead` and `AsyncWrite`.
+///
+/// The `B` generic is the type of buffers that the `Sink` accepts. The `I` generic is the type of
+/// buffer that the `Stream` generates.
+pub struct RwStreamSink<S> {
     inner: S,
-    current_item: Option<I>,
+    current_item: Option<Vec<u8>>,
 }
 
-impl<S, I> RwStreamSink<S, I> {
+impl<S> RwStreamSink<S> {
     /// Wraps around `inner`.
-    pub fn new(inner: S) -> RwStreamSink<S, I> {
+    pub fn new(inner: S) -> RwStreamSink<S> {
         RwStreamSink { inner, current_item: None }
     }
 }
 
-impl<S, I> AsyncRead for RwStreamSink<S, I>
+impl<S> AsyncRead for RwStreamSink<S>
 where
-    S: TryStream<Error = io::Error> + Unpin,
-    S::Ok: IntoBuf<Buf = I>,
-    I: Buf,
+    S: TryStream<Ok = Vec<u8>, Error = io::Error> + Unpin,
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         // Grab the item to copy from.
         let current_item = loop {
             if let Some(ref mut i) = self.current_item {
-                if i.has_remaining() {
+                if !i.is_empty() {
                     break i;
                 }
             }
 
             self.current_item = Some(match TryStream::try_poll_next(Pin::new(&mut self.inner), cx) {
-                Poll::Ready(Some(Ok(i))) => i.into_buf(),
+                Poll::Ready(Some(Ok(i))) => i,
                 Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(err)),
                 Poll::Ready(None) => return Poll::Ready(Ok(0)),     // EOF
                 Poll::Pending => return Poll::Pending,
@@ -68,9 +68,10 @@ where
         };
 
         // Copy it!
-        debug_assert!(current_item.has_remaining());
-        let to_copy = cmp::min(buf.len(), current_item.remaining());
-        current_item.take(to_copy).copy_to_slice(&mut buf[..to_copy]);
+        debug_assert!(!current_item.is_empty());
+        let to_copy = cmp::min(buf.len(), current_item.len());
+        buf[..to_copy].copy_from_slice(&current_item[..to_copy]);
+        for _ in 0..to_copy { current_item.remove(0); }
         Poll::Ready(Ok(to_copy))
     }
 
@@ -79,10 +80,9 @@ where
     }
 }
 
-impl<S, I> AsyncWrite for RwStreamSink<S, I>
+impl<S> AsyncWrite for RwStreamSink<S>
 where
-    S: Stream + Sink<I, Error = io::Error> + Unpin,
-    I: for<'r> From<&'r [u8]>,
+    S: Stream + Sink<Vec<u8>, Error = io::Error> + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         match Sink::poll_ready(Pin::new(&mut self.inner), cx) {
@@ -107,12 +107,11 @@ where
     }
 }
 
-impl<S, I> Unpin for RwStreamSink<S, I> {
+impl<S> Unpin for RwStreamSink<S> {
 }
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
     use crate::RwStreamSink;
     use futures::{prelude::*, stream, channel::mpsc::channel};
     use std::io::Read;
