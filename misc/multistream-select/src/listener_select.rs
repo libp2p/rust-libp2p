@@ -136,7 +136,7 @@ where
                     if io.start_send(Message::Header(Version::V1))?.is_not_ready() {
                         return Ok(Async::NotReady)
                     }
-                    self.state = State::RecvMessage { io };
+                    self.state = State::Flush { io };
                 }
                 State::RecvMessage { mut io } => {
                     let msg = match io.poll() {
