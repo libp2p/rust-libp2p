@@ -20,6 +20,8 @@
 
 //! Configuration of transport protocol upgrades.
 
+pub use crate::upgrade::Version;
+
 use crate::{
     ConnectedPoint,
     ConnectionInfo,
@@ -68,7 +70,8 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// [`Network`]: crate::nodes::Network
 pub struct Builder<T> {
-    inner: T
+    inner: T,
+    version: upgrade::Version,
 }
 
 impl<T> Builder<T>
@@ -77,8 +80,8 @@ where
     T::Error: 'static,
 {
     /// Creates a `Builder` over the given (base) `Transport`.
-    pub fn new(transport: T) -> Builder<T> {
-        Builder { inner: transport }
+    pub fn new(inner: T, version: upgrade::Version) -> Builder<T> {
+        Builder { inner, version }
     }
 
     /// Upgrades the transport to perform authentication of the remote.
@@ -105,11 +108,12 @@ where
         U: OutboundUpgrade<C, Output = (I, D), Error = E> + Clone,
         E: Error + 'static,
     {
+        let version = self.version;
         Builder::new(self.inner.and_then(move |conn, endpoint| {
             Authenticate {
-                inner: upgrade::apply(conn, upgrade, endpoint)
+                inner: upgrade::apply(conn, upgrade, endpoint, version)
             }
-        }))
+        }), version)
     }
 
     /// Applies an arbitrary upgrade on an authenticated, non-multiplexed
@@ -133,7 +137,7 @@ where
         U: OutboundUpgrade<C, Output = D, Error = E> + Clone,
         E: Error + 'static,
     {
-        Builder::new(Upgrade::new(self.inner, upgrade))
+        Builder::new(Upgrade::new(self.inner, upgrade), self.version)
     }
 
     /// Upgrades the transport with a (sub)stream multiplexer.
@@ -158,8 +162,9 @@ where
         U: OutboundUpgrade<C, Output = M, Error = E> + Clone,
         E: Error + 'static,
     {
+        let version = self.version;
         self.inner.and_then(move |(i, c), endpoint| {
-            let upgrade = upgrade::apply(c, upgrade, endpoint);
+            let upgrade = upgrade::apply(c, upgrade, endpoint, version);
             Multiplex { info: Some(i), upgrade }
         })
     }
@@ -332,7 +337,7 @@ where
                 future::Either::A(ref mut up) => {
                     let (i, c) = try_ready!(self.future.poll().map_err(TransportUpgradeError::Transport));
                     let u = up.take().expect("DialUpgradeFuture is constructed with Either::A(Some).");
-                    future::Either::B((Some(i), apply_outbound(c, u)))
+                    future::Either::B((Some(i), apply_outbound(c, u, upgrade::Version::V1)))
                 }
                 future::Either::B((ref mut i, ref mut up)) => {
                     let d = try_ready!(up.poll().map_err(TransportUpgradeError::Upgrade));

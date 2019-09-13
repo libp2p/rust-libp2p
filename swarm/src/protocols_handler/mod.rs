@@ -48,7 +48,7 @@ use futures::prelude::*;
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError},
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeError},
 };
 use std::{cmp::Ordering, error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -244,6 +244,7 @@ pub trait ProtocolsHandler {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SubstreamProtocol<TUpgrade> {
     upgrade: TUpgrade,
+    upgrade_protocol: upgrade::Version,
     timeout: Duration,
 }
 
@@ -255,8 +256,16 @@ impl<TUpgrade> SubstreamProtocol<TUpgrade> {
     pub fn new(upgrade: TUpgrade) -> SubstreamProtocol<TUpgrade> {
         SubstreamProtocol {
             upgrade,
+            upgrade_protocol: upgrade::Version::V1,
             timeout: Duration::from_secs(10),
         }
+    }
+
+    /// Sets the multistream-select protocol (version) to use for negotiating
+    /// protocols upgrades on outbound substreams.
+    pub fn with_upgrade_protocol(mut self, version: upgrade::Version) -> Self {
+        self.upgrade_protocol = version;
+        self
     }
 
     /// Maps a function over the protocol upgrade.
@@ -266,6 +275,7 @@ impl<TUpgrade> SubstreamProtocol<TUpgrade> {
     {
         SubstreamProtocol {
             upgrade: f(self.upgrade),
+            upgrade_protocol: self.upgrade_protocol,
             timeout: self.timeout,
         }
     }
@@ -287,8 +297,8 @@ impl<TUpgrade> SubstreamProtocol<TUpgrade> {
     }
 
     /// Converts the substream protocol configuration into the contained upgrade.
-    pub fn into_upgrade(self) -> TUpgrade {
-        self.upgrade
+    pub fn into_upgrade(self) -> (upgrade::Version, TUpgrade) {
+        (self.upgrade_protocol, self.upgrade)
     }
 }
 
@@ -460,7 +470,7 @@ where T: ProtocolsHandler
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        self.listen_protocol().into_upgrade()
+        self.listen_protocol().into_upgrade().1
     }
 }
 

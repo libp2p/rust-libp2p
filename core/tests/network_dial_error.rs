@@ -95,7 +95,7 @@ fn deny_incoming_connec() {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
@@ -105,7 +105,7 @@ fn deny_incoming_connec() {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
@@ -170,7 +170,7 @@ fn dial_self() {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new())
             .and_then(|(peer, mplex), _| {
@@ -249,7 +249,7 @@ fn dial_self_by_id() {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
@@ -267,7 +267,7 @@ fn multiple_addresses_err() {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
         Network::new(transport, local_public_key.into())
