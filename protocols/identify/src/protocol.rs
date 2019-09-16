@@ -18,25 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::BytesMut;
 use crate::structs_proto;
-use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
-use futures::try_ready;
+use futures::prelude::*;
 use libp2p_core::{
     Multiaddr,
     PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
 };
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
 use std::convert::TryFrom;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::{fmt, iter};
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint::codec;
+use std::{fmt, io, iter, pin::Pin};
 
 /// Configuration for an upgrade to the `Identify` protocol.
 #[derive(Debug, Clone)]
@@ -54,7 +48,7 @@ pub struct RemoteInfo {
 
 /// The substream on which a reply is expected to be sent.
 pub struct ReplySubstream<T> {
-    inner: Framed<T, codec::UviBytes<Vec<u8>>>,
+    inner: T,
 }
 
 impl<T> fmt::Debug for ReplySubstream<T> {
@@ -65,13 +59,15 @@ impl<T> fmt::Debug for ReplySubstream<T> {
 
 impl<T> ReplySubstream<T>
 where
-    T: AsyncWrite
+    T: AsyncWrite + Unpin
 {
     /// Sends back the requested information on the substream.
     ///
     /// Consumes the substream, returning a `ReplyFuture` that resolves
     /// when the reply has been sent on the underlying connection.
-    pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr) -> ReplyFuture<T> {
+    pub fn send(mut self, info: IdentifyInfo, observed_addr: &Multiaddr)
+        -> impl Future<Output = Result<(), io::Error>>
+    {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
@@ -90,47 +86,12 @@ where
         message.set_observedAddr(observed_addr.to_vec());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
 
-        let bytes = message
-            .write_to_bytes()
-            .expect("writing protobuf failed; should never happen");
-
-        ReplyFuture {
-            inner: self.inner,
-            item: Some(bytes),
+        async move {
+            let bytes = message
+                .write_to_bytes()
+                .expect("writing protobuf failed; should never happen");
+            upgrade::write_one(&mut self.inner, &bytes).await
         }
-    }
-}
-
-/// Future returned by `IdentifySender::send()`. Must be processed to the end in order to send
-/// the information to the remote.
-// Note: we don't use a `futures::sink::Sink` because it requires `T` to implement `Sink`, which
-//       means that we would require `T: AsyncWrite` in this struct definition. This requirement
-//       would then propagate everywhere.
-#[must_use = "futures do nothing unless polled"]
-pub struct ReplyFuture<T> {
-    /// The Sink where to send the data.
-    inner: Framed<T, codec::UviBytes<Vec<u8>>>,
-    /// Bytes to send, or `None` if we've already sent them.
-    item: Option<Vec<u8>>,
-}
-
-impl<T> Future for ReplyFuture<T>
-where T: AsyncWrite
-{
-    type Item = ();
-    type Error = IoError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(item) = self.item.take() {
-            if let AsyncSink::NotReady(item) = self.inner.start_send(item)? {
-                self.item = Some(item);
-                return Ok(Async::NotReady);
-            }
-        }
-
-        // A call to `close()` implies flushing.
-        try_ready!(self.inner.close());
-        Ok(Async::Ready(()))
     }
 }
 
@@ -162,93 +123,60 @@ impl UpgradeInfo for IdentifyProtocolConfig {
 
 impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
-    C: AsyncRead + AsyncWrite,
+    C: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = ReplySubstream<Negotiated<C>>;
-    type Error = IoError;
-    type Future = FutureResult<Self::Output, IoError>;
+    type Error = io::Error;
+    type Future = future::Ready<Result<Self::Output, io::Error>>;
 
     fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
-        let inner = Framed::new(socket, codec::UviBytes::default());
-        future::ok(ReplySubstream { inner })
+        future::ok(ReplySubstream { inner: socket })
     }
 }
 
 impl<C> OutboundUpgrade<C> for IdentifyProtocolConfig
 where
-    C: AsyncRead + AsyncWrite,
+    C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     type Output = RemoteInfo;
-    type Error = IoError;
-    type Future = IdentifyOutboundFuture<Negotiated<C>>;
+    type Error = upgrade::ReadOneError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
-    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
-        IdentifyOutboundFuture {
-            inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
-            shutdown: false,
-        }
-    }
-}
+    fn upgrade_outbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+        Box::pin(async move {
+            socket.close().await?;
+            let msg = upgrade::read_one(&mut socket, 4096).await?;
+            let (info, observed_addr) = match parse_proto_msg(msg) {
+                Ok(v) => v,
+                Err(err) => {
+                    debug!("Failed to parse protobuf message; error = {:?}", err);
+                    return Err(err.into())
+                }
+            };
 
-/// Future returned by `OutboundUpgrade::upgrade_outbound`.
-pub struct IdentifyOutboundFuture<T> {
-    inner: Framed<T, codec::UviBytes<BytesMut>>,
-    /// If true, we have finished shutting down the writing part of `inner`.
-    shutdown: bool,
-}
+            trace!("Remote observes us as {:?}", observed_addr);
+            trace!("Information received: {:?}", info);
 
-impl<T> Future for IdentifyOutboundFuture<T>
-where T: AsyncRead + AsyncWrite,
-{
-    type Item = RemoteInfo;
-    type Error = IoError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if !self.shutdown {
-            try_ready!(self.inner.close());
-            self.shutdown = true;
-        }
-
-        let msg = match try_ready!(self.inner.poll()) {
-            Some(i) => i,
-            None => {
-                debug!("Identify protocol stream closed before receiving info");
-                return Err(IoErrorKind::InvalidData.into());
-            }
-        };
-
-        debug!("Received identify message");
-
-        let (info, observed_addr) = match parse_proto_msg(msg) {
-            Ok(v) => v,
-            Err(err) => {
-                debug!("Failed to parse protobuf message; error = {:?}", err);
-                return Err(err)
-            }
-        };
-
-        trace!("Remote observes us as {:?}", observed_addr);
-        trace!("Information received: {:?}", info);
-
-        Ok(Async::Ready(RemoteInfo {
-            info,
-            observed_addr: observed_addr.clone(),
-            _priv: ()
-        }))
+            Ok(RemoteInfo {
+                info,
+                observed_addr: observed_addr.clone(),
+                _priv: ()
+            })
+        })
     }
 }
 
 // Turns a protobuf message into an `IdentifyInfo` and an observed address. If something bad
-// happens, turn it into an `IoError`.
-fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> {
-    match protobuf_parse_from_bytes::<structs_proto::Identify>(&msg) {
+// happens, turn it into an `io::Error`.
+fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<(IdentifyInfo, Multiaddr), io::Error> {
+    match protobuf_parse_from_bytes::<structs_proto::Identify>(msg.as_ref()) {
         Ok(mut msg) => {
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
-            // an `IoError`.
-            fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
+            // an `io::Error`.
+            fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, io::Error> {
                 Multiaddr::try_from(bytes)
-                    .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
             }
 
             let listen_addrs = {
@@ -260,7 +188,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             };
 
             let public_key = PublicKey::from_protobuf_encoding(msg.get_publicKey())
-                .map_err(|e| IoError::new(IoErrorKind::InvalidData, e))?;
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
             let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
             let info = IdentifyInfo {
@@ -274,7 +202,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             Ok((info, observed_addr))
         }
 
-        Err(err) => Err(IoError::new(IoErrorKind::InvalidData, err)),
+        Err(err) => Err(io::Error::new(io::ErrorKind::InvalidData, err)),
     }
 }
 

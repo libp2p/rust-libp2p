@@ -21,7 +21,7 @@
 use crate::transport::{Transport, TransportError, ListenerEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::error;
+use std::{error, pin::Pin, task::Context, task::Poll};
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
@@ -40,6 +40,9 @@ impl<T, F> MapErr<T, F> {
 impl<T, F, TErr> Transport for MapErr<T, F>
 where
     T: Transport,
+    T::Dial: Unpin,
+    T::Listener: Unpin,
+    T::ListenerUpgrade: Unpin,
     F: FnOnce(T::Error) -> TErr + Clone,
     TErr: error::Error,
 {
@@ -72,29 +75,34 @@ pub struct MapErrListener<T: Transport, F> {
     map: F,
 }
 
+impl<T, F> Unpin for MapErrListener<T, F>
+    where T: Transport
+{
+}
+
 impl<T, F, TErr> Stream for MapErrListener<T, F>
 where
     T: Transport,
+    T::Listener: Unpin,
     F: FnOnce(T::Error) -> TErr + Clone,
     TErr: error::Error,
 {
-    type Item = ListenerEvent<MapErrListenerUpgrade<T, F>>;
-    type Error = TErr;
+    type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>>, TErr>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.inner.poll() {
-            Ok(Async::Ready(Some(event))) => {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match TryStream::try_poll_next(Pin::new(&mut self.inner), cx) {
+            Poll::Ready(Some(Ok(event))) => {
                 let event = event.map(move |value| {
                     MapErrListenerUpgrade {
                         inner: value,
                         map: Some(self.map.clone())
                     }
                 });
-                Ok(Async::Ready(Some(event)))
+                Poll::Ready(Some(Ok(event)))
             }
-            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => Err((self.map.clone())(err)),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err((self.map.clone())(err)))),
         }
     }
 }
@@ -105,20 +113,25 @@ pub struct MapErrListenerUpgrade<T: Transport, F> {
     map: Option<F>,
 }
 
+impl<T, F> Unpin for MapErrListenerUpgrade<T, F>
+    where T: Transport
+{
+}
+
 impl<T, F, TErr> Future for MapErrListenerUpgrade<T, F>
 where T: Transport,
+    T::ListenerUpgrade: Unpin,
     F: FnOnce(T::Error) -> TErr,
 {
-    type Item = T::Output;
-    type Error = TErr;
+    type Output = Result<T::Output, TErr>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.inner.poll() {
-            Ok(Async::Ready(value)) => Ok(Async::Ready(value)),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match Future::poll(Pin::new(&mut self.inner), cx) {
+            Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(err)) => {
                 let map = self.map.take().expect("poll() called again after error");
-                Err(map(err))
+                Poll::Ready(Err(map(err)))
             }
         }
     }
@@ -130,23 +143,26 @@ pub struct MapErrDial<T: Transport, F> {
     map: Option<F>,
 }
 
+impl<T, F> Unpin for MapErrDial<T, F>
+    where T: Transport
+{
+}
+
 impl<T, F, TErr> Future for MapErrDial<T, F>
 where
     T: Transport,
+    T::Dial: Unpin,
     F: FnOnce(T::Error) -> TErr,
 {
-    type Item = T::Output;
-    type Error = TErr;
+    type Output = Result<T::Output, TErr>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.inner.poll() {
-            Ok(Async::Ready(value)) => {
-                Ok(Async::Ready(value))
-            },
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match Future::poll(Pin::new(&mut self.inner), cx) {
+            Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(err)) => {
                 let map = self.map.take().expect("poll() called again after error");
-                Err(map(err))
+                Poll::Ready(Err(map(err)))
             }
         }
     }

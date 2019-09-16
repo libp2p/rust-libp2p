@@ -29,11 +29,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{error, fmt, hash::Hash, mem};
-
-pub use crate::nodes::tasks::StartTakeOver;
-
-mod tests;
+use std::{error, fmt, hash::Hash, mem, task::Context, task::Poll};
 
 /// Implementation of `Stream` that handles a collection of nodes.
 pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo = PeerId, TPeerId = PeerId> {
@@ -57,6 +53,9 @@ where
         f.debug_tuple("CollectionStream").finish()
     }
 }
+
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> Unpin for
+    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> { }
 
 /// State of a task.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,7 +322,7 @@ where
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Item = (TConnInfo, TMuxer), Error = TReachErr> + Send + 'static,
+        TFut: Future<Output = Result<(TConnInfo, TMuxer), TReachErr>> + Unpin + Send + 'static,
         THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,
@@ -358,17 +357,19 @@ where
     }
 
     /// Sends an event to all nodes.
-    #[must_use]
-    pub fn start_broadcast(&mut self, event: &TInEvent) -> AsyncSink<()>
+    ///
+    /// Must be called only after a successful call to `poll_ready_broadcast`.
+    pub fn start_broadcast(&mut self, event: &TInEvent)
     where
         TInEvent: Clone
     {
         self.inner.start_broadcast(event)
     }
 
+    /// Wait until we have enough room in senders to broadcast an event.
     #[must_use]
-    pub fn complete_broadcast(&mut self) -> Async<()> {
-        self.inner.complete_broadcast()
+    pub fn poll_ready_broadcast(&mut self, cx: &mut Context) -> Poll<()> {
+        self.inner.poll_ready_broadcast(cx)
     }
 
     /// Adds an existing connection to a node to the collection.
@@ -447,13 +448,13 @@ where
     /// > **Note**: we use a regular `poll` method instead of implementing `Stream` in order to
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
-    pub fn poll(&mut self) -> Async<CollectionEvent<'_, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>>
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<CollectionEvent<'_, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>>
     where
         TConnInfo: Clone,   // TODO: Clone shouldn't be necessary
     {
-        let item = match self.inner.poll() {
-            Async::Ready(item) => item,
-            Async::NotReady => return Async::NotReady,
+        let item = match self.inner.poll(cx) {
+            Poll::Ready(item) => item,
+            Poll::Pending => return Poll::Pending,
         };
 
         match item {
@@ -463,7 +464,7 @@ where
 
                 match (user_data, result, handler) {
                     (TaskState::Pending, tasks::Error::Reach(err), Some(handler)) => {
-                        Async::Ready(CollectionEvent::ReachError {
+                        Poll::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
                             handler,
@@ -482,7 +483,7 @@ where
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(conn_info.peer_id());
                         debug_assert_eq!(_node_task_id, Some(id));
-                        Async::Ready(CollectionEvent::NodeClosed {
+                        Poll::Ready(CollectionEvent::NodeClosed {
                             conn_info,
                             error: err,
                             user_data,
@@ -497,8 +498,8 @@ where
             tasks::Event::NodeReached { task, conn_info } => {
                 let id = task.id();
                 drop(task);
-                Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
-                    parent: self,
+                Poll::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
+                    parent: &mut *self,
                     id,
                     conn_info: Some(conn_info),
                 }))
@@ -512,7 +513,7 @@ where
                                  self.tasks is switched to the Connected state; QED"),
                 };
                 drop(task);
-                Async::Ready(CollectionEvent::NodeEvent {
+                Poll::Ready(CollectionEvent::NodeEvent {
                     // TODO: normally we'd build a `PeerMut` manually here, but the borrow checker
                     //       doesn't like it
                     peer: self.peer_mut(&conn_info.peer_id())
@@ -616,14 +617,15 @@ where
         }
     }
 
-    /// Sends an event to the given node.
-    pub fn start_send_event(&mut self, event: TInEvent) -> StartSend<TInEvent, ()> {
+    /// Begin sending an event to the given node. Must be called only after a successful call to
+    /// `poll_ready_event`.
+    pub fn start_send_event(&mut self, event: TInEvent) {
         self.inner.start_send_event(event)
     }
 
-    /// Complete sending an event message initiated by `start_send_event`.
-    pub fn complete_send_event(&mut self) -> Poll<(), ()> {
-        self.inner.complete_send_event()
+    /// Make sure we are ready to accept an event to be sent with `start_send_event`.
+    pub fn poll_ready_event(&mut self, cx: &mut Context) -> Poll<()> {
+        self.inner.poll_ready_event(cx)
     }
 
     /// Closes the connections to this node. Returns the user data.
@@ -648,23 +650,13 @@ where
     /// The reach attempt will only be effectively cancelled once the peer (the object you're
     /// manipulating) has received some network activity. However no event will be ever be
     /// generated from this reach attempt, and this takes effect immediately.
-    #[must_use]
-    pub fn start_take_over(&mut self, id: InterruptedReachAttempt<TInEvent, TConnInfo, TUserData>)
-        -> StartTakeOver<(), InterruptedReachAttempt<TInEvent, TConnInfo, TUserData>>
-    {
-        match self.inner.start_take_over(id.inner) {
-            StartTakeOver::Ready(_state) => {
-                debug_assert!(if let TaskState::Pending = _state { true } else { false });
-                StartTakeOver::Ready(())
-            }
-            StartTakeOver::NotReady(inner) =>
-                StartTakeOver::NotReady(InterruptedReachAttempt { inner }),
-            StartTakeOver::Gone => StartTakeOver::Gone
-        }
+    pub fn start_take_over(&mut self, id: InterruptedReachAttempt<TInEvent, TConnInfo, TUserData>) {
+        self.inner.start_take_over(id.inner)
     }
 
-    /// Complete a take over initiated by `start_take_over`.
-    pub fn complete_take_over(&mut self) -> Poll<(), ()> {
-        self.inner.complete_take_over()
+    /// Make sure we are ready to taking over with `start_take_over`.
+    #[must_use]
+    pub fn poll_ready_take_over(&mut self, cx: &mut Context) -> Poll<()> {
+        self.inner.poll_ready_take_over(cx)
     }
 }

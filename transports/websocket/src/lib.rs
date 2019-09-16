@@ -34,7 +34,7 @@ use libp2p_core::{
     transport::{map::{MapFuture, MapStream}, ListenerEvent, TransportError}
 };
 use rw_stream_sink::RwStreamSink;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::pin::Pin;
 
 /// A Websocket transport.
 #[derive(Debug, Clone)]
@@ -117,11 +117,11 @@ where
 
 /// Type alias corresponding to `framed::WsConfig::Listener`.
 pub type InnerStream<T, E> =
-    Box<(dyn Stream<Error = Error<E>, Item = ListenerEvent<InnerFuture<T, E>>> + Send)>;
+    Pin<Box<(dyn Stream<Item = Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>> + Send)>>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
 pub type InnerFuture<T, E> =
-    Box<(dyn Future<Item = BytesConnection<T>, Error = Error<E>> + Send)>;
+    Pin<Box<(dyn Future<Output = Result<BytesConnection<T>, Error<E>>> + Send)>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
 pub type WrapperFn<T> =

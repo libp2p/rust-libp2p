@@ -28,8 +28,7 @@ use crate::protocols_handler::{
 use futures::prelude::*;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{error, marker::PhantomData, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 /// Implementation of `ProtocolsHandler` that opens a new substream for each individual message.
@@ -132,7 +131,7 @@ where
 impl<TSubstream, TInProto, TOutProto, TOutEvent> ProtocolsHandler
     for OneShotHandler<TSubstream, TInProto, TOutProto, TOutEvent>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
     TInProto: InboundUpgrade<TSubstream>,
     TOutProto: OutboundUpgrade<TSubstream>,
     TInProto::Output: Into<TOutEvent>,
@@ -208,18 +207,18 @@ where
 
     fn poll(
         &mut self,
+        _: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
         if let Some(err) = self.pending_error.take() {
-            return Err(err);
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
         }
 
         if !self.events_out.is_empty() {
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
                 self.events_out.remove(0),
-            )));
+            ));
         } else {
             self.events_out.shrink_to_fit();
         }
@@ -227,17 +226,17 @@ where
         if !self.dial_queue.is_empty() {
             if self.dial_negotiated < self.max_dial_negotiated {
                 self.dial_negotiated += 1;
-                return Ok(Async::Ready(
+                return Poll::Ready(
                     ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(self.dial_queue.remove(0)),
                         info: (),
                     },
-                ));
+                );
             }
         } else {
             self.dial_queue.shrink_to_fit();
         }
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }

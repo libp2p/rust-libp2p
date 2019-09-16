@@ -10,15 +10,11 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+async-std = "0.99"
 bytes = "0.4"
 get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4.1"
-futures = "0.1"
-tokio-io = "0.1"
-tokio-timer = "0.2"
-tokio-tcp = "0.1"
-
-[dev-dependencies]
-tokio = "0.1"
+futures-preview = "0.3.0-alpha.17"
+futures-timer = "0.3"

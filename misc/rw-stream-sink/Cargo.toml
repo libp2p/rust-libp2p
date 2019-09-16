@@ -10,6 +10,4 @@ keywords = ["networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-futures = "0.1"
-tokio-io = "0.1"
+futures-preview = "0.3.0-alpha.17"

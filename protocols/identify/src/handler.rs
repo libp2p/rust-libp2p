@@ -23,6 +23,7 @@ use futures::prelude::*;
 use libp2p_core::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
+    ReadOneError,
     Negotiated
 };
 use libp2p_swarm::{
@@ -33,9 +34,8 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr
 };
 use smallvec::SmallVec;
-use std::{io, marker::PhantomData, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
-use wasm_timer::{Delay, Instant};
+use std::{marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration};
+use wasm_timer::Delay;
 use void::Void;
 
 /// Delay between the moment we connect and the first time we identify.
@@ -75,7 +75,7 @@ pub enum IdentifyHandlerEvent<TSubstream> {
     /// We received a request for identification.
     Identify(ReplySubstream<Negotiated<TSubstream>>),
     /// Failed to identify the remote.
-    IdentificationError(ProtocolsHandlerUpgrErr<io::Error>),
+    IdentificationError(ProtocolsHandlerUpgrErr<ReadOneError>),
 }
 
 impl<TSubstream> IdentifyHandler<TSubstream> {
@@ -84,7 +84,7 @@ impl<TSubstream> IdentifyHandler<TSubstream> {
         IdentifyHandler {
             config: IdentifyProtocolConfig,
             events: SmallVec::new(),
-            next_id: Delay::new(Instant::now() + DELAY_TO_FIRST_ID),
+            next_id: Delay::new(DELAY_TO_FIRST_ID),
             keep_alive: KeepAlive::Yes,
             marker: PhantomData,
         }
@@ -93,11 +93,11 @@ impl<TSubstream> IdentifyHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for IdentifyHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     type InEvent = Void;
     type OutEvent = IdentifyHandlerEvent<TSubstream>;
-    type Error = wasm_timer::Error;
+    type Error = ReadOneError;
     type Substream = TSubstream;
     type InboundProtocol = IdentifyProtocolConfig;
     type OutboundProtocol = IdentifyProtocolConfig;
@@ -134,38 +134,39 @@ where
     ) {
         self.events.push(IdentifyHandlerEvent::IdentificationError(err));
         self.keep_alive = KeepAlive::No;
-        self.next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
+        self.next_id.reset(TRY_AGAIN_ON_ERR);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
     }
 
-    fn poll(&mut self) -> Poll<
+    fn poll(&mut self, cx: &mut Context) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             IdentifyHandlerEvent<TSubstream>,
+            Self::Error,
         >,
-        Self::Error,
     > {
         if !self.events.is_empty() {
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
                 self.events.remove(0),
-            )));
+            ));
         }
 
         // Poll the future that fires when we need to identify the node again.
-        match self.next_id.poll()? {
-            Async::NotReady => Ok(Async::NotReady),
-            Async::Ready(()) => {
-                self.next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
+        match Future::poll(Pin::new(&mut self.next_id), cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => {
+                self.next_id.reset(DELAY_TO_NEXT_ID);
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: SubstreamProtocol::new(self.config.clone()),
                     info: (),
                 };
-                Ok(Async::Ready(ev))
+                Poll::Ready(ev)
             }
+            Poll::Ready(Err(err)) => Poll::Ready(ProtocolsHandlerEvent::Close(err.into()))
         }
     }
 }

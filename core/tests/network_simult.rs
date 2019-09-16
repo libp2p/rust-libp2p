@@ -20,7 +20,7 @@
 
 mod util;
 
-use futures::{future, prelude::*};
+use futures::prelude::*;
 use libp2p_core::{identity, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
 use libp2p_core::nodes::network::IncomingError;
@@ -45,7 +45,7 @@ impl<TSubstream> Default for TestHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for TestHandler<TSubstream>
 where
-    TSubstream: tokio_io::AsyncRead + tokio_io::AsyncWrite
+    TSubstream: futures::PollRead + futures::PollWrite
 {
     type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
@@ -80,8 +80,8 @@ where
 
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Yes }
 
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
-        Ok(Async::NotReady)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>, Self::Error> {
+        Poll::Pending
     }
 }
 
@@ -142,14 +142,14 @@ fn raw_swarm_simultaneous_connect() {
         let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) =
             future::lazy(move || {
                 let swarm1_listen_addr =
-                    if let Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+                    if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
                     };
 
                 let swarm2_listen_addr =
-                    if let Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
+                    if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
@@ -179,7 +179,7 @@ fn raw_swarm_simultaneous_connect() {
 
                     if swarm1_step == 0 {
                         match swarm1_dial_start.poll().unwrap() {
-                            Async::Ready(_) => {
+                            Poll::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm1.peer(swarm2.local_peer_id().clone())
                                     .into_not_connected()
@@ -187,13 +187,13 @@ fn raw_swarm_simultaneous_connect() {
                                     .connect(swarm2_listen_addr.clone(), handler);
                                 swarm1_step = 1;
                             },
-                            Async::NotReady => swarm1_not_ready = true,
+                            Poll::Pending => swarm1_not_ready = true,
                         }
                     }
 
                     if swarm2_step == 0 {
                         match swarm2_dial_start.poll().unwrap() {
-                            Async::Ready(_) => {
+                            Poll::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm2.peer(swarm1.local_peer_id().clone())
                                     .into_not_connected()
@@ -201,79 +201,79 @@ fn raw_swarm_simultaneous_connect() {
                                     .connect(swarm1_listen_addr.clone(), handler);
                                 swarm2_step = 1;
                             },
-                            Async::NotReady => swarm2_not_ready = true,
+                            Poll::Pending => swarm2_not_ready = true,
                         }
                     }
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm1.poll() {
-                            Async::Ready(NetworkEvent::IncomingConnectionError {
+                            Poll::Ready(NetworkEvent::IncomingConnectionError {
                                 error: IncomingError::DeniedLowerPriority, ..
                             }) => {
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
-                            Async::Ready(NetworkEvent::Connected { conn_info, .. }) => {
+                            Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm2.local_peer_id());
                                 if swarm1_step == 0 {
                                     // The connection was established before
                                     // swarm1 started dialing; discard the test run.
-                                    return Ok(Async::Ready(false))
+                                    return Ok(Poll::Ready(false))
                                 }
                                 assert_eq!(swarm1_step, 1);
                                 swarm1_step = 2;
                             },
-                            Async::Ready(NetworkEvent::Replaced { new_info, .. }) => {
+                            Poll::Ready(NetworkEvent::Replaced { new_info, .. }) => {
                                 assert_eq!(new_info, *swarm2.local_peer_id());
                                 assert_eq!(swarm1_step, 2);
                                 swarm1_step = 3;
                             },
-                            Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
+                            Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
-                            Async::Ready(ev) => panic!("swarm1: unexpected event: {:?}", ev),
-                            Async::NotReady => swarm1_not_ready = true,
+                            Poll::Ready(ev) => panic!("swarm1: unexpected event: {:?}", ev),
+                            Poll::Pending => swarm1_not_ready = true,
                         }
                     }
 
                     if rand::random::<f32>() < 0.1 {
                         match swarm2.poll() {
-                            Async::Ready(NetworkEvent::IncomingConnectionError {
+                            Poll::Ready(NetworkEvent::IncomingConnectionError {
                                 error: IncomingError::DeniedLowerPriority, ..
                             }) => {
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
-                            Async::Ready(NetworkEvent::Connected { conn_info, .. }) => {
+                            Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm1.local_peer_id());
                                 if swarm2_step == 0 {
                                     // The connection was established before
                                     // swarm2 started dialing; discard the test run.
-                                    return Ok(Async::Ready(false))
+                                    return Ok(Poll::Ready(false))
                                 }
                                 assert_eq!(swarm2_step, 1);
                                 swarm2_step = 2;
                             },
-                            Async::Ready(NetworkEvent::Replaced { new_info, .. }) => {
+                            Poll::Ready(NetworkEvent::Replaced { new_info, .. }) => {
                                 assert_eq!(new_info, *swarm1.local_peer_id());
                                 assert_eq!(swarm2_step, 2);
                                 swarm2_step = 3;
                             },
-                            Async::Ready(NetworkEvent::IncomingConnection(inc)) => {
+                            Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
                                 inc.accept(TestHandler::default().into_node_handler_builder());
                             },
-                            Async::Ready(ev) => panic!("swarm2: unexpected event: {:?}", ev),
-                            Async::NotReady => swarm2_not_ready = true,
+                            Poll::Ready(ev) => panic!("swarm2: unexpected event: {:?}", ev),
+                            Poll::Pending => swarm2_not_ready = true,
                         }
                     }
 
                     // TODO: make sure that >= 5 is correct
                     if swarm1_step + swarm2_step >= 5 {
-                        return Ok(Async::Ready(true));
+                        return Ok(Poll::Ready(true));
                     }
 
                     if swarm1_not_ready && swarm2_not_ready {
-                        return Ok(Async::NotReady);
+                        return Poll::Pending;
                     }
                 }
             });

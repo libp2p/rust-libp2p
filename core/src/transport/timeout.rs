@@ -25,11 +25,9 @@
 // TODO: add example
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
-use futures::{try_ready, Async, Future, Poll, Stream};
-use log::debug;
-use std::{error, fmt, time::Duration};
-use wasm_timer::Timeout;
-use wasm_timer::timeout::Error as TimeoutError;
+use futures::prelude::*;
+use futures_timer::Delay;
+use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -76,12 +74,15 @@ impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
 where
     InnerTrans: Transport,
     InnerTrans::Error: 'static,
+    InnerTrans::Dial: Unpin,
+    InnerTrans::Listener: Unpin,
+    InnerTrans::ListenerUpgrade: Unpin,
 {
     type Output = InnerTrans::Output;
     type Error = TransportTimeoutError<InnerTrans::Error>;
     type Listener = TimeoutListener<InnerTrans::Listener>;
-    type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
-    type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
+    type ListenerUpgrade = Timeout<InnerTrans::ListenerUpgrade>;
+    type Dial = Timeout<InnerTrans::Dial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let listener = self.inner.listen_on(addr)
@@ -98,8 +99,9 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self.inner.dial(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
-        Ok(TokioTimerMapErr {
-            inner: Timeout::new(dial, self.outgoing_timeout),
+        Ok(Timeout {
+            inner: dial,
+            timer: Delay::new(self.outgoing_timeout),
         })
     }
 }
@@ -113,21 +115,26 @@ pub struct TimeoutListener<InnerStream> {
 
 impl<InnerStream, O> Stream for TimeoutListener<InnerStream>
 where
-    InnerStream: Stream<Item = ListenerEvent<O>>
+    InnerStream: TryStream<Ok = ListenerEvent<O>> + Unpin
 {
-    type Item = ListenerEvent<TokioTimerMapErr<Timeout<O>>>;
-    type Error = TransportTimeoutError<InnerStream::Error>;
+    type Item = Result<ListenerEvent<Timeout<O>>, TransportTimeoutError<InnerStream::Error>>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let poll_out = try_ready!(self.inner.poll().map_err(TransportTimeoutError::Other));
-        if let Some(event) = poll_out {
-            let event = event.map(move |inner_fut| {
-                TokioTimerMapErr { inner: Timeout::new(inner_fut, self.timeout) }
-            });
-            Ok(Async::Ready(Some(event)))
-        } else {
-            Ok(Async::Ready(None))
-        }
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let poll_out = match TryStream::try_poll_next(Pin::new(&mut self.inner), cx) {
+            Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(TransportTimeoutError::Other(err)))),
+            Poll::Ready(Some(Ok(v))) => v,
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Pending => return Poll::Pending,
+        };
+
+        let event = poll_out.map(move |inner_fut| {
+            Timeout {
+                inner: inner_fut,
+                timer: Delay::new(self.timeout),
+            }
+        });
+
+        Poll::Ready(Some(Ok(event)))
     }
 }
 
@@ -136,40 +143,44 @@ where
 // TODO: can be replaced with `impl Future` once `impl Trait` are fully stable in Rust
 //       (https://github.com/rust-lang/rust/issues/34511)
 #[must_use = "futures do nothing unless polled"]
-pub struct TokioTimerMapErr<InnerFut> {
+pub struct Timeout<InnerFut> {
     inner: InnerFut,
+    timer: Delay,
 }
 
-impl<InnerFut, TErr> Future for TokioTimerMapErr<InnerFut>
+impl<InnerFut> Future for Timeout<InnerFut>
 where
-    InnerFut: Future<Error = TimeoutError<TErr>>,
+    InnerFut: TryFuture + Unpin,
 {
-    type Item = InnerFut::Item;
-    type Error = TransportTimeoutError<TErr>;
+    type Output = Result<InnerFut::Ok, TransportTimeoutError<InnerFut::Error>>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.inner.poll().map_err(|err: TimeoutError<TErr>| {
-            if err.is_inner() {
-                TransportTimeoutError::Other(err.into_inner().expect("ensured by is_inner()"))
-            } else if err.is_elapsed() {
-                debug!("timeout elapsed for connection");
-                TransportTimeoutError::Timeout
-            } else {
-                assert!(err.is_timer());
-                debug!("tokio timer error in timeout wrapper");
-                TransportTimeoutError::TimerError
-            }
-        })
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        // It is debatable whether we should poll the inner future first or the timer first.
+        // For example, if you start dialing with a timeout of 10 seconds, then after 15 seconds
+        // the dialing succeeds on the wire, then after 20 seconds you poll, then depending on
+        // which gets polled first, the outcome will be success or failure.
+
+        match TryFuture::try_poll(Pin::new(&mut self.inner), cx) {
+            Poll::Pending => {},
+            Poll::Ready(Ok(v)) => return Poll::Ready(Ok(v)),
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(TransportTimeoutError::Other(err))),
+        }
+
+        match TryFuture::try_poll(Pin::new(&mut self.timer), cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => Poll::Ready(Err(TransportTimeoutError::Timeout)),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(TransportTimeoutError::TimerError(err))),
+        }
     }
 }
 
 /// Error that can be produced by the `TransportTimeout` layer.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub enum TransportTimeoutError<TErr> {
     /// The transport timed out.
     Timeout,
     /// An error happened in the timer.
-    TimerError,
+    TimerError(io::Error),
     /// Other kind of error.
     Other(TErr),
 }
@@ -180,7 +191,7 @@ where TErr: fmt::Display,
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportTimeoutError::Timeout => write!(f, "Timeout has been reached"),
-            TransportTimeoutError::TimerError => write!(f, "Error in the timer"),
+            TransportTimeoutError::TimerError(err) => write!(f, "Error in the timer: {}", err),
             TransportTimeoutError::Other(err) => write!(f, "{}", err),
         }
     }
@@ -192,7 +203,7 @@ where TErr: error::Error + 'static,
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             TransportTimeoutError::Timeout => None,
-            TransportTimeoutError::TimerError => None,
+            TransportTimeoutError::TimerError(err) => Some(err),
             TransportTimeoutError::Other(err) => Some(err),
         }
     }

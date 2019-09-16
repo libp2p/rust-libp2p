@@ -27,10 +27,9 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr,
     ProtocolsHandlerEvent
 };
-use std::{error::Error, io, fmt, num::NonZeroU32, time::Duration};
+use std::{error::Error, io, fmt, num::NonZeroU32, pin::Pin, task::Context, task::Poll, time::Duration};
 use std::collections::VecDeque;
-use tokio_io::{AsyncRead, AsyncWrite};
-use wasm_timer::{Delay, Instant};
+use wasm_timer::Delay;
 use void::Void;
 
 /// The configuration for outbound pings.
@@ -176,7 +175,7 @@ impl<TSubstream> PingHandler<TSubstream> {
     pub fn new(config: PingConfig) -> Self {
         PingHandler {
             config,
-            next_ping: Delay::new(Instant::now()),
+            next_ping: Delay::new(Duration::new(0, 0)),
             pending_results: VecDeque::with_capacity(2),
             failures: 0,
             _marker: std::marker::PhantomData
@@ -186,7 +185,7 @@ impl<TSubstream> PingHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for PingHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     type InEvent = Void;
     type OutEvent = PingResult;
@@ -228,36 +227,36 @@ where
         }
     }
 
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
+    fn poll(&mut self, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult, Self::Error>> {
         if let Some(result) = self.pending_results.pop_back() {
             if let Ok(PingSuccess::Ping { .. }) = result {
-                let next_ping = Instant::now() + self.config.interval;
                 self.failures = 0;
-                self.next_ping.reset(next_ping);
+                self.next_ping.reset(self.config.interval);
             }
             if let Err(e) = result {
                 self.failures += 1;
                 if self.failures >= self.config.max_failures.get() {
-                    return Err(e)
+                    return Poll::Ready(ProtocolsHandlerEvent::Close(e))
                 } else {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(Err(e))))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(e)))
                 }
             }
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(result)))
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(result))
         }
 
-        match self.next_ping.poll() {
-            Ok(Async::Ready(())) => {
-                self.next_ping.reset(Instant::now() + self.config.timeout);
+        match Future::poll(Pin::new(&mut self.next_ping), cx) {
+            Poll::Ready(Ok(())) => {
+                self.next_ping.reset(self.config.timeout);
                 let protocol = SubstreamProtocol::new(protocol::Ping)
                     .with_timeout(self.config.timeout);
-                Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol,
                     info: (),
-                }))
+                })
             },
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(e) => Err(PingFailure::Other { error: Box::new(e) })
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(e)) =>
+                Poll::Ready(ProtocolsHandlerEvent::Close(PingFailure::Other { error: Box::new(e) }))
         }
     }
 }
@@ -285,7 +284,7 @@ mod tests {
         ProtocolsHandlerEvent<protocol::Ping, (), PingResult>,
         PingFailure
     > {
-        Runtime::new().unwrap().block_on(future::poll_fn(|| h.poll() ))
+        futures::executor::block_on(future::poll_fn(|| h.poll() ))
     }
 
     #[test]

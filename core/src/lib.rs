@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![cfg_attr(feature = "async-await", feature(async_await))]
+
 //! Transports, upgrades, multiplexing and node handling of *libp2p*.
 //!
 //! The main concepts of libp2p-core are:
@@ -37,14 +39,11 @@
 
 /// Multi-address re-export.
 pub use multiaddr;
-pub use multistream_select::Negotiated;
+pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
 mod keys_proto;
 mod peer_id;
 mod translation;
-
-#[cfg(test)]
-mod tests;
 
 pub mod either;
 pub mod identity;

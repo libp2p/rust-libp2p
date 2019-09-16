@@ -37,6 +37,9 @@ jobs:
       - run:
           name: Run tests, inside a docker image, with all features
           command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all --all-features
+      - run:
+          name: Try the async-await feature
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo +nightly test --package libp2p-core --all-features
       - save_cache:
           key: test-cache
           paths:
@@ -48,7 +51,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: 
+          keys:
             - test-wasm-cache-{{ epoch }}
             - test-wasm-cache
       - run:

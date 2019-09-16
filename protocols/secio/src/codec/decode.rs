@@ -20,19 +20,14 @@
 
 //! Individual messages decoding.
 
-use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
 
 use crate::error::SecioError;
-use futures::sink::Sink;
-use futures::stream::Stream;
-use futures::Async;
-use futures::Poll;
-use futures::StartSend;
+use futures::prelude::*;
 use log::debug;
-use std::cmp::min;
+use std::{cmp::min, pin::Pin, task::Context, task::Poll};
 
-/// Wraps around a `Stream<Item = BytesMut>`. The buffers produced by the underlying stream
+/// Wraps around a `Stream<Item = Vec<u8>>`. The buffers produced by the underlying stream
 /// are decoded using the cipher and hmac.
 ///
 /// This struct implements `Stream`, whose stream item are frames of data without the length
@@ -52,7 +47,6 @@ impl<S> DecoderMiddleware<S> {
     ///
     /// The `nonce` parameter denotes a sequence of bytes which are expected to be found at the
     /// beginning of the stream and are checked for equality.
-    #[inline]
     pub fn new(raw_stream: S, cipher: StreamCipher, hmac: Hmac, nonce: Vec<u8>) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
@@ -65,24 +59,22 @@ impl<S> DecoderMiddleware<S> {
 
 impl<S> Stream for DecoderMiddleware<S>
 where
-    S: Stream<Item = BytesMut>,
+    S: TryStream<Ok = bytes::BytesMut> + Unpin,
     S::Error: Into<SecioError>,
 {
-    type Item = Vec<u8>;
-    type Error = SecioError;
+    type Item = Result<Vec<u8>, SecioError>;
 
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let frame = match self.raw_stream.poll() {
-            Ok(Async::Ready(Some(t))) => t,
-            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
-            Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Err(err) => return Err(err.into()),
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let frame = match TryStream::try_poll_next(Pin::new(&mut self.raw_stream), cx) {
+            Poll::Ready(Some(Ok(t))) => t,
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err.into()))),
         };
 
         if frame.len() < self.hmac.num_bytes() {
             debug!("frame too short when decoding secio frame");
-            return Err(SecioError::FrameTooShort);
+            return Poll::Ready(Some(Err(SecioError::FrameTooShort)));
         }
         let content_length = frame.len() - self.hmac.num_bytes();
         {
@@ -91,7 +83,7 @@ where
 
             if self.hmac.verify(crypted_data, expected_hash).is_err() {
                 debug!("hmac mismatch when decoding secio frame");
-                return Err(SecioError::HmacNotMatching);
+                return Poll::Ready(Some(Err(SecioError::HmacNotMatching)));
             }
         }
 
@@ -103,35 +95,35 @@ where
         if !self.nonce.is_empty() {
             let n = min(data_buf.len(), self.nonce.len());
             if data_buf[.. n] != self.nonce[.. n] {
-                return Err(SecioError::NonceVerificationFailed)
+                return Poll::Ready(Some(Err(SecioError::NonceVerificationFailed)))
             }
             self.nonce.drain(.. n);
             data_buf.drain(.. n);
         }
 
-        Ok(Async::Ready(Some(data_buf)))
+        Poll::Ready(Some(Ok(data_buf)))
     }
 }
 
-impl<S> Sink for DecoderMiddleware<S>
+impl<S, I> Sink<I> for DecoderMiddleware<S>
 where
-    S: Sink,
+    S: Sink<I> + Unpin,
 {
-    type SinkItem = S::SinkItem;
-    type SinkError = S::SinkError;
+    type Error = S::Error;
 
-    #[inline]
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        self.raw_stream.start_send(item)
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_ready(Pin::new(&mut self.raw_stream), cx)
     }
 
-    #[inline]
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.raw_stream.poll_complete()
+    fn start_send(mut self: Pin<&mut Self>, item: I) -> Result<(), Self::Error> {
+        Sink::start_send(Pin::new(&mut self.raw_stream), item)
     }
 
-    #[inline]
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.raw_stream.close()
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_flush(Pin::new(&mut self.raw_stream), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_close(Pin::new(&mut self.raw_stream), cx)
     }
 }

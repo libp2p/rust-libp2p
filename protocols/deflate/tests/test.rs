@@ -18,23 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use libp2p_core::transport::{ListenerEvent, Transport};
-use libp2p_core::upgrade::{self, Negotiated};
-use libp2p_deflate::{DeflateConfig, DeflateOutput};
-use libp2p_tcp::{TcpConfig, TcpTransStream};
-use log::info;
+use futures::{prelude::*, channel::oneshot};
+use libp2p_core::{transport::Transport, upgrade};
+use libp2p_deflate::DeflateConfig;
+use libp2p_tcp::TcpConfig;
 use quickcheck::QuickCheck;
-use tokio::{self, io};
 
 #[test]
 fn deflate() {
-    let _ = env_logger::try_init();
-
     fn prop(message: Vec<u8>) -> bool {
-        let client = TcpConfig::new().and_then(|c, e| upgrade::apply(c, DeflateConfig {}, e));
-        let server = client.clone();
-        run(server, client, message);
+        run(message);
         true
     }
 
@@ -43,56 +36,40 @@ fn deflate() {
         .quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
-type Output = DeflateOutput<Negotiated<TcpTransStream>>;
+#[test]
+fn lot_of_data() {
+    run((0..16*1024*1024).map(|_| rand::random::<u8>()).collect());
+}
 
-fn run<T>(server_transport: T, client_transport: T, message1: Vec<u8>)
-where
-    T: Transport<Output = Output>,
-    T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
-    T::ListenerUpgrade: Send + 'static,
-{
+fn run(message1: Vec<u8>) {
+    let transport1 = TcpConfig::new().and_then(|c, e| upgrade::apply(c, DeflateConfig::default(), e));
+    let transport2 = transport1.clone();
     let message2 = message1.clone();
+    let (l_a_tx, l_a_rx) = oneshot::channel();
 
-    let mut server = server_transport
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
-    let server_address = server
-        .by_ref()
-        .wait()
-        .next()
-        .expect("some event")
-        .expect("no error")
-        .into_new_address()
-        .expect("listen address");
-    let server = server
-        .take(1)
-        .filter_map(ListenerEvent::into_upgrade)
-        .and_then(|(client, _)| client)
-        .map_err(|e| panic!("server error: {}", e))
-        .and_then(|client| {
-            info!("server: reading message");
-            io::read_to_end(client, Vec::new())
-        })
-        .for_each(move |(_, msg)| {
-            info!("server: read message: {:?}", msg);
-            assert_eq!(msg, message1);
-            Ok(())
-        });
+    async_std::task::spawn(async move {
+        let mut server = transport1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        let server_address = server.next().await.unwrap().unwrap().into_new_address().unwrap();
+        l_a_tx.send(server_address).unwrap();
 
-    let client = client_transport
-        .dial(server_address.clone())
-        .unwrap()
-        .map_err(|e| panic!("client error: {}", e))
-        .and_then(move |server| {
-            io::write_all(server, message2).and_then(|(client, _)| io::shutdown(client))
-        })
-        .map(|_| ());
+        let mut connec = server.next().await.unwrap().unwrap().into_upgrade().unwrap().0.await.unwrap();
 
-    let future = client
-        .join(server)
-        .map_err(|e| panic!("{:?}", e))
-        .map(|_| ());
+        let mut buf = vec![0; message2.len()];
+        connec.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf[..], &message2[..]);
 
-    tokio::run(future)
+        connec.write_all(&message2).await.unwrap();
+        connec.close().await.unwrap();
+    });
+
+    futures::executor::block_on(async move {
+        let listen_addr = l_a_rx.await.unwrap();
+        let mut connec = transport2.dial(listen_addr).unwrap().await.unwrap();
+        connec.write_all(&message1).await.unwrap();
+        connec.close().await.unwrap();
+
+        let mut buf = Vec::new();
+        connec.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(&buf[..], &message1[..]);
+    });
 }

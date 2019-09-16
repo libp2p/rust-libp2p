@@ -381,7 +381,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // If we find a `#[behaviour(poll_method = "poll")]` attribute on the struct, we call
     // `self.poll()` at the end of the polling.
     let poll_method = {
-        let mut poll_method = quote!{Async::NotReady};
+        let mut poll_method = quote!{Poll::Pending};
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
                 match meta_item {
@@ -419,25 +419,25 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         Some(quote!{
             loop {
                 match #field_name.poll(poll_params) {
-                    Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
+                    Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
                         #net_behv_event_proc::inject_event(self, event)
                     }
-                    Async::Ready(#network_behaviour_action::DialAddress { address }) => {
-                        return Async::Ready(#network_behaviour_action::DialAddress { address });
+                    Poll::Ready(#network_behaviour_action::DialAddress { address }) => {
+                        return Poll::Ready(#network_behaviour_action::DialAddress { address });
                     }
-                    Async::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
-                        return Async::Ready(#network_behaviour_action::DialPeer { peer_id });
+                    Poll::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
+                        return Poll::Ready(#network_behaviour_action::DialPeer { peer_id });
                     }
-                    Async::Ready(#network_behaviour_action::SendEvent { peer_id, event }) => {
-                        return Async::Ready(#network_behaviour_action::SendEvent {
+                    Poll::Ready(#network_behaviour_action::SendEvent { peer_id, event }) => {
+                        return Poll::Ready(#network_behaviour_action::SendEvent {
                             peer_id,
                             event: #wrapped_event,
                         });
                     }
-                    Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
-                        return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
+                    Poll::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
+                        return Poll::Ready(#network_behaviour_action::ReportObservedAddr { address });
                     }
-                    Async::NotReady => break,
+                    Poll::Pending => break,
                 }
             }
         })
@@ -512,10 +512,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            fn poll(&mut self, poll_params: &mut impl #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> {
+            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
-                let f: ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
+                let f: std::task::Poll<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
                 f
             }
         }

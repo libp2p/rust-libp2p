@@ -19,14 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
+use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
-use futures::{prelude::*, task};
+use futures::prelude::*;
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration};
-use tokio_reactor::Handle;
-use wasm_timer::{Instant, Interval};
-use tokio_udp::UdpSocket;
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, pin::Pin, str, task::Context, task::Poll, time::Duration};
+use wasm_timer::Interval;
 
 pub use dns::MdnsResponseError;
 
@@ -63,8 +62,8 @@ pub use dns::MdnsResponseError;
 /// let _future_to_poll = futures::stream::poll_fn(move || -> Poll<Option<()>, io::Error> {
 ///     loop {
 ///         let packet = match service.poll() {
-///             Async::Ready(packet) => packet,
-///             Async::NotReady => return Ok(Async::NotReady),
+///             Poll::Ready(packet) => packet,
+///             Poll::Pending => return Poll::Pending,
 ///         };
 ///
 ///         match packet {
@@ -113,18 +112,18 @@ pub struct MdnsService {
 impl MdnsService {
     /// Starts a new mDNS service.
     #[inline]
-    pub fn new() -> io::Result<MdnsService> {
-        Self::new_inner(false)
+    pub async fn new() -> io::Result<MdnsService> {
+        Self::new_inner(false).await
     }
 
     /// Same as `new`, but we don't send automatically send queries on the network.
     #[inline]
-    pub fn silent() -> io::Result<MdnsService> {
-        Self::new_inner(true)
+    pub async fn silent() -> io::Result<MdnsService> {
+        Self::new_inner(true).await
     }
 
     /// Starts a new mDNS service.
-    fn new_inner(silent: bool) -> io::Result<MdnsService> {
+    async fn new_inner(silent: bool) -> io::Result<MdnsService> {
         let socket = {
             #[cfg(unix)]
             fn platform_specific(s: &net2::UdpBuilder) -> io::Result<()> {
@@ -139,7 +138,7 @@ impl MdnsService {
             builder.bind(("0.0.0.0", 5353))?
         };
 
-        let socket = UdpSocket::from_std(socket, &Handle::default())?;
+        let socket = UdpSocket::from(socket);
         socket.set_multicast_loop_v4(true)?;
         socket.set_multicast_ttl_v4(255)?;
         // TODO: correct interfaces?
@@ -147,8 +146,8 @@ impl MdnsService {
 
         Ok(MdnsService {
             socket,
-            query_socket: UdpSocket::bind(&From::from(([0, 0, 0, 0], 0)))?,
-            query_interval: Interval::new(Instant::now(), Duration::from_secs(20)),
+            query_socket: UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16)).await?,
+            query_interval: Interval::new(Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 2048],
             send_buffers: Vec::new(),
@@ -156,35 +155,27 @@ impl MdnsService {
         })
     }
 
-    /// Polls the service for packets.
-    pub fn poll(&mut self) -> Async<MdnsPacket<'_>> {
+    pub async fn next_packet(&mut self) -> MdnsPacket {
+        // TODO: refactor this block
         // Send a query every time `query_interval` fires.
         // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
         // no point in sending multiple requests in a row.
-        match self.query_interval.poll() {
-            Ok(Async::Ready(_)) => {
+        match Stream::poll_next(Pin::new(&mut self.query_interval), cx) {
+            Poll::Ready(_) => {
                 if !self.silent {
                     let query = dns::build_query();
                     self.query_send_buffers.push(query.to_vec());
                 }
             }
-            Ok(Async::NotReady) => (),
-            _ => unreachable!("A wasm_timer::Interval never errors"), // TODO: is that true?
+            Poll::Pending => (),
         };
 
         // Flush the send buffer of the main socket.
         while !self.send_buffers.is_empty() {
             let to_send = self.send_buffers.remove(0);
-            match self
-                .socket
-                .poll_send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)))
-            {
-                Ok(Async::Ready(bytes_written)) => {
+            match self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353))).await {
+                Ok(bytes_written) => {
                     debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Ok(Async::NotReady) => {
-                    self.send_buffers.insert(0, to_send);
-                    break;
                 }
                 Err(_) => {
                     // Errors are non-fatal because they can happen for example if we lose
@@ -199,16 +190,9 @@ impl MdnsService {
         // This has to be after the push to `query_send_buffers`.
         while !self.query_send_buffers.is_empty() {
             let to_send = self.query_send_buffers.remove(0);
-            match self
-                .query_socket
-                .poll_send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)))
-            {
-                Ok(Async::Ready(bytes_written)) => {
+            match self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353))).await {
+                Ok(bytes_written) => {
                     debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Ok(Async::NotReady) => {
-                    self.query_send_buffers.insert(0, to_send);
-                    break;
                 }
                 Err(_) => {
                     // Errors are non-fatal because they can happen for example if we lose
@@ -219,9 +203,10 @@ impl MdnsService {
             }
         }
 
+        // TODO: block needs to be refactored
         // Check for any incoming packet.
-        match self.socket.poll_recv_from(&mut self.recv_buffer) {
-            Ok(Async::Ready((len, from))) => {
+        match AsyncDatagram::poll_recv_from(Pin::new(&mut self.socket), cx, &mut self.recv_buffer) {
+            Poll::Ready(Ok((len, from))) => {
                 match Packet::parse(&self.recv_buffer[..len]) {
                     Ok(packet) => {
                         if packet.header.query {
@@ -230,7 +215,7 @@ impl MdnsService {
                                 .iter()
                                 .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
                             {
-                                return Async::Ready(MdnsPacket::Query(MdnsQuery {
+                                return Poll::Ready(MdnsPacket::Query(MdnsQuery {
                                     from,
                                     query_id: packet.header.id,
                                     send_buffers: &mut self.send_buffers,
@@ -241,7 +226,7 @@ impl MdnsService {
                                 .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
                             {
                                 // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                                return Async::Ready(MdnsPacket::ServiceDiscovery(
+                                return Poll::Ready(MdnsPacket::ServiceDiscovery(
                                     MdnsServiceDiscovery {
                                         from,
                                         query_id: packet.header.id,
@@ -253,11 +238,11 @@ impl MdnsService {
                                 // writing of this code non-lexical lifetimes haven't been merged
                                 // yet, and I can't manage to write this code without having borrow
                                 // issues.
-                                task::current().notify();
-                                return Async::NotReady;
+                                cx.waker().wake_by_ref();
+                                return Poll::Pending;
                             }
                         } else {
-                            return Async::Ready(MdnsPacket::Response(MdnsResponse {
+                            return Poll::Ready(MdnsPacket::Response(MdnsResponse {
                                 packet,
                                 from,
                             }));
@@ -269,19 +254,17 @@ impl MdnsService {
                         // Note that ideally we would use a loop instead. However as of the writing
                         // of this code non-lexical lifetimes haven't been merged yet, and I can't
                         // manage to write this code without having borrow issues.
-                        task::current().notify();
-                        return Async::NotReady;
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
                     }
                 }
             }
-            Ok(Async::NotReady) => (),
-            Err(_) => {
+            Poll::Pending => (),
+            Poll::Ready(Err(_)) => {
                 // Error are non-fatal and can happen if we get disconnected from example.
                 // The query interval will wake up the task at some point so that we can try again.
             }
         };
-
-        Async::NotReady
     }
 }
 
@@ -537,20 +520,20 @@ impl<'a> fmt::Debug for MdnsPeer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use futures::prelude::*;
     use libp2p_core::PeerId;
-    use std::{io, time::Duration};
-    use tokio::{self, prelude::*};
+    use std::{io, task::Poll, time::Duration};
     use crate::service::{MdnsPacket, MdnsService};
 
     #[test]
     fn discover_ourselves() {
         let mut service = MdnsService::new().unwrap();
         let peer_id = PeerId::random();
-        let stream = stream::poll_fn(move || -> Poll<Option<()>, io::Error> {
+        let stream = stream::poll_fn(move |cx| -> Poll<Option<Result<(), io::Error>>> {
             loop {
-                let packet = match service.poll() {
-                    Async::Ready(packet) => packet,
-                    Async::NotReady => return Ok(Async::NotReady),
+                let packet = match service.poll(cx) {
+                    Poll::Ready(packet) => packet,
+                    Poll::Pending => return Poll::Pending,
                 };
 
                 match packet {
@@ -560,7 +543,7 @@ mod tests {
                     MdnsPacket::Response(response) => {
                         for peer in response.discovered_peers() {
                             if peer.id() == &peer_id {
-                                return Ok(Async::Ready(None));
+                                return Poll::Ready(None);
                             }
                         }
                     }
@@ -569,10 +552,10 @@ mod tests {
             }
         });
 
-        tokio::run(
+        futures::executor::block_on(
             stream
                 .map_err(|err| panic!("{:?}", err))
-                .for_each(|_| Ok(())),
+                .for_each(|_| future::ready(())),
         );
     }
 }

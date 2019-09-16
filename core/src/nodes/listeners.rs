@@ -21,11 +21,10 @@
 //! Manage listening on multiple multiaddresses at once.
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
-use futures::prelude::*;
+use futures::{prelude::*, task::Context, task::Poll};
 use log::debug;
 use smallvec::SmallVec;
-use std::{collections::VecDeque, fmt};
-use void::Void;
+use std::{collections::VecDeque, fmt, pin::Pin};
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
@@ -158,7 +157,7 @@ where
         /// The ID of the listener that errored.
         listener_id: ListenerId,
         /// The error value.
-        error: <TTrans::Listener as Stream>::Error
+        error: <TTrans::Listener as TryStream>::Error
     }
 }
 
@@ -222,28 +221,31 @@ where
         self.listeners.iter().flat_map(|l| l.addresses.iter())
     }
 
-    /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<ListenersEvent<TTrans>> {
+    /// Provides an API similar to `Stream`, except that it cannot end.
+    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ListenersEvent<TTrans>>
+    where
+        TTrans::Listener: Unpin,
+    {
         // We remove each element from `listeners` one by one and add them back.
         let mut remaining = self.listeners.len();
         while let Some(mut listener) = self.listeners.pop_back() {
-            match listener.listener.poll() {
-                Ok(Async::NotReady) => {
+            match TryStream::try_poll_next(Pin::new(&mut listener.listener), cx) {
+                Poll::Pending => {
                     self.listeners.push_front(listener);
                     remaining -= 1;
                     if remaining == 0 { break }
                 }
-                Ok(Async::Ready(Some(ListenerEvent::Upgrade { upgrade, local_addr, remote_addr }))) => {
+                Poll::Ready(Some(Ok(ListenerEvent::Upgrade { upgrade, local_addr, remote_addr }))) => {
                     let id = listener.id;
                     self.listeners.push_front(listener);
-                    return Async::Ready(ListenersEvent::Incoming {
+                    return Poll::Ready(ListenersEvent::Incoming {
                         listener_id: id,
                         upgrade,
                         local_addr,
                         send_back_addr: remote_addr
                     })
                 }
-                Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) => {
+                Poll::Ready(Some(Ok(ListenerEvent::NewAddress(a)))) => {
                     if listener.addresses.contains(&a) {
                         debug!("Transport has reported address {} multiple times", a)
                     }
@@ -252,28 +254,28 @@ where
                     }
                     let id = listener.id;
                     self.listeners.push_front(listener);
-                    return Async::Ready(ListenersEvent::NewAddress {
+                    return Poll::Ready(ListenersEvent::NewAddress {
                         listener_id: id,
                         listen_addr: a
                     })
                 }
-                Ok(Async::Ready(Some(ListenerEvent::AddressExpired(a)))) => {
+                Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(a)))) => {
                     listener.addresses.retain(|x| x != &a);
                     let id = listener.id;
                     self.listeners.push_front(listener);
-                    return Async::Ready(ListenersEvent::AddressExpired {
+                    return Poll::Ready(ListenersEvent::AddressExpired {
                         listener_id: id,
                         listen_addr: a
                     })
                 }
-                Ok(Async::Ready(None)) => {
-                    return Async::Ready(ListenersEvent::Closed {
+                Poll::Ready(None) => {
+                    return Poll::Ready(ListenersEvent::Closed {
                         listener_id: listener.id,
                         listener: listener.listener
                     })
                 }
-                Err(err) => {
-                    return Async::Ready(ListenersEvent::Error {
+                Poll::Ready(Some(Err(err))) => {
+                    return Poll::Ready(ListenersEvent::Error {
                         listener_id: listener.id,
                         error: err
                     })
@@ -282,20 +284,26 @@ where
         }
 
         // We register the current task to be woken up if a new listener is added.
-        Async::NotReady
+        Poll::Pending
     }
 }
 
 impl<TTrans> Stream for ListenersStream<TTrans>
 where
     TTrans: Transport,
+    TTrans::Listener: Unpin,
 {
     type Item = ListenersEvent<TTrans>;
-    type Error = Void; // TODO: use ! once stable
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        Ok(self.poll().map(Option::Some))
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        ListenersStream::poll(self, cx).map(Option::Some)
     }
+}
+
+impl<TTrans> Unpin for ListenersStream<TTrans>
+where
+    TTrans: Transport,
+{
 }
 
 impl<TTrans> fmt::Debug for ListenersStream<TTrans>
@@ -313,7 +321,7 @@ where
 impl<TTrans> fmt::Debug for ListenersEvent<TTrans>
 where
     TTrans: Transport,
-    <TTrans::Listener as Stream>::Error: fmt::Debug,
+    <TTrans::Listener as TryStream>::Error: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -353,215 +361,37 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use std::{io, iter::FromIterator};
     use futures::{future::{self}, stream};
-    use crate::tests::dummy_transport::{DummyTransport, ListenerState};
-    use crate::tests::dummy_muxer::DummyMuxer;
     use crate::PeerId;
-
-    fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
-        ls.listeners[idx].listener = match state {
-            ListenerState::Error =>
-                Box::new(stream::poll_fn(|| Err(io::Error::new(io::ErrorKind::Other, "oh noes")))),
-            ListenerState::Ok(state) => match state {
-                Async::NotReady => Box::new(stream::poll_fn(|| Ok(Async::NotReady))),
-                Async::Ready(Some(event)) => Box::new(stream::poll_fn(move || {
-                    Ok(Async::Ready(Some(event.clone().map(future::ok))))
-                })),
-                Async::Ready(None) => Box::new(stream::empty())
-            }
-            ListenerState::Events(events) =>
-                Box::new(stream::iter_ok(events.into_iter().map(|e| e.map(future::ok))))
-        };
-    }
 
     #[test]
     fn incoming_event() {
-        let mem_transport = transport::MemoryTransport::default();
+        futures::executor::block_on(async move {
+            let mem_transport = transport::MemoryTransport::default();
 
-        let mut listeners = ListenersStream::new(mem_transport);
-        listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
+            let mut listeners = ListenersStream::new(mem_transport);
+            listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-        let address = {
-            let event = listeners.by_ref().wait().next().expect("some event").expect("no error");
-            if let ListenersEvent::NewAddress { listen_addr, .. } = event {
-                listen_addr
-            } else {
-                panic!("Was expecting the listen address to be reported")
-            }
-        };
-
-        let dial = mem_transport.dial(address.clone()).unwrap();
-
-        let future = listeners
-            .into_future()
-            .map_err(|(err, _)| err)
-            .and_then(|(event, _)| {
-                match event {
-                    Some(ListenersEvent::Incoming { local_addr, upgrade, send_back_addr, .. }) => {
-                        assert_eq!(local_addr, address);
-                        assert_eq!(send_back_addr, address);
-                        upgrade.map(|_| ()).map_err(|_| panic!())
-                    },
-                    _ => panic!()
+            let address = {
+                let event = listeners.next().await.unwrap();
+                if let ListenersEvent::NewAddress { listen_addr, .. } = event {
+                    listen_addr
+                } else {
+                    panic!("Was expecting the listen address to be reported")
                 }
-            })
-            .select(dial.map(|_| ()).map_err(|_| panic!()))
-            .map_err(|(err, _)| err);
+            };
 
-        let mut runtime = Runtime::new().unwrap();
-        runtime.block_on(future).unwrap();
-    }
+            let address2 = address.clone();
+            async_std::task::spawn(async move {
+                mem_transport.dial(address2).unwrap().await.unwrap();
+            });
 
-    #[test]
-    fn listener_stream_returns_transport() {
-        let t = DummyTransport::new();
-        let t_clone = t.clone();
-        let ls = ListenersStream::new(t);
-        assert_eq!(ls.transport(), &t_clone);
-    }
-
-    #[test]
-    fn listener_stream_can_iterate_over_listeners() {
-        let mut t = DummyTransport::new();
-        let addr1 = tcp4([127, 0, 0, 1], 1234);
-        let addr2 = tcp4([127, 0, 0, 1], 4321);
-
-        t.set_initial_listener_state(ListenerState::Events(vec![
-            ListenerEvent::NewAddress(addr1.clone()),
-            ListenerEvent::NewAddress(addr2.clone())
-        ]));
-
-        let mut ls = ListenersStream::new(t);
-        ls.listen_on(tcp4([0, 0, 0, 0], 0)).expect("listen_on");
-
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(ListenersEvent::NewAddress { listen_addr, .. })) => {
-            assert_eq!(addr1, listen_addr)
-        });
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(ListenersEvent::NewAddress { listen_addr, .. })) => {
-            assert_eq!(addr2, listen_addr)
-        })
-    }
-
-    #[test]
-    fn listener_stream_poll_without_listeners_is_not_ready() {
-        let t = DummyTransport::new();
-        let mut ls = ListenersStream::new(t);
-        assert_matches!(ls.poll(), Async::NotReady);
-    }
-
-    #[test]
-    fn listener_stream_poll_with_listeners_that_arent_ready_is_not_ready() {
-        let t = DummyTransport::new();
-        let addr = tcp4([127, 0, 0, 1], 1234);
-        let mut ls = ListenersStream::new(t);
-        ls.listen_on(addr).expect("listen_on failed");
-        set_listener_state(&mut ls, 0, ListenerState::Ok(Async::NotReady));
-        assert_matches!(ls.poll(), Async::NotReady);
-        assert_eq!(ls.listeners.len(), 1); // listener is still there
-    }
-
-    #[test]
-    fn listener_stream_poll_with_ready_listeners_is_ready() {
-        let mut t = DummyTransport::new();
-        let peer_id = PeerId::random();
-        let muxer = DummyMuxer::new();
-        let expected_output = (peer_id.clone(), muxer.clone());
-
-        t.set_initial_listener_state(ListenerState::Events(vec![
-            ListenerEvent::NewAddress(tcp4([127, 0, 0, 1], 9090)),
-            ListenerEvent::Upgrade {
-                upgrade: (peer_id.clone(), muxer.clone()),
-                local_addr: tcp4([127, 0, 0, 1], 9090),
-                remote_addr: tcp4([127, 0, 0, 1], 32000)
-            },
-            ListenerEvent::Upgrade {
-                upgrade: (peer_id.clone(), muxer.clone()),
-                local_addr: tcp4([127, 0, 0, 1], 9090),
-                remote_addr: tcp4([127, 0, 0, 1], 32000)
-            },
-            ListenerEvent::Upgrade {
-                upgrade: (peer_id.clone(), muxer.clone()),
-                local_addr: tcp4([127, 0, 0, 1], 9090),
-                remote_addr: tcp4([127, 0, 0, 1], 32000)
+            match listeners.next().await.unwrap() {
+                ListenersEvent::Incoming { local_addr, upgrade, send_back_addr, .. } => {
+                    assert_eq!(local_addr, address);
+                    assert_eq!(send_back_addr, address);
+                },
+                _ => panic!()
             }
-        ]));
-
-        let mut ls = ListenersStream::new(t);
-        ls.listen_on(tcp4([127, 0, 0, 1], 1234)).expect("listen_on");
-        ls.listen_on(tcp4([127, 0, 0, 1], 4321)).expect("listen_on");
-        assert_eq!(ls.listeners.len(), 2);
-
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::NewAddress { .. })
         });
-
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::NewAddress { .. })
-        });
-
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming { upgrade, .. } => {
-                assert_matches!(upgrade.wait(), Ok(output) => {
-                    assert_eq!(output, expected_output)
-                });
-            })
-        });
-
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming { upgrade, .. } => {
-                assert_matches!(upgrade.wait(), Ok(output) => {
-                    assert_eq!(output, expected_output)
-                });
-            })
-        });
-
-        set_listener_state(&mut ls, 1, ListenerState::Ok(Async::NotReady));
-
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming { upgrade, .. } => {
-                assert_matches!(upgrade.wait(), Ok(output) => {
-                    assert_eq!(output, expected_output)
-                });
-            })
-        });
-    }
-
-    #[test]
-    fn listener_stream_poll_with_closed_listener_emits_closed_event() {
-        let t = DummyTransport::new();
-        let addr = tcp4([127, 0, 0, 1], 1234);
-        let mut ls = ListenersStream::new(t);
-        ls.listen_on(addr).expect("listen_on failed");
-        set_listener_state(&mut ls, 0, ListenerState::Ok(Async::Ready(None)));
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Closed{..})
-        });
-        assert_eq!(ls.listeners.len(), 0); // it's gone
-    }
-
-    #[test]
-    fn listener_stream_poll_with_erroring_listener_emits_error_event() {
-        let mut t = DummyTransport::new();
-        let peer_id = PeerId::random();
-        let muxer = DummyMuxer::new();
-        let event = ListenerEvent::Upgrade {
-            upgrade: (peer_id, muxer),
-            local_addr: tcp4([127, 0, 0, 1], 1234),
-            remote_addr: tcp4([127, 0, 0, 1], 32000)
-        };
-        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(event))));
-        let addr = tcp4([127, 0, 0, 1], 1234);
-        let mut ls = ListenersStream::new(t);
-        ls.listen_on(addr).expect("listen_on failed");
-        set_listener_state(&mut ls, 0, ListenerState::Error); // simulate an error on the socket
-        assert_matches!(ls.by_ref().wait().next(), Some(Ok(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Error{..})
-        });
-        assert_eq!(ls.listeners.len(), 0); // it's gone
-    }
-
-    fn tcp4(ip: [u8; 4], port: u16) -> Multiaddr {
-        let protos = std::iter::once(multiaddr::Protocol::Ip4(ip.into()))
-            .chain(std::iter::once(multiaddr::Protocol::Tcp(port)));
-        Multiaddr::from_iter(protos)
     }
 }
