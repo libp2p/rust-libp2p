@@ -177,7 +177,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
 
         let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
         if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn(task).expect("spawning a task on a threads pool never fails; qed");
+            threads_pool.spawn(task).expect("spawning a task on a thread pool never fails; qed");
         } else {
             self.local_spawns.push(task);
         }
@@ -209,10 +209,6 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         let (tx, rx) = mpsc::channel(4);
         self.tasks.insert(task_id, TaskInfo { sender: tx, user_data });
 
-        // TODO: we use `Pin<Box<Pending>>` instead of just `Pending` because `Pending` doesn't
-        // implement `Unpin` even though it should ; this is just a dummy template parameter and
-        // the `Box` is never actually created, so this has no repercusion whatsoever
-        // see https://github.com/rust-lang-nursery/futures-rs/pull/1746
         let task: Task<Pin<Box<futures::future::Pending<_>>>, _, _, _, _, _, _> =
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
