@@ -228,7 +228,7 @@ impl MdnsService {
             let to_send = self.query_send_buffers.remove(0);
 
             {
-                let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
+                let future = self.query_socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
                 futures::pin_mut!(future);
                 match  futures::future::Future::poll(future, cx) {
                     Poll::Ready(Ok(bytes_written)) => {
