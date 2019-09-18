@@ -60,16 +60,18 @@ lazy_static! {
 ///
 /// ```rust
 /// # use futures::prelude::*;
+/// # use futures::executor::block_on;
 /// # use libp2p_core::{identity, PeerId};
 /// # use libp2p_mdns::service::{MdnsService, MdnsPacket};
-/// # use std::{io, time::Duration};
+/// # use std::{io, time::Duration, task::Poll};
 /// # fn main() {
 /// # let my_peer_id = PeerId::from(identity::Keypair::generate_ed25519().public());
 /// # let my_listened_addrs = Vec::new();
-/// let mut service = MdnsService::new().expect("Error while creating mDNS service");
-/// let _future_to_poll = futures::stream::poll_fn(move || -> Poll<Option<()>, io::Error> {
+/// # block_on (async {
+/// let mut service = MdnsService::new().await.expect("Error while creating mDNS service");
+/// let _future_to_poll = futures::stream::poll_fn(move |cx| -> Poll<Option<()>> {
 ///     loop {
-///         let packet = match service.poll() {
+///         let packet = match service.poll(cx) {
 ///             Poll::Ready(packet) => packet,
 ///             Poll::Pending => return Poll::Pending,
 ///         };
@@ -96,7 +98,8 @@ lazy_static! {
 ///             }
 ///         }
 ///     }
-/// }).for_each(|_| Ok(()));
+/// });
+/// # })
 /// # }
 pub struct MdnsService {
     /// Main socket for listening.
@@ -163,6 +166,9 @@ impl MdnsService {
         })
     }
 
+    // This could as well be a `pub async fn`. The problem is that it is being
+    // called within `NetworkBehaviour::poll`. Calling an `async` function
+    // within a non `async` function proved to be not worth the complexity.
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<MdnsPacket> {
         // TODO: refactor this block
         // Send a query every time `query_interval` fires.
