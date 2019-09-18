@@ -24,7 +24,7 @@ use dns_parser::{Packet, RData};
 use futures::prelude::*;
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, task::Context, task::Poll, time::Duration};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, task::Context, task::Poll, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -155,7 +155,7 @@ impl MdnsService {
         Ok(MdnsService {
             socket,
             query_socket: UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16)).await?,
-            query_interval: Interval::new(Duration::from_secs(20)),
+            query_interval: Interval::new_at(Instant::now(), Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 2048],
             send_buffers: Vec::new(),
