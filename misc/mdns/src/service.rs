@@ -22,10 +22,9 @@ use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
 use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use futures::prelude::*;
-use futures::future::FutureExt;
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, pin::Pin, str, task::Context, task::Poll, time::Duration};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, task::Context, task::Poll, time::Duration};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -169,9 +168,7 @@ impl MdnsService {
         // Send a query every time `query_interval` fires.
         // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
         // no point in sending multiple requests in a row.
-        //
-        // TODO: Use StreamExt::poll_next_unpin here.
-        match Stream::poll_next(Pin::new(&mut self.query_interval), cx) {
+        match self.query_interval.poll_next_unpin(cx) {
             Poll::Ready(_) => {
                 // TODO: Call stream until we get pending back to ensure we are
                 // registered with the waker.
@@ -256,7 +253,7 @@ impl MdnsService {
         // TODO: block needs to be refactored
         // TODO: Remove this hack. Right now we can't use things borrowed by the
         // future until it goes out of scope.
-        let mut poll: Poll<async_std::io::Result<(usize, SocketAddr)>>;
+        let poll: Poll<async_std::io::Result<(usize, SocketAddr)>>;
         {
             // Check for any incoming packet.
             let fut = self.socket.recv_from(&mut self.recv_buffer);
