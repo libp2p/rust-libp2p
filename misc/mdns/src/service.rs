@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
-use async_datagram::AsyncDatagram;
 use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use futures::prelude::*;
@@ -28,8 +27,16 @@ use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, pin::Pin, str, task::Context, task::Poll, time::Duration};
 use wasm_timer::Interval;
+use lazy_static::lazy_static;
 
 pub use dns::MdnsResponseError;
+
+lazy_static! {
+    static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr = SocketAddr::from((
+        Ipv4Addr::new(224, 0, 0, 251),
+        5353,
+    ));
+}
 
 /// A running service that discovers libp2p peers and responds to other libp2p peers' queries on
 /// the local network.
@@ -180,7 +187,7 @@ impl MdnsService {
         while !self.send_buffers.is_empty() {
             let to_send = self.send_buffers.remove(0);
             // TODO: Define broadcast address as constant.
-            let future = self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)));
+            let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
             // TODO: Is this safe to do?
             futures::pin_mut!(future);
             // TODO: Is it safe to drop the future on pending and create a new one later?
@@ -205,7 +212,7 @@ impl MdnsService {
         // This has to be after the push to `query_send_buffers`.
         while !self.query_send_buffers.is_empty() {
             let to_send = self.query_send_buffers.remove(0);
-            let future = self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)));
+            let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
             futures::pin_mut!(future);
             match  futures::future::Future::poll(future, cx) {
                 Poll::Ready(Ok(bytes_written)) => {
