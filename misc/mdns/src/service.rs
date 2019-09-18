@@ -170,8 +170,9 @@ impl MdnsService {
         // no point in sending multiple requests in a row.
         match self.query_interval.poll_next_unpin(cx) {
             Poll::Ready(_) => {
-                // TODO: Call stream until we get pending back to ensure we are
-                // registered with the waker.
+                // Ensure underlying task is woken up on the next interval tick.
+                while let Poll::Ready(_) = self.query_interval.poll_next_unpin(cx) {};
+
                 if !self.silent {
                     let query = dns::build_query();
                     self.query_send_buffers.push(query.to_vec());
