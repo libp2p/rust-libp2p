@@ -19,9 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
+use async_datagram::AsyncDatagram;
 use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use futures::prelude::*;
+use futures::future::FutureExt;
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, pin::Pin, str, task::Context, task::Poll, time::Duration};
@@ -155,13 +157,17 @@ impl MdnsService {
         })
     }
 
-    pub async fn next_packet(&mut self) -> MdnsPacket {
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<MdnsPacket> {
         // TODO: refactor this block
         // Send a query every time `query_interval` fires.
         // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
         // no point in sending multiple requests in a row.
+        //
+        // TODO: Use StreamExt::poll_next_unpin here.
         match Stream::poll_next(Pin::new(&mut self.query_interval), cx) {
             Poll::Ready(_) => {
+                // TODO: Call stream until we get pending back to ensure we are
+                // registered with the waker.
                 if !self.silent {
                     let query = dns::build_query();
                     self.query_send_buffers.push(query.to_vec());
@@ -173,14 +179,23 @@ impl MdnsService {
         // Flush the send buffer of the main socket.
         while !self.send_buffers.is_empty() {
             let to_send = self.send_buffers.remove(0);
-            match self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353))).await {
-                Ok(bytes_written) => {
+            // TODO: Define broadcast address as constant.
+            let future = self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)));
+            // TODO: Is this safe to do?
+            futures::pin_mut!(future);
+            // TODO: Is it safe to drop the future on pending and create a new one later?
+            match futures::future::Future::poll(future, cx) {
+                Poll::Ready(Ok(bytes_written)) => {
                     debug_assert_eq!(bytes_written, to_send.len());
                 }
-                Err(_) => {
+                Poll::Ready(Err(_)) => {
                     // Errors are non-fatal because they can happen for example if we lose
                     // connection to the network.
                     self.send_buffers.clear();
+                    break;
+                }
+                Poll::Pending => {
+                    self.send_buffers.insert(0, to_send);
                     break;
                 }
             }
@@ -190,22 +205,31 @@ impl MdnsService {
         // This has to be after the push to `query_send_buffers`.
         while !self.query_send_buffers.is_empty() {
             let to_send = self.query_send_buffers.remove(0);
-            match self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353))).await {
-                Ok(bytes_written) => {
+            let future = self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)));
+            futures::pin_mut!(future);
+            match  futures::future::Future::poll(future, cx) {
+                Poll::Ready(Ok(bytes_written)) => {
                     debug_assert_eq!(bytes_written, to_send.len());
                 }
-                Err(_) => {
+                Poll::Ready(Err(_)) => {
                     // Errors are non-fatal because they can happen for example if we lose
                     // connection to the network.
                     self.query_send_buffers.clear();
                     break;
                 }
+                Poll::Pending => {
+                    self.query_send_buffers.insert(0, to_send);
+                    break;
+                }
+
             }
         }
 
         // TODO: block needs to be refactored
         // Check for any incoming packet.
-        match AsyncDatagram::poll_recv_from(Pin::new(&mut self.socket), cx, &mut self.recv_buffer) {
+        let fut = self.socket.recv_from(&mut self.recv_buffer);
+        futures::pin_mut!(fut);
+        match futures::future::Future::poll(fut, cx) {
             Poll::Ready(Ok((len, from))) => {
                 match Packet::parse(&self.recv_buffer[..len]) {
                     Ok(packet) => {
@@ -265,6 +289,9 @@ impl MdnsService {
                 // The query interval will wake up the task at some point so that we can try again.
             }
         };
+
+        // TODO: Right? Just here to please the compiler for now.
+        return Poll::Pending;
     }
 }
 
