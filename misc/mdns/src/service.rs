@@ -308,7 +308,6 @@ impl MdnsService {
             }
         };
 
-        // TODO: Right? Just here to please the compiler for now.
         return Poll::Pending;
     }
 }
@@ -565,42 +564,40 @@ impl<'a> fmt::Debug for MdnsPeer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use futures::prelude::*;
+    use futures::executor::block_on;
+    use futures::future::poll_fn;
     use libp2p_core::PeerId;
-    use std::{io, task::Poll, time::Duration};
+    use std::{task::Poll, time::Duration};
     use crate::service::{MdnsPacket, MdnsService};
 
     #[test]
     fn discover_ourselves() {
-        let mut service = MdnsService::new().unwrap();
-        let peer_id = PeerId::random();
-        let stream = stream::poll_fn(move |cx| -> Poll<Option<Result<(), io::Error>>> {
-            loop {
-                let packet = match service.poll(cx) {
-                    Poll::Ready(packet) => packet,
-                    Poll::Pending => return Poll::Pending,
-                };
+        block_on (async {
+            let mut service = MdnsService::new().await.unwrap();
+            let peer_id = PeerId::random();
 
-                match packet {
-                    MdnsPacket::Query(query) => {
-                        query.respond(peer_id.clone(), None, Duration::from_secs(120)).unwrap();
-                    }
-                    MdnsPacket::Response(response) => {
-                        for peer in response.discovered_peers() {
-                            if peer.id() == &peer_id {
-                                return Poll::Ready(None);
+            poll_fn(move |cx| -> Poll<()> {
+                loop {
+                    let packet = match service.poll(cx) {
+                        Poll::Ready(packet) => packet,
+                        Poll::Pending => return Poll::Pending,
+                    };
+
+                    match packet {
+                        MdnsPacket::Query(query) => {
+                            query.respond(peer_id.clone(), None, Duration::from_secs(120)).unwrap();
+                        }
+                        MdnsPacket::Response(response) => {
+                            for peer in response.discovered_peers() {
+                                if peer.id() == &peer_id {
+                                    return Poll::Ready(());
+                                }
                             }
                         }
+                        MdnsPacket::ServiceDiscovery(_) => {}
                     }
-                    MdnsPacket::ServiceDiscovery(_) => {}
                 }
-            }
-        });
-
-        futures::executor::block_on(
-            stream
-                .map_err(|err| panic!("{:?}", err))
-                .for_each(|_| future::ready(())),
-        );
+            }).await;
+        })
     }
 }
