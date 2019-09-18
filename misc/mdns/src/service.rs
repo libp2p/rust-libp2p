@@ -185,58 +185,87 @@ impl MdnsService {
 
         // Flush the send buffer of the main socket.
         while !self.send_buffers.is_empty() {
+            // Using extra scope and retry as we can't put the `to_send` back
+            // onto `send_buffers` in `Poll::Pending` as `future` still borrows
+            // it mutably.
+            // TODO: Fix retry hack.
+            let mut retry = false;
             let to_send = self.send_buffers.remove(0);
-            // TODO: Define broadcast address as constant.
-            let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
-            // TODO: Is this safe to do?
-            futures::pin_mut!(future);
-            // TODO: Is it safe to drop the future on pending and create a new one later?
-            match futures::future::Future::poll(future, cx) {
-                Poll::Ready(Ok(bytes_written)) => {
-                    debug_assert_eq!(bytes_written, to_send.len());
+
+            {
+                // TODO: Define broadcast address as constant.
+                let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
+                // TODO: Is this safe to do?
+                futures::pin_mut!(future);
+                // TODO: Is it safe to drop the future on pending and create a new one later?
+                match futures::future::Future::poll(future, cx) {
+                    Poll::Ready(Ok(bytes_written)) => {
+                        debug_assert_eq!(bytes_written, to_send.len());
+                    }
+                    Poll::Ready(Err(_)) => {
+                        // Errors are non-fatal because they can happen for example if we lose
+                        // connection to the network.
+                        self.send_buffers.clear();
+                        break;
+                    }
+                    Poll::Pending => {
+                        retry = true;
+                        break;
+                    }
                 }
-                Poll::Ready(Err(_)) => {
-                    // Errors are non-fatal because they can happen for example if we lose
-                    // connection to the network.
-                    self.send_buffers.clear();
-                    break;
-                }
-                Poll::Pending => {
-                    self.send_buffers.insert(0, to_send);
-                    break;
-                }
+            }
+
+            if retry {
+                self.send_buffers.insert(0, to_send);
             }
         }
 
         // Flush the query send buffer.
         // This has to be after the push to `query_send_buffers`.
         while !self.query_send_buffers.is_empty() {
+            // TODO: Fix `retry` hack. See above.
+            let mut retry = false;
             let to_send = self.query_send_buffers.remove(0);
-            let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
-            futures::pin_mut!(future);
-            match  futures::future::Future::poll(future, cx) {
-                Poll::Ready(Ok(bytes_written)) => {
-                    debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Poll::Ready(Err(_)) => {
-                    // Errors are non-fatal because they can happen for example if we lose
-                    // connection to the network.
-                    self.query_send_buffers.clear();
-                    break;
-                }
-                Poll::Pending => {
-                    self.query_send_buffers.insert(0, to_send);
-                    break;
-                }
 
+            {
+                let future = self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS);
+                futures::pin_mut!(future);
+                match  futures::future::Future::poll(future, cx) {
+                    Poll::Ready(Ok(bytes_written)) => {
+                        debug_assert_eq!(bytes_written, to_send.len());
+                    }
+                    Poll::Ready(Err(_)) => {
+                        // Errors are non-fatal because they can happen for example if we lose
+                        // connection to the network.
+                        self.query_send_buffers.clear();
+                        break;
+                    }
+                    Poll::Pending => {
+                        retry = true;
+                        break;
+                    }
+
+                }
+            }
+
+            if retry {
+                self.query_send_buffers.insert(0, to_send);
             }
         }
 
         // TODO: block needs to be refactored
-        // Check for any incoming packet.
-        let fut = self.socket.recv_from(&mut self.recv_buffer);
-        futures::pin_mut!(fut);
-        match futures::future::Future::poll(fut, cx) {
+        // TODO: Remove this hack. Right now we can't use things borrowed by the
+        // future until it goes out of scope.
+        let mut poll: Poll<async_std::io::Result<(usize, SocketAddr)>>;
+        {
+            // Check for any incoming packet.
+            let fut = self.socket.recv_from(&mut self.recv_buffer);
+            futures::pin_mut!(fut);
+
+            poll = futures::future::Future::poll(fut, cx);
+        }
+
+        match poll {
             Poll::Ready(Ok((len, from))) => {
                 match Packet::parse(&self.recv_buffer[..len]) {
                     Ok(packet) => {
