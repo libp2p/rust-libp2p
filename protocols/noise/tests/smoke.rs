@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![feature(async_closure)]
-
 use futures::{future::{self, Either}, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
@@ -167,7 +165,7 @@ where
             .into_new_address()
             .expect("listen address");
 
-        let client_fut = async || {
+        let client_fut = async {
             let mut client_session = client_transport.dial(server_address.clone())
                 .unwrap()
                 .await
@@ -178,7 +176,7 @@ where
             client_session.flush().await.expect("no error");
         };
 
-        let server_fut = async move || {
+        let server_fut = async {
             let mut server_session = server.try_next()
                 .await
                 .expect("some event")
@@ -197,7 +195,7 @@ where
             assert_eq!(server_buffer, message1);
         };
 
-        futures::future::join(server_fut(), client_fut()).await;
+        futures::future::join(server_fut, client_fut).await;
     })
 }
 
