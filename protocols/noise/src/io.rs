@@ -22,7 +22,7 @@
 
 pub mod handshake;
 
-use futures::Poll;
+use futures::{ready, Poll};
 use futures::prelude::*;
 use log::{debug, trace};
 use snow;
@@ -162,14 +162,9 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
                     this.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = match AsyncRead::poll_read(
-                        Pin::new(&mut this.io),
-                        cx,
-                        &mut buffer.read[*off ..len]
-                    ) {
-                        Poll::Ready(Ok(n)) => n,
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                        Poll::Pending => return Poll::Pending,
+                    let n = match ready!(Pin::new(&mut this.io).poll_read(cx, &mut buffer.read[*off ..len])) {
+                        Ok(n) => n,
+                        Err(e) => return Poll::Ready(Err(e)),
                     };
 
                     trace!("read: read {}/{} bytes", *off + n, len);
@@ -277,10 +272,9 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = match Pin::new(&mut this.io).poll_write( cx, &buffer.write_crypto[*off .. len]) {
-                        Poll::Ready(Ok(n)) => n,
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                        Poll::Pending => return Poll::Pending,
+                    let n = match ready!(Pin::new(&mut this.io).poll_write( cx, &buffer.write_crypto[*off .. len])) {
+                        Ok(n) => n,
+                        Err(e) => return Poll::Ready(Err(e)),
                     };
                     trace!("write: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
@@ -353,10 +347,9 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = match Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len]) {
-                        Poll::Ready(Ok(n)) => n,
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                        Poll::Pending => return Poll::Pending,
+                    let n = match ready!(Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len])) {
+                        Ok(n) => n,
+                        Err(e) => return Poll::Ready(Err(e)),
                     };
                     trace!("flush: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
@@ -401,8 +394,8 @@ fn read_frame_len<R: AsyncRead + Unpin>(mut io: &mut R, cx: &mut futures::task::
     -> Poll<Result<Option<u16>, futures::io::Error>>
 {
     loop {
-        match AsyncRead::poll_read(Pin::new(&mut io), cx, &mut buf[*off ..]) {
-            Poll::Ready(Ok(n)) => {
+        match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off ..])) {
+            Ok(n) => {
                 if n == 0 {
                     return Poll::Ready(Ok(None));
                 }
@@ -411,12 +404,9 @@ fn read_frame_len<R: AsyncRead + Unpin>(mut io: &mut R, cx: &mut futures::task::
                     return Poll::Ready(Ok(Some(u16::from_be_bytes(*buf))));
                 }
             },
-            Poll::Ready(Err(e)) => {
+            Err(e) => {
                 return Poll::Ready(Err(e));
             },
-            Poll::Pending => {
-                return Poll::Pending;
-            }
         }
     }
 }
@@ -434,8 +424,8 @@ fn write_frame_len<W: AsyncWrite + Unpin>(mut io: &mut W, cx: &mut futures::task
     -> futures::task::Poll<std::result::Result<bool, futures::io::Error>>
 {
     loop {
-        match Pin::new(&mut io).poll_write(cx, &buf[*off ..]) {
-            Poll::Ready(Ok(n)) => {
+        match ready!(Pin::new(&mut io).poll_write(cx, &buf[*off ..])) {
+            Ok(n) => {
                 if n == 0 {
                     return Poll::Ready(Ok(false))
                 }
@@ -444,11 +434,8 @@ fn write_frame_len<W: AsyncWrite + Unpin>(mut io: &mut W, cx: &mut futures::task
                     return Poll::Ready(Ok(true))
                 }
             }
-            Poll::Ready(Err(e)) => {
+            Err(e) => {
                 return Poll::Ready(Err(e));
-            }
-            Poll::Pending => {
-                return Poll::Pending;
             }
         }
     }
