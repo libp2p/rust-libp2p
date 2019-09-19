@@ -310,7 +310,7 @@ impl<T> State<T>
 /// A future for receiving a Noise handshake message with an empty payload.
 async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncReadExt + Unpin
+    T: AsyncRead + Unpin
 {
     // TODO: Do we want to `read` here? Don't we want to read nothing at all
     // (empty)?
@@ -321,7 +321,7 @@ where
 /// A future for sending a Noise handshake message with an empty payload.
 async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncWriteExt + Unpin
+    T: AsyncWrite + Unpin
 {
     state.io.write(&[]).await?;
     state.io.flush().await?;
@@ -332,7 +332,7 @@ where
 /// identifying the remote.
 async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncReadExt + Unpin,
+    T: AsyncRead + Unpin,
 {
     let mut len_buf = [0,0];
     state.io.read_exact(&mut len_buf).await?;
@@ -362,7 +362,7 @@ where
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
 async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
-    T: AsyncWriteExt + Unpin,
+    T: AsyncWrite + Unpin,
 {
     let mut pb = payload::Identity::new();
     if state.send_identity {
