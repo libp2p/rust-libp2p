@@ -69,14 +69,8 @@ use std::{
 pub struct TcpConfig {
     /// How long a listener should sleep after receiving an error, before trying again.
     sleep_on_error: Duration,
-    /// Size of the recv buffer size to set for opened sockets, or `None` to keep default.
-    recv_buffer_size: Option<usize>,
-    /// Size of the send buffer size to set for opened sockets, or `None` to keep default.
-    send_buffer_size: Option<usize>,
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
-    /// Keep alive duration to set for opened sockets, or `None` to keep default.
-    keepalive: Option<Option<Duration>>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
     nodelay: Option<bool>,
 }
@@ -86,35 +80,14 @@ impl TcpConfig {
     pub fn new() -> TcpConfig {
         TcpConfig {
             sleep_on_error: Duration::from_millis(100),
-            recv_buffer_size: None,
-            send_buffer_size: None,
             ttl: None,
-            keepalive: None,
             nodelay: None,
         }
-    }
-
-    /// Sets the size of the recv buffer size to set for opened sockets.
-    pub fn recv_buffer_size(mut self, value: usize) -> Self {
-        self.recv_buffer_size = Some(value);
-        self
-    }
-
-    /// Sets the size of the send buffer size to set for opened sockets.
-    pub fn send_buffer_size(mut self, value: usize) -> Self {
-        self.send_buffer_size = Some(value);
-        self
     }
 
     /// Sets the TTL to set for opened sockets.
     pub fn ttl(mut self, value: u32) -> Self {
         self.ttl = Some(value);
-        self
-    }
-
-    /// Sets the keep alive pinging duration to set for opened sockets.
-    pub fn keepalive(mut self, value: Option<Duration>) -> Self {
-        self.keepalive = Some(value);
         self
     }
 
@@ -273,20 +246,8 @@ fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
 
 /// Applies the socket configuration parameters to a socket.
 fn apply_config(config: &TcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
-    if let Some(recv_buffer_size) = config.recv_buffer_size {
-        // TODO: socket.set_recv_buffer_size(recv_buffer_size)?;
-    }
-
-    if let Some(send_buffer_size) = config.send_buffer_size {
-        // TODO: socket.set_send_buffer_size(send_buffer_size)?;
-    }
-
     if let Some(ttl) = config.ttl {
         socket.set_ttl(ttl)?;
-    }
-
-    if let Some(keepalive) = config.keepalive {
-        // TODO: socket.set_keepalive(keepalive)?;
     }
 
     if let Some(nodelay) = config.nodelay {
