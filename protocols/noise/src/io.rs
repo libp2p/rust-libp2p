@@ -60,7 +60,7 @@ impl Buffer {
 /// `T` is the type of the underlying I/O resource.
 pub struct NoiseOutput<T> {
     io: T,
-    session: snow::Session,
+    session: snow::TransportState,
     buffer: Buffer,
     read_state: ReadState,
     write_state: WriteState
@@ -76,7 +76,7 @@ impl<T> fmt::Debug for NoiseOutput<T> {
 }
 
 impl<T> NoiseOutput<T> {
-    fn new(io: T, session: snow::Session) -> Self {
+    fn new(io: T, session: snow::TransportState) -> Self {
         NoiseOutput {
             io, session,
             buffer: Buffer { inner: Box::new([0; TOTAL_BUFFER_LEN]) },
