@@ -386,7 +386,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 
 /// Read 2 bytes as frame length from the given source into the given buffer.
 ///
-// TODO: This is not the case, right?
 /// Panics if `off >= 2`.
 ///
 /// When [`io::ErrorKind::WouldBlock`] is returned, the given buffer and offset

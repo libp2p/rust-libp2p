@@ -312,8 +312,6 @@ async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin
 {
-    // TODO: Do we want to `read` here? Don't we want to read nothing at all
-    // (empty)?
     state.io.read(&mut []).await?;
     Ok(())
 }
