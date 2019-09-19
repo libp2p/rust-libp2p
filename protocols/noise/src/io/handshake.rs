@@ -26,9 +26,10 @@ use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use libp2p_core::identity;
 use futures::prelude::*;
-use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::task;
+use futures::io::AsyncReadExt;
 use protobuf::Message;
-
+use std::pin::Pin;
 use super::NoiseOutput;
 
 /// The identity of the remote established during a handshake.
@@ -86,6 +87,21 @@ pub enum IdentityExchange {
     None { remote: identity::PublicKey }
 }
 
+/// A future performing a Noise handshake pattern.
+pub struct Handshake<T, C>(
+    Pin<Box<dyn Future<
+        Output = <Handshake<T, C> as Future>::Output
+    > + Send>>
+);
+
+impl<T, C> Future for Handshake<T, C> {
+    type Output = Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        Pin::new(&mut self.0).poll(ctx)
+    }
+}
+
 /// Creates an authenticated Noise handshake for the initiator of a
 /// single roundtrip (2 message) handshake pattern.
 ///
@@ -103,20 +119,22 @@ pub enum IdentityExchange {
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-pub async fn rt1_initiator<T, C>(
+pub fn rt1_initiator<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
-) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+) -> Handshake<T, C>
 where
-    T: AsyncWrite + AsyncRead + Unpin,
+    T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
-    let mut state = State::new(io, session, identity, identity_x)?;
-    send_identity(&mut state).await?;
-    recv_identity(&mut state).await?;
-    state.finish()
+    Handshake(Box::pin(async move {
+        let mut state = State::new(io, session, identity, identity_x)?;
+        send_identity(&mut state).await?;
+        recv_identity(&mut state).await?;
+        state.finish()
+    }))
 }
 
 /// Creates an authenticated Noise handshake for the responder of a
@@ -135,20 +153,22 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-pub async fn rt1_responder<T, C>(
+pub fn rt1_responder<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
-) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+) -> Handshake<T, C>
 where
-    T: AsyncWrite + AsyncRead + Unpin,
+    T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
-    let mut state = State::new(io, session, identity, identity_x)?;
-    recv_identity(&mut state).await?;
-    send_identity(&mut state).await?;
-    state.finish()
+    Handshake(Box::pin(async move {
+        let mut state = State::new(io, session, identity, identity_x)?;
+        recv_identity(&mut state).await?;
+        send_identity(&mut state).await?;
+        state.finish()
+    }))
 }
 
 /// Creates an authenticated Noise handshake for the initiator of a
@@ -169,21 +189,23 @@ where
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
-pub async fn rt15_initiator<T, C>(
+pub fn rt15_initiator<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
-) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+) -> Handshake<T, C>
 where
-    T: AsyncWrite + AsyncRead + Unpin,
+    T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
-    let mut state = State::new(io, session, identity, identity_x)?;
-    send_empty(&mut state).await?;
-    recv_identity(&mut state).await?;
-    send_identity(&mut state).await?;
-    state.finish()
+    Handshake(Box::pin(async move {
+        let mut state = State::new(io, session, identity, identity_x)?;
+        send_empty(&mut state).await?;
+        recv_identity(&mut state).await?;
+        send_identity(&mut state).await?;
+        state.finish()
+    }))
 }
 
 /// Creates an authenticated Noise handshake for the responder of a
@@ -204,21 +226,23 @@ where
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
-pub async fn rt15_responder<T, C>(
+pub fn rt15_responder<T, C>(
     io: T,
     session: Result<snow::Session, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
-) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+) -> Handshake<T, C>
 where
-    T: AsyncWrite + AsyncRead + Unpin,
+    T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
-    let mut state = State::new(io, session, identity, identity_x)?;
-    recv_empty(&mut state).await?;
-    send_identity(&mut state).await?;
-    recv_identity(&mut state).await?;
-    state.finish()
+    Handshake(Box::pin(async move {
+        let mut state = State::new(io, session, identity, identity_x)?;
+        recv_empty(&mut state).await?;
+        send_identity(&mut state).await?;
+        recv_identity(&mut state).await?;
+        state.finish()
+    }))
 }
 
 //////////////////////////////////////////////////////////////////////////////
