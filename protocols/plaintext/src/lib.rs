@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::BytesMut;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use futures::{Future, StartSend, Poll, future};
 use futures::sink::Sink;
 use futures::stream::MapErr as StreamMapErr;
@@ -27,6 +26,7 @@ use futures::stream::Stream;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated, PeerId, PublicKey};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
+use std::io;
 use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited::Framed;
@@ -131,9 +131,9 @@ impl PlainText2Config {
 }
 
 #[inline]
-fn map_err(err: IoError) -> IoError {
+fn map_err(err: io::Error) -> io::Error {
     debug!("error during plaintext handshake {:?}", err);
-    IoError::new(IoErrorKind::InvalidData, err)
+    io::Error::new(io::ErrorKind::InvalidData, err)
 }
 
 pub struct PlainTextMiddleware<S> {
@@ -158,7 +158,7 @@ where
     S: AsyncRead + AsyncWrite,
 {
     type SinkItem = BytesMut;
-    type SinkError = IoError;
+    type SinkError = io::Error;
 
     #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
@@ -181,7 +181,7 @@ where
     S: AsyncRead + AsyncWrite,
 {
     type Item = BytesMut;
-    type Error = IoError;
+    type Error = io::Error;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -195,7 +195,7 @@ where
     S: AsyncRead + AsyncWrite,
 {
     /// The plaintext stream.
-    pub stream: RwStreamSink<StreamMapErr<PlainTextMiddleware<S>, fn(IoError) -> IoError>>,
+    pub stream: RwStreamSink<StreamMapErr<PlainTextMiddleware<S>, fn(io::Error) -> io::Error>>,
     /// The public key of the remote.
     pub remote_key: PublicKey,
 }
@@ -223,7 +223,7 @@ impl<S: AsyncRead + AsyncWrite> std::io::Write for PlainTextOutput<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite> AsyncWrite for PlainTextOutput<S> {
-    fn shutdown(&mut self) -> Poll<(), IoError> {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.stream.shutdown()
     }
 }
