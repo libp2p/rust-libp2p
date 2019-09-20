@@ -20,7 +20,7 @@
 
 use futures::prelude::*;
 use libp2p_core::transport::{ListenerEvent, Transport};
-use libp2p_core::upgrade::Negotiated;
+use libp2p_core::upgrade::{self, Negotiated};
 use libp2p_deflate::{DeflateConfig, DeflateOutput};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
@@ -32,9 +32,9 @@ fn deflate() {
     let _ = env_logger::try_init();
 
     fn prop(message: Vec<u8>) -> bool {
-        let server_transport = TcpConfig::new().with_upgrade(DeflateConfig {});
-        let client_transport = TcpConfig::new().with_upgrade(DeflateConfig {});
-        run(server_transport, client_transport, message);
+        let client = TcpConfig::new().and_then(|c, e| upgrade::apply(c, DeflateConfig {}, e));
+        let server = client.clone();
+        run(server, client, message);
         true
     }
 

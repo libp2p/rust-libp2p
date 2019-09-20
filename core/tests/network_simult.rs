@@ -21,16 +21,15 @@
 mod util;
 
 use futures::{future, prelude::*};
-use libp2p_core::identity;
+use libp2p_core::{identity, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
 use libp2p_core::nodes::network::IncomingError;
-use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
 use libp2p_swarm::{
     ProtocolsHandler,
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr
+    ProtocolsHandlerUpgrErr,
 };
 use std::{io, time::Duration};
 use wasm_timer::{Delay, Instant};
@@ -107,21 +106,13 @@ fn raw_swarm_simultaneous_connect() {
     //                 despite the fact that it adds a dependency.
 
     for _ in 0 .. 10 {
-        // TODO: make creating the transport more elegant ; literaly half of the code of the test
-        //       is about creating the transport
         let mut swarm1 = {
             let local_key = identity::Keypair::generate_ed25519();
             let local_public_key = local_key.public();
             let transport = libp2p_tcp::TcpConfig::new()
-                .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-                .and_then(move |out, endpoint| {
-                    let peer_id = out.remote_key.into_peer_id();
-                    let peer_id2 = peer_id.clone();
-                    let upgrade = libp2p_mplex::MplexConfig::default()
-                        .map_outbound(move |muxer| (peer_id, muxer))
-                        .map_inbound(move |muxer| (peer_id2, muxer));
-                    upgrade::apply(out.stream, upgrade, endpoint)
-                })
+                .upgrade()
+                .authenticate(libp2p_secio::SecioConfig::new(local_key))
+                .multiplex(libp2p_mplex::MplexConfig::new())
                 .and_then(|(peer, mplex), _| {
                     // Gracefully close the connection to allow protocol
                     // negotiation to complete.
@@ -134,15 +125,9 @@ fn raw_swarm_simultaneous_connect() {
             let local_key = identity::Keypair::generate_ed25519();
             let local_public_key = local_key.public();
             let transport = libp2p_tcp::TcpConfig::new()
-                .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-                .and_then(move |out, endpoint| {
-                    let peer_id = out.remote_key.into_peer_id();
-                    let peer_id2 = peer_id.clone();
-                    let upgrade = libp2p_mplex::MplexConfig::default()
-                        .map_outbound(move |muxer| (peer_id, muxer))
-                        .map_inbound(move |muxer| (peer_id2, muxer));
-                    upgrade::apply(out.stream, upgrade, endpoint)
-                })
+                .upgrade()
+                .authenticate(libp2p_secio::SecioConfig::new(local_key))
+                .multiplex(libp2p_mplex::MplexConfig::new())
                 .and_then(|(peer, mplex), _| {
                     // Gracefully close the connection to allow protocol
                     // negotiation to complete.
@@ -313,3 +298,4 @@ fn raw_swarm_simultaneous_connect() {
         }
     }
 }
+

@@ -20,13 +20,23 @@
 
 use futures::{future::{self, Either}, prelude::*};
 use libp2p_core::identity;
-use libp2p_core::upgrade::{Negotiated, apply_inbound, apply_outbound};
+use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
 use libp2p_core::transport::{Transport, ListenerEvent};
 use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
 use tokio::{self, io};
+
+#[allow(dead_code)]
+fn core_upgrade_compat() {
+    // Tests API compaibility with the libp2p-core upgrade API,
+    // i.e. if it compiles, the "test" is considered a success.
+    let id_keys = identity::Keypair::generate_ed25519();
+    let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
+    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+    let _ = TcpConfig::new().upgrade().authenticate(noise);
+}
 
 #[test]
 fn xx() {
@@ -40,12 +50,16 @@ fn xx() {
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::xx(server_dh))
+            .and_then(move |output, endpoint| {
+                upgrade::apply(output, NoiseConfig::xx(server_dh), endpoint)
+            })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::xx(client_dh))
+            .and_then(move |output, endpoint| {
+                upgrade::apply(output, NoiseConfig::xx(client_dh), endpoint)
+            })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, message);
@@ -66,12 +80,16 @@ fn ix() {
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::ix(server_dh))
+            .and_then(move |output, endpoint| {
+                upgrade::apply(output, NoiseConfig::ix(server_dh), endpoint)
+            })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::ix(client_dh))
+            .and_then(move |output, endpoint| {
+                upgrade::apply(output, NoiseConfig::ix(client_dh), endpoint)
+            })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, message);
