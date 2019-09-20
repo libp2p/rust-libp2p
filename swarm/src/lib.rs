@@ -343,7 +343,8 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     type Item = Result<TBehaviour::OutEvent, io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        // We use a `this` variable to solve borrowing issues.
+        // We use a `this` variable because the compiler can't mutably borrow multiple times
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {

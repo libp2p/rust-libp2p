@@ -249,7 +249,7 @@ impl ArcWake for Notifier {
 
 /// Processes elements in `inner` until one matching `filter` is found.
 ///
-/// If `Pending` is returned, the waker is kept and notifier later, just like with any `Poll`.
+/// If `Pending` is returned, the waker is kept and notified later, just like with any `Poll`.
 /// `Ready(Ok())` is almost always returned. An error is returned if the stream is EOF.
 fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, cx: &mut Context, mut filter: F) -> Poll<Result<O, IoError>>
 where C: AsyncRead + AsyncWrite + Unpin,
