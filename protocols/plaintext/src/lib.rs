@@ -88,7 +88,7 @@ impl<C> InboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + 'static
 {
-    type Output = PlainTextOutput<Negotiated<C>>;
+    type Output = (PeerId, PlainTextOutput<Negotiated<C>>);
     type Error = PlainTextError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
@@ -101,7 +101,7 @@ impl<C> OutboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + 'static
 {
-    type Output = PlainTextOutput<Negotiated<C>>;
+    type Output = (PeerId, PlainTextOutput<Negotiated<C>>);
     type Error = PlainTextError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
@@ -111,7 +111,7 @@ where
 }
 
 impl PlainText2Config {
-    fn handshake<T>(self, socket: T) -> impl Future<Item = PlainTextOutput<T>, Error = PlainTextError>
+    fn handshake<T>(self, socket: T) -> impl Future<Item = (PeerId, PlainTextOutput<T>), Error = PlainTextError>
     where
         T: AsyncRead + AsyncWrite + Send + 'static
     {
@@ -119,10 +119,13 @@ impl PlainText2Config {
         PlainTextMiddleware::handshake(socket, self)
             .map(|(stream_sink, public_key)| {
                 let mapped = stream_sink.map_err(map_err as fn(_) -> _);
-                PlainTextOutput {
-                    stream: RwStreamSink::new(mapped),
-                    remote_key: public_key,
-                }
+                (
+                    public_key.clone().into_peer_id(),
+                    PlainTextOutput {
+                        stream: RwStreamSink::new(mapped),
+                        remote_key: public_key,
+                    }
+                )
             })
     }
 }
@@ -195,4 +198,32 @@ where
     pub stream: RwStreamSink<StreamMapErr<PlainTextMiddleware<S>, fn(IoError) -> IoError>>,
     /// The public key of the remote.
     pub remote_key: PublicKey,
+}
+
+impl<S: AsyncRead + AsyncWrite> std::io::Read for PlainTextOutput<S> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.stream.read(buf)
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite> AsyncRead for PlainTextOutput<S> {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.stream.prepare_uninitialized_buffer(buf)
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite> std::io::Write for PlainTextOutput<S> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.stream.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.stream.flush()
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite> AsyncWrite for PlainTextOutput<S> {
+    fn shutdown(&mut self) -> Poll<(), IoError> {
+        self.stream.shutdown()
+    }
 }
