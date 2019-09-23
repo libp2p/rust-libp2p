@@ -34,6 +34,7 @@ use libp2p_core::{
     nodes::Substream,
     multiaddr::{Protocol, multiaddr},
     muxing::StreamMuxerBox,
+    upgrade
 };
 use libp2p_secio::SecioConfig;
 use libp2p_swarm::Swarm;
@@ -63,7 +64,7 @@ fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<TestSwa
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = MemoryTransport::default()
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(SecioConfig::new(local_key))
             .multiplex(yamux::Config::default())
             .map(|(p, m), _| (p, StreamMuxerBox::new(m)))

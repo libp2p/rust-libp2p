@@ -68,7 +68,7 @@ mod transfer;
 
 use futures::future::Future;
 
-pub use multistream_select::{Negotiated, NegotiatedComplete, NegotiationError, ProtocolError};
+pub use multistream_select::{Version, Negotiated, NegotiatedComplete, NegotiationError, ProtocolError};
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,

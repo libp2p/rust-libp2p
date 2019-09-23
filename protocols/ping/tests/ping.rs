@@ -25,10 +25,9 @@ use libp2p_core::{
     PeerId,
     Negotiated,
     identity,
-    muxing::StreamMuxer,
     transport::{Transport, boxed::Boxed},
     either::EitherError,
-    upgrade::UpgradeError
+    upgrade::{self, UpgradeError}
 };
 use libp2p_ping::*;
 use libp2p_yamux::{self as yamux, Yamux};
@@ -36,7 +35,7 @@ use libp2p_secio::{SecioConfig, SecioOutput, SecioError};
 use libp2p_swarm::Swarm;
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use futures::{future, prelude::*};
-use std::{fmt, io, time::Duration, sync::mpsc::sync_channel};
+use std::{io, time::Duration, sync::mpsc::sync_channel};
 use tokio::runtime::Runtime;
 
 #[test]
@@ -114,7 +113,7 @@ fn mk_transport() -> (
     let peer_id = id_keys.public().into_peer_id();
     let transport = TcpConfig::new()
         .nodelay(true)
-        .upgrade()
+        .upgrade(upgrade::Version::V1)
         .authenticate(SecioConfig::new(id_keys))
         .multiplex(yamux::Config::default())
         .boxed();
