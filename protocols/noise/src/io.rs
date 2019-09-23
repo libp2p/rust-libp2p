@@ -26,7 +26,7 @@ use futures::{ready, Poll};
 use futures::prelude::*;
 use log::{debug, trace};
 use snow;
-use std::{fmt, io, pin::Pin};
+use std::{fmt, io, pin::Pin, ops::DerefMut};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
@@ -123,10 +123,7 @@ enum WriteState {
 
 impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
     fn poll_read(mut self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
-        // We use a `this` because the compiler isn't smart enough to allow
-        // mutably borrowing multiple different fields from the `Pin` at the
-        // same time.
-        let mut this = &mut *self;
+        let mut this = self.deref_mut();
 
         let buffer = this.buffer.borrow_mut();
 
@@ -217,10 +214,7 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
 
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
     fn poll_write(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &[u8]) -> futures::task::Poll<std::result::Result<usize, std::io::Error>>{
-        // We use a `this` because the compiler isn't smart enough to allow
-        // mutably borrowing multiple different fields from the `Pin` at the
-        // same time.
-        let mut this = &mut *self;
+        let mut this = self.deref_mut();
 
         let buffer = this.buffer.borrow_mut();
 
@@ -302,10 +296,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
     }
 
     fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>> {
-        // We use a `this` because the compiler isn't smart enough to allow
-        // mutably borrowing multiple different fields from the `Pin` at the
-        // same time.
-        let mut this = &mut *self;
+        let mut this = self.deref_mut();
 
         let buffer = this.buffer.borrow_mut();
 
