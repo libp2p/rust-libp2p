@@ -70,8 +70,8 @@ impl<TInner> Negotiated<TInner> {
 
     /// Creates a `Negotiated` in state [`State::Expecting`] that is still
     /// expecting confirmation of the given `protocol`.
-    pub(crate) fn expecting(io: MessageReader<TInner>, protocol: Protocol) -> Self {
-        Negotiated { state: State::Expecting { io, protocol } }
+    pub(crate) fn expecting(io: MessageReader<TInner>, protocol: Protocol, version: Version) -> Self {
+        Negotiated { state: State::Expecting { io, protocol, version } }
     }
 
     /// Polls the `Negotiated` for completion.
@@ -100,27 +100,29 @@ impl<TInner> Negotiated<TInner> {
         // Read outstanding protocol negotiation messages.
         loop {
             match mem::replace(&mut self.state, State::Invalid) {
-                State::Expecting { mut io, protocol } => {
+                State::Expecting { mut io, protocol, version } => {
                     let msg = match io.poll() {
                         Ok(Async::Ready(Some(msg))) => msg,
                         Ok(Async::NotReady) => {
-                            self.state = State::Expecting { io, protocol };
+                            self.state = State::Expecting { io, protocol, version };
                             return Ok(Async::NotReady)
                         }
                         Ok(Async::Ready(None)) => {
-                            self.state = State::Expecting { io, protocol };
+                            self.state = State::Expecting { io, protocol, version };
                             return Err(ProtocolError::IoError(
                                 io::ErrorKind::UnexpectedEof.into()).into())
                         }
                         Err(err) => {
-                            self.state = State::Expecting { io, protocol };
+                            self.state = State::Expecting { io, protocol, version };
                             return Err(err.into())
                         }
                     };
 
-                    if let Message::Header(Version::V1) = &msg {
-                        self.state = State::Expecting { io, protocol };
-                        continue
+                    if let Message::Header(v) = &msg {
+                        if v == &version {
+                            self.state = State::Expecting { io, protocol, version };
+                            continue
+                        }
                     }
 
                     if let Message::Protocol(p) = &msg {
@@ -152,7 +154,14 @@ impl<TInner> Negotiated<TInner> {
 enum State<R> {
     /// In this state, a `Negotiated` is still expecting to
     /// receive confirmation of the protocol it as settled on.
-    Expecting { io: MessageReader<R>, protocol: Protocol },
+    Expecting {
+        /// The underlying I/O stream.
+        io: MessageReader<R>,
+        /// The expected protocol (i.e. name and version).
+        protocol: Protocol,
+        /// The expected multistream-select protocol version.
+        version: Version
+    },
 
     /// In this state, a protocol has been agreed upon and may
     /// only be pending the sending of the final acknowledgement,

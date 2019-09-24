@@ -32,7 +32,8 @@ fn deflate() {
     let _ = env_logger::try_init();
 
     fn prop(message: Vec<u8>) -> bool {
-        let client = TcpConfig::new().and_then(|c, e| upgrade::apply(c, DeflateConfig {}, e));
+        let client = TcpConfig::new().and_then(|c, e|
+            upgrade::apply(c, DeflateConfig {}, e, upgrade::Version::V1));
         let server = client.clone();
         run(server, client, message);
         true

@@ -31,7 +31,7 @@
 //! # fn main() {
 //! use futures::Future;
 //! use libp2p_secio::{SecioConfig, SecioOutput};
-//! use libp2p_core::{PeerId, Multiaddr, identity};
+//! use libp2p_core::{PeerId, Multiaddr, identity, upgrade};
 //! use libp2p_core::transport::Transport;
 //! use libp2p_mplex::MplexConfig;
 //! use libp2p_tcp::TcpConfig;
@@ -41,7 +41,7 @@
 //!
 //! // Create a `Transport`.
 //! let transport = TcpConfig::new()
-//!     .upgrade()
+//!     .upgrade(upgrade::Version::V1)
 //!     .authenticate(SecioConfig::new(local_keys.clone()))
 //!     .multiplex(MplexConfig::default());
 //!
