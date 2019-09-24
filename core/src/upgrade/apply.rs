@@ -20,15 +20,17 @@
 
 use crate::ConnectedPoint;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
-use crate::upgrade::{ProtocolName, NegotiatedComplete};
+use crate::upgrade::ProtocolName;
 use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+pub use multistream_select::Version;
+
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
+pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite,
@@ -37,7 +39,7 @@ where
     if cp.is_listener() {
         Either::A(apply_inbound(conn, up))
     } else {
-        Either::B(apply_outbound(conn, up))
+        Either::B(apply_outbound(conn, up, v))
     }
 }
 
@@ -55,13 +57,13 @@ where
 }
 
 /// Tries to perform an upgrade on an outbound connection or substream.
-pub fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
+pub fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<C>
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::dialer_select_proto(conn, iter);
+    let future = multistream_select::dialer_select_proto(conn, iter, v);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
     }
@@ -155,11 +157,6 @@ where
         future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
         upgrade: U
     },
-    AwaitNegotiated {
-        io: NegotiatedComplete<C>,
-        upgrade: U,
-        protocol: U::Info
-    },
     Upgrade {
         future: U::Future
     },
@@ -185,24 +182,8 @@ where
                             return Ok(Async::NotReady)
                         }
                     };
-                    self.inner = OutboundUpgradeApplyState::AwaitNegotiated {
-                        io: connection.complete(),
-                        protocol: info.0,
-                        upgrade
-                    };
-                }
-                OutboundUpgradeApplyState::AwaitNegotiated { mut io, protocol, upgrade } => {
-                    let io = match io.poll()? {
-                        Async::NotReady => {
-                            self.inner = OutboundUpgradeApplyState::AwaitNegotiated {
-                                io, protocol, upgrade
-                            };
-                            return Ok(Async::NotReady)
-                        }
-                        Async::Ready(io) => io
-                    };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(io, protocol)
+                        future: upgrade.upgrade_outbound(connection, info.0)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
