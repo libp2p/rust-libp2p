@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 async-std = "0.99"
 data-encoding = "2.0"
 dns-parser = "0.8"
-futures-preview = "0.3.0-alpha.17"
+futures-preview = "0.3.0-alpha.18"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 log = "0.4"

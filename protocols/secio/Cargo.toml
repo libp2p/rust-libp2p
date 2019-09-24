@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "0.4"
-futures-preview = "0.3.0-alpha.17"
+futures-preview = "0.3.0-alpha.18"
 futures_codec = "0.2.5"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4.6"
