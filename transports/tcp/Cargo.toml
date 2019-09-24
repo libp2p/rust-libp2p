@@ -16,5 +16,5 @@ get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4.1"
-futures-preview = "0.3.0-alpha.17"
+futures-preview = "0.3.0-alpha.18"
 futures-timer = "0.3"
