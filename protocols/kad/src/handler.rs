@@ -104,7 +104,7 @@ impl<TSubstream, TUserData> SubstreamState<TSubstream, TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Consumes this state and tries to close the substream.
+    /// Tries to close the substream.
     ///
     /// If the substream is not ready to be closed, returns it back.
     fn try_close(&mut self, cx: &mut Context) -> Poll<()> {
