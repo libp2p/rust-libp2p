@@ -14,7 +14,8 @@ arrayvec = "0.4.7"
 bytes = "0.4"
 either = "1.5"
 fnv = "1.0"
-futures = "0.1"
+futures_codec = "0.2"
+futures-preview = "0.3.0-alpha.18"
 log = "0.4"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
@@ -24,9 +25,7 @@ protobuf = "2.3"
 rand = "0.6.0"
 sha2 = "0.8.0"
 smallvec = "0.6"
-tokio-codec = "0.1"
-tokio-io = "0.1"
-wasm-timer = "0.1"
+wasm-timer = "0.2"
 uint = "0.8"
 unsigned-varint = { git = "https://github.com/tomaka/unsigned-varint", branch = "futures-codec", features = ["codec"] }
 void = "1.0"
@@ -37,4 +36,3 @@ libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
 libp2p-yamux = { version = "0.12.0", path = "../../muxers/yamux" }
 quickcheck = "0.8"
 rand = "0.6.0"
-tokio = "0.1"

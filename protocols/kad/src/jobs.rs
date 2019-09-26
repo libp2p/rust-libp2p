@@ -65,6 +65,8 @@ use crate::record::{self, Record, ProviderRecord, store::RecordStore};
 use libp2p_core::PeerId;
 use futures::prelude::*;
 use std::collections::HashSet;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 use std::vec;
 use wasm_timer::{Instant, Delay};
@@ -96,16 +98,18 @@ impl<T> PeriodicJob<T> {
     /// Cuts short the remaining delay, if the job is currently waiting
     /// for the delay to expire.
     fn asap(&mut self) {
-        if let PeriodicJobState::Waiting(delay) = &mut self.state {
-            delay.reset(Instant::now() - Duration::from_secs(1))
+        if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
+            let new_deadline = Instant::now() - Duration::from_secs(1);
+            *deadline = new_deadline;
+            delay.reset_at(new_deadline);
         }
     }
 
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
-    fn is_ready(&mut self, now: Instant) -> bool {
-        if let PeriodicJobState::Waiting(delay) = &mut self.state {
-            if now >= delay.deadline() || delay.poll().map(|a| a.is_ready()).unwrap_or(false) {
+    fn is_ready(&mut self, cx: &mut Context, now: Instant) -> bool {
+        if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
+            if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
                 return true
             }
         }
@@ -117,7 +121,7 @@ impl<T> PeriodicJob<T> {
 #[derive(Debug)]
 enum PeriodicJobState<T> {
     Running(T),
-    Waiting(Delay)
+    Waiting(Delay, Instant)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -143,7 +147,8 @@ impl PutRecordJob {
         record_ttl: Option<Duration>,
     ) -> Self {
         let now = Instant::now();
-        let delay = Delay::new(now + replicate_interval);
+        let deadline = now + replicate_interval;
+        let delay = Delay::new_at(deadline);
         let next_publish = publish_interval.map(|i| now + i);
         Self {
             local_id,
@@ -153,7 +158,7 @@ impl PutRecordJob {
             skipped: HashSet::new(),
             inner: PeriodicJob {
                 interval: replicate_interval,
-                state: PeriodicJobState::Waiting(delay)
+                state: PeriodicJobState::Waiting(delay, deadline)
             }
         }
     }
@@ -185,11 +190,11 @@ impl PutRecordJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, store: &mut T, now: Instant) -> Async<Record>
+    pub fn poll<T>(&mut self, cx: &mut Context, store: &mut T, now: Instant) -> Poll<Record>
     where
         for<'a> T: RecordStore<'a>
     {
-        if self.inner.is_ready(now) {
+        if self.inner.is_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
             let records = store.records()
                 .filter_map(|r| {
@@ -224,7 +229,7 @@ impl PutRecordJob {
                     if r.is_expired(now) {
                         store.remove(&r.key)
                     } else {
-                        return Async::Ready(r)
+                        return Poll::Ready(r)
                     }
                 } else {
                     break
@@ -232,12 +237,13 @@ impl PutRecordJob {
             }
 
             // Wait for the next run.
-            let delay = Delay::new(now + self.inner.interval);
-            self.inner.state = PeriodicJobState::Waiting(delay);
-            assert!(!self.inner.is_ready(now));
+            let deadline = now + self.inner.interval;
+            let delay = Delay::new_at(deadline);
+            self.inner.state = PeriodicJobState::Waiting(delay, deadline);
+            assert!(!self.inner.is_ready(cx, now));
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
 
@@ -256,7 +262,10 @@ impl AddProviderJob {
         Self {
             inner: PeriodicJob {
                 interval,
-                state: PeriodicJobState::Waiting(Delay::new(now + interval))
+                state: {
+                    let deadline = now + interval;
+                    PeriodicJobState::Waiting(Delay::new_at(deadline), deadline)
+                }
             }
         }
     }
@@ -279,11 +288,11 @@ impl AddProviderJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, store: &mut T, now: Instant) -> Async<ProviderRecord>
+    pub fn poll<T>(&mut self, cx: &mut Context, store: &mut T, now: Instant) -> Poll<ProviderRecord>
     where
         for<'a> T: RecordStore<'a>
     {
-        if self.inner.is_ready(now) {
+        if self.inner.is_ready(cx, now) {
             let records = store.provided()
                 .map(|r| r.into_owned())
                 .collect::<Vec<_>>()
@@ -297,19 +306,20 @@ impl AddProviderJob {
                     if r.is_expired(now) {
                         store.remove_provider(&r.key, &r.provider)
                     } else {
-                        return Async::Ready(r)
+                        return Poll::Ready(r)
                     }
                 } else {
                     break
                 }
             }
 
-            let delay = Delay::new(now + self.inner.interval);
-            self.inner.state = PeriodicJobState::Waiting(delay);
-            assert!(!self.inner.is_ready(now));
+            let deadline = now + self.inner.interval;
+            let delay = Delay::new_at(deadline);
+            self.inner.state = PeriodicJobState::Waiting(delay, deadline);
+            assert!(!self.inner.is_ready(cx, now));
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
 
@@ -360,11 +370,11 @@ mod tests {
             // All (non-expired) records in the store must be yielded by the job.
             for r in store.records().map(|r| r.into_owned()).collect::<Vec<_>>() {
                 if !r.is_expired(now) {
-                    assert_eq!(job.poll(&mut store, now), Async::Ready(r));
+                    assert_eq!(job.poll(&mut store, now), Poll::Ready(r));
                     assert!(job.is_running());
                 }
             }
-            assert_eq!(job.poll(&mut store, now), Async::NotReady);
+            assert_eq!(job.poll(&mut store, now), Poll::Pending);
             assert!(!job.is_running());
         }
 
@@ -390,11 +400,11 @@ mod tests {
             // All (non-expired) records in the store must be yielded by the job.
             for r in store.provided().map(|r| r.into_owned()).collect::<Vec<_>>() {
                 if !r.is_expired(now) {
-                    assert_eq!(job.poll(&mut store, now), Async::Ready(r));
+                    assert_eq!(job.poll(&mut store, now), Poll::Ready(r));
                     assert!(job.is_running());
                 }
             }
-            assert_eq!(job.poll(&mut store, now), Async::NotReady);
+            assert_eq!(job.poll(&mut store, now), Poll::Pending);
             assert!(!job.is_running());
         }
 

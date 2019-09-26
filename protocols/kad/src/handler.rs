@@ -36,8 +36,7 @@ use libp2p_core::{
     upgrade::{self, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
 use log::trace;
-use std::{borrow::Cow, error, fmt, io, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{borrow::Cow, error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 /// Protocol handler that handles Kademlia communications with the remote.
@@ -48,7 +47,7 @@ use wasm_timer::Instant;
 /// It also handles requests made by the remote.
 pub struct KademliaHandler<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     /// Configuration for the Kademlia protocol.
     config: KademliaProtocolConfig,
@@ -69,7 +68,7 @@ where
 /// State of an active substream, opened either by us or by the remote.
 enum SubstreamState<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     /// We haven't started opening the outgoing substream yet.
     /// Contains the request we want to send, and the user data if we expect an answer.
@@ -103,29 +102,29 @@ where
 
 impl<TSubstream, TUserData> SubstreamState<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Consumes this state and tries to close the substream.
+    /// Tries to close the substream.
     ///
     /// If the substream is not ready to be closed, returns it back.
-    fn try_close(self) -> AsyncSink<Self> {
+    fn try_close(&mut self, cx: &mut Context) -> Poll<()> {
         match self {
             SubstreamState::OutPendingOpen(_, _)
-            | SubstreamState::OutReportError(_, _) => AsyncSink::Ready,
-            SubstreamState::OutPendingSend(mut stream, _, _)
-            | SubstreamState::OutPendingFlush(mut stream, _)
-            | SubstreamState::OutWaitingAnswer(mut stream, _)
-            | SubstreamState::OutClosing(mut stream) => match stream.close() {
-                Ok(Async::Ready(())) | Err(_) => AsyncSink::Ready,
-                Ok(Async::NotReady) => AsyncSink::NotReady(SubstreamState::OutClosing(stream)),
+            | SubstreamState::OutReportError(_, _) => Poll::Ready(()),
+            SubstreamState::OutPendingSend(ref mut stream, _, _)
+            | SubstreamState::OutPendingFlush(ref mut stream, _)
+            | SubstreamState::OutWaitingAnswer(ref mut stream, _)
+            | SubstreamState::OutClosing(ref mut stream) => match Sink::poll_close(Pin::new(stream), cx) {
+                Poll::Ready(_) => Poll::Ready(()),
+                Poll::Pending => Poll::Pending,
             },
-            SubstreamState::InWaitingMessage(_, mut stream)
-            | SubstreamState::InWaitingUser(_, mut stream)
-            | SubstreamState::InPendingSend(_, mut stream, _)
-            | SubstreamState::InPendingFlush(_, mut stream)
-            | SubstreamState::InClosing(mut stream) => match stream.close() {
-                Ok(Async::Ready(())) | Err(_) => AsyncSink::Ready,
-                Ok(Async::NotReady) => AsyncSink::NotReady(SubstreamState::InClosing(stream)),
+            SubstreamState::InWaitingMessage(_, ref mut stream)
+            | SubstreamState::InWaitingUser(_, ref mut stream)
+            | SubstreamState::InPendingSend(_, ref mut stream, _)
+            | SubstreamState::InPendingFlush(_, ref mut stream)
+            | SubstreamState::InClosing(ref mut stream) => match Sink::poll_close(Pin::new(stream), cx) {
+                Poll::Ready(_) => Poll::Ready(()),
+                Poll::Pending => Poll::Pending,
             },
         }
     }
@@ -382,7 +381,7 @@ struct UniqueConnecId(u64);
 
 impl<TSubstream, TUserData> KademliaHandler<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     /// Create a `KademliaHandler` that only allows sending messages to the remote but denying
     /// incoming connections.
@@ -418,7 +417,7 @@ where
 
 impl<TSubstream, TUserData> Default for KademliaHandler<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     #[inline]
     fn default() -> Self {
@@ -428,7 +427,7 @@ where
 
 impl<TSubstream, TUserData> ProtocolsHandler for KademliaHandler<TSubstream, TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
     TUserData: Clone,
 {
     type InEvent = KademliaHandlerIn<TUserData>;
@@ -485,7 +484,10 @@ where
                     _ => false,
                 });
                 if let Some(pos) = pos {
-                    let _ = self.substreams.remove(pos).try_close();
+                    // TODO: we don't properly close down the substream
+                    let waker = futures::task::noop_waker();
+                    let mut cx = Context::from_waker(&waker);
+                    let _ = self.substreams.remove(pos).try_close(&mut cx);
                 }
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
@@ -639,22 +641,22 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
-        io::Error,
     > {
         // We remove each element from `substreams` one by one and add them back.
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
 
             loop {
-                match advance_substream(substream, self.config.clone()) {
+                match advance_substream(substream, self.config.clone(), cx) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
-                        return Ok(Async::Ready(event));
+                        return Poll::Ready(event);
                     }
                     (None, Some(event), _) => {
-                        return Ok(Async::Ready(event));
+                        return Poll::Ready(event);
                     }
                     (Some(new_state), None, false) => {
                         self.substreams.push(new_state);
@@ -677,7 +679,7 @@ where
             self.keep_alive = KeepAlive::Yes;
         }
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
 
@@ -688,6 +690,7 @@ where
 fn advance_substream<TSubstream, TUserData>(
     state: SubstreamState<TSubstream, TUserData>,
     upgrade: KademliaProtocolConfig,
+    cx: &mut Context,
 ) -> (
     Option<SubstreamState<TSubstream, TUserData>>,
     Option<
@@ -695,12 +698,13 @@ fn advance_substream<TSubstream, TUserData>(
             KademliaProtocolConfig,
             (KadRequestMsg, Option<TUserData>),
             KademliaHandlerEvent<TUserData>,
+            io::Error,
         >,
     >,
     bool,
 )
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     match state {
         SubstreamState::OutPendingOpen(msg, user_data) => {
@@ -711,18 +715,34 @@ where
             (None, Some(ev), false)
         }
         SubstreamState::OutPendingSend(mut substream, msg, user_data) => {
-            match substream.start_send(msg) {
-                Ok(AsyncSink::Ready) => (
-                    Some(SubstreamState::OutPendingFlush(substream, user_data)),
-                    None,
-                    true,
-                ),
-                Ok(AsyncSink::NotReady(msg)) => (
+            match Sink::poll_ready(Pin::new(&mut substream), cx) {
+                Poll::Ready(Ok(())) => {
+                    match Sink::start_send(Pin::new(&mut substream), msg) {
+                        Ok(()) => (
+                            Some(SubstreamState::OutPendingFlush(substream, user_data)),
+                            None,
+                            true,
+                        ),
+                        Err(error) => {
+                            let event = if let Some(user_data) = user_data {
+                                Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                                    error: KademliaHandlerQueryErr::Io(error),
+                                    user_data
+                                }))
+                            } else {
+                                None
+                            };
+
+                            (None, event, false)
+                        }
+                    }
+                },
+                Poll::Pending => (
                     Some(SubstreamState::OutPendingSend(substream, msg, user_data)),
                     None,
                     false,
                 ),
-                Err(error) => {
+                Poll::Ready(Err(error)) => {
                     let event = if let Some(user_data) = user_data {
                         Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
                             error: KademliaHandlerQueryErr::Io(error),
@@ -737,8 +757,8 @@ where
             }
         }
         SubstreamState::OutPendingFlush(mut substream, user_data) => {
-            match substream.poll_complete() {
-                Ok(Async::Ready(())) => {
+            match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                Poll::Ready(Ok(())) => {
                     if let Some(user_data) = user_data {
                         (
                             Some(SubstreamState::OutWaitingAnswer(substream, user_data)),
@@ -749,12 +769,12 @@ where
                         (Some(SubstreamState::OutClosing(substream)), None, true)
                     }
                 }
-                Ok(Async::NotReady) => (
+                Poll::Pending => (
                     Some(SubstreamState::OutPendingFlush(substream, user_data)),
                     None,
                     false,
                 ),
-                Err(error) => {
+                Poll::Ready(Err(error)) => {
                     let event = if let Some(user_data) = user_data {
                         Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
                             error: KademliaHandlerQueryErr::Io(error),
@@ -768,8 +788,8 @@ where
                 }
             }
         }
-        SubstreamState::OutWaitingAnswer(mut substream, user_data) => match substream.poll() {
-            Ok(Async::Ready(Some(msg))) => {
+        SubstreamState::OutWaitingAnswer(mut substream, user_data) => match Stream::poll_next(Pin::new(&mut substream), cx) {
+            Poll::Ready(Some(Ok(msg))) => {
                 let new_state = SubstreamState::OutClosing(substream);
                 let event = process_kad_response(msg, user_data);
                 (
@@ -778,19 +798,19 @@ where
                     true,
                 )
             }
-            Ok(Async::NotReady) => (
+            Poll::Pending => (
                 Some(SubstreamState::OutWaitingAnswer(substream, user_data)),
                 None,
                 false,
             ),
-            Err(error) => {
+            Poll::Ready(Some(Err(error))) => {
                 let event = KademliaHandlerEvent::QueryError {
                     error: KademliaHandlerQueryErr::Io(error),
                     user_data,
                 };
                 (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
             }
-            Ok(Async::Ready(None)) => {
+            Poll::Ready(None) => {
                 let event = KademliaHandlerEvent::QueryError {
                     error: KademliaHandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
                     user_data,
@@ -802,13 +822,13 @@ where
             let event = KademliaHandlerEvent::QueryError { error, user_data };
             (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
         }
-        SubstreamState::OutClosing(mut stream) => match stream.close() {
-            Ok(Async::Ready(())) => (None, None, false),
-            Ok(Async::NotReady) => (Some(SubstreamState::OutClosing(stream)), None, false),
-            Err(_) => (None, None, false),
+        SubstreamState::OutClosing(mut stream) => match Sink::poll_close(Pin::new(&mut stream), cx) {
+            Poll::Ready(Ok(())) => (None, None, false),
+            Poll::Pending => (Some(SubstreamState::OutClosing(stream)), None, false),
+            Poll::Ready(Err(_)) => (None, None, false),
         },
-        SubstreamState::InWaitingMessage(id, mut substream) => match substream.poll() {
-            Ok(Async::Ready(Some(msg))) => {
+        SubstreamState::InWaitingMessage(id, mut substream) => match Stream::poll_next(Pin::new(&mut substream), cx) {
+            Poll::Ready(Some(Ok(msg))) => {
                 if let Ok(ev) = process_kad_request(msg, id) {
                     (
                         Some(SubstreamState::InWaitingUser(id, substream)),
@@ -819,16 +839,16 @@ where
                     (Some(SubstreamState::InClosing(substream)), None, true)
                 }
             }
-            Ok(Async::NotReady) => (
+            Poll::Pending => (
                 Some(SubstreamState::InWaitingMessage(id, substream)),
                 None,
                 false,
             ),
-            Ok(Async::Ready(None)) => {
+            Poll::Ready(None) => {
                 trace!("Inbound substream: EOF");
                 (None, None, false)
             }
-            Err(e) => {
+            Poll::Ready(Some(Err(e))) => {
                 trace!("Inbound substream error: {:?}", e);
                 (None, None, false)
             },
@@ -838,36 +858,39 @@ where
             None,
             false,
         ),
-        SubstreamState::InPendingSend(id, mut substream, msg) => match substream.start_send(msg) {
-            Ok(AsyncSink::Ready) => (
-                Some(SubstreamState::InPendingFlush(id, substream)),
-                None,
-                true,
-            ),
-            Ok(AsyncSink::NotReady(msg)) => (
+        SubstreamState::InPendingSend(id, mut substream, msg) => match Sink::poll_ready(Pin::new(&mut substream), cx) {
+            Poll::Ready(Ok(())) => match Sink::start_send(Pin::new(&mut substream), msg) {
+                Ok(()) => (
+                    Some(SubstreamState::InPendingFlush(id, substream)),
+                    None,
+                    true,
+                ),
+                Err(_) => (None, None, false),
+            },
+            Poll::Pending => (
                 Some(SubstreamState::InPendingSend(id, substream, msg)),
                 None,
                 false,
             ),
-            Err(_) => (None, None, false),
-        },
-        SubstreamState::InPendingFlush(id, mut substream) => match substream.poll_complete() {
-            Ok(Async::Ready(())) => (
+            Poll::Ready(Err(_)) => (None, None, false),
+        }
+        SubstreamState::InPendingFlush(id, mut substream) => match Sink::poll_flush(Pin::new(&mut substream), cx) {
+            Poll::Ready(Ok(())) => (
                 Some(SubstreamState::InWaitingMessage(id, substream)),
                 None,
                 true,
             ),
-            Ok(Async::NotReady) => (
+            Poll::Pending => (
                 Some(SubstreamState::InPendingFlush(id, substream)),
                 None,
                 false,
             ),
-            Err(_) => (None, None, false),
+            Poll::Ready(Err(_)) => (None, None, false),
         },
-        SubstreamState::InClosing(mut stream) => match stream.close() {
-            Ok(Async::Ready(())) => (None, None, false),
-            Ok(Async::NotReady) => (Some(SubstreamState::InClosing(stream)), None, false),
-            Err(_) => (None, None, false),
+        SubstreamState::InClosing(mut stream) => match Sink::poll_close(Pin::new(&mut stream), cx) {
+            Poll::Ready(Ok(())) => (None, None, false),
+            Poll::Pending => (Some(SubstreamState::InClosing(stream)), None, false),
+            Poll::Ready(Err(_)) => (None, None, false),
         },
     }
 }
