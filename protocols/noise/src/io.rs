@@ -26,7 +26,7 @@ use futures::{ready, Poll};
 use futures::prelude::*;
 use log::{debug, trace};
 use snow;
-use std::{fmt, io, pin::Pin, ops::DerefMut};
+use std::{fmt, io, pin::Pin, ops::DerefMut, task::Context};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
@@ -122,7 +122,11 @@ enum WriteState {
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
-    fn poll_read(mut self: core::pin::Pin<&mut Self>, cx: &mut futures::task::Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, futures::io::Error>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
         let mut this = self.deref_mut();
 
         let buffer = this.buffer.borrow_mut();
@@ -159,7 +163,9 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
                     this.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = match ready!(Pin::new(&mut this.io).poll_read(cx, &mut buffer.read[*off ..len])) {
+                    let n = match ready!(
+                        Pin::new(&mut this.io).poll_read(cx, &mut buffer.read[*off ..len])
+                    ) {
                         Ok(n) => n,
                         Err(e) => return Poll::Ready(Err(e)),
                     };
@@ -174,7 +180,10 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
-                        if let Ok(n) = this.session.read_message(&buffer.read[.. len], buffer.read_crypto) {
+                        if let Ok(n) = this.session.read_message(
+                            &buffer.read[.. len],
+                            buffer.read_crypto
+                        ){
                             trace!("read: payload len = {} bytes", n);
                             this.read_state = ReadState::CopyData { len: n, off: 0 }
                         } else {
@@ -213,7 +222,11 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
 }
 
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
-    fn poll_write(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &[u8]) -> futures::task::Poll<std::result::Result<usize, std::io::Error>>{
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>>{
         let mut this = self.deref_mut();
 
         let buffer = this.buffer.borrow_mut();
@@ -270,7 +283,9 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = match ready!(Pin::new(&mut this.io).poll_write( cx, &buffer.write_crypto[*off .. len])) {
+                    let n = match ready!(
+                        Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len])
+                    ) {
                         Ok(n) => n,
                         Err(e) => return Poll::Ready(Err(e)),
                     };
@@ -295,7 +310,10 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         }
     }
 
-    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>
+    ) -> Poll<Result<(), std::io::Error>> {
         let mut this = self.deref_mut();
 
         let buffer = this.buffer.borrow_mut();
@@ -342,7 +360,9 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = match ready!(Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len])) {
+                    let n = match ready!(
+                        Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len])
+                    ) {
                         Ok(n) => n,
                         Err(e) => return Poll::Ready(Err(e)),
                     };
@@ -368,9 +388,11 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         }
     }
 
-    fn poll_close(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> futures::task::Poll<std::result::Result<(), std::io::Error>>{
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>>{
         Pin::new(&mut self.io).poll_close(cx)
-
     }
 
 }
@@ -384,9 +406,12 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 /// for the next invocation.
 ///
 /// Returns `None` if EOF has been encountered.
-fn read_frame_len<R: AsyncRead + Unpin>(mut io: &mut R, cx: &mut futures::task::Context<'_>, buf: &mut [u8; 2], off: &mut usize)
-    -> Poll<Result<Option<u16>, futures::io::Error>>
-{
+fn read_frame_len<R: AsyncRead + Unpin>(
+    mut io: &mut R,
+    cx: &mut Context<'_>,
+    buf: &mut [u8; 2],
+    off: &mut usize,
+) -> Poll<Result<Option<u16>, std::io::Error>> {
     loop {
         match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off ..])) {
             Ok(n) => {
@@ -414,9 +439,12 @@ fn read_frame_len<R: AsyncRead + Unpin>(mut io: &mut R, cx: &mut futures::task::
 /// be preserved for the next invocation.
 ///
 /// Returns `false` if EOF has been encountered.
-fn write_frame_len<W: AsyncWrite + Unpin>(mut io: &mut W, cx: &mut futures::task::Context<'_>, buf: &[u8; 2], off: &mut usize)
-    -> futures::task::Poll<std::result::Result<bool, futures::io::Error>>
-{
+fn write_frame_len<W: AsyncWrite + Unpin>(
+    mut io: &mut W,
+    cx: &mut Context<'_>,
+    buf: &[u8; 2],
+    off: &mut usize,
+) -> Poll<Result<bool, std::io::Error>> {
     loop {
         match ready!(Pin::new(&mut io).poll_write(cx, &buf[*off ..])) {
             Ok(n) => {
@@ -434,4 +462,3 @@ fn write_frame_len<W: AsyncWrite + Unpin>(mut io: &mut W, cx: &mut futures::task
         }
     }
 }
-

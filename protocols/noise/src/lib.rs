@@ -64,6 +64,7 @@ pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
 
 use futures::prelude::*;
 use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated};
+use std::pin::Pin;
 use zeroize::Zeroize;
 
 /// The protocol upgrade configuration.
