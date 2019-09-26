@@ -328,10 +328,10 @@ where
 {
     type Output = (PeerId, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Unpin>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
-        Box::new(self.config.upgrade_inbound(socket, info)
+        Box::pin(self.config.upgrade_inbound(socket, info)
             .and_then(|(remote, io)| match remote {
                 RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
                 _ => future::err(NoiseError::AuthenticationFailed)
@@ -350,10 +350,10 @@ where
 {
     type Output = (PeerId, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Unpin>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
-        Box::new(self.config.upgrade_outbound(socket, info)
+        Box::pin(self.config.upgrade_outbound(socket, info)
             .and_then(|(remote, io)| match remote {
                 RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
                 _ => future::err(NoiseError::AuthenticationFailed)
