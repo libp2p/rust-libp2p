@@ -29,7 +29,7 @@ use futures::prelude::*;
 use futures::task;
 use futures::io::AsyncReadExt;
 use protobuf::Message;
-use std::pin::Pin;
+use std::{pin::Pin, task::Context};
 use super::NoiseOutput;
 
 /// The identity of the remote established during a handshake.
@@ -90,14 +90,14 @@ pub enum IdentityExchange {
 /// A future performing a Noise handshake pattern.
 pub struct Handshake<T, C>(
     Pin<Box<dyn Future<
-        Output = <Handshake<T, C> as Future>::Output
+        Output = Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>,
     > + Send>>
 );
 
 impl<T, C> Future for Handshake<T, C> {
     type Output = Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>;
 
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> task::Poll<Self::Output> {
         Pin::new(&mut self.0).poll(ctx)
     }
 }
