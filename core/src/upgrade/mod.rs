@@ -145,7 +145,7 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     type Error;
     /// Future that performs the handshake with the remote.
     // TODO: remove Unpin
-    type Future: Future<Output = Result<Self::Output, Self::Error>> + Unpin;
+    type Future: Future<Output = Result<Self::Output, Self::Error>> + Unpin + Send;
 
     /// After we have determined that the remote supports one of the protocols we support, this
     /// method is called to start the handshake.
@@ -186,7 +186,7 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     type Error;
     /// Future that performs the handshake with the remote.
     // TODO: remove Unpin
-    type Future: Future<Output = Result<Self::Output, Self::Error>> + Unpin;
+    type Future: Future<Output = Result<Self::Output, Self::Error>> + Unpin + Send;
 
     /// After we have determined that the remote supports one of the protocols we support, this
     /// method is called to start the handshake.
