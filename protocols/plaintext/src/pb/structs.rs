@@ -25,7 +25,7 @@ use protobuf::ProtobufEnum as ProtobufEnum_imported_for_functions;
 pub struct Exchange {
     // message fields
     id: ::protobuf::SingularField<::std::vec::Vec<u8>>,
-    pubkey: ::protobuf::SingularPtrField<super::keys::PublicKey>,
+    pubkey: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -72,7 +72,7 @@ impl Exchange {
         }
     }
 
-    // optional .PublicKey pubkey = 2;
+    // optional bytes pubkey = 2;
 
     pub fn clear_pubkey(&mut self) {
         self.pubkey.clear();
@@ -83,13 +83,13 @@ impl Exchange {
     }
 
     // Param is passed by value, moved
-    pub fn set_pubkey(&mut self, v: super::keys::PublicKey) {
-        self.pubkey = ::protobuf::SingularPtrField::some(v);
+    pub fn set_pubkey(&mut self, v: ::std::vec::Vec<u8>) {
+        self.pubkey = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_pubkey(&mut self) -> &mut super::keys::PublicKey {
+    pub fn mut_pubkey(&mut self) -> &mut ::std::vec::Vec<u8> {
         if self.pubkey.is_none() {
             self.pubkey.set_default();
         }
@@ -97,22 +97,20 @@ impl Exchange {
     }
 
     // Take field
-    pub fn take_pubkey(&mut self) -> super::keys::PublicKey {
-        self.pubkey.take().unwrap_or_else(|| super::keys::PublicKey::new())
+    pub fn take_pubkey(&mut self) -> ::std::vec::Vec<u8> {
+        self.pubkey.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
-    pub fn get_pubkey(&self) -> &super::keys::PublicKey {
-        self.pubkey.as_ref().unwrap_or_else(|| super::keys::PublicKey::default_instance())
+    pub fn get_pubkey(&self) -> &[u8] {
+        match self.pubkey.as_ref() {
+            Some(v) => &v,
+            None => &[],
+        }
     }
 }
 
 impl ::protobuf::Message for Exchange {
     fn is_initialized(&self) -> bool {
-        for v in &self.pubkey {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
         true
     }
 
@@ -124,7 +122,7 @@ impl ::protobuf::Message for Exchange {
                     ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id)?;
                 },
                 2 => {
-                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.pubkey)?;
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.pubkey)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -142,8 +140,7 @@ impl ::protobuf::Message for Exchange {
             my_size += ::protobuf::rt::bytes_size(1, &v);
         }
         if let Some(ref v) = self.pubkey.as_ref() {
-            let len = v.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::bytes_size(2, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -155,9 +152,7 @@ impl ::protobuf::Message for Exchange {
             os.write_bytes(1, &v)?;
         }
         if let Some(ref v) = self.pubkey.as_ref() {
-            os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_bytes(2, &v)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -206,7 +201,7 @@ impl ::protobuf::Message for Exchange {
                     |m: &Exchange| { &m.id },
                     |m: &mut Exchange| { &mut m.id },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<super::keys::PublicKey>>(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "pubkey",
                     |m: &Exchange| { &m.pubkey },
                     |m: &mut Exchange| { &mut m.pubkey },
@@ -252,18 +247,17 @@ impl ::protobuf::reflect::ProtobufValue for Exchange {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n!protocols/plaintext/structs.proto\x1a\x0fcore/keys.proto\">\n\x08Exch\
-    ange\x12\x0e\n\x02id\x18\x01\x20\x01(\x0cR\x02id\x12\"\n\x06pubkey\x18\
-    \x02\x20\x01(\x0b2\n.PublicKeyR\x06pubkeyJ\xbf\x01\n\x06\x12\x04\0\0\x07\
-    \x01\n\x08\n\x01\x0c\x12\x03\0\0\x12\n\t\n\x02\x03\0\x12\x03\x02\x07\x18\
-    \n\n\n\x02\x04\0\x12\x04\x04\0\x07\x01\n\n\n\x03\x04\0\x01\x12\x03\x04\
-    \x08\x10\n\x0b\n\x04\x04\0\x02\0\x12\x03\x05\x02\x18\n\x0c\n\x05\x04\0\
-    \x02\0\x04\x12\x03\x05\x02\n\n\x0c\n\x05\x04\0\x02\0\x05\x12\x03\x05\x0b\
-    \x10\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x05\x11\x13\n\x0c\n\x05\x04\0\
-    \x02\0\x03\x12\x03\x05\x16\x17\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x06\x02\
-    \x20\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x03\x06\x02\n\n\x0c\n\x05\x04\0\
-    \x02\x01\x06\x12\x03\x06\x0b\x14\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\
-    \x06\x15\x1b\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x06\x1e\x1f\
+    \n!protocols/plaintext/structs.proto\"2\n\x08Exchange\x12\x0e\n\x02id\
+    \x18\x01\x20\x01(\x0cR\x02id\x12\x16\n\x06pubkey\x18\x02\x20\x01(\x0cR\
+    \x06pubkeyJ\xb4\x01\n\x06\x12\x04\0\0\x05\x01\n\x08\n\x01\x0c\x12\x03\0\
+    \0\x12\n\n\n\x02\x04\0\x12\x04\x02\0\x05\x01\n\n\n\x03\x04\0\x01\x12\x03\
+    \x02\x08\x10\n\x0b\n\x04\x04\0\x02\0\x12\x03\x03\x02\x18\n\x0c\n\x05\x04\
+    \0\x02\0\x04\x12\x03\x03\x02\n\n\x0c\n\x05\x04\0\x02\0\x05\x12\x03\x03\
+    \x0b\x10\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x03\x11\x13\n\x0c\n\x05\x04\
+    \0\x02\0\x03\x12\x03\x03\x16\x17\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x04\
+    \x02\x1c\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x03\x04\x02\n\n\x0c\n\x05\x04\
+    \0\x02\x01\x05\x12\x03\x04\x0b\x10\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\
+    \x04\x11\x17\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x04\x1a\x1b\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

@@ -26,7 +26,6 @@ use futures::sink::Sink;
 use futures::stream::Stream;
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
-use crate::pb::keys::{PublicKey as PbPublicKey, KeyType};
 use crate::pb::structs::Exchange;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
@@ -64,10 +63,7 @@ impl HandshakeContext<()> {
 
     fn with_local(self) -> Result<HandshakeContext<Local>, PlainTextError> {
         let mut exchange = Exchange::new();
-        let mut pb_pubkey = PbPublicKey::new();
-        pb_pubkey.set_Type(HandshakeContext::pubkey_to_keytype(&self.config.local_public_key));
-        pb_pubkey.set_Data(self.config.local_public_key.clone().into_protobuf_encoding());
-        exchange.set_pubkey(pb_pubkey);
+        exchange.set_pubkey(self.config.local_public_key.clone().into_protobuf_encoding());
         exchange.set_id(self.config.local_public_key.clone().into_peer_id().into_bytes());
 
         let exchange_bytes = exchange.write_to_bytes()?;
@@ -78,25 +74,6 @@ impl HandshakeContext<()> {
                 exchange_bytes,
             }
         })
-    }
-
-    // See `libp2p_core::identity`
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-    fn pubkey_to_keytype(pubkey: &PublicKey) -> KeyType {
-        match pubkey {
-            PublicKey::Ed25519(_) => KeyType::Ed25519,
-            PublicKey::Rsa(_) => KeyType::RSA,
-            PublicKey::Secp256k1(_) => KeyType::Secp256k1,
-        }
-    }
-
-    // See `libp2p_core::identity`
-    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-    fn pubkey_to_keytype(pubkey: &PublicKey) -> KeyType {
-        match pubkey {
-            PublicKey::Ed25519(_) => KeyType::Ed25519,
-            PublicKey::Secp256k1(_) => KeyType::Secp256k1,
-        }
     }
 }
 
@@ -111,7 +88,7 @@ impl HandshakeContext<Local> {
         };
 
         let pb_pubkey = prop.take_pubkey();
-        let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.get_Data()) {
+        let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.as_slice()) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's exchange's pubkey protobuf");
