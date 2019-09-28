@@ -35,7 +35,7 @@ use protobuf::Message;
 use crate::error::PlainTextError;
 use crate::PlainText2Config;
 
-struct HandShakeContext<T> {
+struct HandshakeContext<T> {
     config: PlainText2Config,
     state: T
 }
@@ -54,7 +54,7 @@ struct Remote {
     public_key: PublicKey,
 }
 
-impl HandShakeContext<()> {
+impl HandshakeContext<()> {
     fn new(config: PlainText2Config) -> Self {
         Self {
             config,
@@ -62,17 +62,17 @@ impl HandShakeContext<()> {
         }
     }
 
-    fn with_local(self) -> Result<HandShakeContext<Local>, PlainTextError> {
+    fn with_local(self) -> Result<HandshakeContext<Local>, PlainTextError> {
         let mut exchange = Exchange::new();
         let mut pb_pubkey = PbPublicKey::new();
-        pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.local_public_key));
+        pb_pubkey.set_Type(HandshakeContext::pubkey_to_keytype(&self.config.local_public_key));
         pb_pubkey.set_Data(self.config.local_public_key.clone().into_protobuf_encoding());
         exchange.set_pubkey(pb_pubkey);
         exchange.set_id(self.config.local_public_key.clone().into_peer_id().into_bytes());
 
         let exchange_bytes = exchange.write_to_bytes()?;
 
-        Ok(HandShakeContext {
+        Ok(HandshakeContext {
             config: self.config,
             state: Local {
                 exchange_bytes,
@@ -100,8 +100,8 @@ impl HandShakeContext<()> {
     }
 }
 
-impl HandShakeContext<Local> {
-    fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandShakeContext<Remote>, PlainTextError> {
+impl HandshakeContext<Local> {
+    fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandshakeContext<Remote>, PlainTextError> {
         let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
             Ok(prop) => prop,
             Err(_) => {
@@ -126,7 +126,7 @@ impl HandShakeContext<Local> {
             },
         };
 
-        Ok(HandShakeContext {
+        Ok(HandshakeContext {
             config: self.config,
             state: Remote {
                 peer_id,
@@ -146,7 +146,7 @@ where
         .length_field_length(4)
         .new_framed(socket);
 
-    future::ok::<_, PlainTextError>(HandShakeContext::new(config))
+    future::ok::<_, PlainTextError>(HandshakeContext::new(config))
         .and_then(|context| {
             trace!("starting handshake");
             Ok(context.with_local()?)
