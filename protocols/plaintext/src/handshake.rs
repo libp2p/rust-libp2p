@@ -65,10 +65,10 @@ impl HandShakeContext<()> {
     fn with_local(self) -> Result<HandShakeContext<Local>, PlainTextError> {
         let mut exchange = Exchange::new();
         let mut pb_pubkey = PbPublicKey::new();
-        pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.pubkey));
-        pb_pubkey.set_Data(self.config.pubkey.clone().into_protobuf_encoding());
+        pb_pubkey.set_Type(HandShakeContext::pubkey_to_keytype(&self.config.local_public_key));
+        pb_pubkey.set_Data(self.config.local_public_key.clone().into_protobuf_encoding());
         exchange.set_pubkey(pb_pubkey);
-        exchange.set_id(self.config.pubkey.clone().into_peer_id().into_bytes());
+        exchange.set_id(self.config.local_public_key.clone().into_peer_id().into_bytes());
 
         let exchange_bytes = exchange.write_to_bytes()?;
 
