@@ -183,7 +183,7 @@ where
                 Some(b) => b,
                 None => {
                     debug!("the remote's `PeerId`s hash algorithm is not unsupported");
-                    return Err(PlainTextError::NoSupportIntersection)
+                    return Err(PlainTextError::HandshakeParsingFailure)
                 }
             };
 
