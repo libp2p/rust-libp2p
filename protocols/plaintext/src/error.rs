@@ -63,7 +63,7 @@ impl fmt::Display for PlainTextError {
             PlainTextError::NoSupportIntersection =>
                 f.write_str("There is no protocol supported by both the local and remote hosts"),
             PlainTextError::PeerIdValidationFailed =>
-                f.write_str("The peer id of the exchange isn't consist with the remote public key"),
+                f.write_str("The peer id of the exchange isn't consistent with the remote public key"),
         }
     }
 }
