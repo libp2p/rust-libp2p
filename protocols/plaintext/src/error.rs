@@ -69,7 +69,6 @@ impl fmt::Display for PlainTextError {
 }
 
 impl From<IoError> for PlainTextError {
-    #[inline]
     fn from(err: IoError) -> PlainTextError {
         PlainTextError::IoError(err)
     }
