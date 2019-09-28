@@ -53,31 +53,21 @@ struct Remote {
     public_key: PublicKey,
 }
 
-impl HandshakeContext<()> {
-    fn new(config: PlainText2Config) -> Self {
-        Self {
-            config,
-            state: (),
-        }
-    }
-
-    fn with_local(self) -> Result<HandshakeContext<Local>, PlainTextError> {
+impl HandshakeContext<Local> {
+    fn new(config: PlainText2Config) -> Result<Self, PlainTextError> {
         let mut exchange = Exchange::new();
-        exchange.set_pubkey(self.config.local_public_key.clone().into_protobuf_encoding());
-        exchange.set_id(self.config.local_public_key.clone().into_peer_id().into_bytes());
-
+        exchange.set_id(config.local_public_key.clone().into_peer_id().into_bytes());
+        exchange.set_pubkey(config.local_public_key.clone().into_protobuf_encoding());
         let exchange_bytes = exchange.write_to_bytes()?;
 
-        Ok(HandshakeContext {
-            config: self.config,
+        Ok(Self {
+            config,
             state: Local {
-                exchange_bytes,
+                exchange_bytes
             }
         })
     }
-}
 
-impl HandshakeContext<Local> {
     fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandshakeContext<Remote>, PlainTextError> {
         let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
             Ok(prop) => prop,
@@ -123,10 +113,10 @@ where
         .length_field_length(4)
         .new_framed(socket);
 
-    future::ok::<_, PlainTextError>(HandshakeContext::new(config))
-        .and_then(|context| {
+    future::ok::<_, PlainTextError>(())
+        .and_then(|_| {
             trace!("starting handshake");
-            Ok(context.with_local()?)
+            Ok(HandshakeContext::new(config)?)
         })
         // Send our local `Exchange`.
         .and_then(|context| {
