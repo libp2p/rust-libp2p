@@ -37,7 +37,7 @@ pub enum PlainTextError {
     /// There is no protocol supported by both the local and remote hosts.
     NoSupportIntersection,
 
-    /// The peer id of the exchange isn't consist with the remote public key.
+    /// The peer id of the exchange isn't consistent with the remote public key.
     PeerIdValidationFailed,
 }
 
