@@ -75,7 +75,6 @@ impl From<IoError> for PlainTextError {
 }
 
 impl From<ProtobufError> for PlainTextError {
-    #[inline]
     fn from(err: ProtobufError) -> PlainTextError {
         PlainTextError::ProtobufError(err)
     }
