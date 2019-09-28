@@ -35,7 +35,7 @@ pub enum PlainTextError {
     HandshakeParsingFailure,
 
     /// The peer id of the exchange isn't consistent with the remote public key.
-    PeerIdValidationFailed,
+    InvalidPeerId,
 }
 
 impl error::Error for PlainTextError {
@@ -57,7 +57,7 @@ impl fmt::Display for PlainTextError {
                 write!(f, "Protobuf error: {}", e),
             PlainTextError::HandshakeParsingFailure =>
                 f.write_str("Failed to parse one of the handshake protobuf messages"),
-            PlainTextError::PeerIdValidationFailed =>
+            PlainTextError::InvalidPeerId =>
                 f.write_str("The peer id of the exchange isn't consistent with the remote public key"),
         }
     }
