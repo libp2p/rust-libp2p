@@ -81,9 +81,9 @@ impl HandshakeContext<Local> {
     fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandshakeContext<Remote>, PlainTextError> {
         let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
             Ok(prop) => prop,
-            Err(_) => {
+            Err(e) => {
                 debug!("failed to parse remote's exchange protobuf message");
-                return Err(PlainTextError::HandshakeParsingFailure);
+                return Err(PlainTextError::ProtobufError(e));
             },
         };
 
