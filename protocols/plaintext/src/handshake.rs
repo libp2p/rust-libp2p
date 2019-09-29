@@ -93,6 +93,12 @@ impl HandshakeContext<Local> {
             },
         };
 
+        // Check the validity of the remote's `Exchange`.
+        if peer_id != public_key.clone().into_peer_id() {
+            debug!("The remote's `PeerId` of the exchange isn't consist with the remote public key");
+            return Err(PlainTextError::InvalidPeerId)
+        }
+
         Ok(HandshakeContext {
             config: self.config,
             state: Remote {
@@ -141,25 +147,7 @@ where
                     };
 
                     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-                    Ok((socket, context))
+                    Ok((socket, context.state.public_key))
                 })
-        })
-        // Check the validity of the remote's `Exchange`.
-        .and_then(|(socket, context)| {
-            let is_valid = match context.state.peer_id.is_public_key(&context.state.public_key) {
-                Some(b) => b,
-                None => {
-                    debug!("the remote's `PeerId`s hash algorithm is not unsupported");
-                    return Err(PlainTextError::HandshakeParsingFailure)
-                }
-            };
-
-            if !is_valid {
-                debug!("The remote's `PeerId` of the exchange isn't consist with the remote public key");
-                return Err(PlainTextError::InvalidPeerId)
-            }
-
-            trace!("successfully validated the remote's peer ID");
-            Ok((socket, context.state.public_key))
         })
 }
