@@ -33,6 +33,7 @@ use tokio_io::codec::length_delimited::Framed;
 use crate::error::PlainTextError;
 use void::Void;
 use futures::future::FutureResult;
+use crate::handshake::Remote;
 
 mod error;
 mod handshake;
@@ -117,13 +118,13 @@ impl PlainText2Config {
     {
         debug!("Starting plaintext upgrade");
         PlainTextMiddleware::handshake(socket, self)
-            .map(|(stream_sink, public_key)| {
+            .map(|(stream_sink, remote)| {
                 let mapped = stream_sink.map_err(map_err as fn(_) -> _);
                 (
-                    public_key.clone().into_peer_id(),
+                    remote.peer_id,
                     PlainTextOutput {
                         stream: RwStreamSink::new(mapped),
-                        remote_key: public_key,
+                        remote_key: remote.public_key,
                     }
                 )
             })
@@ -145,10 +146,10 @@ where
     S: AsyncRead + AsyncWrite + Send,
 {
     fn handshake(socket: S, config: PlainText2Config)
-        -> impl Future<Item = (PlainTextMiddleware<S>, PublicKey), Error = PlainTextError>
+        -> impl Future<Item = (PlainTextMiddleware<S>, Remote), Error = PlainTextError>
     {
-        handshake::handshake(socket, config).map(|(inner, public_key)| {
-            (PlainTextMiddleware { inner }, public_key)
+        handshake::handshake(socket, config).map(|(inner, remote)| {
+            (PlainTextMiddleware { inner }, remote)
         })
     }
 }

@@ -46,11 +46,11 @@ struct Local {
 }
 
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
-struct Remote {
+pub struct Remote {
+    // The remote's peer ID:
+    pub peer_id: PeerId,
     // The remote's public key:
-    peer_id: PeerId,
-    // The remote's public key:
-    public_key: PublicKey,
+    pub public_key: PublicKey,
 }
 
 impl HandshakeContext<Local> {
@@ -110,7 +110,7 @@ impl HandshakeContext<Local> {
 }
 
 pub fn handshake<S>(socket: S, config: PlainText2Config)
-    -> impl Future<Item = (Framed<S, BytesMut>, PublicKey), Error = PlainTextError>
+    -> impl Future<Item = (Framed<S, BytesMut>, Remote), Error = PlainTextError>
 where
     S: AsyncRead + AsyncWrite + Send,
 {
@@ -147,7 +147,7 @@ where
                     };
 
                     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-                    Ok((socket, context.state.public_key))
+                    Ok((socket, context.state))
                 })
         })
 }
