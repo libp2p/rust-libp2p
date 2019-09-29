@@ -60,6 +60,7 @@ pub use identity::PublicKey;
 pub use transport::Transport;
 pub use translation::address_translation;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
+pub use nodes::ConnectionInfo;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {

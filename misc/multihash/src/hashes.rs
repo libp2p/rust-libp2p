@@ -3,6 +3,8 @@
 /// Not all hash types are supported by this library.
 #[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
 pub enum Hash {
+    /// Identity (Raw binary )
+    Identity,
     /// SHA-1 (20-byte hash size)
     SHA1,
     /// SHA-256 (32-byte hash size)
@@ -39,6 +41,7 @@ impl Hash {
     /// Get the corresponding hash code.
     pub fn code(&self) -> u16 {
         match self {
+            Hash::Identity => 0x00,
             Hash::SHA1 => 0x11,
             Hash::SHA2256 => 0x12,
             Hash::SHA2512 => 0x13,
@@ -60,6 +63,7 @@ impl Hash {
     /// Get the hash length in bytes.
     pub fn size(&self) -> u8 {
         match self {
+            Hash::Identity => 42,
             Hash::SHA1 => 20,
             Hash::SHA2256 => 32,
             Hash::SHA2512 => 64,
@@ -81,6 +85,7 @@ impl Hash {
     /// Returns the algorithm corresponding to a code, or `None` if no algorithm is matching.
     pub fn from_code(code: u16) -> Option<Hash> {
         Some(match code {
+            0x00 => Hash::Identity,
             0x11 => Hash::SHA1,
             0x12 => Hash::SHA2256,
             0x13 => Hash::SHA2512,

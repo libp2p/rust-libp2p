@@ -82,15 +82,15 @@
 //! *upgraded*. Upgrading a transport is the process of negotiating an additional protocol
 //! with the remote, mediated through a negotiation protocol called [`multistream-select`].
 //!
-//! Example ([`secio`] Protocol Upgrade):
+//! Example ([`secio`] + [`yamux`] Protocol Upgrade):
 //!
 //! ```rust
 //! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair};
+//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair, yamux};
 //! let tcp = TcpConfig::new();
-//! let secio_upgrade = SecioConfig::new(Keypair::generate_ed25519());
-//! let tcp_secio = tcp.with_upgrade(secio_upgrade);
-//! // let _ = tcp_secio.dial(...);
+//! let secio = SecioConfig::new(Keypair::generate_ed25519());
+//! let yamux = yamux::Config::default();
+//! let transport = tcp.upgrade().authenticate(secio).multiplex(yamux);
 //! # }
 //! ```
 //! In this example, `tcp_secio` is a new [`Transport`] that negotiates the secio protocol
@@ -190,8 +190,6 @@ pub use libp2p_ping as ping;
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
 #[doc(inline)]
-pub use libp2p_ratelimit as ratelimit;
-#[doc(inline)]
 pub use libp2p_secio as secio;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
@@ -228,7 +226,6 @@ pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 pub use libp2p_core_derive::NetworkBehaviour;
 
-use futures::prelude::*;
 use std::{error, io, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
@@ -279,21 +276,11 @@ pub fn build_tcp_ws_secio_mplex_yamux(
     ListenerUpgrade = impl Send,
 > + Clone {
     CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(keypair))
-        .and_then(move |output, endpoint| {
-            let peer_id = output.remote_key.into_peer_id();
-            let peer_id2 = peer_id.clone();
-            let upgrade = core::upgrade::SelectUpgrade::new(
-                yamux::Config::default(),
-                mplex::MplexConfig::new(),
-            )
-            // TODO: use a single `.map` instead of two maps
-            .map_inbound(move |muxer| (peer_id, muxer))
-            .map_outbound(move |muxer| (peer_id2, muxer));
-            core::upgrade::apply(output.stream, upgrade, endpoint)
-                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
-        })
-        .with_timeout(Duration::from_secs(20))
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(secio::SecioConfig::new(keypair))
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
+        .timeout(Duration::from_secs(20))
 }
 
 /// Implementation of `Transport` that supports the most common protocols.

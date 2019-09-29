@@ -50,21 +50,72 @@ const MAX_PROTOCOL_LEN: usize = 140;
 
 /// The encoded form of a multistream-select 1.0.0 header message.
 const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
-/// The encoded form of a multistream-select 2.0.0 header message.
-const MSG_MULTISTREAM_2_0: &[u8] = b"/multistream/2.0.0\n";
+/// The encoded form of a multistream-select 1.0.0 header message.
+const MSG_MULTISTREAM_1_0_LAZY: &[u8] = b"/multistream-lazy/1\n";
 /// The encoded form of a multistream-select 'na' message.
 const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
 
-/// The known multistream-select protocol versions.
+/// Supported multistream-select protocol versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
-    /// The first and currently still the only deployed version
-    /// of multistream-select.
+    /// Version 1 of the multistream-select protocol. See [1] and [2].
+    ///
+    /// [1] https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
+    /// [2] https://github.com/multiformats/multistream-select
     V1,
-    /// Draft: https://github.com/libp2p/specs/pull/95
-    V2,
+    /// A lazy variant of version 1 that is identical on the wire but delays
+    /// sending of protocol negotiation data as much as possible.
+    ///
+    /// Delaying the sending of protocol negotiation data can result in
+    /// significantly fewer network roundtrips used for the negotiation,
+    /// up to 0-RTT negotiation.
+    ///
+    /// 0-RTT negotiation is achieved if the dialer supports only a single
+    /// application protocol. In that case the dialer immedidately settles
+    /// on that protocol, buffering the negotiation messages to be sent
+    /// with the first round of application protocol data (or an attempt
+    /// is made to read from the `Negotiated` I/O stream).
+    ///
+    /// A listener receiving a `V1Lazy` header will similarly delay sending
+    /// of the protocol confirmation.  Though typically the listener will need
+    /// to read the request data before sending its response, thus triggering
+    /// sending of the protocol confirmation, which, in absence of additional
+    /// buffering on lower layers will result in at least two response frames
+    /// to be sent.
+    ///
+    /// `V1Lazy` is specific to `rust-libp2p`: While the wire protocol
+    /// is identical to `V1`, delayed sending of protocol negotiation frames
+    /// is only safe under the following assumptions:
+    ///
+    ///   1. The dialer is assumed to always send the first multistream-select
+    ///      protocol message immediately after the multistream header, without
+    ///      first waiting for confirmation of that header. Since the listener
+    ///      delays sending the protocol confirmation, a deadlock situation may
+    ///      otherwise occurs that is only resolved by a timeout. This assumption
+    ///      is trivially satisfied if both peers support and use `V1Lazy`.
+    ///
+    ///   2. When nesting multiple protocol negotiations, the listener is either
+    ///      known to support all of the dialer's optimistically chosen protocols
+    ///      or there is no intermediate protocol without a payload and none of
+    ///      the protocol payloads has the potential for being mistaken for a
+    ///      multistream-select protocol message. This avoids rare edge-cases whereby
+    ///      the listener may not recognize upgrade boundaries and erroneously
+    ///      process a request despite not supporting one of the intermediate
+    ///      protocols that the dialer committed to. See [1] and [2].
+    ///
+    /// [1]: https://github.com/multiformats/go-multistream/issues/20
+    /// [2]: https://github.com/libp2p/rust-libp2p/pull/1212
+    V1Lazy,
+    // Draft: https://github.com/libp2p/specs/pull/95
+    // V2,
+}
+
+impl Default for Version {
+    fn default() -> Self {
+        Version::V1
+    }
 }
 
 /// A protocol (name) exchanged during protocol negotiation.
@@ -131,9 +182,9 @@ impl Message {
                 dest.put(MSG_MULTISTREAM_1_0);
                 Ok(())
             }
-            Message::Header(Version::V2) => {
-                dest.reserve(MSG_MULTISTREAM_2_0.len());
-                dest.put(MSG_MULTISTREAM_2_0);
+            Message::Header(Version::V1Lazy) => {
+                dest.reserve(MSG_MULTISTREAM_1_0_LAZY.len());
+                dest.put(MSG_MULTISTREAM_1_0_LAZY);
                 Ok(())
             }
             Message::Protocol(p) => {
@@ -170,12 +221,12 @@ impl Message {
 
     /// Decodes a `Message` from its byte representation.
     pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
-        if msg == MSG_MULTISTREAM_1_0 {
-            return Ok(Message::Header(Version::V1))
+        if msg == MSG_MULTISTREAM_1_0_LAZY {
+            return Ok(Message::Header(Version::V1Lazy))
         }
 
-        if msg == MSG_MULTISTREAM_2_0 {
-            return Ok(Message::Header(Version::V2))
+        if msg == MSG_MULTISTREAM_1_0 {
+            return Ok(Message::Header(Version::V1))
         }
 
         if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') && msg.len() <= MAX_PROTOCOL_LEN {

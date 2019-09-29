@@ -23,18 +23,19 @@
 use libp2p_core::{
     Multiaddr,
     PeerId,
+    Negotiated,
     identity,
-    muxing::StreamMuxer,
-    upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
-    transport::Transport
+    transport::{Transport, boxed::Boxed},
+    either::EitherError,
+    upgrade::{self, UpgradeError}
 };
 use libp2p_ping::*;
-use libp2p_yamux as yamux;
-use libp2p_secio::SecioConfig;
+use libp2p_yamux::{self as yamux, Yamux};
+use libp2p_secio::{SecioConfig, SecioOutput, SecioError};
 use libp2p_swarm::Swarm;
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::{TcpConfig, TcpTransStream};
 use futures::{future, prelude::*};
-use std::{fmt, io, time::Duration, sync::mpsc::sync_channel};
+use std::{io, time::Duration, sync::mpsc::sync_channel};
 use tokio::runtime::Runtime;
 
 #[test]
@@ -101,26 +102,21 @@ fn ping() {
     assert!(rtt < Duration::from_millis(50));
 }
 
-fn mk_transport() -> (PeerId, impl Transport<
-    Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
-    Listener = impl Send,
-    ListenerUpgrade = impl Send,
-    Dial = impl Send,
-    Error = impl fmt::Debug
-> + Clone) {
+fn mk_transport() -> (
+    PeerId,
+    Boxed<
+        (PeerId, Yamux<Negotiated<SecioOutput<Negotiated<TcpTransStream>>>>),
+        EitherError<EitherError<io::Error, UpgradeError<SecioError>>, UpgradeError<io::Error>>
+    >
+) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let transport = TcpConfig::new()
         .nodelay(true)
-        .with_upgrade(SecioConfig::new(id_keys))
-        .and_then(move |out, endpoint| {
-            let peer_id = out.remote_key.into_peer_id();
-            let peer_id2 = peer_id.clone();
-            let upgrade = yamux::Config::default()
-                .map_outbound(move |muxer| (peer_id, muxer))
-                .map_inbound(move |muxer| (peer_id2, muxer));
-            upgrade::apply(out.stream, upgrade, endpoint)
-        });
+        .upgrade(upgrade::Version::V1)
+        .authenticate(SecioConfig::new(id_keys))
+        .multiplex(yamux::Config::default())
+        .boxed();
     (peer_id, transport)
 }
 

@@ -217,7 +217,7 @@ mod tests {
 
         let client = MemoryTransport.dial(listener_addr).unwrap()
             .and_then(|c| {
-                upgrade::apply_outbound(c, Ping::default())
+                upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1)
                     .map_err(|e| panic!(e))
             });
 

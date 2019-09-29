@@ -26,7 +26,6 @@ libp2p-floodsub = { version = "0.12.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.1.0", path = "./protocols/gossipsub" }
 libp2p-ping = { version = "0.12.0", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.12.0", path = "protocols/plaintext" }
-libp2p-ratelimit = { version = "0.12.0", path = "transports/ratelimit" }
 libp2p-core = { version = "0.12.0", path = "core" }
 libp2p-core-derive = { version = "0.12.0", path = "misc/core-derive" }
 libp2p-secio = { version = "0.12.0", path = "protocols/secio", default-features = false }
@@ -71,13 +70,11 @@ members = [
     "protocols/identify",
     "protocols/kad",
     "protocols/noise",
-    "protocols/observed",
     "protocols/ping",
     "protocols/plaintext",
     "protocols/secio",
     "swarm",
     "transports/dns",
-    "transports/ratelimit",
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
