@@ -36,7 +36,10 @@ use crate::{Negotiated, NegotiationError};
 /// computation that performs the protocol negotiation with the remote. The
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
-pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFuture<R, I::Item>
+pub fn listener_select_proto<R, I>(
+    inner: R,
+    protocols: I,
+) -> ListenerSelectFuture<R, I::Item>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
@@ -78,7 +81,7 @@ where
     N: AsRef<[u8]>
 {
     RecvHeader { io: MessageIO<R> },
-    SendHeader { io: MessageIO<R> },
+    SendHeader { io: MessageIO<R>, version: Version },
     RecvMessage { io: MessageIO<R> },
     SendMessage {
         io: MessageIO<R>,
@@ -102,22 +105,8 @@ where
             match mem::replace(&mut self.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll()? {
-                        Async::Ready(Some(Message::Header(Version::V1))) => {
-                            self.state = State::SendHeader { io }
-                        }
-                        Async::Ready(Some(Message::Header(Version::V2))) => {
-                            // The V2 protocol is not yet supported and not even
-                            // yet fully specified or implemented anywhere. For
-                            // now we just return 'na' to force any dialer to
-                            // fall back to V1, according to the current plans
-                            // for the "transition period".
-                            //
-                            // See: https://github.com/libp2p/specs/pull/95.
-                            self.state = State::SendMessage {
-                                io,
-                                message: Message::NotAvailable,
-                                protocol: None,
-                            }
+                        Async::Ready(Some(Message::Header(version))) => {
+                            self.state = State::SendHeader { io, version }
                         }
                         Async::Ready(Some(_)) => {
                             return Err(ProtocolError::InvalidMessage.into())
@@ -132,11 +121,14 @@ where
                         }
                     }
                 }
-                State::SendHeader { mut io } => {
-                    if io.start_send(Message::Header(Version::V1))?.is_not_ready() {
+                State::SendHeader { mut io, version } => {
+                    if io.start_send(Message::Header(version))?.is_not_ready() {
                         return Ok(Async::NotReady)
                     }
-                    self.state = State::RecvMessage { io };
+                    self.state = match version {
+                        Version::V1 => State::Flush { io },
+                        Version::V1Lazy => State::RecvMessage { io },
+                    }
                 }
                 State::RecvMessage { mut io } => {
                     let msg = match io.poll() {
