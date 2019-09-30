@@ -52,7 +52,7 @@
 //! implementation of `StreamMuxer` to control everything that happens on the wire.
 
 use fnv::FnvHashMap;
-use futures::{future, prelude::*, io::Initializer, task::Context, task::Poll};
+use futures::{future, prelude::*, task::Context, task::Poll};
 use parking_lot::Mutex;
 use std::{io, ops::Deref, fmt, pin::Pin, sync::atomic::{AtomicUsize, Ordering}};
 
@@ -129,11 +129,6 @@ pub trait StreamMuxer {
     /// happened.
     fn read_substream(&self, cx: &mut Context, s: &mut Self::Substream, buf: &mut [u8])
         -> Poll<Result<usize, Self::Error>>;
-
-    /// Mimics the `initializer` method of the `AsyncRead` trait.
-    unsafe fn initializer(&self) -> Initializer {
-        Initializer::zeroing()
-    }
 
     /// Write data to a substream. The behaviour is the same as `futures::AsyncWrite::poll_write`.
     ///
@@ -381,10 +376,6 @@ where
     P: Deref,
     P::Target: StreamMuxer,
 {
-    unsafe fn initializer(&self) -> Initializer {
-        self.muxer.initializer()
-    }
-
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         // We use a `this` because the compiler isn't smart enough to allow mutably borrowing
         // multiple different fields from the `Pin` at the same time.
@@ -511,10 +502,6 @@ impl StreamMuxer for StreamMuxerBox {
         self.inner.destroy_outbound(substream)
     }
 
-    unsafe fn initializer(&self) -> Initializer {
-        self.inner.initializer()
-    }
-
     #[inline]
     fn read_substream(&self, cx: &mut Context, s: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, Self::Error>> {
         self.inner.read_substream(cx, s, buf)
@@ -614,10 +601,6 @@ where
     fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
         let mut list = self.outbound.lock();
         self.inner.destroy_outbound(list.remove(&substream).unwrap())
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        self.inner.initializer()
     }
 
     #[inline]

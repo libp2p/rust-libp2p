@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Endpoint, muxing::StreamMuxer};
-use futures::{prelude::*, io::Initializer};
+use futures::prelude::*;
 use parking_lot::Mutex;
 use std::{io, pin::Pin, sync::atomic::{AtomicBool, Ordering}, task::Context, task::Poll};
 
@@ -98,10 +98,6 @@ where
     }
 
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        self.inner.lock().initializer()
     }
 
     fn read_substream(&self, cx: &mut Context, _: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
