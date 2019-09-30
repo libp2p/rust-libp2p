@@ -38,6 +38,11 @@ tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"
 wasm-timer = "0.1"
+# The protobuf crate introduced a breaking change within its semver minor update
+# from 2.8.1 to 2.9.0. The dependency bound below ensures libp2p uses anything
+# within the 2.8 minor releases. Remove once
+# https://github.com/stepancheg/rust-protobuf/issues/453 is resolved.
+protobuf = "~2.8.0"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.4.0", path = "protocols/deflate" }
