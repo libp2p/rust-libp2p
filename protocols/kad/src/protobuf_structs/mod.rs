@@ -18,4 +18,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(bare_trait_objects)]
 pub mod dht;

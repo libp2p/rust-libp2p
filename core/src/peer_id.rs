@@ -24,10 +24,6 @@ use quick_error::quick_error;
 use multihash;
 use std::{convert::TryFrom, fmt, str::FromStr};
 
-/// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
-/// automatically used as the peer id using an identity multihash.
-const MAX_INLINE_KEY_LENGTH: usize = 42;
-
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
@@ -219,7 +215,7 @@ impl Into<multihash::Multihash> for PeerId {
 quick_error! {
     #[derive(Debug)]
     pub enum ParseError {
-        B58(e: bs58::decode::DecodeError) {
+        B58(e: bs58::decode::Error) {
             display("base-58 decode error: {}", e)
             cause(e)
             from()

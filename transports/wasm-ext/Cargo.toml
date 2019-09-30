@@ -10,10 +10,10 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.1"
-js-sys = "0.3.19"
+futures = "0.1.29"
+js-sys = "0.3.28"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 parity-send-wrapper = "0.1.0"
-tokio-io = "0.1"
-wasm-bindgen = "0.2.42"
-wasm-bindgen-futures = "0.3.19"
+tokio-io = "0.1.12"
+wasm-bindgen = "0.2.51"
+wasm-bindgen-futures = "0.3.10"

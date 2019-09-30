@@ -11,11 +11,11 @@ categories = ["network-programming", "asynchronous"]
 
 [target.'cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))'.dependencies]
 libp2p-core = { version = "0.12.0", path = "../../core" }
-log = "0.4.1"
-futures = "0.1"
-tokio-uds = "0.2"
+log = "0.4.8"
+futures = "0.1.29"
+tokio-uds = "0.2.5"
 
 [target.'cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))'.dev-dependencies]
-tempfile = "3.0"
-tokio = "0.1"
-tokio-io = "0.1"
+tempfile = "3.1.0"
+tokio = "0.1.22"
+tokio-io = "0.1.12"
