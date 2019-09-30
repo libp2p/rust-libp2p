@@ -49,7 +49,7 @@ impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
     U: InboundUpgrade<C>,
     U::Future: Unpin,
-    F: FnOnce(U::Output) -> T + Send
+    F: FnOnce(U::Output) -> T
 {
     type Output = T;
     type Error = U::Error;
@@ -117,7 +117,7 @@ impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
     U: OutboundUpgrade<C>,
     U::Future: Unpin,
-    F: FnOnce(U::Output) -> T + Send
+    F: FnOnce(U::Output) -> T
 {
     type Output = T;
     type Error = U::Error;
@@ -157,7 +157,7 @@ impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
     U: InboundUpgrade<C>,
     U::Future: Unpin,
-    F: FnOnce(U::Error) -> T + Send
+    F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
     type Error = T;
@@ -211,7 +211,7 @@ impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgradeErr<U, F>
 where
     U: OutboundUpgrade<C>,
     U::Future: Unpin,
-    F: FnOnce(U::Error) -> T + Send
+    F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
     type Error = T;
