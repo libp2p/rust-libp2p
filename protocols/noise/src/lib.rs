@@ -322,13 +322,13 @@ where
         Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
         Error = NoiseError
     > + 'static,
+    <NoiseConfig<P, C, R> as libp2p_core::upgrade::InboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
-
 {
     type Output = (PeerId, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
         Box::pin(self.config.upgrade_inbound(socket, info)
@@ -345,12 +345,13 @@ where
         Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
         Error = NoiseError
     > + 'static,
+    <NoiseConfig<P, C, R> as libp2p_core::upgrade::OutboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (PeerId, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
         Box::pin(self.config.upgrade_outbound(socket, info)
