@@ -50,7 +50,6 @@ jobs:
       - restore_cache:
           keys:
             - test-wasm-cache-{{ epoch }}
-            - test-wasm-cache
       - run:
           name: Print Rust version
           command: |
@@ -75,7 +74,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: test-win32-cache
+          key: test-win32-cache-{{ epoch }}
       - run:
           name: Print Rust version
           command: |
@@ -87,7 +86,7 @@ jobs:
           name: Build for Windows 32 bits
           command: cargo check --target i686-pc-windows-gnu
       - save_cache:
-          key: test-win32-cache
+          key: test-win32-cache-{{ epoch }}
           paths:
             - "~/.cargo"
             - "./target"
@@ -99,7 +98,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: integration-test-cache
+          key: integration-test-cache-{{ epoch }}
       - run:
           name: Print Rust version
           command: |
@@ -107,7 +106,7 @@ jobs:
       - run:
           command: cargo run --example ipfs-kad
       - save_cache:
-          key: integration-test-cache
+          key: integration-test-cache-{{ epoch }}
           paths:
             - "~/.cargo"
             - "./target"
