@@ -3,7 +3,7 @@
 
 // https://github.com/Manishearth/rust-clippy/issues/702
 #![allow(unknown_lints)]
-#![allow(clippy::all)]
+#![allow(clippy)]
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
@@ -103,7 +103,7 @@ impl ::protobuf::Message for PublicKey {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -136,7 +136,7 @@ impl ::protobuf::Message for PublicKey {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.Type {
             os.write_enum(1, v.value())?;
         }
@@ -159,13 +159,13 @@ impl ::protobuf::Message for PublicKey {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -224,13 +224,13 @@ impl ::protobuf::Clear for PublicKey {
 }
 
 impl ::std::fmt::Debug for PublicKey {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for PublicKey {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -317,7 +317,7 @@ impl ::protobuf::Message for PrivateKey {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -350,7 +350,7 @@ impl ::protobuf::Message for PrivateKey {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.Type {
             os.write_enum(1, v.value())?;
         }
@@ -373,13 +373,13 @@ impl ::protobuf::Message for PrivateKey {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -438,13 +438,13 @@ impl ::protobuf::Clear for PrivateKey {
 }
 
 impl ::std::fmt::Debug for PrivateKey {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for PrivateKey {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -502,41 +502,41 @@ impl ::std::default::Default for KeyType {
 }
 
 impl ::protobuf::reflect::ProtobufValue for KeyType {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
     }
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\nkeys.proto\"=\n\tPublicKey\x12\x1c\n\x04Type\x18\x01\x20\x02(\x0e2\
-    \x08.KeyTypeR\x04type\x12\x12\n\x04Data\x18\x02\x20\x02(\x0cR\x04data\">\
-    \n\nPrivateKey\x12\x1c\n\x04Type\x18\x01\x20\x02(\x0e2\x08.KeyTypeR\x04t\
-    ype\x12\x12\n\x04Data\x18\x02\x20\x02(\x0cR\x04data*.\n\x07KeyType\x12\
+    \x08.KeyTypeR\x04Type\x12\x12\n\x04Data\x18\x02\x20\x02(\x0cR\x04Data\">\
+    \n\nPrivateKey\x12\x1c\n\x04Type\x18\x01\x20\x02(\x0e2\x08.KeyTypeR\x04T\
+    ype\x12\x12\n\x04Data\x18\x02\x20\x02(\x0cR\x04Data*.\n\x07KeyType\x12\
     \x07\n\x03RSA\x10\0\x12\x0b\n\x07Ed25519\x10\x01\x12\r\n\tSecp256k1\x10\
-    \x02J\xdf\x03\n\x06\x12\x04\0\0\x0e\x01\n\n\n\x02\x05\0\x12\x04\0\0\x04\
-    \x01\n\n\n\x03\x05\0\x01\x12\x03\0\x05\x0c\n\x0b\n\x04\x05\0\x02\0\x12\
-    \x03\x01\x02\n\n\x0c\n\x05\x05\0\x02\0\x01\x12\x03\x01\x02\x05\n\x0c\n\
-    \x05\x05\0\x02\0\x02\x12\x03\x01\x08\t\n\x0b\n\x04\x05\0\x02\x01\x12\x03\
-    \x02\x02\x0e\n\x0c\n\x05\x05\0\x02\x01\x01\x12\x03\x02\x02\t\n\x0c\n\x05\
-    \x05\0\x02\x01\x02\x12\x03\x02\x0c\r\n\x0b\n\x04\x05\0\x02\x02\x12\x03\
-    \x03\x02\x10\n\x0c\n\x05\x05\0\x02\x02\x01\x12\x03\x03\x02\x0b\n\x0c\n\
-    \x05\x05\0\x02\x02\x02\x12\x03\x03\x0e\x0f\n\n\n\x02\x04\0\x12\x04\x06\0\
-    \t\x01\n\n\n\x03\x04\0\x01\x12\x03\x06\x08\x11\n\x0b\n\x04\x04\0\x02\0\
-    \x12\x03\x07\x02\x1c\n\x0c\n\x05\x04\0\x02\0\x04\x12\x03\x07\x02\n\n\x0c\
-    \n\x05\x04\0\x02\0\x06\x12\x03\x07\x0b\x12\n\x0c\n\x05\x04\0\x02\0\x01\
-    \x12\x03\x07\x13\x17\n\x0c\n\x05\x04\0\x02\0\x03\x12\x03\x07\x1a\x1b\n\
-    \x0b\n\x04\x04\0\x02\x01\x12\x03\x08\x02\x1a\n\x0c\n\x05\x04\0\x02\x01\
-    \x04\x12\x03\x08\x02\n\n\x0c\n\x05\x04\0\x02\x01\x05\x12\x03\x08\x0b\x10\
-    \n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\x08\x11\x15\n\x0c\n\x05\x04\0\x02\
-    \x01\x03\x12\x03\x08\x18\x19\n\n\n\x02\x04\x01\x12\x04\x0b\0\x0e\x01\n\n\
-    \n\x03\x04\x01\x01\x12\x03\x0b\x08\x12\n\x0b\n\x04\x04\x01\x02\0\x12\x03\
-    \x0c\x02\x1c\n\x0c\n\x05\x04\x01\x02\0\x04\x12\x03\x0c\x02\n\n\x0c\n\x05\
-    \x04\x01\x02\0\x06\x12\x03\x0c\x0b\x12\n\x0c\n\x05\x04\x01\x02\0\x01\x12\
-    \x03\x0c\x13\x17\n\x0c\n\x05\x04\x01\x02\0\x03\x12\x03\x0c\x1a\x1b\n\x0b\
-    \n\x04\x04\x01\x02\x01\x12\x03\r\x02\x1a\n\x0c\n\x05\x04\x01\x02\x01\x04\
-    \x12\x03\r\x02\n\n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\r\x0b\x10\n\x0c\
-    \n\x05\x04\x01\x02\x01\x01\x12\x03\r\x11\x15\n\x0c\n\x05\x04\x01\x02\x01\
-    \x03\x12\x03\r\x18\x19\
+    \x02J\xe9\x03\n\x06\x12\x04\0\0\x10\x01\n\x08\n\x01\x0c\x12\x03\0\0\x12\
+    \n\n\n\x02\x05\0\x12\x04\x02\0\x06\x01\n\n\n\x03\x05\0\x01\x12\x03\x02\
+    \x05\x0c\n\x0b\n\x04\x05\0\x02\0\x12\x03\x03\x02\n\n\x0c\n\x05\x05\0\x02\
+    \0\x01\x12\x03\x03\x02\x05\n\x0c\n\x05\x05\0\x02\0\x02\x12\x03\x03\x08\t\
+    \n\x0b\n\x04\x05\0\x02\x01\x12\x03\x04\x02\x0e\n\x0c\n\x05\x05\0\x02\x01\
+    \x01\x12\x03\x04\x02\t\n\x0c\n\x05\x05\0\x02\x01\x02\x12\x03\x04\x0c\r\n\
+    \x0b\n\x04\x05\0\x02\x02\x12\x03\x05\x02\x10\n\x0c\n\x05\x05\0\x02\x02\
+    \x01\x12\x03\x05\x02\x0b\n\x0c\n\x05\x05\0\x02\x02\x02\x12\x03\x05\x0e\
+    \x0f\n\n\n\x02\x04\0\x12\x04\x08\0\x0b\x01\n\n\n\x03\x04\0\x01\x12\x03\
+    \x08\x08\x11\n\x0b\n\x04\x04\0\x02\0\x12\x03\t\x02\x1c\n\x0c\n\x05\x04\0\
+    \x02\0\x04\x12\x03\t\x02\n\n\x0c\n\x05\x04\0\x02\0\x06\x12\x03\t\x0b\x12\
+    \n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\t\x13\x17\n\x0c\n\x05\x04\0\x02\0\
+    \x03\x12\x03\t\x1a\x1b\n\x0b\n\x04\x04\0\x02\x01\x12\x03\n\x02\x1a\n\x0c\
+    \n\x05\x04\0\x02\x01\x04\x12\x03\n\x02\n\n\x0c\n\x05\x04\0\x02\x01\x05\
+    \x12\x03\n\x0b\x10\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\n\x11\x15\n\x0c\
+    \n\x05\x04\0\x02\x01\x03\x12\x03\n\x18\x19\n\n\n\x02\x04\x01\x12\x04\r\0\
+    \x10\x01\n\n\n\x03\x04\x01\x01\x12\x03\r\x08\x12\n\x0b\n\x04\x04\x01\x02\
+    \0\x12\x03\x0e\x02\x1c\n\x0c\n\x05\x04\x01\x02\0\x04\x12\x03\x0e\x02\n\n\
+    \x0c\n\x05\x04\x01\x02\0\x06\x12\x03\x0e\x0b\x12\n\x0c\n\x05\x04\x01\x02\
+    \0\x01\x12\x03\x0e\x13\x17\n\x0c\n\x05\x04\x01\x02\0\x03\x12\x03\x0e\x1a\
+    \x1b\n\x0b\n\x04\x04\x01\x02\x01\x12\x03\x0f\x02\x1a\n\x0c\n\x05\x04\x01\
+    \x02\x01\x04\x12\x03\x0f\x02\n\n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\
+    \x0f\x0b\x10\n\x0c\n\x05\x04\x01\x02\x01\x01\x12\x03\x0f\x11\x15\n\x0c\n\
+    \x05\x04\x01\x02\x01\x03\x12\x03\x0f\x18\x19\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

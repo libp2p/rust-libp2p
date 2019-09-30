@@ -3,7 +3,7 @@
 
 // https://github.com/Manishearth/rust-clippy/issues/702
 #![allow(unknown_lints)]
-#![allow(clippy::all)]
+#![allow(clippy)]
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
@@ -102,7 +102,7 @@ impl ::protobuf::Message for RPC {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -137,7 +137,7 @@ impl ::protobuf::Message for RPC {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         for v in &self.subscriptions {
             os.write_tag(1, ::protobuf::wire_format::WireTypeLengthDelimited)?;
             os.write_raw_varint32(v.get_cached_size())?;
@@ -164,13 +164,13 @@ impl ::protobuf::Message for RPC {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -229,13 +229,13 @@ impl ::protobuf::Clear for RPC {
 }
 
 impl ::std::fmt::Debug for RPC {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for RPC {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -316,7 +316,7 @@ impl ::protobuf::Message for RPC_SubOpts {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -353,7 +353,7 @@ impl ::protobuf::Message for RPC_SubOpts {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.subscribe {
             os.write_bool(1, v)?;
         }
@@ -376,13 +376,13 @@ impl ::protobuf::Message for RPC_SubOpts {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -441,13 +441,13 @@ impl ::protobuf::Clear for RPC_SubOpts {
 }
 
 impl ::std::fmt::Debug for RPC_SubOpts {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for RPC_SubOpts {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -608,7 +608,7 @@ impl ::protobuf::Message for Message {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -653,7 +653,7 @@ impl ::protobuf::Message for Message {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(ref v) = self.from.as_ref() {
             os.write_bytes(1, &v)?;
         }
@@ -682,13 +682,13 @@ impl ::protobuf::Message for Message {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -759,13 +759,13 @@ impl ::protobuf::Clear for Message {
 }
 
 impl ::std::fmt::Debug for Message {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for Message {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -904,7 +904,7 @@ impl ::protobuf::Message for TopicDescriptor {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -945,7 +945,7 @@ impl ::protobuf::Message for TopicDescriptor {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(ref v) = self.name.as_ref() {
             os.write_string(1, &v)?;
         }
@@ -975,13 +975,13 @@ impl ::protobuf::Message for TopicDescriptor {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -1046,13 +1046,13 @@ impl ::protobuf::Clear for TopicDescriptor {
 }
 
 impl ::std::fmt::Debug for TopicDescriptor {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for TopicDescriptor {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -1122,7 +1122,7 @@ impl ::protobuf::Message for TopicDescriptor_AuthOpts {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -1155,7 +1155,7 @@ impl ::protobuf::Message for TopicDescriptor_AuthOpts {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.mode {
             os.write_enum(1, v.value())?;
         }
@@ -1178,13 +1178,13 @@ impl ::protobuf::Message for TopicDescriptor_AuthOpts {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -1243,13 +1243,13 @@ impl ::protobuf::Clear for TopicDescriptor_AuthOpts {
 }
 
 impl ::std::fmt::Debug for TopicDescriptor_AuthOpts {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_AuthOpts {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -1307,7 +1307,7 @@ impl ::std::default::Default for TopicDescriptor_AuthOpts_AuthMode {
 }
 
 impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_AuthOpts_AuthMode {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
     }
 }
@@ -1377,7 +1377,7 @@ impl ::protobuf::Message for TopicDescriptor_EncOpts {
         true
     }
 
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
         while !is.eof()? {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
@@ -1410,7 +1410,7 @@ impl ::protobuf::Message for TopicDescriptor_EncOpts {
         my_size
     }
 
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(v) = self.mode {
             os.write_enum(1, v.value())?;
         }
@@ -1433,13 +1433,13 @@ impl ::protobuf::Message for TopicDescriptor_EncOpts {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &dyn (::std::any::Any) {
-        self as &dyn (::std::any::Any)
+    fn as_any(&self) -> &::std::any::Any {
+        self as &::std::any::Any
     }
-    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
-        self as &mut dyn (::std::any::Any)
+    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
+        self as &mut ::std::any::Any
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
         self
     }
 
@@ -1498,13 +1498,13 @@ impl ::protobuf::Clear for TopicDescriptor_EncOpts {
 }
 
 impl ::std::fmt::Debug for TopicDescriptor_EncOpts {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
 impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_EncOpts {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -1562,7 +1562,7 @@ impl ::std::default::Default for TopicDescriptor_EncOpts_EncMode {
 }
 
 impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_EncOpts_EncMode {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
     }
 }
@@ -1586,95 +1586,96 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     cOpts\x12@\n\x04mode\x18\x01\x20\x01(\x0e2,.floodsub.pb.TopicDescriptor.\
     EncOpts.EncModeR\x04mode\x12\x1c\n\tkeyHashes\x18\x02\x20\x03(\x0cR\tkey\
     Hashes\"+\n\x07EncMode\x12\x08\n\x04NONE\x10\0\x12\r\n\tSHAREDKEY\x10\
-    \x01\x12\x07\n\x03WOT\x10\x02J\xc2\x10\n\x06\x12\x04\0\0.\x01\n\x08\n\
-    \x01\x02\x12\x03\0\x08\x13\n\n\n\x02\x04\0\x12\x04\x02\0\n\x01\n\n\n\x03\
-    \x04\0\x01\x12\x03\x02\x08\x0b\n\x0b\n\x04\x04\0\x02\0\x12\x03\x03\x08+\
-    \n\x0c\n\x05\x04\0\x02\0\x04\x12\x03\x03\x08\x10\n\x0c\n\x05\x04\0\x02\0\
-    \x06\x12\x03\x03\x11\x18\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x03\x19&\n\
-    \x0c\n\x05\x04\0\x02\0\x03\x12\x03\x03)*\n\x0b\n\x04\x04\0\x02\x01\x12\
-    \x03\x04\x08%\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x03\x04\x08\x10\n\x0c\n\
-    \x05\x04\0\x02\x01\x06\x12\x03\x04\x11\x18\n\x0c\n\x05\x04\0\x02\x01\x01\
-    \x12\x03\x04\x19\x20\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x04#$\n\x0c\n\
-    \x04\x04\0\x03\0\x12\x04\x06\x08\t\t\n\x0c\n\x05\x04\0\x03\0\x01\x12\x03\
-    \x06\x10\x17\n(\n\x06\x04\0\x03\0\x02\0\x12\x03\x07\x10,\"\x19\x20subscr\
-    ibe\x20or\x20unsubcribe\n\n\x0e\n\x07\x04\0\x03\0\x02\0\x04\x12\x03\x07\
-    \x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\0\x05\x12\x03\x07\x19\x1d\n\x0e\n\
-    \x07\x04\0\x03\0\x02\0\x01\x12\x03\x07\x1e'\n\x0e\n\x07\x04\0\x03\0\x02\
-    \0\x03\x12\x03\x07*+\n\r\n\x06\x04\0\x03\0\x02\x01\x12\x03\x08\x10,\n\
-    \x0e\n\x07\x04\0\x03\0\x02\x01\x04\x12\x03\x08\x10\x18\n\x0e\n\x07\x04\0\
-    \x03\0\x02\x01\x05\x12\x03\x08\x19\x1f\n\x0e\n\x07\x04\0\x03\0\x02\x01\
-    \x01\x12\x03\x08\x20'\n\x0e\n\x07\x04\0\x03\0\x02\x01\x03\x12\x03\x08*+\
-    \n\n\n\x02\x04\x01\x12\x04\x0c\0\x11\x01\n\n\n\x03\x04\x01\x01\x12\x03\
-    \x0c\x08\x0f\n\x0b\n\x04\x04\x01\x02\0\x12\x03\r\x08\x20\n\x0c\n\x05\x04\
-    \x01\x02\0\x04\x12\x03\r\x08\x10\n\x0c\n\x05\x04\x01\x02\0\x05\x12\x03\r\
-    \x11\x16\n\x0c\n\x05\x04\x01\x02\0\x01\x12\x03\r\x17\x1b\n\x0c\n\x05\x04\
-    \x01\x02\0\x03\x12\x03\r\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x01\x12\x03\x0e\
-    \x08\x20\n\x0c\n\x05\x04\x01\x02\x01\x04\x12\x03\x0e\x08\x10\n\x0c\n\x05\
-    \x04\x01\x02\x01\x05\x12\x03\x0e\x11\x16\n\x0c\n\x05\x04\x01\x02\x01\x01\
-    \x12\x03\x0e\x17\x1b\n\x0c\n\x05\x04\x01\x02\x01\x03\x12\x03\x0e\x1e\x1f\
-    \n\x0b\n\x04\x04\x01\x02\x02\x12\x03\x0f\x08!\n\x0c\n\x05\x04\x01\x02\
-    \x02\x04\x12\x03\x0f\x08\x10\n\x0c\n\x05\x04\x01\x02\x02\x05\x12\x03\x0f\
-    \x11\x16\n\x0c\n\x05\x04\x01\x02\x02\x01\x12\x03\x0f\x17\x1c\n\x0c\n\x05\
-    \x04\x01\x02\x02\x03\x12\x03\x0f\x1f\x20\n\x0b\n\x04\x04\x01\x02\x03\x12\
-    \x03\x10\x08%\n\x0c\n\x05\x04\x01\x02\x03\x04\x12\x03\x10\x08\x10\n\x0c\
-    \n\x05\x04\x01\x02\x03\x05\x12\x03\x10\x11\x17\n\x0c\n\x05\x04\x01\x02\
-    \x03\x01\x12\x03\x10\x18\x20\n\x0c\n\x05\x04\x01\x02\x03\x03\x12\x03\x10\
-    #$\nC\n\x02\x04\x02\x12\x04\x14\0.\x01\x1a7\x20topicID\x20=\x20hash(topi\
-    cDescriptor);\x20(not\x20the\x20topic.name)\n\n\n\n\x03\x04\x02\x01\x12\
-    \x03\x14\x08\x17\n\x0b\n\x04\x04\x02\x02\0\x12\x03\x15\x08!\n\x0c\n\x05\
-    \x04\x02\x02\0\x04\x12\x03\x15\x08\x10\n\x0c\n\x05\x04\x02\x02\0\x05\x12\
-    \x03\x15\x11\x17\n\x0c\n\x05\x04\x02\x02\0\x01\x12\x03\x15\x18\x1c\n\x0c\
-    \n\x05\x04\x02\x02\0\x03\x12\x03\x15\x1f\x20\n\x0b\n\x04\x04\x02\x02\x01\
-    \x12\x03\x16\x08#\n\x0c\n\x05\x04\x02\x02\x01\x04\x12\x03\x16\x08\x10\n\
-    \x0c\n\x05\x04\x02\x02\x01\x06\x12\x03\x16\x11\x19\n\x0c\n\x05\x04\x02\
-    \x02\x01\x01\x12\x03\x16\x1a\x1e\n\x0c\n\x05\x04\x02\x02\x01\x03\x12\x03\
-    \x16!\"\n\x0b\n\x04\x04\x02\x02\x02\x12\x03\x17\x08!\n\x0c\n\x05\x04\x02\
-    \x02\x02\x04\x12\x03\x17\x08\x10\n\x0c\n\x05\x04\x02\x02\x02\x06\x12\x03\
-    \x17\x11\x18\n\x0c\n\x05\x04\x02\x02\x02\x01\x12\x03\x17\x19\x1c\n\x0c\n\
-    \x05\x04\x02\x02\x02\x03\x12\x03\x17\x1f\x20\n\x0c\n\x04\x04\x02\x03\0\
-    \x12\x04\x19\x08\"\t\n\x0c\n\x05\x04\x02\x03\0\x01\x12\x03\x19\x10\x18\n\
-    \r\n\x06\x04\x02\x03\0\x02\0\x12\x03\x1a\x10+\n\x0e\n\x07\x04\x02\x03\0\
-    \x02\0\x04\x12\x03\x1a\x10\x18\n\x0e\n\x07\x04\x02\x03\0\x02\0\x06\x12\
-    \x03\x1a\x19!\n\x0e\n\x07\x04\x02\x03\0\x02\0\x01\x12\x03\x1a\"&\n\x0e\n\
-    \x07\x04\x02\x03\0\x02\0\x03\x12\x03\x1a)*\n#\n\x06\x04\x02\x03\0\x02\
-    \x01\x12\x03\x1b\x10(\"\x14\x20root\x20keys\x20to\x20trust\n\n\x0e\n\x07\
-    \x04\x02\x03\0\x02\x01\x04\x12\x03\x1b\x10\x18\n\x0e\n\x07\x04\x02\x03\0\
-    \x02\x01\x05\x12\x03\x1b\x19\x1e\n\x0e\n\x07\x04\x02\x03\0\x02\x01\x01\
-    \x12\x03\x1b\x1f#\n\x0e\n\x07\x04\x02\x03\0\x02\x01\x03\x12\x03\x1b&'\n\
-    \x0e\n\x06\x04\x02\x03\0\x04\0\x12\x04\x1d\x10!\x11\n\x0e\n\x07\x04\x02\
-    \x03\0\x04\0\x01\x12\x03\x1d\x15\x1d\n8\n\x08\x04\x02\x03\0\x04\0\x02\0\
-    \x12\x03\x1e\x18!\"'\x20no\x20authentication,\x20anyone\x20can\x20publis\
-    h\n\n\x10\n\t\x04\x02\x03\0\x04\0\x02\0\x01\x12\x03\x1e\x18\x1c\n\x10\n\
-    \t\x04\x02\x03\0\x04\0\x02\0\x02\x12\x03\x1e\x1f\x20\nT\n\x08\x04\x02\
-    \x03\0\x04\0\x02\x01\x12\x03\x1f\x18\x20\"C\x20only\x20messages\x20signe\
-    d\x20by\x20keys\x20in\x20the\x20topic\x20descriptor\x20are\x20accepted\n\
-    \n\x10\n\t\x04\x02\x03\0\x04\0\x02\x01\x01\x12\x03\x1f\x18\x1b\n\x10\n\t\
-    \x04\x02\x03\0\x04\0\x02\x01\x02\x12\x03\x1f\x1e\x1f\nM\n\x08\x04\x02\
-    \x03\0\x04\0\x02\x02\x12\x03\x20\x18\x20\"<\x20web\x20of\x20trust,\x20ce\
-    rtificates\x20can\x20allow\x20publisher\x20set\x20to\x20grow\n\n\x10\n\t\
-    \x04\x02\x03\0\x04\0\x02\x02\x01\x12\x03\x20\x18\x1b\n\x10\n\t\x04\x02\
-    \x03\0\x04\0\x02\x02\x02\x12\x03\x20\x1e\x1f\n\x0c\n\x04\x04\x02\x03\x01\
-    \x12\x04$\x08-\t\n\x0c\n\x05\x04\x02\x03\x01\x01\x12\x03$\x10\x17\n\r\n\
-    \x06\x04\x02\x03\x01\x02\0\x12\x03%\x10*\n\x0e\n\x07\x04\x02\x03\x01\x02\
-    \0\x04\x12\x03%\x10\x18\n\x0e\n\x07\x04\x02\x03\x01\x02\0\x06\x12\x03%\
-    \x19\x20\n\x0e\n\x07\x04\x02\x03\x01\x02\0\x01\x12\x03%!%\n\x0e\n\x07\
-    \x04\x02\x03\x01\x02\0\x03\x12\x03%()\n<\n\x06\x04\x02\x03\x01\x02\x01\
-    \x12\x03&\x10-\"-\x20the\x20hashes\x20of\x20the\x20shared\x20keys\x20use\
-    d\x20(salted)\n\n\x0e\n\x07\x04\x02\x03\x01\x02\x01\x04\x12\x03&\x10\x18\
-    \n\x0e\n\x07\x04\x02\x03\x01\x02\x01\x05\x12\x03&\x19\x1e\n\x0e\n\x07\
-    \x04\x02\x03\x01\x02\x01\x01\x12\x03&\x1f(\n\x0e\n\x07\x04\x02\x03\x01\
-    \x02\x01\x03\x12\x03&+,\n\x0e\n\x06\x04\x02\x03\x01\x04\0\x12\x04(\x10,\
-    \x11\n\x0e\n\x07\x04\x02\x03\x01\x04\0\x01\x12\x03(\x15\x1c\n1\n\x08\x04\
-    \x02\x03\x01\x04\0\x02\0\x12\x03)\x18!\"\x20\x20no\x20encryption,\x20any\
-    one\x20can\x20read\n\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\0\x01\x12\x03)\
-    \x18\x1c\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\0\x02\x12\x03)\x1f\x20\n9\n\
-    \x08\x04\x02\x03\x01\x04\0\x02\x01\x12\x03*\x18&\"(\x20messages\x20are\
-    \x20encrypted\x20with\x20shared\x20key\n\n\x10\n\t\x04\x02\x03\x01\x04\0\
-    \x02\x01\x01\x12\x03*\x18!\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\x01\x02\
-    \x12\x03*$%\nM\n\x08\x04\x02\x03\x01\x04\0\x02\x02\x12\x03+\x18\x20\"<\
-    \x20web\x20of\x20trust,\x20certificates\x20can\x20allow\x20publisher\x20\
-    set\x20to\x20grow\n\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\x02\x01\x12\x03+\
-    \x18\x1b\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\x02\x02\x12\x03+\x1e\x1f\
+    \x01\x12\x07\n\x03WOT\x10\x02J\xcc\x10\n\x06\x12\x04\0\00\x01\n\x08\n\
+    \x01\x0c\x12\x03\0\0\x12\n\x08\n\x01\x02\x12\x03\x02\x08\x13\n\n\n\x02\
+    \x04\0\x12\x04\x04\0\x0c\x01\n\n\n\x03\x04\0\x01\x12\x03\x04\x08\x0b\n\
+    \x0b\n\x04\x04\0\x02\0\x12\x03\x05\x08+\n\x0c\n\x05\x04\0\x02\0\x04\x12\
+    \x03\x05\x08\x10\n\x0c\n\x05\x04\0\x02\0\x06\x12\x03\x05\x11\x18\n\x0c\n\
+    \x05\x04\0\x02\0\x01\x12\x03\x05\x19&\n\x0c\n\x05\x04\0\x02\0\x03\x12\
+    \x03\x05)*\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x06\x08%\n\x0c\n\x05\x04\0\
+    \x02\x01\x04\x12\x03\x06\x08\x10\n\x0c\n\x05\x04\0\x02\x01\x06\x12\x03\
+    \x06\x11\x18\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\x06\x19\x20\n\x0c\n\
+    \x05\x04\0\x02\x01\x03\x12\x03\x06#$\n\x0c\n\x04\x04\0\x03\0\x12\x04\x08\
+    \x08\x0b\t\n\x0c\n\x05\x04\0\x03\0\x01\x12\x03\x08\x10\x17\n(\n\x06\x04\
+    \0\x03\0\x02\0\x12\x03\t\x10,\"\x19\x20subscribe\x20or\x20unsubcribe\n\n\
+    \x0e\n\x07\x04\0\x03\0\x02\0\x04\x12\x03\t\x10\x18\n\x0e\n\x07\x04\0\x03\
+    \0\x02\0\x05\x12\x03\t\x19\x1d\n\x0e\n\x07\x04\0\x03\0\x02\0\x01\x12\x03\
+    \t\x1e'\n\x0e\n\x07\x04\0\x03\0\x02\0\x03\x12\x03\t*+\n\r\n\x06\x04\0\
+    \x03\0\x02\x01\x12\x03\n\x10,\n\x0e\n\x07\x04\0\x03\0\x02\x01\x04\x12\
+    \x03\n\x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\x01\x05\x12\x03\n\x19\x1f\n\
+    \x0e\n\x07\x04\0\x03\0\x02\x01\x01\x12\x03\n\x20'\n\x0e\n\x07\x04\0\x03\
+    \0\x02\x01\x03\x12\x03\n*+\n\n\n\x02\x04\x01\x12\x04\x0e\0\x13\x01\n\n\n\
+    \x03\x04\x01\x01\x12\x03\x0e\x08\x0f\n\x0b\n\x04\x04\x01\x02\0\x12\x03\
+    \x0f\x08\x20\n\x0c\n\x05\x04\x01\x02\0\x04\x12\x03\x0f\x08\x10\n\x0c\n\
+    \x05\x04\x01\x02\0\x05\x12\x03\x0f\x11\x16\n\x0c\n\x05\x04\x01\x02\0\x01\
+    \x12\x03\x0f\x17\x1b\n\x0c\n\x05\x04\x01\x02\0\x03\x12\x03\x0f\x1e\x1f\n\
+    \x0b\n\x04\x04\x01\x02\x01\x12\x03\x10\x08\x20\n\x0c\n\x05\x04\x01\x02\
+    \x01\x04\x12\x03\x10\x08\x10\n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\x10\
+    \x11\x16\n\x0c\n\x05\x04\x01\x02\x01\x01\x12\x03\x10\x17\x1b\n\x0c\n\x05\
+    \x04\x01\x02\x01\x03\x12\x03\x10\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x02\x12\
+    \x03\x11\x08!\n\x0c\n\x05\x04\x01\x02\x02\x04\x12\x03\x11\x08\x10\n\x0c\
+    \n\x05\x04\x01\x02\x02\x05\x12\x03\x11\x11\x16\n\x0c\n\x05\x04\x01\x02\
+    \x02\x01\x12\x03\x11\x17\x1c\n\x0c\n\x05\x04\x01\x02\x02\x03\x12\x03\x11\
+    \x1f\x20\n\x0b\n\x04\x04\x01\x02\x03\x12\x03\x12\x08%\n\x0c\n\x05\x04\
+    \x01\x02\x03\x04\x12\x03\x12\x08\x10\n\x0c\n\x05\x04\x01\x02\x03\x05\x12\
+    \x03\x12\x11\x17\n\x0c\n\x05\x04\x01\x02\x03\x01\x12\x03\x12\x18\x20\n\
+    \x0c\n\x05\x04\x01\x02\x03\x03\x12\x03\x12#$\nC\n\x02\x04\x02\x12\x04\
+    \x16\00\x01\x1a7\x20topicID\x20=\x20hash(topicDescriptor);\x20(not\x20th\
+    e\x20topic.name)\n\n\n\n\x03\x04\x02\x01\x12\x03\x16\x08\x17\n\x0b\n\x04\
+    \x04\x02\x02\0\x12\x03\x17\x08!\n\x0c\n\x05\x04\x02\x02\0\x04\x12\x03\
+    \x17\x08\x10\n\x0c\n\x05\x04\x02\x02\0\x05\x12\x03\x17\x11\x17\n\x0c\n\
+    \x05\x04\x02\x02\0\x01\x12\x03\x17\x18\x1c\n\x0c\n\x05\x04\x02\x02\0\x03\
+    \x12\x03\x17\x1f\x20\n\x0b\n\x04\x04\x02\x02\x01\x12\x03\x18\x08#\n\x0c\
+    \n\x05\x04\x02\x02\x01\x04\x12\x03\x18\x08\x10\n\x0c\n\x05\x04\x02\x02\
+    \x01\x06\x12\x03\x18\x11\x19\n\x0c\n\x05\x04\x02\x02\x01\x01\x12\x03\x18\
+    \x1a\x1e\n\x0c\n\x05\x04\x02\x02\x01\x03\x12\x03\x18!\"\n\x0b\n\x04\x04\
+    \x02\x02\x02\x12\x03\x19\x08!\n\x0c\n\x05\x04\x02\x02\x02\x04\x12\x03\
+    \x19\x08\x10\n\x0c\n\x05\x04\x02\x02\x02\x06\x12\x03\x19\x11\x18\n\x0c\n\
+    \x05\x04\x02\x02\x02\x01\x12\x03\x19\x19\x1c\n\x0c\n\x05\x04\x02\x02\x02\
+    \x03\x12\x03\x19\x1f\x20\n\x0c\n\x04\x04\x02\x03\0\x12\x04\x1b\x08$\t\n\
+    \x0c\n\x05\x04\x02\x03\0\x01\x12\x03\x1b\x10\x18\n\r\n\x06\x04\x02\x03\0\
+    \x02\0\x12\x03\x1c\x10+\n\x0e\n\x07\x04\x02\x03\0\x02\0\x04\x12\x03\x1c\
+    \x10\x18\n\x0e\n\x07\x04\x02\x03\0\x02\0\x06\x12\x03\x1c\x19!\n\x0e\n\
+    \x07\x04\x02\x03\0\x02\0\x01\x12\x03\x1c\"&\n\x0e\n\x07\x04\x02\x03\0\
+    \x02\0\x03\x12\x03\x1c)*\n#\n\x06\x04\x02\x03\0\x02\x01\x12\x03\x1d\x10(\
+    \"\x14\x20root\x20keys\x20to\x20trust\n\n\x0e\n\x07\x04\x02\x03\0\x02\
+    \x01\x04\x12\x03\x1d\x10\x18\n\x0e\n\x07\x04\x02\x03\0\x02\x01\x05\x12\
+    \x03\x1d\x19\x1e\n\x0e\n\x07\x04\x02\x03\0\x02\x01\x01\x12\x03\x1d\x1f#\
+    \n\x0e\n\x07\x04\x02\x03\0\x02\x01\x03\x12\x03\x1d&'\n\x0e\n\x06\x04\x02\
+    \x03\0\x04\0\x12\x04\x1f\x10#\x11\n\x0e\n\x07\x04\x02\x03\0\x04\0\x01\
+    \x12\x03\x1f\x15\x1d\n8\n\x08\x04\x02\x03\0\x04\0\x02\0\x12\x03\x20\x18!\
+    \"'\x20no\x20authentication,\x20anyone\x20can\x20publish\n\n\x10\n\t\x04\
+    \x02\x03\0\x04\0\x02\0\x01\x12\x03\x20\x18\x1c\n\x10\n\t\x04\x02\x03\0\
+    \x04\0\x02\0\x02\x12\x03\x20\x1f\x20\nT\n\x08\x04\x02\x03\0\x04\0\x02\
+    \x01\x12\x03!\x18\x20\"C\x20only\x20messages\x20signed\x20by\x20keys\x20\
+    in\x20the\x20topic\x20descriptor\x20are\x20accepted\n\n\x10\n\t\x04\x02\
+    \x03\0\x04\0\x02\x01\x01\x12\x03!\x18\x1b\n\x10\n\t\x04\x02\x03\0\x04\0\
+    \x02\x01\x02\x12\x03!\x1e\x1f\nM\n\x08\x04\x02\x03\0\x04\0\x02\x02\x12\
+    \x03\"\x18\x20\"<\x20web\x20of\x20trust,\x20certificates\x20can\x20allow\
+    \x20publisher\x20set\x20to\x20grow\n\n\x10\n\t\x04\x02\x03\0\x04\0\x02\
+    \x02\x01\x12\x03\"\x18\x1b\n\x10\n\t\x04\x02\x03\0\x04\0\x02\x02\x02\x12\
+    \x03\"\x1e\x1f\n\x0c\n\x04\x04\x02\x03\x01\x12\x04&\x08/\t\n\x0c\n\x05\
+    \x04\x02\x03\x01\x01\x12\x03&\x10\x17\n\r\n\x06\x04\x02\x03\x01\x02\0\
+    \x12\x03'\x10*\n\x0e\n\x07\x04\x02\x03\x01\x02\0\x04\x12\x03'\x10\x18\n\
+    \x0e\n\x07\x04\x02\x03\x01\x02\0\x06\x12\x03'\x19\x20\n\x0e\n\x07\x04\
+    \x02\x03\x01\x02\0\x01\x12\x03'!%\n\x0e\n\x07\x04\x02\x03\x01\x02\0\x03\
+    \x12\x03'()\n<\n\x06\x04\x02\x03\x01\x02\x01\x12\x03(\x10-\"-\x20the\x20\
+    hashes\x20of\x20the\x20shared\x20keys\x20used\x20(salted)\n\n\x0e\n\x07\
+    \x04\x02\x03\x01\x02\x01\x04\x12\x03(\x10\x18\n\x0e\n\x07\x04\x02\x03\
+    \x01\x02\x01\x05\x12\x03(\x19\x1e\n\x0e\n\x07\x04\x02\x03\x01\x02\x01\
+    \x01\x12\x03(\x1f(\n\x0e\n\x07\x04\x02\x03\x01\x02\x01\x03\x12\x03(+,\n\
+    \x0e\n\x06\x04\x02\x03\x01\x04\0\x12\x04*\x10.\x11\n\x0e\n\x07\x04\x02\
+    \x03\x01\x04\0\x01\x12\x03*\x15\x1c\n1\n\x08\x04\x02\x03\x01\x04\0\x02\0\
+    \x12\x03+\x18!\"\x20\x20no\x20encryption,\x20anyone\x20can\x20read\n\n\
+    \x10\n\t\x04\x02\x03\x01\x04\0\x02\0\x01\x12\x03+\x18\x1c\n\x10\n\t\x04\
+    \x02\x03\x01\x04\0\x02\0\x02\x12\x03+\x1f\x20\n9\n\x08\x04\x02\x03\x01\
+    \x04\0\x02\x01\x12\x03,\x18&\"(\x20messages\x20are\x20encrypted\x20with\
+    \x20shared\x20key\n\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\x01\x01\x12\x03,\
+    \x18!\n\x10\n\t\x04\x02\x03\x01\x04\0\x02\x01\x02\x12\x03,$%\nM\n\x08\
+    \x04\x02\x03\x01\x04\0\x02\x02\x12\x03-\x18\x20\"<\x20web\x20of\x20trust\
+    ,\x20certificates\x20can\x20allow\x20publisher\x20set\x20to\x20grow\n\n\
+    \x10\n\t\x04\x02\x03\x01\x04\0\x02\x02\x01\x12\x03-\x18\x1b\n\x10\n\t\
+    \x04\x02\x03\x01\x04\0\x02\x02\x02\x12\x03-\x1e\x1f\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

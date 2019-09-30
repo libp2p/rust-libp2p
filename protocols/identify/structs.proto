@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 message Identify {
   // protocolVersion determines compatibility between peers
   optional string protocolVersion = 5; // e.g. ipfs/1.0.0

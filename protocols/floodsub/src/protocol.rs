@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::rpc_proto;
+use crate::rpc;
 use crate::topic::TopicHash;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use protobuf::{ProtobufError, Message as ProtobufMessage};
@@ -58,7 +58,7 @@ where
     #[inline]
     fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         upgrade::read_one_then(socket, 2048, (), |packet, ()| {
-            let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
+            let mut rpc: rpc::RPC = protobuf::parse_from_bytes(&packet)?;
 
             let mut messages = Vec::with_capacity(rpc.get_publish().len());
             for mut publish in rpc.take_publish().into_iter() {
@@ -180,10 +180,10 @@ where
 impl FloodsubRpc {
     /// Turns this `FloodsubRpc` into a message that can be sent to a substream.
     fn into_bytes(self) -> Vec<u8> {
-        let mut proto = rpc_proto::RPC::new();
+        let mut proto = rpc::RPC::new();
 
         for message in self.messages {
-            let mut msg = rpc_proto::Message::new();
+            let mut msg = rpc::Message::new();
             msg.set_from(message.source.into_bytes());
             msg.set_data(message.data);
             msg.set_seqno(message.sequence_number);
@@ -198,7 +198,7 @@ impl FloodsubRpc {
         }
 
         for topic in self.subscriptions {
-            let mut subscription = rpc_proto::RPC_SubOpts::new();
+            let mut subscription = rpc::RPC_SubOpts::new();
             subscription.set_subscribe(topic.action == FloodsubSubscriptionAction::Subscribe);
             subscription.set_topicid(topic.topic.into_string());
             proto.mut_subscriptions().push(subscription);

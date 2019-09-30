@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bs58;
-use crate::rpc_proto;
+use crate::rpc;
 use protobuf::Message;
 
 /// Represents the hash of a topic.
@@ -47,7 +47,7 @@ impl TopicHash {
 /// Built topic.
 #[derive(Debug, Clone)]
 pub struct Topic {
-    descriptor: rpc_proto::TopicDescriptor,
+    descriptor: rpc::TopicDescriptor,
     hash: TopicHash,
 }
 
@@ -83,7 +83,7 @@ impl<'a> From<&'a Topic> for TopicHash {
 /// Builder for a `TopicHash`.
 #[derive(Debug, Clone)]
 pub struct TopicBuilder {
-    builder: rpc_proto::TopicDescriptor,
+    builder: rpc::TopicDescriptor,
 }
 
 impl TopicBuilder {
@@ -91,7 +91,7 @@ impl TopicBuilder {
     where
         S: Into<String>,
     {
-        let mut builder = rpc_proto::TopicDescriptor::new();
+        let mut builder = rpc::TopicDescriptor::new();
         builder.set_name(name.into());
 
         TopicBuilder { builder }

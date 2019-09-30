@@ -78,7 +78,7 @@ mod error;
 mod exchange;
 mod handshake;
 // #[allow(rust_2018_idioms)]
-mod structs_proto;
+mod structs;
 mod stream_cipher;
 
 pub use crate::algo_support::Digest;

@@ -24,7 +24,7 @@
 pub mod protocol;
 
 mod layer;
-mod rpc_proto;
+mod rpc;
 mod topic;
 
 pub use self::layer::{Floodsub, FloodsubEvent};
