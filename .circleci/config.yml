@@ -29,10 +29,6 @@ jobs:
       - restore_cache:
           key: test-cache
       - run:
-          name: Print Rust version
-          command: |
-            rustc --version
-      - run:
           name: Prepare docker container for building
           command: docker build --pull --no-cache -t rust-libp2p -f .circleci/images/rust-libp2p/Dockerfile .
       - run:
