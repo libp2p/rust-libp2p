@@ -6,7 +6,6 @@ workflows:
     jobs:
       - test
       - test-wasm
-      - test-win32
       - integration-test
 
 jobs:
