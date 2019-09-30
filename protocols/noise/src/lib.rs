@@ -322,7 +322,7 @@ where
         Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
         Error = NoiseError
     > + 'static,
-    <NoiseConfig<P, C, R> as libp2p_core::upgrade::InboundUpgrade<T>>::Future: Send,
+    <NoiseConfig<P, C, R> as InboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
@@ -345,7 +345,7 @@ where
         Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
         Error = NoiseError
     > + 'static,
-    <NoiseConfig<P, C, R> as libp2p_core::upgrade::OutboundUpgrade<T>>::Future: Send,
+    <NoiseConfig<P, C, R> as OutboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
