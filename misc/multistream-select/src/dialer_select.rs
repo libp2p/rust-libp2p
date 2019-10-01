@@ -42,18 +42,16 @@ use crate::{Negotiated, NegotiationError};
 /// determined through the `size_hint` of the given iterator and thus
 /// an inaccurate size estimate may result in a suboptimal choice.
 ///
-/// > **Note**: When multiple `DialerSelectFuture`s are composed, i.e. a
-/// > dialer performs multiple, nested protocol negotiations with just a
-/// > single supported protocol (0-RTT negotiations), a listener that
-/// > does not support one of the intermediate protocols may still process
-/// > the request data associated with a supported follow-up protocol.
-/// > See \[[1]\]. To avoid this behaviour, a dialer should ensure completion
-/// > of the previous negotiation before starting the next negotiation,
-/// > which can be accomplished by waiting for the future returned by
-/// > [`Negotiated::complete`] to resolve.
-///
-/// [1]: https://github.com/multiformats/go-multistream/issues/20
-pub fn dialer_select_proto<R, I>(inner: R, protocols: I) -> DialerSelectFuture<R, I::IntoIter>
+/// Within the scope of this library, a dialer always commits to a specific
+/// multistream-select protocol [`Version`], whereas a listener always supports
+/// all versions supported by this library. Frictionless multistream-select
+/// protocol upgrades may thus proceed by deployments with updated listeners,
+/// eventually followed by deployments of dialers choosing the newer protocol.
+pub fn dialer_select_proto<R, I>(
+    inner: R,
+    protocols: I,
+    version: Version
+) -> DialerSelectFuture<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
@@ -62,9 +60,9 @@ where
     let iter = protocols.into_iter();
     // We choose between the "serial" and "parallel" strategies based on the number of protocols.
     if iter.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
-        Either::A(dialer_select_proto_serial(inner, iter))
+        Either::A(dialer_select_proto_serial(inner, iter, version))
     } else {
-        Either::B(dialer_select_proto_parallel(inner, iter))
+        Either::B(dialer_select_proto_parallel(inner, iter, version))
     }
 }
 
@@ -80,7 +78,11 @@ pub type DialerSelectFuture<R, I> = Either<DialerSelectSeq<R, I>, DialerSelectPa
 /// trying the given list of supported protocols one-by-one.
 ///
 /// This strategy is preferable if the dialer only supports a few protocols.
-pub fn dialer_select_proto_serial<R, I>(inner: R, protocols: I) -> DialerSelectSeq<R, I::IntoIter>
+pub fn dialer_select_proto_serial<R, I>(
+    inner: R,
+    protocols: I,
+    version: Version
+) -> DialerSelectSeq<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
@@ -88,9 +90,10 @@ where
 {
     let protocols = protocols.into_iter().peekable();
     DialerSelectSeq {
+        version,
         protocols,
         state: SeqState::SendHeader {
-            io: MessageIO::new(inner)
+            io: MessageIO::new(inner),
         }
     }
 }
@@ -104,7 +107,11 @@ where
 ///
 /// This strategy may be beneficial if the dialer supports many protocols
 /// and it is unclear whether the remote supports one of the first few.
-pub fn dialer_select_proto_parallel<R, I>(inner: R, protocols: I) -> DialerSelectPar<R, I::IntoIter>
+pub fn dialer_select_proto_parallel<R, I>(
+    inner: R,
+    protocols: I,
+    version: Version
+) -> DialerSelectPar<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
@@ -112,6 +119,7 @@ where
 {
     let protocols = protocols.into_iter();
     DialerSelectPar {
+        version,
         protocols,
         state: ParState::SendHeader {
             io: MessageIO::new(inner)
@@ -129,7 +137,8 @@ where
 {
     // TODO: It would be nice if eventually N = I::Item = Protocol.
     protocols: iter::Peekable<I>,
-    state: SeqState<R, I::Item>
+    state: SeqState<R, I::Item>,
+    version: Version,
 }
 
 enum SeqState<R, N>
@@ -157,7 +166,7 @@ where
         loop {
             match mem::replace(&mut self.state, SeqState::Done) {
                 SeqState::SendHeader { mut io } => {
-                    if io.start_send(Message::Header(Version::V1))?.is_not_ready() {
+                    if io.start_send(Message::Header(self.version))?.is_not_ready() {
                         self.state = SeqState::SendHeader { io };
                         return Ok(Async::NotReady)
                     }
@@ -174,9 +183,14 @@ where
                     if self.protocols.peek().is_some() {
                         self.state = SeqState::FlushProtocol { io, protocol }
                     } else {
-                        debug!("Dialer: Expecting proposed protocol: {}", p);
-                        let io = Negotiated::expecting(io.into_reader(), p);
-                        return Ok(Async::Ready((protocol, io)))
+                        match self.version {
+                            Version::V1 => self.state = SeqState::FlushProtocol { io, protocol },
+                            Version::V1Lazy => {
+                                debug!("Dialer: Expecting proposed protocol: {}", p);
+                                let io = Negotiated::expecting(io.into_reader(), p, self.version);
+                                return Ok(Async::Ready((protocol, io)))
+                            }
+                        }
                     }
                 }
                 SeqState::FlushProtocol { mut io, protocol } => {
@@ -199,7 +213,7 @@ where
                     };
 
                     match msg {
-                        Message::Header(Version::V1) => {
+                        Message::Header(v) if v == self.version => {
                             self.state = SeqState::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
@@ -234,7 +248,8 @@ where
     I::Item: AsRef<[u8]>
 {
     protocols: I,
-    state: ParState<R, I::Item>
+    state: ParState<R, I::Item>,
+    version: Version,
 }
 
 enum ParState<R, N>
@@ -263,7 +278,7 @@ where
         loop {
             match mem::replace(&mut self.state, ParState::Done) {
                 ParState::SendHeader { mut io } => {
-                    if io.start_send(Message::Header(Version::V1))?.is_not_ready() {
+                    if io.start_send(Message::Header(self.version))?.is_not_ready() {
                         self.state = ParState::SendHeader { io };
                         return Ok(Async::NotReady)
                     }
@@ -297,7 +312,7 @@ where
                     };
 
                     match &msg {
-                        Message::Header(Version::V1) => {
+                        Message::Header(v) if v == &self.version => {
                             self.state = ParState::RecvProtocols { io }
                         }
                         Message::Protocols(supported) => {
@@ -319,7 +334,7 @@ where
                         return Ok(Async::NotReady)
                     }
                     debug!("Dialer: Expecting proposed protocol: {}", p);
-                    let io = Negotiated::expecting(io.into_reader(), p);
+                    let io = Negotiated::expecting(io.into_reader(), p, self.version);
                     return Ok(Async::Ready((protocol, io)))
                 }
                 ParState::Done => panic!("ParState::poll called after completion")

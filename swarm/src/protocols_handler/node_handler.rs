@@ -111,7 +111,7 @@ where
     )>,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, TProtoHandler::OutboundProtocol)>,
+    queued_dial_upgrades: Vec<(u64, (upgrade::Version, TProtoHandler::OutboundProtocol))>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
@@ -197,7 +197,7 @@ where
             NodeHandlerEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
                 let timeout = protocol.timeout().clone();
-                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade());
+                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade().1);
                 let with_timeout = Timeout::new(upgrade, timeout);
                 self.negotiating_in.push(with_timeout);
             }
@@ -214,8 +214,8 @@ where
                     }
                 };
 
-                let (_, proto_upgrade) = self.queued_dial_upgrades.remove(pos);
-                let upgrade = upgrade::apply_outbound(substream, proto_upgrade);
+                let (_, (version, upgrade)) = self.queued_dial_upgrades.remove(pos);
+                let upgrade = upgrade::apply_outbound(substream, upgrade, version);
                 let with_timeout = Timeout::new(upgrade, timeout);
                 self.negotiating_out.push((user_data, with_timeout));
             }

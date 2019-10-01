@@ -35,7 +35,7 @@ fn core_upgrade_compat() {
     let id_keys = identity::Keypair::generate_ed25519();
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
     let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-    let _ = TcpConfig::new().upgrade().authenticate(noise);
+    let _ = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
 }
 
 #[test]
@@ -51,14 +51,14 @@ fn xx() {
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::xx(server_dh), endpoint)
+                upgrade::apply(output, NoiseConfig::xx(server_dh), endpoint, upgrade::Version::V1)
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::xx(client_dh), endpoint)
+                upgrade::apply(output, NoiseConfig::xx(client_dh), endpoint, upgrade::Version::V1)
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
@@ -81,14 +81,14 @@ fn ix() {
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::ix(server_dh), endpoint)
+                upgrade::apply(output, NoiseConfig::ix(server_dh), endpoint, upgrade::Version::V1)
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::ix(client_dh), endpoint)
+                upgrade::apply(output, NoiseConfig::ix(client_dh), endpoint, upgrade::Version::V1)
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
@@ -115,7 +115,8 @@ fn ik_xx() {
                 if endpoint.is_listener() {
                     Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
                 } else {
-                    Either::B(apply_outbound(output, NoiseConfig::xx(server_dh)))
+                    Either::B(apply_outbound(output, NoiseConfig::xx(server_dh),
+                        upgrade::Version::V1))
                 }
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
@@ -126,7 +127,8 @@ fn ik_xx() {
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
                     Either::A(apply_outbound(output,
-                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public)))
+                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public),
+                        upgrade::Version::V1))
                 } else {
                     Either::B(apply_inbound(output, NoiseConfig::xx(client_dh)))
                 }

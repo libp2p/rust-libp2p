@@ -110,7 +110,7 @@ fn raw_swarm_simultaneous_connect() {
             let local_key = identity::Keypair::generate_ed25519();
             let local_public_key = local_key.public();
             let transport = libp2p_tcp::TcpConfig::new()
-                .upgrade()
+                .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
                 .multiplex(libp2p_mplex::MplexConfig::new())
                 .and_then(|(peer, mplex), _| {
@@ -125,7 +125,7 @@ fn raw_swarm_simultaneous_connect() {
             let local_key = identity::Keypair::generate_ed25519();
             let local_public_key = local_key.public();
             let transport = libp2p_tcp::TcpConfig::new()
-                .upgrade()
+                .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
                 .multiplex(libp2p_mplex::MplexConfig::new())
                 .and_then(|(peer, mplex), _| {
