@@ -6,7 +6,6 @@ workflows:
     jobs:
       - test
       - test-wasm
-      - test-win32
       - integration-test
 
 jobs:
@@ -48,9 +47,12 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          keys: 
+          keys:
             - test-wasm-cache-{{ epoch }}
-            - test-wasm-cache
+      - run:
+          name: Print Rust version
+          command: |
+            rustc --version
       - run:
           name: Build for wasm32
           # TODO: also run tests but with --no-run; important to detect linking errors
@@ -65,25 +67,6 @@ jobs:
             - /usr/local/cargo
             - /root/.cache/sccache
 
-  test-win32:
-    docker:
-      - image: tomaka/rust-mingw-docker
-    steps:
-      - checkout
-      - restore_cache:
-          key: test-win32-cache
-      - run:
-          name: Build for Windows 64 bits
-          command: cargo check --target x86_64-pc-windows-gnu
-      - run:
-          name: Build for Windows 32 bits
-          command: cargo check --target i686-pc-windows-gnu
-      - save_cache:
-          key: test-win32-cache
-          paths:
-            - "~/.cargo"
-            - "./target"
-
   integration-test:
     docker:
       - image: rust
@@ -91,11 +74,15 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: integration-test-cache
+          key: integration-test-cache-{{ epoch }}
+      - run:
+          name: Print Rust version
+          command: |
+            rustc --version
       - run:
           command: cargo run --example ipfs-kad
       - save_cache:
-          key: integration-test-cache
+          key: integration-test-cache-{{ epoch }}
           paths:
             - "~/.cargo"
             - "./target"
