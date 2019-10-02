@@ -265,11 +265,7 @@ where
     T::Output: AsyncRead + AsyncWrite + Unpin + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once
-        ( self
-        , address: Multiaddr
-        ) -> Result<Either<String, BytesConnection<T::Output>>, Error<T::Error>>
-    {
+    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, BytesConnection<T::Output>>, Error<T::Error>> {
         trace!("dial address: {}", address);
 
         let (host_port, dns_name) = host_and_dnsname(&address)?;
