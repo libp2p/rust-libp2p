@@ -22,11 +22,11 @@
 
 pub mod handshake;
 
-use futures::Poll;
+use futures::{ready, Poll};
+use futures::prelude::*;
 use log::{debug, trace};
 use snow;
-use std::{fmt, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{fmt, io, pin::Pin, ops::DerefMut, task::Context};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
@@ -121,57 +121,75 @@ enum WriteState {
     EncErr
 }
 
-impl<T: io::Read> io::Read for NoiseOutput<T> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let buffer = self.buffer.borrow_mut();
+impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        let mut this = self.deref_mut();
+
+        let buffer = this.buffer.borrow_mut();
+
         loop {
-            trace!("read state: {:?}", self.read_state);
-            match self.read_state {
+            trace!("read state: {:?}", this.read_state);
+            match this.read_state {
                 ReadState::Init => {
-                    self.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
+                    this.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
                 }
                 ReadState::ReadLen { mut buf, mut off } => {
-                    let n = match read_frame_len(&mut self.io, &mut buf, &mut off) {
-                        Ok(Some(n)) => n,
-                        Ok(None) => {
+                    let n = match read_frame_len(&mut this.io, cx, &mut buf, &mut off) {
+                        Poll::Ready(Ok(Some(n))) => n,
+                        Poll::Ready(Ok(None)) => {
                             trace!("read: eof");
-                            self.read_state = ReadState::Eof(Ok(()));
-                            return Ok(0)
+                            this.read_state = ReadState::Eof(Ok(()));
+                            return Poll::Ready(Ok(0))
                         }
-                        Err(e) => {
-                            if e.kind() == io::ErrorKind::WouldBlock {
-                                // Preserve read state
-                                self.read_state = ReadState::ReadLen { buf, off };
-                            }
-                            return Err(e)
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(Err(e))
+                        }
+                        Poll::Pending => {
+                            this.read_state = ReadState::ReadLen { buf, off };
+
+                            return Poll::Pending;
                         }
                     };
                     trace!("read: next frame len = {}", n);
                     if n == 0 {
                         trace!("read: empty frame");
-                        self.read_state = ReadState::Init;
+                        this.read_state = ReadState::Init;
                         continue
                     }
-                    self.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
+                    this.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = self.io.read(&mut buffer.read[*off .. len])?;
+                    let n = match ready!(
+                        Pin::new(&mut this.io).poll_read(cx, &mut buffer.read[*off ..len])
+                    ) {
+                        Ok(n) => n,
+                        Err(e) => return Poll::Ready(Err(e)),
+                    };
+
                     trace!("read: read {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("read: eof");
-                        self.read_state = ReadState::Eof(Err(()));
-                        return Err(io::ErrorKind::UnexpectedEof.into())
+                        this.read_state = ReadState::Eof(Err(()));
+                        return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
                     }
+
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
-                        if let Ok(n) = self.session.read_message(&buffer.read[.. len], buffer.read_crypto) {
+                        if let Ok(n) = this.session.read_message(
+                            &buffer.read[.. len],
+                            buffer.read_crypto
+                        ){
                             trace!("read: payload len = {} bytes", n);
-                            self.read_state = ReadState::CopyData { len: n, off: 0 }
+                            this.read_state = ReadState::CopyData { len: n, off: 0 }
                         } else {
                             debug!("decryption error");
-                            self.read_state = ReadState::DecErr;
-                            return Err(io::ErrorKind::InvalidData.into())
+                            this.read_state = ReadState::DecErr;
+                            return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
                         }
                     }
                 }
@@ -181,32 +199,43 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     trace!("read: copied {}/{} bytes", *off + n, len);
                     *off += n;
                     if len == *off {
-                        self.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
+                        this.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
                     }
-                    return Ok(n)
+                    return Poll::Ready(Ok(n))
                 }
                 ReadState::Eof(Ok(())) => {
                     trace!("read: eof");
-                    return Ok(0)
+                    return Poll::Ready(Ok(0))
                 }
                 ReadState::Eof(Err(())) => {
                     trace!("read: eof (unexpected)");
-                    return Err(io::ErrorKind::UnexpectedEof.into())
+                    return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
                 }
-                ReadState::DecErr => return Err(io::ErrorKind::InvalidData.into())
+                ReadState::DecErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
             }
         }
     }
+
+    unsafe fn initializer(&self) -> futures::io::Initializer {
+        futures::io::Initializer::nop()
+    }
 }
 
-impl<T: io::Write> io::Write for NoiseOutput<T> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let buffer = self.buffer.borrow_mut();
+impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>>{
+        let mut this = self.deref_mut();
+
+        let buffer = this.buffer.borrow_mut();
+
         loop {
-            trace!("write state: {:?}", self.write_state);
-            match self.write_state {
+            trace!("write state: {:?}", this.write_state);
+            match this.write_state {
                 WriteState::Init => {
-                    self.write_state = WriteState::BufferData { off: 0 }
+                    this.write_state = WriteState::BufferData { off: 0 }
                 }
                 WriteState::BufferData { ref mut off } => {
                     let n = std::cmp::min(MAX_WRITE_BUF_LEN - *off, buf.len());
@@ -215,136 +244,157 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     *off += n;
                     if *off == MAX_WRITE_BUF_LEN {
                         trace!("write: encrypting {} bytes", *off);
-                        if let Ok(n) = self.session.write_message(buffer.write, buffer.write_crypto) {
-                            trace!("write: cipher text len = {} bytes", n);
-                            self.write_state = WriteState::WriteLen {
-                                len: n,
-                                buf: u16::to_be_bytes(n as u16),
-                                off: 0
+                        match this.session.write_message(buffer.write, buffer.write_crypto) {
+                            Ok(n) => {
+                                trace!("write: cipher text len = {} bytes", n);
+                                this.write_state = WriteState::WriteLen {
+                                    len: n,
+                                    buf: u16::to_be_bytes(n as u16),
+                                    off: 0
+                                }
                             }
-                        } else {
-                            debug!("encryption error");
-                            self.write_state = WriteState::EncErr;
-                            return Err(io::ErrorKind::InvalidData.into())
+                            Err(e) => {
+                                debug!("encryption error: {:?}", e);
+                                this.write_state = WriteState::EncErr;
+                                return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                            }
                         }
                     }
-                    return Ok(n)
+                    return Poll::Ready(Ok(n))
                 }
                 WriteState::WriteLen { len, mut buf, mut off } => {
                     trace!("write: writing len ({}, {:?}, {}/2)", len, buf, off);
-                    match write_frame_len(&mut self.io, &mut buf, &mut off) {
-                        Err(e) => {
-                            if e.kind() == io::ErrorKind::WouldBlock {
-                                self.write_state = WriteState::WriteLen{ len, buf, off };
-                            }
-                            return Err(e)
-                        }
-                        Ok(false) => {
+                    match write_frame_len(&mut this.io, cx, &mut buf, &mut off) {
+                        Poll::Ready(Ok(true)) => (),
+                        Poll::Ready(Ok(false)) => {
                             trace!("write: eof");
-                            self.write_state = WriteState::Eof;
-                            return Err(io::ErrorKind::WriteZero.into())
+                            this.write_state = WriteState::Eof;
+                            return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
                         }
-                        Ok(true) => ()
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(Err(e))
+                        }
+                        Poll::Pending => {
+                            this.write_state = WriteState::WriteLen{ len, buf, off };
+
+                            return Poll::Pending
+                        }
                     }
-                    self.write_state = WriteState::WriteData { len, off: 0 }
+                    this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = self.io.write(&buffer.write_crypto[*off .. len])?;
+                    let n = match ready!(
+                        Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len])
+                    ) {
+                        Ok(n) => n,
+                        Err(e) => return Poll::Ready(Err(e)),
+                    };
                     trace!("write: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("write: eof");
-                        self.write_state = WriteState::Eof;
-                        return Err(io::ErrorKind::WriteZero.into())
+                        this.write_state = WriteState::Eof;
+                        return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
                     }
                     *off += n;
                     if len == *off {
                         trace!("write: finished writing {} bytes", len);
-                        self.write_state = WriteState::Init
+                        this.write_state = WriteState::Init
                     }
                 }
                 WriteState::Eof => {
                     trace!("write: eof");
-                    return Err(io::ErrorKind::WriteZero.into())
+                    return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
                 }
-                WriteState::EncErr => return Err(io::ErrorKind::InvalidData.into())
+                WriteState::EncErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
             }
         }
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        let buffer = self.buffer.borrow_mut();
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>
+    ) -> Poll<Result<(), std::io::Error>> {
+        let mut this = self.deref_mut();
+
+        let buffer = this.buffer.borrow_mut();
+
         loop {
-            match self.write_state {
-                WriteState::Init => return Ok(()),
+            match this.write_state {
+                WriteState::Init => return Poll::Ready(Ok(())),
                 WriteState::BufferData { off } => {
                     trace!("flush: encrypting {} bytes", off);
-                    if let Ok(n) = self.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
-                        trace!("flush: cipher text len = {} bytes", n);
-                        self.write_state = WriteState::WriteLen {
-                            len: n,
-                            buf: u16::to_be_bytes(n as u16),
-                            off: 0
+                    match this.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
+                        Ok(n) => {
+                            trace!("flush: cipher text len = {} bytes", n);
+                            this.write_state = WriteState::WriteLen {
+                                len: n,
+                                buf: u16::to_be_bytes(n as u16),
+                                off: 0
+                            }
                         }
-                    } else {
-                        debug!("encryption error");
-                        self.write_state = WriteState::EncErr;
-                        return Err(io::ErrorKind::InvalidData.into())
+                        Err(e) => {
+                            debug!("encryption error: {:?}", e);
+                            this.write_state = WriteState::EncErr;
+                            return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                        }
                     }
                 }
                 WriteState::WriteLen { len, mut buf, mut off } => {
                     trace!("flush: writing len ({}, {:?}, {}/2)", len, buf, off);
-                    match write_frame_len(&mut self.io, &mut buf, &mut off) {
-                        Ok(true) => (),
-                        Ok(false) => {
+                    match write_frame_len(&mut this.io, cx, &mut buf, &mut off) {
+                        Poll::Ready(Ok(true)) => (),
+                        Poll::Ready(Ok(false)) => {
                             trace!("write: eof");
-                            self.write_state = WriteState::Eof;
-                            return Err(io::ErrorKind::WriteZero.into())
+                            this.write_state = WriteState::Eof;
+                            return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
                         }
-                        Err(e) => {
-                            if e.kind() == io::ErrorKind::WouldBlock {
-                                // Preserve write state
-                                self.write_state = WriteState::WriteLen { len, buf, off };
-                            }
-                            return Err(e)
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(Err(e))
+                        }
+                        Poll::Pending => {
+                            this.write_state = WriteState::WriteLen { len, buf, off };
+
+                            return Poll::Pending
                         }
                     }
-                    self.write_state = WriteState::WriteData { len, off: 0 }
+                    this.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = self.io.write(&buffer.write_crypto[*off .. len])?;
+                    let n = match ready!(
+                        Pin::new(&mut this.io).poll_write(cx, &buffer.write_crypto[*off .. len])
+                    ) {
+                        Ok(n) => n,
+                        Err(e) => return Poll::Ready(Err(e)),
+                    };
                     trace!("flush: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("flush: eof");
-                        self.write_state = WriteState::Eof;
-                        return Err(io::ErrorKind::WriteZero.into())
+                        this.write_state = WriteState::Eof;
+                        return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
                     }
                     *off += n;
                     if len == *off {
                         trace!("flush: finished writing {} bytes", len);
-                        self.write_state = WriteState::Init;
-                        return Ok(())
+                        this.write_state = WriteState::Init;
+                        return Poll::Ready(Ok(()))
                     }
                 }
                 WriteState::Eof => {
                     trace!("flush: eof");
-                    return Err(io::ErrorKind::WriteZero.into())
+                    return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
                 }
-                WriteState::EncErr => return Err(io::ErrorKind::InvalidData.into())
+                WriteState::EncErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
             }
         }
     }
-}
 
-impl<T: AsyncRead> AsyncRead for NoiseOutput<T> {
-    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
-        false
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>>{
+        Pin::new(&mut self.io).poll_close(cx)
     }
-}
 
-impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.io.shutdown()
-    }
 }
 
 /// Read 2 bytes as frame length from the given source into the given buffer.
@@ -356,17 +406,26 @@ impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
 /// for the next invocation.
 ///
 /// Returns `None` if EOF has been encountered.
-fn read_frame_len<R: io::Read>(io: &mut R, buf: &mut [u8; 2], off: &mut usize)
-    -> io::Result<Option<u16>>
-{
+fn read_frame_len<R: AsyncRead + Unpin>(
+    mut io: &mut R,
+    cx: &mut Context<'_>,
+    buf: &mut [u8; 2],
+    off: &mut usize,
+) -> Poll<Result<Option<u16>, std::io::Error>> {
     loop {
-        let n = io.read(&mut buf[*off ..])?;
-        if n == 0 {
-            return Ok(None)
-        }
-        *off += n;
-        if *off == 2 {
-            return Ok(Some(u16::from_be_bytes(*buf)))
+        match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off ..])) {
+            Ok(n) => {
+                if n == 0 {
+                    return Poll::Ready(Ok(None));
+                }
+                *off += n;
+                if *off == 2 {
+                    return Poll::Ready(Ok(Some(u16::from_be_bytes(*buf))));
+                }
+            },
+            Err(e) => {
+                return Poll::Ready(Err(e));
+            },
         }
     }
 }
@@ -380,18 +439,26 @@ fn read_frame_len<R: io::Read>(io: &mut R, buf: &mut [u8; 2], off: &mut usize)
 /// be preserved for the next invocation.
 ///
 /// Returns `false` if EOF has been encountered.
-fn write_frame_len<W: io::Write>(io: &mut W, buf: &[u8; 2], off: &mut usize)
-    -> io::Result<bool>
-{
+fn write_frame_len<W: AsyncWrite + Unpin>(
+    mut io: &mut W,
+    cx: &mut Context<'_>,
+    buf: &[u8; 2],
+    off: &mut usize,
+) -> Poll<Result<bool, std::io::Error>> {
     loop {
-        let n = io.write(&buf[*off ..])?;
-        if n == 0 {
-            return Ok(false)
-        }
-        *off += n;
-        if *off == 2 {
-            return Ok(true)
+        match ready!(Pin::new(&mut io).poll_write(cx, &buf[*off ..])) {
+            Ok(n) => {
+                if n == 0 {
+                    return Poll::Ready(Ok(false))
+                }
+                *off += n;
+                if *off == 2 {
+                    return Poll::Ready(Ok(true))
+                }
+            }
+            Err(e) => {
+                return Poll::Ready(Err(e));
+            }
         }
     }
 }
-
