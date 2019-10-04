@@ -71,10 +71,6 @@ impl PublicKey {
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         let key = signature::UnparsedPublicKey::new(&RSA_PKCS1_2048_8192_SHA256, &self.0);
         key.verify(msg, sig).is_ok()
-        // signature::verify(&RSA_PKCS1_2048_8192_SHA256,
-        //                   Input::from(&self.0),
-        //                   Input::from(msg),
-        //                   Input::from(sig)).is_ok()
     }
 
     /// Encode the RSA public key in DER as a PKCS#1 RSAPublicKey structure,
