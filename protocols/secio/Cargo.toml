@@ -15,7 +15,7 @@ futures = "0.1.29"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4.8"
 protobuf = "2.8.1"
-rand = "0.6.5"
+rand = "0.7.2"
 aes-ctr = "0.3.0"
 aesni = { version = "0.6.0", features = ["nocheck"], optional = true }
 twofish = "0.2.0"
@@ -28,7 +28,7 @@ sha2 = "0.8.0"
 hmac = "0.7.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ring = { version = "0.14", default-features = false }
+ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 untrusted = "0.6.2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
