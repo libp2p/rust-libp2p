@@ -33,6 +33,7 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr,
     protocols_handler::NodeHandlerWrapperBuilder
 };
+use rand_new as rand;
 use rand::seq::SliceRandom;
 use std::io;
 

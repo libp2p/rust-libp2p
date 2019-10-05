@@ -25,6 +25,7 @@ use failure::Fail;
 use super::error::DecodingError;
 use zeroize::Zeroize;
 use sha2::Sha512;
+use rand_old as rand;
 
 /// An Ed25519 keypair.
 pub struct Keypair(ed25519::Keypair);

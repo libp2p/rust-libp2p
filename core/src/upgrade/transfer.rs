@@ -482,6 +482,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+	use rand_new as rand;
     use std::io::{self, Cursor};
     use tokio::runtime::current_thread::Runtime;
 

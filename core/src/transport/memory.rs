@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use rand_old as rand;
 use crate::{Transport, transport::{TransportError, ListenerEvent}};
 use bytes::{Bytes, IntoBuf};
 use fnv::FnvHashMap;
