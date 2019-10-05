@@ -18,7 +18,7 @@ libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 log = "0.4.8"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../multiaddr" }
 net2 = "0.2.33"
-rand = "0.7.2"
+rand = "0.6.5"
 smallvec = "0.6.10"
 tokio-io = "0.1.12"
 tokio-reactor = "0.1.10"

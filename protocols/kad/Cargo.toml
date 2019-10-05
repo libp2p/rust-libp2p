@@ -21,7 +21,7 @@ libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../../misc/multihash" }
 protobuf = "2.8.1"
-rand = "0.7.2"
+rand = "0.6.5"
 sha2 = "0.8.0"
 smallvec = "0.6.10"
 tokio-codec = "0.1.1"
@@ -36,5 +36,5 @@ libp2p-secio = { version = "0.12.0", path = "../secio" }
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
 libp2p-yamux = { version = "0.12.0", path = "../../muxers/yamux" }
 quickcheck = "0.9.0"
-rand = "0.7.2"
+rand = "0.6.5"
 tokio = "0.1.22"
