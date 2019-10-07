@@ -19,15 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::ConnectedPoint;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
-use crate::upgrade::{ProtocolName, NegotiatedComplete};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
 use futures::{future::Either, prelude::*, compat::Compat, compat::Compat01As03, compat::Future01CompatExt};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
+pub use multistream_select::Version;
+
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
+pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -36,7 +37,7 @@ where
     if cp.is_listener() {
         Either::Left(apply_inbound(conn, up))
     } else {
-        Either::Right(apply_outbound(conn, up))
+        Either::Right(apply_outbound(conn, up, v))
     }
 }
 
@@ -54,13 +55,13 @@ where
 }
 
 /// Tries to perform an upgrade on an outbound connection or substream.
-pub fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
+pub fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<C>
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::dialer_select_proto(Compat::new(conn), iter).compat();
+    let future = multistream_select::dialer_select_proto(Compat::new(conn), iter, v).compat();
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
     }
@@ -161,11 +162,6 @@ where
         future: Compat01As03<DialerSelectFuture<Compat<C>, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>>,
         upgrade: U
     },
-    AwaitNegotiated {
-        io: Compat01As03<NegotiatedComplete<Compat<C>>>,
-        upgrade: U,
-        protocol: U::Info
-    },
     Upgrade {
         future: U::Future
     },
@@ -198,24 +194,8 @@ where
                             return Poll::Pending
                         }
                     };
-                    self.inner = OutboundUpgradeApplyState::AwaitNegotiated {
-                        io: Compat01As03::new(connection.complete()),
-                        protocol: info.0,
-                        upgrade
-                    };
-                }
-                OutboundUpgradeApplyState::AwaitNegotiated { mut io, protocol, upgrade } => {
-                    let io = match Future::poll(Pin::new(&mut io), cx)? {
-                        Poll::Pending => {
-                            self.inner = OutboundUpgradeApplyState::AwaitNegotiated {
-                                io, protocol, upgrade
-                            };
-                            return Poll::Pending
-                        }
-                        Poll::Ready(io) => io
-                    };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(Compat01As03::new(io), protocol)
+                        future: upgrade.upgrade_outbound(Compat01As03::new(connection), info.0)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {

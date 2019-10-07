@@ -27,7 +27,14 @@ use quickcheck::QuickCheck;
 #[test]
 fn deflate() {
     fn prop(message: Vec<u8>) -> bool {
+<<<<<<< HEAD
         run(message);
+=======
+        let client = TcpConfig::new().and_then(|c, e|
+            upgrade::apply(c, DeflateConfig {}, e, upgrade::Version::V1));
+        let server = client.clone();
+        run(server, client, message);
+>>>>>>> upstream/master
         true
     }
 

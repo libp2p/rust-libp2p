@@ -36,7 +36,7 @@
 //! Example:
 //!
 //! ```
-//! use libp2p_core::{identity, Transport};
+//! use libp2p_core::{identity, Transport, upgrade};
 //! use libp2p_tcp::TcpConfig;
 //! use libp2p_noise::{Keypair, X25519, NoiseConfig};
 //!
@@ -44,7 +44,7 @@
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
 //! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-//! let builder = TcpConfig::new().upgrade().authenticate(noise);
+//! let builder = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```

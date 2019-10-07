@@ -125,8 +125,8 @@ where
         let proto1 = self.proto1.listen_protocol();
         let proto2 = self.proto2.listen_protocol();
         let timeout = std::cmp::max(proto1.timeout(), proto2.timeout()).clone();
-        SubstreamProtocol::new(SelectUpgrade::new(proto1.into_upgrade(), proto2.into_upgrade()))
-            .with_timeout(timeout)
+        let choice = SelectUpgrade::new(proto1.into_upgrade().1, proto2.into_upgrade().1);
+        SubstreamProtocol::new(choice).with_timeout(timeout)
     }
 
     fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
