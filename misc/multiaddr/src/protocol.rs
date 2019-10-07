@@ -41,6 +41,19 @@ const WS_WITH_PATH: u32 = 4770;         // Note: not standard
 const WSS: u32 = 478;
 const WSS_WITH_PATH: u32 = 4780;        // Note: not standard
 
+const PATH_SEGMENT_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+    .add(b'%')
+    .add(b'/')
+    .add(b'`')
+    .add(b'?')
+    .add(b'{')
+    .add(b'}')
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'<')
+    .add(b'>');
+
 /// `Protocol` describes all possible multiaddress protocols.
 ///
 /// For `Unix`, `Ws` and `Wss` we use `&str` instead of `Path` to allow
@@ -429,12 +442,12 @@ impl<'a> fmt::Display for Protocol<'a> {
             Utp => f.write_str("/utp"),
             Ws(ref s) if s == "/" => f.write_str("/ws"),
             Ws(s) => {
-                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::PATH_SEGMENT_ENCODE_SET);
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
                 write!(f, "/x-parity-ws/{}", encoded)
             },
             Wss(ref s) if s == "/" => f.write_str("/wss"),
             Wss(s) => {
-                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::PATH_SEGMENT_ENCODE_SET);
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
                 write!(f, "/x-parity-wss/{}", encoded)
             },
         }
