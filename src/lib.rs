@@ -244,7 +244,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
-        .upgrade()
+        .upgrade(core::upgrade::Version::V1)
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
         .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))

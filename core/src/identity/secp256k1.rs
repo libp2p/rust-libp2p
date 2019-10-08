@@ -188,4 +188,3 @@ mod tests {
         assert_eq!(sk_bytes, [0; 32]);
     }
 }
-
