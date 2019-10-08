@@ -41,6 +41,19 @@ const WS_WITH_PATH: u32 = 4770;         // Note: not standard
 const WSS: u32 = 478;
 const WSS_WITH_PATH: u32 = 4780;        // Note: not standard
 
+const PATH_SEGMENT_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+    .add(b'%')
+    .add(b'/')
+    .add(b'`')
+    .add(b'?')
+    .add(b'{')
+    .add(b'}')
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'<')
+    .add(b'>');
+
 /// `Protocol` describes all possible multiaddress protocols.
 ///
 /// For `Unix`, `Ws` and `Wss` we use `&str` instead of `Path` to allow
