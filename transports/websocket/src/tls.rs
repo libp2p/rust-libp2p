@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{fmt, io, sync::Arc};
-use tokio_rustls::{
+use futures_rustls::{
     TlsConnector,
     TlsAcceptor,
     rustls,

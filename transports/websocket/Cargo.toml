@@ -10,15 +10,14 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4.6"
-futures-preview = { version = "0.3.0-alpha.18", features = ["compat"] }
-futures_codec = "0.2.0"
+bytes = "0.4.12"
+either = "1.5.3"
+futures-preview = "= 0.3.0-alpha.18"
+futures-rustls = "0.12.0-alpha"
 libp2p-core = { version = "0.12.0", path = "../../core" }
-log = "0.4.1"
+log = "0.4.8"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
-tokio-io = "0.1.12"
-tokio-rustls = "0.10.0-alpha.3"
-soketto = { version = "0.2.3", features = ["deflate"] }
+soketto = { git = "https://github.com/paritytech/soketto.git", branch = "develop", features = ["deflate"] }
 url = "1.7.2"
 webpki-roots = "0.16.0"
 

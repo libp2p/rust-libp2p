@@ -10,4 +10,4 @@ keywords = ["networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures-preview = "0.3.0-alpha.18"
+futures-preview = "= 0.3.0-alpha.18"
