@@ -25,11 +25,11 @@
 //!
 //! This crate provides `libp2p_core::InboundUpgrade` and `libp2p_core::OutboundUpgrade`
 //! implementations for various noise handshake patterns (currently `IK`, `IX`, and `XX`)
-//! over a particular choice of DH key agreement (currently only X25519).
+//! over a particular choice of Diffie–Hellman key agreement (currently only X25519).
 //!
 //! All upgrades produce as output a pair, consisting of the remote's static public key
 //! and a `NoiseOutput` which represents the established cryptographic session with the
-//! remote, implementing `tokio_io::AsyncRead` and `tokio_io::AsyncWrite`.
+//! remote, implementing `futures::io::AsyncRead` and `futures::io::AsyncWrite`.
 //!
 //! # Usage
 //!
@@ -57,12 +57,14 @@ mod protocol;
 
 pub use error::NoiseError;
 pub use io::NoiseOutput;
-pub use io::handshake::{RemoteIdentity, IdentityExchange};
+pub use io::handshake;
+pub use io::handshake::{Handshake, RemoteIdentity, IdentityExchange};
 pub use protocol::{Keypair, AuthenticKeypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
 
+use futures::prelude::*;
 use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::pin::Pin;
 use zeroize::Zeroize;
 
 /// The protocol upgrade configuration.
@@ -157,7 +159,7 @@ where
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
-    T: AsyncRead + AsyncWrite + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
@@ -169,7 +171,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        Handshake::rt1_responder(socket, session,
+        handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -178,7 +180,7 @@ where
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
-    T: AsyncRead + AsyncWrite + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
@@ -190,9 +192,9 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        Handshake::rt1_initiator(socket, session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Mutual)
+        handshake::rt1_initiator(socket, session,
+                                 self.dh_keys.into_identity(),
+                                 IdentityExchange::Mutual)
     }
 }
 
@@ -201,7 +203,7 @@ where
 impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
-    T: AsyncRead + AsyncWrite + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
@@ -213,7 +215,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        Handshake::rt15_responder(socket, session,
+        handshake::rt15_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -222,7 +224,7 @@ where
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
-    T: AsyncRead + AsyncWrite + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
@@ -234,7 +236,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        Handshake::rt15_initiator(socket, session,
+        handshake::rt15_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual)
     }
@@ -245,7 +247,7 @@ where
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
     NoiseConfig<IK, C>: UpgradeInfo,
-    T: AsyncRead + AsyncWrite + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
@@ -257,7 +259,7 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        Handshake::rt1_responder(socket, session,
+        handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Receive)
     }
@@ -266,7 +268,7 @@ where
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
     NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
-    T: AsyncRead + AsyncWrite + Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>);
@@ -279,7 +281,7 @@ where
             .remote_public_key(self.remote.0.as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        Handshake::rt1_initiator(socket, session,
+        handshake::rt1_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Send { remote: self.remote.1 })
     }
@@ -319,23 +321,20 @@ where
     NoiseConfig<P, C, R>: UpgradeInfo + InboundUpgrade<T,
         Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
         Error = NoiseError
-    >,
+    > + 'static,
+    <NoiseConfig<P, C, R> as InboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (PeerId, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = future::AndThen<
-        <NoiseConfig<P, C, R> as InboundUpgrade<T>>::Future,
-        FutureResult<Self::Output, Self::Error>,
-        fn((RemoteIdentity<C>, NoiseOutput<Negotiated<T>>)) -> FutureResult<Self::Output, Self::Error>
-    >;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
-        self.config.upgrade_inbound(socket, info)
-            .and_then(|(remote, io)| future::result(match remote {
-                RemoteIdentity::IdentityKey(pk) => Ok((pk.into_peer_id(), io)),
-                _ => Err(NoiseError::AuthenticationFailed)
+        Box::pin(self.config.upgrade_inbound(socket, info)
+            .and_then(|(remote, io)| match remote {
+                RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
+                _ => future::err(NoiseError::AuthenticationFailed)
             }))
     }
 }
@@ -345,24 +344,20 @@ where
     NoiseConfig<P, C, R>: UpgradeInfo + OutboundUpgrade<T,
         Output = (RemoteIdentity<C>, NoiseOutput<Negotiated<T>>),
         Error = NoiseError
-    >,
+    > + 'static,
+    <NoiseConfig<P, C, R> as OutboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (PeerId, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = future::AndThen<
-        <NoiseConfig<P, C, R> as OutboundUpgrade<T>>::Future,
-        FutureResult<Self::Output, Self::Error>,
-        fn((RemoteIdentity<C>, NoiseOutput<Negotiated<T>>)) -> FutureResult<Self::Output, Self::Error>
-    >;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, info: Self::Info) -> Self::Future {
-        self.config.upgrade_outbound(socket, info)
-            .and_then(|(remote, io)| future::result(match remote {
-                RemoteIdentity::IdentityKey(pk) => Ok((pk.into_peer_id(), io)),
-                _ => Err(NoiseError::AuthenticationFailed)
+        Box::pin(self.config.upgrade_outbound(socket, info)
+            .and_then(|(remote, io)| match remote {
+                RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
+                _ => future::err(NoiseError::AuthenticationFailed)
             }))
     }
 }
-
