@@ -28,7 +28,7 @@
 //! >           not at all specific to libp2p.
 
 use futures::{prelude::*, io::Initializer};
-use std::{cmp, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
+use std::{cmp, io, pin::Pin, task::Context, task::Poll};
 
 /// Wraps around a `Stream + Sink` whose items are buffers. Implements `AsyncRead` and `AsyncWrite`.
 ///
