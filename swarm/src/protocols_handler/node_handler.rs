@@ -198,15 +198,9 @@ where
             NodeHandlerEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
                 let timeout = protocol.timeout().clone();
-<<<<<<< HEAD
-                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade());
+                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade().1);
                 let timeout = Delay::new(timeout);
                 self.negotiating_in.push((upgrade, timeout));
-=======
-                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade().1);
-                let with_timeout = Timeout::new(upgrade, timeout);
-                self.negotiating_in.push(with_timeout);
->>>>>>> upstream/master
             }
             NodeHandlerEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
                 let pos = match self
@@ -221,17 +215,10 @@ where
                     }
                 };
 
-<<<<<<< HEAD
-                let (_, proto_upgrade) = self.queued_dial_upgrades.remove(pos);
-                let upgrade = upgrade::apply_outbound(substream, proto_upgrade);
-                let timeout = Delay::new(timeout);
-                self.negotiating_out.push((user_data, upgrade, timeout));
-=======
                 let (_, (version, upgrade)) = self.queued_dial_upgrades.remove(pos);
                 let upgrade = upgrade::apply_outbound(substream, upgrade, version);
-                let with_timeout = Timeout::new(upgrade, timeout);
-                self.negotiating_out.push((user_data, with_timeout));
->>>>>>> upstream/master
+                let timeout = Delay::new(timeout);
+                self.negotiating_out.push((user_data, upgrade, timeout));
             }
         }
     }
