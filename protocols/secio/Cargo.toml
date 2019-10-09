@@ -24,7 +24,7 @@ lazy_static = "1.2.0"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
 sha2 = "0.8.0"
-hmac = "0.7.0"
+hmac = "0.7.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.14", features = ["use_heap"], default-features = false }
