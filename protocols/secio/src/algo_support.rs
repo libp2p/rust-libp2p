@@ -42,7 +42,7 @@ const SHA_256: &str = "SHA256";
 const SHA_512: &str = "SHA512";
 
 pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P-384";
-pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "NULL"; // "AES-128,AES-256,TwofishCTR";
+pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,TwofishCTR";
 pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
 
 /// Return a proposition string from the given sequence of `KeyAgreement` values.
@@ -212,5 +212,15 @@ impl Into<&'static digest::Algorithm> for Digest {
             Digest::Sha256 => &digest::SHA256,
             Digest::Sha512 => &digest::SHA512,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cipher_non_null() {
+        // This test serves as a safe-guard against accidentally pushing to master a commit that
+        // sets this constant to `NULL`.
+        assert!(!super::DEFAULT_CIPHERS_PROPOSITION.contains("NULL"));
     }
 }
