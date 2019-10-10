@@ -22,13 +22,13 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::identity;
-use libp2p_core::transport::{Transport, MemoryTransport, ListenerEvent};
+use libp2p_core::transport::{Transport, MemoryTransport};
 use libp2p_core::upgrade::{self, UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
 use multiaddr::Multiaddr;
 use rand::random;
-use std::io;
+use std::{io, pin::Pin};
 
 #[derive(Clone)]
 struct HelloUpgrade {}
@@ -44,30 +44,36 @@ impl UpgradeInfo for HelloUpgrade {
 
 impl<C> InboundUpgrade<C> for HelloUpgrade
 where
-    C: AsyncRead + AsyncWrite + Send + 'static
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     type Output = Negotiated<C>;
     type Error = io::Error;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
-        Box::new(nio::read_exact(socket, [0u8; 5]).map(|(io, buf)| {
+    fn upgrade_inbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+        Box::pin(async move {
+            let mut buf = [0u8; 5];
+            socket.read_exact(&mut buf).await.unwrap();
             assert_eq!(&buf[..], "hello".as_bytes());
-            io
-        }))
+            Ok(socket)
+        })
     }
 }
 
 impl<C> OutboundUpgrade<C> for HelloUpgrade
 where
-    C: AsyncWrite + AsyncRead + Send + 'static,
+    C: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
     type Output = Negotiated<C>;
     type Error = io::Error;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
-        Box::new(nio::write_all(socket, "hello").map(|(io, _)| io))
+    fn upgrade_outbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+        Box::pin(async move {
+            socket.write_all(b"hello").await.unwrap();
+            socket.flush().await.unwrap();
+            Ok(socket)
+        })
     }
 }
 
@@ -85,7 +91,7 @@ fn upgrade_pipeline() {
         .and_then(|(peer, mplex), _| {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
-            util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
+            util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
         });
 
     let dialer_keys = identity::Keypair::generate_ed25519();
@@ -100,27 +106,31 @@ fn upgrade_pipeline() {
         .and_then(|(peer, mplex), _| {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
-            util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
+            util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
         });
 
     let listen_addr: Multiaddr = format!("/memory/{}", random::<u64>()).parse().unwrap();
-    let listener = listener_transport.listen_on(listen_addr.clone()).unwrap()
-        .filter_map(ListenerEvent::into_upgrade)
-        .for_each(move |(upgrade, _remote_addr)| {
-            let dialer = dialer_id.clone();
-            upgrade.map(move |(peer, _mplex)| {
-                assert_eq!(peer, dialer)
-            })
-        })
-        .map_err(|e| panic!("Listener error: {}", e));
+    
+    async_std::task::spawn({
+        let listen_addr = listen_addr.clone();
+        let dialer_id = dialer_id.clone();
+        async move {
+            let mut listener = listener_transport.listen_on(listen_addr).unwrap();
+            loop {
+                let (upgrade, _remote_addr) = match listener.next().await.unwrap().unwrap().into_upgrade() {
+                    Some(u) => u,
+                    None => continue
+                };
 
-    let dialer = dialer_transport.dial(listen_addr).unwrap()
-        .map(move |(peer, _mplex)| {
-            assert_eq!(peer, listener_id)
-        });
+                let (peer, _mplex) = upgrade.await.unwrap();
+                assert_eq!(peer, dialer_id);
+            }
+        }
+    });
 
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    rt.spawn(listener);
-    rt.block_on(dialer).unwrap()
+    async_std::task::block_on(async move {
+        let (peer, _mplex) = dialer_transport.dial(listen_addr).unwrap().await.unwrap();
+        assert_eq!(peer, listener_id);
+    });
 }
 
