@@ -73,7 +73,7 @@ impl HandshakeContext<Local> {
             Ok(prop) => prop,
             Err(e) => {
                 debug!("failed to parse remote's exchange protobuf message");
-                return Err(PlainTextError::ProtobufError(e));
+                return Err(PlainTextError::InvalidPayload(Some(e)));
             },
         };
 
@@ -82,14 +82,14 @@ impl HandshakeContext<Local> {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's exchange's pubkey protobuf");
-                return Err(PlainTextError::HandshakeParsingFailure);
+                return Err(PlainTextError::InvalidPayload(None));
             },
         };
         let peer_id = match PeerId::from_bytes(prop.take_id()) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's exchange's id protobuf");
-                return Err(PlainTextError::HandshakeParsingFailure);
+                return Err(PlainTextError::InvalidPayload(None));
             },
         };
 

@@ -28,11 +28,8 @@ pub enum PlainTextError {
     /// I/O error.
     IoError(IoError),
 
-    /// Protocol buffer error.
-    ProtobufError(ProtobufError),
-
-    /// Failed to parse one of the handshake protobuf messages.
-    HandshakeParsingFailure,
+    /// Failed to parse the handshake protobuf message.
+    InvalidPayload(Option<ProtobufError>),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
     InvalidPeerId,
@@ -42,7 +39,7 @@ impl error::Error for PlainTextError {
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             PlainTextError::IoError(ref err) => Some(err),
-            PlainTextError::ProtobufError(ref err) => Some(err),
+            PlainTextError::InvalidPayload(Some(ref err)) => Some(err),
             _ => None,
         }
     }
@@ -53,10 +50,12 @@ impl fmt::Display for PlainTextError {
         match self {
             PlainTextError::IoError(e) =>
                 write!(f, "I/O error: {}", e),
-            PlainTextError::ProtobufError(e) =>
-                write!(f, "Protobuf error: {}", e),
-            PlainTextError::HandshakeParsingFailure =>
-                f.write_str("Failed to parse one of the handshake protobuf messages"),
+            PlainTextError::InvalidPayload(protobuf_error) => {
+                match protobuf_error {
+                    Some(e) => write!(f, "Protobuf error: {}", e),
+                    None => f.write_str("Failed to parse one of the handshake protobuf messages")
+                }
+            },
             PlainTextError::InvalidPeerId =>
                 f.write_str("The peer id of the exchange isn't consistent with the remote public key"),
         }
@@ -71,6 +70,6 @@ impl From<IoError> for PlainTextError {
 
 impl From<ProtobufError> for PlainTextError {
     fn from(err: ProtobufError) -> PlainTextError {
-        PlainTextError::ProtobufError(err)
+        PlainTextError::InvalidPayload(Some(err))
     }
 }
