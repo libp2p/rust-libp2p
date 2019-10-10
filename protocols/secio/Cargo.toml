@@ -14,7 +14,7 @@ bytes = "0.4"
 futures = "0.1"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4.6"
-protobuf = "2.3"
+protobuf = "2.8"
 rand = "0.6.5"
 aes-ctr = "0.3"
 aesni = { version = "0.6", features = ["nocheck"], optional = true }
