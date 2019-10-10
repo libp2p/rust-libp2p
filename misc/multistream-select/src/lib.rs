@@ -62,7 +62,6 @@
 //! yet have sent the last negotiation message despite having settled on a protocol
 //! proposed by the dialer that it supports.
 //!
-//!
 //! This behaviour allows both the dialer and the listener to send data
 //! relating to the negotiated protocol together with the last negotiation
 //! message(s), which, in the case of the dialer only supporting a single
@@ -79,7 +78,7 @@
 //! ```no_run
 //! # fn main() {
 //! use bytes::Bytes;
-//! use multistream_select::dialer_select_proto;
+//! use multistream_select::{dialer_select_proto, Version};
 //! use futures::{Future, Sink, Stream};
 //! use tokio_tcp::TcpStream;
 //! use tokio::runtime::current_thread::Runtime;
@@ -91,7 +90,7 @@
 //!     .from_err()
 //!     .and_then(move |io| {
 //!         let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
-//!         dialer_select_proto(io, protos) // .map(|r| r.0)
+//!         dialer_select_proto(io, protos, Version::V1)
 //!     })
 //!     .map(|(protocol, _io)| protocol);
 //!
@@ -110,7 +109,7 @@ mod protocol;
 mod tests;
 
 pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
-pub use self::protocol::ProtocolError;
+pub use self::protocol::{ProtocolError, Version};
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
 

@@ -23,7 +23,7 @@ mod util;
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{Transport, MemoryTransport, ListenerEvent};
-use libp2p_core::upgrade::{UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::{self, UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
 use multiaddr::Multiaddr;
@@ -76,7 +76,7 @@ fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
     let listener_id = listener_keys.public().into_peer_id();
     let listener_transport = MemoryTransport::default()
-        .upgrade()
+        .upgrade(upgrade::Version::V1)
         .authenticate(SecioConfig::new(listener_keys))
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
@@ -91,7 +91,7 @@ fn upgrade_pipeline() {
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().into_peer_id();
     let dialer_transport = MemoryTransport::default()
-        .upgrade()
+        .upgrade(upgrade::Version::V1)
         .authenticate(SecioConfig::new(dialer_keys))
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})

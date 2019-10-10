@@ -133,9 +133,7 @@ impl SecretKey {
     pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         let m = Message::parse_slice(msg)
             .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
-        secp256k1::sign(&m, &self.0)
-            .map(|s| s.0.serialize_der().as_ref().into())
-            .map_err(|_| SigningError::new("failed to create secp256k1 signature"))
+        Ok(secp256k1::sign(&m, &self.0).0.serialize_der().as_ref().into())
     }
 }
 
@@ -190,4 +188,3 @@ mod tests {
         assert_eq!(sk_bytes, [0; 32]);
     }
 }
-
