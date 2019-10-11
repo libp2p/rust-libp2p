@@ -87,7 +87,7 @@ where
 
 #[test]
 fn raw_swarm_simultaneous_connect() {
-	use rand_new as rand;
+    use libp2p_rand_hack as rand;
     // Checks whether two swarms dialing each other simultaneously properly works.
 
     // When two swarms A and B dial each other, the following can happen:

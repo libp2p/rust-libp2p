@@ -204,7 +204,7 @@ struct Asn1SubjectPublicKeyInfo {
 mod tests {
     use super::*;
     use quickcheck::*;
-	use rand_new as rand;
+    use libp2p_rand_hack as rand;
     use rand::seq::SliceRandom;
     use std::fmt;
 
