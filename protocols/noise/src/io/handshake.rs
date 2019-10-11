@@ -24,6 +24,7 @@ mod payload;
 
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
+use crate::io::SnowState;
 use libp2p_core::identity;
 use futures::{future, Async, Future, future::FutureResult, Poll};
 use std::{mem, io};
@@ -128,7 +129,7 @@ where
     /// ```
     pub fn rt1_initiator(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
     ) -> Handshake<T, C> {
@@ -157,7 +158,7 @@ where
     /// ```
     pub fn rt1_responder(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange,
     ) -> Handshake<T, C> {
@@ -188,7 +189,7 @@ where
     /// ```
     pub fn rt15_initiator(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
     ) -> Handshake<T, C> {
@@ -220,7 +221,7 @@ where
     /// ```
     pub fn rt15_responder(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
     ) -> Handshake<T, C> {
@@ -289,7 +290,7 @@ impl<T> State<T> {
     /// Noise handshake pattern.
     fn new(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
     ) -> FutureResult<Self, NoiseError> {
@@ -302,7 +303,7 @@ impl<T> State<T> {
         future::result(session.map(|s|
             State {
                 identity,
-                io: NoiseOutput::new(io, s),
+                io: NoiseOutput::new(io, SnowState::Handshake(s)),
                 dh_remote_pubkey_sig: None,
                 id_remote_pubkey,
                 send_identity
@@ -340,7 +341,7 @@ impl<T> State<T>
                         }
                     }
                 };
-                future::ok((remote, NoiseOutput { session: s, .. self.io }))
+                future::ok((remote, NoiseOutput { session: SnowState::Transport(s), .. self.io }))
             }
         }
     }
