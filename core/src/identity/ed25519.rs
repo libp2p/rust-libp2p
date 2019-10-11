@@ -22,10 +22,9 @@
 
 use ed25519_dalek as ed25519;
 use failure::Fail;
+use rand::RngCore;
 use super::error::DecodingError;
 use zeroize::Zeroize;
-use sha2::Sha512;
-use rand_old as rand;
 
 /// An Ed25519 keypair.
 pub struct Keypair(ed25519::Keypair);
@@ -33,7 +32,7 @@ pub struct Keypair(ed25519::Keypair);
 impl Keypair {
     /// Generate a new Ed25519 keypair.
     pub fn generate() -> Keypair {
-        Keypair(ed25519::Keypair::generate::<Sha512, _>(&mut rand::thread_rng()))
+        Keypair::from(SecretKey::generate())
     }
 
     /// Encode the keypair into a byte array by concatenating the bytes
@@ -53,7 +52,7 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair.
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        self.0.sign::<Sha512>(msg).to_bytes().to_vec()
+        self.0.sign(msg).to_bytes().to_vec()
     }
 
     /// Get the public key of this keypair.
@@ -89,9 +88,9 @@ impl From<Keypair> for SecretKey {
 /// Promote an Ed25519 secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(sk: SecretKey) -> Keypair {
-        let secret = sk.0;
-        let public = ed25519::PublicKey::from(secret.expand::<Sha512>());
-        Keypair(ed25519::Keypair { secret, public })
+        let secret: ed25519::ExpandedSecretKey = (&sk.0).into();
+        let public = ed25519::PublicKey::from(&secret);
+        Keypair(ed25519::Keypair { secret: sk.0, public })
     }
 }
 
@@ -102,7 +101,7 @@ pub struct PublicKey(ed25519::PublicKey);
 impl PublicKey {
     /// Verify the Ed25519 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        ed25519::Signature::from_bytes(sig).and_then(|s| self.0.verify::<Sha512>(msg, &s)).is_ok()
+        ed25519::Signature::from_bytes(sig).and_then(|s| self.0.verify(msg, &s)).is_ok()
     }
 
     /// Encode the public key into a byte array in compressed form, i.e.
@@ -140,7 +139,9 @@ impl Clone for SecretKey {
 impl SecretKey {
     /// Generate a new Ed25519 secret key.
     pub fn generate() -> SecretKey {
-        SecretKey(ed25519::SecretKey::generate(&mut rand::thread_rng()))
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        SecretKey(ed25519::SecretKey::from_bytes(&bytes).unwrap())
     }
 
     /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.

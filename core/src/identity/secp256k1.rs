@@ -21,7 +21,6 @@
 //! Secp256k1 keys.
 
 use asn1_der::{FromDerObject, DerObject};
-use rand_old as rand;
 use rand::RngCore;
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use secp256k1::{Message, Signature};

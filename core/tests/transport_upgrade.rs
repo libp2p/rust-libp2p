@@ -28,7 +28,7 @@ use libp2p_core::upgrade::{self, UpgradeInfo, Negotiated, InboundUpgrade, Outbou
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
 use multiaddr::Multiaddr;
-use libp2p_rand_hack::random;
+use rand::random;
 use std::io;
 use tokio_io::{io as nio, AsyncWrite, AsyncRead};
 
