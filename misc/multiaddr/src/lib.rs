@@ -144,7 +144,7 @@ impl Multiaddr {
     /// updated `Protocol` at position `at` will be returned.
     pub fn replace<'a, F>(&self, at: usize, by: F) -> Option<Multiaddr>
     where
-        F: FnOnce(&Protocol) -> Option<Protocol<'a>>
+        F: FnOnce(&Protocol<'_>) -> Option<Protocol<'a>>
     {
         let mut address = Multiaddr::with_capacity(self.len());
         let mut fun = Some(by);

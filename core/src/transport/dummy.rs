@@ -41,7 +41,7 @@ impl<TOut> Default for DummyTransport<TOut> {
 }
 
 impl<TOut> fmt::Debug for DummyTransport<TOut> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DummyTransport")
     }
 }
@@ -72,7 +72,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
 pub struct DummyStream(());
 
 impl fmt::Debug for DummyStream {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DummyStream")
     }
 }

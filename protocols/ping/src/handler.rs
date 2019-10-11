@@ -137,7 +137,7 @@ pub enum PingFailure {
 }
 
 impl fmt::Display for PingFailure {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PingFailure::Timeout => f.write_str("Ping timeout"),
             PingFailure::Other { error } => write!(f, "Ping error: {}", error)

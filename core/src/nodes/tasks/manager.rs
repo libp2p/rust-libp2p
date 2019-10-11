@@ -82,7 +82,7 @@ impl<I, O, H, E, HE, T, C> fmt::Debug for Manager<I, O, H, E, HE, T, C>
 where
     T: fmt::Debug
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.tasks.iter().map(|(id, task)| (id, &task.user_data)))
             .finish()
@@ -285,7 +285,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<Event<I, O, H, E, HE, T, C>> {
+    pub fn poll(&mut self) -> Async<Event<'_, I, O, H, E, HE, T, C>> {
         for to_spawn in self.to_spawn.drain() {
             // We try to use the default executor, but fall back to polling the task manually if
             // no executor is available. This makes it possible to use the core in environments
@@ -486,7 +486,7 @@ impl<'a, E, T> TaskEntry<'a, E, T> {
 }
 
 impl<E, T: fmt::Debug> fmt::Debug for TaskEntry<'_, E, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("TaskEntry")
             .field(&self.id())
             .field(self.user_data())
@@ -558,7 +558,7 @@ impl<E, T> ClosedTask<E, T> {
 }
 
 impl<E, T: fmt::Debug> fmt::Debug for ClosedTask<E, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ClosedTask")
             .field(&self.id)
             .field(&self.user_data)

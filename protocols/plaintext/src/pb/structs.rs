@@ -22,74 +22,94 @@ use protobuf::Message as Message_imported_for_functions;
 use protobuf::ProtobufEnum as ProtobufEnum_imported_for_functions;
 
 #[derive(PartialEq,Clone,Default)]
-pub struct Identity {
+pub struct Exchange {
     // message fields
-    pub pubkey: ::std::vec::Vec<u8>,
-    pub signature: ::std::vec::Vec<u8>,
+    id: ::protobuf::SingularField<::std::vec::Vec<u8>>,
+    pubkey: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
 }
 
-impl Identity {
-    pub fn new() -> Identity {
+impl Exchange {
+    pub fn new() -> Exchange {
         ::std::default::Default::default()
     }
 
-    // bytes pubkey = 1;
+    // optional bytes id = 1;
+
+    pub fn clear_id(&mut self) {
+        self.id.clear();
+    }
+
+    pub fn has_id(&self) -> bool {
+        self.id.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_id(&mut self, v: ::std::vec::Vec<u8>) {
+        self.id = ::protobuf::SingularField::some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_id(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.id.is_none() {
+            self.id.set_default();
+        }
+        self.id.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_id(&mut self) -> ::std::vec::Vec<u8> {
+        self.id.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    pub fn get_id(&self) -> &[u8] {
+        match self.id.as_ref() {
+            Some(v) => &v,
+            None => &[],
+        }
+    }
+
+    // optional bytes pubkey = 2;
 
     pub fn clear_pubkey(&mut self) {
         self.pubkey.clear();
     }
 
+    pub fn has_pubkey(&self) -> bool {
+        self.pubkey.is_some()
+    }
+
     // Param is passed by value, moved
     pub fn set_pubkey(&mut self, v: ::std::vec::Vec<u8>) {
-        self.pubkey = v;
+        self.pubkey = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
     pub fn mut_pubkey(&mut self) -> &mut ::std::vec::Vec<u8> {
-        &mut self.pubkey
+        if self.pubkey.is_none() {
+            self.pubkey.set_default();
+        }
+        self.pubkey.as_mut().unwrap()
     }
 
     // Take field
     pub fn take_pubkey(&mut self) -> ::std::vec::Vec<u8> {
-        ::std::mem::replace(&mut self.pubkey, ::std::vec::Vec::new())
+        self.pubkey.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
     pub fn get_pubkey(&self) -> &[u8] {
-        &self.pubkey
-    }
-
-    // bytes signature = 2;
-
-    pub fn clear_signature(&mut self) {
-        self.signature.clear();
-    }
-
-    // Param is passed by value, moved
-    pub fn set_signature(&mut self, v: ::std::vec::Vec<u8>) {
-        self.signature = v;
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_signature(&mut self) -> &mut ::std::vec::Vec<u8> {
-        &mut self.signature
-    }
-
-    // Take field
-    pub fn take_signature(&mut self) -> ::std::vec::Vec<u8> {
-        ::std::mem::replace(&mut self.signature, ::std::vec::Vec::new())
-    }
-
-    pub fn get_signature(&self) -> &[u8] {
-        &self.signature
+        match self.pubkey.as_ref() {
+            Some(v) => &v,
+            None => &[],
+        }
     }
 }
 
-impl ::protobuf::Message for Identity {
+impl ::protobuf::Message for Exchange {
     fn is_initialized(&self) -> bool {
         true
     }
@@ -99,10 +119,10 @@ impl ::protobuf::Message for Identity {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_singular_proto3_bytes_into(wire_type, is, &mut self.pubkey)?;
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.id)?;
                 },
                 2 => {
-                    ::protobuf::rt::read_singular_proto3_bytes_into(wire_type, is, &mut self.signature)?;
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.pubkey)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -116,11 +136,11 @@ impl ::protobuf::Message for Identity {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        if !self.pubkey.is_empty() {
-            my_size += ::protobuf::rt::bytes_size(1, &self.pubkey);
+        if let Some(ref v) = self.id.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(1, &v);
         }
-        if !self.signature.is_empty() {
-            my_size += ::protobuf::rt::bytes_size(2, &self.signature);
+        if let Some(ref v) = self.pubkey.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(2, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -128,11 +148,11 @@ impl ::protobuf::Message for Identity {
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::ProtobufResult<()> {
-        if !self.pubkey.is_empty() {
-            os.write_bytes(1, &self.pubkey)?;
+        if let Some(ref v) = self.id.as_ref() {
+            os.write_bytes(1, &v)?;
         }
-        if !self.signature.is_empty() {
-            os.write_bytes(2, &self.signature)?;
+        if let Some(ref v) = self.pubkey.as_ref() {
+            os.write_bytes(2, &v)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -150,13 +170,13 @@ impl ::protobuf::Message for Identity {
         &mut self.unknown_fields
     }
 
-    fn as_any(&self) -> &::std::any::Any {
-        self as &::std::any::Any
+    fn as_any(&self) -> &dyn (::std::any::Any) {
+        self as &dyn (::std::any::Any)
     }
-    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
-        self as &mut ::std::any::Any
+    fn as_any_mut(&mut self) -> &mut dyn (::std::any::Any) {
+        self as &mut dyn (::std::any::Any)
     }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
+    fn into_any(self: Box<Self>) -> ::std::boxed::Box<dyn (::std::any::Any)> {
         self
     }
 
@@ -164,8 +184,8 @@ impl ::protobuf::Message for Identity {
         Self::descriptor_static()
     }
 
-    fn new() -> Identity {
-        Identity::new()
+    fn new() -> Exchange {
+        Exchange::new()
     }
 
     fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
@@ -176,18 +196,18 @@ impl ::protobuf::Message for Identity {
         unsafe {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
+                    "id",
+                    |m: &Exchange| { &m.id },
+                    |m: &mut Exchange| { &mut m.id },
+                ));
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "pubkey",
-                    |m: &Identity| { &m.pubkey },
-                    |m: &mut Identity| { &mut m.pubkey },
+                    |m: &Exchange| { &m.pubkey },
+                    |m: &mut Exchange| { &mut m.pubkey },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
-                    "signature",
-                    |m: &Identity| { &m.signature },
-                    |m: &mut Identity| { &mut m.signature },
-                ));
-                ::protobuf::reflect::MessageDescriptor::new::<Identity>(
-                    "Identity",
+                ::protobuf::reflect::MessageDescriptor::new::<Exchange>(
+                    "Exchange",
                     fields,
                     file_descriptor_proto()
                 )
@@ -195,51 +215,49 @@ impl ::protobuf::Message for Identity {
         }
     }
 
-    fn default_instance() -> &'static Identity {
-        static mut instance: ::protobuf::lazy::Lazy<Identity> = ::protobuf::lazy::Lazy {
+    fn default_instance() -> &'static Exchange {
+        static mut instance: ::protobuf::lazy::Lazy<Exchange> = ::protobuf::lazy::Lazy {
             lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const Identity,
+            ptr: 0 as *const Exchange,
         };
         unsafe {
-            instance.get(Identity::new)
+            instance.get(Exchange::new)
         }
     }
 }
 
-impl ::protobuf::Clear for Identity {
+impl ::protobuf::Clear for Exchange {
     fn clear(&mut self) {
+        self.clear_id();
         self.clear_pubkey();
-        self.clear_signature();
         self.unknown_fields.clear();
     }
 }
 
-impl ::std::fmt::Debug for Identity {
+impl ::std::fmt::Debug for Exchange {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for Identity {
+impl ::protobuf::reflect::ProtobufValue for Exchange {
     fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x1esrc/io/handshake/payload.proto\"@\n\x08Identity\x12\x16\n\x06pubke\
-    y\x18\x01\x20\x01(\x0cR\x06pubkey\x12\x1c\n\tsignature\x18\x02\x20\x01(\
-    \x0cR\tsignatureJ\xe0\x01\n\x06\x12\x04\0\0\x07\x01\n\x08\n\x01\x0c\x12\
-    \x03\0\0\x12\n4\n\x02\x04\0\x12\x04\x04\0\x07\x012(\x20Payloads\x20for\
-    \x20Noise\x20handshake\x20messages.\n\n\n\n\x03\x04\0\x01\x12\x03\x04\
-    \x08\x10\n\x0b\n\x04\x04\0\x02\0\x12\x03\x05\x08\x19\n\r\n\x05\x04\0\x02\
-    \0\x04\x12\x04\x05\x08\x04\x12\n\x0c\n\x05\x04\0\x02\0\x05\x12\x03\x05\
-    \x08\r\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x05\x0e\x14\n\x0c\n\x05\x04\0\
-    \x02\0\x03\x12\x03\x05\x17\x18\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x06\x08\
-    \x1c\n\r\n\x05\x04\0\x02\x01\x04\x12\x04\x06\x08\x05\x19\n\x0c\n\x05\x04\
-    \0\x02\x01\x05\x12\x03\x06\x08\r\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\
-    \x06\x0e\x17\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x06\x1a\x1bb\x06proto\
-    3\
+    \n!protocols/plaintext/structs.proto\"2\n\x08Exchange\x12\x0e\n\x02id\
+    \x18\x01\x20\x01(\x0cR\x02id\x12\x16\n\x06pubkey\x18\x02\x20\x01(\x0cR\
+    \x06pubkeyJ\xb4\x01\n\x06\x12\x04\0\0\x05\x01\n\x08\n\x01\x0c\x12\x03\0\
+    \0\x12\n\n\n\x02\x04\0\x12\x04\x02\0\x05\x01\n\n\n\x03\x04\0\x01\x12\x03\
+    \x02\x08\x10\n\x0b\n\x04\x04\0\x02\0\x12\x03\x03\x02\x18\n\x0c\n\x05\x04\
+    \0\x02\0\x04\x12\x03\x03\x02\n\n\x0c\n\x05\x04\0\x02\0\x05\x12\x03\x03\
+    \x0b\x10\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x03\x11\x13\n\x0c\n\x05\x04\
+    \0\x02\0\x03\x12\x03\x03\x16\x17\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x04\
+    \x02\x1c\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x03\x04\x02\n\n\x0c\n\x05\x04\
+    \0\x02\x01\x05\x12\x03\x04\x0b\x10\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\
+    \x04\x11\x17\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x04\x1a\x1b\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

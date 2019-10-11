@@ -16,4 +16,4 @@ rand = { version = "0.6.5", default-features = false, features = ["std"] }
 sha-1 = { version = "0.8.1", default-features = false }
 sha2 = { version = "0.8.0", default-features = false }
 sha3 = { version = "0.8.2", default-features = false }
-unsigned-varint = "0.2.2"
+unsigned-varint = "0.2.3"

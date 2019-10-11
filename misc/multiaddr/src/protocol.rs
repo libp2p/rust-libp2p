@@ -442,12 +442,12 @@ impl<'a> fmt::Display for Protocol<'a> {
             Utp => f.write_str("/utp"),
             Ws(ref s) if s == "/" => f.write_str("/ws"),
             Ws(s) => {
-                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::NON_ALPHANUMERIC);
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
                 write!(f, "/x-parity-ws/{}", encoded)
             },
             Wss(ref s) if s == "/" => f.write_str("/wss"),
             Wss(s) => {
-                let encoded = percent_encoding::percent_encode(s.as_bytes(), percent_encoding::NON_ALPHANUMERIC);
+                let encoded = percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
                 write!(f, "/x-parity-wss/{}", encoded)
             },
         }

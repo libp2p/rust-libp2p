@@ -139,7 +139,7 @@ impl ExtTransport {
 }
 
 impl fmt::Debug for ExtTransport {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ExtTransport").finish()
     }
 }
