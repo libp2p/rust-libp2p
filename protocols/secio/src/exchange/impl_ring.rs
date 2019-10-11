@@ -64,8 +64,8 @@ pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (Agreem
 pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8], _out_size: usize)
     -> impl Future<Item = Vec<u8>, Error = SecioError>
 {
-    ring_agreement::agree_ephemeral(my_private_key, algorithm.into(),
-                                    UntrustedInput::from(other_public_key),
+    ring_agreement::agree_ephemeral(my_private_key,
+                                    &ring_agreement::UnparsedPublicKey::new(algorithm.into(), other_public_key),
                                     SecioError::SecretGenerationFailed,
                                     |key_material| Ok(key_material.to_vec()))
         .into_future()
