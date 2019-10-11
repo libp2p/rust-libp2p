@@ -8,8 +8,18 @@ set -u
 # print each command before executing it
 set -x
 
+
+# The source .proto file.
 SOURCE_PROTO_FILE=$1
-DEST_RUST_FILE=$2
+
+DEST_FOLDER=$(dirname "$SOURCE_PROTO_FILE")
+
+# The .rs file generated via protoc.
+TMP_GEN_RUST_FILE=${SOURCE_PROTO_FILE/proto/rs}
+
+# The above with `_proto` injected.
+FINAL_GEN_RUST_FILE=${TMP_GEN_RUST_FILE/.rs/_proto.rs}
+
 
 sudo docker build -t rust-libp2p-protobuf-builder $(dirname "$0")
 
@@ -19,4 +29,7 @@ sudo docker run --rm \
      -w /usr/code \
      rust-libp2p-protobuf-builder \
      /bin/bash -c " \
-    protoc --rust_out $DEST_RUST_FILE $SOURCE_PROTO_FILE"
+    protoc --rust_out $DEST_FOLDER $SOURCE_PROTO_FILE"
+
+
+mv $TMP_GEN_RUST_FILE $FINAL_GEN_RUST_FILE

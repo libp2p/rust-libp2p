@@ -36,7 +36,7 @@ use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use crate::structs::{Exchange, Propose};
+use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 use crate::{KeyAgreement, SecioConfig};

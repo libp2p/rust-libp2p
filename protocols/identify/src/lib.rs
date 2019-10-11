@@ -43,4 +43,4 @@ pub use self::protocol::IdentifyInfo;
 mod handler;
 mod identify;
 mod protocol;
-mod structs;
+mod structs_proto;

@@ -29,7 +29,7 @@ pub mod secp256k1;
 pub mod error;
 
 use self::error::*;
-use crate::{PeerId, keys};
+use crate::{PeerId, keys_proto};
 
 /// Identity keypair of a node.
 ///
@@ -150,20 +150,20 @@ impl PublicKey {
     /// exchange with other nodes.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
         use protobuf::Message;
-        let mut public_key = keys::PublicKey::new();
+        let mut public_key = keys_proto::PublicKey::new();
         match self {
             PublicKey::Ed25519(key) => {
-                public_key.set_Type(keys::KeyType::Ed25519);
+                public_key.set_Type(keys_proto::KeyType::Ed25519);
                 public_key.set_Data(key.encode().to_vec());
             },
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             PublicKey::Rsa(key) => {
-                public_key.set_Type(keys::KeyType::RSA);
+                public_key.set_Type(keys_proto::KeyType::RSA);
                 public_key.set_Data(key.encode_x509());
             },
             #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(key) => {
-                public_key.set_Type(keys::KeyType::Secp256k1);
+                public_key.set_Type(keys_proto::KeyType::Secp256k1);
                 public_key.set_Data(key.encode().to_vec());
             },
         };
@@ -177,31 +177,31 @@ impl PublicKey {
     /// or received from another node.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         #[allow(unused_mut)] // Due to conditional compilation.
-        let mut pubkey = protobuf::parse_from_bytes::<keys::PublicKey>(bytes)
+        let mut pubkey = protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes)
             .map_err(|e| DecodingError::new("Protobuf").source(e))?;
 
         match pubkey.get_Type() {
-            keys::KeyType::Ed25519 => {
+            keys_proto::KeyType::Ed25519 => {
                 ed25519::PublicKey::decode(pubkey.get_Data())
                     .map(PublicKey::Ed25519)
             },
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-            keys::KeyType::RSA => {
+            keys_proto::KeyType::RSA => {
                 rsa::PublicKey::decode_x509(&pubkey.take_Data())
                     .map(PublicKey::Rsa)
             }
             #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-            keys::KeyType::RSA => {
+            keys_proto::KeyType::RSA => {
                 log::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))
             },
             #[cfg(feature = "secp256k1")]
-            keys::KeyType::Secp256k1 => {
+            keys_proto::KeyType::Secp256k1 => {
                 secp256k1::PublicKey::decode(pubkey.get_Data())
                     .map(PublicKey::Secp256k1)
             }
             #[cfg(not(feature = "secp256k1"))]
-            keys::KeyType::Secp256k1 => {
+            keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err("Unsupported".to_string().into())
             },

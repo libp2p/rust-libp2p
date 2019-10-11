@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::BytesMut;
-use crate::structs;
+use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use futures::try_ready;
 use libp2p_core::{
@@ -82,7 +82,7 @@ where
 
         let pubkey_bytes = info.public_key.into_protobuf_encoding();
 
-        let mut message = structs::Identify::new();
+        let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
         message.set_protocolVersion(info.protocol_version);
         message.set_publicKey(pubkey_bytes);
@@ -242,7 +242,7 @@ where T: AsyncRead + AsyncWrite,
 // Turns a protobuf message into an `IdentifyInfo` and an observed address. If something bad
 // happens, turn it into an `IoError`.
 fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> {
-    match protobuf_parse_from_bytes::<structs::Identify>(&msg) {
+    match protobuf_parse_from_bytes::<structs_proto::Identify>(&msg) {
         Ok(mut msg) => {
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
             // an `IoError`.

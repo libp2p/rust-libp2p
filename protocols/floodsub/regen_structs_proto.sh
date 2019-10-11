@@ -1,3 +1,3 @@
 #!/bin/sh
 
-../../scripts/protobuf/gen.sh rpc.proto ./src/
+../../scripts/protobuf/gen.sh src/rpc.proto

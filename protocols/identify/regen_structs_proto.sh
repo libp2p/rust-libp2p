@@ -1,3 +1,3 @@
 #!/bin/sh
 
-../../scripts/protobuf/gen.sh structs.proto ./src/
+../../scripts/protobuf/gen.sh src/structs.proto

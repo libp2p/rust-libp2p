@@ -1,3 +1,3 @@
 #!/bin/sh
 
-../../scripts/protobuf/gen.sh ./src/io/handshake/payload.proto ./src/io/handshake/
+../../scripts/protobuf/gen.sh ./src/io/handshake/payload.proto

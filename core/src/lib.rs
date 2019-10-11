@@ -39,7 +39,7 @@
 pub use multiaddr;
 pub use multistream_select::Negotiated;
 
-mod keys;
+mod keys_proto;
 mod peer_id;
 mod translation;
 
