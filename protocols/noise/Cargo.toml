@@ -27,4 +27,4 @@ env_logger = "0.6"
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
 quickcheck = "0.8"
 tokio = "0.1"
-sodiumoxide = "0.2"
+sodiumoxide = "^0.2.5"
