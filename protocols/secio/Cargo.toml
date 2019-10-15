@@ -27,7 +27,7 @@ sha2 = "0.8.0"
 hmac = "0.7.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ring = { version = "0.14", features = ["use_heap"], default-features = false }
+ring = { version = "^0.16", features = ["alloc"], default-features = false }
 untrusted = { version = "0.6" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
