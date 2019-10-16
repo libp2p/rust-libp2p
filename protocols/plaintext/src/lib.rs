@@ -39,8 +39,10 @@ mod error;
 mod handshake;
 mod pb;
 
-#[derive(Debug, Copy, Clone)]
-pub struct PlainText1Config;
+#[derive(Debug, Clone)]
+pub struct PlainText1Config {
+    pub random_peer_id: PeerId,
+}
 
 impl UpgradeInfo for PlainText1Config {
     type Info = &'static [u8];
@@ -52,22 +54,22 @@ impl UpgradeInfo for PlainText1Config {
 }
 
 impl<C> InboundUpgrade<C> for PlainText1Config {
-    type Output = Negotiated<C>;
+    type Output = (PeerId, Negotiated<C>);
     type Error = Void;
-    type Future = FutureResult<Negotiated<C>, Self::Error>;
+    type Future = FutureResult<Self::Output, Self::Error>;
 
     fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        future::ok(i)
+        future::ok((self.random_peer_id, i ))
     }
 }
 
 impl<C> OutboundUpgrade<C> for PlainText1Config {
-    type Output = Negotiated<C>;
+    type Output = (PeerId, Negotiated<C>);
     type Error = Void;
-    type Future = FutureResult<Negotiated<C>, Self::Error>;
+    type Future = FutureResult<Self::Output, Self::Error>;
 
     fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        future::ok(i)
+        future::ok((self.random_peer_id, i ))
     }
 }
 
@@ -226,5 +228,19 @@ impl<S: AsyncRead + AsyncWrite> std::io::Write for PlainTextOutput<S> {
 impl<S: AsyncRead + AsyncWrite> AsyncWrite for PlainTextOutput<S> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.stream.shutdown()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p_tcp;
+    use libp2p_core::transport::Transport;
+
+    #[test]
+    fn plaintext1_authenticate_transport() {
+        let _ = libp2p_tcp::TcpConfig::new()
+            .upgrade(libp2p_core::upgrade::Version::V1)
+            .authenticate(PlainText1Config{random_peer_id: PeerId::random()});
     }
 }
