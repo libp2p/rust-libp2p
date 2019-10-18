@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
-use crate::topic::{Topic, TopicHash};
+use crate::topic::Topic;
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
 use futures::prelude::*;
@@ -52,7 +52,7 @@ pub struct Floodsub<TSubstream> {
     /// List of peers the network is connected to, and the topics that they're subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
     //       opened substreams
-    connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
+    connected_peers: HashMap<PeerId, SmallVec<[String; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages that we receive
     // erroneously.
@@ -91,7 +91,7 @@ impl<TSubstream> Floodsub<TSubstream> {
                     event: FloodsubRpc {
                         messages: Vec::new(),
                         subscriptions: vec![FloodsubSubscription {
-                            topic: topic.hash().clone(),
+                            topic: topic.id().to_owned(),
                             action: FloodsubSubscriptionAction::Subscribe,
                         }],
                     },
@@ -116,7 +116,7 @@ impl<TSubstream> Floodsub<TSubstream> {
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
-        if self.subscribed_topics.iter().any(|t| t.hash() == topic.hash()) {
+        if self.subscribed_topics.iter().any(|t| t.id() == topic.id()) {
             return false;
         }
 
@@ -126,7 +126,7 @@ impl<TSubstream> Floodsub<TSubstream> {
                 event: FloodsubRpc {
                     messages: Vec::new(),
                     subscriptions: vec![FloodsubSubscription {
-                        topic: topic.hash().clone(),
+                        topic: topic.id().to_owned(),
                         action: FloodsubSubscriptionAction::Subscribe,
                     }],
                 },
@@ -139,12 +139,11 @@ impl<TSubstream> Floodsub<TSubstream> {
 
     /// Unsubscribes from a topic.
     ///
-    /// Note that this only requires a `TopicHash` and not a full `Topic`.
+    /// Note that this only requires the topic name.
     ///
     /// Returns true if we were subscribed to this topic.
-    pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
-        let topic = topic.as_ref();
-        let pos = match self.subscribed_topics.iter().position(|t| t.hash() == topic) {
+    pub fn unsubscribe(&mut self, topic: String) -> bool {
+        let pos = match self.subscribed_topics.iter().position(|t| t.id() == topic) {
             Some(pos) => pos,
             None => return false
         };
@@ -168,12 +167,12 @@ impl<TSubstream> Floodsub<TSubstream> {
     }
 
     /// Publishes a message to the network, if we're subscribed to the topic only.
-    pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
+    pub fn publish(&mut self, topic: String, data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message to the network, even if we're not subscribed to the topic.
-    pub fn publish_any(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
+    pub fn publish_any(&mut self, topic: String, data: impl Into<Vec<u8>>) {
         self.publish_many_any(iter::once(topic), data)
     }
 
@@ -181,16 +180,16 @@ impl<TSubstream> Floodsub<TSubstream> {
     ///
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
-    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
+    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = String>, data: impl Into<Vec<u8>>) {
         self.publish_many_inner(topic, data, true)
     }
 
     /// Publishes a message with multiple topics to the network, even if we're not subscribed to any of the topics.
-    pub fn publish_many_any(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
+    pub fn publish_many_any(&mut self, topic: impl IntoIterator<Item = String>, data: impl Into<Vec<u8>>) {
         self.publish_many_inner(topic, data, false)
     }
 
-    fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
+    fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = String>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
@@ -198,10 +197,10 @@ impl<TSubstream> Floodsub<TSubstream> {
             // with packets with the predetermined sequence numbers and absorb our legitimate
             // messages. We therefore use a random number.
             sequence_number: rand::random::<[u8; 20]>().to_vec(),
-            topics: topic.into_iter().map(|t| t.into().clone()).collect(),
+            topics: topic.into_iter().map(|t| t.clone()).collect(),
         };
 
-        let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u));
+        let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.id() == u));
         if self_subscribed {
             self.received.add(&message);
         }
@@ -252,7 +251,7 @@ where
                     event: FloodsubRpc {
                         messages: Vec::new(),
                         subscriptions: vec![FloodsubSubscription {
-                            topic: topic.hash().clone(),
+                            topic: topic.id().to_owned(),
                             action: FloodsubSubscriptionAction::Subscribe,
                         }],
                     },
@@ -323,7 +322,7 @@ where
             }
 
             // Add the message to be dispatched to the user.
-            if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+            if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.id() == u)) {
                 let event = FloodsubEvent::Message(message.clone());
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(event));
             }
@@ -407,7 +406,7 @@ pub enum FloodsubEvent {
         /// Remote that has subscribed.
         peer_id: PeerId,
         /// The topic it has subscribed to.
-        topic: TopicHash,
+        topic: String,
     },
 
     /// A remote unsubscribed from a topic.
@@ -415,6 +414,6 @@ pub enum FloodsubEvent {
         /// Remote that has unsubscribed.
         peer_id: PeerId,
         /// The topic it has subscribed from.
-        topic: TopicHash,
+        topic: String,
     },
 }

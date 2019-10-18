@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::rpc_proto;
-use crate::topic::TopicHash;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use protobuf::{ProtobufError, Message as ProtobufMessage};
 use std::{error, fmt, io, iter};
@@ -71,7 +70,6 @@ where
                     topics: publish
                         .take_topicIDs()
                         .into_iter()
-                        .map(TopicHash::from_raw)
                         .collect(),
                 });
             }
@@ -87,7 +85,7 @@ where
                         } else {
                             FloodsubSubscriptionAction::Unsubscribe
                         },
-                        topic: TopicHash::from_raw(sub.take_topicid()),
+                        topic: sub.take_topicid(),
                     })
                     .collect(),
             })
@@ -191,7 +189,6 @@ impl FloodsubRpc {
                 message
                     .topics
                     .into_iter()
-                    .map(TopicHash::into_string)
                     .collect(),
             );
             proto.mut_publish().push(msg);
@@ -200,7 +197,7 @@ impl FloodsubRpc {
         for topic in self.subscriptions {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(topic.action == FloodsubSubscriptionAction::Subscribe);
-            subscription.set_topicid(topic.topic.into_string());
+            subscription.set_topicid(topic.topic);
             proto.mut_subscriptions().push(subscription);
         }
 
@@ -225,7 +222,7 @@ pub struct FloodsubMessage {
     /// List of topics this message belongs to.
     ///
     /// Each message can belong to multiple topics at once.
-    pub topics: Vec<TopicHash>,
+    pub topics: Vec<String>,
 }
 
 /// A subscription received by the floodsub system.
@@ -234,7 +231,7 @@ pub struct FloodsubSubscription {
     /// Action to perform.
     pub action: FloodsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
-    pub topic: TopicHash,
+    pub topic: String,
 }
 
 /// Action that a subscription wants to perform.
