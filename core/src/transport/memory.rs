@@ -276,6 +276,8 @@ impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::runtime::current_thread::{Runtime};
+    use std::io::Write;
 
     #[test]
     fn parse_memory_addr_works() {
@@ -308,5 +310,37 @@ mod tests {
         assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_ok());
     }
 
-    // TODO: test that is actually works
+    #[test]
+    fn communicating_between_dialer_and_listener() {
+        let msg = [1, 2, 3];
+
+        // Setup listener.
+
+        let t1_addr: Multiaddr = "/memory/1".parse().unwrap();
+        let t1 = MemoryTransport::default();
+        let listener = t1.listen_on(t1_addr.clone()).unwrap()
+            .filter_map(ListenerEvent::into_upgrade)
+            .take(1)
+            .for_each(|(sock, _)| {
+                sock.and_then(|sock| {
+                    tokio_io::io::read_exact(sock, [0; 3])
+                        .map(|(_, buf)| assert_eq!(buf, msg))
+                        .map_err(|err| panic!("IO error {:?}", err))
+                })
+            });
+
+        // Setup dialer.
+
+        let t2 = MemoryTransport::default();
+        let dialer = t2.dial(t1_addr).unwrap()
+            .then(|socket| {
+                tokio_io::io::write_all(socket.unwrap(), &msg)
+            })
+            .map_err(|e| panic!("IO error {:?}", e));
+
+        // Wait for both to finish.
+
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(dialer.join(listener));
+    }
 }
