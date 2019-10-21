@@ -35,7 +35,7 @@ tokio-io = "0.1"
 wasm-timer = "0.1"
 unsigned-varint = "0.2"
 void = "1"
-zeroize = "0.9"
+zeroize = "1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 ring = { version = "^0.16", features = ["alloc"], default-features = false }
