@@ -34,7 +34,7 @@ use libp2p_swarm::{
     protocols_handler::NodeHandlerWrapperBuilder
 };
 use rand::seq::SliceRandom;
-use std::io;
+use std::{io, task::Context, task::Poll};
 
 // TODO: replace with DummyProtocolsHandler after https://github.com/servo/rust-smallvec/issues/139 ?
 struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>);
@@ -47,7 +47,7 @@ impl<TSubstream> Default for TestHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for TestHandler<TSubstream>
 where
-    TSubstream: futures::PollRead + futures::PollWrite
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
@@ -82,7 +82,7 @@ where
 
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>, Self::Error> {
+    fn poll(&mut self, _: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>> {
         Poll::Pending
     }
 }
@@ -113,26 +113,27 @@ fn deny_incoming_connec() {
 
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let address =
-        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
-            listen_addr
+    let address = futures::executor::block_on(future::poll_fn(|cx| {
+        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
+            Poll::Ready(listen_addr)
         } else {
             panic!("Was expecting the listen address to be reported")
-        };
+        }
+    }));
 
     swarm2
         .peer(swarm1.local_peer_id().clone())
         .into_not_connected().unwrap()
         .connect(address.clone(), TestHandler::default().into_node_handler_builder());
 
-    let future = future::poll_fn(|| -> Poll<Result<(), io::Error>> {
-        match swarm1.poll() {
+    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+        match swarm1.poll(cx) {
             Poll::Ready(NetworkEvent::IncomingConnection(inc)) => drop(inc),
             Poll::Ready(_) => unreachable!(),
             Poll::Pending => (),
         }
 
-        match swarm2.poll() {
+        match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
                 new_state: PeerState::NotConnected,
                 peer_id,
@@ -148,9 +149,7 @@ fn deny_incoming_connec() {
         }
 
         Poll::Pending
-    });
-
-    tokio::runtime::current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+    })).unwrap();
 }
 
 #[test]
@@ -176,31 +175,30 @@ fn dial_self() {
             .and_then(|(peer, mplex), _| {
                 // Gracefully close the connection to allow protocol
                 // negotiation to complete.
-                util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
+                util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
             });
         Network::new(transport, local_public_key.into())
     };
 
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let (address, mut swarm) =
-        future::lazy(move || {
-            if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll() {
+    let (address, mut swarm) = futures::executor::block_on(
+        future::lazy(move |cx| {
+            if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll(cx) {
                 Ok::<_, void::Void>((listen_addr, swarm))
             } else {
                 panic!("Was expecting the listen address to be reported")
             }
-        })
-        .wait()
+        }))
         .unwrap();
 
     swarm.dial(address.clone(), TestHandler::default().into_node_handler_builder()).unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
-    let future = future::poll_fn(|| -> Poll<Result<(), io::Error>> {
+    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
-            match swarm.poll() {
+            match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::UnknownPeerDialError {
                     multiaddr,
                     error: UnknownPeerDialErr::FoundLocalPeerId,
@@ -210,7 +208,7 @@ fn dial_self() {
                     assert!(!got_dial_err);
                     got_dial_err = true;
                     if got_inc_err {
-                        return Ok(Poll::Ready(()));
+                        return Poll::Ready(Ok(()));
                     }
                 },
                 Poll::Ready(NetworkEvent::IncomingConnectionError {
@@ -222,7 +220,7 @@ fn dial_self() {
                     assert!(!got_inc_err);
                     got_inc_err = true;
                     if got_dial_err {
-                        return Ok(Poll::Ready(()));
+                        return Poll::Ready(Ok(()));
                     }
                 },
                 Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
@@ -235,9 +233,7 @@ fn dial_self() {
                 Poll::Pending => break Poll::Pending,
             }
         }
-    });
-
-    tokio::runtime::current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+    })).unwrap();
 }
 
 #[test]
@@ -288,9 +284,9 @@ fn multiple_addresses_err() {
         .connect_iter(addresses.clone(), TestHandler::default().into_node_handler_builder())
         .unwrap();
 
-    let future = future::poll_fn(|| -> Poll<Result<(), io::Error>> {
+    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
-            match swarm.poll() {
+            match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::DialError {
                     new_state,
                     peer_id,
@@ -302,7 +298,7 @@ fn multiple_addresses_err() {
                     assert_eq!(multiaddr, expected);
                     if addresses.is_empty() {
                         assert_eq!(new_state, PeerState::NotConnected);
-                        return Ok(Poll::Ready(()));
+                        return Poll::Ready(Ok(()));
                     } else {
                         match new_state {
                             PeerState::Dialing { num_pending_addresses } => {
@@ -316,7 +312,5 @@ fn multiple_addresses_err() {
                 Poll::Pending => break Poll::Pending,
             }
         }
-    });
-
-    tokio::runtime::current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+    })).unwrap();
 }

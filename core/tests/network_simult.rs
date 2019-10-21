@@ -31,8 +31,8 @@ use libp2p_swarm::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr,
 };
-use std::{io, time::Duration};
-use wasm_timer::{Delay, Instant};
+use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
+use wasm_timer::Delay;
 
 // TODO: replace with DummyProtocolsHandler after https://github.com/servo/rust-smallvec/issues/139 ?
 struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>);
@@ -45,7 +45,7 @@ impl<TSubstream> Default for TestHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for TestHandler<TSubstream>
 where
-    TSubstream: futures::PollRead + futures::PollWrite
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
@@ -80,7 +80,7 @@ where
 
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Yes }
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>, Self::Error> {
+    fn poll(&mut self, _: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>> {
         Poll::Pending
     }
 }
@@ -116,7 +116,7 @@ fn raw_swarm_simultaneous_connect() {
                 .and_then(|(peer, mplex), _| {
                     // Gracefully close the connection to allow protocol
                     // negotiation to complete.
-                    util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
+                    util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
                 });
             Network::new(transport, local_public_key.into_peer_id())
         };
@@ -131,7 +131,7 @@ fn raw_swarm_simultaneous_connect() {
                 .and_then(|(peer, mplex), _| {
                     // Gracefully close the connection to allow protocol
                     // negotiation to complete.
-                    util::CloseMuxer::new(mplex).map(move |mplex| (peer, mplex))
+                    util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
                 });
             Network::new(transport, local_public_key.into_peer_id())
         };
@@ -139,17 +139,17 @@ fn raw_swarm_simultaneous_connect() {
         swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
         swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-        let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) =
-            future::lazy(move || {
+        let (swarm1_listen_addr, swarm2_listen_addr, mut swarm1, mut swarm2) = futures::executor::block_on(
+            future::lazy(move |cx| {
                 let swarm1_listen_addr =
-                    if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll() {
+                    if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
                     };
 
                 let swarm2_listen_addr =
-                    if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll() {
+                    if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll(cx) {
                         listen_addr
                     } else {
                         panic!("Was expecting the listen address to be reported")
@@ -157,19 +157,16 @@ fn raw_swarm_simultaneous_connect() {
 
                 Ok::<_, void::Void>((swarm1_listen_addr, swarm2_listen_addr, swarm1, swarm2))
             })
-            .wait()
-            .unwrap();
-
-        let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
+        ).unwrap();
 
         loop {
             let mut swarm1_step = 0;
             let mut swarm2_step = 0;
 
-            let mut swarm1_dial_start = Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
-            let mut swarm2_dial_start = Delay::new(Instant::now() + Duration::new(0, rand::random::<u32>() % 50_000_000));
+            let mut swarm1_dial_start = Delay::new(Duration::new(0, rand::random::<u32>() % 50_000_000));
+            let mut swarm2_dial_start = Delay::new(Duration::new(0, rand::random::<u32>() % 50_000_000));
 
-            let future = future::poll_fn(|| -> Poll<bool, io::Error> {
+            let future = future::poll_fn(|cx| -> Poll<bool> {
                 loop {
                     let mut swarm1_not_ready = false;
                     let mut swarm2_not_ready = false;
@@ -178,7 +175,7 @@ fn raw_swarm_simultaneous_connect() {
                     // handle other nodes, which may delay the processing.
 
                     if swarm1_step == 0 {
-                        match swarm1_dial_start.poll().unwrap() {
+                        match Future::poll(Pin::new(&mut swarm1_dial_start), cx) {
                             Poll::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm1.peer(swarm2.local_peer_id().clone())
@@ -192,7 +189,7 @@ fn raw_swarm_simultaneous_connect() {
                     }
 
                     if swarm2_step == 0 {
-                        match swarm2_dial_start.poll().unwrap() {
+                        match Future::poll(Pin::new(&mut swarm2_dial_start), cx) {
                             Poll::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm2.peer(swarm1.local_peer_id().clone())
@@ -206,7 +203,7 @@ fn raw_swarm_simultaneous_connect() {
                     }
 
                     if rand::random::<f32>() < 0.1 {
-                        match swarm1.poll() {
+                        match swarm1.poll(cx) {
                             Poll::Ready(NetworkEvent::IncomingConnectionError {
                                 error: IncomingError::DeniedLowerPriority, ..
                             }) => {
@@ -218,7 +215,7 @@ fn raw_swarm_simultaneous_connect() {
                                 if swarm1_step == 0 {
                                     // The connection was established before
                                     // swarm1 started dialing; discard the test run.
-                                    return Ok(Poll::Ready(false))
+                                    return Poll::Ready(false)
                                 }
                                 assert_eq!(swarm1_step, 1);
                                 swarm1_step = 2;
@@ -237,7 +234,7 @@ fn raw_swarm_simultaneous_connect() {
                     }
 
                     if rand::random::<f32>() < 0.1 {
-                        match swarm2.poll() {
+                        match swarm2.poll(cx) {
                             Poll::Ready(NetworkEvent::IncomingConnectionError {
                                 error: IncomingError::DeniedLowerPriority, ..
                             }) => {
@@ -249,7 +246,7 @@ fn raw_swarm_simultaneous_connect() {
                                 if swarm2_step == 0 {
                                     // The connection was established before
                                     // swarm2 started dialing; discard the test run.
-                                    return Ok(Poll::Ready(false))
+                                    return Poll::Ready(false)
                                 }
                                 assert_eq!(swarm2_step, 1);
                                 swarm2_step = 2;
@@ -269,7 +266,7 @@ fn raw_swarm_simultaneous_connect() {
 
                     // TODO: make sure that >= 5 is correct
                     if swarm1_step + swarm2_step >= 5 {
-                        return Ok(Poll::Ready(true));
+                        return Poll::Ready(true);
                     }
 
                     if swarm1_not_ready && swarm2_not_ready {
@@ -278,7 +275,7 @@ fn raw_swarm_simultaneous_connect() {
                 }
             });
 
-            if reactor.block_on(future).unwrap() {
+            if futures::executor::block_on(future) {
                 // The test exercised what we wanted to exercise: a simultaneous connect.
                 break
             } else {
