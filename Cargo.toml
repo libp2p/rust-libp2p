@@ -48,7 +48,7 @@ libp2p-tcp = { version = "0.12.0", path = "transports/tcp" }
 libp2p-websocket = { version = "0.12.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
-env_logger = "0.7.0"
+env_logger = "0.7.1"
 tokio = "0.1.22"
 tokio-stdin-stdout = "0.1.5"
 
