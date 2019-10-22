@@ -23,7 +23,7 @@ multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/m
 multistream-select = { version = "0.5.0", path = "../misc/multistream-select" }
 futures = "0.1"
 parking_lot = "0.8"
-protobuf = "2.3"
+protobuf = "2.8"
 quick-error = "1.2"
 rand = "0.6"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
