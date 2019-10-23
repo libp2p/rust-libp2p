@@ -22,7 +22,7 @@
 
 // these are found in auto-generated code
 #[allow(bare_trait_objects)]
-mod payload;
+mod payload_proto;
 
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
@@ -498,7 +498,7 @@ where
                 },
                 RecvIdentityState::ReadPayload(mut read_payload) => {
                     if let Async::Ready((mut st, bytes)) = read_payload.poll()? {
-                        let pb: payload::Identity = protobuf::parse_from_bytes(&bytes)?;
+                        let pb: payload_proto::Identity = protobuf::parse_from_bytes(&bytes)?;
                         if !pb.pubkey.is_empty() {
                             let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
                                 .map_err(|_| NoiseError::InvalidKey)?;
@@ -553,7 +553,7 @@ where
         loop {
             match mem::replace(&mut self.state, SendIdentityState::Done) {
                 SendIdentityState::Init(st) => {
-                    let mut pb = payload::Identity::new();
+                    let mut pb = payload_proto::Identity::new();
                     if st.send_identity {
                         pb.set_pubkey(st.identity.public.clone().into_protobuf_encoding());
                     }

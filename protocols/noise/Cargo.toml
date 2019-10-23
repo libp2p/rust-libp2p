@@ -15,12 +15,12 @@ lazy_static = "1.4.0"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4.8"
 protobuf = "2.8.1"
+rand = "0.7.2"
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
 tokio-io = "0.1.12"
 x25519-dalek = "0.5.2"
 zeroize = "1.0.0"
-rand = "0.7.2"
 
 [dev-dependencies]
 env_logger = "0.7.1"
