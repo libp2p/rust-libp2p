@@ -41,9 +41,11 @@ pub struct GossipsubConfig {
     /// Flag determining if gossipsub topics are hashed or sent as plain strings.
     pub hash_topics: bool,
 
-    /// Forward all received messages without validation. If this is set to true, the user must
-    /// manually call `propagate_message()` on the behaviour to forward message once validated.
-    pub propagate_messages: bool,
+    /// When set to `true`, prevents automatic forwarding of all received messages. This setting
+    /// allows a user to validate the messages before propagating them to their peers. If set to
+    /// true, the user must manually call `propagate_message()` on the behaviour to forward message
+    /// once validated.
+    pub manual_propagation: bool, 
 }
 
 impl Default for GossipsubConfig {
@@ -61,7 +63,7 @@ impl Default for GossipsubConfig {
             fanout_ttl: Duration::from_secs(60),
             max_transmit_size: 2048,
             hash_topics: false, // default compatibility with floodsub
-            propagate_messages: true,
+            manual_propagation: false,
         }
     }
 }
@@ -103,8 +105,8 @@ pub struct GossipsubConfigBuilder {
     /// Flag determining if gossipsub topics are hashed or sent as plain strings.
     pub hash_topics: bool,
 
-    /// Forward all received messages without validation.
-    pub propagate_messages: bool,
+    /// Manually propagate messages to peers.
+    pub manual_propagation: bool,
 }
 
 impl Default for GossipsubConfigBuilder {
@@ -122,7 +124,7 @@ impl Default for GossipsubConfigBuilder {
             fanout_ttl: Duration::from_secs(60),
             max_transmit_size: 2048,
             hash_topics: false,
-            propagate_messages: true,
+            manual_propagation: true,
         }
     }
 }
@@ -210,8 +212,8 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    pub fn propagate_messages(&mut self, propagate_messages: bool) -> &mut Self {
-        self.propagate_messages = propagate_messages;
+    pub fn manual_propagation(&mut self, manual_propagation: bool) -> &mut Self {
+        self.manual_propagation = manual_propagation;
         self
     }
 
@@ -229,7 +231,7 @@ impl GossipsubConfigBuilder {
             fanout_ttl: self.fanout_ttl,
             max_transmit_size: self.max_transmit_size,
             hash_topics: self.hash_topics,
-            propagate_messages: self.propagate_messages,
+            manual_propagation: self.manual_propagation,
         }
     }
 }
