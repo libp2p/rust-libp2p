@@ -117,23 +117,15 @@ pub fn build_query_response(
     // TTL for the answer
     append_u32(&mut out, ttl);
 
-    let peer_id_base58 = peer_id.to_base58();
-
     // Peer Id.
-    let peer_name = format!(
-        "{}.{}",
-        data_encoding::BASE32_DNSCURVE.encode(&peer_id.into_bytes()),
-        str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII")
-    );
-    let mut peer_id_bytes = Vec::with_capacity(64);
-    append_qname(&mut peer_id_bytes, peer_name.as_bytes());
+    let peer_id_bytes = encode_peer_id(&peer_id);
     debug_assert!(peer_id_bytes.len() <= 0xffff);
     append_u16(&mut out, peer_id_bytes.len() as u16);
     out.extend_from_slice(&peer_id_bytes);
 
     // The TXT records for answers.
     for addr in addresses {
-        let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id_base58);
+        let txt_to_send = format!("dnsaddr={}/p2p/{}", addr.to_string(), peer_id.to_base58());
         let mut txt_to_send_bytes = Vec::with_capacity(txt_to_send.len());
         append_character_string(&mut txt_to_send_bytes, txt_to_send.as_bytes())?;
         append_txt_record(&mut out, &peer_id_bytes, ttl, Some(&txt_to_send_bytes[..]))?;
@@ -209,6 +201,37 @@ fn append_u32(out: &mut Vec<u8>, value: u32) {
 fn append_u16(out: &mut Vec<u8>, value: u16) {
     out.push(((value >> 8) & 0xff) as u8);
     out.push((value & 0xff) as u8);
+}
+
+/// If a peer ID is longer than 63 characters, split it into segments to
+/// be compatible with RFC 1035.
+fn segment_peer_id(peer_id: &String) -> String {
+    // This will only perform one allocation except in extreme circumstances.
+    let mut out = String::with_capacity(peer_id.len() + 8);
+
+    for (idx, chr) in peer_id.chars().enumerate() {
+        if idx > 0 && idx % 63 == 0 {
+            out.push('.');
+        }
+        out.push(chr);
+    }
+    out
+}
+
+/// Combines and encodes a `PeerId` and service name for a DNS query.
+fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
+    // DNS-safe encoding for the Peer ID 
+    let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.as_bytes());
+    // ensure we don't have any labels over 63 bytes long
+    let encoded_peer_id = segment_peer_id(&raw_peer_id);
+    let service_name = str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII");
+    let peer_name = [&encoded_peer_id, service_name].join(".");
+
+    // allocate with a little extra padding for QNAME encoding
+    let mut peer_id_bytes = Vec::with_capacity(peer_name.len() + 32);
+    append_qname(&mut peer_id_bytes, peer_name.as_bytes());
+
+    peer_id_bytes
 }
 
 /// Appends a `QNAME` (as defined by RFC1035) to the `Vec`.
@@ -365,6 +388,22 @@ mod tests {
     fn build_service_discovery_response_correct() {
         let query = build_service_discovery_response(0x1234, Duration::from_secs(120));
         assert!(Packet::parse(&query).is_ok());
+    }
+
+    #[test]
+    fn test_segment_peer_id() {
+        let str_32 = String::from_utf8(vec![b'x'; 32]).unwrap();
+        let str_63 = String::from_utf8(vec![b'x'; 63]).unwrap();
+        let str_64 = String::from_utf8(vec![b'x'; 64]).unwrap();
+        let str_126 = String::from_utf8(vec![b'x'; 126]).unwrap();
+        let str_127 = String::from_utf8(vec![b'x'; 127]).unwrap();
+
+        assert_eq!(segment_peer_id(&str_32), str_32);
+        assert_eq!(segment_peer_id(&str_63), str_63);
+
+        assert_eq!(segment_peer_id(&str_64), [&str_63, "x"].join("."));
+        assert_eq!(segment_peer_id(&str_126), [&str_63, str_63.as_str()].join("."));
+        assert_eq!(segment_peer_id(&str_127), [&str_63, &str_63, "x"].join("."));
     }
 
     // TODO: test limits and errors
