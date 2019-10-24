@@ -177,7 +177,7 @@ pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {
 
     // Service name.
     {
-        let mut name = Vec::new();
+        let mut name = Vec::with_capacity(SERVICE_NAME.len() + 2);
         append_qname(&mut name, SERVICE_NAME);
         append_u16(&mut out, name.len() as u16);
         out.extend_from_slice(&name);
