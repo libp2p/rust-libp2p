@@ -27,7 +27,6 @@ use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
 use std::sync::Arc;
-use untrusted::Input;
 use zeroize::Zeroize;
 
 /// An RSA keypair.
