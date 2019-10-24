@@ -100,7 +100,7 @@ impl PeerId {
     /// returns back the data as an error.
     #[inline]
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
-        if data.algorithm() == multihash::Hash::SHA2256 {
+        if data.algorithm() == multihash::Hash::SHA2256 || data.algorithm() == multihash::Hash::Identity {
             Ok(PeerId { multihash: data })
         } else {
             Err(data)
