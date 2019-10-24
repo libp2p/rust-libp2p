@@ -203,7 +203,7 @@ fn handle_input_line<TSubstream: AsyncRead + AsyncWrite>(
             kademlia.put_record(record, Quorum::One);
         }
         _ => {
-            eprintln!("expected GET or SET");
+            eprintln!("expected GET or PUT");
         }
     }
 }
