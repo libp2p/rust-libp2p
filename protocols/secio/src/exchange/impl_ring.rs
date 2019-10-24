@@ -25,7 +25,6 @@ use futures::{future, prelude::*};
 use log::debug;
 use ring::agreement as ring_agreement;
 use ring::rand as ring_rand;
-use untrusted::Input as UntrustedInput;
 
 impl Into<&'static ring_agreement::Algorithm> for KeyAgreement {
     #[inline]
