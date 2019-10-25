@@ -37,7 +37,6 @@ use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
-#[allow(deprecated)]
 use tokio_io::{AsyncRead, AsyncWrite, codec::length_delimited};
 use crate::{KeyAgreement, SecioConfig};
 

@@ -28,7 +28,6 @@ use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
-#[allow(deprecated)]
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 
