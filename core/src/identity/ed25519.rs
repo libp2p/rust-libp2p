@@ -139,13 +139,10 @@ impl Clone for SecretKey {
 impl SecretKey {
     /// Generate a new Ed25519 secret key.
     pub fn generate() -> SecretKey {
-        loop {
-            let mut bytes = [0u8; 32];
-            rand::thread_rng().fill_bytes(&mut bytes);
-            if let Ok(key) = ed25519::SecretKey::from_bytes(&bytes) {
-                break SecretKey(key)
-            }
-        }
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        SecretKey(ed25519::SecretKey::from_bytes(&bytes)
+            .expect("this returns `Err` only if the length is wrong; the length is correct; qed"))
     }
 
     /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.
