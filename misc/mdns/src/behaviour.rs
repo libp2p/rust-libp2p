@@ -37,28 +37,46 @@ use wasm_timer::{Delay, Instant};
 /// them to the topology.
 pub struct Mdns<TSubstream> {
     /// The inner service.
-    service: MdnsService,
+    service: MaybeBusyMdnsService,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
     /// Each combination of `PeerId` and `Multiaddr` can only appear once, but the same `PeerId`
     /// can appear multiple times.
+    //
+    // TODO: Why this optimization? Is mdns ever within the hot path of an
+    // application? Is the access latency on this data structure relevant?
     discovered_nodes: SmallVec<[(PeerId, Multiaddr, Instant); 8]>,
 
-    /// Future that fires when the TTL at least one node in `discovered_nodes` expires.
+    /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
+    // TODO: Would a simple std Instant suffice as well?
     closest_expiration: Option<Delay>,
 
     /// Marker to pin the generic.
     marker: PhantomData<TSubstream>,
 }
 
+/// Polling the async MdnsService within a non-async `poll` function forces one to keep the returned
+/// opaque future across `poll` invocations. Given that the opaque future itself has a reference to
+/// the MdnsService, this would result in a self-referential struct.
+///
+/// Instead we have `MdnsService::poll` take ownership of `self`, returning a future that resolves
+/// with both itself and a `MdnsPacket` (similar to the old Tokio socket send style). The two states
+/// are thus `Free` with an `MdnsService` or `Busy` with a future returning the original
+/// `MdnsService` and an `MdnsPacket`.
+enum MaybeBusyMdnsService {
+    Free(MdnsService),
+    Busy(Pin<Box<dyn Future<Output = (MdnsService, MdnsPacket)> + Send>>),
+    Unreachable,
+}
+
 impl<TSubstream> Mdns<TSubstream> {
     /// Builds a new `Mdns` behaviour.
     pub async fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(Mdns {
-            service: MdnsService::new().await?,
+            service: MaybeBusyMdnsService::Free(MdnsService::new().await?),
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
             marker: PhantomData,
@@ -80,7 +98,7 @@ pub enum MdnsEvent {
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
     /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
-    /// been refreshed, we remove it from the list emit it as an `Expired` event.
+    /// been refreshed, we remove it from the list and emit it as an `Expired` event.
     Expired(ExpiredAddrsIter),
 }
 
@@ -210,18 +228,39 @@ where
 
         // Polling the mDNS service, and obtain the list of nodes discovered this round.
         let discovered = loop {
-            let event = match self.service.poll(cx) {
-                Poll::Ready(ev) => ev,
-                Poll::Pending => return Poll::Pending,
+            let service = std::mem::replace(&mut self.service, MaybeBusyMdnsService::Unreachable);
+
+            let packet = match service {
+                MaybeBusyMdnsService::Free(service) => {
+                    self.service = MaybeBusyMdnsService::Busy(Box::pin(service.next()));
+                    continue;
+                },
+                MaybeBusyMdnsService::Busy(mut fut) => {
+                    match fut.as_mut().poll(cx) {
+                        Poll::Ready((service, packet)) => {
+                            self.service = MaybeBusyMdnsService::Free(service);
+                            packet
+                        },
+                        Poll::Pending => {
+                            self.service = MaybeBusyMdnsService::Busy(fut);
+                            return Poll::Pending;
+                        }
+                    }
+                },
+                MaybeBusyMdnsService::Unreachable => unreachable!(),
             };
 
-            match event {
+            match packet {
                 MdnsPacket::Query(query) => {
-                    let _ = query.respond(
-                        params.local_peer_id().clone(),
-                        params.listened_addresses(),
-                        Duration::from_secs(5 * 60)
-                    );
+                    // TODO: it should always be free, can we encode this somehow?
+                    if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
+                        service.enqueue_response(query.build_response(
+                            params.local_peer_id().clone(),
+                            params.listened_addresses(),
+                            // TODO: This should move to a constant, right?
+                            Duration::from_secs(5 * 60)
+                        ).unwrap());
+                    }
                 },
                 MdnsPacket::Response(response) => {
                     // We replace the IP address with the address we observe the
@@ -240,12 +279,12 @@ where
 
                         let new_expiration = Instant::now() + peer.ttl();
 
-                        let mut addrs = Vec::new();
+                        let mut addrs: Vec<Multiaddr> = Vec::new();
                         for addr in peer.addresses() {
                             if let Some(new_addr) = address_translation(&addr, &observed) {
-                                addrs.push(new_addr)
+                                addrs.push(new_addr.clone())
                             }
-                            addrs.push(addr)
+                            addrs.push(addr.clone())
                         }
 
                         for addr in addrs {
@@ -264,17 +303,24 @@ where
                     break discovered;
                 },
                 MdnsPacket::ServiceDiscovery(disc) => {
-                    disc.respond(Duration::from_secs(5 * 60));
+                    // TODO: it should always be free, can we encode this somehow?
+                    if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
+                        // TODO: This should move to a constant, right? Also can it be consolidated with
+                        // the query response TTL?
+                        service.enqueue_response(disc.build_response(Duration::from_secs(5 * 60)));
+                    }
                 },
             }
         };
 
-        // As the final step, we need to refresh `closest_expiration`.
+        // Getting this far implies that we discovered new nodes. As the final step, we need to
+        // refresh `closest_expiration`.
         self.closest_expiration = self.discovered_nodes.iter()
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
             .map(Delay::new_at);
+
         Poll::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
             inner: discovered.into_iter(),
         })))
@@ -284,8 +330,7 @@ where
 impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Mdns")
-            .field("service", &self.service)
+            //.field("service", &self.service)
             .finish()
     }
 }
-
