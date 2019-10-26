@@ -69,14 +69,8 @@ use std::{
 pub struct TcpConfig {
     /// How long a listener should sleep after receiving an error, before trying again.
     sleep_on_error: Duration,
-    /// Size of the recv buffer size to set for opened sockets, or `None` to keep default.
-    recv_buffer_size: Option<usize>,
-    /// Size of the send buffer size to set for opened sockets, or `None` to keep default.
-    send_buffer_size: Option<usize>,
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
-    /// Keep alive duration to set for opened sockets, or `None` to keep default.
-    keepalive: Option<Option<Duration>>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
     nodelay: Option<bool>,
 }
@@ -86,35 +80,14 @@ impl TcpConfig {
     pub fn new() -> TcpConfig {
         TcpConfig {
             sleep_on_error: Duration::from_millis(100),
-            recv_buffer_size: None,
-            send_buffer_size: None,
             ttl: None,
-            keepalive: None,
             nodelay: None,
         }
-    }
-
-    /// Sets the size of the recv buffer size to set for opened sockets.
-    pub fn recv_buffer_size(mut self, value: usize) -> Self {
-        self.recv_buffer_size = Some(value);
-        self
-    }
-
-    /// Sets the size of the send buffer size to set for opened sockets.
-    pub fn send_buffer_size(mut self, value: usize) -> Self {
-        self.send_buffer_size = Some(value);
-        self
     }
 
     /// Sets the TTL to set for opened sockets.
     pub fn ttl(mut self, value: u32) -> Self {
         self.ttl = Some(value);
-        self
-    }
-
-    /// Sets the keep alive pinging duration to set for opened sockets.
-    pub fn keepalive(mut self, value: Option<Duration>) -> Self {
-        self.keepalive = Some(value);
         self
     }
 
@@ -273,20 +246,8 @@ fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
 
 /// Applies the socket configuration parameters to a socket.
 fn apply_config(config: &TcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
-    if let Some(recv_buffer_size) = config.recv_buffer_size {
-        // TODO: socket.set_recv_buffer_size(recv_buffer_size)?;
-    }
-
-    if let Some(send_buffer_size) = config.send_buffer_size {
-        // TODO: socket.set_send_buffer_size(send_buffer_size)?;
-    }
-
     if let Some(ttl) = config.ttl {
         socket.set_ttl(ttl)?;
-    }
-
-    if let Some(keepalive) = config.keepalive {
-        // TODO: socket.set_keepalive(keepalive)?;
     }
 
     if let Some(nodelay) = config.nodelay {
@@ -491,31 +452,10 @@ impl Drop for TcpTransStream {
 
 #[cfg(test)]
 mod tests {
-    use futures::{prelude::*, future::{self, Loop}, stream};
+    use futures::prelude::*;
     use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
     use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, time::Duration};
-    use super::{multiaddr_to_socketaddr, TcpConfig, Listener};
-    use tokio::runtime::current_thread::{self, Runtime};
-    use tokio_io;
-
-    #[test]
-    fn pause_on_error() {
-        // We create a stream of values and errors and continue polling even after errors
-        // have been encountered. We count the number of items (including errors) and assert
-        // that no item has been missed.
-        let rs = stream::iter_result(vec![Ok(1), Err(1), Ok(1), Err(1)]);
-        let ls = Listener::new(rs, Duration::from_secs(1));
-        let sum = future::loop_fn((0, ls), |(acc, ls)| {
-            ls.into_future().then(move |item| {
-                match item {
-                    Ok((None, _)) => Ok::<_, std::convert::Infallible>(Loop::Break(acc)),
-                    Ok((Some(n), rest)) => Ok(Loop::Continue((acc + n, rest))),
-                    Err((n, rest)) => Ok(Loop::Continue((acc + n, rest)))
-                }
-            })
-        });
-        assert_eq!(4, current_thread::block_on_all(sum).unwrap())
-    }
+    use super::{multiaddr_to_socketaddr, TcpConfig};
 
     #[test]
     fn wildcard_expansion() {
@@ -608,42 +548,43 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        use std::io::Write;
+        let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
+        let mut ready_tx = Some(ready_tx);
 
-        std::thread::spawn(move || {
-            let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
+        async_std::task::spawn(async move {
+            let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new();
-            let listener = tcp.listen_on(addr).unwrap()
-                .filter_map(ListenerEvent::into_upgrade)
-                .for_each(|(sock, _)| {
-                    sock.and_then(|sock| {
-                        // Define what to do with the socket that just connected to us
-                        // Which in this case is read 3 bytes
-                        let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
-                            .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
-                            .map_err(|err| panic!("IO error {:?}", err));
+            let mut listener = tcp.listen_on(addr).unwrap();
 
-                        // Spawn the future as a concurrent task
-                        handle.spawn(handle_conn).unwrap();
-
-                        futures::future::ready(())
-                    })
-                });
-
-            futures::executor::block_on(listener);
+            loop {
+                match listener.next().await.unwrap().unwrap() {
+                    ListenerEvent::NewAddress(listen_addr) => {
+                        ready_tx.take().unwrap().send(listen_addr).unwrap();
+                    },
+                    ListenerEvent::Upgrade { upgrade, .. } => {
+                        let mut upgrade = upgrade.await.unwrap();
+                        let mut buf = [0u8; 3];
+                        upgrade.read_exact(&mut buf).await.unwrap();
+                        assert_eq!(buf, [1, 2, 3]);
+                        upgrade.write_all(&[4, 5, 6]).await.unwrap();
+                    },
+                    _ => unreachable!()
+                }
+            }
         });
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-        let tcp = TcpConfig::new();
-        // Obtain a future socket through dialing
-        let socket = tcp.dial(addr.clone()).unwrap();
-        // Define what to do with the socket once it's obtained
-        let action = socket.then(|sock| {
-            sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
-            futures::future::ready(())
+
+        async_std::task::block_on(async move {
+            let addr = ready_rx.await.unwrap();
+            let tcp = TcpConfig::new();
+
+            // Obtain a future socket through dialing
+            let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
+            socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
+
+            let mut buf = [0u8; 3];
+            socket.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, [4, 5, 6]);
         });
-        // Execute the future in our event loop
-        futures::executor::block_on(action);
     }
 
     #[test]

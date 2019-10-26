@@ -34,7 +34,8 @@ fn async_write() {
     let bg_thread = thread::spawn(move || {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new().and_then(move |c, e| upgrade::apply(c, mplex, e));
+        let transport = TcpConfig::new().and_then(move |c, e|
+            upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -69,7 +70,8 @@ fn async_write() {
     });
 
     let mplex = libp2p_mplex::MplexConfig::new();
-    let transport = TcpConfig::new().and_then(move |c, e| upgrade::apply(c, mplex, e));
+    let transport = TcpConfig::new().and_then(move |c, e|
+        upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
     let future = transport
         .dial(rx.recv().unwrap())

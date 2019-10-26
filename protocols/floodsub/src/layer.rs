@@ -230,7 +230,7 @@ impl<TSubstream> Floodsub<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Floodsub<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubConfig, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;

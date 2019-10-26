@@ -42,7 +42,8 @@ fn lot_of_data() {
 }
 
 fn run(message1: Vec<u8>) {
-    let transport1 = TcpConfig::new().and_then(|c, e| upgrade::apply(c, DeflateConfig::default(), e));
+    let transport1 = TcpConfig::new()
+        .and_then(|c, e| upgrade::apply(c, DeflateConfig::default(), e, upgrade::Version::V1));
     let transport2 = transport1.clone();
     let message2 = message1.clone();
     let (l_a_tx, l_a_rx) = oneshot::channel();

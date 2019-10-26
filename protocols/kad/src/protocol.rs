@@ -34,14 +34,13 @@ use bytes::BytesMut;
 use codec::UviBytes;
 use crate::protobuf_structs::dht as proto;
 use crate::record::{self, Record};
-use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
+use futures::prelude::*;
+use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use protobuf::{self, Message};
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
 use wasm_timer::Instant;
 
@@ -176,10 +175,10 @@ impl UpgradeInfo for KademliaProtocolConfig {
 
 impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
-    C: AsyncRead + AsyncWrite,
+    C: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = KadInStreamSink<Negotiated<C>>;
-    type Future = FutureResult<Self::Output, io::Error>;
+    type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
     #[inline]
@@ -189,14 +188,17 @@ where
 
         future::ok(
             Framed::new(incoming, codec)
-                .from_err()
-                .with::<_, fn(_) -> _, _>(|response| {
+                .err_into()
+                .with::<_, _, fn(_) -> _, _>(|response| {
                     let proto_struct = resp_msg_to_proto(response);
-                    proto_struct.write_to_bytes().map_err(invalid_data)
+                    future::ready(proto_struct.write_to_bytes().map_err(invalid_data))
                 })
-                .and_then::<fn(_) -> _, _>(|bytes| {
-                    let request = protobuf::parse_from_bytes(&bytes)?;
-                    proto_to_req_msg(request)
+                .and_then::<_, fn(_) -> _>(|bytes| {
+                    let request = match protobuf::parse_from_bytes(&bytes) {
+                        Ok(r) => r,
+                        Err(err) => return future::ready(Err(err.into()))
+                    };
+                    future::ready(proto_to_req_msg(request))
                 }),
         )
     }
@@ -204,10 +206,10 @@ where
 
 impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
 where
-    C: AsyncRead + AsyncWrite,
+    C: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = KadOutStreamSink<Negotiated<C>>;
-    type Future = FutureResult<Self::Output, io::Error>;
+    type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
     #[inline]
@@ -217,14 +219,17 @@ where
 
         future::ok(
             Framed::new(incoming, codec)
-                .from_err()
-                .with::<_, fn(_) -> _, _>(|request| {
+                .err_into()
+                .with::<_, _, fn(_) -> _, _>(|request| {
                     let proto_struct = req_msg_to_proto(request);
-                    proto_struct.write_to_bytes().map_err(invalid_data)
+                    future::ready(proto_struct.write_to_bytes().map_err(invalid_data))
                 })
-                .and_then::<fn(_) -> _, _>(|bytes| {
-                    let response = protobuf::parse_from_bytes(&bytes)?;
-                    proto_to_resp_msg(response)
+                .and_then::<_, fn(_) -> _>(|bytes| {
+                    let response = match protobuf::parse_from_bytes(&bytes) {
+                        Ok(r) => r,
+                        Err(err) => return future::ready(Err(err.into()))
+                    };
+                    future::ready(proto_to_resp_msg(response))
                 }),
         )
     }
@@ -238,13 +243,14 @@ pub type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
 
 pub type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
-        stream::FromErr<Framed<S, UviBytes<Vec<u8>>>, io::Error>,
+        stream::ErrInto<Framed<S, UviBytes<Vec<u8>>>, io::Error>,
+        Vec<u8>,
         A,
-        fn(A) -> Result<Vec<u8>, io::Error>,
-        Result<Vec<u8>, io::Error>,
+        future::Ready<Result<Vec<u8>, io::Error>>,
+        fn(A) -> future::Ready<Result<Vec<u8>, io::Error>>,
     >,
-    fn(BytesMut) -> Result<B, io::Error>,
-    Result<B, io::Error>,
+    future::Ready<Result<B, io::Error>>,
+    fn(BytesMut) -> future::Ready<Result<B, io::Error>>,
 >;
 
 /// Request that we can send to a peer or that we received from a peer.

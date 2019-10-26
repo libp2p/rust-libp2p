@@ -51,32 +51,30 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
 ///
 /// // The `listeners` will now generate events when polled.
-/// let future = listeners.for_each(move |event| {
-///     match event {
-///         ListenersEvent::NewAddress { listener_id, listen_addr } => {
-///             println!("Listener {:?} is listening at address {}", listener_id, listen_addr);
-///         },
-///         ListenersEvent::AddressExpired { listener_id, listen_addr } => {
-///             println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
-///         },
-///         ListenersEvent::Closed { listener_id, .. } => {
-///             println!("Listener {:?} has been closed", listener_id);
-///         },
-///         ListenersEvent::Error { listener_id, error } => {
-///             println!("Listener {:?} has experienced an error: {}", listener_id, error);
-///         },
-///         ListenersEvent::Incoming { listener_id, upgrade, local_addr, .. } => {
-///             println!("Listener {:?} has a new connection on {}", listener_id, local_addr);
-///             // We don't do anything with the newly-opened connection, but in a real-life
-///             // program you probably want to use it!
-///             drop(upgrade);
-///         },
-///     };
-///
-///     Ok(())
-/// });
-///
-/// tokio::run(future.map_err(|_| ()));
+/// futures::executor::block_on(async move {
+///     while let Some(event) = listeners.next().await {
+///         match event {
+///             ListenersEvent::NewAddress { listener_id, listen_addr } => {
+///                 println!("Listener {:?} is listening at address {}", listener_id, listen_addr);
+///             },
+///             ListenersEvent::AddressExpired { listener_id, listen_addr } => {
+///                 println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
+///             },
+///             ListenersEvent::Closed { listener_id, .. } => {
+///                 println!("Listener {:?} has been closed", listener_id);
+///             },
+///             ListenersEvent::Error { listener_id, error } => {
+///                 println!("Listener {:?} has experienced an error: {}", listener_id, error);
+///             },
+///             ListenersEvent::Incoming { listener_id, upgrade, local_addr, .. } => {
+///                 println!("Listener {:?} has a new connection on {}", listener_id, local_addr);
+///                 // We don't do anything with the newly-opened connection, but in a real-life
+///                 // program you probably want to use it!
+///                 drop(upgrade);
+///             },
+///         }
+///     }
+/// })
 /// # }
 /// ```
 pub struct ListenersStream<TTrans>
@@ -358,7 +356,6 @@ mod tests {
     use super::*;
     use crate::transport::{self, ListenerEvent};
     use assert_matches::assert_matches;
-    use tokio::runtime::current_thread::Runtime;
     use std::{io, iter::FromIterator};
     use futures::{future::{self}, stream};
     use crate::PeerId;

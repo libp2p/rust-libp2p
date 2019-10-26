@@ -23,7 +23,7 @@ use crate::topic::TopicHash;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use protobuf::{ProtobufError, Message as ProtobufMessage};
-use std::{error, fmt, io, iter};
+use std::{error, fmt, io, iter, pin::Pin};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -49,15 +49,15 @@ impl UpgradeInfo for FloodsubConfig {
 
 impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
 where
-    TSocket: AsyncRead + AsyncWrite + Unpin,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = FloodsubRpc;
     type Error = FloodsubDecodeError;
-    type Future = upgrade::ReadOneThen<upgrade::Negotiated<TSocket>, (), fn(Vec<u8>, ()) -> Result<FloodsubRpc, FloodsubDecodeError>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    #[inline]
-    fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        upgrade::read_one_then(socket, 2048, (), |packet, ()| {
+    fn upgrade_inbound(self, mut socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+        Box::pin(async move {
+            let packet = upgrade::read_one(&mut socket, 2048).await?;
             let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
 
             let mut messages = Vec::with_capacity(rpc.get_publish().len());
@@ -164,16 +164,19 @@ impl UpgradeInfo for FloodsubRpc {
 
 impl<TSocket> OutboundUpgrade<TSocket> for FloodsubRpc
 where
-    TSocket: AsyncWrite + AsyncRead + Unpin,
+    TSocket: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
     type Output = ();
     type Error = io::Error;
-    type Future = upgrade::WriteOne<upgrade::Negotiated<TSocket>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        let bytes = self.into_bytes();
-        upgrade::write_one(socket, bytes)
+    fn upgrade_outbound(self, mut socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+        Box::pin(async move {
+            let bytes = self.into_bytes();
+            upgrade::write_one(&mut socket, bytes).await?;
+            Ok(())
+        })
     }
 }
 
