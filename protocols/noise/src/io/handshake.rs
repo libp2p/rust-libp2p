@@ -20,10 +20,11 @@
 
 //! Noise protocol handshake I/O.
 
-mod payload;
+mod payload_proto;
 
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
+use crate::io::SnowState;
 use libp2p_core::identity;
 use futures::prelude::*;
 use futures::task;
@@ -271,7 +272,7 @@ impl<T> State<T> {
     /// Noise handshake pattern.
     fn new(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
     ) -> Result<Self, NoiseError> {
@@ -284,7 +285,7 @@ impl<T> State<T> {
         session.map(|s|
             State {
                 identity,
-                io: NoiseOutput::new(io, s),
+                io: NoiseOutput::new(io, SnowState::Handshake(s)),
                 dh_remote_pubkey_sig: None,
                 id_remote_pubkey,
                 send_identity
@@ -322,7 +323,7 @@ impl<T> State<T>
                         }
                     }
                 };
-                Ok((remote, NoiseOutput { session: s, .. self.io }))
+                Ok((remote, NoiseOutput { session: SnowState::Transport(s), .. self.io }))
             }
         }
     }
