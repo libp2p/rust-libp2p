@@ -27,6 +27,9 @@ use libp2p_core::{Multiaddr, PeerId};
 use rand;
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
+/// Maximum size of a DNS label as per RFC1035
+const MAX_LABEL_LENGTH: usize = 63;
+
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
 pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
@@ -205,12 +208,15 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
 
 /// If a peer ID is longer than 63 characters, split it into segments to
 /// be compatible with RFC 1035.
-fn segment_peer_id(peer_id: &String) -> String {
+fn segment_peer_id(peer_id: String) -> String {
+    // Guard for the most common case
+    if peer_id.len() < MAX_LABEL_LENGTH { return peer_id }
+
     // This will only perform one allocation except in extreme circumstances.
     let mut out = String::with_capacity(peer_id.len() + 8);
 
     for (idx, chr) in peer_id.chars().enumerate() {
-        if idx > 0 && idx % 63 == 0 {
+        if idx > 0 && idx % MAX_LABEL_LENGTH == 0 {
             out.push('.');
         }
         out.push(chr);
@@ -223,7 +229,7 @@ fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
     // DNS-safe encoding for the Peer ID 
     let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.as_bytes());
     // ensure we don't have any labels over 63 bytes long
-    let encoded_peer_id = segment_peer_id(&raw_peer_id);
+    let encoded_peer_id = segment_peer_id(raw_peer_id);
     let service_name = str::from_utf8(SERVICE_NAME).expect("SERVICE_NAME is always ASCII");
     let peer_name = [&encoded_peer_id, service_name].join(".");
 
@@ -398,12 +404,12 @@ mod tests {
         let str_126 = String::from_utf8(vec![b'x'; 126]).unwrap();
         let str_127 = String::from_utf8(vec![b'x'; 127]).unwrap();
 
-        assert_eq!(segment_peer_id(&str_32), str_32);
-        assert_eq!(segment_peer_id(&str_63), str_63);
+        assert_eq!(segment_peer_id(str_32.clone()), str_32);
+        assert_eq!(segment_peer_id(str_63.clone()), str_63);
 
-        assert_eq!(segment_peer_id(&str_64), [&str_63, "x"].join("."));
-        assert_eq!(segment_peer_id(&str_126), [&str_63, str_63.as_str()].join("."));
-        assert_eq!(segment_peer_id(&str_127), [&str_63, &str_63, "x"].join("."));
+        assert_eq!(segment_peer_id(str_64), [&str_63, "x"].join("."));
+        assert_eq!(segment_peer_id(str_126), [&str_63, str_63.as_str()].join("."));
+        assert_eq!(segment_peer_id(str_127), [&str_63, &str_63, "x"].join("."));
     }
 
     // TODO: test limits and errors
