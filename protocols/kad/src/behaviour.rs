@@ -1313,7 +1313,7 @@ where
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
-        let mut jobs_query_capacity = JOBS_MAX_QUERIES - self.queries.size();
+        let mut jobs_query_capacity = JOBS_MAX_QUERIES.saturating_sub(self.queries.size());
 
         // Run the periodic provider announcement job.
         if let Some(mut job) = self.add_provider_job.take() {
