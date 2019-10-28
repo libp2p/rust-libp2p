@@ -24,6 +24,7 @@ use ed25519_dalek as ed25519;
 use failure::Fail;
 use super::error::DecodingError;
 use zeroize::Zeroize;
+use core::fmt;
 
 /// An Ed25519 keypair.
 pub struct Keypair(ed25519::Keypair);
@@ -63,6 +64,12 @@ impl Keypair {
     pub fn secret(&self) -> SecretKey {
         SecretKey::from_bytes(&mut self.0.secret.to_bytes())
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
+    }
+}
+
+impl fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keypair").field("public", &self.0.public).finish()
     }
 }
 
@@ -132,6 +139,12 @@ impl Clone for SecretKey {
         let mut sk_bytes = self.0.to_bytes();
         Self::from_bytes(&mut sk_bytes)
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
+    }
+}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SecretKey")
     }
 }
 
