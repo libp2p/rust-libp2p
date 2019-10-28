@@ -210,7 +210,7 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
 /// be compatible with RFC 1035.
 fn segment_peer_id(peer_id: String) -> String {
     // Guard for the most common case
-    if peer_id.len() < MAX_LABEL_LENGTH { return peer_id }
+    if peer_id.len() <= MAX_LABEL_LENGTH { return peer_id }
 
     // This will only perform one allocation except in extreme circumstances.
     let mut out = String::with_capacity(peer_id.len() + 8);
