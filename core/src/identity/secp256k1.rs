@@ -26,6 +26,7 @@ use sha2::{Digest as ShaDigestTrait, Sha256};
 use secp256k1::{Message, Signature};
 use super::error::{DecodingError, SigningError};
 use zeroize::Zeroize;
+use core::fmt;
 
 /// A Secp256k1 keypair.
 #[derive(Clone)]
@@ -51,6 +52,12 @@ impl Keypair {
     }
 }
 
+impl fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keypair").field("public", &self.public).finish()
+    }
+}
+
 /// Promote a Secp256k1 secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(secret: SecretKey) -> Keypair {
@@ -69,6 +76,12 @@ impl From<Keypair> for SecretKey {
 /// A Secp256k1 secret key.
 #[derive(Clone)]
 pub struct SecretKey(secp256k1::SecretKey);
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SecretKey")
+    }
+}
 
 impl SecretKey {
     /// Generate a new Secp256k1 secret key.
