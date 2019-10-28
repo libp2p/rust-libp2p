@@ -38,7 +38,7 @@ void = "1"
 zeroize = "1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
-ring = { version = "^0.16", features = ["alloc"], default-features = false }
+ring = { version = "^0.16", features = ["alloc", "std"], default-features = false }
 untrusted = { version = "0.6" }
 
 [dev-dependencies]
