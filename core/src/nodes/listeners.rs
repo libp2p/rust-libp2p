@@ -408,7 +408,7 @@ mod tests {
             .map_err(|(err, _)| err);
 
         let mut runtime = Runtime::new().unwrap();
-        runtime.block_on(future).unwrap();
+        let _ = runtime.block_on(future).unwrap();
     }
 
     #[test]
