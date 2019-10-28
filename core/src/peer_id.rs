@@ -219,7 +219,7 @@ impl Into<multihash::Multihash> for PeerId {
 quick_error! {
     #[derive(Debug)]
     pub enum ParseError {
-        B58(e: bs58::decode::DecodeError) {
+        B58(e: bs58::decode::Error) {
             display("base-58 decode error: {}", e)
             cause(e)
             from()

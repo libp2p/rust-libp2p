@@ -48,10 +48,6 @@ fn main() {
     // Create a swarm to manage peers and events.
     let mut swarm = {
         // Create a Kademlia behaviour.
-        // Note that normally the Kademlia process starts by performing lots of request in order
-        // to insert our local node in the DHT. However here we use `without_init` because this
-        // example is very ephemeral and we don't want to pollute the DHT. In a real world
-        // application, you want to use `new` instead.
         let mut cfg = KademliaConfig::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
         let store = MemoryStore::new(local_peer_id.clone());

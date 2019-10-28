@@ -21,7 +21,7 @@ libp2p-core = { version = "0.12.0", path = "../../core" }
 libp2p-swarm = { version = "0.2.0", path = "../../swarm" }
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../../misc/multihash" }
-protobuf = "2.3"
+protobuf = "2.8"
 rand = "0.6.0"
 sha2 = "0.8.0"
 smallvec = "0.6"
