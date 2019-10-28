@@ -93,7 +93,7 @@ impl FixedPeersIter {
         }
     }
 
-    pub fn next(&mut self) -> PeersIterState<'_> {
+    pub fn next(&mut self) -> PeersIterState {
         match &mut self.state {
             State::Finished => return PeersIterState::Finished,
             State::Waiting { num_waiting } => {

@@ -14,5 +14,4 @@ futures = "0.1"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4"
 tokio-io = "0.1"
-# yamux = "0.2.1"
-yamux = { git = "https://github.com/paritytech/yamux", branch = "master" }
+yamux = "0.2.1"

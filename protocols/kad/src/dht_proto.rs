@@ -351,7 +351,7 @@ impl ::std::fmt::Debug for Record {
 }
 
 impl ::protobuf::reflect::ProtobufValue for Record {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -741,7 +741,7 @@ impl ::std::fmt::Debug for Message {
 }
 
 impl ::protobuf::reflect::ProtobufValue for Message {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -982,7 +982,7 @@ impl ::std::fmt::Debug for Message_Peer {
 }
 
 impl ::protobuf::reflect::ProtobufValue for Message_Peer {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Message(self)
     }
 }
@@ -1049,7 +1049,7 @@ impl ::std::default::Default for Message_MessageType {
 }
 
 impl ::protobuf::reflect::ProtobufValue for Message_MessageType {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
     }
 }
@@ -1110,7 +1110,7 @@ impl ::std::default::Default for Message_ConnectionType {
 }
 
 impl ::protobuf::reflect::ProtobufValue for Message_ConnectionType {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef<'_> {
+    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
         ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
     }
 }

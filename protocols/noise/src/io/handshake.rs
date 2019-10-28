@@ -20,8 +20,6 @@
 
 //! Noise protocol handshake I/O.
 
-// these are found in auto-generated code
-#[allow(bare_trait_objects)]
 mod payload_proto;
 
 use crate::error::NoiseError;

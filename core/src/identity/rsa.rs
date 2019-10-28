@@ -215,7 +215,7 @@ mod tests {
     struct SomeKeypair(Keypair);
 
     impl fmt::Debug for SomeKeypair {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "SomeKeypair")
         }
     }

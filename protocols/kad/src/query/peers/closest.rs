@@ -257,7 +257,7 @@ impl ClosestPeersIter {
     }
 
     /// Advances the state of the iterator, potentially getting a new peer to contact.
-    pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    pub fn next(&mut self, now: Instant) -> PeersIterState {
         if let State::Finished = self.state {
             return PeersIterState::Finished
         }
