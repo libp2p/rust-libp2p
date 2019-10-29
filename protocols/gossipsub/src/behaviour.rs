@@ -982,7 +982,7 @@ where
 
     fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
         // TODO: Refactor
-        // remove from mesh, topic_peers and peer_topic
+        // remove from mesh, topic_peers, peer_topic and fanout
         debug!("Peer disconnected: {:?}", id);
         {
             let topics = match self.peer_topics.get(&id) {
@@ -1022,6 +1022,13 @@ where
                         "ERROR: Disconnected node: {:?} with topic: {:?} not in topic_peers",
                         &id, &topic
                     );
+                }
+
+                // remove from fanout
+                if let Some(fanout_peers) = self.fanout.get_mut(&topic) {
+                    if let Some(pos) = fanout_peers.iter().position(|p| p == id) {
+                        fanout_peers.remove(pos);
+                    }
                 }
             }
         }
