@@ -27,7 +27,6 @@ use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
 use std::sync::Arc;
-use untrusted::Input;
 use zeroize::Zeroize;
 
 /// An RSA keypair.
@@ -40,7 +39,7 @@ impl Keypair {
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        let kp = RsaKeyPair::from_pkcs8(Input::from(&der[..]))
+        let kp = RsaKeyPair::from_pkcs8(&der)
             .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo").source(e))?;
         der.zeroize();
         Ok(Keypair(Arc::new(kp)))
@@ -69,10 +68,8 @@ pub struct PublicKey(Vec<u8>);
 impl PublicKey {
     /// Verify an RSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        signature::verify(&RSA_PKCS1_2048_8192_SHA256,
-                          Input::from(&self.0),
-                          Input::from(msg),
-                          Input::from(sig)).is_ok()
+        let key = signature::UnparsedPublicKey::new(&RSA_PKCS1_2048_8192_SHA256, &self.0);
+        key.verify(msg, sig).is_ok()
     }
 
     /// Encode the RSA public key in DER as a PKCS#1 RSAPublicKey structure,

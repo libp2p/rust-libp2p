@@ -32,7 +32,7 @@
 
 use bytes::BytesMut;
 use codec::UviBytes;
-use crate::protobuf_structs::dht as proto;
+use crate::dht_proto as proto;
 use crate::record::{self, Record};
 use futures::{future::{self, FutureResult}, sink, stream, Sink, Stream};
 use libp2p_core::{Multiaddr, PeerId};
