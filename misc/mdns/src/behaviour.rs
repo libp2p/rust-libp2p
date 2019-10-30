@@ -62,7 +62,7 @@ pub struct Mdns<TSubstream> {
 /// opaque future across `poll` invocations. Given that the opaque future itself has a reference to
 /// the MdnsService, this would result in a self-referential struct.
 ///
-/// Instead we have `MdnsService::poll` take ownership of `self`, returning a future that resolves
+/// Instead we have `MdnsService::next` take ownership of `self`, returning a future that resolves
 /// with both itself and a `MdnsPacket` (similar to the old Tokio socket send style). The two states
 /// are thus `Free` with an `MdnsService` or `Busy` with a future returning the original
 /// `MdnsService` and an `MdnsPacket`.
@@ -252,7 +252,7 @@ where
 
             match packet {
                 MdnsPacket::Query(query) => {
-                    // TODO: it should always be free, can we encode this somehow?
+                    // MaybeBusyMdnsService should always be Free.
                     if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
                         service.enqueue_response(query.build_response(
                             params.local_peer_id().clone(),
@@ -303,7 +303,7 @@ where
                     break discovered;
                 },
                 MdnsPacket::ServiceDiscovery(disc) => {
-                    // TODO: it should always be free, can we encode this somehow?
+                    // MaybeBusyMdnsService should always be Free.
                     if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
                         // TODO: This should move to a constant, right? Also can it be consolidated with
                         // the query response TTL?

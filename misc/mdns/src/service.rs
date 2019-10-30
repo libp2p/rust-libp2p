@@ -185,7 +185,7 @@ impl MdnsService {
     /// Rust.
     ///
     /// 2. Taking ownership - Instead `MdnsService::next` takes ownership of
-    /// self and returns it alongside an `MdnsPacket` ones the actual future
+    /// self and returns it alongside an `MdnsPacket` once the actual future
     /// resolves, not forcing self-referential structures on the caller.
     pub async fn next(mut self) -> (Self, MdnsPacket) {
         // Send a query every time `query_interval` fires.
