@@ -39,6 +39,32 @@ mod error;
 mod handshake;
 mod pb;
 
+/// `PlainText1Config` is an insecure connection handshake for testing purposes only.
+///
+/// > **Note**: Given that `PlainText1Config` has no notion of exchanging peer identity information it is not compatible
+/// > with the `libp2p_core::transport::upgrade::Builder` pattern. See
+/// > [`PlainText2Config`](struct.PlainText2Config.html) if compatibility is needed. Even though not compatible with the
+/// > Builder pattern one can still do an upgrade *manually*:
+///
+/// ```
+/// # use libp2p_core::transport::{ Transport, memory::MemoryTransport };
+/// # use libp2p_plaintext::PlainText1Config;
+/// #
+/// MemoryTransport::default()
+///   .and_then(move |io, endpoint| {
+///     libp2p_core::upgrade::apply(
+///       io,
+///       PlainText1Config{},
+///       endpoint,
+///       libp2p_core::transport::upgrade::Version::V1,
+///     )
+///   })
+///   .map(|plaintext, _endpoint| {
+///     unimplemented!();
+///     // let peer_id = somehow_derive_peer_id();
+///     // return (peer_id, plaintext);
+///   });
+/// ```
 #[derive(Debug, Copy, Clone)]
 pub struct PlainText1Config;
 
@@ -71,6 +97,8 @@ impl<C> OutboundUpgrade<C> for PlainText1Config {
     }
 }
 
+/// `PlainText2Config` is an insecure connection handshake for testing purposes only, implementing
+/// the libp2p plaintext connection handshake specification.
 #[derive(Clone)]
 pub struct PlainText2Config {
     pub local_public_key: identity::PublicKey,
