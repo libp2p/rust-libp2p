@@ -21,98 +21,127 @@
 //! Implements the Yamux multiplexing protocol for libp2p, see also the
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
-use futures::{future::{self, FutureResult}, prelude::*};
+use futures::{future, prelude::*, ready};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
-use log::debug;
-use std::{io, iter, sync::atomic};
-use std::io::{Error as IoError};
-use tokio_io::{AsyncRead, AsyncWrite};
+use parking_lot::Mutex;
+use std::{fmt, io, iter, pin::Pin, task::Context};
+use thiserror::Error;
 
-// TODO: add documentation and field names
-pub struct Yamux<C>(yamux::Connection<C>, atomic::AtomicBool);
+/// A Yamux connection.
+pub struct Yamux<C>(Mutex<Inner>, std::marker::PhantomData<C>);
 
-impl<C> Yamux<C>
-where
-    C: AsyncRead + AsyncWrite + 'static
-{
-    pub fn new(c: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        cfg.set_read_after_close(false);
-        Yamux(yamux::Connection::new(c, cfg, mode), atomic::AtomicBool::new(false))
+struct Inner {
+    /// The actual connection object as a `futures::stream::Stream`.
+    connection: Pin<Box<dyn Stream<Item = Result<yamux::Stream, YamuxError>> + Send>>,
+    /// Handle to control the connection.
+    control: yamux::Control,
+    /// True, once we have received an inbound substream.
+    acknowledged: bool
+}
+
+impl<C> fmt::Debug for Yamux<C> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Yamux")
     }
 }
 
+/// The Yamux [`StreamMuxer`] error type.
+#[derive(Debug, Error)]
+#[error("yamux error: {0}")]
+pub struct YamuxError(#[from] pub yamux::ConnectionError);
+
+impl Into<io::Error> for YamuxError {
+    fn into(self: YamuxError) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, self.to_string())
+    }
+}
+
+/// A token to poll for an outbound substream.
+#[derive(Debug)]
+pub struct OpenSubstreamToken(());
+
+impl<C> Yamux<C>
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    /// Create a new Yamux connection.
+    pub fn new(io: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
+        cfg.set_read_after_close(false);
+        let conn = yamux::Connection::new(io, cfg, mode);
+        let ctrl = conn.control();
+        let inner = Inner {
+            connection: Box::pin(yamux::into_stream(conn).err_into()),
+            control: ctrl,
+            acknowledged: false
+        };
+        Yamux(Mutex::new(inner), std::marker::PhantomData)
+    }
+}
+
+type Poll<T> = std::task::Poll<Result<T, YamuxError>>;
+
 impl<C> libp2p_core::StreamMuxer for Yamux<C>
 where
-    C: AsyncRead + AsyncWrite + 'static
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Substream = yamux::StreamHandle<C>;
-    type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
-    type Error = IoError;
+    type Substream = yamux::Stream;
+    type OutboundSubstream = OpenSubstreamToken;
+    type Error = YamuxError;
 
-    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
-        match self.0.poll() {
-            Err(e) => {
-                debug!("connection error: {}", e);
-                Err(io::Error::new(io::ErrorKind::Other, e))
+    fn poll_inbound(&self, c: &mut Context) -> Poll<Self::Substream> {
+        let mut inner = self.0.lock();
+        match ready!(inner.connection.poll_next_unpin(c)) {
+            Some(Ok(s)) => {
+                inner.acknowledged = true;
+                Poll::Ready(Ok(s))
             }
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => Err(io::ErrorKind::BrokenPipe.into()),
-            Ok(Async::Ready(Some(stream))) => {
-                self.1.store(true, atomic::Ordering::Release);
-                Ok(Async::Ready(stream))
-            }
+            Some(Err(e)) => Poll::Ready(Err(e)),
+            None => Poll::Ready(Err(yamux::ConnectionError::Closed.into()))
         }
     }
 
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-        future::result(stream)
+        OpenSubstreamToken(())
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
-        match substream.poll()? {
-            Async::Ready(Some(s)) => Ok(Async::Ready(s)),
-            Async::Ready(None) => Err(io::ErrorKind::BrokenPipe.into()),
-            Async::NotReady => Ok(Async::NotReady),
-        }
+    fn poll_outbound(&self, c: &mut Context, _: &mut OpenSubstreamToken) -> Poll<Self::Substream> {
+        let mut inner = self.0.lock();
+        Pin::new(&mut inner.control).poll_open_stream(c).map_err(YamuxError)
     }
 
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
+        self.0.lock().control.abort_open_stream()
     }
 
-    fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
-        let result = sub.poll_read(buf);
-        if let Ok(Async::Ready(_)) = result {
-            self.1.store(true, atomic::Ordering::Release);
-        }
-        result
+    fn read_substream(&self, c: &mut Context, s: &mut Self::Substream, b: &mut [u8]) -> Poll<usize> {
+        Pin::new(s).poll_read(c, b).map_err(|e| YamuxError(e.into()))
     }
 
-    fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, IoError> {
-        sub.poll_write(buf)
+    fn write_substream(&self, c: &mut Context, s: &mut Self::Substream, b: &[u8]) -> Poll<usize> {
+        Pin::new(s).poll_write(c, b).map_err(|e| YamuxError(e.into()))
     }
 
-    fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
-        sub.poll_flush()
+    fn flush_substream(&self, c: &mut Context, s: &mut Self::Substream) -> Poll<()> {
+        Pin::new(s).poll_flush(c).map_err(|e| YamuxError(e.into()))
     }
 
-    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
-        sub.shutdown()
+    fn shutdown_substream(&self, c: &mut Context, s: &mut Self::Substream) -> Poll<()> {
+        Pin::new(s).poll_close(c).map_err(|e| YamuxError(e.into()))
     }
 
-    fn destroy_substream(&self, _: Self::Substream) {
-    }
+    fn destroy_substream(&self, _: Self::Substream) { }
 
     fn is_remote_acknowledged(&self) -> bool {
-        self.1.load(atomic::Ordering::Acquire)
+        self.0.lock().acknowledged
     }
 
-    fn close(&self) -> Poll<(), IoError> {
-        self.0.close().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    fn close(&self, c: &mut Context) -> Poll<()> {
+        let mut inner = self.0.lock();
+        Pin::new(&mut inner.control).poll_close(c).map_err(YamuxError)
     }
 
-    fn flush_all(&self) -> Poll<(), IoError> {
-        self.0.flush().map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    fn flush_all(&self, _: &mut Context) -> Poll<()> {
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -142,27 +171,27 @@ impl UpgradeInfo for Config {
 
 impl<C> InboundUpgrade<C> for Config
 where
-    C: AsyncRead + AsyncWrite + 'static,
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     type Output = Yamux<Negotiated<C>>;
     type Error = io::Error;
-    type Future = FutureResult<Yamux<Negotiated<C>>, io::Error>;
+    type Future = future::Ready<Result<Yamux<Negotiated<C>>, Self::Error>>;
 
-    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
+    fn upgrade_inbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+        future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Server)))
     }
 }
 
 impl<C> OutboundUpgrade<C> for Config
 where
-    C: AsyncRead + AsyncWrite + 'static,
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     type Output = Yamux<Negotiated<C>>;
     type Error = io::Error;
-    type Future = FutureResult<Yamux<Negotiated<C>>, io::Error>;
+    type Future = future::Ready<Result<Yamux<Negotiated<C>>, Self::Error>>;
 
-    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
+    fn upgrade_outbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+        future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Client)))
     }
 }
 
