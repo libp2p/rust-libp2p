@@ -394,17 +394,13 @@ impl<'a> MdnsResponse<'a> {
                 _ => return None,
             };
 
-            let peer_name = {
-                let mut iter = record_value.splitn(2, |c| c == '.');
-                let name = match iter.next() {
-                    Some(n) => n.to_owned(),
-                    None => return None,
-                };
-                if iter.next().map(|v| v.as_bytes()) != Some(SERVICE_NAME) {
-                    return None;
-                }
-                name
+            let mut peer_name = match record_value.rsplitn(4, |c| c == '.').last() {
+                Some(n) => n.to_owned(),
+                None => return None,
             };
+
+            // if we have a segmented name, remove the '.'
+            peer_name.retain(|c| c != '.');
 
             let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
                 Ok(bytes) => match PeerId::from_bytes(bytes) {
@@ -524,11 +520,10 @@ mod tests {
     use libp2p_core::PeerId;
     use std::{io, task::Poll, time::Duration};
     use crate::service::{MdnsPacket, MdnsService};
+    use multiaddr::multihash::*;
 
-    #[test]
-    fn discover_ourselves() {
+    fn discover(peer_id: PeerId) {
         let mut service = MdnsService::new().unwrap();
-        let peer_id = PeerId::random();
         let stream = stream::poll_fn(move |cx| -> Poll<Option<Result<(), io::Error>>> {
             loop {
                 let packet = match service.poll(cx) {
@@ -557,5 +552,17 @@ mod tests {
                 .map_err(|err| panic!("{:?}", err))
                 .for_each(|_| future::ready(())),
         );
+    }
+
+    #[test]
+    fn discover_normal_peer_id() {
+        discover(PeerId::random())
+    }
+
+    #[test]
+    fn discover_long_peer_id() {
+        let max_value = String::from_utf8(vec![b'f'; 42]).unwrap();
+        let hash = encode(Hash::Identity, max_value.as_ref()).unwrap();
+        discover(PeerId::from_multihash(hash).unwrap())
     }
 }
