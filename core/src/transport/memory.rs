@@ -276,8 +276,9 @@ impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::runtime::current_thread::{Runtime};
+    use rand::Rng;
     use std::io::Write;
+    use tokio::runtime::current_thread::{Runtime};
 
     #[test]
     fn parse_memory_addr_works() {
@@ -316,7 +317,15 @@ mod tests {
 
         // Setup listener.
 
-        let t1_addr: Multiaddr = "/memory/1".parse().unwrap();
+        let rand_port: NonZeroU64;
+        loop {
+            if let Some(port) = NonZeroU64::new(rand::random()) {
+                rand_port = port;
+                break;
+            }
+        }
+
+        let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
         let t1 = MemoryTransport::default();
         let listener = t1.listen_on(t1_addr.clone()).unwrap()
             .filter_map(ListenerEvent::into_upgrade)
