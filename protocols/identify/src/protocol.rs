@@ -216,7 +216,7 @@ mod tests {
         identity,
         Transport,
         transport::ListenerEvent,
-        upgrade::{apply_outbound, apply_inbound}
+        upgrade::{self, apply_outbound, apply_inbound}
     };
     use std::{io, sync::mpsc, thread};
 
@@ -279,7 +279,7 @@ mod tests {
         let future = transport.dial(rx.recv().unwrap())
             .unwrap()
             .and_then(|socket| {
-                apply_outbound(socket, IdentifyProtocolConfig)
+                apply_outbound(socket, IdentifyProtocolConfig, upgrade::Version::V1)
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
             })
             .and_then(|RemoteInfo { info, observed_addr, .. }| {

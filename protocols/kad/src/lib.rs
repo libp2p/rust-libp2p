@@ -32,7 +32,7 @@ pub mod record;
 mod addresses;
 mod behaviour;
 mod jobs;
-mod protobuf_structs;
+mod dht_proto;
 mod query;
 
 pub use addresses::Addresses;

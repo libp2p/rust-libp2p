@@ -60,12 +60,12 @@ impl<T> WsConfig<T> {
     }
 
     /// Get the max. frame data size we support.
-    pub fn max_data_size(&self) -> u64 {
+    pub fn max_data_size(&self) -> usize {
         self.transport.max_data_size()
     }
 
     /// Set the max. frame data size we support.
-    pub fn set_max_data_size(&mut self, size: u64) -> &mut Self {
+    pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
         self.transport.set_max_data_size(size);
         self
     }
@@ -96,9 +96,9 @@ where
     T: Transport + Send + Clone + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
+    T::Listener: Send + Unpin + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Send + 'static
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Output = RwStreamSink<BytesConnection<T::Output>>;
     type Error = Error<T::Error>;

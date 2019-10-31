@@ -262,6 +262,7 @@ mod tests {
         muxing::StreamMuxer,
         Multiaddr,
         Transport,
+        upgrade
     };
     use libp2p_tcp::TcpConfig;
     use libp2p_secio::SecioConfig;
@@ -282,7 +283,7 @@ mod tests {
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
             .nodelay(true)
-            .upgrade()
+            .upgrade(upgrade::Version::V1)
             .authenticate(SecioConfig::new(id_keys))
             .multiplex(MplexConfig::new());
         (pubkey, transport)

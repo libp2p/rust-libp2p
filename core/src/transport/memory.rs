@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Transport, transport::{TransportError, ListenerEvent}};
-use bytes::{Bytes, IntoBuf};
+use bytes::IntoBuf;
 use fnv::FnvHashMap;
 use futures::{future::{self, Ready}, prelude::*, channel::mpsc, task::Context, task::Poll};
 use lazy_static::lazy_static;
@@ -29,7 +29,7 @@ use rw_stream_sink::RwStreamSink;
 use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64, pin::Pin};
 
 lazy_static! {
-    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Bytes>>>> =
+    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Vec<u8>>>>> =
         Mutex::new(FnvHashMap::default());
 }
 
@@ -39,13 +39,13 @@ pub struct MemoryTransport;
 
 /// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
-    sender: mpsc::Sender<Channel<Bytes>>,
-    channel_to_send: Option<Channel<Bytes>>,
-    channel_to_return: Option<Channel<Bytes>>,
+    sender: mpsc::Sender<Channel<Vec<u8>>>,
+    channel_to_send: Option<Channel<Vec<u8>>>,
+    channel_to_return: Option<Channel<Vec<u8>>>,
 }
 
 impl Future for DialFuture {
-    type Output = Result<Channel<Bytes>, MemoryTransportError>;
+    type Output = Result<Channel<Vec<u8>>, MemoryTransportError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         match self.sender.poll_ready(cx) {
@@ -67,7 +67,7 @@ impl Future for DialFuture {
 }
 
 impl Transport for MemoryTransport {
-    type Output = Channel<Bytes>;
+    type Output = Channel<Vec<u8>>;
     type Error = MemoryTransportError;
     type Listener = Listener;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
@@ -168,13 +168,13 @@ pub struct Listener {
     /// The address we are listening on.
     addr: Multiaddr,
     /// Receives incoming connections.
-    receiver: mpsc::Receiver<Channel<Bytes>>,
+    receiver: mpsc::Receiver<Channel<Vec<u8>>>,
     /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
     tell_listen_addr: bool
 }
 
 impl Stream for Listener {
-    type Item = Result<ListenerEvent<Ready<Result<Channel<Bytes>, MemoryTransportError>>>, MemoryTransportError>;
+    type Item = Result<ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>>, MemoryTransportError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         if self.tell_listen_addr {
@@ -230,7 +230,7 @@ pub type Channel<T> = RwStreamSink<Chan<T>>;
 /// A channel represents an established, in-memory, logical connection between two endpoints.
 ///
 /// Implements `Sink` and `Stream`.
-pub struct Chan<T = Bytes> {
+pub struct Chan<T = Vec<u8>> {
     incoming: mpsc::Receiver<T>,
     outgoing: mpsc::Sender<T>,
 }

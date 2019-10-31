@@ -29,11 +29,11 @@ where
 {
     type Output = Result<M, M::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             match std::mem::replace(&mut self.state, CloseMuxerState::Done) {
                 CloseMuxerState::Close(muxer) => {
-                    if muxer.close()?.is_not_ready() {
+                    if !muxer.close(cx)?.is_ready() {
                         self.state = CloseMuxerState::Close(muxer);
                         return Poll::Pending
                     }
@@ -45,3 +45,5 @@ where
     }
 }
 
+impl<M> Unpin for CloseMuxer<M> {
+}

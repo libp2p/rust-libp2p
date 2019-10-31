@@ -214,3 +214,13 @@ impl Into<&'static digest::Algorithm> for Digest {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cipher_non_null() {
+        // This test serves as a safe-guard against accidentally pushing to master a commit that
+        // sets this constant to `NULL`.
+        assert!(!super::DEFAULT_CIPHERS_PROPOSITION.contains("NULL"));
+    }
+}

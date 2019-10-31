@@ -32,7 +32,7 @@
 
 use bytes::BytesMut;
 use codec::UviBytes;
-use crate::protobuf_structs::dht as proto;
+use crate::dht_proto as proto;
 use crate::record::{self, Record};
 use futures::prelude::*;
 use futures_codec::Framed;
