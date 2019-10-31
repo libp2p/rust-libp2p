@@ -10,11 +10,11 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-futures = "0.1"
+futures = "0.1.29"
 libp2p-core = { version = "0.12.0", path = "../../core" }
-log = "0.4.6"
-void = "1"
+bytes = "0.4.12"
+log = "0.4.8"
+void = "1.0.2"
 tokio-io = "0.1.12"
-protobuf = "2.3"
+protobuf = "2.8.1"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }

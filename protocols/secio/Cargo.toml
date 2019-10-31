@@ -23,12 +23,13 @@ ctr = "0.3"
 lazy_static = "1.2.0"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
+tokio-codec = "0.1.1"
 sha2 = "0.8.0"
 hmac = "0.7.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ring = { version = "^0.16", features = ["alloc"], default-features = false }
-untrusted = { version = "0.6" }
+ring = { version = "0.16.9", features = ["alloc"], default-features = false }
+untrusted = "0.7.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.10"
@@ -43,7 +44,7 @@ secp256k1 = []
 aes-all = ["aesni"]
 
 [dev-dependencies]
-criterion = "0.2"
+criterion = "0.3.0"
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
 libp2p-mplex = { version = "0.12.0", path = "../../muxers/mplex" }
 tokio = "0.1"

@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bs58 = "0.2.0"
+bs58 = "0.3.0"
 bytes = "0.4"
 cuckoofilter = "0.3.2"
 fnv = "1.0"
