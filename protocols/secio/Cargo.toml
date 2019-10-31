@@ -28,8 +28,8 @@ hmac = "0.7.0"
 unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ring = { version = "^0.16", features = ["alloc"], default-features = false }
-untrusted = { version = "0.6" }
+ring = { version = "0.16.9", features = ["alloc"], default-features = false }
+untrusted = "0.7.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.10"
@@ -45,7 +45,7 @@ aes-all = ["aesni"]
 
 [dev-dependencies]
 async-std = "0.99"
-criterion = "0.2"
+criterion = "0.3.0"
 libp2p-mplex = { version = "0.12.0", path = "../../muxers/mplex" }
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
 
