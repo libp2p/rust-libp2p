@@ -252,10 +252,6 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
             }
         }
     }
-
-    unsafe fn initializer(&self) -> futures::io::Initializer {
-        futures::io::Initializer::nop()
-    }
 }
 
 impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
