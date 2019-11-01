@@ -27,7 +27,7 @@
 //! > **Note**: Although this crate is hosted in the libp2p repo, it is purely a utility crate and
 //! >           not at all specific to libp2p.
 
-use futures::{prelude::*, io::Initializer};
+use futures::prelude::*;
 use std::{cmp, io, pin::Pin, task::Context, task::Poll};
 
 /// Wraps around a `Stream + Sink` whose items are buffers. Implements `AsyncRead` and `AsyncWrite`.
@@ -73,10 +73,6 @@ where
         buf[..to_copy].copy_from_slice(&current_item[..to_copy]);
         for _ in 0..to_copy { current_item.remove(0); }
         Poll::Ready(Ok(to_copy))
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        Initializer::nop()
     }
 }
 

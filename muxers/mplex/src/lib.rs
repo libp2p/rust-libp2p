@@ -33,7 +33,7 @@ use libp2p_core::{
 use log::{debug, trace};
 use parking_lot::Mutex;
 use fnv::FnvHashSet;
-use futures::{prelude::*, future, io::Initializer, ready, stream::Fuse};
+use futures::{prelude::*, future, ready, stream::Fuse};
 use futures::task::{ArcWake, waker_ref};
 use futures_codec::Framed;
 
@@ -468,10 +468,6 @@ where C: AsyncRead + AsyncWrite + Unpin
     #[inline]
     fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
         // Nothing to do.
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        Initializer::nop()
     }
 
     fn read_substream(&self, cx: &mut Context, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, IoError>> {

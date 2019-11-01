@@ -58,7 +58,7 @@
 pub use self::error::SecioError;
 
 use futures::stream::MapErr as StreamMapErr;
-use futures::{prelude::*, io::Initializer};
+use futures::prelude::*;
 use libp2p_core::{PeerId, PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
@@ -198,10 +198,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
         -> Poll<Result<usize, io::Error>>
     {
         AsyncRead::poll_read(Pin::new(&mut self.stream), cx, buf)
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        self.stream.initializer()
     }
 }
 
