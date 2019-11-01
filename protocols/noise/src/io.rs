@@ -62,14 +62,14 @@ pub(crate) enum SnowState {
 }
 
 impl SnowState {
-    pub fn read_message(&mut self, message: &[u8], payload: &mut [u8]) -> Result<usize, SnowError> {
+    pub fn read_message(&mut self, message: &[u8], payload: &mut [u8]) -> Result<usize, snow::Error> {
         match self {
             SnowState::Handshake(session) => session.read_message(message, payload),
             SnowState::Transport(session) => session.read_message(message, payload),
         }
     }
 
-    pub fn write_message(&mut self, message: &[u8], payload: &mut [u8]) -> Result<usize, SnowError> {
+    pub fn write_message(&mut self, message: &[u8], payload: &mut [u8]) -> Result<usize, snow::Error> {
         match self {
             SnowState::Handshake(session) => session.write_message(message, payload),
             SnowState::Transport(session) => session.write_message(message, payload),
@@ -83,10 +83,10 @@ impl SnowState {
         }
     }
 
-    pub fn into_transport_mode(self) -> Result<snow::TransportState, SnowError> {
+    pub fn into_transport_mode(self) -> Result<snow::TransportState, snow::Error> {
         match self {
             SnowState::Handshake(session) => session.into_transport_mode(),
-            SnowState::Transport(_) => Err(SnowError::State(StateProblem::HandshakeAlreadyFinished)),
+            SnowState::Transport(_) => Err(snow::Error::State(snow::error::StateProblem::HandshakeAlreadyFinished)),
         }
     }
 }

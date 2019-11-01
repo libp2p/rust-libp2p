@@ -122,7 +122,7 @@ impl<T, C> Future for Handshake<T, C> {
 /// ```
 pub fn rt1_initiator<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Handshake<T, C>
@@ -156,7 +156,7 @@ where
 /// ```
 pub fn rt1_responder<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
 ) -> Handshake<T, C>
@@ -192,7 +192,7 @@ where
 /// ```
 pub fn rt15_initiator<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Handshake<T, C>
@@ -229,7 +229,7 @@ where
 /// ```
 pub fn rt15_responder<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Handshake<T, C>
@@ -363,7 +363,7 @@ where
 
     let mut payload_buf = vec![0; len];
     state.io.read_exact(&mut payload_buf).await?;
-    let pb: payload::Identity = protobuf::parse_from_bytes(&payload_buf)?;
+    let pb: payload_proto::Identity = protobuf::parse_from_bytes(&payload_buf)?;
 
     if !pb.pubkey.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
@@ -387,7 +387,7 @@ async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload::Identity::new();
+    let mut pb = payload_proto::Identity::new();
     if state.send_identity {
         pb.set_pubkey(state.identity.public.clone().into_protobuf_encoding());
     }
