@@ -103,6 +103,7 @@ impl Hmac {
 }
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
+// TODO: I don't think it is a BytesMut but a Vec<u8>, right?
 /// `future::Stream`. The `Stream` and `Sink` produce and accept `BytesMut` objects.
 ///
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
