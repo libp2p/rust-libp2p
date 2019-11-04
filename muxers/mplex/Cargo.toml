@@ -12,12 +12,12 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "0.4.5"
 fnv = "1.0"
-futures_codec = "0.2.4"
+futures_codec = "0.3.0"
 futures-preview = "0.3.0-alpha.18"
 libp2p-core = { version = "0.12.0", path = "../../core" }
 log = "0.4"
 parking_lot = "0.8"
-unsigned-varint = { git = "https://github.com/tomaka/unsigned-varint", branch = "futures-codec", features = ["codec"] }
+unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.12.0", path = "../../transports/tcp" }
