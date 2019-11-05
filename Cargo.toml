@@ -79,6 +79,3 @@ members = [
     "transports/wasm-ext"
 ]
 
-# TODO: remove after https://github.com/matthunz/futures-codec/issues/22
-[patch.crates-io]
-futures_codec = { git = "https://github.com/matthunz/futures-codec" }
