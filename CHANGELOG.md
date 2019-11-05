@@ -1,3 +1,16 @@
+# Version 0.13.0 (2019-11-05)
+
+- Reworked the transport upgrade API. See https://github.com/libp2p/rust-libp2p/pull/1240 for more information.
+- Added a parameter allowing to choose the protocol negotiation protocol when upgrading a connection or a substream. See https://github.com/libp2p/rust-libp2p/pull/1245 for more information.
+- Added an alternative `multistream-select` protocol called `V1Lazy`.
+- Added `PlainText2Config` that implements the `/plaintext/2.0.0` protocol.
+- Refactored `libp2p-identify`. Some items have been renamed.
+- Now accepting `PeerId`s using the `identity` hashing algorithm as valid.
+- Removed `libp2p-observed` and `libp2p-ratelimit`.
+- Fixed mDNS long peer IDs not being transmitted properly.
+- Added some `Debug` trait implementations.
+- Fixed potential arithmetic overflows in `libp2p-kad` and `multistream-select`.
+
 # Version 0.12.0 (2019-08-15)
 
 - In some situations, `multistream-select` will now assume that protocol negotiation immediately succeeds. If it turns out that it failed, an error is generated when reading or writing from/to the stream.
