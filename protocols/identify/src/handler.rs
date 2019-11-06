@@ -36,7 +36,6 @@ use smallvec::SmallVec;
 use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_timer::{Delay, Instant};
-use void::Void;
 
 /// Delay between the moment we connect and the first time we identify.
 const DELAY_TO_FIRST_ID: Duration = Duration::from_millis(500);
@@ -95,7 +94,7 @@ impl<TSubstream> ProtocolsHandler for IdentifyHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type InEvent = Void;
+    type InEvent = ();
     type OutEvent = IdentifyHandlerEvent<TSubstream>;
     type Error = wasm_timer::Error;
     type Substream = TSubstream;

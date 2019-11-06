@@ -37,7 +37,6 @@ use libp2p_swarm::{
 };
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
-use void::Void;
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -53,7 +52,7 @@ pub struct Identify<TSubstream> {
     /// Pending replies to send.
     pending_replies: VecDeque<Reply<TSubstream>>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Void, IdentifyEvent>>,
+    events: VecDeque<NetworkBehaviourAction<(), IdentifyEvent>>,
 }
 
 /// A pending reply to an inbound identification request.
