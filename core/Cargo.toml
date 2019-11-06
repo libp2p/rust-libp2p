@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -19,8 +19,8 @@ fnv = "1.0"
 lazy_static = "1.2"
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../misc/multiaddr" }
-multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/multihash" }
-multistream-select = { version = "0.5.0", path = "../misc/multistream-select" }
+multihash = { package = "parity-multihash", version = "0.1.4", path = "../misc/multihash" }
+multistream-select = { version = "0.6.0", path = "../misc/multistream-select" }
 futures = "0.1"
 parking_lot = "0.9.0"
 protobuf = "2.8"
@@ -42,10 +42,10 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 untrusted = "0.7.0"
 
 [dev-dependencies]
-libp2p-swarm = { version = "0.2.0", path = "../swarm" }
-libp2p-tcp = { version = "0.12.0", path = "../transports/tcp" }
-libp2p-mplex = { version = "0.12.0", path = "../muxers/mplex" }
-libp2p-secio = { version = "0.12.0", path = "../protocols/secio" }
+libp2p-swarm = { version = "0.3.0", path = "../swarm" }
+libp2p-tcp = { version = "0.13.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.13.0", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.13.0", path = "../protocols/secio" }
 rand = "0.7.2"
 quickcheck = "0.9.0"
 tokio = "0.1"
