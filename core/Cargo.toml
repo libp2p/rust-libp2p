@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,22 +11,22 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asn1_der = "0.6.1"
-bs58 = "0.2.0"
+bs58 = "0.3.0"
 bytes = "0.4"
-ed25519-dalek = "1.0.0-pre.1"
+ed25519-dalek = "1.0.0-pre.2"
 failure = "0.1"
 fnv = "1.0"
 futures-timer = "0.3"
 lazy_static = "1.2"
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.5.0", path = "../misc/multiaddr" }
-multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/multihash" }
-multistream-select = { version = "0.5.0", path = "../misc/multistream-select" }
+multihash = { package = "parity-multihash", version = "0.1.4", path = "../misc/multihash" }
+multistream-select = { version = "0.6.0", path = "../misc/multistream-select" }
 futures-preview = { version = "0.3.0-alpha.18", features = ["compat", "io-compat"] }
-parking_lot = "0.8"
+parking_lot = "0.9.0"
 protobuf = "2.8"
 quick-error = "1.2"
-rand = "0.6"
+rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
 libsecp256k1 = { version = "0.3.1", optional = true }
 sha2 = "0.8.0"
@@ -37,17 +37,17 @@ void = "1"
 zeroize = "1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
-ring = { version = "^0.16", features = ["alloc", "std"], default-features = false }
-untrusted = { version = "0.6" }
+ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false }
+untrusted = "0.7.0"
 
 [dev-dependencies]
 async-std = "0.99"
-libp2p-swarm = { version = "0.2.0", path = "../swarm" }
-libp2p-tcp = { version = "0.12.0", path = "../transports/tcp" }
-libp2p-mplex = { version = "0.12.0", path = "../muxers/mplex" }
-libp2p-secio = { version = "0.12.0", path = "../protocols/secio" }
-rand = "0.6"
-quickcheck = "0.8"
+libp2p-swarm = { version = "0.3.0", path = "../swarm" }
+libp2p-tcp = { version = "0.13.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.13.0", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.13.0", path = "../protocols/secio" }
+rand = "0.7.2"
+quickcheck = "0.9.0"
 wasm-timer = "0.2"
 assert_matches = "1.3"
 
