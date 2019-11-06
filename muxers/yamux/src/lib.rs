@@ -28,61 +28,68 @@ use std::{fmt, io, iter, pin::Pin, task::Context};
 use thiserror::Error;
 
 /// A Yamux connection.
-pub struct Yamux<C>(Mutex<Inner>, std::marker::PhantomData<C>);
+pub struct Yamux<S>(Mutex<Inner<S>>);
 
-struct Inner {
-    /// The actual connection object as a `futures::stream::Stream`.
-    connection: Pin<Box<dyn Stream<Item = Result<yamux::Stream, YamuxError>> + Send>>,
+impl<S> fmt::Debug for Yamux<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Yamux")
+    }
+}
+
+struct Inner<S> {
+    /// The `futures::stream::Stream` of incoming substreams.
+    incoming: S,
     /// Handle to control the connection.
     control: yamux::Control,
     /// True, once we have received an inbound substream.
     acknowledged: bool
 }
 
-impl<C> fmt::Debug for Yamux<C> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("Yamux")
-    }
-}
-
-/// The Yamux [`StreamMuxer`] error type.
-#[derive(Debug, Error)]
-#[error("yamux error: {0}")]
-pub struct YamuxError(#[from] pub yamux::ConnectionError);
-
-impl Into<io::Error> for YamuxError {
-    fn into(self: YamuxError) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, self.to_string())
-    }
-}
-
 /// A token to poll for an outbound substream.
 #[derive(Debug)]
 pub struct OpenSubstreamToken(());
 
-impl<C> Yamux<C>
-where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
-{
+impl Yamux<Incoming> {
     /// Create a new Yamux connection.
-    pub fn new(io: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
+    pub fn new<C>(io: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self
+    where
+        C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    {
         cfg.set_read_after_close(false);
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
         let inner = Inner {
-            connection: Box::pin(yamux::into_stream(conn).err_into()),
+            incoming: Incoming(Box::pin(yamux::into_stream(conn).err_into())),
             control: ctrl,
             acknowledged: false
         };
-        Yamux(Mutex::new(inner), std::marker::PhantomData)
+        Yamux(Mutex::new(inner))
+    }
+}
+
+impl Yamux<LocalIncoming> {
+    /// Create a new Yamux connection (which is ![`Send`]).
+    pub fn local<C>(io: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self
+    where
+        C: AsyncRead + AsyncWrite + Unpin + 'static
+    {
+        cfg.set_read_after_close(false);
+        let conn = yamux::Connection::new(io, cfg, mode);
+        let ctrl = conn.control();
+        let inner = Inner {
+            incoming: LocalIncoming(Box::pin(yamux::into_stream(conn).err_into())),
+            control: ctrl,
+            acknowledged: false
+        };
+        Yamux(Mutex::new(inner))
     }
 }
 
 type Poll<T> = std::task::Poll<Result<T, YamuxError>>;
 
-impl<C> libp2p_core::StreamMuxer for Yamux<C>
+impl<S> libp2p_core::StreamMuxer for Yamux<S>
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin
 {
     type Substream = yamux::Stream;
     type OutboundSubstream = OpenSubstreamToken;
@@ -90,7 +97,7 @@ where
 
     fn poll_inbound(&self, c: &mut Context) -> Poll<Self::Substream> {
         let mut inner = self.0.lock();
-        match ready!(inner.connection.poll_next_unpin(c)) {
+        match ready!(inner.incoming.poll_next_unpin(c)) {
             Some(Ok(s)) => {
                 inner.acknowledged = true;
                 Poll::Ready(Ok(s))
@@ -145,12 +152,22 @@ where
     }
 }
 
+/// The yamux configuration.
 #[derive(Clone)]
 pub struct Config(yamux::Config);
+
+/// The yamux configuration for upgrading I/O resources which are ![`Send`].
+#[derive(Clone)]
+pub struct LocalConfig(Config);
 
 impl Config {
     pub fn new(cfg: yamux::Config) -> Self {
         Config(cfg)
+    }
+
+    /// Turn this into a `LocalConfig` for use with upgrades of !Send resources.
+    pub fn local(self) -> LocalConfig {
+        LocalConfig(self)
     }
 }
 
@@ -169,16 +186,38 @@ impl UpgradeInfo for Config {
     }
 }
 
+impl UpgradeInfo for LocalConfig {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/yamux/1.0.0")
+    }
+}
+
 impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = Yamux<Negotiated<C>>;
+    type Output = Yamux<Incoming>;
     type Error = io::Error;
-    type Future = future::Ready<Result<Yamux<Negotiated<C>>, Self::Error>>;
+    type Future = future::Ready<Result<Yamux<Incoming>, Self::Error>>;
 
     fn upgrade_inbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Server)))
+    }
+}
+
+impl<C> InboundUpgrade<C> for LocalConfig
+where
+    C: AsyncRead + AsyncWrite + Unpin + 'static
+{
+    type Output = Yamux<LocalIncoming>;
+    type Error = io::Error;
+    type Future = future::Ready<Result<Yamux<LocalIncoming>, Self::Error>>;
+
+    fn upgrade_inbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+        future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Server)))
     }
 }
 
@@ -186,12 +225,65 @@ impl<C> OutboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = Yamux<Negotiated<C>>;
+    type Output = Yamux<Incoming>;
     type Error = io::Error;
-    type Future = future::Ready<Result<Yamux<Negotiated<C>>, Self::Error>>;
+    type Future = future::Ready<Result<Yamux<Incoming>, Self::Error>>;
 
     fn upgrade_outbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Client)))
     }
 }
 
+impl<C> OutboundUpgrade<C> for LocalConfig
+where
+    C: AsyncRead + AsyncWrite + Unpin + 'static
+{
+    type Output = Yamux<LocalIncoming>;
+    type Error = io::Error;
+    type Future = future::Ready<Result<Yamux<LocalIncoming>, Self::Error>>;
+
+    fn upgrade_outbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+        future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Client)))
+    }
+}
+
+/// The Yamux [`StreamMuxer`] error type.
+#[derive(Debug, Error)]
+#[error("yamux error: {0}")]
+pub struct YamuxError(#[from] pub yamux::ConnectionError);
+
+impl Into<io::Error> for YamuxError {
+    fn into(self: YamuxError) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, self.to_string())
+    }
+}
+
+/// The [`futures::stream::Stream`] of incoming substreams.
+pub struct Incoming(Pin<Box<dyn Stream<Item = Result<yamux::Stream, YamuxError>> + Send>>);
+
+/// The [`futures::stream::Stream`] of incoming substreams (`!Send`).
+pub struct LocalIncoming(Pin<Box<dyn Stream<Item = Result<yamux::Stream, YamuxError>>>>);
+
+impl Stream for Incoming {
+    type Item = Result<yamux::Stream, YamuxError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
+        self.0.poll_next_unpin(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl Stream for LocalIncoming {
+    type Item = Result<yamux::Stream, YamuxError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
+        self.0.poll_next_unpin(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
