@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use async_tls::{client, server};
 use bytes::BytesMut;
 use crate::{error::Error, tls};
 use either::Either;
 use futures::{prelude::*, ready};
-use futures_rustls::{client, server, webpki};
 use libp2p_core::{
     Transport,
     either::EitherOutput,
@@ -301,7 +301,12 @@ where
             if use_tls { // begin TLS session
                 let dns_name = dns_name.expect("for use_tls we have checked that dns_name is some");
                 trace!("starting TLS handshake with {}", address);
-                let stream = self.tls_config.client.connect(dns_name.as_ref(), stream)
+                let stream = self.tls_config.client.connect(&dns_name, stream)
+                    .map_err(|e| {
+                        // We should never enter here as we passed a `DNSNameRef` to `connect`.
+                        debug!("invalid domain name: {:?}", dns_name);
+                        Error::Tls(e.into())
+                    })?
                     .map_err(|e| {
                         debug!("TLS handshake with {} failed: {}", address, e);
                         Error::Tls(tls::Error::from(e))

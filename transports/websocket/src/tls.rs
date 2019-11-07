@@ -18,13 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use async_tls::{TlsConnector, TlsAcceptor};
 use std::{fmt, io, sync::Arc};
-use futures_rustls::{
-    TlsConnector,
-    TlsAcceptor,
-    rustls,
-    webpki
-};
 
 /// TLS configuration.
 #[derive(Clone)]
