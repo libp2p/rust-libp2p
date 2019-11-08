@@ -30,7 +30,7 @@ use libp2p_swarm::{
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, marker::PhantomData, pin::Pin, time::Duration, task::Context, task::Poll};
+use std::{cmp, fmt, io, iter, marker::PhantomData, mem, pin::Pin, time::Duration, task::Context, task::Poll};
 use wasm_timer::{Delay, Instant};
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
@@ -51,25 +51,20 @@ pub struct Mdns<TSubstream> {
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    // TODO: Would a simple std Instant suffice as well?
     closest_expiration: Option<Delay>,
 
     /// Marker to pin the generic.
     marker: PhantomData<TSubstream>,
 }
 
-/// Polling the async MdnsService within a non-async `poll` function forces one to keep the returned
-/// opaque future across `poll` invocations. Given that the opaque future itself has a reference to
-/// the MdnsService, this would result in a self-referential struct.
-///
-/// Instead we have `MdnsService::next` take ownership of `self`, returning a future that resolves
-/// with both itself and a `MdnsPacket` (similar to the old Tokio socket send style). The two states
-/// are thus `Free` with an `MdnsService` or `Busy` with a future returning the original
-/// `MdnsService` and an `MdnsPacket`.
+/// `MdnsService::next` takes ownership of `self`, returning a future that resolves with both itself
+/// and a `MdnsPacket` (similar to the old Tokio socket send style). The two states are thus `Free`
+/// with an `MdnsService` or `Busy` with a future returning the original `MdnsService` and an
+/// `MdnsPacket`.
 enum MaybeBusyMdnsService {
     Free(MdnsService),
     Busy(Pin<Box<dyn Future<Output = (MdnsService, MdnsPacket)> + Send>>),
-    Unreachable,
+    Poisoned,
 }
 
 impl<TSubstream> Mdns<TSubstream> {
@@ -228,7 +223,7 @@ where
 
         // Polling the mDNS service, and obtain the list of nodes discovered this round.
         let discovered = loop {
-            let service = std::mem::replace(&mut self.service, MaybeBusyMdnsService::Unreachable);
+            let service = mem::replace(&mut self.service, MaybeBusyMdnsService::Poisoned);
 
             let packet = match service {
                 MaybeBusyMdnsService::Free(service) => {
@@ -247,7 +242,7 @@ where
                         }
                     }
                 },
-                MaybeBusyMdnsService::Unreachable => unreachable!(),
+                MaybeBusyMdnsService::Poisoned => panic!("Mdns poisoned"),
             };
 
             match packet {
