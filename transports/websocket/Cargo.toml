@@ -10,16 +10,18 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+async-tls = "0.5"
 bytes = "0.4.12"
 either = "1.5.3"
 futures-preview = "0.3.0-alpha.18"
-#futures-rustls = "0.12.0-alpha"        # TODO: https://github.com/quininer/tokio-rustls/issues/51
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.8"
+rustls = "0.16"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 soketto = { git = "https://github.com/paritytech/soketto.git", branch = "develop", features = ["deflate"] }
-url = "2.1.0"
-webpki-roots = "0.18.0"
+url = "2.1"
+webpki = "0.21"
+webpki-roots = "0.18"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.13.0", path = "../tcp" }
