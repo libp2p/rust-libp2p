@@ -33,6 +33,8 @@ use smallvec::SmallVec;
 use std::{cmp, fmt, io, iter, marker::PhantomData, mem, pin::Pin, time::Duration, task::Context, task::Poll};
 use wasm_timer::{Delay, Instant};
 
+const MDNS_RESPONSE_TTL: std::time::Duration = Duration::from_secs(5 * 60);
+
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 pub struct Mdns<TSubstream> {
@@ -253,7 +255,7 @@ where
                             query.query_id(),
                             params.local_peer_id().clone(),
                             params.listened_addresses().into_iter(),
-                            Duration::from_secs(5 * 60),
+                            MDNS_RESPONSE_TTL,
                         );
                         service.enqueue_response(resp.unwrap());
                     }
@@ -301,11 +303,9 @@ where
                 MdnsPacket::ServiceDiscovery(disc) => {
                     // MaybeBusyMdnsService should always be Free.
                     if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
-                        // TODO: This should move to a constant, right? Also can it be consolidated with
-                        // the query response TTL?
                         let resp = build_service_discovery_response(
                             disc.query_id(),
-                            Duration::from_secs(5 * 60),
+                            MDNS_RESPONSE_TTL,
                         );
                         service.enqueue_response(resp);
                     }
