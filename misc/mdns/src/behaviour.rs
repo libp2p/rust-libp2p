@@ -45,9 +45,6 @@ pub struct Mdns<TSubstream> {
     ///
     /// Each combination of `PeerId` and `Multiaddr` can only appear once, but the same `PeerId`
     /// can appear multiple times.
-    //
-    // TODO: Why this optimization? Is mdns ever within the hot path of an
-    // application? Is the access latency on this data structure relevant?
     discovered_nodes: SmallVec<[(PeerId, Multiaddr, Instant); 8]>,
 
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
