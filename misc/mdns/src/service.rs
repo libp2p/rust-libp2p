@@ -28,7 +28,7 @@ use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
-pub use dns::MdnsResponseError;
+pub use dns::{MdnsResponseError, build_query_response, build_service_discovery_response};
 
 lazy_static! {
     static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr = SocketAddr::from((
@@ -61,12 +61,12 @@ lazy_static! {
 /// ```rust
 /// # use futures::prelude::*;
 /// # use futures::executor::block_on;
-/// # use libp2p_core::{identity, PeerId};
-/// # use libp2p_mdns::service::{MdnsService, MdnsPacket};
+/// # use libp2p_core::{identity, Multiaddr, PeerId};
+/// # use libp2p_mdns::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
 /// # use std::{io, time::Duration, task::Poll};
 /// # fn main() {
 /// # let my_peer_id = PeerId::from(identity::Keypair::generate_ed25519().public());
-/// # let my_listened_addrs = Vec::new();
+/// # let my_listened_addrs: Vec<Multiaddr> = vec![];
 /// # block_on(async {
 /// let mut service = MdnsService::new().await.expect("Error while creating mDNS service");
 /// let _future_to_poll = async {
@@ -75,11 +75,13 @@ lazy_static! {
 ///     match packet {
 ///         MdnsPacket::Query(query) => {
 ///             println!("Query from {:?}", query.remote_addr());
-///             service.enqueue_response(query.build_response(
+///             let resp = build_query_response(
+///                 query.query_id(),
 ///                 my_peer_id.clone(),
-///                 my_listened_addrs.clone(),
+///                 vec![].into_iter(),
 ///                 Duration::from_secs(120),
-///             ).unwrap());
+///             ).unwrap();
+///             service.enqueue_response(resp);
 ///         }
 ///         MdnsPacket::Response(response) => {
 ///             for peer in response.discovered_peers() {
@@ -89,8 +91,12 @@ lazy_static! {
 ///                 }
 ///             }
 ///         }
-///         MdnsPacket::ServiceDiscovery(query) => {
-///             service.enqueue_response(query.build_response(std::time::Duration::from_secs(120)));
+///         MdnsPacket::ServiceDiscovery(disc) => {
+///             let resp = build_service_discovery_response(
+///                 disc.query_id(),
+///                 Duration::from_secs(120),
+///             );
+///             service.enqueue_response(resp);
 ///         }
 ///     }
 /// };
@@ -318,31 +324,14 @@ pub struct MdnsQuery {
 }
 
 impl MdnsQuery {
-    /// Build query response.
-    ///
-    /// Pass the ID of the local peer, and the list of addresses we're listening on.
-    ///
-    /// If there are more than 2^16-1 addresses, ignores the others.
-    ///
-    /// > **Note**: Keep in mind that we will also receive this response in an `MdnsResponse`.
-    #[inline]
-    pub fn build_response<TAddresses>(
-        self,
-        peer_id: PeerId,
-        addresses: TAddresses,
-        ttl: Duration,
-    ) -> Result<Vec<u8>, MdnsResponseError>
-    where
-        TAddresses: IntoIterator<Item = Multiaddr>,
-        TAddresses::IntoIter: ExactSizeIterator,
-    {
-        dns::build_query_response(self.query_id, peer_id, addresses.into_iter(), ttl)
-    }
-
     /// Source address of the packet.
-    #[inline]
     pub fn remote_addr(&self) -> &SocketAddr {
         &self.from
+    }
+
+    /// Query id of the packet.
+    pub fn query_id(&self) -> u16 {
+        self.query_id
     }
 }
 
@@ -364,16 +353,14 @@ pub struct MdnsServiceDiscovery {
 }
 
 impl MdnsServiceDiscovery {
-    /// Build service discovery response.
-    #[inline]
-    pub fn build_response(self, ttl: Duration) -> Vec<u8> {
-        dns::build_service_discovery_response(self.query_id, ttl)
-    }
-
     /// Source address of the packet.
-    #[inline]
     pub fn remote_addr(&self) -> &SocketAddr {
         &self.from
+    }
+
+    /// Query id of the packet.
+    pub fn query_id(&self) -> u16 {
+        self.query_id
     }
 }
 
@@ -566,7 +553,13 @@ mod tests {
 
                 match next.1 {
                     MdnsPacket::Query(query) => {
-                        service.enqueue_response(query.build_response(peer_id.clone(), None, Duration::from_secs(120)).unwrap());
+                        let resp = crate::dns::build_query_response(
+                            query.query_id(),
+                            peer_id.clone(),
+                            vec![].into_iter(),
+                            Duration::from_secs(120),
+                        ).unwrap();
+                        service.enqueue_response(resp);
                     }
                     MdnsPacket::Response(response) => {
                         for peer in response.discovered_peers() {

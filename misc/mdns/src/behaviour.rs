@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::service::{MdnsService, MdnsPacket};
+use crate::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
 use futures::prelude::*;
 use libp2p_core::{address_translation, ConnectedPoint, Multiaddr, PeerId, multiaddr::Protocol};
 use libp2p_swarm::{
@@ -249,12 +249,13 @@ where
                 MdnsPacket::Query(query) => {
                     // MaybeBusyMdnsService should always be Free.
                     if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
-                        service.enqueue_response(query.build_response(
+                        let resp = build_query_response(
+                            query.query_id(),
                             params.local_peer_id().clone(),
-                            params.listened_addresses(),
-                            // TODO: This should move to a constant, right?
-                            Duration::from_secs(5 * 60)
-                        ).unwrap());
+                            params.listened_addresses().into_iter(),
+                            Duration::from_secs(5 * 60),
+                        );
+                        service.enqueue_response(resp.unwrap());
                     }
                 },
                 MdnsPacket::Response(response) => {
@@ -302,7 +303,11 @@ where
                     if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
                         // TODO: This should move to a constant, right? Also can it be consolidated with
                         // the query response TTL?
-                        service.enqueue_response(disc.build_response(Duration::from_secs(5 * 60)));
+                        let resp = build_service_discovery_response(
+                            disc.query_id(),
+                            Duration::from_secs(5 * 60),
+                        );
+                        service.enqueue_response(resp);
                     }
                 },
             }
