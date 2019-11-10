@@ -287,6 +287,123 @@ mod tests {
         );
     }
 
+    /// Test local node publish to subscribed topic
+    #[test]
+    fn test_publish() {
+        // node should:
+        // - Send publish message to all peers
+        // - Insert message into gs.mcache and gs.received
+
+        let publish_topic = String::from("test_publish");
+        let (mut gs, _, topic_hashes) =
+            build_and_inject_nodes(20, vec![publish_topic.clone()], true);
+
+        assert!(
+            gs.mesh.get(&topic_hashes[0]).is_some(),
+            "Subscribe should add a new entry to the mesh[topic] hashmap"
+        );
+
+        // publish on topic
+        let publish_data = vec![0; 42];
+        gs.publish(&Topic::new(publish_topic), publish_data);
+
+        // Collect all publish messages
+        let publishes = gs
+            .events
+            .iter()
+            .fold(vec![], |mut collected_publish, e| match e {
+                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    for s in &event.messages {
+                        collected_publish.push(s.clone());
+                    }
+                    collected_publish
+                }
+                _ => collected_publish,
+            });
+
+        let msg_id = publishes.first().expect("Should contain > 0 entries").id();
+
+        assert!(
+            publishes.len() == 20,
+            "Should send a publish message to all known peers"
+        );
+
+        assert!(
+            gs.mcache.get(&msg_id).is_some(),
+            "Message cache should contain published message"
+        );
+        assert!(
+            gs.received.get(&msg_id).is_some(),
+            "Received cache should contain published message"
+        );
+    }
+
+    /// Test local node publish to unsubscribed topic
+    #[test]
+    fn test_fanout() {
+        // node should:
+        // - Populate fanout peers
+        // - Send publish message to fanout peers
+        // - Insert message into gs.mcache and gs.received
+        let fanout_topic = String::from("test_fanout");
+        let (mut gs, _, topic_hashes) =
+            build_and_inject_nodes(20, vec![fanout_topic.clone()], true);
+
+        assert!(
+            gs.mesh.get(&topic_hashes[0]).is_some(),
+            "Subscribe should add a new entry to the mesh[topic] hashmap"
+        );
+        // Unsubscribe from topic
+        assert!(
+            gs.unsubscribe(Topic::new(fanout_topic.clone())),
+            "should be able to unsubscribe successfully from topic"
+        );
+
+        // Publish on unsubscribed topic
+        let publish_data = vec![0; 42];
+        gs.publish(&Topic::new(fanout_topic.clone()), publish_data);
+
+        assert_eq!(
+            gs.fanout
+                .get(&TopicHash::from_raw(fanout_topic.clone()))
+                .unwrap()
+                .len(),
+            gs.config.mesh_n,
+            "Fanout should contain `mesh_n` peers for fanout topic"
+        );
+
+        // Collect all publish messages
+        let publishes = gs
+            .events
+            .iter()
+            .fold(vec![], |mut collected_publish, e| match e {
+                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    for s in &event.messages {
+                        collected_publish.push(s.clone());
+                    }
+                    collected_publish
+                }
+                _ => collected_publish,
+            });
+
+        let msg_id = publishes.first().expect("Should contain > 0 entries").id();
+
+        assert_eq!(
+            publishes.len(),
+            gs.config.mesh_n,
+            "Should send a publish message to `mesh_n` fanout peers"
+        );
+
+        assert!(
+            gs.mcache.get(&msg_id).is_some(),
+            "Message cache should contain published message"
+        );
+        assert!(
+            gs.received.get(&msg_id).is_some(),
+            "Received cache should contain published message"
+        );
+    }
+
     #[test]
     /// Test the gossipsub NetworkBehaviour peer connection logic.
     fn test_inject_connected() {
