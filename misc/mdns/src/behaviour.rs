@@ -255,7 +255,7 @@ where
                             MDNS_RESPONSE_TTL,
                         );
                         service.enqueue_response(resp.unwrap());
-                    }
+                    } else { debug_assert!(false); }
                 },
                 MdnsPacket::Response(response) => {
                     // We replace the IP address with the address we observe the
@@ -305,7 +305,7 @@ where
                             MDNS_RESPONSE_TTL,
                         );
                         service.enqueue_response(resp);
-                    }
+                    } else { debug_assert!(false); }
                 },
             }
         };
