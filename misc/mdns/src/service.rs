@@ -21,7 +21,8 @@
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
 use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
-use futures::prelude::*;
+use either::Either::{Left, Right};
+use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
@@ -194,68 +195,75 @@ impl MdnsService {
     /// self and returns it alongside an `MdnsPacket` once the actual future
     /// resolves, not forcing self-referential structures on the caller.
     pub async fn next(mut self) -> (Self, MdnsPacket) {
-        // Send a query every time `query_interval` fires.
-        //
-        // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
-        // no point in sending multiple requests in a row.
-        if let Some(_) = self.query_interval.next().now_or_never() {
-            // Ensure underlying task is woken up on the next interval tick.
-            while let Some(_) = self.query_interval.next().now_or_never() {};
-
-            if !self.silent {
-                let query = dns::build_query();
-                self.query_send_buffers.push(query.to_vec());
-            }
-        };
-
-        // Flush the send buffer of the main socket.
-        while !self.send_buffers.is_empty() {
-            let to_send = self.send_buffers.remove(0);
-
-            match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
-                Ok(bytes_written) => {
-                    debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Err(_) => {
-                    // Errors are non-fatal because they can happen for example if we lose
-                    // connection to the network.
-                    self.send_buffers.clear();
-                    break;
-                }
-            }
-        }
-
-        // Flush the query send buffer.
-        // This has to be after the push to `query_send_buffers`.
-        while !self.query_send_buffers.is_empty() {
-            let to_send = self.query_send_buffers.remove(0);
-
-            match self.query_socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
-                Ok(bytes_written) => {
-                    debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Err(_) => {
-                    // Errors are non-fatal because they can happen for example if we lose
-                    // connection to the network.
-                    self.query_send_buffers.clear();
-                    break;
-                }
-            }
-        }
-
         loop {
-            match self.socket.recv_from(&mut self.recv_buffer).await {
-                Ok((len, from)) => {
-                    match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
-                        Some(packet) => return (self, packet),
-                        None => {},
+            // Flush the send buffer of the main socket.
+            while !self.send_buffers.is_empty() {
+                let to_send = self.send_buffers.remove(0);
+
+                match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                    Ok(bytes_written) => {
+                        debug_assert_eq!(bytes_written, to_send.len());
+                    }
+                    Err(_) => {
+                        // Errors are non-fatal because they can happen for example if we lose
+                        // connection to the network.
+                        self.send_buffers.clear();
+                        break;
                     }
                 }
-                Err(_) => {
-                    // Error are non-fatal and can happen if we get disconnected from example.
-                    // The query interval will wake up the task at some point so that we can try again.
+            }
+
+            // Flush the query send buffer.
+            while !self.query_send_buffers.is_empty() {
+                let to_send = self.query_send_buffers.remove(0);
+
+                match self.query_socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                    Ok(bytes_written) => {
+                        debug_assert_eq!(bytes_written, to_send.len());
+                    }
+                    Err(_) => {
+                        // Errors are non-fatal because they can happen for example if we lose
+                        // connection to the network.
+                        self.query_send_buffers.clear();
+                        break;
+                    }
                 }
-            }};
+            }
+
+            // Either (left) listen for incoming packets or (right) send query packets whenever the
+            // query interval fires.
+            let selected_output = match futures::future::select(
+                Box::pin(self.socket.recv_from(&mut self.recv_buffer)),
+                Box::pin(self.query_interval.next()),
+            ).await {
+                future::Either::Left((recved, _)) => Left(recved),
+                future::Either::Right(_) => Right(()),
+            };
+
+            match selected_output {
+                Left(left) => match left {
+                    Ok((len, from)) => {
+                        match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
+                            Some(packet) => return (self, packet),
+                            None => {},
+                        }
+                    },
+                    Err(_) => {
+                        // Error are non-fatal and can happen if we get disconnected from example.
+                        // The query interval will wake up the task at some point so that we can try again.
+                    },
+                },
+                Right(_) => {
+                    // Ensure underlying task is woken up on the next interval tick.
+                    while let Some(_) = self.query_interval.next().now_or_never() {};
+
+                    if !self.silent {
+                        let query = dns::build_query();
+                        self.query_send_buffers.push(query.to_vec());
+                    }
+                }
+            };
+        }
     }
 }
 
@@ -579,6 +587,8 @@ mod tests {
     }
 
     #[test]
+    // As of today the underlying UDP socket is not stubbed out. Thus tests run in parallel to this
+    // unit tests inter fear with it. Test needs to be run in sequence to ensure test properties.
     fn respect_query_interval() {
         let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
             .into_iter()
