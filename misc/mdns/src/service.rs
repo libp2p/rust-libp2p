@@ -246,46 +246,9 @@ impl MdnsService {
         loop {
             match self.socket.recv_from(&mut self.recv_buffer).await {
                 Ok((len, from)) => {
-                    match Packet::parse(&self.recv_buffer[..len]) {
-                        Ok(packet) => {
-                            if packet.header.query {
-                                if packet
-                                    .questions
-                                    .iter()
-                                    .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
-                                {
-                                    let query = MdnsPacket::Query(MdnsQuery {
-                                        from,
-                                        query_id: packet.header.id,
-                                    });
-                                    return (self, query);
-                                } else if packet
-                                    .questions
-                                    .iter()
-                                    .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
-                                {
-                                    // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                                    let discovery = MdnsPacket::ServiceDiscovery(
-                                        MdnsServiceDiscovery {
-                                            from,
-                                            query_id: packet.header.id,
-                                        },
-                                    );
-                                    return (self, discovery);
-                                } else {
-                                    continue;
-                                }
-                            } else {
-                                let resp = MdnsPacket::Response(MdnsResponse::new (
-                                    packet,
-                                    from,
-                                ));
-                                return (self, resp);
-                            }
-                        }
-                        Err(_) => {
-                            continue;
-                        }
+                    match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
+                        Some(packet) => return (self, packet),
+                        None => {},
                     }
                 }
                 Err(_) => {
@@ -313,6 +276,52 @@ pub enum MdnsPacket {
     Response(MdnsResponse),
     /// A request for service discovery.
     ServiceDiscovery(MdnsServiceDiscovery),
+}
+
+impl MdnsPacket {
+    fn new_from_bytes(buf: &[u8], from: SocketAddr) -> Option<MdnsPacket> {
+        match Packet::parse(buf) {
+            Ok(packet) => {
+                if packet.header.query {
+                    if packet
+                        .questions
+                        .iter()
+                        .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
+                    {
+                        let query = MdnsPacket::Query(MdnsQuery {
+                            from,
+                            query_id: packet.header.id,
+                        });
+                        return Some(query);
+                    } else if packet
+                        .questions
+                        .iter()
+                        .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
+                    {
+                        // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+                        let discovery = MdnsPacket::ServiceDiscovery(
+                            MdnsServiceDiscovery {
+                                from,
+                                query_id: packet.header.id,
+                            },
+                        );
+                        return Some(discovery);
+                    } else {
+                        return None;
+                    }
+                } else {
+                    let resp = MdnsPacket::Response(MdnsResponse::new (
+                        packet,
+                        from,
+                    ));
+                    return Some(resp);
+                }
+            }
+            Err(_) => {
+                return None;
+            }
+        }
+    }
 }
 
 /// A received mDNS query.
