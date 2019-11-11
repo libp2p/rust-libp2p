@@ -538,7 +538,8 @@ impl fmt::Debug for MdnsPeer {
 mod tests {
     use futures::executor::block_on;
     use libp2p_core::PeerId;
-    use std::time::Duration;
+    use std::{io::{Error, ErrorKind}, time::Duration};
+    use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
 
     #[test]
@@ -572,5 +573,53 @@ mod tests {
                 }
             }
         })
+    }
+
+    #[test]
+    fn respect_query_interval() {
+        let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
+            .into_iter()
+            .map(|i| i.addr.ip())
+            .collect();
+
+        let fut = async {
+            let mut service = MdnsService::new().await.unwrap();
+            let mut sent_queries = vec![];
+
+            loop {
+                let next = service.next().await;
+                service = next.0;
+
+                match next.1 {
+                    MdnsPacket::Query(query) => {
+                        // Ignore queries from other nodes.
+                        let source_ip = query.remote_addr().ip();
+                        if !own_ips.contains(&source_ip) {
+                            continue;
+                        }
+
+                        sent_queries.push(query);
+
+                        if sent_queries.len() > 1 {
+                            return Ok(())
+                        }
+                    }
+                    MdnsPacket::Response(resp) => {
+                        // Ignore queries from other nodes.
+                        let source_ip = resp.remote_addr().ip();
+                        if !own_ips.contains(&source_ip) {
+                            continue;
+                        }
+
+                        return Err(Error::new(ErrorKind::Other, "did not expect a response packet"));
+                    },
+                    MdnsPacket::ServiceDiscovery(_) => {
+                        return Err(Error::new(ErrorKind::Other, "did not expect a service discovery packet"));
+                    },
+                }
+            }
+        };
+
+        block_on(fut.timeout(Duration::from_secs(41))).unwrap();
     }
 }
