@@ -442,8 +442,8 @@ impl MdnsResponse {
     /// Returns the list of peers that have been reported in this packet.
     ///
     /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
-    pub fn discovered_peers(&self) -> &Vec<MdnsPeer> {
-        &self.peers
+    pub fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
+        self.peers.iter()
     }
 
     /// Source address of the packet.
@@ -557,7 +557,7 @@ mod tests {
     use multiaddr::multihash::*;
 
     fn discover(peer_id: PeerId) {
-        block_on (async {
+        block_on(async {
             let mut service = MdnsService::new().await.unwrap();
             loop {
                 let next = service.next().await;
@@ -580,15 +580,15 @@ mod tests {
                             }
                         }
                     }
-                    MdnsPacket::ServiceDiscovery(_) => {panic!("did not expect a service discovery packet")}
+                    MdnsPacket::ServiceDiscovery(_) => panic!("did not expect a service discovery packet")
                 }
             }
         })
     }
 
-    #[test]
     // As of today the underlying UDP socket is not stubbed out. Thus tests run in parallel to this
     // unit tests inter fear with it. Test needs to be run in sequence to ensure test properties.
+    #[test]
     fn respect_query_interval() {
         let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
             .into_iter()
