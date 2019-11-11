@@ -39,7 +39,6 @@
 use async_std::net::TcpStream;
 use futures::{
     future::{self, Ready},
-    io::Initializer,
     prelude::*,
 };
 use futures_timer::Delay;
@@ -419,10 +418,6 @@ pub struct TcpTransStream {
 impl AsyncRead for TcpTransStream {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        self.inner.initializer()
     }
 }
 

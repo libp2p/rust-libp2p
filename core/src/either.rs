@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{muxing::StreamMuxer, ProtocolName, transport::ListenerEvent};
-use futures::{prelude::*, io::Initializer};
+use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
@@ -67,13 +67,6 @@ where
     A: AsyncRead + Unpin,
     B: AsyncRead + Unpin,
 {
-    unsafe fn initializer(&self) -> Initializer {
-        match self {
-            EitherOutput::First(a) => a.initializer(),
-            EitherOutput::Second(b) => b.initializer(),
-        }
-    }
-
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, IoError>> {
         match &mut *self {
             EitherOutput::First(a) => AsyncRead::poll_read(Pin::new(a), cx, buf),
@@ -246,13 +239,6 @@ where
                     _ => panic!("Wrong API usage")
                 }
             },
-        }
-    }
-
-    unsafe fn initializer(&self) -> Initializer {
-        match self {
-            EitherOutput::First(ref inner) => inner.initializer(),
-            EitherOutput::Second(ref inner) => inner.initializer(),
         }
     }
 

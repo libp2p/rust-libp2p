@@ -18,13 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use async_tls::{TlsConnector, TlsAcceptor};
 use std::{fmt, io, sync::Arc};
-use futures_rustls::{
-    TlsConnector,
-    TlsAcceptor,
-    rustls,
-    webpki
-};
 
 /// TLS configuration.
 #[derive(Clone)]
@@ -128,7 +123,7 @@ impl Builder {
 }
 
 pub(crate) fn dns_name_ref(name: &str) -> Result<webpki::DNSNameRef<'_>, Error> {
-    webpki::DNSNameRef::try_from_ascii_str(name).map_err(|()| Error::InvalidDnsName(name.into()))
+    webpki::DNSNameRef::try_from_ascii_str(name).map_err(|_| Error::InvalidDnsName(name.into()))
 }
 
 // Error //////////////////////////////////////////////////////////////////////////////////////////

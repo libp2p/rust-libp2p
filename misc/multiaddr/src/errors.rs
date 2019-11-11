@@ -57,8 +57,8 @@ impl From<multihash::DecodeOwnedError> for Error {
     }
 }
 
-impl From<bs58::decode::DecodeError> for Error {
-    fn from(err: bs58::decode::DecodeError) -> Error {
+impl From<bs58::decode::Error> for Error {
+    fn from(err: bs58::decode::Error) -> Error {
         Error::ParsingError(err.into())
     }
 }

@@ -22,8 +22,10 @@
 
 use ed25519_dalek as ed25519;
 use failure::Fail;
+use rand::RngCore;
 use super::error::DecodingError;
 use zeroize::Zeroize;
+use core::fmt;
 
 /// An Ed25519 keypair.
 pub struct Keypair(ed25519::Keypair);
@@ -31,7 +33,7 @@ pub struct Keypair(ed25519::Keypair);
 impl Keypair {
     /// Generate a new Ed25519 keypair.
     pub fn generate() -> Keypair {
-        Keypair(ed25519::Keypair::generate(&mut rand::thread_rng()))
+        Keypair::from(SecretKey::generate())
     }
 
     /// Encode the keypair into a byte array by concatenating the bytes
@@ -66,6 +68,12 @@ impl Keypair {
     }
 }
 
+impl fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Keypair").field("public", &self.0.public).finish()
+    }
+}
+
 impl Clone for Keypair {
     fn clone(&self) -> Keypair {
         let mut sk_bytes = self.0.secret.to_bytes();
@@ -87,9 +95,9 @@ impl From<Keypair> for SecretKey {
 /// Promote an Ed25519 secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(sk: SecretKey) -> Keypair {
-        let secret = sk.0;
+        let secret: ed25519::ExpandedSecretKey = (&sk.0).into();
         let public = ed25519::PublicKey::from(&secret);
-        Keypair(ed25519::Keypair { secret, public })
+        Keypair(ed25519::Keypair { secret: sk.0, public })
     }
 }
 
@@ -135,10 +143,19 @@ impl Clone for SecretKey {
     }
 }
 
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SecretKey")
+    }
+}
+
 impl SecretKey {
     /// Generate a new Ed25519 secret key.
     pub fn generate() -> SecretKey {
-        SecretKey(ed25519::SecretKey::generate(&mut rand::thread_rng()))
+        let mut bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut bytes);
+        SecretKey(ed25519::SecretKey::from_bytes(&bytes)
+            .expect("this returns `Err` only if the length is wrong; the length is correct; qed"))
     }
 
     /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.

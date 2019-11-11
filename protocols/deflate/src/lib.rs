@@ -135,7 +135,6 @@ impl<S> AsyncRead for DeflateOutput<S>
                 unsafe {
                     this.read_interm.reserve(256);
                     this.read_interm.set_len(this.read_interm.capacity());
-                    this.inner.initializer().initialize(&mut this.read_interm);
                 }
 
                 match AsyncRead::poll_read(Pin::new(&mut this.inner), cx, &mut this.read_interm) {
@@ -171,10 +170,6 @@ impl<S> AsyncRead for DeflateOutput<S>
                 return Poll::Ready(Ok(read))
             }
         }
-    }
-
-    unsafe fn initializer(&self) -> futures::io::Initializer {
-        futures::io::Initializer::nop()
     }
 }
 

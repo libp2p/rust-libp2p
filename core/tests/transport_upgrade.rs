@@ -110,7 +110,7 @@ fn upgrade_pipeline() {
         });
 
     let listen_addr: Multiaddr = format!("/memory/{}", random::<u64>()).parse().unwrap();
-    
+
     async_std::task::spawn({
         let listen_addr = listen_addr.clone();
         let dialer_id = dialer_id.clone();

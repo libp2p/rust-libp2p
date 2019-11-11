@@ -20,10 +20,11 @@
 
 //! Noise protocol handshake I/O.
 
-mod payload;
+mod payload_proto;
 
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
+use crate::io::SnowState;
 use libp2p_core::identity;
 use futures::prelude::*;
 use futures::task;
@@ -121,7 +122,7 @@ impl<T, C> Future for Handshake<T, C> {
 /// ```
 pub fn rt1_initiator<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Handshake<T, C>
@@ -155,7 +156,7 @@ where
 /// ```
 pub fn rt1_responder<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
 ) -> Handshake<T, C>
@@ -191,7 +192,7 @@ where
 /// ```
 pub fn rt15_initiator<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Handshake<T, C>
@@ -228,7 +229,7 @@ where
 /// ```
 pub fn rt15_responder<T, C>(
     io: T,
-    session: Result<snow::Session, NoiseError>,
+    session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange
 ) -> Handshake<T, C>
@@ -271,7 +272,7 @@ impl<T> State<T> {
     /// Noise handshake pattern.
     fn new(
         io: T,
-        session: Result<snow::Session, NoiseError>,
+        session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
         identity_x: IdentityExchange
     ) -> Result<Self, NoiseError> {
@@ -284,7 +285,7 @@ impl<T> State<T> {
         session.map(|s|
             State {
                 identity,
-                io: NoiseOutput::new(io, s),
+                io: NoiseOutput::new(io, SnowState::Handshake(s)),
                 dh_remote_pubkey_sig: None,
                 id_remote_pubkey,
                 send_identity
@@ -322,7 +323,7 @@ impl<T> State<T>
                         }
                     }
                 };
-                Ok((remote, NoiseOutput { session: s, .. self.io }))
+                Ok((remote, NoiseOutput { session: SnowState::Transport(s), .. self.io }))
             }
         }
     }
@@ -362,7 +363,7 @@ where
 
     let mut payload_buf = vec![0; len];
     state.io.read_exact(&mut payload_buf).await?;
-    let pb: payload::Identity = protobuf::parse_from_bytes(&payload_buf)?;
+    let pb: payload_proto::Identity = protobuf::parse_from_bytes(&payload_buf)?;
 
     if !pb.pubkey.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
@@ -386,7 +387,7 @@ async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload::Identity::new();
+    let mut pb = payload_proto::Identity::new();
     if state.send_identity {
         pb.set_pubkey(state.identity.public.clone().into_protobuf_encoding());
     }

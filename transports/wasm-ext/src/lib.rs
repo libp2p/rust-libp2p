@@ -32,7 +32,7 @@
 //! module.
 //!
 
-use futures::{prelude::*, future::Ready, io::Initializer};
+use futures::{prelude::*, future::Ready};
 use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
 use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
@@ -356,10 +356,6 @@ impl fmt::Debug for Connection {
 }
 
 impl AsyncRead for Connection {
-    unsafe fn initializer(&self) -> Initializer {
-        Initializer::nop()
-    }
-
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         loop {
             match mem::replace(&mut self.read_state, ConnectionReadState::Finished) {

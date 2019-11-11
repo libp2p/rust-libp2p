@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::identity;
-use snow::SnowError;
+use snow::error::Error as SnowError;
 use std::{error::Error, fmt, io};
 
 /// libp2p_noise error type.

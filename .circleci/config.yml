@@ -12,7 +12,6 @@ jobs:
   test:
     machine:
       enabled: true
-      docker_layer_caching: true
     steps:
       - checkout
       - run:
