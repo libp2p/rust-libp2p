@@ -66,6 +66,26 @@ enum MaybeBusyMdnsService {
     Poisoned,
 }
 
+impl fmt::Debug for MaybeBusyMdnsService {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MaybeBusyMdnsService::Free(service) => {
+                fmt.debug_struct("MaybeBusyMdnsService::Free")
+                    .field("service", service)
+                    .finish()
+            },
+            MaybeBusyMdnsService::Busy(_) => {
+                fmt.debug_struct("MaybeBusyMdnsService::Busy")
+                    .finish()
+            }
+            MaybeBusyMdnsService::Poisoned => {
+                fmt.debug_struct("MaybeBusyMdnsService::Poisoned")
+                    .finish()
+            }
+        }
+    }
+}
+
 impl<TSubstream> Mdns<TSubstream> {
     /// Builds a new `Mdns` behaviour.
     pub async fn new() -> io::Result<Mdns<TSubstream>> {
@@ -327,7 +347,7 @@ where
 impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Mdns")
-            //.field("service", &self.service)
+            .field("service", &self.service)
             .finish()
     }
 }
