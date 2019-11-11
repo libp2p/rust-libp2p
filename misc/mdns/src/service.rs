@@ -173,27 +173,27 @@ impl MdnsService {
     }
 
     /// Returns a future resolving to itself and the next received `MdnsPacket`.
-    ///
-    /// **Note**: Why does `next` take ownership of itself?
-    ///
-    /// `MdnsService::next` needs to be called from within `NetworkBehaviour`
-    /// implementations. Given that traits can not have async methods the
-    /// respective `NetworkBehaviour` implementation needs to somehow keep the
-    /// Future returned by `MdnsService::next` across classic `poll`
-    /// invocations. The instance method `next` can either take a reference or
-    /// ownership of itself:
-    ///
-    /// 1. Taking a reference - If `MdnsService::poll` takes a reference to
-    /// `&self` the respective `NetworkBehaviour` implementation would need to
-    /// keep both the Future as well as its `MdnsService` instance across poll
-    /// invocations. Given that in this case the Future would have a reference
-    /// to `MdnsService`, the `NetworkBehaviour` implementation struct would
-    /// need to be self-referential which is not possible without unsafe code in
-    /// Rust.
-    ///
-    /// 2. Taking ownership - Instead `MdnsService::next` takes ownership of
-    /// self and returns it alongside an `MdnsPacket` once the actual future
-    /// resolves, not forcing self-referential structures on the caller.
+    //
+    // **Note**: Why does `next` take ownership of itself?
+    //
+    // `MdnsService::next` needs to be called from within `NetworkBehaviour`
+    // implementations. Given that traits can not have async methods the
+    // respective `NetworkBehaviour` implementation needs to somehow keep the
+    // Future returned by `MdnsService::next` across classic `poll`
+    // invocations. The instance method `next` can either take a reference or
+    // ownership of itself:
+    //
+    // 1. Taking a reference - If `MdnsService::poll` takes a reference to
+    // `&self` the respective `NetworkBehaviour` implementation would need to
+    // keep both the Future as well as its `MdnsService` instance across poll
+    // invocations. Given that in this case the Future would have a reference
+    // to `MdnsService`, the `NetworkBehaviour` implementation struct would
+    // need to be self-referential which is not possible without unsafe code in
+    // Rust.
+    //
+    // 2. Taking ownership - Instead `MdnsService::next` takes ownership of
+    // self and returns it alongside an `MdnsPacket` once the actual future
+    // resolves, not forcing self-referential structures on the caller.
     pub async fn next(mut self) -> (Self, MdnsPacket) {
         loop {
             // Flush the send buffer of the main socket.
