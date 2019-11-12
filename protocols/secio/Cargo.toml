@@ -10,21 +10,21 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-futures-preview = "0.3.0-alpha.18"
-futures_codec = "0.3.0"
+aes-ctr = "0.3"
+aesni = { version = "0.6", features = ["nocheck"], optional = true }
+bytes = "0.4.12"
+ctr = "0.3"
+futures = "0.3.1"
+futures_codec = "0.3.1"
+hmac = "0.7.0"
+lazy_static = "1.2.0"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.6"
 protobuf = "2.8"
 rand = "0.6.5"
-aes-ctr = "0.3"
-aesni = { version = "0.6", features = ["nocheck"], optional = true }
-twofish = "0.2.0"
-ctr = "0.3"
-lazy_static = "1.2.0"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 sha2 = "0.8.0"
-hmac = "0.7.0"
+twofish = "0.2.0"
 unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -44,8 +44,8 @@ secp256k1 = []
 aes-all = ["aesni"]
 
 [dev-dependencies]
-async-std = "0.99"
-criterion = "0.3.0"
+async-std = "1.0"
+criterion = "0.3"
 libp2p-mplex = { version = "0.13.0", path = "../../muxers/mplex" }
 libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
 

@@ -10,11 +10,11 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = "0.99"
-bytes = "0.4"
+async-std = "1.0"
+bytes = "0.4.12"
+futures = "0.3.1"
+futures-timer = "2.0"
 get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.1"
-futures-preview = "0.3.0-alpha.18"
-futures-timer = "0.3"

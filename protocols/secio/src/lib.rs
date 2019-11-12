@@ -148,7 +148,7 @@ impl SecioConfig {
 /// Output of the secio protocol.
 pub struct SecioOutput<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Unpin
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> io::Error>>,
