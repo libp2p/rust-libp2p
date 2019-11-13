@@ -2,6 +2,10 @@
 
 - Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
 
+# Version 0.13.1 (2019-11-13)
+
+- Maintenance release to bump dependencies and deal with an accidental breaking change in multihash 0.1.4.
+
 # Version 0.13.0 (2019-11-05)
 
 - Reworked the transport upgrade API. See https://github.com/libp2p/rust-libp2p/pull/1240 for more information.
