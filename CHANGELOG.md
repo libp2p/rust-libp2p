@@ -1,6 +1,6 @@
 # Version 0.13.1 (2019-11-13)
 
-- Maintenant release to bump dependencies and deal with an accidental breaking change in multihash 0.1.4.
+- Maintenance release to bump dependencies and deal with an accidental breaking change in multihash 0.1.4.
 
 # Version 0.13.0 (2019-11-05)
 
