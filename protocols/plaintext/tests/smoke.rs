@@ -18,14 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_plaintext::PlainText2Config;
-use log::{info, debug};
-use libp2p_core::identity;
-use libp2p_core::transport::{Transport, ListenerEvent};
 use futures::io::{AsyncWriteExt, AsyncReadExt};
 use futures::stream::TryStreamExt;
-use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade;
+use libp2p_core::{
+    identity,
+    multiaddr::Multiaddr,
+    transport::{Transport, ListenerEvent},
+    upgrade,
+};
+use libp2p_plaintext::PlainText2Config;
+use log::debug;
 use quickcheck::QuickCheck;
 
 #[test]
@@ -82,7 +84,7 @@ fn variable_msg_length() {
                 .expect("listen address");
 
             let client_fut = async {
-                info!("dialing {:?}", server_address);
+                debug!("dialing {:?}", server_address);
                 let (received_server_id, mut client_channel) = client_transport.dial(server_address).unwrap().await.unwrap();
                 assert_eq!(received_server_id, server_id.public().into_peer_id());
 
@@ -105,7 +107,7 @@ fn variable_msg_length() {
                     .expect("no error");
 
                 let mut server_buffer = vec![0; msg_to_receive.len()];
-                info!("Server: reading message.");
+                debug!("Server: reading message.");
                 server_channel.read_exact(&mut server_buffer).await.expect("reading client message");
 
                 assert_eq!(server_buffer, msg_to_receive);
