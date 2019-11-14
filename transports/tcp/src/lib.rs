@@ -37,10 +37,7 @@
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
 use async_std::net::TcpStream;
-use futures::{
-    future::{self, Ready},
-    prelude::*,
-};
+use futures::{future::{self, Ready}, prelude::*};
 use futures_timer::Delay;
 use get_if_addrs::{IfAddr, get_if_addrs};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
@@ -449,7 +446,7 @@ impl Drop for TcpTransStream {
 mod tests {
     use futures::prelude::*;
     use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
-    use std::{net::{IpAddr, Ipv4Addr, SocketAddr}, time::Duration};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use super::{multiaddr_to_socketaddr, TcpConfig};
 
     #[test]

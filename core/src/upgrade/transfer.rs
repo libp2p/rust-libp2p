@@ -115,7 +115,7 @@ pub async fn read_varint(socket: &mut (impl AsyncRead + Unpin)) -> Result<usize,
 /// > **Note**: Assumes that a variable-length prefix indicates the length of the message. This is
 /// >           compatible with what `write_one` does.
 pub async fn read_one(socket: &mut (impl AsyncRead + Unpin), max_size: usize)
-    -> Result<Vec<u8>, ReadOneError>    
+    -> Result<Vec<u8>, ReadOneError>
 {
     let len = read_varint(socket).await?;
     if len > max_size {
@@ -171,7 +171,6 @@ impl error::Error for ReadOneError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{self, Cursor};
 
     #[test]
     fn write_one_works() {
@@ -181,7 +180,7 @@ mod tests {
 
         let mut out = vec![0; 10_000];
         futures::executor::block_on(
-            write_one(&mut Cursor::new(&mut out[..]), data.clone())
+            write_one(&mut futures::io::Cursor::new(&mut out[..]), data.clone())
         ).unwrap();
 
         let (out_len, out_data) = unsigned_varint::decode::usize(&out).unwrap();
