@@ -45,7 +45,7 @@
 #![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
 
 use async_std::os::unix::net::{UnixListener, UnixStream};
-use futures::{prelude::*, ready, future::Ready};
+use futures::{prelude::*, future::Ready};
 use futures::stream::Stream;
 use libp2p_core::{
     Transport,
@@ -53,7 +53,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::debug;
-use std::{io, path::PathBuf, pin::Pin, task::Context, task::Poll};
+use std::{io, path::PathBuf, pin::Pin};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
 ///
@@ -144,38 +144,6 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 
     Ok(out)
-}
-
-pub struct ListenerStream<T> {
-    stream: T,
-    addr: Multiaddr,
-    tell_new_addr: bool
-}
-
-impl<T> Stream for ListenerStream<T>
-where
-    T: TryStream + Unpin
-{
-    type Item = Result<ListenerEvent<future::Ready<Result<T::Ok, T::Error>>>, T::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        if self.tell_new_addr {
-            self.tell_new_addr = false;
-            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))))
-        }
-
-        match ready!(TryStream::try_poll_next(Pin::new(&mut self.stream), cx)) {
-            Some(item) => {
-                debug!("incoming connection on {}", self.addr);
-                Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                    upgrade: future::ready(item),
-                    local_addr: self.addr.clone(),
-                    remote_addr: self.addr.clone()
-                })))
-            }
-            None => Poll::Ready(None)
-        }
-    }
 }
 
 #[cfg(test)]
