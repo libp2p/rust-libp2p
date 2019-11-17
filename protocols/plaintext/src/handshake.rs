@@ -18,16 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::PlainText2Config;
+use crate::error::PlainTextError;
+use crate::pb::structs::Exchange;
+
 use bytes::BytesMut;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
-use crate::pb::structs::Exchange;
 use protobuf::Message;
-use crate::error::PlainTextError;
-use crate::PlainText2Config;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use unsigned_varint::codec::UviBytes;
 
 struct HandshakeContext<T> {
     config: PlainText2Config,
@@ -63,7 +65,9 @@ impl HandshakeContext<Local> {
         })
     }
 
-    fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandshakeContext<Remote>, PlainTextError> {
+    fn with_remote(self, exchange_bytes: BytesMut)
+        -> Result<HandshakeContext<Remote>, PlainTextError>
+    {
         let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
             Ok(prop) => prop,
             Err(e) => {
@@ -90,7 +94,7 @@ impl HandshakeContext<Local> {
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.clone().into_peer_id() {
-            debug!("The remote's `PeerId` of the exchange isn't consist with the remote public key");
+            debug!("the remote's `PeerId` isn't consistent with the remote's public key");
             return Err(PlainTextError::InvalidPeerId)
         }
 
@@ -105,21 +109,18 @@ impl HandshakeContext<Local> {
 }
 
 pub async fn handshake<S>(socket: S, config: PlainText2Config)
-    -> Result<(Framed<S, unsigned_varint::codec::UviBytes<Vec<u8>>>, Remote), PlainTextError>
+    -> Result<(Framed<S, UviBytes<BytesMut>>, Remote), PlainTextError>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {
     // The handshake messages all start with a variable-length integer indicating the size.
-    let mut socket = Framed::new(
-        socket,
-        unsigned_varint::codec::UviBytes::<Vec<u8>>::default()
-    );
+    let mut socket = Framed::new(socket, UviBytes::default());
 
     trace!("starting handshake");
     let context = HandshakeContext::new(config)?;
 
     trace!("sending exchange to remote");
-    socket.send(context.state.exchange_bytes.clone()).await?;
+    socket.send(BytesMut::from(context.state.exchange_bytes.clone())).await?;
 
     trace!("receiving the remote's exchange");
     let context = match socket.next().await {

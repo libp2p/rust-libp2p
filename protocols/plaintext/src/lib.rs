@@ -19,16 +19,26 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::error::PlainTextError;
-use unsigned_varint::codec::UviBytes;
 use crate::handshake::Remote;
+
+use bytes::BytesMut;
 use futures::future::{self, Ready};
-use futures::{Sink, Stream};
 use futures::prelude::*;
+use futures::{Sink, Stream};
 use futures_codec::Framed;
-use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated, PeerId, PublicKey};
+use libp2p_core::{
+    identity,
+    InboundUpgrade,
+    OutboundUpgrade,
+    UpgradeInfo,
+    upgrade::Negotiated,
+    PeerId,
+    PublicKey,
+};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
 use std::{io, iter, pin::Pin, task::{Context, Poll}};
+use unsigned_varint::codec::UviBytes;
 use void::Void;
 
 mod error;
@@ -159,7 +169,7 @@ fn map_err(err: io::Error) -> io::Error {
 }
 
 pub struct PlainTextMiddleware<S> {
-    inner: Framed<S, UviBytes<Vec<u8>>>,
+    inner: Framed<S, UviBytes<BytesMut>>,
 }
 
 impl<S> PlainTextMiddleware<S>
@@ -174,7 +184,7 @@ where
     }
 }
 
-impl<S> Sink<Vec<u8>> for PlainTextMiddleware<S>
+impl<S> Sink<BytesMut> for PlainTextMiddleware<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -184,7 +194,7 @@ where
         Sink::poll_ready(Pin::new(&mut self.inner), cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
+    fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> Result<(), Self::Error> {
         Sink::start_send(Pin::new(&mut self.inner), item)
     }
 
@@ -201,16 +211,10 @@ impl<S> Stream for PlainTextMiddleware<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = Result<Vec<u8>, io::Error>;
+    type Item = Result<BytesMut, io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // TODO: Too much of a hack? (BytesMut -> Vec<u8>)
-        match Stream::poll_next(Pin::new(&mut self.inner), cx) {
-            Poll::Ready(ready) => {
-                Poll::Ready(ready.map(|res| res.map(|buf| buf.to_vec())))
-            },
-            Poll::Pending => Poll::Pending,
-        }
+        Stream::poll_next(Pin::new(&mut self.inner), cx)
     }
 }
 
