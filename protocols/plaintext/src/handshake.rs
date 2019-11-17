@@ -26,7 +26,7 @@ use futures::sink::Sink;
 use futures::stream::Stream;
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
-use crate::pb::structs::Exchange;
+use crate::structs_proto::Exchange;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
 use tokio_io::codec::length_delimited::Framed;
