@@ -24,7 +24,7 @@ use crate::handshake::Remote;
 use bytes::BytesMut;
 use futures::future::{self, Ready};
 use futures::prelude::*;
-use futures::{Sink, Stream};
+use futures::{future::BoxFuture, Sink, Stream};
 use futures_codec::Framed;
 use libp2p_core::{
     identity,
@@ -125,7 +125,7 @@ where
 {
     type Output = (PeerId, PlainTextOutput<Negotiated<C>>);
     type Error = PlainTextError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         Box::pin(self.handshake(socket))
@@ -138,7 +138,7 @@ where
 {
     type Output = (PeerId, PlainTextOutput<Negotiated<C>>);
     type Error = PlainTextError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         Box::pin(self.handshake(socket))
