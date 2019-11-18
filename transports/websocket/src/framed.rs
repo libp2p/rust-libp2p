@@ -22,7 +22,7 @@ use async_tls::{client, server};
 use bytes::BytesMut;
 use crate::{error::Error, tls};
 use either::Either;
-use futures::{prelude::*, ready};
+use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
     Transport,
     either::EitherOutput,
@@ -30,8 +30,8 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
-use soketto::{connection::{self, Connection}, extension::deflate::Deflate, handshake};
-use std::{io, pin::Pin, task::Context, task::Poll};
+use soketto::{connection, extension::deflate::Deflate, handshake};
+use std::{fmt, io, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
 /// Max. number of payload bytes of a single frame.
@@ -109,9 +109,9 @@ where
 {
     type Output = BytesConnection<T::Output>;
     type Error = Error<T::Error>;
-    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>> + Send>>;
-    type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
@@ -208,15 +208,17 @@ where
                             .map_err(|e| Error::Handshake(Box::new(e)))
                             .await?;
 
-                        let mut conn = server.into_connection();
-                        conn.set_max_message_size(max_size);
-                        conn.set_max_frame_size(max_size);
+                        let conn = {
+                            let mut builder = server.into_builder();
+                            builder.set_max_message_size(max_size).set_max_frame_size(max_size);
+                            BytesConnection::new(builder)
+                        };
 
-                        Ok(BytesConnection(conn))
+                        Ok(conn)
                     };
 
                     ListenerEvent::Upgrade {
-                        upgrade: Box::pin(upgrade) as Pin<Box<dyn Future<Output = _> + Send>>,
+                        upgrade: Box::pin(upgrade) as BoxFuture<'static, _>,
                         local_addr,
                         remote_addr
                     }
@@ -262,7 +264,7 @@ where
 impl<T> WsConfig<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite + Unpin + 'static
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
     async fn dial_once(self, address: Multiaddr) -> Result<Either<String, BytesConnection<T::Output>>, Error<T::Error>> {
@@ -338,7 +340,7 @@ where
             }
             handshake::ServerResponse::Accepted { .. } => {
                 trace!("websocket handshake with {} successful", address);
-                Ok(Either::Right(BytesConnection(client.into_connection())))
+                Ok(Either::Right(BytesConnection::new(client.into_builder())))
             }
         }
     }
@@ -405,45 +407,82 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 
 /// A [`Stream`] and [`Sink`] that produces and consumes [`BytesMut`] values
 /// which correspond to the payload data of websocket frames.
-#[derive(Debug)]
-pub struct BytesConnection<T>(Connection<TlsOrPlain<T>>);
+pub struct BytesConnection<T> {
+    receiver: BoxStream<'static, Result<(BytesMut, bool), connection::Error>>,
+    sender: Pin<Box<dyn Sink<BytesMut, Error = connection::Error> + Send>>,
+    _marker: std::marker::PhantomData<T>
+}
 
-impl<T: AsyncRead + AsyncWrite + Unpin> Stream for BytesConnection<T> {
-    type Item = io::Result<BytesMut>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let next = Pin::new(&mut self.0)
-            .poll_next(cx)
-            .map(|item| {
-                item.map(|result| result.map_err(|e| io::Error::new(io::ErrorKind::Other, e)))
-            });
-        Poll::Ready(ready!(next).map(|result| result.map(connection::Data::into)))
+impl<T> fmt::Debug for BytesConnection<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("BytesConnection")
     }
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin> Sink<BytesMut> for BytesConnection<T> {
+impl<T> BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    fn new(builder: connection::Builder<TlsOrPlain<T>>) -> Self {
+        let (sender, receiver) = builder.finish();
+        let sink = quicksink::make_sink(sender, |mut sender, action| async move {
+            match action {
+                quicksink::Action::Send(x) => sender.send_binary(x).await?,
+                quicksink::Action::Flush => sender.flush().await?,
+                quicksink::Action::Close => sender.close().await?
+            }
+            Ok(sender)
+        });
+        let stream = connection::into_stream(receiver);
+        BytesConnection {
+            receiver: Box::pin(stream),
+            sender: Box::pin(sink),
+            _marker: std::marker::PhantomData
+        }
+    }
+}
+
+impl<T> Stream for BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Item = io::Result<BytesMut>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let item = ready!(Pin::new(&mut self.receiver).poll_next(cx));
+        let item = item.map(|result| {
+            result.map(|(bytes, _)| bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        });
+        Poll::Ready(item)
+    }
+}
+
+impl<T> Sink<BytesMut> for BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
     type Error = io::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0)
+        Pin::new(&mut self.sender)
             .poll_ready(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> io::Result<()> {
-        Pin::new(&mut self.0)
-            .start_send(connection::Data::Binary(item))
+        Pin::new(&mut self.sender)
+            .start_send(item)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0)
+        Pin::new(&mut self.sender)
             .poll_flush(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0)
+        Pin::new(&mut self.sender)
             .poll_close(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
