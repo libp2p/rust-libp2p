@@ -37,7 +37,7 @@ use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr
 use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{JsCast, prelude::*};
-use wasm_bindgen_futures::futures_0_3::JsFuture;
+use wasm_bindgen_futures::JsFuture;
 
 /// Contains the definition that one must match on the JavaScript side.
 pub mod ffi {

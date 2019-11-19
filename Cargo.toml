@@ -33,7 +33,7 @@ libp2p-uds = { version = "0.13.0", path = "transports/uds" }
 libp2p-wasm-ext = { version = "0.6.0", path = "transports/wasm-ext" }
 libp2p-yamux = { version = "0.13.0", path = "muxers/yamux" }
 parking_lot = "0.9.0"
-smallvec = "0.6"
+smallvec = "1.0"
 tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"

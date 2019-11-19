@@ -30,7 +30,7 @@ quick-error = "1.2"
 rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
 sha2 = "0.8.0"
-smallvec = "0.6"
+smallvec = "1.0"
 unsigned-varint = "0.2"
 void = "1"
 wasm-timer = "0.1"

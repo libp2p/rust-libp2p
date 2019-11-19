@@ -133,7 +133,7 @@ where
     /// Destroys all outbound streams and returns the corresponding user data.
     pub fn cancel_outgoing(&mut self) -> Vec<TUserData> {
         let mut out = Vec::with_capacity(self.outbound_substreams.len());
-        for (user_data, outbound) in self.outbound_substreams.drain() {
+        for (user_data, outbound) in self.outbound_substreams.drain(..) {
             out.push(user_data);
             self.muxer.destroy_outbound(outbound);
         }
@@ -201,7 +201,7 @@ where
         // The substreams that were produced will continue to work, as the muxer is held in an Arc.
         // However we will no longer process any further inbound or outbound substream, and we
         // therefore close everything.
-        for (_, outbound) in self.outbound_substreams.drain() {
+        for (_, outbound) in self.outbound_substreams.drain(..) {
             self.muxer.destroy_outbound(outbound);
         }
     }
