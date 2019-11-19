@@ -22,11 +22,11 @@
 
 pub mod handshake;
 
-use futures::{ready, Poll};
+use futures::ready;
 use futures::prelude::*;
 use log::{debug, trace};
 use snow;
-use std::{fmt, io, pin::Pin, ops::DerefMut, task::Context};
+use std::{fmt, io, pin::Pin, ops::DerefMut, task::{Context, Poll}};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
