@@ -103,7 +103,7 @@ impl Hmac {
 }
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
-/// `future::Stream`. The `Stream` and `Sink` produce and accept `BytesMut` objects.
+/// `future::Stream`. The `Stream` and `Sink` produce and accept `Vec<u8>` objects.
 ///
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).

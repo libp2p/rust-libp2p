@@ -1,3 +1,7 @@
+# Next Version
+
+- Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
+
 # Version 0.13.0 (2019-11-05)
 
 - Reworked the transport upgrade API. See https://github.com/libp2p/rust-libp2p/pull/1240 for more information.
