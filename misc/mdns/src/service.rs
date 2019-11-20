@@ -21,13 +21,22 @@
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
 use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
-use futures::prelude::*;
+use either::Either::{Left, Right};
+use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, pin::Pin, str, task::Context, task::Poll, time::Duration};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
+use lazy_static::lazy_static;
 
-pub use dns::MdnsResponseError;
+pub use dns::{MdnsResponseError, build_query_response, build_service_discovery_response};
+
+lazy_static! {
+    static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr = SocketAddr::from((
+        Ipv4Addr::new(224, 0, 0, 251),
+        5353,
+    ));
+}
 
 /// A running service that discovers libp2p peers and responds to other libp2p peers' queries on
 /// the local network.
@@ -52,43 +61,47 @@ pub use dns::MdnsResponseError;
 ///
 /// ```rust
 /// # use futures::prelude::*;
-/// # use libp2p_core::{identity, PeerId};
-/// # use libp2p_mdns::service::{MdnsService, MdnsPacket};
-/// # use std::{io, time::Duration};
+/// # use futures::executor::block_on;
+/// # use libp2p_core::{identity, Multiaddr, PeerId};
+/// # use libp2p_mdns::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
+/// # use std::{io, time::Duration, task::Poll};
 /// # fn main() {
 /// # let my_peer_id = PeerId::from(identity::Keypair::generate_ed25519().public());
-/// # let my_listened_addrs = Vec::new();
-/// let mut service = MdnsService::new().expect("Error while creating mDNS service");
-/// let _future_to_poll = futures::stream::poll_fn(move || -> Poll<Option<()>, io::Error> {
-///     loop {
-///         let packet = match service.poll() {
-///             Poll::Ready(packet) => packet,
-///             Poll::Pending => return Poll::Pending,
-///         };
+/// # let my_listened_addrs: Vec<Multiaddr> = vec![];
+/// # block_on(async {
+/// let mut service = MdnsService::new().await.expect("Error while creating mDNS service");
+/// let _future_to_poll = async {
+///     let (mut service, packet) = service.next().await;
 ///
-///         match packet {
-///             MdnsPacket::Query(query) => {
-///                 println!("Query from {:?}", query.remote_addr());
-///                 query.respond(
-///                     my_peer_id.clone(),
-///                     my_listened_addrs.clone(),
-///                     Duration::from_secs(120),
-///                 );
-///             }
-///             MdnsPacket::Response(response) => {
-///                 for peer in response.discovered_peers() {
-///                     println!("Discovered peer {:?}", peer.id());
-///                     for addr in peer.addresses() {
-///                         println!("Address = {:?}", addr);
-///                     }
+///     match packet {
+///         MdnsPacket::Query(query) => {
+///             println!("Query from {:?}", query.remote_addr());
+///             let resp = build_query_response(
+///                 query.query_id(),
+///                 my_peer_id.clone(),
+///                 vec![].into_iter(),
+///                 Duration::from_secs(120),
+///             ).unwrap();
+///             service.enqueue_response(resp);
+///         }
+///         MdnsPacket::Response(response) => {
+///             for peer in response.discovered_peers() {
+///                 println!("Discovered peer {:?}", peer.id());
+///                 for addr in peer.addresses() {
+///                     println!("Address = {:?}", addr);
 ///                 }
 ///             }
-///             MdnsPacket::ServiceDiscovery(query) => {
-///                 query.respond(std::time::Duration::from_secs(120));
-///             }
+///         }
+///         MdnsPacket::ServiceDiscovery(disc) => {
+///             let resp = build_service_discovery_response(
+///                 disc.query_id(),
+///                 Duration::from_secs(120),
+///             );
+///             service.enqueue_response(resp);
 ///         }
 ///     }
-/// }).for_each(|_| Ok(()));
+/// };
+/// # })
 /// # }
 pub struct MdnsService {
     /// Main socket for listening.
@@ -142,12 +155,12 @@ impl MdnsService {
         socket.set_multicast_loop_v4(true)?;
         socket.set_multicast_ttl_v4(255)?;
         // TODO: correct interfaces?
-        socket.join_multicast_v4(&From::from([224, 0, 0, 251]), &Ipv4Addr::UNSPECIFIED)?;
+        socket.join_multicast_v4(From::from([224, 0, 0, 251]), Ipv4Addr::UNSPECIFIED)?;
 
         Ok(MdnsService {
             socket,
             query_socket: UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16)).await?,
-            query_interval: Interval::new(Duration::from_secs(20)),
+            query_interval: Interval::new_at(Instant::now(), Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 2048],
             send_buffers: Vec::new(),
@@ -155,116 +168,102 @@ impl MdnsService {
         })
     }
 
-    pub async fn next_packet(&mut self) -> MdnsPacket {
-        // TODO: refactor this block
-        // Send a query every time `query_interval` fires.
-        // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
-        // no point in sending multiple requests in a row.
-        match Stream::poll_next(Pin::new(&mut self.query_interval), cx) {
-            Poll::Ready(_) => {
-                if !self.silent {
-                    let query = dns::build_query();
-                    self.query_send_buffers.push(query.to_vec());
-                }
-            }
-            Poll::Pending => (),
-        };
+    pub fn enqueue_response(&mut self, rsp: Vec<u8>) {
+        self.send_buffers.push(rsp);
+    }
 
-        // Flush the send buffer of the main socket.
-        while !self.send_buffers.is_empty() {
-            let to_send = self.send_buffers.remove(0);
-            match self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353))).await {
-                Ok(bytes_written) => {
-                    debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Err(_) => {
-                    // Errors are non-fatal because they can happen for example if we lose
-                    // connection to the network.
-                    self.send_buffers.clear();
-                    break;
-                }
-            }
-        }
+    /// Returns a future resolving to itself and the next received `MdnsPacket`.
+    //
+    // **Note**: Why does `next` take ownership of itself?
+    //
+    // `MdnsService::next` needs to be called from within `NetworkBehaviour`
+    // implementations. Given that traits can not have async methods the
+    // respective `NetworkBehaviour` implementation needs to somehow keep the
+    // Future returned by `MdnsService::next` across classic `poll`
+    // invocations. The instance method `next` can either take a reference or
+    // ownership of itself:
+    //
+    // 1. Taking a reference - If `MdnsService::poll` takes a reference to
+    // `&self` the respective `NetworkBehaviour` implementation would need to
+    // keep both the Future as well as its `MdnsService` instance across poll
+    // invocations. Given that in this case the Future would have a reference
+    // to `MdnsService`, the `NetworkBehaviour` implementation struct would
+    // need to be self-referential which is not possible without unsafe code in
+    // Rust.
+    //
+    // 2. Taking ownership - Instead `MdnsService::next` takes ownership of
+    // self and returns it alongside an `MdnsPacket` once the actual future
+    // resolves, not forcing self-referential structures on the caller.
+    pub async fn next(mut self) -> (Self, MdnsPacket) {
+        loop {
+            // Flush the send buffer of the main socket.
+            while !self.send_buffers.is_empty() {
+                let to_send = self.send_buffers.remove(0);
 
-        // Flush the query send buffer.
-        // This has to be after the push to `query_send_buffers`.
-        while !self.query_send_buffers.is_empty() {
-            let to_send = self.query_send_buffers.remove(0);
-            match self.socket.send_to(&to_send, &From::from(([224, 0, 0, 251], 5353))).await {
-                Ok(bytes_written) => {
-                    debug_assert_eq!(bytes_written, to_send.len());
-                }
-                Err(_) => {
-                    // Errors are non-fatal because they can happen for example if we lose
-                    // connection to the network.
-                    self.query_send_buffers.clear();
-                    break;
-                }
-            }
-        }
-
-        // TODO: block needs to be refactored
-        // Check for any incoming packet.
-        match AsyncDatagram::poll_recv_from(Pin::new(&mut self.socket), cx, &mut self.recv_buffer) {
-            Poll::Ready(Ok((len, from))) => {
-                match Packet::parse(&self.recv_buffer[..len]) {
-                    Ok(packet) => {
-                        if packet.header.query {
-                            if packet
-                                .questions
-                                .iter()
-                                .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
-                            {
-                                return Poll::Ready(MdnsPacket::Query(MdnsQuery {
-                                    from,
-                                    query_id: packet.header.id,
-                                    send_buffers: &mut self.send_buffers,
-                                }));
-                            } else if packet
-                                .questions
-                                .iter()
-                                .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
-                            {
-                                // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                                return Poll::Ready(MdnsPacket::ServiceDiscovery(
-                                    MdnsServiceDiscovery {
-                                        from,
-                                        query_id: packet.header.id,
-                                        send_buffers: &mut self.send_buffers,
-                                    },
-                                ));
-                            } else {
-                                // Note that ideally we would use a loop instead. However as of the
-                                // writing of this code non-lexical lifetimes haven't been merged
-                                // yet, and I can't manage to write this code without having borrow
-                                // issues.
-                                cx.waker().wake_by_ref();
-                                return Poll::Pending;
-                            }
-                        } else {
-                            return Poll::Ready(MdnsPacket::Response(MdnsResponse {
-                                packet,
-                                from,
-                            }));
-                        }
+                match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                    Ok(bytes_written) => {
+                        debug_assert_eq!(bytes_written, to_send.len());
                     }
                     Err(_) => {
-                        // Ignore errors while parsing the packet. We need to poll again for the
-                        // next packet.
-                        // Note that ideally we would use a loop instead. However as of the writing
-                        // of this code non-lexical lifetimes haven't been merged yet, and I can't
-                        // manage to write this code without having borrow issues.
-                        cx.waker().wake_by_ref();
-                        return Poll::Pending;
+                        // Errors are non-fatal because they can happen for example if we lose
+                        // connection to the network.
+                        self.send_buffers.clear();
+                        break;
                     }
                 }
             }
-            Poll::Pending => (),
-            Poll::Ready(Err(_)) => {
-                // Error are non-fatal and can happen if we get disconnected from example.
-                // The query interval will wake up the task at some point so that we can try again.
+
+            // Flush the query send buffer.
+            while !self.query_send_buffers.is_empty() {
+                let to_send = self.query_send_buffers.remove(0);
+
+                match self.query_socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                    Ok(bytes_written) => {
+                        debug_assert_eq!(bytes_written, to_send.len());
+                    }
+                    Err(_) => {
+                        // Errors are non-fatal because they can happen for example if we lose
+                        // connection to the network.
+                        self.query_send_buffers.clear();
+                        break;
+                    }
+                }
             }
-        };
+
+            // Either (left) listen for incoming packets or (right) send query packets whenever the
+            // query interval fires.
+            let selected_output = match futures::future::select(
+                Box::pin(self.socket.recv_from(&mut self.recv_buffer)),
+                Box::pin(self.query_interval.next()),
+            ).await {
+                future::Either::Left((recved, _)) => Left(recved),
+                future::Either::Right(_) => Right(()),
+            };
+
+            match selected_output {
+                Left(left) => match left {
+                    Ok((len, from)) => {
+                        match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
+                            Some(packet) => return (self, packet),
+                            None => {},
+                        }
+                    },
+                    Err(_) => {
+                        // Error are non-fatal and can happen if we get disconnected from example.
+                        // The query interval will wake up the task at some point so that we can try again.
+                    },
+                },
+                Right(_) => {
+                    // Ensure underlying task is woken up on the next interval tick.
+                    while let Some(_) = self.query_interval.next().now_or_never() {};
+
+                    if !self.silent {
+                        let query = dns::build_query();
+                        self.query_send_buffers.push(query.to_vec());
+                    }
+                }
+            };
+        }
     }
 }
 
@@ -278,58 +277,82 @@ impl fmt::Debug for MdnsService {
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
-pub enum MdnsPacket<'a> {
+pub enum MdnsPacket {
     /// A query made by a remote.
-    Query(MdnsQuery<'a>),
+    Query(MdnsQuery),
     /// A response sent by a remote in response to one of our queries.
-    Response(MdnsResponse<'a>),
+    Response(MdnsResponse),
     /// A request for service discovery.
-    ServiceDiscovery(MdnsServiceDiscovery<'a>),
+    ServiceDiscovery(MdnsServiceDiscovery),
+}
+
+impl MdnsPacket {
+    fn new_from_bytes(buf: &[u8], from: SocketAddr) -> Option<MdnsPacket> {
+        match Packet::parse(buf) {
+            Ok(packet) => {
+                if packet.header.query {
+                    if packet
+                        .questions
+                        .iter()
+                        .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
+                    {
+                        let query = MdnsPacket::Query(MdnsQuery {
+                            from,
+                            query_id: packet.header.id,
+                        });
+                        return Some(query);
+                    } else if packet
+                        .questions
+                        .iter()
+                        .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
+                    {
+                        // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+                        let discovery = MdnsPacket::ServiceDiscovery(
+                            MdnsServiceDiscovery {
+                                from,
+                                query_id: packet.header.id,
+                            },
+                        );
+                        return Some(discovery);
+                    } else {
+                        return None;
+                    }
+                } else {
+                    let resp = MdnsPacket::Response(MdnsResponse::new (
+                        packet,
+                        from,
+                    ));
+                    return Some(resp);
+                }
+            }
+            Err(_) => {
+                return None;
+            }
+        }
+    }
 }
 
 /// A received mDNS query.
-pub struct MdnsQuery<'a> {
+pub struct MdnsQuery {
     /// Sender of the address.
     from: SocketAddr,
     /// Id of the received DNS query. We need to pass this ID back in the results.
     query_id: u16,
-    /// Queue of pending buffers.
-    send_buffers: &'a mut Vec<Vec<u8>>,
 }
 
-impl<'a> MdnsQuery<'a> {
-    /// Respond to the query.
-    ///
-    /// Pass the ID of the local peer, and the list of addresses we're listening on.
-    ///
-    /// If there are more than 2^16-1 addresses, ignores the others.
-    ///
-    /// > **Note**: Keep in mind that we will also receive this response in an `MdnsResponse`.
-    #[inline]
-    pub fn respond<TAddresses>(
-        self,
-        peer_id: PeerId,
-        addresses: TAddresses,
-        ttl: Duration,
-    ) -> Result<(), MdnsResponseError>
-    where
-        TAddresses: IntoIterator<Item = Multiaddr>,
-        TAddresses::IntoIter: ExactSizeIterator,
-    {
-        let response =
-            dns::build_query_response(self.query_id, peer_id, addresses.into_iter(), ttl)?;
-        self.send_buffers.push(response);
-        Ok(())
-    }
-
+impl MdnsQuery {
     /// Source address of the packet.
-    #[inline]
     pub fn remote_addr(&self) -> &SocketAddr {
         &self.from
     }
+
+    /// Query id of the packet.
+    pub fn query_id(&self) -> u16 {
+        self.query_id
+    }
 }
 
-impl<'a> fmt::Debug for MdnsQuery<'a> {
+impl fmt::Debug for MdnsQuery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsQuery")
             .field("from", self.remote_addr())
@@ -339,31 +362,26 @@ impl<'a> fmt::Debug for MdnsQuery<'a> {
 }
 
 /// A received mDNS service discovery query.
-pub struct MdnsServiceDiscovery<'a> {
+pub struct MdnsServiceDiscovery {
     /// Sender of the address.
     from: SocketAddr,
     /// Id of the received DNS query. We need to pass this ID back in the results.
     query_id: u16,
-    /// Queue of pending buffers.
-    send_buffers: &'a mut Vec<Vec<u8>>,
 }
 
-impl<'a> MdnsServiceDiscovery<'a> {
-    /// Respond to the query.
-    #[inline]
-    pub fn respond(self, ttl: Duration) {
-        let response = dns::build_service_discovery_response(self.query_id, ttl);
-        self.send_buffers.push(response);
-    }
-
+impl MdnsServiceDiscovery {
     /// Source address of the packet.
-    #[inline]
     pub fn remote_addr(&self) -> &SocketAddr {
         &self.from
     }
+
+    /// Query id of the packet.
+    pub fn query_id(&self) -> u16 {
+        self.query_id
+    }
 }
 
-impl<'a> fmt::Debug for MdnsServiceDiscovery<'a> {
+impl fmt::Debug for MdnsServiceDiscovery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsServiceDiscovery")
             .field("from", self.remote_addr())
@@ -373,18 +391,15 @@ impl<'a> fmt::Debug for MdnsServiceDiscovery<'a> {
 }
 
 /// A received mDNS response.
-pub struct MdnsResponse<'a> {
-    packet: Packet<'a>,
+pub struct MdnsResponse {
+    peers: Vec<MdnsPeer>,
     from: SocketAddr,
 }
 
-impl<'a> MdnsResponse<'a> {
-    /// Returns the list of peers that have been reported in this packet.
-    ///
-    /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
-    pub fn discovered_peers<'b>(&'b self) -> impl Iterator<Item = MdnsPeer<'b>> {
-        let packet = &self.packet;
-        self.packet.answers.iter().filter_map(move |record| {
+impl MdnsResponse {
+    /// Creates a new `MdnsResponse` based on the provided `Packet`.
+    fn new(packet: Packet, from: SocketAddr) -> MdnsResponse {
+        let peers = packet.answers.iter().filter_map(|record| {
             if record.name.to_string().as_bytes() != SERVICE_NAME {
                 return None;
             }
@@ -410,13 +425,25 @@ impl<'a> MdnsResponse<'a> {
                 Err(_) => return None,
             };
 
-            Some(MdnsPeer {
-                packet,
+            Some(MdnsPeer::new (
+                &packet,
                 record_value,
                 peer_id,
-                ttl: record.ttl,
-            })
-        })
+                record.ttl,
+            ))
+        }).collect();
+
+        MdnsResponse {
+            peers,
+            from,
+        }
+    }
+
+    /// Returns the list of peers that have been reported in this packet.
+    ///
+    /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
+    pub fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
+        self.peers.iter()
     }
 
     /// Source address of the packet.
@@ -426,7 +453,7 @@ impl<'a> MdnsResponse<'a> {
     }
 }
 
-impl<'a> fmt::Debug for MdnsResponse<'a> {
+impl fmt::Debug for MdnsResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsResponse")
             .field("from", self.remote_addr())
@@ -435,41 +462,22 @@ impl<'a> fmt::Debug for MdnsResponse<'a> {
 }
 
 /// A peer discovered by the service.
-pub struct MdnsPeer<'a> {
-    /// The original packet which will be used to determine the addresses.
-    packet: &'a Packet<'a>,
-    /// Cached value of `concat(base32(peer_id), service name)`.
-    record_value: String,
+pub struct MdnsPeer {
+    addrs: Vec<Multiaddr>,
     /// Id of the peer.
     peer_id: PeerId,
     /// TTL of the record in seconds.
     ttl: u32,
 }
 
-impl<'a> MdnsPeer<'a> {
-    /// Returns the id of the peer.
-    #[inline]
-    pub fn id(&self) -> &PeerId {
-        &self.peer_id
-    }
-
-    /// Returns the requested time-to-live for the record.
-    #[inline]
-    pub fn ttl(&self) -> Duration {
-        Duration::from_secs(u64::from(self.ttl))
-    }
-
-    /// Returns the list of addresses the peer says it is listening on.
-    ///
-    /// Filters out invalid addresses.
-    pub fn addresses<'b>(&'b self) -> impl Iterator<Item = Multiaddr> + 'b {
-        let my_peer_id = &self.peer_id;
-        let record_value = &self.record_value;
-        self.packet
+impl MdnsPeer {
+    /// Creates a new `MdnsPeer` based on the provided `Packet`.
+    pub fn new(packet: &Packet, record_value: String, my_peer_id: PeerId, ttl: u32) -> MdnsPeer {
+        let addrs = packet
             .additional
             .iter()
-            .filter_map(move |add_record| {
-                if &add_record.name.to_string() != record_value {
+            .filter_map(|add_record| {
+                if add_record.name.to_string() != record_value {
                     return None;
                 }
 
@@ -480,7 +488,7 @@ impl<'a> MdnsPeer<'a> {
                 }
             })
             .flat_map(|txt| txt.iter())
-            .filter_map(move |txt| {
+            .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
                 let addr = match dns::decode_character_string(txt) {
                     Ok(a) => a,
@@ -498,15 +506,40 @@ impl<'a> MdnsPeer<'a> {
                     Err(_) => return None,
                 };
                 match addr.pop() {
-                    Some(Protocol::P2p(ref peer_id)) if peer_id == my_peer_id => (),
+                    Some(Protocol::P2p(ref peer_id)) if peer_id == &my_peer_id => (),
                     _ => return None,
                 };
                 Some(addr)
-            })
+            }).collect();
+
+        MdnsPeer {
+            addrs,
+            peer_id: my_peer_id.clone(),
+            ttl,
+        }
+    }
+
+    /// Returns the id of the peer.
+    #[inline]
+    pub fn id(&self) -> &PeerId {
+        &self.peer_id
+    }
+
+    /// Returns the requested time-to-live for the record.
+    #[inline]
+    pub fn ttl(&self) -> Duration {
+        Duration::from_secs(u64::from(self.ttl))
+    }
+
+    /// Returns the list of addresses the peer says it is listening on.
+    ///
+    /// Filters out invalid addresses.
+    pub fn addresses(&self) -> &Vec<Multiaddr> {
+        &self.addrs
     }
 }
 
-impl<'a> fmt::Debug for MdnsPeer<'a> {
+impl fmt::Debug for MdnsPeer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsPeer")
             .field("peer_id", &self.peer_id)
@@ -516,42 +549,87 @@ impl<'a> fmt::Debug for MdnsPeer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use futures::prelude::*;
+    use futures::executor::block_on;
     use libp2p_core::PeerId;
-    use std::{io, task::Poll, time::Duration};
+    use std::{io::{Error, ErrorKind}, time::Duration};
+    use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
     use multiaddr::multihash::*;
 
     fn discover(peer_id: PeerId) {
-        let mut service = MdnsService::new().unwrap();
-        let stream = stream::poll_fn(move |cx| -> Poll<Option<Result<(), io::Error>>> {
+        block_on(async {
+            let mut service = MdnsService::new().await.unwrap();
             loop {
-                let packet = match service.poll(cx) {
-                    Poll::Ready(packet) => packet,
-                    Poll::Pending => return Poll::Pending,
-                };
+                let next = service.next().await;
+                service = next.0;
 
-                match packet {
+                match next.1 {
                     MdnsPacket::Query(query) => {
-                        query.respond(peer_id.clone(), None, Duration::from_secs(120)).unwrap();
+                        let resp = crate::dns::build_query_response(
+                            query.query_id(),
+                            peer_id.clone(),
+                            vec![].into_iter(),
+                            Duration::from_secs(120),
+                        ).unwrap();
+                        service.enqueue_response(resp);
                     }
                     MdnsPacket::Response(response) => {
                         for peer in response.discovered_peers() {
                             if peer.id() == &peer_id {
-                                return Poll::Ready(None);
+                                return;
                             }
                         }
                     }
-                    MdnsPacket::ServiceDiscovery(_) => {}
+                    MdnsPacket::ServiceDiscovery(_) => panic!("did not expect a service discovery packet")
                 }
             }
-        });
+        })
+    }
 
-        futures::executor::block_on(
-            stream
-                .map_err(|err| panic!("{:?}", err))
-                .for_each(|_| future::ready(())),
-        );
+    // As of today the underlying UDP socket is not stubbed out. Thus tests run in parallel to this
+    // unit tests inter fear with it. Test needs to be run in sequence to ensure test properties.
+    #[test]
+    fn respect_query_interval() {
+        let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
+            .into_iter()
+            .map(|i| i.addr.ip())
+            .collect();
+
+        let fut = async {
+            let mut service = MdnsService::new().await.unwrap();
+            let mut sent_queries = vec![];
+
+            loop {
+                let next = service.next().await;
+                service = next.0;
+
+                match next.1 {
+                    MdnsPacket::Query(query) => {
+                        // Ignore queries from other nodes.
+                        let source_ip = query.remote_addr().ip();
+                        if !own_ips.contains(&source_ip) {
+                            continue;
+                        }
+
+                        sent_queries.push(query);
+
+                        if sent_queries.len() > 1 {
+                            return Ok(())
+                        }
+                    }
+                    // Ignore response packets. We don't stub out the UDP socket, thus this is
+                    // either random noise from the network, or noise from other unit tests running
+                    // in parallel.
+                    MdnsPacket::Response(_) => {},
+                    MdnsPacket::ServiceDiscovery(_) => {
+                        return Err(Error::new(ErrorKind::Other, "did not expect a service discovery packet"));
+                    },
+                }
+            }
+        };
+
+        // TODO: This might be too long for a unit test.
+        block_on(fut.timeout(Duration::from_secs(41))).unwrap();
     }
 
     #[test]

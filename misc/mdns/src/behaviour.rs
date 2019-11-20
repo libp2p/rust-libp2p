@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::service::{MdnsService, MdnsPacket};
+use crate::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
 use futures::prelude::*;
 use libp2p_core::{address_translation, ConnectedPoint, Multiaddr, PeerId, multiaddr::Protocol};
 use libp2p_swarm::{
@@ -30,14 +30,16 @@ use libp2p_swarm::{
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, marker::PhantomData, pin::Pin, time::Duration, task::Context, task::Poll};
+use std::{cmp, fmt, io, iter, marker::PhantomData, mem, pin::Pin, time::Duration, task::Context, task::Poll};
 use wasm_timer::{Delay, Instant};
+
+const MDNS_RESPONSE_TTL: std::time::Duration = Duration::from_secs(5 * 60);
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 pub struct Mdns<TSubstream> {
     /// The inner service.
-    service: MdnsService,
+    service: MaybeBusyMdnsService,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -45,7 +47,7 @@ pub struct Mdns<TSubstream> {
     /// can appear multiple times.
     discovered_nodes: SmallVec<[(PeerId, Multiaddr, Instant); 8]>,
 
-    /// Future that fires when the TTL at least one node in `discovered_nodes` expires.
+    /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
     closest_expiration: Option<Delay>,
@@ -54,11 +56,41 @@ pub struct Mdns<TSubstream> {
     marker: PhantomData<TSubstream>,
 }
 
+/// `MdnsService::next` takes ownership of `self`, returning a future that resolves with both itself
+/// and a `MdnsPacket` (similar to the old Tokio socket send style). The two states are thus `Free`
+/// with an `MdnsService` or `Busy` with a future returning the original `MdnsService` and an
+/// `MdnsPacket`.
+enum MaybeBusyMdnsService {
+    Free(MdnsService),
+    Busy(Pin<Box<dyn Future<Output = (MdnsService, MdnsPacket)> + Send>>),
+    Poisoned,
+}
+
+impl fmt::Debug for MaybeBusyMdnsService {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MaybeBusyMdnsService::Free(service) => {
+                fmt.debug_struct("MaybeBusyMdnsService::Free")
+                    .field("service", service)
+                    .finish()
+            },
+            MaybeBusyMdnsService::Busy(_) => {
+                fmt.debug_struct("MaybeBusyMdnsService::Busy")
+                    .finish()
+            }
+            MaybeBusyMdnsService::Poisoned => {
+                fmt.debug_struct("MaybeBusyMdnsService::Poisoned")
+                    .finish()
+            }
+        }
+    }
+}
+
 impl<TSubstream> Mdns<TSubstream> {
     /// Builds a new `Mdns` behaviour.
     pub async fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(Mdns {
-            service: MdnsService::new().await?,
+            service: MaybeBusyMdnsService::Free(MdnsService::new().await?),
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
             marker: PhantomData,
@@ -80,7 +112,7 @@ pub enum MdnsEvent {
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
     /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
-    /// been refreshed, we remove it from the list emit it as an `Expired` event.
+    /// been refreshed, we remove it from the list and emit it as an `Expired` event.
     Expired(ExpiredAddrsIter),
 }
 
@@ -210,18 +242,40 @@ where
 
         // Polling the mDNS service, and obtain the list of nodes discovered this round.
         let discovered = loop {
-            let event = match self.service.poll(cx) {
-                Poll::Ready(ev) => ev,
-                Poll::Pending => return Poll::Pending,
+            let service = mem::replace(&mut self.service, MaybeBusyMdnsService::Poisoned);
+
+            let packet = match service {
+                MaybeBusyMdnsService::Free(service) => {
+                    self.service = MaybeBusyMdnsService::Busy(Box::pin(service.next()));
+                    continue;
+                },
+                MaybeBusyMdnsService::Busy(mut fut) => {
+                    match fut.as_mut().poll(cx) {
+                        Poll::Ready((service, packet)) => {
+                            self.service = MaybeBusyMdnsService::Free(service);
+                            packet
+                        },
+                        Poll::Pending => {
+                            self.service = MaybeBusyMdnsService::Busy(fut);
+                            return Poll::Pending;
+                        }
+                    }
+                },
+                MaybeBusyMdnsService::Poisoned => panic!("Mdns poisoned"),
             };
 
-            match event {
+            match packet {
                 MdnsPacket::Query(query) => {
-                    let _ = query.respond(
-                        params.local_peer_id().clone(),
-                        params.listened_addresses(),
-                        Duration::from_secs(5 * 60)
-                    );
+                    // MaybeBusyMdnsService should always be Free.
+                    if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
+                        let resp = build_query_response(
+                            query.query_id(),
+                            params.local_peer_id().clone(),
+                            params.listened_addresses().into_iter(),
+                            MDNS_RESPONSE_TTL,
+                        );
+                        service.enqueue_response(resp.unwrap());
+                    } else { debug_assert!(false); }
                 },
                 MdnsPacket::Response(response) => {
                     // We replace the IP address with the address we observe the
@@ -240,12 +294,12 @@ where
 
                         let new_expiration = Instant::now() + peer.ttl();
 
-                        let mut addrs = Vec::new();
+                        let mut addrs: Vec<Multiaddr> = Vec::new();
                         for addr in peer.addresses() {
                             if let Some(new_addr) = address_translation(&addr, &observed) {
-                                addrs.push(new_addr)
+                                addrs.push(new_addr.clone())
                             }
-                            addrs.push(addr)
+                            addrs.push(addr.clone())
                         }
 
                         for addr in addrs {
@@ -264,17 +318,26 @@ where
                     break discovered;
                 },
                 MdnsPacket::ServiceDiscovery(disc) => {
-                    disc.respond(Duration::from_secs(5 * 60));
+                    // MaybeBusyMdnsService should always be Free.
+                    if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
+                        let resp = build_service_discovery_response(
+                            disc.query_id(),
+                            MDNS_RESPONSE_TTL,
+                        );
+                        service.enqueue_response(resp);
+                    } else { debug_assert!(false); }
                 },
             }
         };
 
-        // As the final step, we need to refresh `closest_expiration`.
+        // Getting this far implies that we discovered new nodes. As the final step, we need to
+        // refresh `closest_expiration`.
         self.closest_expiration = self.discovered_nodes.iter()
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
             .map(Delay::new_at);
+
         Poll::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
             inner: discovered.into_iter(),
         })))
@@ -288,4 +351,3 @@ impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
             .finish()
     }
 }
-
