@@ -13,8 +13,8 @@ categories = ["network-programming", "asynchronous"]
 proc-macro = true
 
 [dependencies]
-syn = { version = "1.0", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
-quote = "1.0"
+syn = { version = "1.0.8", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+quote = "1.0.2"
 
 [dev-dependencies]
 libp2p = { version = "0.13.0", path = "../.." }

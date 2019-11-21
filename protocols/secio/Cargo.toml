@@ -10,33 +10,33 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-futures = "0.1"
+bytes = "0.4.12"
+futures = "0.1.29"
 libp2p-core = { version = "0.13.0", path = "../../core" }
-log = "0.4.6"
-protobuf = "2.8"
+log = "0.4.8"
+protobuf = "2.8.1"
 rand = "0.6.5"
-aes-ctr = "0.3"
-aesni = { version = "0.6", features = ["nocheck"], optional = true }
+aes-ctr = "0.3.0"
+aesni = { version = "0.6.0", features = ["nocheck"], optional = true }
 twofish = "0.2.0"
-ctr = "0.3"
-lazy_static = "1.2.0"
+ctr = "0.3.2"
+lazy_static = "1.4.0"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
-tokio-io = "0.1.0"
+tokio-io = "0.1.12"
 tokio-codec = "0.1.1"
 sha2 = "0.8.0"
-hmac = "0.7.0"
+hmac = "0.7.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 untrusted = "0.7.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3.10"
-parity-send-wrapper = "0.1"
-wasm-bindgen = "0.2.33"
-wasm-bindgen-futures = "0.3.10"
-web-sys = { version = "0.3.10", features = ["Crypto", "CryptoKey", "SubtleCrypto", "Window"] }
+js-sys = "0.3.32"
+parity-send-wrapper = "0.1.0"
+wasm-bindgen = "0.2.55"
+wasm-bindgen-futures = "0.3.27"
+web-sys = { version = "0.3.32", features = ["Crypto", "CryptoKey", "SubtleCrypto", "Window"] }
 
 [features]
 default = ["secp256k1"]
@@ -47,8 +47,8 @@ aes-all = ["aesni"]
 criterion = "0.3.0"
 libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
 libp2p-mplex = { version = "0.13.0", path = "../../muxers/mplex" }
-tokio = "0.1"
-tokio-tcp = "0.1"
+tokio = "0.1.22"
+tokio-tcp = "0.1.3"
 
 [[bench]]
 name = "bench"
