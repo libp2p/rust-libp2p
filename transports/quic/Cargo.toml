@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 [package]
-name = "libp2p-transport-quic"
+name = "libp2p-quic"
 version = "0.13.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
@@ -28,3 +28,12 @@ edition = "2018"
 [dependencies]
 quinn-proto = "0.4.0"
 rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
+futures = { version = "0.3.1", features = ["compat"] }
+libp2p-core = { path = "../../core", version = "0.13.1" }
+log = "0.4.8"
+tokio-io = "0.1.12"
+quinn = "0.4.0"
+tokio = "0.1.22"
+get_if_addrs = "0.5.3"
+ipnet = "2.1.0"
+err-derive = "0.2.1"
