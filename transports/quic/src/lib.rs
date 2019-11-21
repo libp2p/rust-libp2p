@@ -39,7 +39,7 @@
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
 use futures::{
-    compat::{Compat, Compat01As03},
+    compat::Compat,
     future::{self, Either},
     prelude::*,
     stream::{self, Chain, Once, Stream},
@@ -79,13 +79,12 @@ pub struct QuicConfig {
 /// An error in the QUIC transport
 #[derive(Debug, err_derive::Error)]
 pub enum QuicError {
-	/// An I/O error
-	#[error(display = "Endpoint error: {}", _0)]
-	EndpointError(#[source] quinn::EndpointError),
-	#[error(display = "QUIC Protocol Error: {}", _0)]
-	ProtocolError(#[source] quinn::ConnectionError),
+    /// An I/O error
+    #[error(display = "Endpoint error: {}", _0)]
+    EndpointError(#[source] quinn::EndpointError),
+    #[error(display = "QUIC Protocol Error: {}", _0)]
+    ProtocolError(#[source] quinn::ConnectionError),
 }
-
 
 impl QuicConfig {
     /// Creates a new configuration object for TCP/IP.
@@ -101,36 +100,34 @@ impl Default for QuicConfig {
 }
 
 pub struct QuicIncoming {
-    incoming: Compat01As03<quinn::Incoming>,
+    incoming: quinn::Incoming,
     addr: Multiaddr,
 }
-type CompatConnecting = Compat<
-    future::MapErr<
-        Compat01As03<quinn::Connecting>,
-        fn(quinn::ConnectionError) -> QuicError,
-    >,
->;
+
+type CompatConnecting =
+    Compat<future::MapErr<quinn::Connecting, fn(quinn::ConnectionError) -> QuicError>>;
+
 impl Stream for QuicIncoming {
     type Item = Result<ListenerEvent<CompatConnecting>, QuicError>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         ctx: &mut std::task::Context,
     ) -> std::task::Poll<Option<Self::Item>> {
-        use std::{pin::Pin, task::Poll};
         use futures::compat::Future01CompatExt;
-		fn dummy_error(s: quinn::ConnectionError) -> QuicError {
-			QuicError::ProtocolError(s)
-		}
+        use std::{pin::Pin, task::Poll};
+        fn dummy_error(s: quinn::ConnectionError) -> QuicError {
+            QuicError::ProtocolError(s)
+        }
         match Pin::new(&mut self.incoming).poll_next(ctx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Some(Ok(upgrade))) => Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                upgrade: upgrade.compat().map_err(QuicError::ProtocolError as _).compat(),
-                local_addr: self.addr.clone(),
-                remote_addr: self.addr.clone(),
-            }))),
-            Poll::Ready(Some(Err(()))) => {
-                panic!("this never happens according to a source code comment in quinn; qed")
-            }
+            Poll::Ready(Some(upgrade)) => {
+				let peer = upgrade.remote_address();
+				Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+					remote_addr: ip_to_multiaddr(peer.ip(), peer.port()),
+					upgrade: upgrade.map_err(QuicError::ProtocolError as _).compat(),
+					local_addr: self.addr.clone(),
+				})))
+			}
             Poll::Ready(None) => Poll::Ready(None),
         }
     }
@@ -145,32 +142,28 @@ impl Transport for QuicConfig {
     type Dial = Self::ListenerUpgrade;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        use futures::compat::{Stream01CompatExt, Future01CompatExt};
+        use futures::compat::{Future01CompatExt, Stream01CompatExt};
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
             sa
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        let (driver, _endpoint, incoming) =
-            self.endpoint_builder
-                .bind(&socket_addr)
-                .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
-        tokio::spawn(driver.compat().map_err(drop).compat());
-        Ok(QuicIncoming {
-            incoming: incoming.compat(),
-            addr,
-        }
-        .compat())
+        let (driver, _endpoint, incoming) = self
+            .endpoint_builder
+            .bind(&socket_addr)
+            .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
+        tokio::spawn(driver.map_err(drop).compat());
+        Ok(QuicIncoming { incoming, addr }.compat())
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                return Err(TransportError::Other(QuicError::EndpointError(EndpointError::Socket(
-                    io::ErrorKind::ConnectionRefused.into(),
-                ))));
+                return Err(TransportError::Other(QuicError::EndpointError(
+                    EndpointError::Socket(io::ErrorKind::ConnectionRefused.into()),
+                )));
             }
             socket_addr
         } else {
@@ -209,7 +202,8 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
         IpAddr::V4(ip) => Protocol::Ip4(ip),
         IpAddr::V6(ip) => Protocol::Ip6(ip),
     };
-    let it = iter::once(proto).chain(iter::once(Protocol::Udp(port)));
+	let end = [Protocol::Udp(port), Protocol::Quic];
+    let it = iter::once(proto).chain(end.into_iter().cloned());
     Multiaddr::from_iter(it)
 }
 
