@@ -33,14 +33,14 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use futures::{prelude::*, channel::oneshot};
+use futures::{prelude::*, channel::oneshot, future::BoxFuture};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
     transport::{TransportError, ListenerEvent}
 };
 use log::{error, debug, trace};
-use std::{error, fmt, io, net::ToSocketAddrs, pin::Pin};
+use std::{error, fmt, io, net::ToSocketAddrs};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
 ///
@@ -90,8 +90,9 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport + 'static,
-    T::Error: 'static,
+    T: Transport + Send + 'static,
+    T::Error: Send,
+    T::Dial: Send
 {
     type Output = T::Output;
     type Error = DnsErr<T::Error>;
@@ -102,7 +103,7 @@ where
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
         future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
-        Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>
+        BoxFuture<'static, Result<Self::Output, Self::Error>>
     >;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
@@ -166,21 +167,21 @@ where
             })
             .collect::<stream::FuturesOrdered<_>>();
 
-        let inner = self.inner;
-        Ok(future::Either::Right(Box::pin(async {
-            let addr = addr;
-            let outcome: Vec<_> = resolve_futs.collect().await;
-            let outcome = outcome.into_iter().collect::<Result<Vec<_>, _>>()?;
-            let outcome = outcome.into_iter().collect::<Multiaddr>();
-            debug!("DNS resolution outcome: {} => {}", addr, outcome);
+        let future = resolve_futs.collect::<Vec<_>>()
+            .then(move |outcome| async move {
+                let outcome = outcome.into_iter().collect::<Result<Vec<_>, _>>()?;
+                let outcome = outcome.into_iter().collect::<Multiaddr>();
+                debug!("DNS resolution outcome: {} => {}", addr, outcome);
 
-            match inner.dial(outcome) {
-                Ok(d) => d.await.map_err(DnsErr::Underlying),
-                Err(TransportError::MultiaddrNotSupported(_addr)) =>
-                    Err(DnsErr::MultiaddrNotSupported),
-                Err(TransportError::Other(err)) => Err(DnsErr::Underlying(err)),
-            }
-        }) as Pin<Box<_>>))
+                match self.inner.dial(outcome) {
+                    Ok(d) => d.await.map_err(DnsErr::Underlying),
+                    Err(TransportError::MultiaddrNotSupported(_addr)) =>
+                        Err(DnsErr::MultiaddrNotSupported),
+                    Err(TransportError::Other(err)) => Err(DnsErr::Underlying(err))
+                }
+            });
+
+        Ok(future.boxed().right_future())
     }
 }
 
@@ -231,14 +232,13 @@ where TErr: error::Error + 'static
 #[cfg(test)]
 mod tests {
     use super::DnsConfig;
-    use futures::prelude::*;
+    use futures::{future::BoxFuture, prelude::*, stream::BoxStream};
     use libp2p_core::{
         Transport,
         multiaddr::{Protocol, Multiaddr},
         transport::ListenerEvent,
         transport::TransportError,
     };
-    use std::pin::Pin;
 
     #[test]
     fn basic_resolve() {
@@ -248,9 +248,9 @@ mod tests {
         impl Transport for CustomTransport {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>>>;
-            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
-            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+            type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
