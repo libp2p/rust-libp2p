@@ -80,8 +80,8 @@ pub struct QuicConfig {
 #[derive(Debug, err_derive::Error)]
 pub enum QuicError {
 	/// An I/O error
-	#[error(display = "I/O error: {}", _0)]
-	IoError(#[source] std::io::Error),
+	#[error(display = "Endpoint error: {}", _0)]
+	EndpointError(#[source] quinn::EndpointError),
 	#[error(display = "QUIC Protocol Error: {}", _0)]
 	ProtocolError(#[source] quinn::ConnectionError),
 }
@@ -155,11 +155,7 @@ impl Transport for QuicConfig {
         let (driver, _endpoint, incoming) =
             self.endpoint_builder
                 .bind(&socket_addr)
-                .map_err(|err| match err {
-                    EndpointError::Config(_) => unreachable!("this only happens if the configuration is invalid; we always pass a valid configuration; qed"),
-					EndpointError::Socket(e) => TransportError::Other(QuicError::IoError(e)),
-					EndpointError::Tls(_) | EndpointError::WebPki(_) => unimplemented!(),
-                })?;
+                .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
         tokio::spawn(driver.compat().map_err(drop).compat());
         Ok(QuicIncoming {
             incoming: incoming.compat(),
@@ -172,9 +168,9 @@ impl Transport for QuicConfig {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                return Err(TransportError::Other(QuicError::IoError(
+                return Err(TransportError::Other(QuicError::EndpointError(EndpointError::Socket(
                     io::ErrorKind::ConnectionRefused.into(),
-                )));
+                ))));
             }
             socket_addr
         } else {
