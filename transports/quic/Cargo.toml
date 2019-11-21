@@ -31,7 +31,7 @@ rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
 libp2p-core = { path = "../../core", version = "0.13.1" }
 log = "0.4.8"
 tokio-io = "0.1.12"
-quinn = { git = "https://github.com/paritytech/quinn", rev = "demi-connecting-peer-address" }
+quinn = { git = "https://github.com/djc/quinn", rev = "master" }
 tokio = "0.1.22"
 ipnet = "2.1.0"
 err-derive = "0.2.1"
