@@ -44,14 +44,13 @@ use futures::{
     prelude::*,
     stream::{self, Chain, Once, Stream},
 };
-use get_if_addrs::{get_if_addrs, IfAddr};
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use ipnet::IpNet;
 use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
+    multiaddr::{Multiaddr, Protocol, host_addresses, ip_to_multiaddr},
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use log::{debug, trace};
+use log::debug;
 pub use quinn::{EndpointBuilder, EndpointError, ServerConfig};
 use std::{
     collections::VecDeque,
@@ -115,19 +114,16 @@ impl Stream for QuicIncoming {
     ) -> std::task::Poll<Option<Self::Item>> {
         use futures::compat::Future01CompatExt;
         use std::{pin::Pin, task::Poll};
-        fn dummy_error(s: quinn::ConnectionError) -> QuicError {
-            QuicError::ProtocolError(s)
-        }
         match Pin::new(&mut self.incoming).poll_next(ctx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Some(upgrade)) => {
-				let peer = upgrade.remote_address();
-				Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-					remote_addr: ip_to_multiaddr(peer.ip(), peer.port()),
-					upgrade: upgrade.map_err(QuicError::ProtocolError as _).compat(),
-					local_addr: self.addr.clone(),
-				})))
-			}
+                let peer = upgrade.remote_address();
+                Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
+                    remote_addr: ip_to_multiaddr(peer.ip(), &[Protocol::Udp(peer.port()), Protocol::Quic]),
+                    upgrade: upgrade.map_err(QuicError::ProtocolError as _).compat(),
+                    local_addr: self.addr.clone(),
+                })))
+            }
             Poll::Ready(None) => Poll::Ready(None),
         }
     }
@@ -194,42 +190,6 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
         }
         _ => Err(()),
     }
-}
-
-// Create a [`Multiaddr`] from the given IP address and port number.
-fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
-    let proto = match ip {
-        IpAddr::V4(ip) => Protocol::Ip4(ip),
-        IpAddr::V6(ip) => Protocol::Ip6(ip),
-    };
-	let end = [Protocol::Udp(port), Protocol::Quic];
-    let it = iter::once(proto).chain(end.into_iter().cloned());
-    Multiaddr::from_iter(it)
-}
-
-// Collect all local host addresses and use the provided port number as listen port.
-fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
-    let mut addrs = Vec::new();
-    for iface in get_if_addrs()? {
-        let ip = iface.ip();
-        let ma = ip_to_multiaddr(ip, port);
-        let ipn = match iface.addr {
-            IfAddr::V4(ip4) => {
-                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
-                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
-                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
-                IpNet::V4(ipnet)
-            }
-            IfAddr::V6(ip6) => {
-                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
-                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
-                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
-                IpNet::V6(ipnet)
-            }
-        };
-        addrs.push((ip, ipn, ma))
-    }
-    Ok(addrs)
 }
 
 /// Listen address information.

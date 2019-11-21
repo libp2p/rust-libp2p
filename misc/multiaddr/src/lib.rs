@@ -8,6 +8,8 @@ mod from_url;
 mod util;
 
 use bytes::{Bytes, BytesMut};
+use get_if_addrs::{get_if_addrs, IfAddr};
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{
     Deserialize,
     Deserializer,
@@ -18,6 +20,7 @@ use serde::{
 use std::{
     convert::TryFrom,
     fmt,
+    io,
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     result::Result as StdResult,
@@ -302,6 +305,41 @@ impl TryFrom<Bytes> for Multiaddr {
         }
         Ok(Multiaddr { bytes: v.into() })
     }
+}
+
+/// Create a [`Multiaddr`] from the given IP address and suffix.
+pub fn ip_to_multiaddr(ip: IpAddr, suffix: &[Protocol]) -> Multiaddr {
+    let proto = match ip {
+        IpAddr::V4(ip) => Protocol::Ip4(ip),
+        IpAddr::V6(ip) => Protocol::Ip6(ip),
+    };
+    let it = std::iter::once(proto).chain(suffix.into_iter().cloned());
+    Multiaddr::from_iter(it)
+}
+
+/// Collect all local host addresses and use the provided port number as listen port.
+pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
+    let mut addrs = Vec::new();
+    for iface in get_if_addrs()? {
+        let ip = iface.ip();
+        let ma = ip_to_multiaddr(ip, suffix);
+        let ipn = match iface.addr {
+            IfAddr::V4(ip4) => {
+                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
+                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
+                IpNet::V4(ipnet)
+            }
+            IfAddr::V6(ip6) => {
+                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
+                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
+                IpNet::V6(ipnet)
+            }
+        };
+        addrs.push((ip, ipn, ma))
+    }
+    Ok(addrs)
 }
 
 impl TryFrom<BytesMut> for Multiaddr {
