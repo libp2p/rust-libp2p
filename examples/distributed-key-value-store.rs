@@ -120,14 +120,7 @@ fn main() -> Result<()> {
     };
 
     // Read full lines from stdin
-    let stdin = stream::unfold(io::stdin(), |stdin| async move {
-        let mut buf = String::new();
-        if let Err(e) = stdin.read_line(&mut buf).await {
-            return Some((Err(e), stdin))
-        }
-        Some((Ok(buf), stdin))
-    });
-    futures::pin_mut!(stdin);
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns.
     Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
