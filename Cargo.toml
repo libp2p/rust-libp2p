@@ -15,7 +15,7 @@ secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 
 [dependencies]
 bytes = "0.4"
-futures = "0.1"
+futures = "0.3.1"
 multiaddr = { package = "parity-multiaddr", version = "0.5.1", path = "misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.4", path = "misc/multihash" }
 lazy_static = "1.2"
@@ -34,10 +34,7 @@ libp2p-wasm-ext = { version = "0.6.0", path = "transports/wasm-ext" }
 libp2p-yamux = { version = "0.13.0", path = "muxers/yamux" }
 parking_lot = "0.9.0"
 smallvec = "1.0"
-tokio-codec = "0.1"
-tokio-executor = "0.1"
-tokio-io = "0.1"
-wasm-timer = "0.1"
+wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.5.0", path = "protocols/deflate" }
