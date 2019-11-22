@@ -10,12 +10,13 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-tls = "0.5"
+async-tls = "0.6"
 bytes = "0.4.12"
 either = "1.5.3"
-futures-preview = "0.3.0-alpha.18"
+futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.8"
+quicksink = { git = "https://github.com/paritytech/quicksink.git" }
 rustls = "0.16"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 soketto = { git = "https://github.com/paritytech/soketto.git", branch = "develop", features = ["deflate"] }

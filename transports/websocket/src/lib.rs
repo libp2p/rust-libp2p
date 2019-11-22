@@ -26,7 +26,7 @@ pub mod tls;
 
 use error::Error;
 use framed::BytesConnection;
-use futures::prelude::*;
+use futures::{future::BoxFuture, prelude::*, stream::BoxStream};
 use libp2p_core::{
     ConnectedPoint,
     Transport,
@@ -34,7 +34,6 @@ use libp2p_core::{
     transport::{map::{MapFuture, MapStream}, ListenerEvent, TransportError}
 };
 use rw_stream_sink::RwStreamSink;
-use std::pin::Pin;
 
 /// A Websocket transport.
 #[derive(Debug, Clone)]
@@ -116,22 +115,19 @@ where
 }
 
 /// Type alias corresponding to `framed::WsConfig::Listener`.
-pub type InnerStream<T, E> =
-    Pin<Box<(dyn Stream<Item = Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>> + Send)>>;
+pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
-pub type InnerFuture<T, E> =
-    Pin<Box<(dyn Future<Output = Result<BytesConnection<T>, Error<E>>> + Send)>>;
+pub type InnerFuture<T, E> = BoxFuture<'static, Result<BytesConnection<T>, Error<E>>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
-pub type WrapperFn<T> =
-    fn(BytesConnection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
+pub type WrapperFn<T> = fn(BytesConnection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
 
 /// Wrap a websocket connection producing data frames into a `RwStreamSink`
 /// implementing `AsyncRead` + `AsyncWrite`.
 fn wrap_connection<T>(c: BytesConnection<T>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
 where
-    T: AsyncRead + AsyncWrite
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     RwStreamSink::new(c)
 }
