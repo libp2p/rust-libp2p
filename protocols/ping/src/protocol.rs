@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
+use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use log::debug;
 use rand::{distributions, prelude::*};
-use std::{io, iter, pin::Pin, time::Duration};
+use std::{io, iter, time::Duration};
 use wasm_timer::Instant;
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
@@ -55,36 +55,35 @@ impl UpgradeInfo for Ping {
 
 impl<TSocket> InboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = ();
     type Error = io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<(), io::Error>>>>;
+    type Future = BoxFuture<'static, Result<(), io::Error>>;
 
     fn upgrade_inbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        Box::pin(async move {
+        async move {
             let mut payload = [0u8; 32];
             socket.read_exact(&mut payload).await?;
             socket.write_all(&payload).await?;
             socket.close().await?;
             Ok(())
-        })
+        }.boxed()
     }
 }
 
 impl<TSocket> OutboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = Duration;
     type Error = io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Duration, io::Error>>>>;
+    type Future = BoxFuture<'static, Result<Duration, io::Error>>;
 
     fn upgrade_outbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
         debug!("Preparing ping payload {:?}", payload);
-
-        Box::pin(async move {
+        async move {
             socket.write_all(&payload).await?;
             socket.close().await?;
             let started = Instant::now();
@@ -96,7 +95,7 @@ where
             } else {
                 Err(io::Error::new(io::ErrorKind::InvalidData, "Ping payload mismatch"))
             }
-        })
+        }.boxed()
     }
 }
 

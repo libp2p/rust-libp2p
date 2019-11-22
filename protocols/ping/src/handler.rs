@@ -185,7 +185,7 @@ impl<TSubstream> PingHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for PingHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type InEvent = Void;
     type OutEvent = PingResult;
