@@ -90,7 +90,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Subscribes to a topic.
+    /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
@@ -102,15 +102,20 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // send subscription request to all peers in the topic
+        let mut fixed_event = None; // initialise the event once if needed
         if let Some(peer_list) = self.topic_peers.get(&topic_hash) {
-            let event = Arc::new(GossipsubRpc {
-                messages: Vec::new(),
-                subscriptions: vec![GossipsubSubscription {
-                    topic_hash: topic_hash.clone(),
-                    action: GossipsubSubscriptionAction::Subscribe,
-                }],
-                control_msgs: Vec::new(),
-            });
+            if fixed_event.is_none() {
+                fixed_event = Some(Arc::new(GossipsubRpc {
+                    messages: Vec::new(),
+                    subscriptions: vec![GossipsubSubscription {
+                        topic_hash: topic_hash.clone(),
+                        action: GossipsubSubscriptionAction::Subscribe,
+                    }],
+                    control_msgs: Vec::new(),
+                }));
+            }
+
+            let event = fixed_event.expect("event has been initialised");
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
@@ -142,15 +147,21 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // announce to all peers in the topic
+        let mut fixed_event = None; // initialise the event once if needed
         if let Some(peer_list) = self.topic_peers.get(topic_hash) {
-            let event = Arc::new(GossipsubRpc {
-                messages: Vec::new(),
-                subscriptions: vec![GossipsubSubscription {
-                    topic_hash: topic_hash.clone(),
-                    action: GossipsubSubscriptionAction::Unsubscribe,
-                }],
-                control_msgs: Vec::new(),
-            });
+            if fixed_event.is_none() {
+                fixed_event = Some(Arc::new(GossipsubRpc {
+                    messages: Vec::new(),
+                    subscriptions: vec![GossipsubSubscription {
+                        topic_hash: topic_hash.clone(),
+                        action: GossipsubSubscriptionAction::Unsubscribe,
+                    }],
+                    control_msgs: Vec::new(),
+                }));
+            }
+
+            let event = fixed_event.expect("event has been initialised");
+
             for peer in peer_list {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
@@ -198,7 +209,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         let local_peer_id = self.local_peer_id.clone();
         self.forward_msg(message.clone(), &local_peer_id);
 
-        let mut recipient_peers = HashMap::new();
+        let mut recipient_peers = HashSet::new();
         for topic_hash in &message.topics {
             // if not subscribed to the topic, use fanout peers
             if self.mesh.get(&topic_hash).is_none() {
@@ -207,7 +218,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 // if we have fanout peers add them to the map
                 if self.fanout.contains_key(&topic_hash) {
                     for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
-                        recipient_peers.insert(peer.clone(), ());
+                        recipient_peers.insert(peer.clone());
                     }
                 } else {
                     // we have no fanout peers, select mesh_n of them and add them to the fanout
@@ -217,7 +228,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     self.fanout.insert(topic_hash.clone(), new_peers.clone());
                     for peer in new_peers {
                         debug!("Peer added to fanout: {:?}", peer);
-                        recipient_peers.insert(peer.clone(), ());
+                        recipient_peers.insert(peer.clone());
                     }
                 }
                 // we are publishing to fanout peers - update the time we published
@@ -236,7 +247,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             control_msgs: Vec::new(),
         });
         // Send to peers we know are subscribed to the topic.
-        for peer_id in recipient_peers.keys() {
+        for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
@@ -246,8 +257,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         info!("Published message: {:?}", message.id());
     }
 
-    /// This function should be called when `config.manual_propagation` is `true` to order to
-    /// propagate messages. Messages are stored in the Memcache and validation is expected to be
+    /// This function should be called when `config.manual_propagation` is `true` in order to
+    /// propagate messages. Messages are stored in the ['Memcache'] and validation is expected to be
     /// fast enough that the messages should still exist in the cache.
     ///
     /// Calling this function will propagate a message stored in the cache, if it still exists.

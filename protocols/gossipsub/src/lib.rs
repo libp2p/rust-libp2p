@@ -20,12 +20,14 @@
 //! This section outlines the current implementation's potential discrepancies from that of other
 //! implementations, due to undefined elements in the current specification.
 //!
-//! - **Topics** -  In gossipsub, topics configurable by the `hash_topics` configuration
-//! parameter. Topics are of type `TopicHash`. The current go implementation uses raw utf-8 strings, and this is default configuration in rust-libp2p. Topics can be hashed (SHA256 hashed then base64 encoded) by setting the `hash_topics` configuration parameter to true.
+//! - **Topics** -  In gossipsub, topics configurable by the `hash_topics` configuration parameter.
+//! Topics are of type `TopicHash`. The current go implementation uses raw utf-8 strings, and this
+//! is default configuration in rust-libp2p. Topics can be hashed (SHA256 hashed then base64
+//! encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
 //! `PeerId` and a nonce (sequence number) of the message. The sequence numbers in this
-//! implementation are sent as raw bytes across the wire. They are 64-bit big-endian   unsigned
+//! implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
 //! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
 //! the current go implementation.
 //!
@@ -42,25 +44,22 @@
 //! - `history_length` - The number of heartbeats which past messages are kept in cache (default: 5).
 //! - `history_gossip` - The number of past heartbeats that the node will send gossip metadata
 //! about (default: 3).
-//! - `mesh_n` - The target number of peers store in the local mesh network (default: 6).
-//! - `mesh_n_low` - The minimum number of peers in the local mesh network before trying to add
-//! more peers to the mesh from the connected peer pool (default: 4).
-//! - `mesh_n_high` - The maximum number of peers in the local mesh network before removing peers
-//! to reach `mesh_n` peers (default: 12).
-//! - `gossip_lazy` - The number of peers that the local node will gossip to during a heartbeat
-//! (default: `mesh_n` = 6).
-//! - `heartbeat_initial_delay - The initial time delay before starting the first heartbeat
-//! (default: 5 seconds).
+//! - `mesh_n` - The target number of peers store in the local mesh network.
+//! (default: 6).
+//! - `mesh_n_low` - The minimum number of peers in the local mesh network before.
+//! trying to add more peers to the mesh from the connected peer pool (default: 4).
+//! - `mesh_n_high` - The maximum number of peers in the local mesh network before removing peers to
+//! reach `mesh_n` peers (default: 12).
+//! - `gossip_lazy` - The number of peers that the local node will gossip to during a heartbeat (default: `mesh_n` = 6).
+//! - `heartbeat_initial_delay - The initial time delay before starting the first heartbeat (default: 5 seconds).
 //! - `heartbeat_interval` - The time between each heartbeat (default: 1 second).
-//! - `fanout_ttl` - The fanout time to live time period. The timeout required before removing
-//! peers from the fanout for a given topic (default: 1 minute).
-//! - `max_transmit_size` - This sets the maximum transmission size for total gossipsub messages
-//! on the network.
-//! - `hash_topics` - Whether to hash the topics using base64(SHA256(topic)) or to leave
-//! as plain utf-8 strings.
-//! - `propagate_messages` - Whether gossipsub should immediately forward received messages on the
-//! network. For applications requiring message validation, this should be set to false, then
-//! the application should call `propagate_message(message, propagation_source)` once validated, to
+//! - `fanout_ttl` - The fanout time to live time period. The timeout required before removing peers from the fanout
+//! for a given topic (default: 1 minute).
+//! - `max_transmit_size` - This sets the maximum transmission size for total gossipsub messages on the network.
+//! - `hash_topics` - Whether to hash the topics using base64(SHA256(topic)) or to leave as plain utf-8 strings.
+//! - `manual_propagation` - Whether gossipsub should immediately forward received messages on the
+//! network. For applications requiring message validation, this should be set to false, then the
+//! application should call `propagate_message(message_id, propagation_source)` once validated, to
 //! propagate the message to peers.
 //!
 //! This struct implements the `Default` trait and can be initialised via
@@ -69,8 +68,8 @@
 //!
 //! ## Gossipsub
 //!
-//! The [`Gossipsub`] struct implements the `NetworkBehaviour` trait allowing it to act as the routing
-//! behaviour in a `Swarm`. This struct requires an instance of `PeerId` and
+//! The [`Gossipsub`] struct implements the `NetworkBehaviour` trait allowing it to act as the
+//! routing behaviour in a `Swarm`. This struct requires an instance of `PeerId` and
 //! [`GossipsubConfig`].
 //!
 //! [`Gossipsub`]: struct.Gossipsub.html

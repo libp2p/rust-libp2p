@@ -31,7 +31,6 @@ impl Default for ProtocolConfig {
 
 impl ProtocolConfig {
     /// Builds a new `ProtocolConfig`.
-    #[inline]
     /// Sets the maximum gossip transmission size.
     pub fn new(
         protocol_id: impl Into<Cow<'static, [u8]>>,
@@ -48,7 +47,6 @@ impl UpgradeInfo for ProtocolConfig {
     type Info = Cow<'static, [u8]>;
     type InfoIter = iter::Once<Self::Info>;
 
-    #[inline]
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(self.protocol_id.clone())
     }
@@ -62,7 +60,6 @@ where
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
-    #[inline]
     fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
@@ -78,7 +75,6 @@ where
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
-    #[inline]
     fn upgrade_outbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
@@ -287,13 +283,14 @@ impl GossipsubMessage {
     // To be compatible with the go implementation
     pub fn id(&self) -> String {
         let mut source_string = self.source.to_base58();
-        // the sequence number is a big endian uint64 (as per go implementation)
+        // the sequence number should be a big endian uint64 (as per go implementation)
         // avoid a potential panic by setting the seqno to 0 if it is not long enough.
-        // TODO: Check that this doesn't introduce a vulnerability or issue
-        let seqno = if self.sequence_number.len() >= 8 {
-            BigEndian::read_u64(&self.sequence_number)
-        } else {
-            0
+        let seqno = {
+            if (self.sequence_number.len() == 0) | (self.sequence_number.len() > 8) {
+                0
+            } else {
+                BigEndian::read_uint(&self.sequence_number, self.sequence_number.len())
+            }
         };
         source_string.push_str(&seqno.to_string());
         source_string
@@ -323,7 +320,7 @@ pub enum GossipsubSubscriptionAction {
 pub enum GossipsubControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave {
-        /// The topic of the message.
+        /// The topic of the messages.
         topic_hash: TopicHash,
         /// A list of known message ids (peer_id + sequence _number) as a string.
         message_ids: Vec<String>,

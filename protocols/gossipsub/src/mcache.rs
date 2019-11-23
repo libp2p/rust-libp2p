@@ -4,14 +4,14 @@ use crate::protocol::GossipsubMessage;
 use crate::topic::TopicHash;
 use std::collections::HashMap;
 
-/// CacheEntry stored in the history
+/// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
     mid: String,
     topics: Vec<TopicHash>,
 }
 
-/// MessageCache struct holding history of messages
+/// MessageCache struct holding history of messages.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCache {
     msgs: HashMap<String, GossipsubMessage>,
@@ -19,7 +19,7 @@ pub struct MessageCache {
     gossip: usize,
 }
 
-/// Implementation of the MessageCache
+/// Implementation of the MessageCache.
 impl MessageCache {
     pub fn new(gossip: usize, history_capacity: usize) -> MessageCache {
         MessageCache {
@@ -73,22 +73,12 @@ impl MessageCache {
     /// Shift the history array down one and delete messages associated with the
     /// last entry
     pub fn shift(&mut self) {
-        let last_index = self.history.len() - 1;
-        for entry in &self.history[last_index] {
+        for entry in self.history.pop().expect("history is always > 1") {
             self.msgs.remove(&entry.mid);
         }
 
-        // Pop the last value
-        self.history.pop();
-
         // Insert an empty vec in position 0
         self.history.insert(0, Vec::new());
-
-        // TODO bench which one is quicker
-        // for i in (0..(self.history.len() - 1)).rev() {
-        //     self.history[i+1] = self.history[i].clone();
-        // }
-        // self.history[0] = Vec::new();
     }
 }
 
@@ -114,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    /// Test that the message cache can be created
+    /// Test that the message cache can be created.
     fn test_new_cache() {
         let x: usize = 3;
         let mc = MessageCache::new(x, 5);
@@ -123,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    /// Test you can put one message and get one
+    /// Test you can put one message and get one.
     fn test_put_get_one() {
         let mut mc = MessageCache::new(10, 15);
 
@@ -149,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    /// Test attempting to 'get' with a wrong id
+    /// Test attempting to 'get' with a wrong id.
     fn test_get_wrong() {
         let mut mc = MessageCache::new(10, 15);
 
@@ -167,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    /// Test attempting to 'get' empty message cache
+    /// Test attempting to 'get' empty message cache.
     fn test_get_empty() {
         let mc = MessageCache::new(10, 15);
 
@@ -178,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    /// Test adding a message with no topics
+    /// Test adding a message with no topics.
     fn test_no_topic_put() {
         let mut mc = MessageCache::new(3, 5);
 
@@ -196,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    /// Test shift mechanism
+    /// Test shift mechanism.
     fn test_shift() {
         let mut mc = MessageCache::new(1, 5);
 
@@ -220,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    /// Test Shift with no additions
+    /// Test Shift with no additions.
     fn test_empty_shift() {
         let mut mc = MessageCache::new(1, 5);
 
@@ -246,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    /// Test shift to see if the last history messages are removed
+    /// Test shift to see if the last history messages are removed.
     fn test_remove_last_from_shift() {
         let mut mc = MessageCache::new(4, 5);
 
