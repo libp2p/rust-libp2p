@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use anyhow::Result;
 use async_std::task;
 use libp2p::mdns::service::{MdnsPacket, MdnsService};
+use std::error::Error;
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     // This example provides passive discovery of the libp2p nodes on the
     // network that send mDNS queries and answers.
     task::block_on(async move {

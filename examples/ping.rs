@@ -38,13 +38,12 @@
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
-use anyhow::{Context as _, Result};
 use async_std::task;
 use futures::{future, prelude::*};
 use libp2p::{identity, PeerId, ping::{Ping, PingConfig}, Swarm};
-use std::task::{Context, Poll};
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId.
@@ -69,8 +68,8 @@ fn main() -> Result<()> {
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
     if let Some(addr) = std::env::args().nth(1) {
-        let remote = addr.parse().context("Failed to parse address to dial.")?;
-        Swarm::dial_addr(&mut swarm, remote).with_context(|| format!("Dialing {} failed", addr))?;
+        let remote = addr.parse()?;
+        Swarm::dial_addr(&mut swarm, remote)?;
         println!("Dialed {}", addr)
     }
 

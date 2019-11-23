@@ -29,7 +29,6 @@
 //!
 //! 4. Close with Ctrl-c.
 
-use anyhow::{Context as _, Result};
 use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
@@ -43,9 +42,9 @@ use libp2p::{
     mdns::{Mdns, MdnsEvent},
     swarm::NetworkBehaviourEventProcess
 };
-use std::task::{Context, Poll};
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -114,7 +113,7 @@ fn main() -> Result<()> {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id.clone());
         let kademlia = Kademlia::new(local_peer_id.clone(), store);
-        let mdns = task::block_on(Mdns::new()).context("Failed to create mDNS service")?;
+        let mdns = task::block_on(Mdns::new())?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
     };

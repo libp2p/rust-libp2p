@@ -45,7 +45,6 @@ libp2p-tcp = { version = "0.13.0", path = "transports/tcp" }
 libp2p-websocket = { version = "0.13.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
-anyhow = "1.0"
 async-std = "1.0"
 env_logger = "0.7.1"
 

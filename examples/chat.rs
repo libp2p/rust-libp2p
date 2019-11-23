@@ -49,7 +49,6 @@
 //!
 //! The two nodes then connect.
 
-use anyhow::{Context as _, Result};
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
@@ -62,9 +61,9 @@ use libp2p::{
     mdns::{Mdns, MdnsEvent},
     swarm::NetworkBehaviourEventProcess
 };
-use std::task::{Context, Poll};
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId
@@ -114,7 +113,7 @@ fn main() -> Result<()> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = task::block_on(Mdns::new()).context("Failed to create mDNS service")?;
+        let mdns = task::block_on(Mdns::new())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id.clone()),
             mdns
@@ -126,9 +125,9 @@ fn main() -> Result<()> {
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
-        let addr: Multiaddr = to_dial.parse().context("Failed to parse address to dial")?;
-        Swarm::dial_addr(&mut swarm, addr.clone()).with_context(|| format!("Failed to dial {}", addr))?;
-        println!("Dialed {:?}", addr)
+        let addr: Multiaddr = to_dial.parse()?;
+        Swarm::dial_addr(&mut swarm, addr)?;
+        println!("Dialed {:?}", to_dial)
     }
 
     // Read full lines from stdin

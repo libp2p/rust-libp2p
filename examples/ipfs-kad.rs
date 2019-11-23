@@ -23,7 +23,6 @@
 //! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
 //! peer ID will be generated randomly.
 
-use anyhow::{Context, Result};
 use async_std::task;
 use futures::prelude::*;
 use libp2p::{
@@ -34,9 +33,9 @@ use libp2p::{
 };
 use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
 use libp2p::kad::record::store::MemoryStore;
-use std::{env, time::Duration};
+use std::{env, error::Error, time::Duration};
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -81,7 +80,7 @@ fn main() -> Result<()> {
 
     // Order Kademlia to search for a peer.
     let to_search: PeerId = if let Some(peer_id) = env::args().nth(1) {
-        peer_id.parse().context("Failed to parse peer ID to find")?
+        peer_id.parse()?
     } else {
         identity::Keypair::generate_ed25519().public().into()
     };
