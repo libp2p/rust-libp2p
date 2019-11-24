@@ -332,6 +332,12 @@ pub enum TransportError<TErr> {
     Other(TErr),
 }
 
+impl<TErr> From<TErr> for TransportError<TErr> where TErr: std::error::Error {
+    fn from(source: TErr) -> Self {
+        Self::Other(source)
+    }
+}
+
 impl<TErr> TransportError<TErr> {
     /// Applies a function to the the error in [`TransportError::Other`].
     pub fn map<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {

@@ -37,6 +37,10 @@
 //!
 //! The `QuicConfig` structs implements the `Transport` trait of the `swarm` library. See the
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
+//!
+//! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
+//! QUIC connections do not need to be upgraded.  You will get a compile-time error if you try.
+//! Instead, you must pass all needed configuration into the constructor.
 
 use futures::{
     compat::Compat,
@@ -46,12 +50,12 @@ use futures::{
 };
 use ipnet::IpNet;
 use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol, host_addresses, ip_to_multiaddr},
+    multiaddr::{host_addresses, ip_to_multiaddr, Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     Transport,
 };
 use log::debug;
-pub use quinn::{EndpointBuilder, EndpointError, ServerConfig};
+pub use quinn::{Endpoint, EndpointBuilder, EndpointError, ServerConfig};
 use std::{
     collections::VecDeque,
     io::{self, Read, Write},
@@ -71,6 +75,8 @@ pub struct QuicConfig {
     /// The underlying QUIC transport config.  Quinn provides functions for creating a suitable
     /// one.
     pub endpoint_builder: EndpointBuilder,
+    /// The underlying QUIC transport endpoint.
+    endpoint: Option<Endpoint>,
     /// The server configuration.  Quinn provides functions for making one.
     pub server_configuration: ServerConfig,
 }
@@ -82,7 +88,9 @@ pub enum QuicError {
     #[error(display = "Endpoint error: {}", _0)]
     EndpointError(#[source] quinn::EndpointError),
     #[error(display = "QUIC Protocol Error: {}", _0)]
-    ProtocolError(#[source] quinn::ConnectionError),
+    ConnectionError(#[source] quinn::ConnectionError),
+    #[error(display = "QUIC outbound connection error: {}", _0)]
+    ConnectError(#[source] quinn::ConnectError),
 }
 
 impl QuicConfig {
@@ -119,8 +127,11 @@ impl Stream for QuicIncoming {
             Poll::Ready(Some(upgrade)) => {
                 let peer = upgrade.remote_address();
                 Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
-                    remote_addr: ip_to_multiaddr(peer.ip(), &[Protocol::Udp(peer.port()), Protocol::Quic]),
-                    upgrade: upgrade.map_err(QuicError::ProtocolError as _).compat(),
+                    remote_addr: ip_to_multiaddr(
+                        peer.ip(),
+                        &[Protocol::Udp(peer.port()), Protocol::Quic],
+                    ),
+                    upgrade: upgrade.map_err(QuicError::ConnectionError as _).compat(),
                     local_addr: self.addr.clone(),
                 })))
             }
@@ -134,8 +145,7 @@ impl Transport for QuicConfig {
     type Error = QuicError;
     type Listener = Compat<QuicIncoming>;
     type ListenerUpgrade = CompatConnecting;
-
-    type Dial = Self::ListenerUpgrade;
+    type Dial = CompatConnecting;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         use futures::compat::{Future01CompatExt, Stream01CompatExt};
@@ -166,7 +176,16 @@ impl Transport for QuicConfig {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        unimplemented!("Dialing {}", addr);
+        let (driver, endpoint, _incoming) =
+            self.endpoint_builder
+                .bind(&([0u8; 16], 0u16).into())
+                .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
+
+        Ok(endpoint
+            .connect(&socket_addr, &socket_addr.to_string())
+            .map_err(QuicError::ConnectError)?
+			.map_err(QuicError::ConnectionError as _)
+			.compat())
     }
 }
 
