@@ -43,7 +43,6 @@
 //! Instead, you must pass all needed configuration into the constructor.
 
 use futures::{
-    compat::Compat,
     future::{self, Either},
     prelude::*,
     stream::{self, Chain, Once, Stream},
@@ -61,6 +60,8 @@ use std::{
     io::{self, Read, Write},
     iter::{self, FromIterator},
     net::{IpAddr, SocketAddr},
+    pin::Pin,
+    task::{Context, Poll},
     time::{Duration, Instant},
     vec::IntoIter,
 };
@@ -111,17 +112,11 @@ pub struct QuicIncoming {
     addr: Multiaddr,
 }
 
-type CompatConnecting =
-    Compat<future::MapErr<quinn::Connecting, fn(quinn::ConnectionError) -> QuicError>>;
+type CompatConnecting = future::MapErr<quinn::Connecting, fn(quinn::ConnectionError) -> QuicError>;
 
-impl Stream for QuicIncoming {
+impl futures_core::stream::Stream for QuicIncoming {
     type Item = Result<ListenerEvent<CompatConnecting>, QuicError>;
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        ctx: &mut std::task::Context,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        use futures::compat::Future01CompatExt;
-        use std::{pin::Pin, task::Poll};
+    fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.incoming).poll_next(ctx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Some(upgrade)) => {
@@ -131,7 +126,7 @@ impl Stream for QuicIncoming {
                         peer.ip(),
                         &[Protocol::Udp(peer.port()), Protocol::Quic],
                     ),
-                    upgrade: upgrade.map_err(QuicError::ConnectionError as _).compat(),
+                    upgrade: upgrade.map_err(QuicError::ConnectionError as _),
                     local_addr: self.addr.clone(),
                 })))
             }
@@ -143,12 +138,12 @@ impl Stream for QuicIncoming {
 impl Transport for QuicConfig {
     type Output = quinn::NewConnection;
     type Error = QuicError;
-    type Listener = Compat<QuicIncoming>;
+    type Listener = QuicIncoming;
     type ListenerUpgrade = CompatConnecting;
     type Dial = CompatConnecting;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        use futures::compat::{Future01CompatExt, Stream01CompatExt};
+        // use futures::compat::{Future01CompatExt, Stream01CompatExt};
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
             sa
         } else {
@@ -160,7 +155,7 @@ impl Transport for QuicConfig {
             .bind(&socket_addr)
             .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
         tokio::spawn(driver.map_err(drop).compat());
-        Ok(QuicIncoming { incoming, addr }.compat())
+        Ok(QuicIncoming { incoming, addr })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -184,8 +179,7 @@ impl Transport for QuicConfig {
         Ok(endpoint
             .connect(&socket_addr, &socket_addr.to_string())
             .map_err(QuicError::ConnectError)?
-			.map_err(QuicError::ConnectionError as _)
-			.compat())
+            .map_err(QuicError::ConnectionError as _))
     }
 }
 

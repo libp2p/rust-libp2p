@@ -36,3 +36,4 @@ tokio = "0.1.22"
 ipnet = "2.1.0"
 err-derive = "0.2.1"
 futures = { version = "0.3.0-alpha.19", package = "futures-preview", features = ["compat"] }
+futures-core = "0.3.0-alpha.19"
