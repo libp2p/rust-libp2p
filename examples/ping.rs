@@ -38,11 +38,12 @@
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
-use futures::{prelude::*, future};
-use libp2p::{ identity, PeerId, ping::{Ping, PingConfig}, Swarm };
-use std::env;
+use async_std::task;
+use futures::{future, prelude::*};
+use libp2p::{identity, PeerId, ping::{Ping, PingConfig}, Swarm};
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId.
@@ -51,7 +52,7 @@ fn main() {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = libp2p::build_development_transport(id_keys);
+    let transport = libp2p::build_development_transport(id_keys)?;
 
     // Create a ping network behaviour.
     //
@@ -66,38 +67,33 @@ fn main() {
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
-    if let Some(addr) = env::args().nth(1) {
-        let remote_addr = addr.clone();
-        match addr.parse() {
-            Ok(remote) => {
-                match Swarm::dial_addr(&mut swarm, remote) {
-                    Ok(()) => println!("Dialed {:?}", remote_addr),
-                    Err(e) => println!("Dialing {:?} failed with: {:?}", remote_addr, e)
-                }
-            },
-            Err(err) => println!("Failed to parse address to dial: {:?}", err),
-        }
+    if let Some(addr) = std::env::args().nth(1) {
+        let remote = addr.parse()?;
+        Swarm::dial_addr(&mut swarm, remote)?;
+        println!("Dialed {}", addr)
     }
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned port.
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 
-    // Use tokio to drive the `Swarm`.
     let mut listening = false;
-    tokio::run(future::poll_fn(move || -> Result<_, ()> {
+    task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(e)) => println!("{:?}", e),
-                Async::Ready(None) | Async::NotReady => {
+            match swarm.poll_next_unpin(cx) {
+                Poll::Ready(Some(event)) => println!("{:?}", event),
+                Poll::Ready(None) => return Poll::Ready(()),
+                Poll::Pending => {
                     if !listening {
-                        if let Some(a) = Swarm::listeners(&swarm).next() {
-                            println!("Listening on {:?}", a);
+                        for addr in Swarm::listeners(&swarm) {
+                            println!("Listening on {}", addr);
                             listening = true;
                         }
                     }
-                    return Ok(Async::NotReady)
+                    return Poll::Pending
                 }
             }
         }
     }));
+
+    Ok(())
 }

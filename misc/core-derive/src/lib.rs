@@ -96,8 +96,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
             .collect::<Vec<_>>();
 
-        additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncRead});
-        additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});
+        additional.push(quote!{#substream_generic: ::libp2p::futures::io::AsyncRead});
+        additional.push(quote!{#substream_generic: ::libp2p::futures::io::AsyncWrite});
+        additional.push(quote!{#substream_generic: Unpin});
 
         if let Some(where_clause) = where_clause {
             if where_clause.predicates.trailing_punct() {
@@ -118,7 +119,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
                 match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "out_event" => {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.path.is_ident("out_event") => {
                         if let syn::Lit::Str(ref s) = m.lit {
                             let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
                             out = quote!{#ident};
@@ -381,11 +382,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // If we find a `#[behaviour(poll_method = "poll")]` attribute on the struct, we call
     // `self.poll()` at the end of the polling.
     let poll_method = {
-        let mut poll_method = quote!{Poll::Pending};
+        let mut poll_method = quote!{std::task::Poll::Pending};
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
                 match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "poll_method" => {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.path.is_ident("poll_method") => {
                         if let syn::Lit::Str(ref s) = m.lit {
                             let ident: Ident = syn::parse_str(&s.value()).unwrap();
                             poll_method = quote!{#name::#ident(self)};
@@ -418,26 +419,26 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(quote!{
             loop {
-                match #field_name.poll(poll_params) {
-                    Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
+                match #field_name.poll(cx, poll_params) {
+                    std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
                         #net_behv_event_proc::inject_event(self, event)
                     }
-                    Poll::Ready(#network_behaviour_action::DialAddress { address }) => {
-                        return Poll::Ready(#network_behaviour_action::DialAddress { address });
+                    std::task::Poll::Ready(#network_behaviour_action::DialAddress { address }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address });
                     }
-                    Poll::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
-                        return Poll::Ready(#network_behaviour_action::DialPeer { peer_id });
+                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id });
                     }
-                    Poll::Ready(#network_behaviour_action::SendEvent { peer_id, event }) => {
-                        return Poll::Ready(#network_behaviour_action::SendEvent {
+                    std::task::Poll::Ready(#network_behaviour_action::SendEvent { peer_id, event }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::SendEvent {
                             peer_id,
                             event: #wrapped_event,
                         });
                     }
-                    Poll::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
-                        return Poll::Ready(#network_behaviour_action::ReportObservedAddr { address });
+                    std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address });
                     }
-                    Poll::Pending => break,
+                    std::task::Poll::Pending => break,
                 }
             }
         })
@@ -526,9 +527,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
 fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
     if attr.path.segments.len() == 1 && attr.path.segments[0].ident == "behaviour" {
-        match attr.interpret_meta() {
-            Some(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
-            _ => {
+        match attr.parse_meta() {
+            Ok(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
+            Ok(_) => None,
+            Err(e) => {
+                eprintln!("error parsing attribute metadata: {}", e);
                 None
             }
         }
@@ -542,7 +545,7 @@ fn is_ignored(field: &syn::Field) -> bool {
     for meta_items in field.attrs.iter().filter_map(get_meta_items) {
         for meta_item in meta_items {
             match meta_item {
-                syn::NestedMeta::Meta(syn::Meta::Word(ref m)) if m == "ignore" => {
+                syn::NestedMeta::Meta(syn::Meta::Path(ref m)) if m.is_ident("ignore") => {
                     return true;
                 }
                 _ => ()
