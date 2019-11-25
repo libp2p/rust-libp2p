@@ -123,30 +123,26 @@ fn bootstrap() {
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
 
         // Run test
-        block_on(
-            poll_fn(move |ctx| {
-                for (i, swarm) in swarms.iter_mut().enumerate() {
-                    loop {
-                        match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(Ok(KademliaEvent::BootstrapResult(Ok(ok))))) => {
-                                assert_eq!(i, 0);
-                                assert_eq!(ok.peer, swarm_ids[0]);
-                                let known = swarm.kbuckets.iter()
-                                    .map(|e| e.node.key.preimage().clone())
-                                    .collect::<HashSet<_>>();
-                                assert_eq!(expected_known, known);
-                                return Poll::Ready(());
-                            }
-                            // TODO: Refactor this!
-                            Poll::Ready(Some(Err(e))) => panic!(e),
-                            Poll::Ready(_) => (),
-                            Poll::Pending => break,
-                        }
-                    }
+        block_on(async move {
+            // Give all but first swarm chance to make progress.
+            for swarm in swarms.iter_mut().skip(1) {
+                while let Some(_) = swarm.next().now_or_never() {};
+            }
+
+            // Have first swarm make progress and check for success.
+            while let Some(event) = swarms[0].next().now_or_never() {
+                if let KademliaEvent::BootstrapResult(Ok(ok)) = event.unwrap().unwrap() {
+                    assert_eq!(ok.peer, swarm_ids[0]);
+                    let known = swarms[0].kbuckets.iter()
+                        .map(|e| e.node.key.preimage().clone())
+                        .collect::<HashSet<_>>();
+                    assert_eq!(expected_known, known);
+                    return Poll::Ready(());
                 }
-                Poll::Pending
-            })
-        )
+            }
+
+            Poll::Pending
+        });
     }
 
     let mut rng = thread_rng();
