@@ -326,6 +326,7 @@ impl AddProviderJob {
 #[cfg(test)]
 mod tests {
     use crate::record::store::MemoryStore;
+    use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
     use rand::Rng;
     use super::*;
@@ -362,26 +363,24 @@ mod tests {
             for r in records {
                 let _ = store.put(r);
             }
-            // TODO: refactor
-            futures::executor::block_on(
-                futures::future::poll_fn(|ctx| {
-                    // Polling with an instant beyond the deadline for the next run
-                    // is guaranteed to run the job, without the job needing to poll the `Delay`
-                    // and thus without needing to run `poll` in the context of a task
-                    // for testing purposes.
-                    let now = Instant::now() + job.inner.interval;
-                    // All (non-expired) records in the store must be yielded by the job.
-                    for r in store.records().map(|r| r.into_owned()).collect::<Vec<_>>() {
-                        if !r.is_expired(now) {
-                            assert_eq!(job.poll(ctx, &mut store, now), Poll::Ready(r));
-                            assert!(job.is_running());
-                        }
+
+            block_on(poll_fn(|ctx| {
+                // Polling with an instant beyond the deadline for the next run
+                // is guaranteed to run the job, without the job needing to poll the `Delay`
+                // and thus without needing to run `poll` in the context of a task
+                // for testing purposes.
+                let now = Instant::now() + job.inner.interval;
+                // All (non-expired) records in the store must be yielded by the job.
+                for r in store.records().map(|r| r.into_owned()).collect::<Vec<_>>() {
+                    if !r.is_expired(now) {
+                        assert_eq!(job.poll(ctx, &mut store, now), Poll::Ready(r));
+                        assert!(job.is_running());
                     }
-                    assert_eq!(job.poll(ctx, &mut store, now), Poll::Pending);
-                    Poll::Ready(())
-                })
-            );
-            assert!(!job.is_running());
+                }
+                assert_eq!(job.poll(ctx, &mut store, now), Poll::Pending);
+                assert!(!job.is_running());
+                Poll::Ready(())
+            }));
         }
 
         quickcheck(prop as fn(_))
@@ -398,25 +397,24 @@ mod tests {
                 r.provider = id.clone();
                 let _ = store.add_provider(r);
             }
-            futures::executor::block_on(
-                futures::future::poll_fn(|ctx| {
-                    // Polling with an instant beyond the deadline for the next run
-                    // is guaranteed to run the job, without the job needing to poll the `Delay`
-                    // and thus without needing to run `poll` in the context of a task
-                    // for testing purposes.
-                    let now = Instant::now() + job.inner.interval;
-                    // All (non-expired) records in the store must be yielded by the job.
-                    for r in store.provided().map(|r| r.into_owned()).collect::<Vec<_>>() {
-                        if !r.is_expired(now) {
-                            assert_eq!(job.poll(ctx, &mut store, now), Poll::Ready(r));
-                            assert!(job.is_running());
-                        }
+
+            block_on(poll_fn(|ctx| {
+                // Polling with an instant beyond the deadline for the next run
+                // is guaranteed to run the job, without the job needing to poll the `Delay`
+                // and thus without needing to run `poll` in the context of a task
+                // for testing purposes.
+                let now = Instant::now() + job.inner.interval;
+                // All (non-expired) records in the store must be yielded by the job.
+                for r in store.provided().map(|r| r.into_owned()).collect::<Vec<_>>() {
+                    if !r.is_expired(now) {
+                        assert_eq!(job.poll(ctx, &mut store, now), Poll::Ready(r));
+                        assert!(job.is_running());
                     }
-                    assert_eq!(job.poll(ctx, &mut store, now), Poll::Pending);
-                    Poll::Ready(())
-                })
-            );
-            assert!(!job.is_running());
+                }
+                assert_eq!(job.poll(ctx, &mut store, now), Poll::Pending);
+                assert!(!job.is_running());
+                Poll::Ready(())
+            }));
         }
 
         quickcheck(prop as fn(_))
