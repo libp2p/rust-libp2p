@@ -25,6 +25,8 @@ use super::*;
 use crate::K_VALUE;
 use crate::kbucket::Distance;
 use crate::record::store::MemoryStore;
+use futures::prelude::*;
+// TODO: still needed?
 use futures::future;
 use libp2p_core::{
     PeerId,
@@ -42,7 +44,6 @@ use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng};
 use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
-use tokio::runtime::current_thread;
 use multihash::{Multihash, Hash::SHA2256};
 
 type TestSwarm = Swarm<
@@ -120,27 +121,30 @@ fn bootstrap() {
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
 
         // Run test
-        current_thread::run(
-            future::poll_fn(move || {
+        futures::executor::block_on(
+            future::poll_fn(move |ctx| {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
-                        match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::BootstrapResult(Ok(ok)))) => {
+                        match swarm.poll_next_unpin(ctx) {
+                            Poll::Ready(Some(Ok(KademliaEvent::BootstrapResult(Ok(ok))))) => {
                                 assert_eq!(i, 0);
                                 assert_eq!(ok.peer, swarm_ids[0]);
                                 let known = swarm.kbuckets.iter()
                                     .map(|e| e.node.key.preimage().clone())
                                     .collect::<HashSet<_>>();
                                 assert_eq!(expected_known, known);
-                                return Ok(Async::Ready(()));
+                                return Poll::Ready(());
                             }
-                            Async::Ready(_) => (),
-                            Async::NotReady => break,
+                            // TODO: Refactor this!
+                            Poll::Ready(Some(Err(e))) => panic!(e),
+                            Poll::Ready(_) => (),
+                            Poll::Pending => break,
                         }
                     }
                 }
-                Ok(Async::NotReady)
-            }))
+                Poll::Pending
+            })
+        )
     }
 
     let mut rng = thread_rng();
@@ -175,26 +179,28 @@ fn query_iter() {
         expected_distances.sort();
 
         // Run test
-        current_thread::run(
-            future::poll_fn(move || {
+        futures::executor::block_on(
+            future::poll_fn(move |ctx| {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
-                        match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                        match swarm.poll_next_unpin(ctx) {
+                            Poll::Ready(Some(Ok(KademliaEvent::GetClosestPeersResult(Ok(ok))))) => {
                                 assert_eq!(&ok.key[..], search_target.as_bytes());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert_eq!(swarm.queries.size(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
                                 let key = kbucket::Key::new(ok.key);
                                 assert_eq!(expected_distances, distances(&key, ok.peers));
-                                return Ok(Async::Ready(()));
+                                return Poll::Ready(());
                             }
-                            Async::Ready(_) => (),
-                            Async::NotReady => break,
+                            // TODO: Refactor
+                            Poll::Ready(Some(Err(e))) => panic!(e),
+                            Poll::Ready(_) => (),
+                            Poll::Pending => break,
                         }
                     }
                 }
-                Ok(Async::NotReady)
+                Poll::Pending
             }))
     }
 
@@ -220,23 +226,25 @@ fn unresponsive_not_returned_direct() {
     let search_target = PeerId::random();
     swarms[0].get_closest_peers(search_target.clone());
 
-    current_thread::run(
-        future::poll_fn(move || {
+    futures::executor::block_on(
+        future::poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(Ok(KademliaEvent::GetClosestPeersResult(Ok(ok))))) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 0);
-                            return Ok(Async::Ready(()));
+                            return Poll::Ready(());
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
+                        // TODO: Refactor
+                        Poll::Ready(Some(Err(e))) => panic!(e),
+                        Poll::Ready(_) => (),
+                        Poll::Pending => break,
                     }
                 }
             }
 
-            Ok(Async::NotReady)
+            Poll::Pending
         }))
 }
 
@@ -261,24 +269,26 @@ fn unresponsive_not_returned_indirect() {
     let search_target = PeerId::random();
     swarms[1].get_closest_peers(search_target.clone());
 
-    current_thread::run(
-        future::poll_fn(move || {
+    futures::executor::block_on(
+        future::poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(Ok(KademliaEvent::GetClosestPeersResult(Ok(ok))))) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
-                            return Ok(Async::Ready(()));
+                            return Poll::Ready(());
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
+                        // TODO: Refactor
+                        Poll::Ready(Some(Err(e))) => panic!(e),
+                        Poll::Ready(_) => (),
+                        Poll::Pending => break,
                     }
                 }
             }
 
-            Ok(Async::NotReady)
+            Poll::Pending
         }))
 }
 
@@ -294,29 +304,31 @@ fn get_record_not_found() {
     let target_key = record::Key::from(Multihash::random(SHA2256));
     swarms[0].get_record(&target_key, Quorum::One);
 
-    current_thread::run(
-        future::poll_fn(move || {
+    futures::executor::block_on(
+        future::poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaEvent::GetRecordResult(Err(e)))) => {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(Ok(KademliaEvent::GetRecordResult(Err(e))))) => {
                             if let GetRecordError::NotFound { key, closest_peers, } = e {
                                 assert_eq!(key, target_key);
                                 assert_eq!(closest_peers.len(), 2);
                                 assert!(closest_peers.contains(&swarm_ids[1]));
                                 assert!(closest_peers.contains(&swarm_ids[2]));
-                                return Ok(Async::Ready(()));
+                                return Poll::Ready(());
                             } else {
                                 panic!("Unexpected error result: {:?}", e);
                             }
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
+                        // TODO: Refactor
+                        Poll::Ready(Some(Err(e))) => panic!(e),
+                        Poll::Ready(_) => (),
+                        Poll::Pending => break,
                     }
                 }
             }
 
-            Ok(Async::NotReady)
+            Poll::Pending
         }))
 }
 
@@ -351,14 +363,14 @@ fn put_record() {
         // The accumulated results for one round of publishing.
         let mut results = Vec::new();
 
-        current_thread::run(
-            future::poll_fn(move || loop {
-                // Poll all swarms until they are "NotReady".
+        futures::executor::block_on(
+            future::poll_fn(move |ctx| loop {
+                // Poll all swarms until they are "Pending".
                 for swarm in &mut swarms {
                     loop {
-                        match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::PutRecordResult(res))) |
-                            Async::Ready(Some(KademliaEvent::RepublishRecordResult(res))) => {
+                        match swarm.poll_next_unpin(ctx) {
+                            Poll::Ready(Some(Ok(KademliaEvent::PutRecordResult(res)))) |
+                            Poll::Ready(Some(Ok(KademliaEvent::RepublishRecordResult(res)))) => {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
@@ -368,16 +380,18 @@ fn put_record() {
                                     }
                                 }
                             }
-                            Async::Ready(_) => (),
-                            Async::NotReady => break,
+                            // TODO: Refactor
+                            Poll::Ready(Some(Err(e))) => panic!(e),
+                            Poll::Ready(_) => (),
+                            Poll::Pending => break,
                         }
                     }
                 }
 
-                // All swarms are NotReady and not enough results have been collected
+                // All swarms are Pending and not enough results have been collected
                 // so far, thus wait to be polled again for further progress.
                 if results.len() != records.len() {
-                    return Ok(Async::NotReady)
+                    return Poll::Pending
                 }
 
                 // Consume the results, checking that each record was replicated
@@ -422,7 +436,7 @@ fn put_record() {
                     }
                     assert_eq!(swarms[0].store.records().count(), 0);
                     // All records have been republished, thus the test is complete.
-                    return Ok(Async::Ready(()));
+                    return Poll::Ready(());
                 }
 
                 // Tell the replication job to republish asap.
@@ -449,23 +463,25 @@ fn get_value() {
     swarms[1].store.put(record.clone()).unwrap();
     swarms[0].get_record(&record.key, Quorum::One);
 
-    current_thread::run(
-        future::poll_fn(move || {
+    futures::executor::block_on(
+        future::poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(Ok(KademliaEvent::GetRecordResult(Ok(ok))))) => {
                             assert_eq!(ok.records.len(), 1);
                             assert_eq!(ok.records.first(), Some(&record));
-                            return Ok(Async::Ready(()));
+                            return Poll::Ready(());
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
+                        // TODO: Refactor
+                        Poll::Ready(Some(Err(e))) => panic!(e),
+                        Poll::Ready(_) => (),
+                        Poll::Pending => break,
                     }
                 }
             }
 
-            Ok(Async::NotReady)
+            Poll::Pending
         }))
 }
 
@@ -485,22 +501,24 @@ fn get_value_many() {
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
     swarms[0].get_record(&record.key, quorum);
 
-    current_thread::run(
-        future::poll_fn(move || {
+    futures::executor::block_on(
+        future::poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
-                    match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(Ok(KademliaEvent::GetRecordResult(Ok(ok))))) => {
                             assert_eq!(ok.records.len(), num_results);
                             assert_eq!(ok.records.first(), Some(&record));
-                            return Ok(Async::Ready(()));
+                            return Poll::Ready(());
                         }
-                        Async::Ready(_) => (),
-                        Async::NotReady => break,
+                        // TODO: Refactor
+                        Poll::Ready(Some(Err(e))) => panic!(e),
+                        Poll::Ready(_) => (),
+                        Poll::Pending => break,
                     }
                 }
             }
-            Ok(Async::NotReady)
+            Poll::Pending
         }))
 }
 
@@ -529,14 +547,14 @@ fn add_provider() {
             swarms[0].start_providing(k.clone());
         }
 
-        current_thread::run(
-            future::poll_fn(move || loop {
-                // Poll all swarms until they are "NotReady".
+        futures::executor::block_on(
+            future::poll_fn(move |ctx| loop {
+                // Poll all swarms until they are "Pending".
                 for swarm in &mut swarms {
                     loop {
-                        match swarm.poll().unwrap() {
-                            Async::Ready(Some(KademliaEvent::StartProvidingResult(res))) |
-                            Async::Ready(Some(KademliaEvent::RepublishProviderResult(res))) => {
+                        match swarm.poll_next_unpin(ctx) {
+                            Poll::Ready(Some(Ok(KademliaEvent::StartProvidingResult(res)))) |
+                            Poll::Ready(Some(Ok(KademliaEvent::RepublishProviderResult(res)))) => {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
@@ -545,8 +563,10 @@ fn add_provider() {
                                     }
                                 }
                             }
-                            Async::Ready(_) => (),
-                            Async::NotReady => break,
+                            // TODO: Refactor
+                            Poll::Ready(Some(Err(e))) => panic!(e),
+                            Poll::Ready(_) => (),
+                            Poll::Pending => break,
                         }
                     }
                 }
@@ -559,7 +579,7 @@ fn add_provider() {
                 if !published {
                     // Still waiting for all requests to be sent for one round
                     // of publishing.
-                    return Ok(Async::NotReady)
+                    return Poll::Pending
                 }
 
                 // A round of publishing is complete. Consume the results, checking that
@@ -578,7 +598,7 @@ fn add_provider() {
                     if actual.len() != replication_factor.get() {
                         // Still waiting for some nodes to process the request.
                         results.push(key);
-                        return Ok(Async::NotReady)
+                        return Poll::Pending
                     }
 
                     let mut expected = swarm_ids.clone().split_off(1);
@@ -608,7 +628,7 @@ fn add_provider() {
                     }
                     assert_eq!(swarms[0].store.provided().count(), 0);
                     // All records have been republished, thus the test is complete.
-                    return Ok(Async::Ready(()));
+                    return Poll::Ready(());
                 }
 
                 // Initiate the second round of publishing by telling the
@@ -636,12 +656,12 @@ fn exceed_jobs_max_queries() {
 
     assert_eq!(swarms[0].queries.size(), num);
 
-    current_thread::run(
-        future::poll_fn(move || {
+    futures::executor::block_on(
+        future::poll_fn(move |ctx| {
             for _ in 0 .. num {
                 // There are no other nodes, so the queries finish instantly.
-                if let Ok(Async::Ready(Some(e))) = swarms[0].poll() {
-                    if let KademliaEvent::BootstrapResult(r) = e {
+                if let Poll::Ready(Some(e)) = swarms[0].poll_next_unpin(ctx) {
+                    if let Ok(KademliaEvent::BootstrapResult(r)) = e {
                         assert!(r.is_ok(), "Unexpected error")
                     } else {
                         panic!("Unexpected event: {:?}", e)
@@ -650,7 +670,6 @@ fn exceed_jobs_max_queries() {
                     panic!("Expected event")
                 }
             }
-            Ok(Async::Ready(()))
+            Poll::Ready(())
         }))
 }
-
