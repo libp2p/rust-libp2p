@@ -124,20 +124,22 @@ fn bootstrap() {
 
         // Run test
         block_on(async move {
-            // Give all but first swarm chance to make progress.
-            for swarm in swarms.iter_mut().skip(1) {
-                while let Some(_) = swarm.next().now_or_never() {};
-            }
+            'outer: loop {
+                // Give all but first swarm chance to make progress.
+                for swarm in swarms.iter_mut().skip(1) {
+                    while let Some(_) = swarm.next().now_or_never() {};
+                }
 
-            // Have first swarm make progress and check for success.
-            while let Some(event) = swarms[0].next().now_or_never() {
-                if let KademliaEvent::BootstrapResult(Ok(ok)) = event.unwrap().unwrap() {
-                    assert_eq!(ok.peer, swarm_ids[0]);
-                    let known = swarms[0].kbuckets.iter()
-                        .map(|e| e.node.key.preimage().clone())
-                        .collect::<HashSet<_>>();
-                    assert_eq!(expected_known, known);
-                    return;
+                // Have first swarm make progress and check for success.
+                while let Some(event) = swarms[0].next().now_or_never() {
+                    if let KademliaEvent::BootstrapResult(Ok(ok)) = event.unwrap().unwrap() {
+                        assert_eq!(ok.peer, swarm_ids[0]);
+                        let known = swarms[0].kbuckets.iter()
+                            .map(|e| e.node.key.preimage().clone())
+                            .collect::<HashSet<_>>();
+                        assert_eq!(expected_known, known);
+                        break 'outer;
+                    }
                 }
             }
         });
