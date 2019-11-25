@@ -265,11 +265,10 @@ where
 mod tests {
     use super::*;
 
+    use async_std::net::TcpStream;
     use futures::future;
     use quickcheck::*;
     use rand::Rng;
-    use tokio_tcp::TcpStream;
-    use tokio::runtime::current_thread::Runtime;
 
     impl Arbitrary for PingConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> PingConfig {
@@ -280,11 +279,10 @@ mod tests {
         }
     }
 
-    fn tick(h: &mut PingHandler<TcpStream>) -> Result<
-        ProtocolsHandlerEvent<protocol::Ping, (), PingResult>,
-        PingFailure
-    > {
-        futures::executor::block_on(future::poll_fn(|| h.poll() ))
+    fn tick(h: &mut PingHandler<TcpStream>)
+        -> ProtocolsHandlerEvent<protocol::Ping, (), PingResult, PingFailure>
+    {
+        futures::executor::block_on(future::poll_fn(|cx| h.poll(cx) ))
     }
 
     #[test]
@@ -292,34 +290,25 @@ mod tests {
         fn prop(cfg: PingConfig, ping_rtt: Duration) -> bool {
             let mut h = PingHandler::<TcpStream>::new(cfg);
 
-            // The first ping is scheduled "immediately".
-            let start = h.next_ping.deadline();
-            assert!(start <= Instant::now());
-
             // Send ping
             match tick(&mut h) {
-                Ok(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info: _ }) => {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info: _ } => {
                     // The handler must use the configured timeout.
                     assert_eq!(protocol.timeout(), &h.config.timeout);
-                    // The next ping must be scheduled no earlier than the ping timeout.
-                    assert!(h.next_ping.deadline() >= start + h.config.timeout);
                 }
                 e => panic!("Unexpected event: {:?}", e)
             }
-
-            let now = Instant::now();
 
             // Receive pong
             h.inject_fully_negotiated_outbound(ping_rtt, ());
             match tick(&mut h) {
-                Ok(ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { rtt }))) => {
+                ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { rtt })) => {
                     // The handler must report the given RTT.
                     assert_eq!(rtt, ping_rtt);
-                    // The next ping must be scheduled no earlier than the ping interval.
-                    assert!(now + h.config.interval <= h.next_ping.deadline());
                 }
                 e => panic!("Unexpected event: {:?}", e)
             }
+
             true
         }
 
@@ -333,20 +322,20 @@ mod tests {
         for _ in 0 .. h.config.max_failures.get() - 1 {
             h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
             match tick(&mut h) {
-                Ok(ProtocolsHandlerEvent::Custom(Err(PingFailure::Timeout))) => {}
+                ProtocolsHandlerEvent::Custom(Err(PingFailure::Timeout)) => {}
                 e => panic!("Unexpected event: {:?}", e)
             }
         }
         h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
         match tick(&mut h) {
-            Err(PingFailure::Timeout) => {
+            ProtocolsHandlerEvent::Close(PingFailure::Timeout) => {
                 assert_eq!(h.failures, h.config.max_failures.get());
             }
             e => panic!("Unexpected event: {:?}", e)
         }
         h.inject_fully_negotiated_outbound(Duration::from_secs(1), ());
         match tick(&mut h) {
-            Ok(ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { .. }))) => {
+            ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { .. })) => {
                 // A success resets the counter for consecutive failures.
                 assert_eq!(h.failures, 0);
             }
