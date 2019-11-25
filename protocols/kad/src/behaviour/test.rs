@@ -137,11 +137,9 @@ fn bootstrap() {
                         .map(|e| e.node.key.preimage().clone())
                         .collect::<HashSet<_>>();
                     assert_eq!(expected_known, known);
-                    return Poll::Ready(());
+                    return;
                 }
             }
-
-            Poll::Pending
         });
     }
 
