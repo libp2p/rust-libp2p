@@ -23,6 +23,7 @@
 //! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
 //! peer ID will be generated randomly.
 
+use async_std::task;
 use futures::prelude::*;
 use libp2p::{
     Swarm,
@@ -32,10 +33,9 @@ use libp2p::{
 };
 use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
 use libp2p::kad::record::store::MemoryStore;
-use std::env;
-use std::time::Duration;
+use std::{env, error::Error, time::Duration};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -43,7 +43,7 @@ fn main() {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = build_development_transport(local_key);
+    let transport = build_development_transport(local_key)?;
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
@@ -60,7 +60,7 @@ fn main() {
         behaviour.add_address(&"QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());*/
 
         // The only address that currently works.
-        behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse().unwrap(), "/ip4/104.131.131.82/tcp/4001".parse().unwrap());
+        behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse()?, "/ip4/104.131.131.82/tcp/4001".parse()?);
 
         // The following addresses always fail signature verification, possibly due to
         // RSA keys with < 2048 bits.
@@ -80,7 +80,7 @@ fn main() {
 
     // Order Kademlia to search for a peer.
     let to_search: PeerId = if let Some(peer_id) = env::args().nth(1) {
-        peer_id.parse().expect("Failed to parse peer ID to find")
+        peer_id.parse()?
     } else {
         identity::Keypair::generate_ed25519().public().into()
     };
@@ -89,38 +89,29 @@ fn main() {
     swarm.get_closest_peers(to_search);
 
     // Kick it off!
-    tokio::run(futures::future::poll_fn(move || {
-        loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(KademliaEvent::GetClosestPeersResult(res))) => {
-                    match res {
-                        Ok(ok) => {
-                            if !ok.peers.is_empty() {
-                                println!("Query finished with closest peers: {:#?}", ok.peers);
-                                return Ok(Async::Ready(()));
-                            } else {
-                                // The example is considered failed as there
-                                // should always be at least 1 reachable peer.
-                                panic!("Query finished with no closest peers.");
-                            }
+    task::block_on(async move {
+        while let Some(event) = swarm.try_next().await? {
+            if let KademliaEvent::GetClosestPeersResult(result) = event {
+                match result {
+                    Ok(ok) =>
+                        if !ok.peers.is_empty() {
+                            println!("Query finished with closest peers: {:#?}", ok.peers)
+                        } else {
+                            // The example is considered failed as there
+                            // should always be at least 1 reachable peer.
+                            panic!("Query finished with no closest peers.")
                         }
-                        Err(GetClosestPeersError::Timeout { peers, .. }) => {
-                            if !peers.is_empty() {
-                                println!("Query timed out with closest peers: {:#?}", peers);
-                                return Ok(Async::Ready(()));
-                            } else {
-                                // The example is considered failed as there
-                                // should always be at least 1 reachable peer.
-                                panic!("Query timed out with no closest peers.");
-                            }
+                    Err(GetClosestPeersError::Timeout { peers, .. }) =>
+                        if !peers.is_empty() {
+                            println!("Query timed out with closest peers: {:#?}", peers)
+                        } else {
+                            // The example is considered failed as there
+                            // should always be at least 1 reachable peer.
+                            panic!("Query timed out with no closest peers.");
                         }
-                    }
-                },
-                Async::Ready(Some(_)) => {},
-                Async::Ready(None) | Async::NotReady => break,
+                }
             }
         }
-
-        Ok(Async::NotReady)
-    }));
+        Ok(())
+    })
 }
