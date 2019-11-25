@@ -93,7 +93,7 @@ impl<TSubstream> Default for Ping<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Ping<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type ProtocolsHandler = PingHandler<TSubstream>;
     type OutEvent = PingEvent;

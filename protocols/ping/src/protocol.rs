@@ -55,11 +55,11 @@ impl UpgradeInfo for Ping {
 
 impl<TSocket> InboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = ();
     type Error = io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<(), io::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>;
 
     fn upgrade_inbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -74,11 +74,11 @@ where
 
 impl<TSocket> OutboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = Duration;
     type Error = io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Duration, io::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Duration, io::Error>> + Send>>;
 
     fn upgrade_outbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
@@ -122,31 +122,23 @@ mod tests {
         let mut listener = MemoryTransport.listen_on(mem_addr).unwrap();
 
         let listener_addr =
-            if let Ok(Poll::Ready(Some(ListenerEvent::NewAddress(a)))) = listener.poll() {
+            if let Some(Some(Ok(ListenerEvent::NewAddress(a)))) = listener.next().now_or_never() {
                 a
             } else {
                 panic!("MemoryTransport not listening on an address!");
             };
+        
+        async_std::task::spawn(async move {
+            let listener_event = listener.next().await.unwrap();
+            let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
+            let conn = listener_upgrade.await.unwrap();
+            upgrade::apply_inbound(conn, Ping::default()).await.unwrap();
+        });
 
-        let server = listener
-            .into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(listener_event, _)| {
-                let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
-                let conn = listener_upgrade.wait().unwrap();
-                upgrade::apply_inbound(conn, Ping::default())
-                    .map_err(|e| panic!(e))
-            });
-
-        let client = MemoryTransport.dial(listener_addr).unwrap()
-            .and_then(|c| {
-                upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1)
-                    .map_err(|e| panic!(e))
-            });
-
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.spawn(server.map_err(|e| panic!(e)));
-        let rtt = runtime.block_on(client).expect("RTT");
-        assert!(rtt > Duration::from_secs(0));
+        async_std::task::block_on(async move {
+            let c = MemoryTransport.dial(listener_addr).unwrap().await.unwrap();
+            let rtt = upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1).await.unwrap();
+            assert!(rtt > Duration::from_secs(0));
+        });
     }
 }
