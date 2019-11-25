@@ -182,60 +182,32 @@ where
 
 #[cfg(test)]
 mod tests {
+    use libp2p_core::Multiaddr;
     use libp2p_tcp as tcp;
-    use tokio::runtime::current_thread::Runtime;
-    use futures::{Future, Stream};
-    use libp2p_core::{
-        Transport,
-        multiaddr::Protocol,
-        transport::ListenerEvent
-    };
+    use futures::prelude::*;
+    use libp2p_core::{Transport, multiaddr::Protocol};
     use super::WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
-
-        let mut listener = ws_config.clone()
-            .listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap())
-            .unwrap();
-
-        let addr = listener.by_ref().wait()
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
-        assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
-
-        let listener = listener
-            .filter_map(ListenerEvent::into_upgrade)
-            .into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(c, _)| c.unwrap().0);
-
-        let dialer = ws_config.clone().dial(addr.clone()).unwrap();
-
-        let future = listener
-            .select(dialer)
-            .map_err(|(e, _)| e)
-            .and_then(|(_, n)| n);
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(future).unwrap();
+        let a = "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap();
+        futures::executor::block_on(connect(a))
     }
 
     #[test]
     fn dialer_connects_to_listener_ipv6() {
+        let a = "/ip6/::1/tcp/0/ws".parse().unwrap();
+        futures::executor::block_on(connect(a))
+    }
+
+    async fn connect(listen_addr: Multiaddr) {
         let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         let mut listener = ws_config.clone()
-            .listen_on("/ip6/::1/tcp/0/ws".parse().unwrap())
-            .unwrap();
+            .listen_on(listen_addr)
+            .expect("listener");
 
-        let addr = listener.by_ref().wait()
-            .next()
+        let addr = listener.try_next().await
             .expect("some event")
             .expect("no error")
             .into_new_address()
@@ -244,20 +216,18 @@ mod tests {
         assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
         assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
 
-        let listener = listener
-            .filter_map(ListenerEvent::into_upgrade)
-            .into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(c, _)| c.unwrap().0);
+        let inbound = async move {
+            let (conn, _addr) = listener.try_filter_map(|e| future::ready(Ok(e.into_upgrade())))
+                .try_next()
+                .await
+                .unwrap()
+                .unwrap();
+            conn.await
+        };
 
-        let dialer = ws_config.clone().dial(addr.clone()).unwrap();
+        let outbound = ws_config.dial(addr).unwrap();
 
-        let future = listener
-            .select(dialer)
-            .map_err(|(e, _)| e)
-            .and_then(|(_, n)| n);
-
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(future).unwrap();
+        let (a, b) = futures::join!(inbound, outbound);
+        a.and(b).unwrap();
     }
 }
