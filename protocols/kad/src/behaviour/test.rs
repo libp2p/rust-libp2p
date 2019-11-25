@@ -25,9 +25,11 @@ use super::*;
 use crate::K_VALUE;
 use crate::kbucket::Distance;
 use crate::record::store::MemoryStore;
-use futures::prelude::*;
-// TODO: still needed?
-use futures::future;
+use futures::{
+    prelude::*,
+    executor::block_on,
+    future::poll_fn,
+};
 use libp2p_core::{
     PeerId,
     Transport,
@@ -121,8 +123,8 @@ fn bootstrap() {
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
 
         // Run test
-        futures::executor::block_on(
-            future::poll_fn(move |ctx| {
+        block_on(
+            poll_fn(move |ctx| {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
@@ -179,8 +181,8 @@ fn query_iter() {
         expected_distances.sort();
 
         // Run test
-        futures::executor::block_on(
-            future::poll_fn(move |ctx| {
+        block_on(
+            poll_fn(move |ctx| {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
@@ -226,8 +228,8 @@ fn unresponsive_not_returned_direct() {
     let search_target = PeerId::random();
     swarms[0].get_closest_peers(search_target.clone());
 
-    futures::executor::block_on(
-        future::poll_fn(move |ctx| {
+    block_on(
+        poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -269,8 +271,8 @@ fn unresponsive_not_returned_indirect() {
     let search_target = PeerId::random();
     swarms[1].get_closest_peers(search_target.clone());
 
-    futures::executor::block_on(
-        future::poll_fn(move |ctx| {
+    block_on(
+        poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -304,8 +306,8 @@ fn get_record_not_found() {
     let target_key = record::Key::from(Multihash::random(SHA2256));
     swarms[0].get_record(&target_key, Quorum::One);
 
-    futures::executor::block_on(
-        future::poll_fn(move |ctx| {
+    block_on(
+        poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -363,8 +365,8 @@ fn put_record() {
         // The accumulated results for one round of publishing.
         let mut results = Vec::new();
 
-        futures::executor::block_on(
-            future::poll_fn(move |ctx| loop {
+        block_on(
+            poll_fn(move |ctx| loop {
                 // Poll all swarms until they are "Pending".
                 for swarm in &mut swarms {
                     loop {
@@ -463,8 +465,8 @@ fn get_value() {
     swarms[1].store.put(record.clone()).unwrap();
     swarms[0].get_record(&record.key, Quorum::One);
 
-    futures::executor::block_on(
-        future::poll_fn(move |ctx| {
+    block_on(
+        poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -501,8 +503,8 @@ fn get_value_many() {
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
     swarms[0].get_record(&record.key, quorum);
 
-    futures::executor::block_on(
-        future::poll_fn(move |ctx| {
+    block_on(
+        poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
@@ -547,8 +549,8 @@ fn add_provider() {
             swarms[0].start_providing(k.clone());
         }
 
-        futures::executor::block_on(
-            future::poll_fn(move |ctx| loop {
+        block_on(
+            poll_fn(move |ctx| loop {
                 // Poll all swarms until they are "Pending".
                 for swarm in &mut swarms {
                     loop {
@@ -656,8 +658,8 @@ fn exceed_jobs_max_queries() {
 
     assert_eq!(swarms[0].queries.size(), num);
 
-    futures::executor::block_on(
-        future::poll_fn(move |ctx| {
+    block_on(
+        poll_fn(move |ctx| {
             for _ in 0 .. num {
                 // There are no other nodes, so the queries finish instantly.
                 if let Poll::Ready(Some(e)) = swarms[0].poll_next_unpin(ctx) {
