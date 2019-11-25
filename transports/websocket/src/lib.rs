@@ -24,9 +24,10 @@ pub mod error;
 pub mod framed;
 pub mod tls;
 
+use bytes::BytesMut;
 use error::Error;
-use framed::BytesConnection;
-use futures::{future::BoxFuture, prelude::*, stream::BoxStream};
+use framed::Connection;
+use futures::{future::BoxFuture, prelude::*, stream::BoxStream, ready};
 use libp2p_core::{
     ConnectedPoint,
     Transport,
@@ -34,6 +35,7 @@ use libp2p_core::{
     transport::{map::{MapFuture, MapStream}, ListenerEvent, TransportError}
 };
 use rw_stream_sink::RwStreamSink;
+use std::{io, pin::Pin, task::{Context, Poll}};
 
 /// A Websocket transport.
 #[derive(Debug, Clone)]
@@ -118,18 +120,62 @@ where
 pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
-pub type InnerFuture<T, E> = BoxFuture<'static, Result<BytesConnection<T>, Error<E>>>;
+pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
-pub type WrapperFn<T> = fn(BytesConnection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
+pub type WrapperFn<T> = fn(Connection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
 
 /// Wrap a websocket connection producing data frames into a `RwStreamSink`
 /// implementing `AsyncRead` + `AsyncWrite`.
-fn wrap_connection<T>(c: BytesConnection<T>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
+fn wrap_connection<T>(c: Connection<T>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    RwStreamSink::new(c)
+    RwStreamSink::new(BytesConnection(c))
+}
+
+/// The websocket connection.
+#[derive(Debug)]
+pub struct BytesConnection<T>(Connection<T>);
+
+impl<T> Stream for BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Item = io::Result<BytesMut>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        loop {
+            match ready!(self.0.try_poll_next_unpin(cx)?) {
+                Some(framed::IncomingData::Binary(d)) => return Poll::Ready(Some(Ok(d))),
+                None => return Poll::Ready(None),
+                _ => {}
+            }
+        }
+    }
+}
+
+impl<T> Sink<BytesMut> for BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Error = io::Error;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_ready(cx)
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> io::Result<()> {
+        Pin::new(&mut self.0).start_send(framed::OutgoingData::Binary(item))
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_close(cx)
+    }
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
