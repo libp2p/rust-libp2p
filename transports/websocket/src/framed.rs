@@ -30,8 +30,8 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
-use soketto::{connection, extension::deflate::Deflate, handshake};
-use std::{fmt, io, pin::Pin, task::Context, task::Poll};
+use soketto::{connection, data, extension::deflate::Deflate, handshake};
+use std::{convert::TryInto, fmt, io, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
 /// Max. number of payload bytes of a single frame.
@@ -107,7 +107,7 @@ where
     T::ListenerUpgrade: Send + 'static,
     T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = BytesConnection<T::Output>;
+    type Output = Connection<T::Output>;
     type Error = Error<T::Error>;
     type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -211,7 +211,7 @@ where
                         let conn = {
                             let mut builder = server.into_builder();
                             builder.set_max_message_size(max_size).set_max_frame_size(max_size);
-                            BytesConnection::new(builder)
+                            Connection::new(builder)
                         };
 
                         Ok(conn)
@@ -267,7 +267,7 @@ where
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, BytesConnection<T::Output>>, Error<T::Error>> {
+    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("dial address: {}", address);
 
         let (host_port, dns_name) = host_and_dnsname(&address)?;
@@ -340,7 +340,7 @@ where
             }
             handshake::ServerResponse::Accepted { .. } => {
                 trace!("websocket handshake with {} successful", address);
-                Ok(Either::Right(BytesConnection::new(client.into_builder())))
+                Ok(Either::Right(Connection::new(client.into_builder())))
             }
         }
     }
@@ -403,23 +403,41 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
     }
 }
 
-// BytesConnection ////////////////////////////////////////////////////////////////////////////////
-
-/// A [`Stream`] and [`Sink`] that produces and consumes [`BytesMut`] values
-/// which correspond to the payload data of websocket frames.
-pub struct BytesConnection<T> {
-    receiver: BoxStream<'static, Result<(BytesMut, bool), connection::Error>>,
-    sender: Pin<Box<dyn Sink<BytesMut, Error = connection::Error> + Send>>,
+/// The websocket connection.
+pub struct Connection<T> {
+    receiver: BoxStream<'static, Result<data::Incoming, connection::Error>>,
+    sender: Pin<Box<dyn Sink<data::Outgoing, Error = connection::Error> + Send>>,
     _marker: std::marker::PhantomData<T>
 }
 
-impl<T> fmt::Debug for BytesConnection<T> {
+/// Data received over the websocket connection.
+#[derive(Debug, Clone)]
+pub enum IncomingData {
+    /// We received some binary data.
+    Binary(BytesMut),
+    /// We received a PONG.
+    Pong(BytesMut)
+}
+
+/// Data sent over the websocket connection.
+#[derive(Debug, Clone)]
+pub enum OutgoingData {
+    /// Send some bytes.
+    Binary(BytesMut),
+    /// Send a PING message.
+    Ping(BytesMut),
+    /// Send an unsolicited PONG message.
+    /// (Incoming PINGs are answered automatically.)
+    Pong(BytesMut)
+}
+
+impl<T> fmt::Debug for Connection<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("BytesConnection")
+        f.write_str("Connection")
     }
 }
 
-impl<T> BytesConnection<T>
+impl<T> Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
@@ -427,37 +445,56 @@ where
         let (sender, receiver) = builder.finish();
         let sink = quicksink::make_sink(sender, |mut sender, action| async move {
             match action {
-                quicksink::Action::Send(x) => sender.send_binary(x).await?,
+                quicksink::Action::Send(x) => sender.send(x).await?,
                 quicksink::Action::Flush => sender.flush().await?,
                 quicksink::Action::Close => sender.close().await?
             }
             Ok(sender)
         });
         let stream = connection::into_stream(receiver);
-        BytesConnection {
+        Connection {
             receiver: Box::pin(stream),
             sender: Box::pin(sink),
             _marker: std::marker::PhantomData
         }
     }
+
+    /// Send binary application data to the remote.
+    pub fn send_data(&mut self, data: impl Into<BytesMut>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Binary(data.into()))
+    }
+
+    /// Send a PING to the remote.
+    pub fn send_ping(&mut self, data: impl Into<BytesMut>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Ping(data.into()))
+    }
+
+    /// Send an unsolicited PONG to the remote.
+    pub fn send_pong(&mut self, data: impl Into<BytesMut>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Pong(data.into()))
+    }
 }
 
-impl<T> Stream for BytesConnection<T>
+impl<T> Stream for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Item = io::Result<BytesMut>;
+    type Item = io::Result<IncomingData>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let item = ready!(Pin::new(&mut self.receiver).poll_next(cx));
+        let item = ready!(self.receiver.poll_next_unpin(cx));
         let item = item.map(|result| {
-            result.map(|(bytes, _)| bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            result.map(|incoming| match incoming {
+                data::Incoming::Data(d) => IncomingData::Binary(d.into()),
+                data::Incoming::Pong(p) => IncomingData::Pong(p)
+            })
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
         });
         Poll::Ready(item)
     }
 }
 
-impl<T> Sink<BytesMut> for BytesConnection<T>
+impl<T> Sink<OutgoingData> for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
@@ -469,7 +506,23 @@ where
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> io::Result<()> {
+    fn start_send(mut self: Pin<&mut Self>, item: OutgoingData) -> io::Result<()> {
+        let item = match item {
+            OutgoingData::Binary(d) => data::Outgoing::Data(soketto::Data::Binary(d)),
+            OutgoingData::Ping(p) => {
+                let p = p.try_into().map_err(|()| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "PING data must be < 126 bytes")
+                })?;
+                data::Outgoing::Ping(p)
+            }
+            OutgoingData::Pong(p) => {
+                let p = p.try_into().map_err(|()| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "PONG data must be < 126 bytes")
+                })?;
+                data::Outgoing::Pong(p)
+            }
+
+        };
         Pin::new(&mut self.sender)
             .start_send(item)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
