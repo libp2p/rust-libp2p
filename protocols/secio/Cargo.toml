@@ -35,7 +35,7 @@ untrusted = "0.7.0"
 js-sys = "0.3.10"
 parity-send-wrapper = "0.1"
 wasm-bindgen = "0.2.33"
-wasm-bindgen-futures = "0.3.10"
+wasm-bindgen-futures = "0.4.5"
 web-sys = { version = "0.3.10", features = ["Crypto", "CryptoKey", "SubtleCrypto", "Window"] }
 
 [features]
