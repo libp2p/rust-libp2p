@@ -214,10 +214,8 @@ mod tests {
     use libp2p_core::{
         identity,
         Transport,
-        transport::ListenerEvent,
         upgrade::{self, apply_outbound, apply_inbound}
     };
-    use std::{io, thread};
 
     #[test]
     fn correct_transfer() {
