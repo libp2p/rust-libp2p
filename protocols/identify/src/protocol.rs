@@ -137,11 +137,11 @@ where
 
 impl<C> OutboundUpgrade<C> for IdentifyProtocolConfig
 where
-    C: AsyncRead + AsyncWrite + Unpin + 'static,
+    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = RemoteInfo;
     type Error = upgrade::ReadOneError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         Box::pin(async move {
@@ -209,16 +209,13 @@ fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<(IdentifyInfo, Multiaddr), i
 #[cfg(test)]
 mod tests {
     use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use tokio::runtime::current_thread::Runtime;
     use libp2p_tcp::TcpConfig;
-    use futures::{Future, Stream};
+    use futures::{prelude::*, channel::oneshot};
     use libp2p_core::{
         identity,
         Transport,
-        transport::ListenerEvent,
         upgrade::{self, apply_outbound, apply_inbound}
     };
-    use std::{io, sync::mpsc, thread};
 
     #[test]
     fn correct_transfer() {
@@ -227,75 +224,55 @@ mod tests {
         let send_pubkey = identity::Keypair::generate_ed25519().public();
         let recv_pubkey = send_pubkey.clone();
 
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = oneshot::channel();
 
-        let bg_thread = thread::spawn(move || {
+        let bg_task = async_std::task::spawn(async move {
             let transport = TcpConfig::new();
 
             let mut listener = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let addr = listener.by_ref().wait()
-                .next()
+            let addr = listener.next().await
                 .expect("some event")
                 .expect("no error")
                 .into_new_address()
                 .expect("listen address");
-
-
             tx.send(addr).unwrap();
 
-            let future = listener
-                .filter_map(ListenerEvent::into_upgrade)
-                .into_future()
-                .map_err(|(err, _)| err)
-                .and_then(|(client, _)| client.unwrap().0)
-                .and_then(|socket| {
-                    apply_inbound(socket, IdentifyProtocolConfig)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-                })
-                .and_then(|sender| {
-                    sender.send(
-                        IdentifyInfo {
-                            public_key: send_pubkey,
-                            protocol_version: "proto_version".to_owned(),
-                            agent_version: "agent_version".to_owned(),
-                            listen_addrs: vec![
-                                "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                                "/ip6/::1/udp/1000".parse().unwrap(),
-                            ],
-                            protocols: vec!["proto1".to_string(), "proto2".to_string()],
-                        },
-                        &"/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-                    )
-                });
-            let mut rt = Runtime::new().unwrap();
-            let _ = rt.block_on(future).unwrap();
+            let socket = listener.next().await.unwrap().unwrap().into_upgrade().unwrap().0.await.unwrap();
+            let sender = apply_inbound(socket, IdentifyProtocolConfig).await.unwrap();
+            sender.send(
+                IdentifyInfo {
+                    public_key: send_pubkey,
+                    protocol_version: "proto_version".to_owned(),
+                    agent_version: "agent_version".to_owned(),
+                    listen_addrs: vec![
+                        "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                        "/ip6/::1/udp/1000".parse().unwrap(),
+                    ],
+                    protocols: vec!["proto1".to_string(), "proto2".to_string()],
+                },
+                &"/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
+            ).await.unwrap();
         });
 
-        let transport = TcpConfig::new();
+        async_std::task::block_on(async move {
+            let transport = TcpConfig::new();
 
-        let future = transport.dial(rx.recv().unwrap())
-            .unwrap()
-            .and_then(|socket| {
-                apply_outbound(socket, IdentifyProtocolConfig, upgrade::Version::V1)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-            })
-            .and_then(|RemoteInfo { info, observed_addr, .. }| {
-                assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
-                assert_eq!(info.public_key, recv_pubkey);
-                assert_eq!(info.protocol_version, "proto_version");
-                assert_eq!(info.agent_version, "agent_version");
-                assert_eq!(info.listen_addrs,
-                    &["/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                      "/ip6/::1/udp/1000".parse().unwrap()]);
-                assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
-                Ok(())
-            });
+            let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+            let RemoteInfo { info, observed_addr, .. } =
+                apply_outbound(socket, IdentifyProtocolConfig, upgrade::Version::V1).await.unwrap();
+            assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
+            assert_eq!(info.public_key, recv_pubkey);
+            assert_eq!(info.protocol_version, "proto_version");
+            assert_eq!(info.agent_version, "agent_version");
+            assert_eq!(info.listen_addrs,
+                &["/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                "/ip6/::1/udp/1000".parse().unwrap()]);
+            assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
 
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(future).unwrap();
-        bg_thread.join().unwrap();
+            bg_task.await;
+        });
     }
 }
