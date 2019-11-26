@@ -124,7 +124,7 @@ fn bootstrap() {
 
         // Run test
         block_on(async move {
-            'outer: loop {
+            loop {
                 // Give all but first swarm chance to make progress.
                 for swarm in swarms.iter_mut().skip(1) {
                     while let Some(_) = swarm.next().now_or_never() {};
@@ -138,7 +138,7 @@ fn bootstrap() {
                             .map(|e| e.node.key.preimage().clone())
                             .collect::<HashSet<_>>();
                         assert_eq!(expected_known, known);
-                        break 'outer;
+                        return;
                     }
                 }
             }
