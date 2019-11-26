@@ -92,7 +92,7 @@ impl<TSubstream> IdentifyHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for IdentifyHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + 'static,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type InEvent = ();
     type OutEvent = IdentifyHandlerEvent<TSubstream>;

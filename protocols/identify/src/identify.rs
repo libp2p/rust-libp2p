@@ -254,7 +254,7 @@ pub enum IdentifyEvent {
 #[cfg(test)]
 mod tests {
     use crate::{Identify, IdentifyEvent};
-    use futures::{future, prelude::*};
+    use futures::prelude::*;
     use libp2p_core::{
         identity,
         PeerId,
@@ -268,8 +268,7 @@ mod tests {
     use libp2p_swarm::Swarm;
     use libp2p_mplex::MplexConfig;
     use rand::{Rng, thread_rng};
-    use std::{fmt, io};
-    use tokio::runtime::current_thread;
+    use std::{fmt, io, pin::Pin, task::Context, task::Poll};
 
     fn transport() -> (identity::PublicKey, impl Transport<
         Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
@@ -316,40 +315,39 @@ mod tests {
         // it will permit the connection to be closed, as defined by
         // `IdentifyHandler::connection_keep_alive`. Hence the test succeeds if
         // either `Identified` event arrives correctly.
-        current_thread::Runtime::new().unwrap().block_on(
-            future::poll_fn(move || -> Result<_, io::Error> {
+        futures::executor::block_on(
+            future::poll_fn(move |cx| {
                 loop {
-                    match swarm1.poll().unwrap() {
-                        Async::Ready(Some(IdentifyEvent::Received { info, .. })) => {
+                    match Stream::poll_next(Pin::new(&mut swarm1), cx) {
+                        Poll::Ready(Some(Ok(IdentifyEvent::Received { info, .. }))) => {
                             assert_eq!(info.public_key, pubkey2);
                             assert_eq!(info.protocol_version, "c");
                             assert_eq!(info.agent_version, "d");
                             assert!(!info.protocols.is_empty());
                             assert!(info.listen_addrs.is_empty());
-                            return Ok(Poll::Ready(()))
+                            return Poll::Ready(())
                         },
-                        Async::Ready(Some(IdentifyEvent::Sent { .. })) => (),
-                        Async::Ready(e) => panic!("{:?}", e),
-                        Async::NotReady => {}
+                        Poll::Ready(Some(Ok(IdentifyEvent::Sent { .. }))) => (),
+                        Poll::Ready(e) => panic!("{:?}", e),
+                        Poll::Pending => {}
                     }
 
-                    match swarm2.poll().unwrap() {
-                        Async::Ready(Some(IdentifyEvent::Received { info, .. })) => {
+                    match Stream::poll_next(Pin::new(&mut swarm2), cx) {
+                        Poll::Ready(Some(Ok(IdentifyEvent::Received { info, .. }))) => {
                             assert_eq!(info.public_key, pubkey1);
                             assert_eq!(info.protocol_version, "a");
                             assert_eq!(info.agent_version, "b");
                             assert!(!info.protocols.is_empty());
                             assert_eq!(info.listen_addrs.len(), 1);
-                            return Ok(Poll::Ready(()))
+                            return Poll::Ready(())
                         },
-                        Async::Ready(Some(IdentifyEvent::Sent { .. })) => (),
-                        Async::Ready(e) => panic!("{:?}", e),
-                        Async::NotReady => break
+                        Poll::Ready(Some(Ok(IdentifyEvent::Sent { .. }))) => (),
+                        Poll::Ready(e) => panic!("{:?}", e),
+                        Poll::Pending => break
                     }
                 }
 
-                Ok(Poll::Pending)
-            }))
-            .unwrap();
+                Poll::Pending
+            }));
     }
 }
