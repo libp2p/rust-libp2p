@@ -62,7 +62,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let substream_generic = {
         let mut n = "TSubstream".to_string();
         // Avoid collisions.
-        while ast.generics.type_params().any(|tp| tp.ident.to_string() == n) {
+        while ast.generics.type_params().any(|tp| tp.ident == n) {
             n.push('1');
         }
         let n = Ident::new(&n, name.span());
