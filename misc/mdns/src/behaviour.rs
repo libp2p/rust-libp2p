@@ -236,7 +236,7 @@ where
                     }
                 },
                 Poll::Pending => (),
-                Poll::Ready(Err(err)) => warn!("tokio timer has errored: {:?}", err),
+                Poll::Ready(Err(err)) => warn!("timer has errored: {:?}", err),
             }
         }
 
