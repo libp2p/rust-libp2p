@@ -365,10 +365,6 @@ mod tests {
             }
 
             block_on(poll_fn(|ctx| {
-                // Polling with an instant beyond the deadline for the next run
-                // is guaranteed to run the job, without the job needing to poll the `Delay`
-                // and thus without needing to run `poll` in the context of a task
-                // for testing purposes.
                 let now = Instant::now() + job.inner.interval;
                 // All (non-expired) records in the store must be yielded by the job.
                 for r in store.records().map(|r| r.into_owned()).collect::<Vec<_>>() {
@@ -399,10 +395,6 @@ mod tests {
             }
 
             block_on(poll_fn(|ctx| {
-                // Polling with an instant beyond the deadline for the next run
-                // is guaranteed to run the job, without the job needing to poll the `Delay`
-                // and thus without needing to run `poll` in the context of a task
-                // for testing purposes.
                 let now = Instant::now() + job.inner.interval;
                 // All (non-expired) records in the store must be yielded by the job.
                 for r in store.provided().map(|r| r.into_owned()).collect::<Vec<_>>() {
