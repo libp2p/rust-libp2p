@@ -23,20 +23,18 @@
 use libp2p_core::{
     Multiaddr,
     PeerId,
-    Negotiated,
     identity,
+    muxing::StreamMuxerBox,
     transport::{Transport, boxed::Boxed},
     either::EitherError,
     upgrade::{self, UpgradeError}
 };
 use libp2p_ping::*;
-use libp2p_yamux::{self as yamux, Yamux};
-use libp2p_secio::{SecioConfig, SecioOutput, SecioError};
+use libp2p_secio::{SecioConfig, SecioError};
 use libp2p_swarm::Swarm;
-use libp2p_tcp::{TcpConfig, TcpTransStream};
-use futures::{future, prelude::*};
-use std::{io, time::Duration, sync::mpsc::sync_channel};
-use tokio::runtime::Runtime;
+use libp2p_tcp::TcpConfig;
+use futures::{prelude::*, channel::mpsc};
+use std::{io, time::Duration};
 
 #[test]
 fn ping() {
@@ -48,56 +46,45 @@ fn ping() {
     let (peer2_id, trans) = mk_transport();
     let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
 
-    let (tx, rx) = sync_channel::<Multiaddr>(1);
+    let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
     let pid1 = peer1_id.clone();
     let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-    let mut listening = false;
     Swarm::listen_on(&mut swarm1, addr).unwrap();
-    let peer1 = future::poll_fn(move || -> Result<_, ()> {
+
+    let peer1 = async move {
+        while let Some(_) = swarm1.next().now_or_never() {}
+
+        for l in Swarm::listeners(&swarm1) {
+            tx.send(l.clone()).await.unwrap();
+        }
+
         loop {
-            match swarm1.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(PingEvent { peer, result })) => match result {
-                    Ok(PingSuccess::Ping { rtt }) =>
-                        return Ok(Async::Ready((pid1.clone(), peer, rtt))),
-                    _ => {}
+            match swarm1.next().await.unwrap().unwrap() {
+                PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                    return (pid1.clone(), peer, rtt)
                 },
-                _ => {
-                    if !listening {
-                        for l in Swarm::listeners(&swarm1) {
-                            tx.send(l.clone()).unwrap();
-                            listening = true;
-                        }
-                    }
-                    return Ok(Async::NotReady)
-                }
+                _ => {}
             }
         }
-    });
+    };
 
     let pid2 = peer2_id.clone();
-    let mut dialing = false;
-    let peer2 = future::poll_fn(move || -> Result<_, ()> {
+    let peer2 = async move {
+        Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
+
         loop {
-            match swarm2.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(PingEvent { peer, result })) => match result {
-                    Ok(PingSuccess::Ping { rtt }) =>
-                        return Ok(Async::Ready((pid2.clone(), peer, rtt))),
-                    _ => {}
+            match swarm2.next().await.unwrap().unwrap() {
+                PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                    return (pid2.clone(), peer, rtt)
                 },
-                _ => {
-                    if !dialing {
-                        Swarm::dial_addr(&mut swarm2, rx.recv().unwrap()).unwrap();
-                        dialing = true;
-                    }
-                    return Ok(Async::NotReady)
-                }
+                _ => {}
             }
         }
-    });
+    };
 
-    let result = peer1.select(peer2).map_err(|e| panic!(e));
-    let ((p1, p2, rtt), _) = futures::executor::block_on(result).unwrap();
+    let result = future::select(Box::pin(peer1), Box::pin(peer2));
+    let ((p1, p2, rtt), _) = futures::executor::block_on(result).factor_first();
     assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
     assert!(rtt < Duration::from_millis(50));
 }
@@ -105,7 +92,7 @@ fn ping() {
 fn mk_transport() -> (
     PeerId,
     Boxed<
-        (PeerId, Yamux<Negotiated<SecioOutput<Negotiated<TcpTransStream>>>>),
+        (PeerId, StreamMuxerBox),
         EitherError<EitherError<io::Error, UpgradeError<SecioError>>, UpgradeError<io::Error>>
     >
 ) {
@@ -115,8 +102,8 @@ fn mk_transport() -> (
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(SecioConfig::new(id_keys))
-        .multiplex(yamux::Config::default())
+        .multiplex(libp2p_yamux::Config::default())
+        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
     (peer_id, transport)
 }
-
