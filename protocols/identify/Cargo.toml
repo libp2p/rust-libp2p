@@ -10,7 +10,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = "1.0"
 bytes = "0.4"
 futures_codec = "0.3.1"
 futures = "0.3.1"
@@ -24,6 +23,7 @@ wasm-timer = "0.2"
 unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
 
 [dev-dependencies]
+async-std = "1.0"
 libp2p-mplex = { version = "0.13.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.13.0", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
