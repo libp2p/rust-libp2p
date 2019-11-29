@@ -37,8 +37,7 @@ use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
-use tokio_io::codec::length_delimited;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::{AsyncRead, AsyncWrite, codec::length_delimited};
 use crate::{KeyAgreement, SecioConfig};
 
 // This struct contains the whole context of a handshake, and is filled progressively

@@ -252,4 +252,3 @@ impl rand::RngCore for Rng {
 impl rand::CryptoRng for Rng {}
 
 impl snow::types::Random for Rng {}
-

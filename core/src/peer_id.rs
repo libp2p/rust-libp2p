@@ -26,6 +26,8 @@ use std::{convert::TryFrom, fmt, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
+//
+// Note: see `from_public_key` for how this value will be used in the future.
 const MAX_INLINE_KEY_LENGTH: usize = 42;
 
 /// Identifier of a peer of the network.
@@ -98,7 +100,7 @@ impl PeerId {
     /// returns back the data as an error.
     #[inline]
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
-        if data.algorithm() == multihash::Hash::SHA2256 {
+        if data.algorithm() == multihash::Hash::SHA2256 || data.algorithm() == multihash::Hash::Identity {
             Ok(PeerId { multihash: data })
         } else {
             Err(data)

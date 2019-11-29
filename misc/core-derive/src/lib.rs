@@ -62,7 +62,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let substream_generic = {
         let mut n = "TSubstream".to_string();
         // Avoid collisions.
-        while ast.generics.type_params().any(|tp| tp.ident.to_string() == n) {
+        while ast.generics.type_params().any(|tp| tp.ident == n) {
             n.push('1');
         }
         let n = Ident::new(&n, name.span());
@@ -118,7 +118,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
                 match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "out_event" => {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.path.is_ident("out_event") => {
                         if let syn::Lit::Str(ref s) = m.lit {
                             let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
                             out = quote!{#ident};
@@ -385,7 +385,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
                 match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "poll_method" => {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.path.is_ident("poll_method") => {
                         if let syn::Lit::Str(ref s) = m.lit {
                             let ident: Ident = syn::parse_str(&s.value()).unwrap();
                             poll_method = quote!{#name::#ident(self)};
@@ -525,9 +525,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 }
 
 fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
-    if attr.path.segments.len() == 1 && attr.path.segments[0].ident == "behaviour" {
-        match attr.interpret_meta() {
-            Some(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
+    if attr.path.is_ident("behaviour") {
+        match attr.parse_meta() {
+            Ok(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
             _ => {
                 None
             }
@@ -542,7 +542,7 @@ fn is_ignored(field: &syn::Field) -> bool {
     for meta_items in field.attrs.iter().filter_map(get_meta_items) {
         for meta_item in meta_items {
             match meta_item {
-                syn::NestedMeta::Meta(syn::Meta::Word(ref m)) if m == "ignore" => {
+                syn::NestedMeta::Meta(syn::Meta::Path(ref m)) if m.is_ident("ignore") => {
                     return true;
                 }
                 _ => ()
