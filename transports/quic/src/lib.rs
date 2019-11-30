@@ -51,7 +51,7 @@ use ipnet::IpNet;
 use libp2p_core::{
     multiaddr::{host_addresses, ip_to_multiaddr, Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
-    Transport,
+    StreamMuxer, Transport,
 };
 use log::debug;
 pub use quinn::{Endpoint, EndpointBuilder, EndpointError, ServerConfig};
@@ -61,6 +61,7 @@ use std::{
     iter::{self, FromIterator},
     net::{IpAddr, SocketAddr},
     pin::Pin,
+    sync::Mutex,
     task::{Context, Poll},
     time::{Duration, Instant},
     vec::IntoIter,
@@ -108,7 +109,9 @@ impl Default for QuicConfig {
 }
 
 pub struct QuicIncoming {
+	/// This field uses structural pinning…
     incoming: quinn::Incoming,
+	/// but this field does not.
     addr: Multiaddr,
 }
 
@@ -135,6 +138,73 @@ impl futures_core::stream::Stream for QuicIncoming {
     }
 }
 
+struct QuicMuxer {
+    bi_streams: quinn::IncomingBiStreams,
+    connection: quinn::Connection,
+    driver: quinn::ConnectionDriver,
+}
+
+pub struct SyncQuicMuxer(Mutex<QuicMuxer>);
+
+pub struct QuicSubstream {
+    send: quinn::SendStream,
+    recv: quinn::RecvStream,
+}
+
+// FIXME: if quinn ever starts using `!Unpin` futures, this will require `unsafe` code.
+// Will probably fall back to spawning the connection driver in this case 🙁
+impl StreamMuxer for SyncQuicMuxer {
+    type OutboundSubstream = quinn::OpenBi;
+    type Substream = (quinn::SendStream, quinn::RecvStream);
+    type Error = quinn::ConnectionError;
+    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
+		let mut this = self.0.lock().unwrap();
+        match Pin::new(&mut this.driver).poll(cx) {
+            Poll::Ready(Ok(())) => unreachable!(
+                "ConnectionDriver will not resolve as long as `self.bi_streams` is alive"
+            ),
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => (),
+        }
+        match Pin::new(&mut this.bi_streams).poll_next(cx) {
+			Poll::Ready(Some(stream)) => Poll::Ready(stream),
+			Poll::Ready(None) => Poll::Ready(Err(quinn::ConnectionError::LocallyClosed)),
+			Poll::Pending => Poll::Pending,
+		}
+    }
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        self.0.lock().unwrap().connection.open_bi()
+    }
+	fn destroy_substream(&self, _substream: Self::Substream) {
+	}
+	fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
+	}
+	fn is_remote_acknowledged(&self) -> bool {
+		true
+	}
+	fn write_substream(&self, cx: &mut Context, substream: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, Self::Error>> {
+		Pin::new(substream.0).poll_write(buf)
+	}
+	fn poll_outbound(&self, cx: &mut Context, _substream: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, Self::Error>> {
+		unimplemented!()
+	}
+	fn read_substream(&self, cx: &mut Context, _substream: &mut Self::Substream, _buf: &mut [u8]) -> Poll<Result<usize, Self::Error>> {
+		unimplemented!()
+	}
+    fn shutdown_substream(&self, cx: &mut Context, _substream: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
+		unimplemented!()
+	}
+    fn flush_substream(&self, cx: &mut Context, _substream: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
+		unimplemented!()
+	}
+    fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+		unimplemented!()
+	}
+    fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+		unimplemented!()
+	}
+}
+
 impl Transport for QuicConfig {
     type Output = quinn::NewConnection;
     type Error = QuicError;
@@ -143,7 +213,6 @@ impl Transport for QuicConfig {
     type Dial = CompatConnecting;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        // use futures::compat::{Future01CompatExt, Stream01CompatExt};
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
             sa
         } else {
@@ -446,26 +515,3 @@ mod tests {
 struct QuicTransport {
     endpoint: quinn::Endpoint,
 }
-/*
-
-#[cfg(any())]
-impl Transport for &mut QuicTransport {
-
-    fn poll_transmit(&mut self) -> Result<(), std::io::Error> {
-        self.transmit = match self.transmit.or_else(|| self.connection.poll_transmit(Instant::now())) {
-            Some(s) => s,
-            None => return Ok(()),
-        };
-        while self.transmit.contents.len() > self.offest {
-            match self.socket.send_to(contents[self.offset..], destination) {
-                Ok(len) => self.offset += len,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => continue,
-                    ErrorKind::WouldBlock => unimplemented!("figure out what to wake!"),
-                    _ => return Err(e),
-                },
-            }
-        }
-        Ok(())
-    }
-}*/
