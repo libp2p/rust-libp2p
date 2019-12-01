@@ -43,30 +43,24 @@
 //! Instead, you must pass all needed configuration into the constructor.
 
 use futures::{
-    future::{self, Either},
+    future,
     prelude::*,
-    stream::{self, Chain, Once, Stream},
 };
 use ipnet::IpNet;
 use libp2p_core::{
-    multiaddr::{host_addresses, ip_to_multiaddr, Multiaddr, Protocol},
+    multiaddr::{ip_to_multiaddr, Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     StreamMuxer, Transport,
 };
 use log::debug;
 pub use quinn::{Endpoint, EndpointBuilder, EndpointError, ServerConfig};
 use std::{
-    collections::VecDeque,
-    io::{self, Read, Write},
-    iter::{self, FromIterator},
+    io,
     net::{IpAddr, SocketAddr},
     pin::Pin,
     sync::Mutex,
     task::{Context, Poll},
-    time::{Duration, Instant},
-    vec::IntoIter,
 };
-use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
 ///
@@ -146,29 +140,24 @@ struct QuicMuxer {
 
 pub struct SyncQuicMuxer(Mutex<QuicMuxer>);
 
-pub struct QuicSubstream {
-    send: quinn::SendStream,
-    recv: quinn::RecvStream,
-}
-
 // FIXME: if quinn ever starts using `!Unpin` futures, this will require `unsafe` code.
 // Will probably fall back to spawning the connection driver in this case 🙁
 impl StreamMuxer for SyncQuicMuxer {
     type OutboundSubstream = quinn::OpenBi;
-    type Substream = (quinn::SendStream, quinn::RecvStream);
-    type Error = quinn::ConnectionError;
+    type Substream = Mutex<(quinn::SendStream, quinn::RecvStream)>;
+    type Error = std::io::Error;
     fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
 		let mut this = self.0.lock().unwrap();
         match Pin::new(&mut this.driver).poll(cx) {
             Poll::Ready(Ok(())) => unreachable!(
                 "ConnectionDriver will not resolve as long as `self.bi_streams` is alive"
             ),
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e.into())),
             Poll::Pending => (),
         }
         match Pin::new(&mut this.bi_streams).poll_next(cx) {
-			Poll::Ready(Some(stream)) => Poll::Ready(stream),
-			Poll::Ready(None) => Poll::Ready(Err(quinn::ConnectionError::LocallyClosed)),
+			Poll::Ready(Some(stream)) => Poll::Ready(stream.map(Mutex::new).map_err(From::from)),
+			Poll::Ready(None) => Poll::Ready(Err(quinn::ConnectionError::LocallyClosed.into())),
 			Poll::Pending => Poll::Pending,
 		}
     }
@@ -183,25 +172,26 @@ impl StreamMuxer for SyncQuicMuxer {
 		true
 	}
 	fn write_substream(&self, cx: &mut Context, substream: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, Self::Error>> {
-		Pin::new(substream.0).poll_write(buf)
+		Pin::new(&mut substream.lock().unwrap().0).poll_write(cx, buf)
 	}
-	fn poll_outbound(&self, cx: &mut Context, _substream: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, Self::Error>> {
-		unimplemented!()
+	fn poll_outbound(&self, cx: &mut Context, substream: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, Self::Error>> {
+		Pin::new(substream).poll(cx).map_err(From::from).map_ok(Mutex::new)
 	}
-	fn read_substream(&self, cx: &mut Context, _substream: &mut Self::Substream, _buf: &mut [u8]) -> Poll<Result<usize, Self::Error>> {
-		unimplemented!()
+	fn read_substream(&self, cx: &mut Context, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, Self::Error>> {
+		Pin::new(&mut substream.lock().unwrap().1).poll_read(cx, buf)
 	}
-    fn shutdown_substream(&self, cx: &mut Context, _substream: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
-		unimplemented!()
+    fn shutdown_substream(&self, cx: &mut Context, substream: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
+		Pin::new(&mut substream.lock().unwrap().0).poll_close(cx)
 	}
-    fn flush_substream(&self, cx: &mut Context, _substream: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
-		unimplemented!()
+    fn flush_substream(&self, cx: &mut Context, substream: &mut Self::Substream) -> Poll<Result<(), Self::Error>> {
+		// The actual implementation does nothing.  This at least does something.
+		self.write_substream(cx, substream, b"").map_ok(drop)
 	}
-    fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-		unimplemented!()
+    fn flush_all(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+		Poll::Ready(Ok(()))
 	}
-    fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-		unimplemented!()
+    fn close(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+		Poll::Ready(Ok(self.0.lock().unwrap().connection.close(0u32.into(), b"")))
 	}
 }
 
@@ -223,7 +213,7 @@ impl Transport for QuicConfig {
             .endpoint_builder
             .bind(&socket_addr)
             .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
-        tokio::spawn(driver.map_err(drop).compat());
+        tokio::task::spawn(driver.map_err(drop));
         Ok(QuicIncoming { incoming, addr })
     }
 
@@ -240,7 +230,7 @@ impl Transport for QuicConfig {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        let (driver, endpoint, _incoming) =
+        let (_driver, endpoint, _incoming) =
             self.endpoint_builder
                 .bind(&([0u8; 16], 0u16).into())
                 .map_err(|e| TransportError::Other(QuicError::EndpointError(e)))?;
@@ -272,246 +262,4 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
         }
         _ => Err(()),
     }
-}
-
-/// Listen address information.
-#[derive(Debug)]
-enum Addresses {
-    /// A specific address is used to listen.
-    One(Multiaddr),
-    /// A set of addresses is used to listen.
-    Many(Vec<(IpAddr, IpNet, Multiaddr)>),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{multiaddr_to_socketaddr, Listener, TcpConfig};
-    use futures::{
-        future::{self, Loop},
-        prelude::*,
-        stream,
-    };
-    use libp2p_core::{
-        multiaddr::{Multiaddr, Protocol},
-        transport::ListenerEvent,
-        Transport,
-    };
-    use std::{
-        net::{IpAddr, Ipv4Addr, SocketAddr},
-        time::Duration,
-    };
-    use tokio::runtime::current_thread::{self, Runtime};
-    use tokio_io;
-
-    #[test]
-    fn pause_on_error() {
-        // We create a stream of values and errors and continue polling even after errors
-        // have been encountered. We count the number of items (including errors) and assert
-        // that no item has been missed.
-        let rs = stream::iter_result(vec![Ok(1), Err(1), Ok(1), Err(1)]);
-        let ls = Listener::new(rs, Duration::from_secs(1));
-        let sum = future::loop_fn((0, ls), |(acc, ls)| {
-            ls.into_future().then(move |item| match item {
-                Ok((None, _)) => Ok::<_, std::convert::Infallible>(Loop::Break(acc)),
-                Ok((Some(n), rest)) => Ok(Loop::Continue((acc + n, rest))),
-                Err((n, rest)) => Ok(Loop::Continue((acc + n, rest))),
-            })
-        });
-        assert_eq!(4, current_thread::block_on_all(sum).unwrap())
-    }
-
-    #[test]
-    fn wildcard_expansion() {
-        let mut listener = TcpConfig::new()
-            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-            .expect("listener");
-
-        // Get the first address.
-        let addr = listener
-            .by_ref()
-            .wait()
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        // Process all initial `NewAddress` events and make sure they
-        // do not contain wildcard address or port.
-        let server = listener
-            .take_while(|event| match event {
-                ListenerEvent::NewAddress(a) => {
-                    let mut iter = a.iter();
-                    match iter.next().expect("ip address") {
-                        Protocol::Ip4(ip) => assert!(!ip.is_unspecified()),
-                        Protocol::Ip6(ip) => assert!(!ip.is_unspecified()),
-                        other => panic!("Unexpected protocol: {}", other),
-                    }
-                    if let Protocol::Tcp(port) = iter.next().expect("port") {
-                        assert_ne!(0, port)
-                    } else {
-                        panic!("No TCP port in address: {}", a)
-                    }
-                    Ok(true)
-                }
-                _ => Ok(false),
-            })
-            .for_each(|_| Ok(()));
-
-        let client = TcpConfig::new().dial(addr).expect("dialer");
-        tokio::run(
-            server
-                .join(client)
-                .map(|_| ())
-                .map_err(|e| panic!("error: {}", e)),
-        )
-    }
-
-    #[test]
-    fn multiaddr_to_tcp_conversion() {
-        use std::net::Ipv6Addr;
-
-        assert!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
-                .is_err()
-        );
-
-        assert_eq!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()),
-            Ok(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                12345,
-            ))
-        );
-        assert_eq!(
-            multiaddr_to_socketaddr(
-                &"/ip4/255.255.255.255/tcp/8080"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            ),
-            Ok(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-                8080,
-            ))
-        );
-        assert_eq!(
-            multiaddr_to_socketaddr(&"/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap()),
-            Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                12345,
-            ))
-        );
-        assert_eq!(
-            multiaddr_to_socketaddr(
-                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            ),
-            Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(
-                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                )),
-                8080,
-            ))
-        );
-    }
-
-    #[test]
-    fn communicating_between_dialer_and_listener() {
-        use std::io::Write;
-
-        std::thread::spawn(move || {
-            let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-            let tcp = TcpConfig::new();
-            let mut rt = Runtime::new().unwrap();
-            let handle = rt.handle();
-            let listener = tcp
-                .listen_on(addr)
-                .unwrap()
-                .filter_map(ListenerEvent::into_upgrade)
-                .for_each(|(sock, _)| {
-                    sock.and_then(|sock| {
-                        // Define what to do with the socket that just connected to us
-                        // Which in this case is read 3 bytes
-                        let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
-                            .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
-                            .map_err(|err| panic!("IO error {:?}", err));
-
-                        // Spawn the future as a concurrent task
-                        handle.spawn(handle_conn).unwrap();
-
-                        Ok(())
-                    })
-                });
-
-            rt.block_on(listener).unwrap();
-            rt.run().unwrap();
-        });
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-        let tcp = TcpConfig::new();
-        // Obtain a future socket through dialing
-        let socket = tcp.dial(addr.clone()).unwrap();
-        // Define what to do with the socket once it's obtained
-        let action = socket.then(|sock| -> Result<(), ()> {
-            sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
-            Ok(())
-        });
-        // Execute the future in our event loop
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(action).unwrap();
-    }
-
-    #[test]
-    fn replace_port_0_in_returned_multiaddr_ipv4() {
-        let tcp = TcpConfig::new();
-
-        let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
-        assert!(addr.to_string().contains("tcp/0"));
-
-        let new_addr = tcp
-            .listen_on(addr)
-            .unwrap()
-            .wait()
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        assert!(!new_addr.to_string().contains("tcp/0"));
-    }
-
-    #[test]
-    fn replace_port_0_in_returned_multiaddr_ipv6() {
-        let tcp = TcpConfig::new();
-
-        let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
-        assert!(addr.to_string().contains("tcp/0"));
-
-        let new_addr = tcp
-            .listen_on(addr)
-            .unwrap()
-            .wait()
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        assert!(!new_addr.to_string().contains("tcp/0"));
-    }
-
-    #[test]
-    fn larger_addr_denied() {
-        let tcp = TcpConfig::new();
-
-        let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
-            .parse::<Multiaddr>()
-            .unwrap();
-        assert!(tcp.listen_on(addr).is_err());
-    }
-}
-struct QuicTransport {
-    endpoint: quinn::Endpoint,
 }
