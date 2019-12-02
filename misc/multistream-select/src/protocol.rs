@@ -25,13 +25,9 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
-use bytes::{Bytes, BytesMut, BufMut};
-use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
-use futures::{prelude::*, try_ready};
-use log::trace;
+use bytes::Bytes;
+use futures::prelude::*;
 use std::{io, fmt, error::Error, convert::TryFrom};
-use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint as uvi;
 
 /// The maximum number of supported protocols that can be processed.
 const MAX_PROTOCOLS: usize = 1000;
@@ -173,54 +169,95 @@ pub enum Message {
     NotAvailable,
 }
 
+/// Writes a single unsigned variable-length integer into `dest`.
+async fn write_uvi(dest: impl AsyncWrite + Unpin, val: usize) -> Result<(), ProtocolError> {
+    let mut buf = unsigned_varint::encode::usize_buffer();
+    let slice = unsigned_varint::encode::usize(val, &mut buf);
+    dest.write_all(&slice).await?;
+    Ok(())
+}
+
+/// Reads a single unsigned variable-length integer from `src` and returns it.
+///
+/// Returns an error if the stream ends before we could decode one.
+///
+/// > **Note**: This function reads bytes one by one from the stream. You are
+/// >           therefore encouraged to wrap it around some buffering layer.
+async fn read_uvi(src: impl AsyncRead + Unpin) -> Result<usize, ProtocolError> {
+    let mut buf = unsigned_varint::encode::usize_buffer();
+
+    loop {
+        let mut buf_index = 0;
+        if buf_index == buf.len() {
+            return Err(From::from(io::Error::from(io::ErrorKind::InvalidData)))
+        }
+
+        src.read_exact(&mut buf[buf_index .. buf_index + 1]).await?;
+
+        if (buf[buf_index] & 0x80) == 0 {
+            let (value, _) = unsigned_varint::decode::usize(&buf)?;
+            return Ok(value);
+        }
+
+        buf_index += 1;
+    }
+}
+
 impl Message {
-    /// Encodes a `Message` into its byte representation.
-    pub fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
+    /// Writes a `Message` into an `AsyncWrite`. Does **not** flush.
+    pub async fn encode(&self, dest: impl AsyncWrite + Unpin) -> Result<(), ProtocolError> {
         match self {
             Message::Header(Version::V1) => {
-                dest.reserve(MSG_MULTISTREAM_1_0.len());
-                dest.put(MSG_MULTISTREAM_1_0);
+                write_uvi(&mut dest, MSG_MULTISTREAM_1_0.len()).await?;
+                dest.write_all(MSG_MULTISTREAM_1_0).await?;
                 Ok(())
             }
             Message::Header(Version::V1Lazy) => {
-                dest.reserve(MSG_MULTISTREAM_1_0_LAZY.len());
-                dest.put(MSG_MULTISTREAM_1_0_LAZY);
+                write_uvi(&mut dest, MSG_MULTISTREAM_1_0_LAZY.len()).await?;
+                dest.write_all(MSG_MULTISTREAM_1_0_LAZY).await?;
                 Ok(())
             }
             Message::Protocol(p) => {
                 let len = p.0.as_ref().len() + 1; // + 1 for \n
-                dest.reserve(len);
-                dest.put(p.0.as_ref());
-                dest.put(&b"\n"[..]);
+                write_uvi(&mut dest, MSG_MULTISTREAM_1_0_LAZY.len()).await?;
+                dest.write_all(p.0.as_ref()).await?;
+                dest.write_all(&b"\n"[..]).await?;
                 Ok(())
             }
             Message::ListProtocols => {
-                dest.reserve(MSG_LS.len());
-                dest.put(MSG_LS);
+                write_uvi(&mut dest, MSG_LS.len()).await?;
+                dest.write_all(MSG_LS).await?;
                 Ok(())
             }
             Message::Protocols(ps) => {
-                let mut buf = uvi::encode::usize_buffer();
-                let mut out_msg = Vec::from(uvi::encode::usize(ps.len(), &mut buf));
+                let mut buf = unsigned_varint::encode::usize_buffer();
+                let mut out_msg = Vec::from(unsigned_varint::encode::usize(ps.len(), &mut buf));
                 for p in ps {
-                    out_msg.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
+                    out_msg.extend(unsigned_varint::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
                     out_msg.extend_from_slice(p.0.as_ref());
                     out_msg.push(b'\n')
                 }
-                dest.reserve(out_msg.len());
-                dest.put(out_msg);
+                write_uvi(&mut dest, out_msg.len()).await?;
+                dest.write_all(&out_msg).await?;
                 Ok(())
             }
             Message::NotAvailable => {
-                dest.reserve(MSG_PROTOCOL_NA.len());
-                dest.put(MSG_PROTOCOL_NA);
+                write_uvi(&mut dest, MSG_PROTOCOL_NA.len()).await?;
+                dest.write_all(MSG_PROTOCOL_NA).await?;
                 Ok(())
             }
         }
     }
 
-    /// Decodes a `Message` from its byte representation.
-    pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
+    /// Reads one `Message` from an `AsyncRead`.
+    pub async fn decode(mut io: impl AsyncRead + Unpin) -> Result<Message, ProtocolError> {
+        let msg = {
+            let len = read_uvi(&mut io).await?;
+            let mut msg = vec![0; len];
+            io.read_exact(&mut msg).await?;
+            msg
+        };
+
         if msg == MSG_MULTISTREAM_1_0_LAZY {
             return Ok(Message::Header(Version::V1Lazy))
         }
@@ -230,8 +267,8 @@ impl Message {
         }
 
         if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') && msg.len() <= MAX_PROTOCOL_LEN {
-            let p = Protocol::try_from(msg.split_to(msg.len() - 1))?;
-            return Ok(Message::Protocol(p));
+            msg.truncate(msg.len() - 1);
+            return Ok(Message::Protocol(Protocol::try_from(&msg[..])?));
         }
 
         if msg == MSG_PROTOCOL_NA {
@@ -244,13 +281,13 @@ impl Message {
 
         // At this point, it must be a varint number of protocols, i.e.
         // a `Protocols` message.
-        let (num_protocols, mut remaining) = uvi::decode::usize(&msg)?;
+        let (num_protocols, mut remaining) = unsigned_varint::decode::usize(&msg)?;
         if num_protocols > MAX_PROTOCOLS {
             return Err(ProtocolError::TooManyProtocols)
         }
         let mut protocols = Vec::with_capacity(num_protocols);
         for _ in 0 .. num_protocols {
-            let (len, rem) = uvi::decode::usize(remaining)?;
+            let (len, rem) = unsigned_varint::decode::usize(remaining)?;
             if len == 0 || len > rem.len() || rem[len - 1] != b'\n' {
                 return Err(ProtocolError::InvalidMessage)
             }
@@ -259,174 +296,8 @@ impl Message {
             remaining = &rem[len ..]
         }
 
-        return Ok(Message::Protocols(protocols));
+        Ok(Message::Protocols(protocols))
     }
-}
-
-/// A `MessageIO` implements a [`Stream`] and [`Sink`] of [`Message`]s.
-pub struct MessageIO<R> {
-    inner: LengthDelimited<R>,
-}
-
-impl<R> MessageIO<R> {
-    /// Constructs a new `MessageIO` resource wrapping the given I/O stream.
-    pub fn new(inner: R) -> MessageIO<R>
-    where
-        R: AsyncRead + AsyncWrite
-    {
-        Self { inner: LengthDelimited::new(inner) }
-    }
-
-    /// Converts the `MessageIO` into a `MessageReader`, dropping the
-    /// `Message`-oriented `Sink` in favour of direct `AsyncWrite` access
-    /// to the underlying I/O stream.
-    ///
-    /// This is typically done if further negotiation messages are expected to be
-    /// received but no more messages are written, allowing the writing of
-    /// follow-up protocol data to commence.
-    pub fn into_reader(self) -> MessageReader<R> {
-        MessageReader { inner: self.inner.into_reader() }
-    }
-
-    /// Drops the `MessageIO` resource, yielding the underlying I/O stream
-    /// together with the remaining write buffer containing the protocol
-    /// negotiation frame data that has not yet been written to the I/O stream.
-    ///
-    /// The returned remaining write buffer may be prepended to follow-up
-    /// protocol data to send with a single `write`. Either way, if non-empty,
-    /// the write buffer _must_ eventually be written to the I/O stream
-    /// _before_ any follow-up data, in order for protocol negotiation to
-    /// complete cleanly.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the read buffer is not empty, meaning that an incoming
-    /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever [`MessageIO::poll`] returned
-    /// a message.
-    pub fn into_inner(self) -> (R, BytesMut) {
-        self.inner.into_inner()
-    }
-}
-
-impl<R> Sink for MessageIO<R>
-where
-    R: AsyncWrite,
-{
-    type SinkItem = Message;
-    type SinkError = ProtocolError;
-
-    fn start_send(&mut self, msg: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        let mut buf = BytesMut::new();
-        msg.encode(&mut buf)?;
-        match self.inner.start_send(buf.freeze())? {
-            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(msg)),
-            AsyncSink::Ready => Ok(AsyncSink::Ready),
-        }
-    }
-
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        Ok(self.inner.poll_complete()?)
-    }
-
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        Ok(self.inner.close()?)
-    }
-}
-
-impl<R> Stream for MessageIO<R>
-where
-    R: AsyncRead
-{
-    type Item = Message;
-    type Error = ProtocolError;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        poll_stream(&mut self.inner)
-    }
-}
-
-/// A `MessageReader` implements a `Stream` of `Message`s on an underlying
-/// I/O resource combined with direct `AsyncWrite` access.
-#[derive(Debug)]
-pub struct MessageReader<R> {
-    inner: LengthDelimitedReader<R>
-}
-
-impl<R> MessageReader<R> {
-    /// Drops the `MessageReader` resource, yielding the underlying I/O stream
-    /// together with the remaining write buffer containing the protocol
-    /// negotiation frame data that has not yet been written to the I/O stream.
-    ///
-    /// The returned remaining write buffer may be prepended to follow-up
-    /// protocol data to send with a single `write`. Either way, if non-empty,
-    /// the write buffer _must_ eventually be written to the I/O stream
-    /// _before_ any follow-up data, in order for protocol negotiation to
-    /// complete cleanly.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the read buffer is not empty, meaning that an incoming
-    /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever [`MessageReader::poll`] returned
-    /// a message.
-    pub fn into_inner(self) -> (R, BytesMut) {
-        self.inner.into_inner()
-    }
-
-    /// Returns a reference to the underlying I/O stream.
-    pub fn inner_ref(&self) -> &R {
-        self.inner.inner_ref()
-    }
-}
-
-impl<R> Stream for MessageReader<R>
-where
-    R: AsyncRead
-{
-    type Item = Message;
-    type Error = ProtocolError;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        poll_stream(&mut self.inner)
-    }
-}
-
-impl<R> io::Write for MessageReader<R>
-where
-    R: AsyncWrite
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-impl<TInner> AsyncWrite for MessageReader<TInner>
-where
-    TInner: AsyncWrite
-{
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.inner.shutdown()
-    }
-}
-
-fn poll_stream<S>(stream: &mut S) -> Poll<Option<Message>, ProtocolError>
-where
-    S: Stream<Item = Bytes, Error = io::Error>,
-{
-    let msg = if let Some(msg) = try_ready!(stream.poll()) {
-        Message::decode(msg)?
-    } else {
-        return Ok(Async::Ready(None))
-    };
-
-    trace!("Received message: {:?}", msg);
-
-    Ok(Async::Ready(Some(msg)))
 }
 
 /// A protocol error.
@@ -456,12 +327,12 @@ impl Into<io::Error> for ProtocolError {
         if let ProtocolError::IoError(e) = self {
             return e
         }
-        return io::ErrorKind::InvalidData.into()
+        io::ErrorKind::InvalidData.into()
     }
 }
 
-impl From<uvi::decode::Error> for ProtocolError {
-    fn from(err: uvi::decode::Error) -> ProtocolError {
+impl From<unsigned_varint::decode::Error> for ProtocolError {
+    fn from(err: unsigned_varint::decode::Error) -> ProtocolError {
         Self::from(io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
     }
 }

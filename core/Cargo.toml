@@ -16,7 +16,7 @@ bytes = "0.4"
 ed25519-dalek = "1.0.0-pre.2"
 failure = "0.1"
 fnv = "1.0"
-futures = { version = "0.3.1", features = ["compat", "io-compat", "executor", "thread-pool"] }
+futures = { version = "0.3.1", features = ["executor", "thread-pool"] }
 futures-timer = "0.3"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
