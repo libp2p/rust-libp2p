@@ -20,9 +20,8 @@
 
 use crate::ConnectedPoint;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
-use futures::{future::Either, prelude::*, compat::Compat, compat::Compat01As03, compat::Future01CompatExt};
+use futures::{future::Either, prelude::*};
 use log::debug;
-use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
@@ -31,7 +30,7 @@ pub use multistream_select::Version;
 pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint, v: Version)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
-    C: AsyncRead + AsyncWrite + Unpin,
+C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     U: InboundUpgrade<C> + OutboundUpgrade<C>,
 {
     if cp.is_listener() {
@@ -44,11 +43,11 @@ where
 /// Tries to perform an upgrade on an inbound connection or substream.
 pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
-    C: AsyncRead + AsyncWrite + Unpin,
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     U: InboundUpgrade<C>,
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::listener_select_proto(Compat::new(conn), iter).compat();
+    let future = multistream_select::listener_select_proto(conn, iter).compat();
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init { future, upgrade: up }
     }
@@ -57,7 +56,7 @@ where
 /// Tries to perform an upgrade on an outbound connection or substream.
 pub fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
 where
-    C: AsyncRead + AsyncWrite + Unpin,
+C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     U: OutboundUpgrade<C>
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
@@ -232,4 +231,3 @@ impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
         self.0.protocol_name()
     }
 }
-

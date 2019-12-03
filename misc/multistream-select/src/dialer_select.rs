@@ -52,7 +52,7 @@ pub async fn dialer_select_proto<R, I>(
     version: Version
 ) -> Result<(I::Item, Negotiated<R>), NegotiationError>
 where
-    R: AsyncRead + AsyncWrite + Unpin,
+    R: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     I: IntoIterator,
     I::Item: AsRef<[u8]>
 {
@@ -72,24 +72,24 @@ where
 ///
 /// This strategy is preferable if the dialer only supports a few protocols.
 pub async fn dialer_select_proto_serial<R, I>(
-    io: R,
+    mut io: R,
     protocols: I,
     version: Version
 ) -> Result<(I::Item, Negotiated<R>), NegotiationError>
 where
-    R: AsyncRead + AsyncWrite + Unpin,
+    R: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     I: IntoIterator,
     I::Item: AsRef<[u8]>
 {
-    let protocols = protocols.into_iter().peekable();
+    let mut protocols = protocols.into_iter().peekable();
 
     Message::Header(version).encode(&mut io).await?;
 
     loop {
         let protocol_raw = protocols.next().ok_or(NegotiationError::Failed)?;
-        let protocol = TryFrom::try_from(protocol_raw.as_ref())?;
+        let protocol = Protocol::try_from(protocol_raw.as_ref())?;
 
-        Message::Protocol(protocol).encode(&mut io).await?;
+        Message::Protocol(protocol.clone()).encode(&mut io).await?;
         debug!("Dialer: Proposed protocol: {}", protocol);
 
         if protocols.peek().is_some() {
@@ -132,12 +132,12 @@ where
 /// This strategy may be beneficial if the dialer supports many protocols
 /// and it is unclear whether the remote supports one of the first few.
 pub async fn dialer_select_proto_parallel<R, I>(
-    io: R,
+    mut io: R,
     protocols: I,
     version: Version
 ) -> Result<(I::Item, Negotiated<R>), NegotiationError>
 where
-    R: AsyncRead + AsyncWrite + Unpin,
+    R: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     I: IntoIterator,
     I::Item: AsRef<[u8]>
 {
@@ -163,7 +163,7 @@ where
     };
 
     let proto_encoded = Protocol::try_from(protocol.as_ref())?;
-    Message::Protocol(proto_encoded).encode(&mut io).await?;
+    Message::Protocol(proto_encoded.clone()).encode(&mut io).await?;
     debug!("Dialer: Expecting proposed protocol: {}", proto_encoded);
 
     let io = Negotiated::expecting(io, proto_encoded, version);

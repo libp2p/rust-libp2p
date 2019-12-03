@@ -36,15 +36,15 @@ use crate::{Negotiated, NegotiationError};
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
 pub async fn listener_select_proto<R, I>(
-    io: R,
+    mut io: R,
     protocols: I,
 ) -> Result<(I::Item, Negotiated<R>), NegotiationError>
 where
-    R: AsyncRead + AsyncWrite + Unpin,
+    R: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     I: IntoIterator,
     I::Item: AsRef<[u8]>
 {
-    let protocols = protocols.into_iter().filter_map(|n|
+    let mut protocols = protocols.into_iter().filter_map(|n|
         match Protocol::try_from(n.as_ref()) {
             Ok(p) => Some((n, p)),
             Err(e) => {

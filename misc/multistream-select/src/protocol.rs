@@ -170,7 +170,7 @@ pub enum Message {
 }
 
 /// Writes a single unsigned variable-length integer into `dest`.
-async fn write_uvi(dest: impl AsyncWrite + Unpin, val: usize) -> Result<(), ProtocolError> {
+async fn write_uvi(mut dest: impl AsyncWrite + Unpin, val: usize) -> Result<(), ProtocolError> {
     let mut buf = unsigned_varint::encode::usize_buffer();
     let slice = unsigned_varint::encode::usize(val, &mut buf);
     dest.write_all(&slice).await?;
@@ -183,11 +183,11 @@ async fn write_uvi(dest: impl AsyncWrite + Unpin, val: usize) -> Result<(), Prot
 ///
 /// > **Note**: This function reads bytes one by one from the stream. You are
 /// >           therefore encouraged to wrap it around some buffering layer.
-async fn read_uvi(src: impl AsyncRead + Unpin) -> Result<usize, ProtocolError> {
+async fn read_uvi(mut src: impl AsyncRead + Unpin) -> Result<usize, ProtocolError> {
     let mut buf = unsigned_varint::encode::usize_buffer();
+    let mut buf_index = 0;
 
     loop {
-        let mut buf_index = 0;
         if buf_index == buf.len() {
             return Err(From::from(io::Error::from(io::ErrorKind::InvalidData)))
         }
@@ -205,7 +205,7 @@ async fn read_uvi(src: impl AsyncRead + Unpin) -> Result<usize, ProtocolError> {
 
 impl Message {
     /// Writes a `Message` into an `AsyncWrite`. Does **not** flush.
-    pub async fn encode(&self, dest: impl AsyncWrite + Unpin) -> Result<(), ProtocolError> {
+    pub async fn encode(&self, mut dest: impl AsyncWrite + Unpin) -> Result<(), ProtocolError> {
         match self {
             Message::Header(Version::V1) => {
                 write_uvi(&mut dest, MSG_MULTISTREAM_1_0.len()).await?;
@@ -219,7 +219,7 @@ impl Message {
             }
             Message::Protocol(p) => {
                 let len = p.0.as_ref().len() + 1; // + 1 for \n
-                write_uvi(&mut dest, MSG_MULTISTREAM_1_0_LAZY.len()).await?;
+                write_uvi(&mut dest, len).await?;
                 dest.write_all(p.0.as_ref()).await?;
                 dest.write_all(&b"\n"[..]).await?;
                 Ok(())
