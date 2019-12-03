@@ -258,6 +258,11 @@ impl Message {
             msg
         };
 
+        Message::from_bytes(&msg)
+    }
+
+    /// Attempts to decode existing bytes into a message.
+    pub fn from_bytes(msg: &[u8]) -> Result<Message, ProtocolError> {
         if msg == MSG_MULTISTREAM_1_0_LAZY {
             return Ok(Message::Header(Version::V1Lazy))
         }
@@ -267,8 +272,7 @@ impl Message {
         }
 
         if msg.get(0) == Some(&b'/') && msg.last() == Some(&b'\n') && msg.len() <= MAX_PROTOCOL_LEN {
-            msg.truncate(msg.len() - 1);
-            return Ok(Message::Protocol(Protocol::try_from(&msg[..])?));
+            return Ok(Message::Protocol(Protocol::try_from(&msg[..msg.len() - 1])?));
         }
 
         if msg == MSG_PROTOCOL_NA {
