@@ -420,6 +420,14 @@ impl IncomingData {
         self.0.is_binary()
     }
 
+    pub fn is_text(&self) -> bool {
+        self.0.is_text()
+    }
+
+    pub fn is_data(&self) -> bool {
+        self.0.is_data()
+    }
+
     pub fn is_pong(&self) -> bool {
         self.0.is_pong()
     }
