@@ -115,6 +115,7 @@ where
                 Message::NotAvailable => {
                     debug!("Dialer: Received rejection of protocol: {}",
                         String::from_utf8_lossy(protocol.as_ref()));
+                    break;
                 }
                 _ => return Err(ProtocolError::InvalidMessage.into())
             }

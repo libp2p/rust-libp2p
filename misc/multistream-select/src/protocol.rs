@@ -400,12 +400,12 @@ mod tests {
     #[test]
     fn encode_decode_message() {
         fn prop(msg: Message) {
-            let mut buf = BytesMut::new();
-            msg.encode(&mut buf).expect(&format!("Encoding message failed: {:?}", msg));
-            match Message::decode(buf.freeze()) {
-                Ok(m) => assert_eq!(m, msg),
-                Err(e) => panic!("Decoding failed: {:?}", e)
-            }
+            async_std::task::block_on(async move {
+                let mut buf = Vec::new();
+                msg.encode(&mut buf).await.unwrap();
+                let m = Message::decode(&buf[..]).await.unwrap();
+                assert_eq!(m, msg);
+            });
         }
         quickcheck(prop as fn(_))
     }

@@ -77,9 +77,8 @@ where
     pub async fn complete(mut self) -> Result<(), NegotiationError> {
         self.flush().await?;
 
-        match self.state {
-            State::Expecting { complete_future, .. } => { complete_future.await?; },
-            _ => {}
+        if let State::Expecting { complete_future, .. } = self.state {
+            complete_future.await?;
         }
 
         Ok(())
@@ -247,75 +246,3 @@ impl<R> fmt::Debug for State<R> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use quickcheck::*;
-    use std::io::Write;
-
-    /// An I/O resource with a fixed write capacity (total and per write op).
-    struct Capped { buf: Vec<u8>, step: usize }
-
-    impl io::Write for Capped {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            if self.buf.len() + buf.len() > self.buf.capacity() {
-                return Err(io::ErrorKind::WriteZero.into())
-            }
-            self.buf.write(&buf[.. usize::min(self.step, buf.len())])
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl AsyncWrite for Capped {
-        fn shutdown(&mut self) -> Poll<(), io::Error> {
-            Ok(().into())
-        }
-    }
-
-    #[test]
-    fn write_remaining() {
-        fn prop(rem: Vec<u8>, new: Vec<u8>, free: u8) -> TestResult {
-            let cap = rem.len() + free as usize;
-            let buf = Capped { buf: Vec::with_capacity(cap), step: free as usize };
-            let mut rem = BytesMut::from(rem);
-            let mut io = Negotiated::completed(buf, rem.clone());
-            let mut written = 0;
-            loop {
-                // Write until `new` has been fully written or the capped buffer is
-                // full (in which case the buffer should remain unchanged from the
-                // last successful write).
-                match io.write(&new[written..]) {
-                    Ok(n) =>
-                        if let State::Completed { remaining, .. } = &io.state {
-                            if n == rem.len() + new[written..].len() {
-                                assert!(remaining.is_empty())
-                            } else {
-                                assert!(remaining.len() <= rem.len());
-                            }
-                            written += n;
-                            if written == new.len() {
-                                return TestResult::passed()
-                            }
-                            rem = remaining.clone();
-                        } else {
-                            return TestResult::failed()
-                        }
-                    Err(_) =>
-                        if let State::Completed { remaining, .. } = &io.state {
-                            assert!(rem.len() + new[written..].len() > cap);
-                            assert_eq!(remaining, &rem);
-                            return TestResult::passed()
-                        } else {
-                            return TestResult::failed()
-                        }
-                }
-            }
-        }
-        quickcheck(prop as fn(_,_,_) -> _)
-    }
-}
-

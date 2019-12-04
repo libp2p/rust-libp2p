@@ -80,6 +80,7 @@ where
                     debug!("Listener: rejecting protocol: {}",
                         String::from_utf8_lossy(p.as_ref()));
                     Message::NotAvailable.encode(&mut io).await?;
+                    io.flush().await?;
                     continue;
                 };
 
