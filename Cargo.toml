@@ -43,6 +43,7 @@ libp2p-mdns = { version = "0.13.1", path = "misc/mdns" }
 libp2p-noise = { version = "0.11.0", path = "protocols/noise" }
 libp2p-tcp = { version = "0.13.0", path = "transports/tcp" }
 libp2p-websocket = { version = "0.13.0", path = "transports/websocket", optional = true }
+libp2p-quic = { version = "0.13.0", path = "transports/quic" }
 
 [dev-dependencies]
 async-std = "1.0"

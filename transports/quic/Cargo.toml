@@ -26,13 +26,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-quinn-proto = "0.4.0"
 rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
 libp2p-core = { path = "../../core", version = "0.13.1" }
 log = "0.4.8"
-quinn = { git = "https://github.com/daxpedda/quinn.git", rev = "750081f2fcc431e9d7597c387b3d3b62a2a2cbb7" }
 tokio = { version = "0.2.2", features = ["rt-threaded"] }
 ipnet = "2.1.0"
 err-derive = "0.2.1"
 futures = { version = "0.3.1", package = "futures", features = ["compat"] }
 futures-core = "0.3.1"
+quinn-proto = { git = "https://github.com/djc/quinn" }
+async-std = "1.2.0"
