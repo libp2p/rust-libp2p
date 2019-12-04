@@ -71,7 +71,7 @@ use futures::future::Future;
 pub use crate::Negotiated;
 pub use multistream_select::{Version, NegotiationError, ProtocolError};
 pub use self::{
-    apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
+    apply::{apply, apply_inbound, apply_outbound},
     denied::DeniedUpgrade,
     either::EitherUpgrade,
     error::UpgradeError,

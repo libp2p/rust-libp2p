@@ -31,7 +31,7 @@ use libp2p_core::{
     PeerId,
     nodes::collection::ConnectionInfo,
     nodes::handled_node::{IntoNodeHandler, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
-    upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply}
+    upgrade,
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::{Delay, Instant};

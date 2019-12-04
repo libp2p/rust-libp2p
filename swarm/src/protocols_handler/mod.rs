@@ -100,7 +100,7 @@ pub trait ProtocolsHandler {
     /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error;
     /// The type of substreams on which the protocol(s) are negotiated.
-    type Substream: AsyncRead + AsyncWrite + Unpin;
+    type Substream: AsyncRead + AsyncWrite + Unpin + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgrade<Self::Substream>;
     /// The outbound upgrade for the protocol(s) used by the handler.
