@@ -36,3 +36,4 @@ futures = { version = "0.3.1", package = "futures", features = ["compat"] }
 futures-core = "0.3.1"
 quinn-proto = { git = "https://github.com/djc/quinn" }
 async-std = "1.2.0"
+async-macros = "2.0.0"
