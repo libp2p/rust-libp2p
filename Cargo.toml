@@ -48,6 +48,7 @@ libp2p-quic = { version = "0.13.0", path = "transports/quic" }
 [dev-dependencies]
 async-std = "1.0"
 env_logger = "0.7.1"
+parity-multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "misc/multiaddr" }
 
 [workspace]
 members = [

@@ -27,11 +27,16 @@
 //! Example:
 //!
 //! ```
-//! extern crate libp2p_quic;
-//! use libp2p_quic::QuicConfig;
+//! use libp2p_quic::{QuicConfig, QuicEndpoint};
+//! use libp2p_core::Multiaddr;
 //!
 //! # fn main() {
-//! let quic = QuicConfig::new();
+//! let quic_config = QuicConfig::new();
+//! let quic_endpoint = QuicEndpoint::new(
+//!     &quic_config,
+//!     "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?"),
+//! )
+//! .expect("I/O error");
 //! # }
 //! ```
 //!
@@ -73,12 +78,14 @@ use std::{
 ///
 /// The QUIC endpoints created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct QuicConfig {
     /// The client configuration.  Quinn provides functions for making one.
-    pub client_configuration: quinn_proto::ClientConfig,
+    pub client_config: quinn_proto::ClientConfig,
     /// The server configuration.  Quinn provides functions for making one.
-    pub server_configuration: quinn_proto::ServerConfig,
+    pub server_config: Arc<quinn_proto::ServerConfig>,
+    /// The endpoint configuration
+    pub endpoint_config: Arc<quinn_proto::EndpointConfig>,
 }
 
 pub struct QuicSubstream {
@@ -90,12 +97,6 @@ impl QuicConfig {
     /// Creates a new configuration object for TCP/IP.
     pub fn new() -> Self {
         Self::default()
-    }
-}
-
-impl Default for QuicConfig {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -138,9 +139,9 @@ pub struct Endpoint {
     sender: mpsc::Sender<quinn_proto::Transmit>,
     /// The channel on which new connections are sent.  This is bounded in practice by the accept
     /// backlog.
-    new_connections: mpsc::UnboundedSender<(ConnectionHandle, Connection)>,
+    new_connections: mpsc::UnboundedSender<QuicMuxer>,
     /// The channel used to receive new connections.
-    receive_connections: mpsc::UnboundedReceiver<(ConnectionHandle, Connection)>,
+    receive_connections: mpsc::UnboundedReceiver<QuicMuxer>,
 }
 
 impl Muxer {
@@ -261,9 +262,8 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::WriteError;
 
         let mut inner = self.inner();
-        ready!(inner.sender.poll_ready(cx).map_err(|_| panic!(
-            "we have a strong reference to the other end, so it won’t be dropped; qed"
-        )));
+        ready!(inner.sender.poll_ready(cx))
+            .expect("we have a strong reference to the other end, so it won’t be dropped; qed");
         match inner.connection.write(*substream, buf) {
             Ok(bytes) => {
                 if let Some(transmit) = inner.connection.poll_transmit(Instant::now()) {
@@ -309,9 +309,8 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
-        ready!(inner.sender.poll_ready(cx).map_err(|_| panic!(
-            "we have a strong reference to the other end, so it won’t be dropped; qed"
-        )));
+        ready!(inner.sender.poll_ready(cx))
+            .expect("we have a strong reference to the other end, so it won’t be dropped; qed");
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => {
                 if let Some(transmit) = inner.connection.poll_transmit(Instant::now()) {
@@ -391,13 +390,55 @@ impl Endpoint {
             .lock()
             .expect("we don’t panic here unless something has already gone horribly wrong")
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct QuicEndpoint(Arc<Endpoint>, Multiaddr);
+
+impl QuicEndpoint {
+    fn inner(&self) -> MutexGuard<'_, EndpointInner> {
+        self.0.inner.lock().unwrap()
+    }
+
+    pub fn new(
+        config: &QuicConfig,
+        addr: Multiaddr,
+    ) -> Result<Self, TransportError<<Self as Transport>::Error>> {
+        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
+            sa
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+        // NOT blocking, as per man:bind(2)
+        let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
+        let (sender, receiver) = mpsc::channel(0);
+        let (new_connections, receive_connections) = mpsc::unbounded();
+        Ok(Self(
+            Arc::new(Endpoint {
+                socket,
+                inner: Mutex::new(EndpointInner {
+                    inner: quinn_proto::Endpoint::new(
+                        config.endpoint_config.clone(),
+                        Some(config.server_config.clone()),
+                    )
+                    .map_err(|_| TransportError::Other(io::ErrorKind::InvalidData.into()))?,
+                    muxers: HashMap::new(),
+                }),
+                sender,
+                receiver,
+                new_connections,
+                receive_connections,
+            }),
+            addr,
+        ))
+    }
 
     /// Process incoming UDP packets until an error occurs on the socket, or we are dropped.
     async fn process_packet(&self) -> Result<(), io::Error> {
         loop {
             use quinn_proto::DatagramEvent;
             let mut buf = [0; 1800];
-            let (bytes, peer) = self.socket.recv_from(&mut buf[..]).await?;
+            let (bytes, peer) = self.0.socket.recv_from(&mut buf[..]).await?;
             // This takes a mutex, so it must be *after* the `await` call.
             let mut inner = self.inner();
             let (handle, event) =
@@ -425,68 +466,30 @@ impl Endpoint {
                     connection
                 }
             };
-            self.new_connections.unbounded_send((handle, connection)).expect("this is an unbounded channel, and we have an instance of the peer, so this will never fail; qed")
+            let endpoint = &self.0;
+            let muxer = Arc::new(Mutex::new(Muxer {
+                connection,
+                handle,
+                writers: HashMap::new(),
+                readers: HashMap::new(),
+                acceptors: vec![],
+                connectors: vec![],
+                sender: endpoint.sender.clone(),
+                endpoint: endpoint.clone(),
+            }));
+            self.inner().muxers.insert(handle, Arc::downgrade(&muxer));
+            self.inner().muxers.insert(handle, Arc::downgrade(&muxer));
+            endpoint.new_connections
+                .unbounded_send(QuicMuxer(muxer))
+                .expect(
+                    "this is an unbounded channel, and we have an instance of the peer, so \
+                     this will never fail; qed",
+                );
         }
     }
 }
 
-#[derive(Debug, Clone)]
-struct QuicEndpoint(Arc<Endpoint>, Multiaddr);
-
-impl QuicEndpoint {
-    fn inner(&self) -> MutexGuard<'_, EndpointInner> {
-        self.0.inner.lock().unwrap()
-    }
-
-    pub fn new(addr: Multiaddr) -> Result<Self, TransportError<<Self as Transport>::Error>> {
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
-            sa
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
-        // NOT blocking, as per man:bind(2)
-        let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
-        let (sender, receiver) = mpsc::channel(0);
-        let (new_connections, receive_connections) = mpsc::unbounded();
-        Ok(Self(
-            Arc::new(Endpoint {
-                socket,
-                inner: Mutex::new(EndpointInner {
-                    inner: quinn_proto::Endpoint::new(Default::default(), None)
-                        .expect("the default config is valid; qed"),
-                    muxers: HashMap::new(),
-                }),
-                sender,
-                receiver,
-                new_connections,
-                receive_connections,
-            }),
-            addr,
-        ))
-    }
-
-    fn dispatch_new_connection(
-        &self,
-        handle: ConnectionHandle,
-        connection: Connection,
-    ) -> QuicMuxer {
-        let endpoint = self.0.clone();
-        let muxer = Arc::new(Mutex::new(Muxer {
-            connection,
-            handle,
-            writers: HashMap::new(),
-            readers: HashMap::new(),
-            acceptors: vec![],
-            connectors: vec![],
-            sender: endpoint.sender.clone(),
-            endpoint,
-        }));
-        self.inner().muxers.insert(handle, Arc::downgrade(&muxer));
-        QuicMuxer(muxer)
-    }
-}
-
-struct QuicConnecting {
+pub struct QuicConnecting {
     endpoint: Arc<Endpoint>,
 }
 
