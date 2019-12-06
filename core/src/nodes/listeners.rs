@@ -354,11 +354,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::{self, ListenerEvent};
-    use assert_matches::assert_matches;
-    use std::{io, iter::FromIterator};
-    use futures::{future::{self}, stream};
-    use crate::PeerId;
+    use crate::transport;
 
     #[test]
     fn incoming_event() {
@@ -383,7 +379,7 @@ mod tests {
             });
 
             match listeners.next().await.unwrap() {
-                ListenersEvent::Incoming { local_addr, upgrade, send_back_addr, .. } => {
+                ListenersEvent::Incoming { local_addr, send_back_addr, .. } => {
                     assert_eq!(local_addr, address);
                     assert_eq!(send_back_addr, address);
                 },

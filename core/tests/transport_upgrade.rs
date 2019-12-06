@@ -26,7 +26,7 @@ use libp2p_core::transport::{Transport, MemoryTransport};
 use libp2p_core::upgrade::{self, UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
-use multiaddr::Multiaddr;
+use multiaddr::{Multiaddr, Protocol};
 use rand::random;
 use std::{io, pin::Pin};
 
@@ -109,28 +109,29 @@ fn upgrade_pipeline() {
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
         });
 
-    let listen_addr: Multiaddr = format!("/memory/{}", random::<u64>()).parse().unwrap();
+    let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
+    let listen_addr2 = listen_addr1.clone();
 
-    async_std::task::spawn({
-        let listen_addr = listen_addr.clone();
-        let dialer_id = dialer_id.clone();
-        async move {
-            let mut listener = listener_transport.listen_on(listen_addr).unwrap();
-            loop {
-                let (upgrade, _remote_addr) = match listener.next().await.unwrap().unwrap().into_upgrade() {
+    let mut listener = listener_transport.listen_on(listen_addr1).unwrap();
+
+    let server = async move {
+        loop {
+            let (upgrade, _remote_addr) =
+                match listener.next().await.unwrap().unwrap().into_upgrade() {
                     Some(u) => u,
                     None => continue
                 };
-
-                let (peer, _mplex) = upgrade.await.unwrap();
-                assert_eq!(peer, dialer_id);
-            }
+            let (peer, _mplex) = upgrade.await.unwrap();
+            assert_eq!(peer, dialer_id);
         }
-    });
+    };
 
-    async_std::task::block_on(async move {
-        let (peer, _mplex) = dialer_transport.dial(listen_addr).unwrap().await.unwrap();
+    let client = async move {
+        let (peer, _mplex) = dialer_transport.dial(listen_addr2).unwrap().await.unwrap();
         assert_eq!(peer, listener_id);
-    });
+    };
+
+    async_std::task::spawn(server);
+    async_std::task::block_on(client);
 }
 
