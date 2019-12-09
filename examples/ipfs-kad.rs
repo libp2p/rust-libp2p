@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         } else {
                             // The example is considered failed as there
                             // should always be at least 1 reachable peer.
-                            panic!("Query finished with no closest peers.")
+                            println!("Query finished with no closest peers.")
                         }
                     Err(GetClosestPeersError::Timeout { peers, .. }) =>
                         if !peers.is_empty() {
@@ -107,11 +107,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         } else {
                             // The example is considered failed as there
                             // should always be at least 1 reachable peer.
-                            panic!("Query timed out with no closest peers.");
+                            println!("Query timed out with no closest peers.");
                         }
-                }
+                };
+
+                break;
             }
         }
+
         Ok(())
     })
 }
