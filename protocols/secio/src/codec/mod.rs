@@ -23,16 +23,17 @@
 
 mod decode;
 mod encode;
+mod len_prefix;
 
 use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
 use decode::DecoderMiddleware;
 use encode::EncoderMiddleware;
-use futures::{prelude::*, stream::BoxStream};
+use futures::prelude::*;
 use hmac::{self, Mac};
-use quicksink::Action;
 use sha2::{Sha256, Sha512};
-use std::{fmt, io, pin::Pin, task::{Context, Poll}};
+
+pub use len_prefix::LenPrefixCodec;
 
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<LenPrefixCodec<S>>>;
@@ -122,99 +123,6 @@ where
     DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
-
-/// `Stream` & `Sink` that reads and writes a length prefix in front of the actual data.
-pub struct LenPrefixCodec<T> {
-    stream: BoxStream<'static, io::Result<Vec<u8>>>,
-    sink: Pin<Box<dyn Sink<Vec<u8>, Error = io::Error> + Send>>,
-    _mark: std::marker::PhantomData<T>
-}
-
-impl<T> fmt::Debug for LenPrefixCodec<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("LenPrefixCodec")
-    }
-}
-
-static_assertions::const_assert! {
-    std::mem::size_of::<u32>() <= std::mem::size_of::<usize>()
-}
-
-impl<T> LenPrefixCodec<T>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
-{
-    pub fn new(socket: T) -> Self {
-        let (r, w) = socket.split();
-
-        let stream = futures::stream::unfold(r, |mut r| async {
-            let mut len = [0; 4];
-            if let Err(e) = r.read_exact(&mut len).await {
-                if e.kind() == io::ErrorKind::UnexpectedEof {
-                    return None
-                }
-                return Some((Err(e), r))
-            }
-            let mut v = vec![0; u32::from_be_bytes(len) as usize];
-            if let Err(e) = r.read_exact(&mut v).await {
-                return Some((Err(e), r))
-            }
-            Some((Ok(v), r))
-        });
-
-        let sink = quicksink::make_sink(w, |mut w, action: Action<Vec<u8>>| async {
-            match action {
-                Action::Send(data) => {
-                    w.write_all(&(data.len() as u32).to_be_bytes()).await?;
-                    w.write_all(&data).await?
-                }
-                Action::Flush => w.flush().await?,
-                Action::Close => w.close().await?
-            }
-            Ok(w)
-        });
-
-        LenPrefixCodec {
-            stream: stream.boxed(),
-            sink: Box::pin(sink),
-            _mark: std::marker::PhantomData
-        }
-    }
-}
-
-impl<T> Stream for LenPrefixCodec<T>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
-{
-    type Item = io::Result<Vec<u8>>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.stream.poll_next_unpin(cx)
-    }
-}
-
-impl<T> Sink<Vec<u8>> for LenPrefixCodec<T>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
-{
-    type Error = io::Error;
-
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.sink).poll_ready(cx)
-    }
-
-    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
-        Pin::new(&mut self.sink).start_send(item)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.sink).poll_flush(cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.sink).poll_close(cx)
-    }
-}
 
 #[cfg(test)]
 mod tests {
