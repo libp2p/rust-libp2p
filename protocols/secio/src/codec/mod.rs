@@ -182,7 +182,7 @@ mod tests {
 
             let (connec, _) = listener.accept().await.unwrap();
             let codec = full_codec(
-                LenPrefixCodec::new(connec),
+                LenPrefixCodec::new(connec, 1024),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
@@ -198,7 +198,7 @@ mod tests {
             let listener_addr = l_a_rx.await.unwrap();
             let stream = TcpStream::connect(&listener_addr).await.unwrap();
             let mut codec = full_codec(
-                LenPrefixCodec::new(stream),
+                LenPrefixCodec::new(stream, 1024),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),

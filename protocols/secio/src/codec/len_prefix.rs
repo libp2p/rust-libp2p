@@ -43,10 +43,10 @@ impl<T> LenPrefixCodec<T>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    pub fn new(socket: T) -> Self {
+    pub fn new(socket: T, max_len: usize) -> Self {
         let (r, w) = socket.split();
 
-        let stream = futures::stream::unfold(r, |mut r| async {
+        let stream = futures::stream::unfold(r, move |mut r| async move {
             let mut len = [0; 4];
             if let Err(e) = r.read_exact(&mut len).await {
                 if e.kind() == io::ErrorKind::UnexpectedEof {
@@ -54,16 +54,24 @@ where
                 }
                 return Some((Err(e), r))
             }
-            let mut v = vec![0; u32::from_be_bytes(len) as usize];
+            let n = u32::from_be_bytes(len) as usize;
+            if n > max_len {
+                let msg = format!("data length {} exceeds allowed maximum {}", n, max_len);
+                return Some((Err(io::Error::new(io::ErrorKind::PermissionDenied, msg)), r))
+            }
+            let mut v = vec![0; n];
             if let Err(e) = r.read_exact(&mut v).await {
                 return Some((Err(e), r))
             }
             Some((Ok(v), r))
         });
 
-        let sink = quicksink::make_sink(w, |mut w, action: Action<Vec<u8>>| async {
+        let sink = quicksink::make_sink(w, move |mut w, action: Action<Vec<u8>>| async move {
             match action {
                 Action::Send(data) => {
+                    if data.len() > max_len {
+                        log::error!("data length {} exceeds allowed maximum {}", data.len(), max_len)
+                    }
                     w.write_all(&(data.len() as u32).to_be_bytes()).await?;
                     w.write_all(&data).await?
                 }

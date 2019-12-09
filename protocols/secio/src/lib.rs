@@ -85,7 +85,8 @@ pub struct SecioConfig {
     pub(crate) key: identity::Keypair,
     pub(crate) agreements_prop: Option<String>,
     pub(crate) ciphers_prop: Option<String>,
-    pub(crate) digests_prop: Option<String>
+    pub(crate) digests_prop: Option<String>,
+    pub(crate) max_frame_len: usize
 }
 
 impl SecioConfig {
@@ -95,7 +96,8 @@ impl SecioConfig {
             key: kp,
             agreements_prop: None,
             ciphers_prop: None,
-            digests_prop: None
+            digests_prop: None,
+            max_frame_len: 8 * 1024 * 1024
         }
     }
 
@@ -123,6 +125,12 @@ impl SecioConfig {
         I: IntoIterator<Item=&'a Digest>
     {
         self.digests_prop = Some(algo_support::digests_proposition(xs));
+        self
+    }
+
+    /// Override the default max. frame length of 8MiB.
+    pub fn max_frame_len(mut self, n: usize) -> Self {
+        self.max_frame_len = n;
         self
     }
 

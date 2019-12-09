@@ -50,7 +50,7 @@ pub async fn handshake<S>(socket: S, config: SecioConfig)
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    let mut socket = LenPrefixCodec::new(socket);
+    let mut socket = LenPrefixCodec::new(socket, config.max_frame_len);
 
     let local_nonce = {
         let mut local_nonce = [0; 16];
