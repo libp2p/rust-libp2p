@@ -108,7 +108,11 @@ type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
 
 #[derive(Debug)]
 pub struct Muxer {
+    /// The pending stream, if any.
+    pending_stream: Option<StreamId>,
+    /// The associated endpoint
     endpoint: Arc<Endpoint>,
+    /// The `quinn_proto::Connection` struct.
     connection: Connection,
     /// Connection handle
     handle: ConnectionHandle,
@@ -214,17 +218,31 @@ impl Muxer {
                     }
                 }
                 Event::StreamAvailable { dir: Dir::Bi } => {
-                    if let Some(w) = self.connectors.pop_front() {
-                        let stream = self.connection.open(Dir::Bi)
-							.expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
-                        match w.send(stream) {
-                            Ok(()) => (),
-                            Err(_) => unimplemented!(),
+                    if self.connectors.is_empty() {
+                        // no task to wake up
+                        return;
+                    }
+                    debug_assert!(
+                        self.pending_stream.is_none(),
+                        "we cannot have both pending tasks and a pending stream; qed"
+                    );
+                    let stream = self.connection.open(Dir::Bi)
+						.expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
+                    while let Some(oneshot) = self.connectors.pop_front() {
+                        match oneshot.send(stream) {
+                            Ok(()) => return,
+                            Err(_) => (),
                         }
                     }
+                    self.pending_stream = Some(stream)
                 }
                 Event::ConnectionLost { .. } => break, // nothing more
-                Event::StreamFinished { .. } => unimplemented!(),
+                Event::StreamFinished { stream, .. } => {
+                    // Wake up the task waiting on us (if any)
+                    if let Some((_, waker)) = self.writers.remove_entry(&stream) {
+                        waker.wake()
+                    }
+                }
                 Event::StreamOpened { dir: Dir::Bi } => {
                     if let Some(w) = self.accept_waker.take() {
                         w.wake()
@@ -272,14 +290,16 @@ impl StreamMuxer for QuicMuxer {
     type Error = std::io::Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
-        match inner.connection.open(Dir::Bi) {
+        if let Some(id) = inner.pending_stream.take() {
+            // mandatory ― otherwise we will fail an assertion above
+            Outbound(OutboundInner::Complete(id))
+        } else if let Some(id) = inner.connection.open(Dir::Bi) {
             // optimization: if we can complete synchronously, do so.
-            Some(id) => Outbound(OutboundInner::Complete(id)),
-            None => {
-                let (sender, receiver) = oneshot::channel();
-                inner.connectors.push_front(sender);
-                Outbound(OutboundInner::Pending(receiver))
-            }
+            Outbound(OutboundInner::Complete(id))
+        } else {
+            let (sender, receiver) = oneshot::channel();
+            inner.connectors.push_front(sender);
+            Outbound(OutboundInner::Pending(receiver))
         }
     }
     fn destroy_outbound(&self, _: Outbound) {}
@@ -497,8 +517,10 @@ impl QuicEndpoint {
                             None => continue, // FIXME should this be a panic?
                         },
                     };
-					let mut connection = connection.lock().expect("we assume we have not already panicked; qed");
-					connection.process_app_events(&mut inner, connection_event);
+                    let mut connection = connection
+                        .lock()
+                        .expect("we assume we have not already panicked; qed");
+                    connection.process_app_events(&mut inner, connection_event);
                     continue;
                 }
                 DatagramEvent::NewConnection(connection) => {
@@ -508,6 +530,7 @@ impl QuicEndpoint {
             };
             let endpoint = &self.0;
             let muxer = Arc::new(Mutex::new(Muxer {
+                pending_stream: None,
                 connection,
                 handle,
                 writers: HashMap::new(),
@@ -593,10 +616,9 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 }
 
-#[cfg(any())]
 #[cfg(test)]
 mod tests {
-    use super::{multiaddr_to_socketaddr, QuicConfig};
+    use super::{multiaddr_to_socketaddr, QuicConfig, QuicEndpoint};
     use futures::prelude::*;
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
@@ -607,8 +629,10 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        let mut listener = QuicConfig::new()
-            .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
+        let addr: Multiaddr = "/ip4/0.0.0.0/udp/0/quic".parse().unwrap();
+        let mut listener = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
+            .expect("endpoint")
+            .listen_on(addr)
             .expect("listener");
 
         // Get the first address.
@@ -641,7 +665,10 @@ mod tests {
             })
             .for_each(|_| futures::future::ready(()));
 
-        let client = QuicConfig::new().dial(addr).expect("dialer");
+        let client = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
+            .expect("endpoint")
+            .dial(addr)
+            .expect("dialer");
         futures::executor::block_on(futures::future::join(server, client))
             .1
             .unwrap();
@@ -749,12 +776,14 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
-        let tcp = QuicConfig::new();
+        let quic = QuicConfig::new();
 
-        let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
-        assert!(addr.to_string().contains("tcp/0"));
+        let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
+        assert!(addr.to_string().ends_with("udp/0/quic"));
 
-        let new_addr = futures::executor::block_on_stream(tcp.listen_on(addr).unwrap())
+        let quic = QuicEndpoint::new(&quic, addr.clone()).expect("no error");
+
+        let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
             .next()
             .expect("some event")
             .expect("no error")
@@ -766,12 +795,13 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
-        let tcp = QuicConfig::new();
+        let config = QuicConfig::new();
 
-        let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
-        assert!(addr.to_string().contains("tcp/0"));
+        let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
+        assert!(addr.to_string().contains("udp/0/quic"));
+        let quic = QuicEndpoint::new(&config, addr.clone()).expect("no error");
 
-        let new_addr = futures::executor::block_on_stream(tcp.listen_on(addr).unwrap())
+        let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
             .next()
             .expect("some event")
             .expect("no error")
@@ -783,11 +813,10 @@ mod tests {
 
     #[test]
     fn larger_addr_denied() {
-        let tcp = QuicConfig::new();
-
+        let config = QuicConfig::new();
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()
             .unwrap();
-        assert!(tcp.listen_on(addr).is_err());
+        assert!(QuicEndpoint::new(&config, addr).is_err())
     }
 }
