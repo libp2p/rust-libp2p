@@ -5,7 +5,7 @@ use libp2p_core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use log::{error, trace};
+use log::{trace, warn};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::io;
@@ -131,11 +131,12 @@ where
         // Should never establish a new outbound substream if one already exists.
         // If this happens, an outbound message is not sent.
         if self.outbound_substream.is_some() {
-            error!("Established an outbound substream with one already available");
-            return;
+            warn!("Established an outbound substream with one already available");
+            // Add the message back to the send queue
+            self.send_queue.push(message);
+        } else {
+            self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
         }
-
-        self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
     }
 
     #[inline]

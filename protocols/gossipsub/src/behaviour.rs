@@ -999,7 +999,7 @@ where
             let topics = match self.peer_topics.get(&id) {
                 Some(topics) => (topics),
                 None => {
-                    error!("ERROR: Disconnected node, not in connected nodes");
+                    warn!("ERROR: Disconnected node, not in connected nodes");
                     return;
                 }
             };
