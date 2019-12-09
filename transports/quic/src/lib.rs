@@ -56,7 +56,11 @@
 
 use async_macros::ready;
 use async_std::net::UdpSocket;
-use futures::{channel::mpsc, future, prelude::*};
+use futures::{
+    channel::{mpsc, oneshot},
+    future,
+    prelude::*,
+};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
@@ -100,6 +104,8 @@ impl QuicConfig {
     }
 }
 
+type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
+
 #[derive(Debug)]
 pub struct Muxer {
     endpoint: Arc<Endpoint>,
@@ -110,10 +116,10 @@ pub struct Muxer {
     writers: HashMap<StreamId, std::task::Waker>,
     /// Tasks blocked on reading
     readers: HashMap<StreamId, std::task::Waker>,
-    /// Tasks waiting for new connections
-    acceptors: Vec<std::task::Waker>,
+    /// Task waiting for new connections
+    accept_waker: Option<std::task::Waker>,
     /// Tasks waiting to make a connection
-    connectors: Vec<std::task::Waker>,
+    connectors: StreamSenderQueue,
     /// Channel to request I/O
     sender: mpsc::Sender<quinn_proto::Transmit>,
 }
@@ -174,7 +180,7 @@ impl Muxer {
     }
 
     /// Process application events
-    fn process_app_events(&mut self, endpoint: &mut EndpointInner) {
+    fn process_app_events(&mut self, endpoint: &mut EndpointInner, event: ConnectionEvent) {
         use quinn_proto::Event;
         self.send_to_endpoint(endpoint);
         while let Some(event) = self.connection.poll() {
@@ -208,12 +214,21 @@ impl Muxer {
                     }
                 }
                 Event::StreamAvailable { dir: Dir::Bi } => {
-                    let _: Option<()> = self.acceptors.pop().map(|w| w.wake());
+                    if let Some(w) = self.connectors.pop_front() {
+                        let stream = self.connection.open(Dir::Bi)
+							.expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
+                        match w.send(stream) {
+                            Ok(()) => (),
+                            Err(_) => unimplemented!(),
+                        }
+                    }
                 }
                 Event::ConnectionLost { .. } => break, // nothing more
                 Event::StreamFinished { .. } => unimplemented!(),
                 Event::StreamOpened { dir: Dir::Bi } => {
-                    let _: Option<()> = self.connectors.pop().map(|w| w.wake());
+                    if let Some(w) = self.accept_waker.take() {
+                        w.wake()
+                    }
                 }
             }
         }
@@ -231,12 +246,43 @@ impl QuicMuxer {
     }
 }
 
+#[derive(Debug)]
+enum OutboundInner {
+    Complete(StreamId),
+    Pending(oneshot::Receiver<StreamId>),
+}
+
+pub struct Outbound(OutboundInner);
+
+impl Future for Outbound {
+    type Output = Result<StreamId, std::io::Error>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match self.get_mut().0 {
+            OutboundInner::Complete(s) => Poll::Ready(Ok(s)),
+            OutboundInner::Pending(ref mut receiver) => Pin::new(receiver)
+                .poll(cx)
+                .map_err(|oneshot::Canceled| std::io::ErrorKind::ConnectionAborted.into()),
+        }
+    }
+}
+
 impl StreamMuxer for QuicMuxer {
-    type OutboundSubstream = ();
+    type OutboundSubstream = Outbound;
     type Substream = StreamId;
     type Error = std::io::Error;
-    fn open_outbound(&self) {}
-    fn destroy_outbound(&self, (): ()) {}
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        let mut inner = self.inner();
+        match inner.connection.open(Dir::Bi) {
+            // optimization: if we can complete synchronously, do so.
+            Some(id) => Outbound(OutboundInner::Complete(id)),
+            None => {
+                let (sender, receiver) = oneshot::channel();
+                inner.connectors.push_front(sender);
+                Outbound(OutboundInner::Pending(receiver))
+            }
+        }
+    }
+    fn destroy_outbound(&self, _: Outbound) {}
     fn destroy_substream(&self, substream: Self::Substream) {}
     fn is_remote_acknowledged(&self) -> bool {
         true
@@ -246,7 +292,7 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         match inner.connection.accept(quinn_proto::Dir::Bi) {
             None => {
-                inner.acceptors.push(cx.waker().clone());
+                inner.accept_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
             Some(stream) => Poll::Ready(Ok(stream)),
@@ -291,14 +337,7 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context,
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut inner = self.inner();
-        match inner.connection.open(Dir::Bi) {
-            None => {
-                inner.connectors.push(cx.waker().clone());
-                Poll::Pending
-            }
-            Some(id) => Poll::Ready(Ok(id)),
-        }
+        Pin::new(substream).poll(cx)
     }
 
     fn read_substream(
@@ -335,7 +374,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn shutdown_substream(
         &self,
-        cx: &mut Context,
+        _cx: &mut Context,
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(
@@ -376,7 +415,7 @@ impl StreamMuxer for QuicMuxer {
 
 impl Stream for Endpoint {
     type Item = Result<QuicMuxer, io::Error>;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Option<Self::Item>> {
         let mut inner = self.inner.lock().unwrap();
         // inner.pending_connections -= 1;
         inner.inner.accept();
@@ -458,7 +497,8 @@ impl QuicEndpoint {
                             None => continue, // FIXME should this be a panic?
                         },
                     };
-                    (*connection).lock().unwrap().process_app_events(&mut inner);
+					let mut connection = connection.lock().expect("we assume we have not already panicked; qed");
+					connection.process_app_events(&mut inner, connection_event);
                     continue;
                 }
                 DatagramEvent::NewConnection(connection) => {
@@ -472,14 +512,14 @@ impl QuicEndpoint {
                 handle,
                 writers: HashMap::new(),
                 readers: HashMap::new(),
-                acceptors: vec![],
-                connectors: vec![],
+                accept_waker: None,
+                connectors: Default::default(),
                 sender: endpoint.sender.clone(),
                 endpoint: endpoint.clone(),
             }));
             self.inner().muxers.insert(handle, Arc::downgrade(&muxer));
-            self.inner().muxers.insert(handle, Arc::downgrade(&muxer));
-            endpoint.new_connections
+            endpoint
+                .new_connections
                 .unbounded_send(QuicMuxer(muxer))
                 .expect(
                     "this is an unbounded channel, and we have an instance of the peer, so \
@@ -495,7 +535,7 @@ pub struct QuicConnecting {
 
 impl Future for QuicConnecting {
     type Output = Result<QuicMuxer, io::Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
         unimplemented!()
     }
 }
