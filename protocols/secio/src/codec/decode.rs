@@ -59,7 +59,7 @@ impl<S> DecoderMiddleware<S> {
 
 impl<S> Stream for DecoderMiddleware<S>
 where
-    S: TryStream<Ok = bytes::BytesMut> + Unpin,
+    S: TryStream<Ok = Vec<u8>> + Unpin,
     S::Error: Into<SecioError>,
 {
     type Item = Result<Vec<u8>, SecioError>;
@@ -87,10 +87,9 @@ where
             }
         }
 
-        let mut data_buf = frame.to_vec();
+        let mut data_buf = frame;
         data_buf.truncate(content_length);
-        self.cipher_state
-            .decrypt(&mut data_buf);
+        self.cipher_state.decrypt(&mut data_buf);
 
         if !self.nonce.is_empty() {
             let n = min(data_buf.len(), self.nonce.len());

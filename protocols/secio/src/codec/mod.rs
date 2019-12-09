@@ -21,21 +21,22 @@
 //! Individual messages encoding and decoding. Use this after the algorithms have been
 //! successfully negotiated.
 
-use self::decode::DecoderMiddleware;
-use self::encode::EncoderMiddleware;
-
-use crate::algo_support::Digest;
-use futures::prelude::*;
-use aes_ctr::stream_cipher;
-use hmac::{self, Mac};
-use sha2::{Sha256, Sha512};
-use unsigned_varint::codec::UviBytes;
-
 mod decode;
 mod encode;
+mod len_prefix;
+
+use aes_ctr::stream_cipher;
+use crate::algo_support::Digest;
+use decode::DecoderMiddleware;
+use encode::EncoderMiddleware;
+use futures::prelude::*;
+use hmac::{self, Mac};
+use sha2::{Sha256, Sha512};
+
+pub use len_prefix::LenPrefixCodec;
 
 /// Type returned by `full_codec`.
-pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<futures_codec::Framed<S, UviBytes<Vec<u8>>>>>;
+pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<LenPrefixCodec<S>>>;
 
 pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
@@ -108,7 +109,7 @@ impl Hmac {
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
-    socket: futures_codec::Framed<S, unsigned_varint::codec::UviBytes<Vec<u8>>>,
+    socket: LenPrefixCodec<S>,
     cipher_encoding: StreamCipher,
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
@@ -116,30 +117,27 @@ pub fn full_codec<S>(
     remote_nonce: Vec<u8>
 ) -> FullCodec<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
     DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
+
 #[cfg(test)]
 mod tests {
-    use super::{full_codec, DecoderMiddleware, EncoderMiddleware, Hmac};
+    use super::{full_codec, DecoderMiddleware, EncoderMiddleware, Hmac, LenPrefixCodec};
     use crate::algo_support::Digest;
     use crate::stream_cipher::{ctr, Cipher};
     use crate::error::SecioError;
     use async_std::net::{TcpListener, TcpStream};
-    use bytes::BytesMut;
     use futures::{prelude::*, channel::mpsc, channel::oneshot};
-    use futures_codec::Framed;
-    use unsigned_varint::codec::UviBytes;
 
     const NULL_IV : [u8; 16] = [0; 16];
 
     #[test]
     fn raw_encode_then_decode() {
         let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(256);
-        let data_rx = data_rx.map(BytesMut::from);
 
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
@@ -184,7 +182,7 @@ mod tests {
 
             let (connec, _) = listener.accept().await.unwrap();
             let codec = full_codec(
-                Framed::new(connec, UviBytes::default()),
+                LenPrefixCodec::new(connec, 1024),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
@@ -200,7 +198,7 @@ mod tests {
             let listener_addr = l_a_rx.await.unwrap();
             let stream = TcpStream::connect(&listener_addr).await.unwrap();
             let mut codec = full_codec(
-                Framed::new(stream, UviBytes::default()),
+                LenPrefixCodec::new(stream, 1024),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),

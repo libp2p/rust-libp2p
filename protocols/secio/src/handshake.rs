@@ -18,22 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::SecioConfig;
 use crate::algo_support;
-use crate::codec::{full_codec, FullCodec, Hmac};
-use crate::stream_cipher::ctr;
+use crate::codec::{full_codec, FullCodec, Hmac, LenPrefixCodec};
 use crate::error::SecioError;
 use crate::exchange;
+use crate::stream_cipher::ctr;
+use crate::structs_proto::{Exchange, Propose};
 use futures::prelude::*;
 use libp2p_core::PublicKey;
 use log::{debug, trace};
-use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
+use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use crate::structs_proto::{Exchange, Propose};
-use crate::SecioConfig;
+
 
 /// Performs a handshake on the given socket.
 ///
@@ -44,16 +45,12 @@ use crate::SecioConfig;
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
 /// negotiation.
-pub async fn handshake<'a, S: 'a>(socket: S, config: SecioConfig)
+pub async fn handshake<S>(socket: S, config: SecioConfig)
     -> Result<(FullCodec<S>, PublicKey, Vec<u8>), SecioError>
 where
-    S: AsyncRead + AsyncWrite + Send + Unpin,
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    // The handshake messages all start with a variable-length integer indicating the size.
-    let mut socket = futures_codec::Framed::new(
-        socket,
-        unsigned_varint::codec::UviBytes::<Vec<u8>>::default()
-    );
+    let mut socket = LenPrefixCodec::new(socket, config.max_frame_len);
 
     let local_nonce = {
         let mut local_nonce = [0; 16];
