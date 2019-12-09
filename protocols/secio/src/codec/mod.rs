@@ -21,21 +21,21 @@
 //! Individual messages encoding and decoding. Use this after the algorithms have been
 //! successfully negotiated.
 
-use self::decode::DecoderMiddleware;
-use self::encode::EncoderMiddleware;
-
-use crate::algo_support::Digest;
-use futures::prelude::*;
-use aes_ctr::stream_cipher;
-use hmac::{self, Mac};
-use sha2::{Sha256, Sha512};
-use unsigned_varint::codec::UviBytes;
-
 mod decode;
 mod encode;
 
+use aes_ctr::stream_cipher;
+use crate::algo_support::Digest;
+use decode::DecoderMiddleware;
+use encode::EncoderMiddleware;
+use futures::{prelude::*, stream::BoxStream};
+use hmac::{self, Mac};
+use quicksink::Action;
+use sha2::{Sha256, Sha512};
+use std::{fmt, io, pin::Pin, task::{Context, Poll}};
+
 /// Type returned by `full_codec`.
-pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<futures_codec::Framed<S, UviBytes<Vec<u8>>>>>;
+pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<LenPrefixCodec<S>>>;
 
 pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
@@ -108,7 +108,7 @@ impl Hmac {
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
-    socket: futures_codec::Framed<S, unsigned_varint::codec::UviBytes<Vec<u8>>>,
+    socket: LenPrefixCodec<S>,
     cipher_encoding: StreamCipher,
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
@@ -116,30 +116,120 @@ pub fn full_codec<S>(
     remote_nonce: Vec<u8>
 ) -> FullCodec<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
     DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
+
+/// `Stream` & `Sink` that reads and writes a length prefix in front of the actual data.
+pub struct LenPrefixCodec<T> {
+    stream: BoxStream<'static, io::Result<Vec<u8>>>,
+    sink: Pin<Box<dyn Sink<Vec<u8>, Error = io::Error> + Send>>,
+    _mark: std::marker::PhantomData<T>
+}
+
+impl<T> fmt::Debug for LenPrefixCodec<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("LenPrefixCodec")
+    }
+}
+
+static_assertions::const_assert! {
+    std::mem::size_of::<u32>() <= std::mem::size_of::<usize>()
+}
+
+impl<T> LenPrefixCodec<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    pub fn new(socket: T) -> Self {
+        let (r, w) = socket.split();
+
+        let stream = futures::stream::unfold(r, |mut r| async {
+            let mut len = [0; 4];
+            if let Err(e) = r.read_exact(&mut len).await {
+                if e.kind() == io::ErrorKind::UnexpectedEof {
+                    return None
+                }
+                return Some((Err(e), r))
+            }
+            let mut v = vec![0; u32::from_be_bytes(len) as usize];
+            if let Err(e) = r.read_exact(&mut v).await {
+                return Some((Err(e), r))
+            }
+            Some((Ok(v), r))
+        });
+
+        let sink = quicksink::make_sink(w, |mut w, action: Action<Vec<u8>>| async {
+            match action {
+                Action::Send(data) => {
+                    w.write_all(&(data.len() as u32).to_be_bytes()).await?;
+                    w.write_all(&data).await?
+                }
+                Action::Flush => w.flush().await?,
+                Action::Close => w.close().await?
+            }
+            Ok(w)
+        });
+
+        LenPrefixCodec {
+            stream: stream.boxed(),
+            sink: Box::pin(sink),
+            _mark: std::marker::PhantomData
+        }
+    }
+}
+
+impl<T> Stream for LenPrefixCodec<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    type Item = io::Result<Vec<u8>>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.stream.poll_next_unpin(cx)
+    }
+}
+
+impl<T> Sink<Vec<u8>> for LenPrefixCodec<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    type Error = io::Error;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.sink).poll_ready(cx)
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
+        Pin::new(&mut self.sink).start_send(item)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.sink).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.sink).poll_close(cx)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{full_codec, DecoderMiddleware, EncoderMiddleware, Hmac};
+    use super::{full_codec, DecoderMiddleware, EncoderMiddleware, Hmac, LenPrefixCodec};
     use crate::algo_support::Digest;
     use crate::stream_cipher::{ctr, Cipher};
     use crate::error::SecioError;
     use async_std::net::{TcpListener, TcpStream};
-    use bytes::BytesMut;
     use futures::{prelude::*, channel::mpsc, channel::oneshot};
-    use futures_codec::Framed;
-    use unsigned_varint::codec::UviBytes;
 
     const NULL_IV : [u8; 16] = [0; 16];
 
     #[test]
     fn raw_encode_then_decode() {
         let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(256);
-        let data_rx = data_rx.map(BytesMut::from);
 
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
@@ -184,7 +274,7 @@ mod tests {
 
             let (connec, _) = listener.accept().await.unwrap();
             let codec = full_codec(
-                Framed::new(connec, UviBytes::default()),
+                LenPrefixCodec::new(connec),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
@@ -200,7 +290,7 @@ mod tests {
             let listener_addr = l_a_rx.await.unwrap();
             let stream = TcpStream::connect(&listener_addr).await.unwrap();
             let mut codec = full_codec(
-                Framed::new(stream, UviBytes::default()),
+                LenPrefixCodec::new(stream),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),

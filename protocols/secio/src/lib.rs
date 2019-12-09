@@ -148,7 +148,7 @@ impl SecioConfig {
 /// Output of the secio protocol.
 pub struct SecioOutput<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> io::Error>>,
@@ -193,7 +193,10 @@ where
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
+impl<S> AsyncRead for SecioOutput<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
@@ -201,7 +204,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for SecioOutput<S> {
+impl<S> AsyncWrite for SecioOutput<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
@@ -254,7 +260,7 @@ where
 
 impl<S> Sink<Vec<u8>> for SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Error = io::Error;
 
@@ -277,7 +283,7 @@ where
 
 impl<S> Stream for SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Item = Result<Vec<u8>, SecioError>;
 
