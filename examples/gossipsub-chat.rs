@@ -46,11 +46,6 @@
 //!
 //! The two nodes should then connect.
 
-extern crate env_logger;
-extern crate futures;
-extern crate libp2p;
-extern crate tokio;
-
 use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::{GossipsubEvent, Topic};
@@ -91,8 +86,7 @@ fn main() {
     };
 
     // Listen on all interfaces and whatever port the OS assigns
-    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-    println!("Listening on {:?}", addr);
+    libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
@@ -111,6 +105,7 @@ fn main() {
     let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
 
     // Kick it off
+    let mut listening = false;
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match framed_stdin.poll().expect("Error while polling stdin") {
@@ -131,6 +126,13 @@ fn main() {
                     _ => {}
                 },
                 Async::Ready(None) | Async::NotReady => break,
+            }
+        }
+
+        if !listening {
+            for addr in libp2p::Swarm::listeners(&swarm) {
+                println!("Listening on {:?}", addr);
+                listening = true;
             }
         }
 

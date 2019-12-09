@@ -15,7 +15,6 @@ fnv = "1.0.6"
 futures = "0.1.25"
 protobuf = "2.3.0"
 rand = "0.6.5"
-smallvec = "0.6.8"
 tokio-codec = "0.1.1"
 tokio-io = "0.1.11"
 tokio-timer = "0.2.8"
@@ -24,6 +23,7 @@ log = "0.4.6"
 sha2 = "0.8.0"
 base64 = "0.10.1"
 lru = "0.1.17"
+smallvec = "1.0.0"
 
 [dev-dependencies]
 libp2p = { path = "../../" }

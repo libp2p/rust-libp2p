@@ -1,3 +1,23 @@
+// Copyright 2018 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 extern crate fnv;
 
 use crate::protocol::GossipsubMessage;
@@ -88,11 +108,11 @@ mod tests {
     use crate::{Topic, TopicHash};
     use libp2p_core::PeerId;
 
-    fn gen_testm(x: usize, topics: Vec<TopicHash>) -> GossipsubMessage {
+    fn gen_testm(x: u64, topics: Vec<TopicHash>) -> GossipsubMessage {
         let u8x: u8 = x as u8;
         let source = PeerId::random();
         let data: Vec<u8> = vec![u8x];
-        let sequence_number: Vec<u8> = vec![u8x];
+        let sequence_number = x;
 
         let m = GossipsubMessage {
             source,
@@ -120,7 +140,7 @@ mod tests {
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
 
-        let m = gen_testm(10 as usize, vec![topic1_hash, topic2_hash]);
+        let m = gen_testm(10, vec![topic1_hash, topic2_hash]);
 
         mc.put(m.clone());
 
@@ -146,7 +166,7 @@ mod tests {
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
 
-        let m = gen_testm(10 as usize, vec![topic1_hash, topic2_hash]);
+        let m = gen_testm(10, vec![topic1_hash, topic2_hash]);
 
         mc.put(m.clone());
 
@@ -173,7 +193,7 @@ mod tests {
         let mut mc = MessageCache::new(3, 5);
 
         // Build the message
-        let m = gen_testm(1 as usize, vec![]);
+        let m = gen_testm(1, vec![]);
         mc.put(m.clone());
 
         let fetched = mc.get(&m.id());
@@ -195,7 +215,7 @@ mod tests {
 
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i as usize, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
             mc.put(m.clone());
         }
 
@@ -218,7 +238,7 @@ mod tests {
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i as usize, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
             mc.put(m.clone());
         }
 
@@ -244,7 +264,7 @@ mod tests {
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i as usize, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
             mc.put(m.clone());
         }
 

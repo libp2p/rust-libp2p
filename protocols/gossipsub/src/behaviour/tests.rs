@@ -450,7 +450,7 @@ mod tests {
         for peer in peers {
             let known_topics = gs.peer_topics.get(&peer).unwrap();
             assert!(
-                known_topics == &SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes.clone()),
+                known_topics == &topic_hashes,
                 "The topics for each node should all topics"
             );
         }
@@ -497,12 +497,12 @@ mod tests {
 
         let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().clone();
         assert!(
-            peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[..3].to_vec()),
+            peer_topics == topic_hashes[..3].to_vec(),
             "First peer should be subscribed to three topics"
         );
         let peer_topics = gs.peer_topics.get(&peers[1]).unwrap().clone();
         assert!(
-            peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[..3].to_vec()),
+            peer_topics == topic_hashes[..3].to_vec(),
             "Second peer should be subscribed to three topics"
         );
 
@@ -531,7 +531,7 @@ mod tests {
 
         let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().clone();
         assert!(
-            peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[1..3].to_vec()),
+            peer_topics == topic_hashes[1..3].to_vec(),
             "Peer should be subscribed to two topics"
         );
 
@@ -559,20 +559,28 @@ mod tests {
 
         gs.topic_peers.insert(topic_hash.clone(), peers.clone());
 
-        let random_peers = gs.get_random_peers(&topic_hash, 5, { |_| true });
+        let random_peers =
+            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| true });
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
-        let random_peers = gs.get_random_peers(&topic_hash, 30, { |_| true });
+        let random_peers =
+            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 30, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers = gs.get_random_peers(&topic_hash, 20, { |_| true });
+        let random_peers =
+            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 20, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers = gs.get_random_peers(&topic_hash, 0, { |_| true });
+        let random_peers =
+            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 0, { |_| true });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         // test the filter
-        let random_peers = gs.get_random_peers(&topic_hash, 5, { |_| false });
+        let random_peers =
+            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
-        let random_peers = gs.get_random_peers(&topic_hash, 10, { |peer| peers.contains(peer) });
+        let random_peers =
+            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
+                |peer| peers.contains(peer)
+            });
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
     }
 
@@ -584,7 +592,7 @@ mod tests {
         let message = GossipsubMessage {
             source: peers[11].clone(),
             data: vec![1, 2, 3, 4],
-            sequence_number: vec![0, 0, 0, 0, 0, 0, 0, 1],
+            sequence_number: 1u64,
             topics: Vec::new(),
         };
         let msg_id = message.id();
@@ -622,7 +630,7 @@ mod tests {
             let message = GossipsubMessage {
                 source: peers[11].clone(),
                 data: vec![1, 2, 3, 4],
-                sequence_number: vec![0, 0, 0, 0, 0, 0, 0, shift],
+                sequence_number: shift,
                 topics: Vec::new(),
             };
             let msg_id = message.id();

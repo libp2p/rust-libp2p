@@ -100,7 +100,7 @@ impl Encoder for GossipsubCodec {
             let mut msg = rpc_proto::Message::new();
             msg.set_from(message.source.into_bytes());
             msg.set_data(message.data);
-            msg.set_seqno(message.sequence_number);
+            msg.set_seqno(message.sequence_number.to_be_bytes().to_vec());
             msg.set_topicIDs(
                 message
                     .topics
@@ -181,11 +181,19 @@ impl Decoder for GossipsubCodec {
 
         let mut messages = Vec::with_capacity(rpc.get_publish().len());
         for mut publish in rpc.take_publish().into_iter() {
+            // ensure the sequence number is a u64
+            let raw_seq = publish.take_seqno();
+            if raw_seq.len() != 8 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "sequence number has an incorrect size",
+                ));
+            }
             messages.push(GossipsubMessage {
                 source: PeerId::from_bytes(publish.take_from())
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id"))?,
                 data: publish.take_data(),
-                sequence_number: publish.take_seqno(),
+                sequence_number: BigEndian::read_u64(&raw_seq),
                 topics: publish
                     .take_topicIDs()
                     .into_iter()
@@ -200,23 +208,17 @@ impl Decoder for GossipsubCodec {
         let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
             .take_ihave()
             .into_iter()
-            .map(|mut ihave| {
-                GossipsubControlAction::IHave {
-                    topic_hash: TopicHash::from_raw(ihave.take_topicID()),
-                    // TODO: Potentially format the message ids better
-                    message_ids: ihave.take_messageIDs().into_vec(),
-                }
+            .map(|mut ihave| GossipsubControlAction::IHave {
+                topic_hash: TopicHash::from_raw(ihave.take_topicID()),
+                message_ids: ihave.take_messageIDs().into_vec(),
             })
             .collect();
 
         let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
             .take_iwant()
             .into_iter()
-            .map(|mut iwant| {
-                GossipsubControlAction::IWant {
-                    // TODO: Potentially format the message ids better
-                    message_ids: iwant.take_messageIDs().into_vec(),
-                }
+            .map(|mut iwant| GossipsubControlAction::IWant {
+                message_ids: iwant.take_messageIDs().into_vec(),
             })
             .collect();
 
@@ -270,7 +272,7 @@ pub struct GossipsubMessage {
     pub data: Vec<u8>,
 
     /// A random sequence number.
-    pub sequence_number: Vec<u8>,
+    pub sequence_number: u64,
 
     /// List of topics this message belongs to.
     ///
@@ -283,16 +285,7 @@ impl GossipsubMessage {
     // To be compatible with the go implementation
     pub fn id(&self) -> String {
         let mut source_string = self.source.to_base58();
-        // the sequence number should be a big endian uint64 (as per go implementation)
-        // avoid a potential panic by setting the seqno to 0 if it is not long enough.
-        let seqno = {
-            if (self.sequence_number.len() == 0) | (self.sequence_number.len() > 8) {
-                0
-            } else {
-                BigEndian::read_uint(&self.sequence_number, self.sequence_number.len())
-            }
-        };
-        source_string.push_str(&seqno.to_string());
+        source_string.push_str(&self.sequence_number.to_string());
         source_string
     }
 }
