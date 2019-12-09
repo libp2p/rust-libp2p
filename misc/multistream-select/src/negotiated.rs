@@ -242,12 +242,14 @@ where
                         Ok(n) => {
                             remaining.split_to(n);
                             if !remaining.is_empty() {
-                                let written = if n < buf.len() {
-                                    remaining.split_off(remaining_len);
-                                    n
-                                } else {
-                                    buf.len()
-                                };
+                                let written =
+                                    if n < buf.len() {
+                                        debug_assert!(remaining.len() > remaining_len);
+                                        remaining.split_off(remaining_len);
+                                        n
+                                    } else {
+                                        buf.len()
+                                    };
                                 debug_assert!(remaining.len() <= remaining_len);
                                 Ok(written)
                             } else {

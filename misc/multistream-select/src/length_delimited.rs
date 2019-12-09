@@ -328,17 +328,17 @@ where
             let n = self.inner.write_buffer.len();
             self.inner.write_buffer.extend_from_slice(buf);
             let result = self.inner.poll_write_buffer();
-            let written = n - self.inner.write_buffer.len();
+            let written = n + buf.len() - self.inner.write_buffer.len();
             if written == 0 {
+                self.inner.write_buffer.split_off(n); // Never grow the buffer.
                 if let Err(e) = result {
                     return Err(e)
                 }
                 return Err(io::ErrorKind::WouldBlock.into())
             }
             if written < buf.len() {
-                if self.inner.write_buffer.len() > n {
-                    self.inner.write_buffer.split_off(n); // Never grow the buffer.
-                }
+                debug_assert!(self.inner.write_buffer.len() > n);
+                self.inner.write_buffer.split_off(n); // Never grow the buffer.
                 return Ok(written)
             }
             return Ok(buf.len())
