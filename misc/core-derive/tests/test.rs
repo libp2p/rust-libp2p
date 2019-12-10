@@ -134,7 +134,7 @@ fn custom_polling() {
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>(_: &mut std::task::Context) {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -190,7 +190,7 @@ fn custom_event_and_polling() {
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>(_: &mut std::task::Context) {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
