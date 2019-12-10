@@ -40,9 +40,6 @@ impl<T, F> MapErr<T, F> {
 impl<T, F, TErr> Transport for MapErr<T, F>
 where
     T: Transport,
-    T::Dial: Unpin,
-    T::Listener: Unpin,
-    T::ListenerUpgrade: Unpin,
     F: FnOnce(T::Error) -> TErr + Clone,
     TErr: error::Error,
 {
@@ -70,67 +67,62 @@ where
 }
 
 /// Listening stream for `MapErr`.
+#[pin_project::pin_project]
 pub struct MapErrListener<T: Transport, F> {
+    #[pin]
     inner: T::Listener,
     map: F,
-}
-
-impl<T, F> Unpin for MapErrListener<T, F>
-    where T: Transport
-{
 }
 
 impl<T, F, TErr> Stream for MapErrListener<T, F>
 where
     T: Transport,
-    T::Listener: Unpin,
     F: FnOnce(T::Error) -> TErr + Clone,
     TErr: error::Error,
 {
     type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>>, TErr>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match TryStream::try_poll_next(Pin::new(&mut self.inner), cx) {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        match TryStream::try_poll_next(this.inner, cx) {
             Poll::Ready(Some(Ok(event))) => {
+                let map = &*this.map;
                 let event = event.map(move |value| {
                     MapErrListenerUpgrade {
                         inner: value,
-                        map: Some(self.map.clone())
+                        map: Some(map.clone())
                     }
                 });
                 Poll::Ready(Some(Ok(event)))
             }
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err((self.map.clone())(err)))),
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err((this.map.clone())(err)))),
         }
     }
 }
 
 /// Listening upgrade future for `MapErr`.
+#[pin_project::pin_project]
 pub struct MapErrListenerUpgrade<T: Transport, F> {
+    #[pin]
     inner: T::ListenerUpgrade,
     map: Option<F>,
 }
 
-impl<T, F> Unpin for MapErrListenerUpgrade<T, F>
-    where T: Transport
-{
-}
-
 impl<T, F, TErr> Future for MapErrListenerUpgrade<T, F>
 where T: Transport,
-    T::ListenerUpgrade: Unpin,
     F: FnOnce(T::Error) -> TErr,
 {
     type Output = Result<T::Output, TErr>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        match Future::poll(Pin::new(&mut self.inner), cx) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        match Future::poll(this.inner, cx) {
             Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(err)) => {
-                let map = self.map.take().expect("poll() called again after error");
+                let map = this.map.take().expect("poll() called again after error");
                 Poll::Ready(Err(map(err)))
             }
         }
@@ -138,30 +130,27 @@ where T: Transport,
 }
 
 /// Dialing future for `MapErr`.
+#[pin_project::pin_project]
 pub struct MapErrDial<T: Transport, F> {
+    #[pin]
     inner: T::Dial,
     map: Option<F>,
-}
-
-impl<T, F> Unpin for MapErrDial<T, F>
-    where T: Transport
-{
 }
 
 impl<T, F, TErr> Future for MapErrDial<T, F>
 where
     T: Transport,
-    T::Dial: Unpin,
     F: FnOnce(T::Error) -> TErr,
 {
     type Output = Result<T::Output, TErr>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        match Future::poll(Pin::new(&mut self.inner), cx) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        match Future::poll(this.inner, cx) {
             Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(err)) => {
-                let map = self.map.take().expect("poll() called again after error");
+                let map = this.map.take().expect("poll() called again after error");
                 Poll::Ready(Err(map(err)))
             }
         }

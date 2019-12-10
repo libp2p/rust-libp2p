@@ -59,9 +59,7 @@ where
 impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectUpgrade<A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
-    <A as InboundUpgrade<C>>::Future: Unpin,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
-    <B as InboundUpgrade<C>>::Future: Unpin,
 {
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;

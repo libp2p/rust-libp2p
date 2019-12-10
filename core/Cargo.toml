@@ -25,6 +25,7 @@ multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../misc/m
 multihash = { package = "parity-multihash", version = "0.2.0", path = "../misc/multihash" }
 multistream-select = { version = "0.6.0", path = "../misc/multistream-select" }
 parking_lot = "0.9.0"
+pin-project = "0.4.6"
 protobuf = "2.8"
 quick-error = "1.2"
 rand = "0.7"
