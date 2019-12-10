@@ -21,4 +21,4 @@ unsigned-varint = "0.2.2"
 tokio = "0.1"
 tokio-tcp = "0.1"
 quickcheck = "0.9.0"
-rand = "0.7.2"
+rand = { version = "0.7.2", features = ["wasm-bindgen"] }

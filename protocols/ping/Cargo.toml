@@ -16,7 +16,7 @@ libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../misc/multiaddr" }
 futures = "0.1"
-rand = "0.7.2"
+rand = { version = "0.7.2", features = ["wasm-bindgen"] }
 tokio-io = "0.1"
 wasm-timer = "0.1"
 void = "1.0"

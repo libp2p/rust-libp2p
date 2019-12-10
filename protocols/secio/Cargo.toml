@@ -15,7 +15,7 @@ futures = "0.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.6"
 protobuf = "2.8"
-rand = "0.6.5"
+rand = { version = "0.6.5", features = ["wasm-bindgen"] }
 aes-ctr = "0.3"
 aesni = { version = "0.6", features = ["nocheck"], optional = true }
 twofish = "0.2.0"
