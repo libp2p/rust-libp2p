@@ -130,11 +130,11 @@ fn custom_polling() {
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo<T>(&mut self) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, ()>> { std::task::Poll::Pending }
+        fn foo<T>(&mut self, _: &mut std::task::Context) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, ()>> { std::task::Poll::Pending }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>(_: &mut std::task::Context) {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -186,11 +186,11 @@ fn custom_event_and_polling() {
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo<T>(&mut self) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, String>> { std::task::Poll::Pending }
+        fn foo<T>(&mut self, _: &mut std::task::Context) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, String>> { std::task::Poll::Pending }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>(_: &mut std::task::Context) {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
