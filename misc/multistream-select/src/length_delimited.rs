@@ -323,27 +323,11 @@ where
     R: AsyncWrite
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        // Try to drain the write buffer together with writing `buf`.
-        if !self.inner.write_buffer.is_empty() {
-            let n = self.inner.write_buffer.len();
-            self.inner.write_buffer.extend_from_slice(buf);
-            let result = self.inner.poll_write_buffer();
-            let written = n - self.inner.write_buffer.len();
-            if written == 0 {
-                if let Err(e) = result {
-                    return Err(e)
-                }
+        while !self.inner.write_buffer.is_empty() {
+            if self.inner.poll_write_buffer()?.is_not_ready() {
                 return Err(io::ErrorKind::WouldBlock.into())
             }
-            if written < buf.len() {
-                if self.inner.write_buffer.len() > n {
-                    self.inner.write_buffer.split_off(n); // Never grow the buffer.
-                }
-                return Ok(written)
-            }
-            return Ok(buf.len())
         }
-
         self.inner_mut().write(buf)
     }
 
