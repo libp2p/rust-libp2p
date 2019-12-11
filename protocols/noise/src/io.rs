@@ -424,7 +424,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>>{
-        ready!(Pin::new(&mut *self).poll_flush(cx))?;
+        ready!(self.as_mut().poll_flush(cx))?;
         Pin::new(&mut self.io).poll_close(cx)
     }
 
