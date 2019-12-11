@@ -389,7 +389,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.path.is_ident("poll_method") => {
                         if let syn::Lit::Str(ref s) = m.lit {
                             let ident: Ident = syn::parse_str(&s.value()).unwrap();
-                            poll_method = quote!{#name::#ident(self)};
+                            poll_method = quote!{#name::#ident(self, cx)};
                         }
                     }
                     _ => ()
