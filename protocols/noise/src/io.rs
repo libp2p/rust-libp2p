@@ -427,7 +427,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         ready!(self.as_mut().poll_flush(cx))?;
         Pin::new(&mut self.io).poll_close(cx)
     }
-
 }
 
 /// Read 2 bytes as frame length from the given source into the given buffer.
