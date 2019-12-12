@@ -35,13 +35,7 @@ impl<A, B> OrTransport<A, B> {
 impl<A, B> Transport for OrTransport<A, B>
 where
     B: Transport,
-    B::Dial: Unpin,
-    B::Listener: Unpin,
-    B::ListenerUpgrade: Unpin,
     A: Transport,
-    A::Dial: Unpin,
-    A::Listener: Unpin,
-    A::ListenerUpgrade: Unpin,
 {
     type Output = EitherOutput<A::Output, B::Output>;
     type Error = EitherError<A::Error, B::Error>;

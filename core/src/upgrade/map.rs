@@ -48,7 +48,6 @@ where
 impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
     U: InboundUpgrade<C>,
-    U::Future: Unpin,
     F: FnOnce(U::Output) -> T
 {
     type Output = T;
@@ -66,7 +65,6 @@ where
 impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
     U: OutboundUpgrade<C>,
-    U::Future: Unpin,
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -102,7 +100,6 @@ where
 impl<C, U, F> InboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
     U: InboundUpgrade<C>,
-    U::Future: Unpin,
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -116,7 +113,6 @@ where
 impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
     U: OutboundUpgrade<C>,
-    U::Future: Unpin,
     F: FnOnce(U::Output) -> T
 {
     type Output = T;
@@ -156,7 +152,6 @@ where
 impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
     U: InboundUpgrade<C>,
-    U::Future: Unpin,
     F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
@@ -174,7 +169,6 @@ where
 impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
     U: OutboundUpgrade<C>,
-    U::Future: Unpin,
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -210,7 +204,6 @@ where
 impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgradeErr<U, F>
 where
     U: OutboundUpgrade<C>,
-    U::Future: Unpin,
     F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
@@ -238,54 +231,54 @@ where
     }
 }
 
+#[pin_project::pin_project]
 pub struct MapFuture<TInnerFut, TMap> {
+    #[pin]
     inner: TInnerFut,
     map: Option<TMap>,
 }
 
-impl<TInnerFut, TMap> Unpin for MapFuture<TInnerFut, TMap> {
-}
-
 impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
 where
-    TInnerFut: TryFuture<Ok = TIn> + Unpin,
+    TInnerFut: TryFuture<Ok = TIn>,
     TMap: FnOnce(TIn) -> TOut,
 {
     type Output = Result<TOut, TInnerFut::Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let item = match TryFuture::try_poll(Pin::new(&mut self.inner), cx) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let item = match TryFuture::try_poll(this.inner, cx) {
             Poll::Ready(Ok(v)) => v,
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
             Poll::Pending => return Poll::Pending,
         };
 
-        let map = self.map.take().expect("Future has already finished");
+        let map = this.map.take().expect("Future has already finished");
         Poll::Ready(Ok(map(item)))
     }
 }
 
+#[pin_project::pin_project]
 pub struct MapErrFuture<T, F> {
+    #[pin]
     fut: T,
     fun: Option<F>,
 }
 
-impl<T, F> Unpin for MapErrFuture<T, F> {
-}
-
 impl<T, E, F, A> Future for MapErrFuture<T, F>
 where
-    T: TryFuture<Error = E> + Unpin,
+    T: TryFuture<Error = E>,
     F: FnOnce(E) -> A,
 {
     type Output = Result<T::Ok, A>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        match TryFuture::try_poll(Pin::new(&mut self.fut), cx) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        match TryFuture::try_poll(this.fut, cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(x)) => Poll::Ready(Ok(x)),
             Poll::Ready(Err(e)) => {
-                let f = self.fun.take().expect("Future has not resolved yet");
+                let f = this.fun.take().expect("Future has not resolved yet");
                 Poll::Ready(Err(f(e)))
             }
         }
