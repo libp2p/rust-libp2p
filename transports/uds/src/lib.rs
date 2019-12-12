@@ -45,15 +45,15 @@
 #![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
 
 use async_std::os::unix::net::{UnixListener, UnixStream};
-use futures::{prelude::*, future::Ready};
-use futures::stream::Stream;
+use futures::{prelude::*, future::{BoxFuture, Ready}};
+use futures::stream::BoxStream;
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
 use log::debug;
-use std::{io, path::PathBuf, pin::Pin};
+use std::{io, path::PathBuf};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
 ///
@@ -65,7 +65,6 @@ pub struct UdsConfig {
 
 impl UdsConfig {
     /// Creates a new configuration object for Unix domain sockets.
-    #[inline]
     pub fn new() -> UdsConfig {
         UdsConfig {}
     }
@@ -74,13 +73,13 @@ impl UdsConfig {
 impl Transport for UdsConfig {
     type Output = UnixStream;
     type Error = io::Error;
-    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>> + Send>>;
-    type ListenerUpgrade = Ready<Result<Self::Output, io::Error>>;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
-            Ok(Box::pin(async move { UnixListener::bind(&path).await }
+            Ok(async move { UnixListener::bind(&path).await }
                 .map_ok(move |listener| {
                     stream::once({
                         let addr = addr.clone();
@@ -105,7 +104,8 @@ impl Transport for UdsConfig {
                         }
                     }))
                 })
-                .try_flatten_stream()))
+                .try_flatten_stream()
+                .boxed())
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
@@ -114,7 +114,7 @@ impl Transport for UdsConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            Ok(Box::pin(async move { UnixStream::connect(&path).await }))
+            Ok(async move { UnixStream::connect(&path).await }.boxed())
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
@@ -149,12 +149,9 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 #[cfg(test)]
 mod tests {
     use super::{multiaddr_to_path, UdsConfig};
-    use futures::prelude::*;
+    use futures::{channel::oneshot, prelude::*};
     use std::{self, borrow::Cow, path::Path};
-    use libp2p_core::{
-        Transport,
-        multiaddr::{Protocol, Multiaddr}
-    };
+    use libp2p_core::{Transport, multiaddr::{Protocol, Multiaddr}};
     use tempfile;
 
     #[test]
@@ -179,26 +176,36 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
         let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
-        let addr2 = addr.clone();
 
-        async_std::task::spawn(
-            UdsConfig::new().listen_on(addr2).unwrap()
-                .try_filter_map(|ev| future::ok(ev.into_upgrade()))
-                .try_for_each(|(sock, _)| {
-                    async {
-                        let mut sock = sock.await.unwrap();
-                        let mut buf = [0u8; 3];
-                        sock.read_exact(&mut buf).await.unwrap();
-                        assert_eq!(buf, [1, 2, 3]);
-                        Ok(())
-                    }
-                })
-        );
+        let (tx, rx) = oneshot::channel();
 
-        futures::executor::block_on(async {
+        async_std::task::spawn(async move {
+            let mut listener = UdsConfig::new().listen_on(addr).unwrap();
+
+            let listen_addr = listener.try_next().await.unwrap()
+                .expect("some event")
+                .into_new_address()
+                .expect("listen address");
+
+            tx.send(listen_addr).unwrap();
+
+            let (sock, _addr) = listener.try_filter_map(|e| future::ok(e.into_upgrade()))
+                .try_next()
+                .await
+                .unwrap()
+                .expect("some event");
+
+            let mut sock = sock.await.unwrap();
+            let mut buf = [0u8; 3];
+            sock.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, [1, 2, 3]);
+        });
+
+        async_std::task::block_on(async move {
             let uds = UdsConfig::new();
-            let mut socket = uds.dial(addr.clone()).unwrap().await.unwrap();
-            socket.write(&[0x1, 0x2, 0x3]).await.unwrap();
+            let addr = rx.await.unwrap();
+            let mut socket = uds.dial(addr).unwrap().await.unwrap();
+            socket.write(&[1, 2, 3]).await.unwrap();
         });
     }
 
