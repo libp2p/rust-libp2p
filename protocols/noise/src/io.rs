@@ -353,7 +353,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 
         loop {
             match this.write_state {
-                WriteState::Init => return Poll::Ready(Ok(())),
+                WriteState::Init => return Pin::new(&mut this.io).poll_flush(cx),
                 WriteState::BufferData { off } => {
                     trace!("flush: encrypting {} bytes", off);
                     match this.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
@@ -409,7 +409,6 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     if len == *off {
                         trace!("flush: finished writing {} bytes", len);
                         this.write_state = WriteState::Init;
-                        return Poll::Ready(Ok(()))
                     }
                 }
                 WriteState::Eof => {
@@ -425,6 +424,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>>{
+        ready!(self.as_mut().poll_flush(cx))?;
         Pin::new(&mut self.io).poll_close(cx)
     }
 
