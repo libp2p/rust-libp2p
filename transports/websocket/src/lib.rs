@@ -26,7 +26,7 @@ pub mod tls;
 
 use bytes::BytesMut;
 use error::Error;
-use framed::Connection;
+use framed::{Connection, IncomingData};
 use futures::{future::BoxFuture, prelude::*, stream::BoxStream, ready};
 use libp2p_core::{
     ConnectedPoint,
@@ -36,6 +36,28 @@ use libp2p_core::{
 };
 use rw_stream_sink::RwStreamSink;
 use std::{io, pin::Pin, task::{Context, Poll}};
+
+struct BufferedFallback<T> {
+    stream: T,
+    bytes: BytesMut
+}
+
+#[derive(Debug)]
+enum EitherStream<T, F> {
+    Websocket(Connection<T>),
+    Fallback(BufferedFallback<F>)
+}
+
+impl<T, F> futures::Stream for EitherStream<T, F> {
+    type Item = io::Result<IncomingData>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match Pin::into_inner(self) {
+            EitherStream::Websocket(conn) => Pin::new(conn).poll_next(cx),
+            EitherStream::Fallback(conn) => unimplemented!()
+        }
+    }
+}
 
 /// A Websocket transport.
 #[derive(Debug, Clone)]
@@ -120,14 +142,14 @@ where
 pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
-pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
+pub type InnerFuture<T, E> = BoxFuture<'static, Result<EitherStream<T, ()>, Error<E>>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
-pub type WrapperFn<T> = fn(Connection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
+pub type WrapperFn<T> = fn(EitherStream<T, ()>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
 
 /// Wrap a websocket connection producing data frames into a `RwStreamSink`
 /// implementing `AsyncRead` + `AsyncWrite`.
-fn wrap_connection<T>(c: Connection<T>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
+fn wrap_connection<T>(c: EitherStream<T, ()>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
@@ -136,7 +158,7 @@ where
 
 /// The websocket connection.
 #[derive(Debug)]
-pub struct BytesConnection<T>(Connection<T>);
+pub struct BytesConnection<T>(EitherStream<T, ()>);
 
 impl<T> Stream for BytesConnection<T>
 where
@@ -164,19 +186,32 @@ where
     type Error = io::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_ready(cx)
+        match self.0 {
+            EitherStream::Websocket(mut conn) => Pin::new(&mut conn).poll_ready(cx),
+            EitherStream::Fallback(_) => Poll::Pending,
+        }
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> io::Result<()> {
-        Pin::new(&mut self.0).start_send(framed::OutgoingData::Binary(item))
+        match self.0 {
+            EitherStream::Websocket(mut conn) => Pin::new(&mut conn)
+                .start_send(framed::OutgoingData::Binary(item)),
+            EitherStream::Fallback(_) => Ok(()),
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
+        match self.0 {
+            EitherStream::Websocket(mut conn) => Pin::new(&mut conn).poll_flush(cx),
+            EitherStream::Fallback(_) => Poll::Pending,
+        }
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_close(cx)
+        match self.0 {
+            EitherStream::Websocket(mut conn) => Pin::new(&mut conn).poll_close(cx),
+            EitherStream::Fallback(_) => Poll::Pending,
+        }
     }
 }
 

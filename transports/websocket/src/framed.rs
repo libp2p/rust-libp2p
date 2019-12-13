@@ -20,15 +20,10 @@
 
 use async_tls::{client, server};
 use bytes::BytesMut;
-use crate::{error::Error, tls};
+use crate::{error::Error, tls, EitherStream};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use libp2p_core::{
-    Transport,
-    either::EitherOutput,
-    multiaddr::{Protocol, Multiaddr},
-    transport::{ListenerEvent, TransportError}
-};
+use libp2p_core::{Transport, either::EitherOutput, multiaddr::{Protocol, Multiaddr}, transport::{ListenerEvent, TransportError}, ConnectionInfo};
 use log::{debug, trace};
 use soketto::{connection, data, extension::deflate::Deflate, handshake};
 use std::{convert::TryInto, fmt, io, pin::Pin, task::Context, task::Poll};
@@ -107,7 +102,7 @@ where
     T::ListenerUpgrade: Send + 'static,
     T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = Connection<T::Output>;
+    type Output = EitherStream<T::Output, T>;
     type Error = Error<T::Error>;
     type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -189,33 +184,41 @@ where
                             server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
                         }
 
-                        let ws_key = {
-                            let request = server.receive_request()
-                                .map_err(|e| Error::Handshake(Box::new(e)))
-                                .await?;
-                            request.into_key()
-                        };
+                        let result = server.receive_request_or_take_buffer()
+                            .await;
 
-                        trace!("accepting websocket handshake request from {}", remote2);
+                        match result {
+                            Ok(req) => {
+                                let ws_key = req.into_key();
 
-                        let response =
-                            handshake::server::Response::Accept {
-                                key: &ws_key,
-                                protocol: None
-                            };
+                                trace!("accepting websocket handshake request from {}", remote2);
 
-                        server.send_response(&response)
-                            .map_err(|e| Error::Handshake(Box::new(e)))
-                            .await?;
+                                let response =
+                                    handshake::server::Response::Accept {
+                                        key: &ws_key,
+                                        protocol: None
+                                    };
 
-                        let conn = {
-                            let mut builder = server.into_builder();
-                            builder.set_max_message_size(max_size);
-                            builder.set_max_frame_size(max_size);
-                            Connection::new(builder)
-                        };
+                                server.send_response(&response)
+                                    .map_err(|e| Error::Handshake(Box::new(e)))
+                                    .await?;
 
-                        Ok(conn)
+                                let conn = {
+                                    let mut builder = server.into_builder();
+                                    builder.set_max_message_size(max_size);
+                                    builder.set_max_frame_size(max_size);
+                                    EitherStream::Websocket(Connection::new(builder))
+                                };
+
+                                Ok(conn)
+                            },
+                            Err((e, buf)) => {
+                                Ok(EitherStream::Fallback(crate::BufferedFallback {
+                                    bytes: buf,
+                                    stream: self.transport
+                                }))
+                            }
+                        }
                     };
 
                     ListenerEvent::Upgrade {
@@ -252,7 +255,7 @@ where
                         remaining_redirects -= 1;
                         addr = location_to_multiaddr(&redirect)?
                     }
-                    Ok(Either::Right(conn)) => return Ok(conn),
+                    Ok(Either::Right(conn)) => return Ok(EitherStream::Websocket(conn)),
                     Err(e) => return Err(e)
                 }
             }
