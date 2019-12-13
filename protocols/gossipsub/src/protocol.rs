@@ -132,14 +132,14 @@ impl Encoder for GossipsubCodec {
                     let mut rpc_ihave = rpc_proto::ControlIHave::new();
                     rpc_ihave.set_topicID(topic_hash.into_string());
                     for msg_id in message_ids {
-                        rpc_ihave.mut_messageIDs().push(msg_id);
+                        rpc_ihave.mut_messageIDs().push(msg_id.0);
                     }
                     control_msg.mut_ihave().push(rpc_ihave);
                 }
                 GossipsubControlAction::IWant { message_ids } => {
                     let mut rpc_iwant = rpc_proto::ControlIWant::new();
                     for msg_id in message_ids {
-                        rpc_iwant.mut_messageIDs().push(msg_id);
+                        rpc_iwant.mut_messageIDs().push(msg_id.0);
                     }
                     control_msg.mut_iwant().push(rpc_iwant);
                 }
@@ -210,7 +210,12 @@ impl Decoder for GossipsubCodec {
             .into_iter()
             .map(|mut ihave| GossipsubControlAction::IHave {
                 topic_hash: TopicHash::from_raw(ihave.take_topicID()),
-                message_ids: ihave.take_messageIDs().into_vec(),
+                message_ids: ihave
+                    .take_messageIDs()
+                    .into_vec()
+                    .into_iter()
+                    .map(|x| MessageId(x))
+                    .collect::<Vec<_>>(),
             })
             .collect();
 
@@ -218,7 +223,12 @@ impl Decoder for GossipsubCodec {
             .take_iwant()
             .into_iter()
             .map(|mut iwant| GossipsubControlAction::IWant {
-                message_ids: iwant.take_messageIDs().into_vec(),
+                message_ids: iwant
+                    .take_messageIDs()
+                    .into_vec()
+                    .into_iter()
+                    .map(|x| MessageId(x))
+                    .collect::<Vec<_>>(),
             })
             .collect();
 
@@ -262,6 +272,10 @@ impl Decoder for GossipsubCodec {
     }
 }
 
+/// A type for gossipsub message ids.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MessageId(pub String);
+
 /// A message received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {
@@ -283,10 +297,10 @@ pub struct GossipsubMessage {
 impl GossipsubMessage {
     /// Converts message into a message_id.
     // To be compatible with the go implementation
-    pub fn id(&self) -> String {
+    pub fn id(&self) -> MessageId {
         let mut source_string = self.source.to_base58();
         source_string.push_str(&self.sequence_number.to_string());
-        source_string
+        MessageId(source_string)
     }
 }
 
@@ -316,12 +330,12 @@ pub enum GossipsubControlAction {
         /// The topic of the messages.
         topic_hash: TopicHash,
         /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<String>,
+        message_ids: Vec<MessageId>,
     },
     /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
     IWant {
         /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<String>,
+        message_ids: Vec<MessageId>,
     },
     /// The node has been added to the mesh - Graft control message.
     Graft {

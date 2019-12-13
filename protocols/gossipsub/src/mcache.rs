@@ -20,21 +20,21 @@
 
 extern crate fnv;
 
-use crate::protocol::GossipsubMessage;
+use crate::protocol::{GossipsubMessage, MessageId};
 use crate::topic::TopicHash;
 use std::collections::HashMap;
 
 /// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
-    mid: String,
+    mid: MessageId,
     topics: Vec<TopicHash>,
 }
 
 /// MessageCache struct holding history of messages.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCache {
-    msgs: HashMap<String, GossipsubMessage>,
+    msgs: HashMap<MessageId, GossipsubMessage>,
     history: Vec<Vec<CacheEntry>>,
     gossip: usize,
 }
@@ -63,17 +63,17 @@ impl MessageCache {
     }
 
     /// Get a message with `message_id`
-    pub fn get(&self, message_id: &str) -> Option<&GossipsubMessage> {
+    pub fn get(&self, message_id: &MessageId) -> Option<&GossipsubMessage> {
         self.msgs.get(message_id)
     }
 
     /// Get a list of GossipIds for a given topic
-    pub fn get_gossip_ids(&self, topic: &TopicHash) -> Vec<String> {
+    pub fn get_gossip_ids(&self, topic: &TopicHash) -> Vec<MessageId> {
         self.history[..self.gossip]
             .iter()
             .fold(vec![], |mut current_entries, entries| {
                 // search for entries with desired topic
-                let mut found_entries: Vec<String> = entries
+                let mut found_entries: Vec<MessageId> = entries
                     .iter()
                     .filter_map(|entry| {
                         if entry.topics.iter().any(|t| t == topic) {
@@ -171,7 +171,7 @@ mod tests {
         mc.put(m.clone());
 
         // Try to get an incorrect ID
-        let wrong_id = String::from("wrongid");
+        let wrong_id = MessageId(String::from("wrongid"));
         let fetched = mc.get(&wrong_id);
         assert_eq!(fetched.is_none(), true);
     }
@@ -182,7 +182,7 @@ mod tests {
         let mc = MessageCache::new(10, 15);
 
         // Try to get an incorrect ID
-        let wrong_string = String::from("imempty");
+        let wrong_string = MessageId(String::from("imempty"));
         let fetched = mc.get(&wrong_string);
         assert_eq!(fetched.is_none(), true);
     }

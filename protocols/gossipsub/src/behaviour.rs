@@ -23,6 +23,7 @@ use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::protocol::{
     GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
+    MessageId,
 };
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
@@ -77,7 +78,7 @@ pub struct Gossipsub<TSubstream> {
 
     // We keep track of the messages we received (in the format `string(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
-    received: LruCache<String, ()>,
+    received: LruCache<MessageId, ()>,
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
@@ -280,13 +281,13 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// fast enough that the messages should still exist in the cache.
     ///
     /// Calling this function will propagate a message stored in the cache, if it still exists.
-    pub fn propagate_message(&mut self, message_id: &str, propagation_source: &PeerId) {
+    pub fn propagate_message(&mut self, message_id: &MessageId, propagation_source: &PeerId) {
         let message = match self.mcache.get(message_id) {
             Some(message) => message.clone(),
             None => {
                 warn!(
                     "Message not in cache. Ignoring forwarding. Message Id: {}",
-                    message_id
+                    message_id.0
                 );
                 return;
             }
@@ -359,7 +360,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     topic_hash: topic_hash.clone(),
                 },
             );
-            //TODO: tagPeer
         }
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
@@ -380,7 +380,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                         topic_hash: topic_hash.clone(),
                     },
                 );
-                //TODO: untag Peer
             }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
@@ -388,7 +387,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
     /// Handles an IHAVE control message. Checks our cache of messages. If the message is unknown,
     /// requests it with an IWANT control message.
-    fn handle_ihave(&mut self, peer_id: &PeerId, ihave_msgs: Vec<(TopicHash, Vec<String>)>) {
+    fn handle_ihave(&mut self, peer_id: &PeerId, ihave_msgs: Vec<(TopicHash, Vec<MessageId>)>) {
         debug!("Handling IHAVE for peer: {:?}", peer_id);
         // use a hashset to avoid duplicates efficiently
         let mut iwant_ids = HashSet::new();
@@ -427,7 +426,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
     /// Handles an IWANT control message. Checks our cache of messages. If the message exists it is
     /// forwarded to the requesting peer.
-    fn handle_iwant(&mut self, peer_id: &PeerId, iwant_msgs: Vec<String>) {
+    fn handle_iwant(&mut self, peer_id: &PeerId, iwant_msgs: Vec<MessageId>) {
         debug!("Handling IWANT for peer: {:?}", peer_id);
         // build a hashmap of available messages
         let mut cached_messages = HashMap::new();
@@ -472,7 +471,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 if !peers.contains(peer_id) {
                     peers.push(peer_id.clone());
                 }
-            //TODO: tagPeer
             } else {
                 to_prune_topics.insert(topic_hash.clone());
             }
@@ -514,7 +512,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     peer_id, topic_hash
                 );
                 peers.retain(|p| p != peer_id);
-                //TODO: untagPeer
             }
         }
         debug!("Completed PRUNE handling for peer: {:?}", peer_id);
@@ -653,11 +650,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
         );
     }
 
-    /// Heartbeat function which shifts the memcache and updates the mesh
+    /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
         debug!("Starting heartbeat");
-
-        //TODO: Clean up any state from last heartbeat.
 
         let mut to_graft = HashMap::new();
         let mut to_prune = HashMap::new();

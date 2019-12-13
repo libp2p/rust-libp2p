@@ -669,7 +669,7 @@ mod tests {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
         let events_before = gs.events.len();
-        gs.handle_iwant(&peers[7], vec![String::from("unknown id")]);
+        gs.handle_iwant(&peers[7], vec![MessageId(String::from("unknown id"))]);
         let events_after = gs.events.len();
 
         assert_eq!(
@@ -686,15 +686,18 @@ mod tests {
 
         gs.handle_ihave(
             &peers[7],
-            vec![(topic_hashes[0].clone(), vec![String::from("unknown id")])],
+            vec![(
+                topic_hashes[0].clone(),
+                vec![MessageId(String::from("unknown id"))],
+            )],
         );
 
         // check that we sent an IWANT request for `unknown id`
         let iwant_exists = match gs.control_pool.get(&peers[7]) {
             Some(controls) => controls.iter().any(|c| match c {
-                GossipsubControlAction::IWant { message_ids } => {
-                    message_ids.iter().any(|m| *m == String::from("unknown id"))
-                }
+                GossipsubControlAction::IWant { message_ids } => message_ids
+                    .iter()
+                    .any(|m| *m.0 == String::from("unknown id")),
                 _ => false,
             }),
             _ => false,
@@ -713,7 +716,7 @@ mod tests {
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
-        let msg_id = String::from("known id");
+        let msg_id = MessageId(String::from("known id"));
         gs.received.put(msg_id.clone(), ());
 
         let events_before = gs.events.len();
@@ -737,7 +740,7 @@ mod tests {
             &peers[7],
             vec![(
                 TopicHash::from_raw(String::from("unsubscribed topic")),
-                vec![String::from("irrelevant id")],
+                vec![MessageId(String::from("irrelevant id"))],
             )],
         );
         let events_after = gs.events.len();
