@@ -58,7 +58,6 @@ use async_macros::ready;
 use async_std::net::UdpSocket;
 use futures::{
     channel::{mpsc, oneshot},
-    future,
     prelude::*,
 };
 use libp2p_core::{
@@ -73,10 +72,7 @@ use std::{
     io,
     net::SocketAddr,
     pin::Pin,
-    sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
-        Arc, Mutex, MutexGuard, Weak,
-    },
+    sync::{Arc, Mutex, MutexGuard, Weak},
     task::{Context, Poll},
     time::Instant,
 };
@@ -231,7 +227,7 @@ impl Muxer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
 impl QuicMuxer {
@@ -411,14 +407,56 @@ impl StreamMuxer for QuicMuxer {
     }
 }
 
-impl Stream for Endpoint {
-    type Item = Result<QuicMuxer, io::Error>;
-    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let mut inner = self.inner.lock().unwrap();
-        // inner.pending_connections -= 1;
-        inner.inner.accept();
-        eprintln!("panicking!");
-        unimplemented!()
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub struct QuicStream {
+    id: StreamId,
+    muxer: QuicMuxer,
+}
+
+#[cfg(test)]
+impl AsyncWrite for QuicStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let inner = self.get_mut();
+        inner.muxer.write_substream(cx, &mut inner.id, buf)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+#[cfg(test)]
+impl AsyncRead for QuicStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let inner = self.get_mut();
+        inner.muxer.read_substream(cx, &mut inner.id, buf)
+    }
+}
+
+#[cfg(test)]
+impl Stream for QuicMuxer {
+    type Item = QuicStream;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.poll_inbound(cx).map(|x| match x {
+            Ok(id) => Some(QuicStream {
+                id,
+                muxer: self.get_mut().clone(),
+            }),
+            Err(_) => None,
+        })
     }
 }
 
@@ -461,7 +499,7 @@ impl QuicEndpoint {
     pub fn new(
         config: &QuicConfig,
         address: Multiaddr,
-    ) -> Result<Self, TransportError<<Self as Transport>::Error>> {
+    ) -> Result<Self, TransportError<<&Self as Transport>::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&address) {
             sa
         } else {
@@ -579,7 +617,7 @@ impl Future for QuicUpgrade {
     }
 }
 
-impl Transport for QuicEndpoint {
+impl Transport for &QuicEndpoint {
     type Output = QuicMuxer;
     type Error = io::Error;
     type Listener =
@@ -768,14 +806,13 @@ mod tests {
         );
     }
 
-	#[cfg(any())]
     #[test]
     fn communicating_between_dialer_and_listener() {
         let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
         let mut ready_tx = Some(ready_tx);
 
         async_std::task::spawn(async move {
-            let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
+            let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
             let quic_config = QuicConfig::new();
             let quic_endpoint = QuicEndpoint::new(
                 &quic_config,
@@ -792,7 +829,7 @@ mod tests {
                         ready_tx.take().unwrap().send(listen_addr).unwrap();
                     }
                     ListenerEvent::Upgrade { upgrade, .. } => {
-                        let mut upgrade = upgrade.await.unwrap();
+                        let mut upgrade = upgrade.await.unwrap().next().await.unwrap();
                         let mut buf = [0u8; 3];
                         upgrade.read_exact(&mut buf).await.unwrap();
                         assert_eq!(buf, [1, 2, 3]);
@@ -805,10 +842,17 @@ mod tests {
 
         async_std::task::block_on(async move {
             let addr = ready_rx.await.unwrap();
-            let tcp = QuicConfig::new();
-
+            let quic_config = QuicConfig::new();
+            let quic_endpoint = QuicEndpoint::new(&quic_config, addr.clone()).unwrap();
             // Obtain a future socket through dialing
-            let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
+            let mut socket = quic_endpoint
+                .dial(addr.clone())
+                .unwrap()
+                .await
+                .unwrap()
+                .next()
+                .await
+                .unwrap();
             socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
 
             let mut buf = [0u8; 3];
@@ -817,7 +861,6 @@ mod tests {
         });
     }
 
-	#[cfg(any())]
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
         let quic = QuicConfig::new();
@@ -837,7 +880,6 @@ mod tests {
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 
-	#[cfg(any())]
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
         let config = QuicConfig::new();
