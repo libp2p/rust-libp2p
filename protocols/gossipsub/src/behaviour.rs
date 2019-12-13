@@ -281,7 +281,13 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// fast enough that the messages should still exist in the cache.
     ///
     /// Calling this function will propagate a message stored in the cache, if it still exists.
-    pub fn propagate_message(&mut self, message_id: &MessageId, propagation_source: &PeerId) {
+    /// If the message still exists in the cache, it will be forwarded and this function will return true,
+    /// otherwise it will return false.
+    pub fn propagate_message(
+        &mut self,
+        message_id: &MessageId,
+        propagation_source: &PeerId,
+    ) -> bool {
         let message = match self.mcache.get(message_id) {
             Some(message) => message.clone(),
             None => {
@@ -289,10 +295,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     "Message not in cache. Ignoring forwarding. Message Id: {}",
                     message_id.0
                 );
-                return;
+                return false;
             }
         };
-        self.forward_msg(message, propagation_source)
+        self.forward_msg(message, propagation_source);
+        true
     }
 
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
