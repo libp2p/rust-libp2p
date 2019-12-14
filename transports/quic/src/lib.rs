@@ -91,11 +91,6 @@ pub struct QuicConfig {
     pub endpoint_config: Arc<quinn_proto::EndpointConfig>,
 }
 
-pub struct QuicSubstream {
-    stream: StreamId,
-    transmit: Option<quinn_proto::Transmit>,
-}
-
 impl QuicConfig {
     /// Creates a new configuration object for TCP/IP.
     pub fn new() -> Self {
@@ -170,6 +165,7 @@ impl Muxer {
     /// Process application events
     fn process_app_events(&mut self, endpoint: &mut EndpointInner, event: ConnectionEvent) {
         use quinn_proto::Event;
+        self.connection.handle_event(event);
         self.send_to_endpoint(endpoint);
         while let Some(event) = self.connection.poll() {
             match event {
@@ -277,7 +273,7 @@ impl StreamMuxer for QuicMuxer {
         }
     }
     fn destroy_outbound(&self, _: Outbound) {}
-    fn destroy_substream(&self, substream: Self::Substream) {}
+    fn destroy_substream(&self, _substream: Self::Substream) {}
     fn is_remote_acknowledged(&self) -> bool {
         true
     }
@@ -398,7 +394,7 @@ impl StreamMuxer for QuicMuxer {
         Poll::Ready(Ok(()))
     }
 
-    fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn close(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(self.inner().connection.close(
             Instant::now(),
             Default::default(),
@@ -460,14 +456,6 @@ impl Stream for QuicMuxer {
     }
 }
 
-impl Endpoint {
-    fn inner(&self) -> MutexGuard<'_, EndpointInner> {
-        self.inner
-            .lock()
-            .expect("we don’t panic here unless something has already gone horribly wrong")
-    }
-}
-
 /// A QUIC endpoint.  Each endpoint has its own configuration and listening socket.
 ///
 /// You and You generally need only one of these per process.  Endpoints are thread-safe, so you
@@ -483,7 +471,7 @@ impl Endpoint {
 /// `QuicEndpoint`.  You can obtain this via the `addr` method.  If you pass a different one, you
 /// will get `TransportError::MultiaddrNotSuppported`.
 #[derive(Debug, Clone)]
-pub struct QuicEndpoint(Arc<Endpoint>);
+pub struct QuicEndpoint(Arc<Endpoint>, QuicConfig);
 
 impl QuicEndpoint {
     fn inner(&self) -> MutexGuard<'_, EndpointInner> {
@@ -509,29 +497,48 @@ impl QuicEndpoint {
         let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
         let (sender, receiver) = mpsc::channel(0);
         let (new_connections, receive_connections) = mpsc::unbounded();
-        Ok(Self(Arc::new(Endpoint {
-            socket,
-            inner: Mutex::new(EndpointInner {
-                inner: quinn_proto::Endpoint::new(
-                    config.endpoint_config.clone(),
-                    Some(config.server_config.clone()),
-                )
-                .map_err(|_| TransportError::Other(io::ErrorKind::InvalidData.into()))?,
-                muxers: HashMap::new(),
-                driver: None,
+        Ok(Self(
+            Arc::new(Endpoint {
+                socket,
+                inner: Mutex::new(EndpointInner {
+                    inner: quinn_proto::Endpoint::new(
+                        config.endpoint_config.clone(),
+                        Some(config.server_config.clone()),
+                    )
+                    .map_err(|_| TransportError::Other(io::ErrorKind::InvalidData.into()))?,
+                    muxers: HashMap::new(),
+                    driver: None,
+                }),
+                sender,
+                receiver,
+                new_connections,
+                receive_connections: Mutex::new(Some(receive_connections)),
+                address,
             }),
-            sender,
-            receiver,
-            new_connections,
-            receive_connections: Mutex::new(Some(receive_connections)),
-            address,
-        })))
+            config.clone(),
+        ))
     }
 
-    async fn send_outgoing_packets(&self) -> Result<(), io::Error> {
-        loop {
-            let mut inner = self.inner();
-        }
+    fn create_muxer(
+        &self,
+        connection: Connection,
+        handle: ConnectionHandle,
+        inner: &mut EndpointInner,
+    ) -> Arc<Mutex<Muxer>> {
+        let endpoint = &self.0;
+        let muxer = Arc::new(Mutex::new(Muxer {
+            pending_stream: None,
+            connection,
+            handle,
+            writers: HashMap::new(),
+            readers: HashMap::new(),
+            accept_waker: None,
+            connectors: Default::default(),
+            sender: endpoint.sender.clone(),
+            endpoint: endpoint.clone(),
+        }));
+        inner.muxers.insert(handle, Arc::downgrade(&muxer));
+        muxer
     }
 
     /// Process incoming UDP packets until an error occurs on the socket, or we are dropped.
@@ -550,7 +557,7 @@ impl QuicEndpoint {
                     Some(e) => e,
                     None => continue,
                 };
-            let connection = match event {
+            match event {
                 DatagramEvent::ConnectionEvent(connection_event) => {
                     let connection = match inner.muxers.get(&handle) {
                         None => panic!("received a ConnectionEvent for an unknown Connection"),
@@ -563,36 +570,25 @@ impl QuicEndpoint {
                         .lock()
                         .expect("we assume we have not already panicked; qed");
                     connection.process_app_events(&mut inner, connection_event);
-                    continue;
                 }
-                DatagramEvent::NewConnection(connection) => connection,
-            };
-            let endpoint = &self.0;
-            let muxer = Arc::new(Mutex::new(Muxer {
-                pending_stream: None,
-                connection,
-                handle,
-                writers: HashMap::new(),
-                readers: HashMap::new(),
-                accept_waker: None,
-                connectors: Default::default(),
-                sender: endpoint.sender.clone(),
-                endpoint: endpoint.clone(),
-            }));
-            inner.muxers.insert(handle, Arc::downgrade(&muxer));
-            endpoint
-                .new_connections
-                .unbounded_send(Ok(ListenerEvent::Upgrade {
-                    upgrade: QuicUpgrade {
-                        muxer: Some(QuicMuxer(muxer)),
-                    },
-                    local_addr: endpoint.address.clone(),
-                    remote_addr: endpoint.address.clone(),
-                }))
-                .expect(
-                    "this is an unbounded channel, and we have an instance of the peer, so \
-                     this will never fail; qed",
-                );
+                DatagramEvent::NewConnection(connection) => {
+                    let muxer = self.create_muxer(connection, handle, &mut *inner);
+                    let endpoint = &self.0;
+                    endpoint
+						.new_connections
+						.unbounded_send(Ok(ListenerEvent::Upgrade {
+							upgrade: QuicUpgrade {
+								muxer: Some(QuicMuxer(muxer)),
+							},
+							local_addr: endpoint.address.clone(),
+							remote_addr: endpoint.address.clone(),
+						}))
+					.expect(
+						"this is an unbounded channel, and we have an instance of the peer, so \
+					 this will never fail; qed",
+					);
+                }
+            }
         }
     }
 }
@@ -663,8 +659,21 @@ impl Transport for &QuicEndpoint {
             ))
         }
 
-        eprintln!("panicking");
-        unimplemented!()
+        let s: Result<(_, Connection), _> = inner
+            .inner
+            .connect(
+                self.1.client_config.clone(),
+                socket_addr,
+                &socket_addr.ip().to_string(),
+            )
+            .map_err(|e| {
+                eprintln!("Connection error: {:?}", e);
+                TransportError::Other(io::ErrorKind::InvalidInput.into())
+            });
+        let (handle, conn) = s?;
+        Ok(QuicUpgrade {
+            muxer: Some(QuicMuxer(self.create_muxer(conn, handle, &mut inner))),
+        })
     }
 }
 
@@ -703,19 +712,16 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        let addr: Multiaddr = "/ip4/0.0.0.0/udp/0/quic".parse().unwrap();
+        let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
         let mut listener = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
             .expect("endpoint")
             .listen_on(addr)
             .expect("listener");
-
-        // Get the first address.
-        let addr = futures::executor::block_on_stream(listener.by_ref())
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
+        let addr: Multiaddr = "/ip4/127.0.0.1/udp/1236/quic".parse().unwrap();
+        let client = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
+            .expect("endpoint")
+            .dial(addr)
+            .expect("dialer");
 
         // Process all initial `NewAddress` events and make sure they
         // do not contain wildcard address or port.
@@ -739,10 +745,6 @@ mod tests {
             })
             .for_each(|_| futures::future::ready(()));
 
-        let client = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
-            .expect("endpoint")
-            .dial(addr)
-            .expect("dialer");
         futures::executor::block_on(futures::future::join(server, client))
             .1
             .unwrap();
@@ -812,15 +814,11 @@ mod tests {
         let mut ready_tx = Some(ready_tx);
 
         async_std::task::spawn(async move {
-            let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
+            let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
+                .parse()
+                .expect("bad address?");
             let quic_config = QuicConfig::new();
-            let quic_endpoint = QuicEndpoint::new(
-                &quic_config,
-                "/ip4/127.0.0.1/udp/12345/quic"
-                    .parse()
-                    .expect("bad address?"),
-            )
-            .expect("I/O error");
+            let quic_endpoint = QuicEndpoint::new(&quic_config, addr.clone()).expect("I/O error");
             let mut listener = quic_endpoint.listen_on(addr).unwrap();
 
             loop {
