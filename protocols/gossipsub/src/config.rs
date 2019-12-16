@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{GossipsubMessage, MessageId};
 use std::borrow::Cow;
 use std::time::Duration;
 
 /// Configuration parameters that define the performance of the gossipsub network.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GossipsubConfig {
     /// The protocol id to negotiate this protocol.
     pub protocol_id: Cow<'static, [u8]>,
@@ -66,6 +67,16 @@ pub struct GossipsubConfig {
     /// true, the user must manually call `propagate_message()` on the behaviour to forward message
     /// once validated.
     pub manual_propagation: bool,
+
+    /// A user-defined function allowing the user to specify the message id of a gossipsub message.
+    /// The default value is to concatenate the source peer id with a sequence number. Setting this
+    /// parameter allows the user to address packets arbitrarily. One example is content based
+    /// addressing, where this function may be set to `hash(message)`. This would prevent messages
+    /// of the same content from being duplicated.
+    ///
+    /// The function takes a `GossipsubMessage` as input and outputs a String to be interpreted as
+    /// the message id.
+    pub message_id_fn: fn(&GossipsubMessage) -> MessageId,
 }
 
 impl Default for GossipsubConfig {
@@ -84,6 +95,12 @@ impl Default for GossipsubConfig {
             max_transmit_size: 2048,
             hash_topics: false, // default compatibility with floodsub
             manual_propagation: false,
+            message_id_fn: |message| {
+                // default message id is: source + sequence number
+                let mut source_string = message.source.to_base58();
+                source_string.push_str(&message.sequence_number.to_string());
+                MessageId(source_string)
+            },
         }
     }
 }
@@ -185,6 +202,11 @@ impl GossipsubConfigBuilder {
 
     pub fn manual_propagation(&mut self, manual_propagation: bool) -> &mut Self {
         self.config.manual_propagation = manual_propagation;
+        self
+    }
+
+    pub fn message_id_fn(&mut self, id_fn: fn(&GossipsubMessage) -> MessageId) -> &mut Self {
+        self.config.message_id_fn = id_fn;
         self
     }
 

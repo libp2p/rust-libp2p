@@ -100,7 +100,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
             mesh: HashMap::new(),
             fanout: HashMap::new(),
             fanout_last_pub: HashMap::new(),
-            mcache: MessageCache::new(gs_config.history_gossip, gs_config.history_length),
+            mcache: MessageCache::new(
+                gs_config.history_gossip,
+                gs_config.history_length,
+                gs_config.message_id_fn,
+            ),
             received: LruCache::new(256), // keep track of the last 256 messages
             heartbeat: Interval::new(
                 Instant::now() + gs_config.heartbeat_initial_delay,
@@ -219,7 +223,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
             topics: topic.into_iter().map(|t| self.topic_hash(t)).collect(),
         };
 
-        debug!("Publishing message: {:?}", message.id());
+        debug!(
+            "Publishing message: {:?}",
+            (self.config.message_id_fn)(&message)
+        );
 
         // forward the message to mesh and floodsub peers
         let local_peer_id = self.local_peer_id.clone();
@@ -257,12 +264,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // add published message to our received caches
+        let msg_id = (self.config.message_id_fn)(&message);
         self.mcache.put(message.clone());
-        self.received.put(message.id(), ());
+        self.received.put(msg_id.clone(), ());
+
+        info!("Published message: {:?}", msg_id);
 
         let event = Arc::new(GossipsubRpc {
             subscriptions: Vec::new(),
-            messages: vec![message.clone()],
+            messages: vec![message],
             control_msgs: Vec::new(),
         });
         // Send to peers we know are subscribed to the topic.
@@ -273,7 +283,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 event: event.clone(),
             });
         }
-        info!("Published message: {:?}", message.id());
     }
 
     /// This function should be called when `config.manual_propagation` is `true` in order to
@@ -527,16 +536,13 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(&mut self, msg: GossipsubMessage, propagation_source: &PeerId) {
+        let msg_id = (self.config.message_id_fn)(&msg);
         debug!(
             "Handling message: {:?} from peer: {:?}",
-            msg.id(),
-            propagation_source
+            msg_id, propagation_source
         );
-        if self.received.put(msg.id(), ()).is_some() {
-            info!(
-                "Message already received, ignoring. Message: {:?}",
-                msg.id()
-            );
+        if self.received.put(msg_id.clone(), ()).is_some() {
+            debug!("Message already received, ignoring. Message: {:?}", msg_id);
             return;
         }
 
@@ -553,7 +559,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // forward the message to mesh peers, if no validation is required
         if !self.config.manual_propagation {
-            let message_id = msg.id();
+            let message_id = (self.config.message_id_fn)(&msg);
             self.forward_msg(msg, propagation_source);
             debug!("Completed message handling for message: {:?}", message_id);
         }
@@ -873,7 +879,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
     /// Helper function which forwards a message to mesh[topic] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
-        debug!("Forwarding message: {:?}", message.id());
+        let msg_id = (self.config.message_id_fn)(&message);
+        debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
 
         // add mesh peers
@@ -897,7 +904,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             });
 
             for peer in recipient_peers.iter() {
-                debug!("Sending message: {:?} to peer {:?}", message.id(), peer);
+                debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
                     event: event.clone(),

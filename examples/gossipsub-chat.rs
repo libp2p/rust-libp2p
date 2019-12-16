@@ -48,16 +48,19 @@
 
 use env_logger::{Builder, Env};
 use futures::prelude::*;
-use libp2p::gossipsub::{GossipsubEvent, Topic};
+use libp2p::gossipsub::protocol::MessageId;
+use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
 use libp2p::{
     gossipsub, identity,
     tokio_codec::{FramedRead, LinesCodec},
     PeerId,
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 fn main() {
-    Builder::from_env(Env::default().default_filter_or("debug")).init();
+    Builder::from_env(Env::default().default_filter_or("info")).init();
 
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
@@ -75,9 +78,18 @@ fn main() {
         // to set default parameters for gossipsub use:
         // let gossipsub_config = gossipsub::GossipsubConfig::default();
 
+        // To content-address message, we can take the hash of message and use it as an ID.
+        let message_id_fn = |message: &GossipsubMessage| {
+            let mut s = DefaultHasher::new();
+            message.data.hash(&mut s);
+            MessageId(s.finish().to_string())
+        };
+
         // set custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
             .heartbeat_interval(Duration::from_secs(10))
+            .message_id_fn(message_id_fn) // content-address messages. No two messages of the
+            //same content will be propagated.
             .build();
         // build a gossipsub network behaviour
         let mut gossipsub = gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config);

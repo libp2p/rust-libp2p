@@ -321,7 +321,8 @@ mod tests {
                 _ => collected_publish,
             });
 
-        let msg_id = publishes.first().expect("Should contain > 0 entries").id();
+        let msg_id =
+            (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
 
         assert!(
             publishes.len() == 20,
@@ -386,7 +387,8 @@ mod tests {
                 _ => collected_publish,
             });
 
-        let msg_id = publishes.first().expect("Should contain > 0 entries").id();
+        let msg_id =
+            (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
 
         assert_eq!(
             publishes.len(),
@@ -589,13 +591,15 @@ mod tests {
     fn test_handle_iwant_msg_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
+        let id = gs.config.message_id_fn;
+
         let message = GossipsubMessage {
             source: peers[11].clone(),
             data: vec![1, 2, 3, 4],
             sequence_number: 1u64,
             topics: Vec::new(),
         };
-        let msg_id = message.id();
+        let msg_id = id(&message);
         gs.mcache.put(message.clone());
 
         gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
@@ -615,7 +619,7 @@ mod tests {
             });
 
         assert!(
-            sent_messages.iter().any(|msg| msg.id() == msg_id),
+            sent_messages.iter().any(|msg| id(msg) == msg_id),
             "Expected the cached message to be sent to an IWANT peer"
         );
     }
@@ -625,6 +629,7 @@ mod tests {
     fn test_handle_iwant_msg_cached_shifted() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
+        let id = gs.config.message_id_fn;
         // perform 10 memshifts and check that it leaves the cache
         for shift in 1..10 {
             let message = GossipsubMessage {
@@ -633,7 +638,7 @@ mod tests {
                 sequence_number: shift,
                 topics: Vec::new(),
             };
-            let msg_id = message.id();
+            let msg_id = id(&message);
             gs.mcache.put(message.clone());
             for _ in 0..shift {
                 gs.mcache.shift();
@@ -644,7 +649,7 @@ mod tests {
             // is the message is being sent?
             let message_exists = gs.events.iter().any(|e| match e {
                 NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
-                    event.messages.iter().any(|msg| msg.id() == msg_id)
+                    event.messages.iter().any(|msg| id(msg) == msg_id)
                 }
                 _ => false,
             });

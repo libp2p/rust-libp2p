@@ -294,16 +294,6 @@ pub struct GossipsubMessage {
     pub topics: Vec<TopicHash>,
 }
 
-impl GossipsubMessage {
-    /// Converts message into a message_id.
-    // To be compatible with the go implementation
-    pub fn id(&self) -> MessageId {
-        let mut source_string = self.source.to_base58();
-        source_string.push_str(&self.sequence_number.to_string());
-        MessageId(source_string)
-    }
-}
-
 /// A subscription received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubSubscription {
