@@ -214,3 +214,23 @@ impl GossipsubConfigBuilder {
         self.config.clone()
     }
 }
+
+impl std::fmt::Debug for GossipsubConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut builder = f.debug_struct("GossipsubConfig");
+        let _ = builder.field("protocol_id", &self.protocol_id);
+        let _ = builder.field("history_length", &self.history_length);
+        let _ = builder.field("history_gossip", &self.history_gossip);
+        let _ = builder.field("mesh_n", &self.mesh_n);
+        let _ = builder.field("mesh_n_low", &self.mesh_n_low);
+        let _ = builder.field("mesh_n_high", &self.mesh_n_high);
+        let _ = builder.field("gossip_lazy", &self.gossip_lazy);
+        let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
+        let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
+        let _ = builder.field("fanout_ttl", &self.fanout_ttl);
+        let _ = builder.field("max_transmit_size", &self.max_transmit_size);
+        let _ = builder.field("hash_topics", &self.hash_topics);
+        let _ = builder.field("manual_propagation", &self.manual_propagation);
+        builder.finish()
+    }
+}
