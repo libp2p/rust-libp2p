@@ -39,9 +39,6 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport,
-    T::Dial: Unpin,
-    T::Listener: Unpin,
-    T::ListenerUpgrade: Unpin,
     F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
 {
     type Output = D;
@@ -65,22 +62,21 @@ where
 /// Custom `Stream` implementation to avoid boxing.
 ///
 /// Maps a function over every stream item.
+#[pin_project::pin_project]
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> { stream: T, fun: F }
-
-impl<T, F> Unpin for MapStream<T, F> {
-}
+pub struct MapStream<T, F> { #[pin] stream: T, fun: F }
 
 impl<T, F, A, B, X> Stream for MapStream<T, F>
 where
-    T: TryStream<Ok = ListenerEvent<X>> + Unpin,
+    T: TryStream<Ok = ListenerEvent<X>>,
     X: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B + Clone
 {
     type Item = Result<ListenerEvent<MapFuture<X, F>>, T::Error>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match TryStream::try_poll_next(Pin::new(&mut self.stream), cx) {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        match TryStream::try_poll_next(this.stream, cx) {
             Poll::Ready(Some(Ok(event))) => {
                 let event = match event {
                     ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
@@ -91,7 +87,7 @@ where
                         ListenerEvent::Upgrade {
                             upgrade: MapFuture {
                                 inner: upgrade,
-                                args: Some((self.fun.clone(), point))
+                                args: Some((this.fun.clone(), point))
                             },
                             local_addr,
                             remote_addr
@@ -112,30 +108,29 @@ where
 /// Custom `Future` to avoid boxing.
 ///
 /// Applies a function to the inner future's result.
+#[pin_project::pin_project]
 #[derive(Clone, Debug)]
 pub struct MapFuture<T, F> {
+    #[pin]
     inner: T,
     args: Option<(F, ConnectedPoint)>
 }
 
-impl<T, F> Unpin for MapFuture<T, F> {
-}
-
 impl<T, A, F, B> Future for MapFuture<T, F>
 where
-    T: TryFuture<Ok = A> + Unpin,
+    T: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B
 {
     type Output = Result<B, T::Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let item = match TryFuture::try_poll(Pin::new(&mut self.inner), cx) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let item = match TryFuture::try_poll(this.inner, cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(Ok(v)) => v,
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
         };
-        let (f, a) = self.args.take().expect("MapFuture has already finished.");
+        let (f, a) = this.args.take().expect("MapFuture has already finished.");
         Poll::Ready(Ok(f(item, a)))
     }
 }
-

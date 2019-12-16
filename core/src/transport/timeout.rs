@@ -74,9 +74,6 @@ impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
 where
     InnerTrans: Transport,
     InnerTrans::Error: 'static,
-    InnerTrans::Dial: Unpin,
-    InnerTrans::Listener: Unpin,
-    InnerTrans::ListenerUpgrade: Unpin,
 {
     type Output = InnerTrans::Output;
     type Error = TransportTimeoutError<InnerTrans::Error>;
@@ -108,29 +105,34 @@ where
 
 // TODO: can be removed and replaced with an `impl Stream` once impl Trait is fully stable
 //       in Rust (https://github.com/rust-lang/rust/issues/34511)
+#[pin_project::pin_project]
 pub struct TimeoutListener<InnerStream> {
+    #[pin]
     inner: InnerStream,
     timeout: Duration,
 }
 
 impl<InnerStream, O> Stream for TimeoutListener<InnerStream>
 where
-    InnerStream: TryStream<Ok = ListenerEvent<O>> + Unpin
+    InnerStream: TryStream<Ok = ListenerEvent<O>>,
 {
     type Item = Result<ListenerEvent<Timeout<O>>, TransportTimeoutError<InnerStream::Error>>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let poll_out = match TryStream::try_poll_next(Pin::new(&mut self.inner), cx) {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+
+        let poll_out = match TryStream::try_poll_next(this.inner, cx) {
             Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(TransportTimeoutError::Other(err)))),
             Poll::Ready(Some(Ok(v))) => v,
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Pending => return Poll::Pending,
         };
 
+        let timeout = *this.timeout;
         let event = poll_out.map(move |inner_fut| {
             Timeout {
                 inner: inner_fut,
-                timer: Delay::new(self.timeout),
+                timer: Delay::new(timeout),
             }
         });
 
@@ -142,31 +144,35 @@ where
 /// `TransportTimeoutError<Err>`.
 // TODO: can be replaced with `impl Future` once `impl Trait` are fully stable in Rust
 //       (https://github.com/rust-lang/rust/issues/34511)
+#[pin_project::pin_project]
 #[must_use = "futures do nothing unless polled"]
 pub struct Timeout<InnerFut> {
+    #[pin]
     inner: InnerFut,
     timer: Delay,
 }
 
 impl<InnerFut> Future for Timeout<InnerFut>
 where
-    InnerFut: TryFuture + Unpin,
+    InnerFut: TryFuture,
 {
     type Output = Result<InnerFut::Ok, TransportTimeoutError<InnerFut::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         // It is debatable whether we should poll the inner future first or the timer first.
         // For example, if you start dialing with a timeout of 10 seconds, then after 15 seconds
         // the dialing succeeds on the wire, then after 20 seconds you poll, then depending on
         // which gets polled first, the outcome will be success or failure.
 
-        match TryFuture::try_poll(Pin::new(&mut self.inner), cx) {
+        let mut this = self.project();
+
+        match TryFuture::try_poll(this.inner, cx) {
             Poll::Pending => {},
             Poll::Ready(Ok(v)) => return Poll::Ready(Ok(v)),
             Poll::Ready(Err(err)) => return Poll::Ready(Err(TransportTimeoutError::Other(err))),
         }
 
-        match TryFuture::try_poll(Pin::new(&mut self.timer), cx) {
+        match TryFuture::try_poll(Pin::new(&mut this.timer), cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => Poll::Ready(Err(TransportTimeoutError::Timeout)),
             Poll::Ready(Err(err)) => Poll::Ready(Err(TransportTimeoutError::TimerError(err))),
