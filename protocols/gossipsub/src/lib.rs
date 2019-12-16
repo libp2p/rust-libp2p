@@ -146,5 +146,5 @@ mod topic;
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc};
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder};
-pub use self::protocol::GossipsubMessage;
+pub use self::protocol::{GossipsubMessage, MessageId};
 pub use self::topic::{Topic, TopicHash};

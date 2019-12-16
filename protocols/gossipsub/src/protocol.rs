@@ -276,6 +276,18 @@ impl Decoder for GossipsubCodec {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MessageId(pub String);
 
+impl std::fmt::Display for MessageId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Into<String> for MessageId {
+    fn into(self) -> String {
+        self.0.into()
+    }
+}
+
 /// A message received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {

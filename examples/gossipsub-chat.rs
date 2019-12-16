@@ -130,9 +130,10 @@ fn main() {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(gossip_event)) => match gossip_event {
-                    GossipsubEvent::Message(peer_id, message) => println!(
-                        "Got message: {:?} from peer {:?}",
+                    GossipsubEvent::Message(peer_id, id, message) => println!(
+                        "Got message: {} with id: {} from peer: {:?}",
                         String::from_utf8_lossy(&message.data),
+                        id,
                         peer_id
                     ),
                     _ => {}

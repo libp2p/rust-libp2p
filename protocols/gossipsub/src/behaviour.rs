@@ -553,7 +553,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         if self.mesh.keys().any(|t| msg.topics.iter().any(|u| t == u)) {
             debug!("Sending received message to user");
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                GossipsubEvent::Message(propagation_source.clone(), msg.clone()),
+                GossipsubEvent::Message(propagation_source.clone(), msg_id, msg.clone()),
             ));
         }
 
@@ -1178,9 +1178,10 @@ pub struct GossipsubRpc {
 /// Event that can happen on the gossipsub behaviour.
 #[derive(Debug)]
 pub enum GossipsubEvent {
-    /// A message has been received. This contains the PeerId that we received the message from
-    /// and the actual message.
-    Message(PeerId, GossipsubMessage),
+    /// A message has been received. This contains the PeerId that we received the message from,
+    /// the message id (used if the application layer needs to propagate the message) and the
+    /// message itself.
+    Message(PeerId, MessageId, GossipsubMessage),
 
     /// A remote subscribed to a topic.
     Subscribed {
