@@ -69,11 +69,14 @@ use log::debug;
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
     collections::HashMap,
-    io,
+    fmt, io,
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, Mutex, MutexGuard, Weak},
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll::{self, Pending, Ready},
+    },
     time::Instant,
 };
 
@@ -542,7 +545,11 @@ impl QuicEndpoint {
     }
 
     /// Process incoming UDP packets until an error occurs on the socket, or we are dropped.
-    async fn process_incoming_packets(self) -> Result<(), io::Error> {
+    async fn process_incoming_packets(self, address: Multiaddr) -> Result<(), io::Error> {
+        self.0
+            .new_connections
+            .unbounded_send(Ok(ListenerEvent::NewAddress(address)))
+            .expect("we have a reference to the peer, so this will not fail; qed");
         loop {
             use quinn_proto::DatagramEvent;
             let mut buf = [0; 1800];
@@ -634,7 +641,7 @@ impl Transport for &QuicEndpoint {
         let mut inner = self.inner();
         if inner.driver.is_none() {
             inner.driver = Some(async_std::task::spawn(
-                self.clone().process_incoming_packets(),
+                self.clone().process_incoming_packets(addr),
             ))
         }
         res
@@ -655,17 +662,14 @@ impl Transport for &QuicEndpoint {
         let mut inner = self.inner();
         if inner.driver.is_none() {
             inner.driver = Some(async_std::task::spawn(
-                self.clone().process_incoming_packets(),
+                self.clone()
+                    .process_incoming_packets(self.0.address.clone()),
             ))
         }
 
         let s: Result<(_, Connection), _> = inner
             .inner
-            .connect(
-                self.1.client_config.clone(),
-                socket_addr,
-                &socket_addr.ip().to_string(),
-            )
+            .connect(self.1.client_config.clone(), socket_addr, "localhost")
             .map_err(|e| {
                 eprintln!("Connection error: {:?}", e);
                 TransportError::Other(io::ErrorKind::InvalidInput.into())
@@ -711,9 +715,10 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
+    #[ignore] // this needs cmsg support from async-std
     fn wildcard_expansion() {
         let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
-        let mut listener = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
+        let listener = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
             .expect("endpoint")
             .listen_on(addr)
             .expect("listener");
@@ -841,16 +846,15 @@ mod tests {
         async_std::task::block_on(async move {
             let addr = ready_rx.await.unwrap();
             let quic_config = QuicConfig::new();
-            let quic_endpoint = QuicEndpoint::new(&quic_config, addr.clone()).unwrap();
+            let quic_endpoint = QuicEndpoint::new(
+                &quic_config,
+                "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
+            )
+            .unwrap();
             // Obtain a future socket through dialing
-            let mut socket = quic_endpoint
-                .dial(addr.clone())
-                .unwrap()
-                .await
-                .unwrap()
-                .next()
-                .await
-                .unwrap();
+            let mut connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
+            eprintln!("Received a Connection: {:?}", connection);
+            let mut socket = connection.next().await.unwrap();
             socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
 
             let mut buf = [0u8; 3];
