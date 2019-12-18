@@ -172,10 +172,9 @@ where
             Poll::Ready(Err(err)) => return Poll::Ready(Err(TransportTimeoutError::Other(err))),
         }
 
-        match TryFuture::try_poll(Pin::new(&mut this.timer), cx) {
+        match Pin::new(&mut this.timer).poll(cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(())) => Poll::Ready(Err(TransportTimeoutError::Timeout)),
-            Poll::Ready(Err(err)) => Poll::Ready(Err(TransportTimeoutError::TimerError(err))),
+            Poll::Ready(()) => Poll::Ready(Err(TransportTimeoutError::Timeout))
         }
     }
 }
