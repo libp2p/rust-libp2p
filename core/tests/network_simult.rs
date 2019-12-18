@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod util;
-
 use futures::prelude::*;
 use libp2p_core::{identity, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
@@ -111,10 +109,7 @@ fn raw_swarm_simultaneous_connect() {
             let transport = libp2p_tcp::TcpConfig::new()
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
-                .multiplex(libp2p_mplex::MplexConfig::new())
-                .and_then(|(peer, mplex), _| {
-                    util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-                });
+                .multiplex(libp2p_mplex::MplexConfig::new());
             Network::new(transport, local_public_key.into_peer_id())
         };
 
@@ -124,10 +119,7 @@ fn raw_swarm_simultaneous_connect() {
             let transport = libp2p_tcp::TcpConfig::new()
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
-                .multiplex(libp2p_mplex::MplexConfig::new())
-                .and_then(|(peer, mplex), _| {
-                    util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-                });
+                .multiplex(libp2p_mplex::MplexConfig::new());
             Network::new(transport, local_public_key.into_peer_id())
         };
 
