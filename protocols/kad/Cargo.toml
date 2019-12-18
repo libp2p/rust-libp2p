@@ -14,7 +14,7 @@ arrayvec = "0.5.1"
 bytes = "0.4"
 either = "1.5"
 fnv = "1.0"
-futures_codec = "0.3.1"
+futures_codec = "= 0.3.3"
 futures = "0.3.1"
 log = "0.4"
 libp2p-core = { version = "0.13.0", path = "../../core" }

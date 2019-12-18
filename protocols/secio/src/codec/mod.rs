@@ -156,7 +156,7 @@ mod tests {
         );
 
         let data = b"hello world";
-        futures::executor::block_on(async move {
+        async_std::task::block_on(async move {
             encoder.send(data.to_vec()).await.unwrap();
             let rx = decoder.next().await.unwrap().unwrap();
             assert_eq!(rx, data);
@@ -209,7 +209,7 @@ mod tests {
             codec.send(data.to_vec().into()).await.unwrap();
         };
 
-        futures::executor::block_on(future::join(client, server));
+        async_std::task::block_on(future::join(client, server));
     }
 
     #[test]

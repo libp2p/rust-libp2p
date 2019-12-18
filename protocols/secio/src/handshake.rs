@@ -419,7 +419,7 @@ mod tests {
             }
         });
 
-        futures::executor::block_on(async move {
+        async_std::task::block_on(async move {
             let listen_addr = l_a_rx.await.unwrap();
             let connec = async_std::net::TcpStream::connect(&listen_addr).await.unwrap();
             let mut codec = handshake(connec, key2).await.unwrap().0;

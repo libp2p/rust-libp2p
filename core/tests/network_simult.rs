@@ -280,7 +280,7 @@ fn raw_swarm_simultaneous_connect() {
                 }
             });
 
-            if futures::executor::block_on(future) {
+            if async_std::task::block_on(future) {
                 // The test exercised what we wanted to exercise: a simultaneous connect.
                 break
             }

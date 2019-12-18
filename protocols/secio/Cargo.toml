@@ -19,7 +19,7 @@ lazy_static = "1.2.0"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.6"
 protobuf = "2.8"
-quicksink = { git = "https://github.com/paritytech/quicksink.git" }
+quicksink = "0.1"
 rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
 sha2 = "0.8.0"
