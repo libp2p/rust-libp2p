@@ -35,5 +35,5 @@ err-derive = "0.2.1"
 futures = { version = "0.3.1", package = "futures", features = ["compat"] }
 futures-core = "0.3.1"
 quinn-proto = { git = "https://github.com/djc/quinn" }
-async-std = "1.2.0"
+async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
 async-macros = "2.0.0"

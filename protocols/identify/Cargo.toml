@@ -23,7 +23,7 @@ wasm-timer = "0.2"
 unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
 
 [dev-dependencies]
-async-std = "1.0"
+async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
 libp2p-mplex = { version = "0.13.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.13.0", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }

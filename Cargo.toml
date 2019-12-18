@@ -46,7 +46,7 @@ libp2p-websocket = { version = "0.13.0", path = "transports/websocket", optional
 libp2p-quic = { version = "0.13.0", path = "transports/quic" }
 
 [dev-dependencies]
-async-std = "1.0"
+async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
 env_logger = "0.7.1"
 
 [workspace]
