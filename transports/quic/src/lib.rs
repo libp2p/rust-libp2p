@@ -70,7 +70,7 @@ use log::debug;
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
     collections::HashMap,
-    fmt, io,
+    io,
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, Mutex, MutexGuard, Weak},
@@ -186,9 +186,6 @@ impl Muxer {
         self.send_to_endpoint(endpoint);
         while let Some(event) = self.connection.poll() {
             match event {
-                Event::DatagramSendUnblocked => {
-                    panic!("we never try to send datagrams, so this will never happen; qed")
-                }
                 Event::StreamOpened { dir: Dir::Uni } => { /* do nothing */ }
                 Event::StreamAvailable { dir: Dir::Uni } | Event::DatagramReceived => continue,
                 Event::StreamReadable { stream } => {
@@ -333,7 +330,7 @@ impl StreamMuxer for QuicMuxer {
             Err(WriteError::UnknownStream) => {
                 panic!("libp2p never uses a closed stream, so this cannot happen; qed")
             }
-            Err(WriteError::Stopped { error_code: _ }) => {
+            Err(WriteError::Stopped(_)) => {
                 Poll::Ready(Err(std::io::ErrorKind::ConnectionAborted.into()))
             }
         }
@@ -373,9 +370,7 @@ impl StreamMuxer for QuicMuxer {
             Err(ReadError::UnknownStream) => {
                 panic!("libp2p never uses a closed stream, so this cannot happen; qed")
             }
-            Err(ReadError::Reset { error_code: _ }) => {
-                Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()))
-            }
+            Err(ReadError::Reset(_)) => Poll::Ready(Err(io::ErrorKind::ConnectionReset.into())),
         }
     }
 
@@ -512,7 +507,6 @@ impl QuicEndpoint {
         };
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
-        let (sender, receiver) = mpsc::channel(0);
         let (new_connections, receive_connections) = mpsc::unbounded();
         Ok(Self(
             Arc::new(Endpoint {
@@ -526,8 +520,6 @@ impl QuicEndpoint {
                     muxers: HashMap::new(),
                     driver: None,
                 }),
-                sender,
-                receiver,
                 new_connections,
                 receive_connections: Mutex::new(Some(receive_connections)),
                 address,
@@ -551,7 +543,6 @@ impl QuicEndpoint {
             readers: HashMap::new(),
             accept_waker: None,
             connectors: Default::default(),
-            sender: endpoint.sender.clone(),
             endpoint: endpoint.clone(),
             pending: None,
         }));
@@ -560,12 +551,12 @@ impl QuicEndpoint {
     }
 
     /// Process UDP packets until either an error occurs on the socket or we are dropped.
-    async fn process_udp_traffic(self, address: Multiaddr) -> Result<(), io::Error> {
+    async fn process_udp_packets(self, address: Multiaddr) -> Result<(), io::Error> {
         self.0
             .new_connections
             .unbounded_send(Ok(ListenerEvent::NewAddress(address)))
             .expect("we have a reference to the peer, so this will not fail; qed");
-        let mut outgoing_packet = None;
+        let mut outgoing_packet: Option<quinn_proto::Transmit> = None;
         loop {
             use quinn_proto::DatagramEvent;
             if let Some(packet) = outgoing_packet.take() {
@@ -599,7 +590,7 @@ impl QuicEndpoint {
                         .lock()
                         .expect("we assume we have not already panicked; qed");
                     connection.process_app_events(&mut inner, connection_event);
-                    outgoing_packet = connection.poll_transmit()
+                    outgoing_packet = connection.connection.poll_transmit(Instant::now())
                 }
                 DatagramEvent::NewConnection(connection) => {
                     let muxer = self.create_muxer(connection, handle, &mut *inner);
@@ -685,8 +676,7 @@ impl Transport for &QuicEndpoint {
         let mut inner = self.inner();
         if inner.driver.is_none() {
             inner.driver = Some(async_std::task::spawn(
-                self.clone()
-                    .process_udp_packets(self.0.address.clone()),
+                self.clone().process_udp_packets(self.0.address.clone()),
             ))
         }
 
