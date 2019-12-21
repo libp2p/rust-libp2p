@@ -18,5 +18,5 @@ futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
 protobuf = "2.8"
-rand = "0.6"
+rand = "0.7.2"
 smallvec = "1.0"

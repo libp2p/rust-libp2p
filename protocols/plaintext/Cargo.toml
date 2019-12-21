@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "0.4.12"
 futures = "0.3.1"
-futures_codec = "0.3.1"
+futures_codec = "=0.3.3"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.8"
 protobuf = "2.8.1"
@@ -23,5 +23,5 @@ void = "1.0.2"
 [dev-dependencies]
 env_logger = "0.7.1"
 quickcheck = "0.9.0"
-rand = "0.7"
-futures-timer = "2.0"
+rand = "0.7.2"
+futures-timer = "2.0.2"

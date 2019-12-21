@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 async-std = "1.0"
 bytes = "0.4.12"
 futures = "0.3.1"
-futures-timer = "2.0"
+futures-timer = "2.0.2"
 get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
 libp2p-core = { version = "0.13.0", path = "../../core" }
