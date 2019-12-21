@@ -120,7 +120,7 @@ where
     let context = HandshakeContext::new(config)?;
 
     trace!("sending exchange to remote");
-    socket.send(BytesMut::from(context.state.exchange_bytes.clone())).await?;
+    socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
 
     trace!("receiving the remote's exchange");
     let context = match socket.next().await {

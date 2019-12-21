@@ -10,8 +10,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-futures_codec = "= 0.3.3"
+bytes = "0.5"
+futures_codec = "0.3.4"
 futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
@@ -20,7 +20,7 @@ multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../mis
 protobuf = "2.8"
 smallvec = "1.0"
 wasm-timer = "0.2"
-unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
+unsigned-varint = { git = "https://github.com/twittner/unsigned-varint.git", branch = "bytes-0.5", features = ["futures-codec"] }
 
 [dev-dependencies]
 async-std = "1.0"

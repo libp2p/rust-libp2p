@@ -11,10 +11,10 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 arrayvec = "0.5.1"
-bytes = "0.4"
+bytes = "0.5"
 either = "1.5"
 fnv = "1.0"
-futures_codec = "= 0.3.3"
+futures_codec = "0.3.4"
 futures = "0.3.1"
 log = "0.4"
 libp2p-core = { version = "0.13.0", path = "../../core" }
@@ -27,7 +27,7 @@ sha2 = "0.8.0"
 smallvec = "1.0"
 wasm-timer = "0.2"
 uint = "0.8"
-unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
+unsigned-varint = { git = "https://github.com/twittner/unsigned-varint.git", branch = "bytes-0.5", features = ["futures-codec"] }
 void = "1.0"
 
 [dev-dependencies]

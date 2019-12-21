@@ -535,7 +535,7 @@ where C: AsyncRead + AsyncWrite + Unpin
 
         let elem = codec::Elem::Data {
             substream_id: substream.num,
-            data: From::from(&buf[..to_write]),
+            data: Bytes::copy_from_slice(&buf[..to_write]),
             endpoint: substream.endpoint,
         };
 

@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asn1_der = "0.6.1"
 bs58 = "0.3.0"
-bytes = "0.4"
+bytes = "0.5"
 ed25519-dalek = "1.0.0-pre.3"
 failure = "0.1"
 fnv = "1.0"
@@ -32,7 +32,7 @@ rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
 sha2 = "0.8.0"
 smallvec = "1.0"
-unsigned-varint = "0.2"
+unsigned-varint = { git = "https://github.com/twittner/unsigned-varint.git", branch = "bytes-0.5" }
 void = "1"
 zeroize = "1"
 
