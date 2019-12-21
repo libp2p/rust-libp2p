@@ -27,4 +27,4 @@ async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-re
 libp2p-mplex = { version = "0.13.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.13.0", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
-rand = "0.6"
+rand = "0.7.2"

@@ -9,16 +9,16 @@ edition = "2018"
 
 [dependencies]
 bytes = "0.4"
-curve25519-dalek = "1"
+curve25519-dalek = "2.0.0"
 futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4"
 protobuf = "2.8"
-rand = "^0.7.2"
+rand = "0.7.2"
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
-x25519-dalek = "0.5"
+x25519-dalek = "0.6.0"
 zeroize = "1"
 
 [dev-dependencies]
