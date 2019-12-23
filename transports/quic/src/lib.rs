@@ -932,9 +932,13 @@ mod tests {
     };
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+    fn init() {
+        drop(env_logger::try_init());
+    }
+
     #[test]
     fn wildcard_expansion() {
-        env_logger::try_init();
+        init();
         let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
         let listener = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
             .expect("endpoint")
@@ -976,8 +980,7 @@ mod tests {
     #[test]
     fn multiaddr_to_udp_conversion() {
         use std::net::Ipv6Addr;
-
-        env_logger::try_init();
+        init();
         assert!(
             multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
                 .is_err()
@@ -1035,7 +1038,7 @@ mod tests {
     #[test]
     fn communicating_between_dialer_and_listener() {
         use super::trace;
-        env_logger::try_init();
+        init();
         let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
         let mut ready_tx = Some(ready_tx);
 
@@ -1087,7 +1090,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
-        env_logger::try_init();
+        init();
         let quic = QuicConfig::new();
 
         let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
@@ -1107,7 +1110,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
-        env_logger::try_init();
+        init();
         let config = QuicConfig::new();
 
         let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
@@ -1126,7 +1129,7 @@ mod tests {
 
     #[test]
     fn larger_addr_denied() {
-        env_logger::try_init();
+        init();
         let config = QuicConfig::new();
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()
