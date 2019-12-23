@@ -21,16 +21,17 @@
 use libp2p_core::Multiaddr;
 use crate::tls;
 use std::{error, fmt};
+use crate::fallback::Fallback;
 
 /// Error in WebSockets.
 #[derive(Debug)]
-pub enum Error<E> {
+pub enum Error<E, F> {
     /// Error in the transport layer underneath.
     Transport(E),
     /// A TLS related error.
     Tls(tls::Error),
     /// Websocket handshake error.
-    Handshake(Box<dyn error::Error + Send + Sync>),
+    Handshake(Box<dyn error::Error + Send + Sync>, Option<Fallback<F>>),
     /// The configured maximum of redirects have been made.
     TooManyRedirects,
     /// A multi-address is not supported.
@@ -41,12 +42,12 @@ pub enum Error<E> {
     Base(Box<dyn error::Error + Send + Sync>)
 }
 
-impl<E: fmt::Display> fmt::Display for Error<E> {
+impl<E: fmt::Display, F> fmt::Display for Error<E, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Transport(err) => write!(f, "{}", err),
             Error::Tls(err) => write!(f, "{}", err),
-            Error::Handshake(err) => write!(f, "{}", err),
+            Error::Handshake(err, _) => write!(f, "{}", err),
             Error::InvalidMultiaddr(ma) => write!(f, "invalid multi-address: {}", ma),
             Error::TooManyRedirects => f.write_str("too many redirects"),
             Error::InvalidRedirectLocation => f.write_str("invalid redirect location"),
@@ -55,12 +56,12 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
     }
 }
 
-impl<E: error::Error + 'static> error::Error for Error<E> {
+impl<E: error::Error + 'static, F: fmt::Debug> error::Error for Error<E, F> {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Error::Transport(err) => Some(err),
             Error::Tls(err) => Some(err),
-            Error::Handshake(err) => Some(&**err),
+            Error::Handshake(err, _) => Some(&**err),
             Error::Base(err) => Some(&**err),
             Error::InvalidMultiaddr(_)
             | Error::TooManyRedirects
@@ -69,7 +70,7 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
     }
 }
 
-impl<E> From<tls::Error> for Error<E> {
+impl<E, F> From<tls::Error> for Error<E, F> {
     fn from(e: tls::Error) -> Self {
         Error::Tls(e)
     }

@@ -20,10 +20,15 @@
 
 use async_tls::{client, server};
 use bytes::BytesMut;
-use crate::{error::Error, tls, EitherStream};
+use crate::{error::Error, tls, fallback::Fallback};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use libp2p_core::{Transport, either::EitherOutput, multiaddr::{Protocol, Multiaddr}, transport::{ListenerEvent, TransportError}, ConnectionInfo};
+use libp2p_core::{
+    Transport,
+    either::EitherOutput,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
 use log::{debug, trace};
 use soketto::{connection, data, extension::deflate::Deflate, handshake};
 use std::{convert::TryInto, fmt, io, pin::Pin, task::Context, task::Poll};
@@ -91,7 +96,7 @@ impl<T> WsConfig<T> {
     }
 }
 
-type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
+pub(crate) type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
 impl<T> Transport for WsConfig<T>
 where
@@ -100,10 +105,10 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + Unpin + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + fmt::Debug + 'static,
 {
-    type Output = EitherStream<T::Output, T>;
-    type Error = Error<T::Error>;
+    type Output = Connection<T::Output>;
+    type Error = Error<T::Error, T::Output>;
     type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -184,41 +189,41 @@ where
                             server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
                         }
 
-                        let result = server.receive_request_or_take_buffer()
-                            .await;
-
-                        match result {
-                            Ok(req) => {
-                                let ws_key = req.into_key();
-
-                                trace!("accepting websocket handshake request from {}", remote2);
-
-                                let response =
-                                    handshake::server::Response::Accept {
-                                        key: &ws_key,
-                                        protocol: None
+                        let ws_key = {
+                            let response = server.receive_request()
+                                .await;
+                            match response {
+                                Ok(request) => request.into_key(),
+                                Err(e) => {
+                                    let fallback = Fallback {
+                                        bytes: server.take_buffer().freeze(),
+                                        stream: server.into_inner(),
                                     };
-
-                                server.send_response(&response)
-                                    .map_err(|e| Error::Handshake(Box::new(e)))
-                                    .await?;
-
-                                let conn = {
-                                    let mut builder = server.into_builder();
-                                    builder.set_max_message_size(max_size);
-                                    builder.set_max_frame_size(max_size);
-                                    EitherStream::Websocket(Connection::new(builder))
-                                };
-
-                                Ok(conn)
-                            },
-                            Err((e, buf)) => {
-                                Ok(EitherStream::Fallback(crate::BufferedFallback {
-                                    bytes: buf,
-                                    stream: self.transport
-                                }))
+                                    return Err(Error::Handshake(Box::new(e), Some(fallback)))
+                                }
                             }
-                        }
+                        };
+
+                        trace!("accepting websocket handshake request from {}", remote2);
+
+                        let response =
+                            handshake::server::Response::Accept {
+                                key: &ws_key,
+                                protocol: None
+                            };
+
+                        server.send_response(&response)
+                            .map_err(|e| Error::Handshake(Box::new(e), None))
+                            .await?;
+
+                        let conn = {
+                            let mut builder = server.into_builder();
+                            builder.set_max_message_size(max_size);
+                            builder.set_max_frame_size(max_size);
+                            Connection::new(builder)
+                        };
+
+                        Ok(conn)
                     };
 
                     ListenerEvent::Upgrade {
@@ -255,7 +260,7 @@ where
                         remaining_redirects -= 1;
                         addr = location_to_multiaddr(&redirect)?
                     }
-                    Ok(Either::Right(conn)) => return Ok(EitherStream::Websocket(conn)),
+                    Ok(Either::Right(conn)) => return Ok(conn),
                     Err(e) => return Err(e)
                 }
             }
@@ -268,10 +273,10 @@ where
 impl<T> WsConfig<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + fmt::Debug + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error, T::Output>> {
         trace!("dial address: {}", address);
 
         let (host_port, dns_name) = host_and_dnsname(&address)?;
@@ -333,14 +338,14 @@ where
             client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
         }
 
-        match client.handshake().map_err(|e| Error::Handshake(Box::new(e))).await? {
+        match client.handshake().map_err(|e| Error::Handshake(Box::new(e), None)).await? {
             handshake::ServerResponse::Redirect { status_code, location } => {
                 debug!("received redirect ({}); location: {}", status_code, location);
                 Ok(Either::Left(location))
             }
             handshake::ServerResponse::Rejected { status_code } => {
                 let msg = format!("server rejected handshake; status code = {}", status_code);
-                Err(Error::Handshake(msg.into()))
+                Err(Error::Handshake(msg.into(), None))
             }
             handshake::ServerResponse::Accepted { .. } => {
                 trace!("websocket handshake with {} successful", address);
@@ -351,7 +356,7 @@ where
 }
 
 // Extract host, port and optionally the DNS name from the given [`Multiaddr`].
-fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSName>), Error<T>> {
+fn host_and_dnsname<T, F: fmt::Debug>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSName>), Error<T, F>> {
     let mut iter = addr.iter();
     match (iter.next(), iter.next()) {
         (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) =>
@@ -370,7 +375,7 @@ fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSNa
 }
 
 // Given a location URL, build a new websocket [`Multiaddr`].
-fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
+fn location_to_multiaddr<T, F: fmt::Debug>(location: &str) -> Result<Multiaddr, Error<T, F>> {
     match Url::parse(location) {
         Ok(url) => {
             let mut a = Multiaddr::empty();
