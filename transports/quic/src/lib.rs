@@ -228,7 +228,9 @@ impl StreamMuxer for QuicMuxer {
         }
         match inner.connection.write(*substream, buf) {
             Ok(bytes) => {
-                while let Some(transmit) = inner.connection.poll_transmit(Instant::now()) {
+                inner.driver_waker.take().map(|w| w.wake());
+                let now = Instant::now();
+                while let Some(transmit) = inner.connection.poll_transmit(now) {
                     ready!(inner.poll_transmit(cx, transmit))?;
                 }
                 Ready(Ok(bytes))
@@ -269,15 +271,17 @@ impl StreamMuxer for QuicMuxer {
                 e.clone(),
             )));
         }
-        while let Some(transmit) = inner.pending.take() {
+        if let Some(transmit) = inner.pending.take() {
             ready!(inner.poll_transmit(cx, transmit))?;
         }
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => {
-                while let Some(transmit) = inner.connection.poll_transmit(Instant::now()) {
+                let now = Instant::now();
+                inner.driver_waker.take().map(|w| w.wake());
+                while let Some(transmit) = inner.connection.poll_transmit(now) {
                     ready!(inner.poll_transmit(cx, transmit))?;
                 }
-                Poll::Ready(Ok(bytes))
+                Ready(Ok(bytes))
             }
             Ok(None) => Poll::Ready(Ok(0)),
             Err(ReadError::Blocked) => {
@@ -508,8 +512,9 @@ impl QuicEndpoint {
                         },
                     };
                     let mut connection = connection.lock();
-                    outgoing_packet =
-                        connection.process_connection_events(&mut inner, connection_event);
+                    connection.process_connection_events(&mut inner, connection_event);
+                    outgoing_packet = connection.connection.poll_transmit(Instant::now());
+                    connection.driver_waker.take().map(|w| w.wake());
                 }
                 DatagramEvent::NewConnection(connection) => {
                     let (muxer, driver) = self.create_muxer(connection, handle, &mut *inner);
@@ -552,15 +557,7 @@ impl Future for QuicUpgrade {
                     e.clone(),
                 )));
             }
-            if let Some(transmit) = inner.pending.take() {
-                trace!("Sending pending packet");
-                ready!(inner.poll_transmit(cx, transmit))?;
-            }
             let now = Instant::now();
-            while let Some(transmit) = inner.connection.poll_transmit(now) {
-                trace!("Sending packet during connection");
-                ready!(inner.poll_transmit(cx, transmit))?;
-            }
             if inner.connection.is_handshaking() {
                 assert!(inner.close_reason.is_none());
                 assert!(!inner.connection.is_drained(), "deadlock");
@@ -689,7 +686,10 @@ pub struct Muxer {
     timers: quinn_proto::TimerTable<Option<futures_timer::Delay>>,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
+    /// Waker to wake up the driver
+    driver_waker: Option<std::task::Waker>,
 }
+
 impl Muxer {
     fn new(endpoint: Arc<Endpoint>, connection: Connection, handle: ConnectionHandle) -> Self {
         Muxer {
@@ -704,6 +704,7 @@ impl Muxer {
             pending: None,
             timers: quinn_proto::TimerTable::new(|| None),
             close_reason: None,
+            driver_waker: None,
         }
     }
 
@@ -718,7 +719,19 @@ impl Muxer {
         }
     }
 
-    pub fn poll_transmit(
+    pub fn transmit(&mut self, cx: &mut Context<'_>, now: Instant) -> Poll<Result<(), io::Error>> {
+        debug_assert!(
+            self.pending.is_none(),
+            "You called Muxer::transmit with a pending packet"
+        );
+        while let Some(transmit) = self.connection.poll_transmit(now) {
+            self.driver_waker.take().map(|w| w.wake());
+            ready!(self.poll_transmit(cx, transmit))?;
+        }
+        Ready(Ok(()))
+    }
+
+    fn poll_transmit(
         &mut self,
         cx: &mut Context<'_>,
         transmit: quinn_proto::Transmit,
@@ -746,15 +759,13 @@ impl Muxer {
         &mut self,
         endpoint: &mut EndpointInner,
         event: ConnectionEvent,
-    ) -> Option<quinn_proto::Transmit> {
+    ) {
+        if self.close_reason.is_some() {
+            return;
+        }
         self.connection.handle_event(event);
         self.send_to_endpoint(endpoint);
         self.process_app_events();
-        if self.close_reason.is_none() {
-            self.connection.poll_transmit(Instant::now())
-        } else {
-			None
-		}
     }
 
     pub fn process_app_events(&mut self) {
@@ -887,7 +898,8 @@ impl Future for ConnectionDriver {
             ready!(this.poll_transmit(cx, packet)).expect("error handling not implemented");
         }
         trace!("being polled for timers!");
-        let mut inner = (*this.inner).lock();
+        let mut inner = this.inner.lock();
+        inner.driver_waker = Some(cx.waker().clone());
         loop {
             trace!("loop iteration");
             let mut needs_timer_update = false;
@@ -929,13 +941,14 @@ impl Future for ConnectionDriver {
             }
         }
         inner.process_app_events();
-        while let Some(tx) = inner.connection.poll_transmit(now) {
-            ready!(inner.poll_transmit(cx, tx)).expect("error handling not implemented");
-        }
+        ready!(inner.transmit(cx, now));
         if inner.connection.is_drained() {
             debug!(
                 "Connection drained: close reason {}",
-                inner.close_reason.as_ref().expect("we never have a closed connection with no reason; qed")
+                inner
+                    .close_reason
+                    .as_ref()
+                    .expect("we never have a closed connection with no reason; qed")
             );
             Ready(Ok(()))
         } else {
@@ -995,9 +1008,8 @@ mod tests {
             })
             .for_each(|_| futures::future::ready(()));
 
-		async_std::task::spawn(server);
-        futures::executor::block_on(client)
-            .unwrap();
+        async_std::task::spawn(server);
+        futures::executor::block_on(client).unwrap();
     }
 
     #[test]
