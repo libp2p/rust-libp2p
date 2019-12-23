@@ -137,8 +137,9 @@ impl QuicMuxer {
 
 #[derive(Debug)]
 enum OutboundInner {
-    Complete(StreamId),
+    Complete(Result<StreamId, io::Error>),
     Pending(oneshot::Receiver<StreamId>),
+    Done,
 }
 
 pub struct Outbound(OutboundInner);
@@ -147,10 +148,16 @@ impl Future for Outbound {
     type Output = Result<StreamId, std::io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         match self.get_mut().0 {
-            OutboundInner::Complete(s) => Poll::Ready(Ok(s)),
-            OutboundInner::Pending(ref mut receiver) => Pin::new(receiver)
-                .poll(cx)
+            ref mut inner @ OutboundInner::Complete(_) => {
+                match std::mem::replace(inner, OutboundInner::Done) {
+                    OutboundInner::Complete(e) => Ready(e),
+                    _ => unreachable!(),
+                }
+            }
+            OutboundInner::Pending(ref mut receiver) => receiver
+                .poll_unpin(cx)
                 .map_err(|oneshot::Canceled| std::io::ErrorKind::ConnectionAborted.into()),
+            OutboundInner::Done => panic!("polled after yielding Ready"),
         }
     }
 }
@@ -161,12 +168,17 @@ impl StreamMuxer for QuicMuxer {
     type Error = std::io::Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
-        if let Some(id) = inner.pending_stream.take() {
+        if let Some(ref e) = inner.close_reason {
+            Outbound(OutboundInner::Complete(Err(std::io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                e.clone(),
+            ))))
+        } else if let Some(id) = inner.pending_stream.take() {
             // mandatory ― otherwise we will fail an assertion above
-            Outbound(OutboundInner::Complete(id))
+            Outbound(OutboundInner::Complete(Ok(id)))
         } else if let Some(id) = inner.connection.open(Dir::Bi) {
             // optimization: if we can complete synchronously, do so.
-            Outbound(OutboundInner::Complete(id))
+            Outbound(OutboundInner::Complete(Ok(id)))
         } else {
             let (sender, receiver) = oneshot::channel();
             inner.connectors.push_front(sender);
@@ -540,18 +552,33 @@ impl Future for QuicUpgrade {
                     e.clone(),
                 )));
             }
-            while let Some(transmit) = inner.pending.take() {
+            if let Some(transmit) = inner.pending.take() {
+                trace!("Sending pending packet");
                 ready!(inner.poll_transmit(cx, transmit))?;
             }
-            while let Some(transmit) = inner.connection.poll_transmit(Instant::now()) {
+            let now = Instant::now();
+            while let Some(transmit) = inner.connection.poll_transmit(now) {
+                trace!("Sending packet during connection");
                 ready!(inner.poll_transmit(cx, transmit))?;
             }
             if inner.connection.is_handshaking() {
+                assert!(inner.close_reason.is_none());
+                assert!(!inner.connection.is_drained(), "deadlock");
                 inner.accept_waker = Some(cx.waker().clone());
                 return Pending;
+            } else if inner.connection.is_drained() {
+                debug!("connection already drained; failing");
+                return Ready(Err(std::io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    inner
+                        .close_reason
+                        .as_ref()
+                        .expect("drained connections have a close reason")
+                        .clone(),
+                )));
             }
         }
-        Poll::Ready(Ok(muxer.take().expect("impossible")))
+        Ready(Ok(muxer.take().expect("impossible")))
     }
 }
 
