@@ -39,3 +39,4 @@ async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-re
 async-macros = "2.0.0"
 futures-timer = "2.0.2"
 env_logger = "0.7.1"
+parking_lot = "0.10.0"

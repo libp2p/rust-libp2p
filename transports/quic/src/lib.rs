@@ -67,14 +67,15 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     StreamMuxer, Transport,
 };
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
+use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
     collections::HashMap,
     io,
     net::SocketAddr,
     pin::Pin,
-    sync::{Arc, Mutex, MutexGuard, Weak},
+    sync::{Arc, Weak},
     task::{
         Context,
         Poll::{self, Pending, Ready},
@@ -130,9 +131,7 @@ pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
 impl QuicMuxer {
     fn inner<'a>(&'a self) -> MutexGuard<'a, Muxer> {
-        self.0
-            .lock()
-            .expect("we already panicked, so are in an inconsistent state; qed")
+        self.0.lock()
     }
 }
 
@@ -393,7 +392,7 @@ pub struct QuicEndpoint(Arc<Endpoint>, QuicConfig);
 
 impl QuicEndpoint {
     fn inner(&self) -> MutexGuard<'_, EndpointInner> {
-        self.0.inner.lock().expect("we assume we have not already panicked; qed")
+        self.0.inner.lock()
     }
 
     /// Retrieves the `Multiaddr` of this `QuicEndpoint`.
@@ -496,9 +495,7 @@ impl QuicEndpoint {
                             }
                         },
                     };
-                    let mut connection = connection
-                        .lock()
-                        .expect("we assume we have not already panicked; qed");
+                    let mut connection = connection.lock();
                     outgoing_packet =
                         connection.process_connection_events(&mut inner, connection_event);
                 }
@@ -573,7 +570,6 @@ impl Transport for &QuicEndpoint {
         let res = (self.0)
             .receive_connections
             .lock()
-            .expect("we assume we have not already panicked; qed")
             .take()
             .ok_or_else(|| TransportError::Other(io::ErrorKind::AlreadyExists.into()));
         let mut inner = self.inner();
@@ -864,7 +860,7 @@ impl Future for ConnectionDriver {
             ready!(this.poll_transmit(cx, packet)).expect("error handling not implemented");
         }
         trace!("being polled for timers!");
-        let mut inner = (*this.inner).lock().expect("poisoned");
+        let mut inner = (*this.inner).lock();
         loop {
             trace!("loop iteration");
             let mut needs_timer_update = false;
