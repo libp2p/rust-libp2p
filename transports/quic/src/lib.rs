@@ -67,7 +67,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     StreamMuxer, Transport,
 };
-use log::{debug, error, trace, warn};
+use log::{debug, error, trace};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
@@ -228,7 +228,7 @@ impl StreamMuxer for QuicMuxer {
         }
         match inner.connection.write(*substream, buf) {
             Ok(bytes) => {
-                inner.driver_waker.take().map(|w| w.wake());
+                inner.wake_driver();
                 let now = Instant::now();
                 while let Some(transmit) = inner.connection.poll_transmit(now) {
                     ready!(inner.poll_transmit(cx, transmit))?;
@@ -277,7 +277,7 @@ impl StreamMuxer for QuicMuxer {
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => {
                 let now = Instant::now();
-                inner.driver_waker.take().map(|w| w.wake());
+                inner.wake_driver();
                 while let Some(transmit) = inner.connection.poll_transmit(now) {
                     ready!(inner.poll_transmit(cx, transmit))?;
                 }
@@ -514,7 +514,7 @@ impl QuicEndpoint {
                     let mut connection = connection.lock();
                     connection.process_connection_events(&mut inner, connection_event);
                     outgoing_packet = connection.connection.poll_transmit(Instant::now());
-                    connection.driver_waker.take().map(|w| w.wake());
+                    connection.wake_driver();
                 }
                 DatagramEvent::NewConnection(connection) => {
                     let (muxer, driver) = self.create_muxer(connection, handle, &mut *inner);
@@ -557,7 +557,6 @@ impl Future for QuicUpgrade {
                     e.clone(),
                 )));
             }
-            let now = Instant::now();
             if inner.connection.is_handshaking() {
                 assert!(inner.close_reason.is_none());
                 assert!(!inner.connection.is_drained(), "deadlock");
@@ -724,11 +723,19 @@ impl Muxer {
             self.pending.is_none(),
             "You called Muxer::transmit with a pending packet"
         );
+        let mut need_wake = false;
         while let Some(transmit) = self.connection.poll_transmit(now) {
-            self.driver_waker.take().map(|w| w.wake());
+            need_wake = true;
             ready!(self.poll_transmit(cx, transmit))?;
         }
+        if need_wake {
+            self.wake_driver()
+        }
         Ready(Ok(()))
+    }
+
+    fn wake_driver(&mut self) {
+        drop(self.driver_waker.take().map(|w| w.wake()))
     }
 
     fn poll_transmit(
