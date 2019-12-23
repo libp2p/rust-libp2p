@@ -126,6 +126,7 @@ struct Endpoint {
     /// The `Multiaddr`
     address: Multiaddr,
 }
+
 #[derive(Debug, Clone)]
 pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
@@ -215,17 +216,8 @@ impl StreamMuxer for QuicMuxer {
         buf: &[u8],
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::WriteError;
-
         let mut inner = self.inner();
-        if let Some(ref e) = inner.close_reason {
-            return Ready(Err(std::io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                e.clone(),
-            )));
-        }
-        if let Some(transmit) = inner.pending.take() {
-            ready!(inner.poll_transmit(cx, transmit))?;
-        }
+        ready!(inner.pre_application_io(cx))?;
         match inner.connection.write(*substream, buf) {
             Ok(bytes) => inner.on_application_io(cx, bytes),
             Err(WriteError::Blocked) => {
@@ -257,15 +249,7 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
-        if let Some(ref e) = inner.close_reason {
-            return Ready(Err(std::io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                e.clone(),
-            )));
-        }
-        if let Some(transmit) = inner.pending.take() {
-            ready!(inner.poll_transmit(cx, transmit))?;
-        }
+        ready!(inner.pre_application_io(cx))?;
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => inner.on_application_io(cx, bytes),
             Ok(None) => Poll::Ready(Ok(0)),
@@ -735,6 +719,19 @@ impl Muxer {
             ready!(self.poll_transmit(cx, transmit))?;
         }
         Ready(Ok(bytes))
+    }
+
+    fn pre_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        if let Some(ref e) = self.close_reason {
+            return Ready(Err(std::io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                e.clone(),
+            )));
+        }
+        if let Some(transmit) = self.pending.take() {
+            ready!(self.poll_transmit(cx, transmit))?;
+        }
+        Ready(Ok(()))
     }
 
     fn poll_transmit(
