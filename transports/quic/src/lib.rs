@@ -227,15 +227,7 @@ impl StreamMuxer for QuicMuxer {
             ready!(inner.poll_transmit(cx, transmit))?;
         }
         match inner.connection.write(*substream, buf) {
-            Ok(bytes) => {
-                inner.wake_driver();
-                let now = Instant::now();
-                while let Some(transmit) = inner.connection.poll_transmit(now) {
-                    ready!(inner.poll_transmit(cx, transmit))?;
-                }
-                Ready(Ok(bytes))
-            }
-
+            Ok(bytes) => inner.on_application_io(cx, bytes),
             Err(WriteError::Blocked) => {
                 inner.writers.insert(*substream, cx.waker().clone());
                 Pending
@@ -275,14 +267,7 @@ impl StreamMuxer for QuicMuxer {
             ready!(inner.poll_transmit(cx, transmit))?;
         }
         match inner.connection.read(*substream, buf) {
-            Ok(Some(bytes)) => {
-                let now = Instant::now();
-                inner.wake_driver();
-                while let Some(transmit) = inner.connection.poll_transmit(now) {
-                    ready!(inner.poll_transmit(cx, transmit))?;
-                }
-                Ready(Ok(bytes))
-            }
+            Ok(Some(bytes)) => inner.on_application_io(cx, bytes),
             Ok(None) => Poll::Ready(Ok(0)),
             Err(ReadError::Blocked) => {
                 inner.readers.insert(*substream, cx.waker().clone());
@@ -736,6 +721,20 @@ impl Muxer {
 
     fn wake_driver(&mut self) {
         drop(self.driver_waker.take().map(|w| w.wake()))
+    }
+
+    /// Call when I/O is done by the application.  `bytes` is the number of bytes of I/O done.
+    fn on_application_io(
+        &mut self,
+        cx: &mut Context<'_>,
+        bytes: usize,
+    ) -> Poll<Result<usize, io::Error>> {
+        self.wake_driver();
+        let now = Instant::now();
+        while let Some(transmit) = self.connection.poll_transmit(now) {
+            ready!(self.poll_transmit(cx, transmit))?;
+        }
+        Ready(Ok(bytes))
     }
 
     fn poll_transmit(
