@@ -67,7 +67,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     StreamMuxer, Transport,
 };
-use log::{debug, error, trace};
+use log::{debug, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
@@ -469,13 +469,13 @@ impl QuicEndpoint {
             trace!("have an event!");
             match event {
                 DatagramEvent::ConnectionEvent(connection_event) => {
-                    trace!("got a connection event: {:?}", connection_event);
+                    // trace!("got a connection event: {:?}", connection_event);
                     let connection = match inner.muxers.get(&handle) {
                         None => panic!("received a ConnectionEvent for an unknown Connection"),
                         Some(e) => match e.upgrade() {
                             Some(e) => e,
                             None => {
-                                error!("lost our connection!");
+                                debug!("lost our connection!");
                                 continue;
                             }
                         },
@@ -499,8 +499,8 @@ impl QuicEndpoint {
                             remote_addr: endpoint.address.clone(),
                         }))
                     .expect(
-                        "this is an unbounded channel, and we have an instance of the peer, so \
-                     this will never fail; qed",
+						"this is an unbounded channel, and we have an instance of the peer, so \
+					 this will never fail; qed",
                     );
                 }
             }
@@ -596,7 +596,7 @@ impl Transport for &QuicEndpoint {
             .inner
             .connect(self.1.client_config.clone(), socket_addr, "localhost")
             .map_err(|e| {
-                error!("Connection error: {:?}", e);
+                warn!("Connection error: {:?}", e);
                 TransportError::Other(io::ErrorKind::InvalidInput.into())
             });
         let (handle, conn) = s?;
@@ -685,22 +685,6 @@ impl Muxer {
                 self.connection.handle_event(connection_event)
             }
         }
-    }
-
-    pub fn transmit(&mut self, cx: &mut Context<'_>, now: Instant) -> Poll<Result<(), io::Error>> {
-        debug_assert!(
-            self.pending.is_none(),
-            "You called Muxer::transmit with a pending packet"
-        );
-        let mut need_wake = false;
-        while let Some(transmit) = self.connection.poll_transmit(now) {
-            need_wake = true;
-            ready!(self.poll_transmit(cx, transmit))?;
-        }
-        if need_wake {
-            self.wake_driver()
-        }
-        Ready(Ok(()))
     }
 
     fn wake_driver(&mut self) {
@@ -826,7 +810,6 @@ impl Muxer {
                         v.wake();
                     }
                     self.connectors.truncate(0);
-                    debug!("Self is {:?}", self);
                 }
                 Event::StreamFinished { stream, .. } => {
                     // Wake up the task waiting on us (if any)
@@ -903,6 +886,7 @@ impl Future for ConnectionDriver {
         trace!("being polled for timers!");
         let mut inner = this.inner.lock();
         inner.driver_waker = Some(cx.waker().clone());
+        let mut need_application_processing = false;
         loop {
             trace!("loop iteration");
             let mut needs_timer_update = false;
@@ -919,6 +903,7 @@ impl Future for ConnectionDriver {
                     Pending => continue,
                     Ready(()) => {
                         trace!("timer {:?} ready at time {:?}", timer, now);
+                        need_application_processing = true;
                         connection.handle_timeout(now, timer);
                     }
                 }
@@ -929,7 +914,7 @@ impl Future for ConnectionDriver {
                 match update {
                     TimerSetting::Stop => timers[timer] = None,
                     TimerSetting::Start(instant) => {
-                        trace!("setting a timer for {:?}", instant - now);
+                        trace!("setting timer {:?} for {:?}", timer, instant - now);
                         let mut new_timer = futures_timer::Delay::new(instant - now);
                         match new_timer.poll_unpin(cx) {
                             Ready(()) => needs_timer_update = true,
@@ -939,12 +924,18 @@ impl Future for ConnectionDriver {
                     }
                 }
             }
+            while let Some(tx) = inner.connection.poll_transmit(now) {
+                needs_timer_update = true;
+                drop(ready!(inner.poll_transmit(cx, tx)))
+            }
             if !needs_timer_update {
                 break;
             }
         }
-        inner.process_app_events();
-        ready!(inner.transmit(cx, now));
+        if need_application_processing {
+            inner.process_app_events();
+        }
+
         if inner.connection.is_drained() {
             debug!(
                 "Connection drained: close reason {}",
