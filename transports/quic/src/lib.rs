@@ -52,9 +52,11 @@
 //! The entry point is the `QuicEndpoint` struct.  It represents a single QUIC endpoint.  You
 //! should generally have one of these per process.
 //!
-//! `QuicEndpoint` manages a background task that processes all socket I/O.  This includes:
+//! `QuicEndpoint` manages a background task that processes all incoming packets.  Each
+//! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![deny(unsafe_code)]
+#![forbid(unsafe_code, dead_code)]
+mod certificate;
 mod connection;
 use async_macros::ready;
 use async_std::net::UdpSocket;
@@ -195,7 +197,7 @@ impl StreamMuxer for QuicMuxer {
     fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner();
         if let Some(ref e) = inner.close_reason {
-            return Poll::Ready(Err(std::io::Error::new(
+            return Ready(Err(std::io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 e.clone(),
             )));
@@ -205,7 +207,7 @@ impl StreamMuxer for QuicMuxer {
                 inner.accept_waker = Some(cx.waker().clone());
                 Pending
             }
-            Some(stream) => Poll::Ready(Ok(stream)),
+            Some(stream) => Ready(Ok(stream)),
         }
     }
 
@@ -227,9 +229,7 @@ impl StreamMuxer for QuicMuxer {
             Err(WriteError::UnknownStream) => {
                 panic!("libp2p never uses a closed stream, so this cannot happen; qed")
             }
-            Err(WriteError::Stopped(_)) => {
-                Poll::Ready(Err(std::io::ErrorKind::ConnectionAborted.into()))
-            }
+            Err(WriteError::Stopped(_)) => Ready(Err(std::io::ErrorKind::ConnectionAborted.into())),
         }
     }
 
@@ -252,7 +252,7 @@ impl StreamMuxer for QuicMuxer {
         ready!(inner.pre_application_io(cx))?;
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => inner.on_application_io(cx, bytes),
-            Ok(None) => Poll::Ready(Ok(0)),
+            Ok(None) => Ready(Ok(0)),
             Err(ReadError::Blocked) => {
                 inner.readers.insert(*substream, cx.waker().clone());
                 Pending
@@ -260,7 +260,7 @@ impl StreamMuxer for QuicMuxer {
             Err(ReadError::UnknownStream) => {
                 panic!("libp2p never uses a closed stream, so this cannot happen; qed")
             }
-            Err(ReadError::Reset(_)) => Poll::Ready(Err(io::ErrorKind::ConnectionReset.into())),
+            Err(ReadError::Reset(_)) => Ready(Err(io::ErrorKind::ConnectionReset.into())),
         }
     }
 
@@ -269,7 +269,7 @@ impl StreamMuxer for QuicMuxer {
         _cx: &mut Context,
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(
+        Ready(
             self.inner()
                 .connection
                 .finish(*substream)
@@ -293,11 +293,11 @@ impl StreamMuxer for QuicMuxer {
     }
 
     fn flush_all(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+        Ready(Ok(()))
     }
 
     fn close(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(self.inner().connection.close(
+        Ready(Ok(self.inner().connection.close(
             Instant::now(),
             Default::default(),
             Default::default(),
@@ -324,11 +324,11 @@ impl AsyncWrite for QuicStream {
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Poll::Ready(Ok(()))
+        Ready(Ok(()))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Poll::Ready(Ok(()))
+        Ready(Ok(()))
     }
 }
 
