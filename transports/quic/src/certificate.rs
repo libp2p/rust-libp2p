@@ -25,6 +25,7 @@
 //! The libp2p extension OID
 pub const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 pub const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
+pub const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &'static rcgen::SignatureAlgorithm =
     &rcgen::PKCS_ECDSA_P256_SHA256;
@@ -50,11 +51,16 @@ fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen
 fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::CustomExtension) {
     let temp_keypair = rcgen::KeyPair::generate(&LIBP2P_SIGNATURE_ALGORITHM)
         .expect("we pass valid parameters, and assume we have enough memory and randomness; qed");
-    let mut signing_buf = [0u8; 21 + LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH];
+    let mut signing_buf =
+        [0u8; LIBP2P_SIGNING_PREFIX_LENGTH + LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH];
     let public = temp_keypair.public_key_raw();
-    assert_eq!(public.len(), LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH, "ECDSA public keys are 65 bytes");
-    signing_buf[..21].copy_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
-    signing_buf[21..].copy_from_slice(public);
+    assert_eq!(
+        public.len(),
+        LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH,
+        "ECDSA public keys are 65 bytes"
+    );
+    signing_buf[..LIBP2P_SIGNING_PREFIX_LENGTH].copy_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
+    signing_buf[LIBP2P_SIGNING_PREFIX_LENGTH..].copy_from_slice(public);
     let signature = keypair.sign(&signing_buf).expect("signing failed");
     (
         temp_keypair,
@@ -72,12 +78,60 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
         .expect("certificate generation with valid params will succeed")
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+pub struct X509Certificate {
+    #[cfg_attr(test, allow(dead_code))]
+    signed_data: Vec<u8>,
+    #[cfg_attr(test, allow(dead_code))]
+    algorithm: yasna::models::ObjectIdentifier,
+    #[cfg_attr(test, allow(dead_code))]
+    signature_value: Vec<u8>,
+}
+
+/// Parse an X.509 certificate.  Does NOT verify it.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<X509Certificate> {
+    yasna::parse_der(certificate, |reader| {
+        reader.read_sequence(|reader| {
+            let signed_data = reader.next().read_der()?;
+            let algorithm = reader.next().read_sequence(|reader| {
+                let oid = reader.next().read_oid()?;
+                reader.read_optional(|_: yasna::BERReader| -> Result<(), _> {
+                    Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Extra))
+                })?;
+                Ok(oid)
+            })?;
+            let (signature_value, bits) = reader.next().read_bitvec_bytes()?;
+            // be extra careful regarding overflow
+            if (bits & 7) != 0 || signature_value.len() != (bits >> 3) {
+                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+            } else {
+                Ok(X509Certificate {
+                    signed_data,
+                    algorithm,
+                    signature_value,
+                })
+            }
+        })
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     #[test]
     fn can_make_a_certificate() {
-        make_cert(&identity::Keypair::generate_ed25519());
-        make_cert(&identity::Keypair::generate_secp256k1());
+        parse_certificate(
+            &make_cert(&identity::Keypair::generate_ed25519())
+                .serialize_der()
+                .unwrap(),
+        )
+        .unwrap();
+        parse_certificate(
+            &make_cert(&identity::Keypair::generate_secp256k1())
+                .serialize_der()
+                .unwrap(),
+        )
+        .unwrap();
     }
 }
