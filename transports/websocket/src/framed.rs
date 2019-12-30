@@ -190,16 +190,20 @@ where
                         }
 
                         let ws_key = {
-                            let response = server.receive_request()
+                            let request = server.receive_request()
                                 .await;
-                            match response {
+                            match request {
                                 Ok(request) => request.into_key(),
                                 Err(e) => {
-                                    let fallback = Fallback {
-                                        bytes: server.take_buffer().freeze(),
-                                        stream: server.into_inner(),
+                                    let fallback = match e {
+                                        handshake::Error::Io(_) => None,
+                                        _ => Some(Fallback {
+                                            bytes: server.take_buffer().freeze(),
+                                            stream: server.into_inner(),
+                                        })
                                     };
-                                    return Err(Error::Handshake(Box::new(e), Some(fallback)))
+
+                                    return Err(Error::Handshake(Box::new(e), fallback));
                                 }
                             }
                         };

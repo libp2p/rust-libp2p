@@ -20,7 +20,7 @@
 
 use std::pin::Pin;
 use std::task::{Poll, Context};
-use std::io::{self, Read};
+use std::io::{self, Read, IoSliceMut};
 use futures::{AsyncRead, AsyncWrite};
 use bytes5::Buf;
 
@@ -33,33 +33,45 @@ pub struct Fallback<T> {
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin> AsyncRead for Fallback<T> {
-	fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-		let this = Pin::into_inner(self);
-
-		if !this.bytes.is_empty() {
-			match (&*this.bytes).read(buf) {
+	fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+		if !self.bytes.is_empty() {
+			match (&*self.bytes).read(buf) {
 				Ok(read) => {
-					this.bytes.advance(read);
+					self.bytes.advance(read);
 					Poll::Ready(Ok(read))
 				}
 				Err(err) => Poll::Ready(Err(err))
 			}
 		} else {
-			Pin::new(&mut this.stream).poll_read(cx, buf)
+			Pin::new(&mut self.stream).poll_read(cx, buf)
+		}
+	}
+
+	fn poll_read_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
+		if !self.bytes.is_empty() {
+			match (&*self.bytes).read_vectored(bufs) {
+				Ok(read) => {
+					self.bytes.advance(read);
+					Poll::Ready(Ok(read))
+				}
+				Err(err) => Poll::Ready(Err(err))
+			}
+		} else {
+			Pin::new(&mut self.stream).poll_read_vectored(cx, bufs)
 		}
 	}
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Fallback<T> {
-	fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-		Pin::new(&mut Pin::into_inner(self).stream).poll_write(cx, buf)
+	fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+		Pin::new(&mut self.stream).poll_write(cx, buf)
 	}
 
-	fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-		Pin::new(&mut Pin::into_inner(self).stream).poll_flush(cx)
+	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+		Pin::new(&mut self.stream).poll_flush(cx)
 	}
 
-	fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-		Pin::new(&mut Pin::into_inner(self).stream).poll_close(cx)
+	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+		Pin::new(&mut self.stream).poll_close(cx)
 	}
 }
