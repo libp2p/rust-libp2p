@@ -42,4 +42,4 @@ env_logger = "0.7.1"
 parking_lot = "0.10.0"
 rcgen = "0.7.0"
 protobuf = "2.8.1"
-yasna = "0.3.1"
+yasna = { version = "0.3.1", features = ["num-bigint"] }
