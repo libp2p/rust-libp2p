@@ -26,7 +26,8 @@ use quote::quote;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Data, DataStruct, Ident};
 
-/// The interface that satisfies Rust.
+/// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
+/// the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
