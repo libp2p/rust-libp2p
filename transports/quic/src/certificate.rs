@@ -346,13 +346,7 @@ mod test {
         let public = keypair.public();
         log::trace!("have a public key!");
         assert_eq!(public, public, "key is not equal to itself?");
-        // assert_eq!(
-        //     identity::PublicKey::from_protobuf_encoding(&public.clone().into_protobuf_encoding())
-        //         .unwrap(),
-        //     public,
-        //     "encoding and decoding corrupted key!"
-        // );
-        log::error!("have a valid key!");
+        log::debug!("have a valid key!");
         assert_eq!(
             verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
                 .unwrap()
