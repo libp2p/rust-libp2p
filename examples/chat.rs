@@ -88,6 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // Struct fields which do not implement NetworkBehaviour need to be ignored
         #[behaviour(ignore)]
+        #[allow(dead_code)]
         ignored_member: bool,
     }
 
