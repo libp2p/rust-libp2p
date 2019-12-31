@@ -55,7 +55,12 @@
 //! `QuicEndpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![forbid(unused_must_use, unstable_features, warnings, missing_copy_implementations)]
+#![forbid(
+    unused_must_use,
+    unstable_features,
+    warnings,
+    missing_copy_implementations
+)]
 #![deny(trivial_casts)]
 mod certificate;
 mod connection;

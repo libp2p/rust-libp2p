@@ -25,7 +25,7 @@
 //! This crate uses the `log` crate to emit log output.  Events that will occur normally are output
 //! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
 //! library) are logged at `debug` level.
-use log::{debug, trace};
+use log::{debug, trace, warn};
 pub const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 pub const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 pub const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
@@ -76,7 +76,7 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     params.alg = &LIBP2P_SIGNATURE_ALGORITHM;
     params.key_pair = Some(cert_keypair);
     rcgen::Certificate::from_params(params)
-        .expect("certificate generation with valid params will succeed; qed");
+        .expect("certificate generation with valid params will succeed; qed")
 }
 
 /// Read a bitvec into a vector of bytes.  Requires the bitvec to be a whole number of bytes.
@@ -86,7 +86,7 @@ fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1E
     if (bits & 7) == 0 && value.len() == (bits >> 3) {
         Ok(value)
     } else {
-        debug!("value was of wrong length, sorry!");
+        warn!("value was of wrong length, sorry!");
         Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
     }
 }
@@ -149,7 +149,7 @@ fn parse_x509_extension(
         let oid = reader.next().read_oid()?;
         trace!("read extensions with oid {:?}", oid);
         if !oids_seen.insert(oid.clone()) {
-            debug!(
+            warn!(
                 "found the second extension with oid {:?} in the same certificate",
                 oid
             );
@@ -200,25 +200,31 @@ fn verify_libp2p_extension(
     })
 }
 
+/// Compute the signature algorithm corresponding to an algorithm identifier.
+/// These OIDs come from various RFCs.
+///
+/// Potential future optimization: operate directly on serialized data.
+///
+/// Note that this is NOT a validating parser!  We rely on webpki to do that for us.  We just do
+/// the bare minimum.
 fn compute_signature_algorithm(
     key: &[u8],
     alg: &AlgorithmIdentifier,
 ) -> yasna::ASN1Result<&'static webpki::SignatureAlgorithm> {
     #![cfg_attr(not(test), allow(dead_code))]
-    use webpki::*;
     Ok(match (key.len(), &**alg.algorithm.components()) {
-        (32, &[1, 3, 101, 111]) => &ED25519,
-        (33, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P256_SHA256,
-        (65, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P256_SHA256,
-        (33, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P256_SHA384,
-        (65, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P256_SHA384,
-        (49, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P384_SHA256,
-        (97, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P384_SHA256,
-        (49, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P384_SHA384,
-        (97, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P384_SHA384,
-        (_, &[1, 2, 840, 113549, 1, 1, 11]) => &RSA_PKCS1_2048_8192_SHA256,
-        (_, &[1, 2, 840, 113549, 1, 1, 12]) => &RSA_PKCS1_2048_8192_SHA384,
-        (_, &[1, 2, 840, 113549, 1, 1, 13]) => &RSA_PKCS1_2048_8192_SHA512,
+        (32, &[1, 3, 101, 111]) => &webpki::ED25519,
+        (33, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P256_SHA256,
+        (65, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P256_SHA256,
+        (33, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P256_SHA384,
+        (65, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P256_SHA384,
+        (49, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P384_SHA256,
+        (97, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P384_SHA256,
+        (49, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P384_SHA384,
+        (97, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P384_SHA384,
+        (_, &[1, 2, 840, 113549, 1, 1, 11]) => &webpki::RSA_PKCS1_2048_8192_SHA256,
+        (_, &[1, 2, 840, 113549, 1, 1, 12]) => &webpki::RSA_PKCS1_2048_8192_SHA384,
+        (_, &[1, 2, 840, 113549, 1, 1, 13]) => &webpki::RSA_PKCS1_2048_8192_SHA512,
         (_, &[1, 2, 840, 113549, 1, 1, 10]) => match alg.parameters {
             None => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
             Some(ref e) => yasna::parse_der(e, |reader| {
@@ -226,15 +232,18 @@ fn compute_signature_algorithm(
                     let keytype = reader.next().read_sequence(|reader| {
                         let keytype = match &**reader.next().read_oid()?.components() {
                             &[2, 16, 840, 1, 101, 3, 4, 2, 1] => {
-                                &RSA_PSS_2048_8192_SHA256_LEGACY_KEY
+                                &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY
                             }
                             &[2, 16, 840, 1, 101, 3, 4, 2, 2] => {
-                                &RSA_PSS_2048_8192_SHA384_LEGACY_KEY
+                                &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY
                             }
                             &[2, 16, 840, 1, 101, 3, 4, 2, 3] => {
-                                &RSA_PSS_2048_8192_SHA512_LEGACY_KEY
+                                &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY
                             }
-                            _ => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
+                            _ => {
+                                warn!("unsupported signature algorithm, rejecting!");
+                                return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid));
+                            }
                         };
                         reader.read_optional(|reader| reader.read_null())?;
                         Ok(keytype)
@@ -274,12 +283,10 @@ fn parse_certificate(
                 let version = reader.next().read_der()?;
                 // this is the encoding of 2 with context 0
                 if version != [160, 3, 2, 1, 2] {
-                    debug!("got invalid version {:?}", version);
+                    warn!("got invalid version {:?}", version);
                     return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?;
                 }
-                let serial_number = reader.next().read_biguint()?;
-                trace!("got serial number {:?}", serial_number);
-                drop(serial_number);
+                reader.next().read_biguint()?; // ignore the serial number
                 if read_algid(&mut reader)? != raw_certificate.algorithm {
                     debug!(
                         "expected algid to be {:?}, but it is not",
