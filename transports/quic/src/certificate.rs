@@ -93,15 +93,75 @@ fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1E
     }
 }
 
+const SHA256_OID: &[u64] = &[2, 16, 840, 1, 101, 3, 4, 2, 1];
+const SHA384_OID: &[u64] = &[2, 16, 840, 1, 101, 3, 4, 2, 2];
+const SHA512_OID: &[u64] = &[2, 16, 840, 1, 101, 3, 4, 2, 3];
+const MGF1_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 10];
+const RSA_PSS_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 10];
+const SHA256_WITH_RSA_ENCRYPTION_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 11];
+const SHA384_WITH_RSA_ENCRYPTION_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 12];
+const SHA512_WITH_RSA_ENCRYPTION_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 13];
+
+/// Read an optional NULL.  Returns None for easier chaining.
+fn read_null(
+    reader: &mut yasna::BERReaderSeq,
+) -> Result<Option<yasna::models::ObjectIdentifier>, yasna::ASN1Error> {
+    reader
+        .read_optional(|reader| reader.read_null())
+        .map(|_| None)
+}
+
+/// Read an X.509 hash algorithm identifier.
+fn read_hash_algid(
+    reader: &mut yasna::BERReaderSeq,
+) -> Result<(yasna::models::ObjectIdentifier, u8), yasna::ASN1Error> {
+    // This is optional, but the default is SHA-1 which is insecure.
+    // So we treat it as required.
+    reader.next().read_sequence(|reader| {
+        let oid = reader.next().read_oid()?;
+        let length = match &**oid.components() {
+            SHA256_OID => 32,
+            SHA384_OID => 48,
+            SHA512_OID => 64,
+            _ => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
+        };
+        read_null(reader)?;
+        Ok((oid, length))
+    })
+}
+
 /// Read an X.509 Algorithm Identifier
 fn read_algid(reader: &mut yasna::BERReaderSeq) -> Result<AlgorithmIdentifier, yasna::ASN1Error> {
-    reader.next().read_sequence(|reader| {
-        // We don’t support signature algorithms with parameters.
+    reader.next().read_sequence(|mut reader| {
+        let algorithm = reader.next().read_oid()?;
+        let parameters = match &**algorithm.components() {
+            RSA_PSS_OID => reader.next().read_sequence(|mut reader| {
+                let (hash_oid, length) = read_hash_algid(&mut reader)?;
+                reader.next().read_sequence(|mut reader| {
+                    let mgf = reader.next().read_oid()?;
+                    if &**mgf.components() != MGF1_OID || length != read_hash_algid(&mut reader)?.1
+                    {
+                        Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+                    } else {
+                        Ok(())
+                    }
+                })?;
+                if reader.next().read_u8()? != length {
+                    Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+                } else {
+                    Ok(Some(hash_oid))
+                }
+            }),
+            SHA256_WITH_RSA_ENCRYPTION_OID
+            | SHA384_WITH_RSA_ENCRYPTION_OID
+            | SHA512_WITH_RSA_ENCRYPTION_OID => read_null(&mut reader),
+            // _ => Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
+            _ => unimplemented!("non-RSA keys"),
+        }?;
+
         Ok(AlgorithmIdentifier {
-            algorithm: reader.next().read_oid()?,
-            parameters: reader
-                .read_optional(|reader| reader.read_der())?
-                .unwrap_or(vec![]),
+            algorithm,
+            parameters,
         })
     })
 }
@@ -111,10 +171,11 @@ struct AlgorithmIdentifier {
     #[cfg_attr(test, allow(dead_code))]
     algorithm: yasna::models::ObjectIdentifier,
     #[cfg_attr(test, allow(dead_code))]
-    parameters: Vec<u8>,
+    parameters: Option<yasna::models::ObjectIdentifier>,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug)]
 pub struct X509Certificate {
     #[cfg_attr(test, allow(dead_code))]
     tbs_certificate: Vec<u8>,
@@ -126,29 +187,45 @@ pub struct X509Certificate {
 
 fn parse_x509_extensions(
     reader: &mut yasna::BERReaderSeq,
-    public_key: &identity::PublicKey,
     certificate_key: &[u8],
-) -> Result<(), yasna::ASN1Error> {
+) -> Result<identity::PublicKey, yasna::ASN1Error> {
     reader.next().read_tagged(yasna::Tag::context(3), |reader| {
+        let mut public_key = None;
+        let mut oids_seen = std::collections::HashSet::new();
         reader.read_sequence_of(|reader| {
             trace!("reading an extension");
-            parse_x509_extension(reader, &public_key, &certificate_key)
-        })
+            Ok(public_key = parse_x509_extension(reader, &certificate_key, &mut oids_seen)?)
+        })?;
+        match public_key {
+            Some(e) => Ok(e),
+            None => Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Eof)),
+        }
     })
 }
 
 fn parse_x509_extension(
     reader: yasna::BERReader,
-    public_key: &identity::PublicKey,
     certificate_key: &[u8],
-) -> Result<(), yasna::ASN1Error> {
+    oids_seen: &mut std::collections::HashSet<yasna::models::ObjectIdentifier>,
+) -> Result<Option<identity::PublicKey>, yasna::ASN1Error> {
     reader.read_sequence(|reader| {
         let oid = reader.next().read_oid()?;
         trace!("read extensions with oid {:?}", oid);
+        if !oids_seen.insert(oid.clone()) {
+            debug!(
+                "found the second extension with oid {:?} in the same certificate",
+                oid
+            );
+            return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid));
+        }
         let mut is_critical = false;
-        // ASN.1 DER forbids explicitly specifying a default value.  However, other
-        // tools allow specifying `false` for `is_critical`, so so do we.
-        reader.read_optional(|reader| Ok(is_critical = reader.read_bool()?))?;
+        reader.read_optional(|reader| {
+            if reader.read_bool()? {
+                Ok(is_critical = true)
+            } else {
+                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+            }
+        })?;
         trace!("certificate critical? {}", is_critical);
         let contents = reader.next().read_bytes()?;
         if *oid.components() != LIBP2P_OID {
@@ -156,28 +233,41 @@ fn parse_x509_extension(
                 // unknown critical extension
                 Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
             } else {
-                Ok(())
+                Ok(None)
             }
         } else {
-            verify_libp2p_extension(&contents, public_key, certificate_key)
+            Ok(Some(verify_libp2p_extension(&contents, certificate_key)?))
         }
     })
 }
 
 fn verify_libp2p_extension(
     extension: &[u8],
-    public_key: &identity::PublicKey,
     certificate_key: &[u8],
-) -> yasna::ASN1Result<()> {
-    unimplemented!()
+) -> yasna::ASN1Result<identity::PublicKey> {
+    yasna::parse_der(extension, |reader| {
+        reader.read_sequence(|mut reader| {
+            let public_key = read_bitvec(&mut reader)?;
+            let signature = read_bitvec(&mut reader)?;
+            let public_key = identity::PublicKey::from_protobuf_encoding(&public_key)
+                .map_err(|_| yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?;
+            let mut v = Vec::with_capacity(LIBP2P_SIGNING_PREFIX_LENGTH + certificate_key.len());
+            v.extend_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
+            v.extend_from_slice(certificate_key);
+            if public_key.verify(&v, &signature) {
+                Ok(public_key)
+            } else {
+                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+            }
+        })
+    })
 }
 
 /// Parse an X.509 certificate.  Does NOT verify it.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn parse_certificate(
     certificate: &[u8],
-    public_key: &identity::PublicKey,
-) -> yasna::ASN1Result<X509Certificate> {
+) -> yasna::ASN1Result<(X509Certificate, identity::PublicKey)> {
     trace!("parsing certificate");
     let raw_certificate = yasna::parse_der(certificate, |reader| {
         reader.read_sequence(|mut reader| {
@@ -191,63 +281,57 @@ pub fn parse_certificate(
             })
         })
     })?;
-    yasna::parse_der(&raw_certificate.tbs_certificate, |reader| {
-        trace!("parsing TBScertificate");
-        reader.read_sequence(|mut reader| {
-            trace!("getting X509 version");
-            let version = reader.next().read_der()?;
-            // this is the encoding of 2 with context 0
-            if version != [160, 3, 2, 1, 2] {
-                debug!("got invalid version {:?}", version);
-                return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?;
-            }
-            let serial_number = reader.next().read_biguint()?;
-            trace!("got serial number {:?}", serial_number);
-            drop(serial_number);
-            if read_algid(&mut reader)? != raw_certificate.algorithm {
-                debug!(
-                    "expected algid to be {:?}, but it is not",
-                    raw_certificate.algorithm
-                );
-                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?
-            }
-            reader
-                .next()
-                .read_sequence_of(|reader| reader.read_der().map(drop))?; // we don’t care about the issuer
-            trace!("reading validity");
-            reader.next().read_sequence(|reader| {
-                reader.next().read_der()?;
-                reader.next().read_der()
-            })?; // we don’t care about the validity
-            trace!("reading subject");
-            reader
-                .next()
-                .read_sequence_of(|reader| reader.read_der().map(drop))?; // we don’t care about the subject
-            trace!("reading subjectPublicKeyInfo");
-            let key = reader.next().read_sequence(|mut reader| {
-                trace!("reading subject key algorithm");
-                let algid = read_algid(&mut reader)?;
-                trace!("reading subject key");
-                let key = read_bitvec(&mut reader)?;
-                if algid != raw_certificate.algorithm {
-                    trace!(
-                        "expected algid to be {:?}, but it is {:?}.  Key is {:?}.  Ignoring subject’s key!",
-                        raw_certificate.algorithm,
-                        algid,
-                        key,
-                    );
+    let (_certificate_key, identity_key) =
+        yasna::parse_der(&raw_certificate.tbs_certificate, |reader| {
+            trace!("parsing TBScertificate");
+            reader.read_sequence(|mut reader| {
+                trace!("getting X509 version");
+                let version = reader.next().read_der()?;
+                // this is the encoding of 2 with context 0
+                if version != [160, 3, 2, 1, 2] {
+                    debug!("got invalid version {:?}", version);
+                    return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?;
                 }
-                Ok(key)
-            })?;
-            trace!("reading issuerUniqueId");
-            reader.read_optional(|reader| reader.read_bitvec_bytes())?; // we don’t care about the issuerUniqueId
-            trace!("reading subjectUniqueId");
-            reader.read_optional(|reader| reader.read_bitvec_bytes())?; // we don’t care about the subjectUniqueId
-            trace!("reading extensions");
-			parse_x509_extensions(reader, public_key, &key)
-        })
-    })?;
-    Ok(raw_certificate)
+                let serial_number = reader.next().read_biguint()?;
+                trace!("got serial number {:?}", serial_number);
+                drop(serial_number);
+                if read_algid(&mut reader)? != raw_certificate.algorithm {
+                    debug!(
+                        "expected algid to be {:?}, but it is not",
+                        raw_certificate.algorithm
+                    );
+                    Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?
+                }
+                reader
+                    .next()
+                    .read_sequence_of(|reader| reader.read_der().map(drop))?; // we don’t care about the issuer
+                trace!("reading validity");
+                reader.next().read_sequence(|reader| {
+                    reader.next().read_der()?;
+                    reader.next().read_der()
+                })?; // we don’t care about the validity
+                trace!("reading subject");
+                reader
+                    .next()
+                    .read_sequence_of(|reader| reader.read_der().map(drop))?; // we don’t care about the subject
+                trace!("reading subjectPublicKeyInfo");
+                let key = reader.next().read_sequence(|mut reader| {
+                    trace!("reading subject key algorithm");
+                    let _algid = read_algid(&mut reader)?;
+                    trace!("reading subject key");
+                    let key = read_bitvec(&mut reader)?;
+                    Ok(key)
+                })?;
+                trace!("reading issuerUniqueId");
+                reader.read_optional(|reader| reader.read_bitvec_bytes())?; // we don’t care about the issuerUniqueId
+                trace!("reading subjectUniqueId");
+                reader.read_optional(|reader| reader.read_bitvec_bytes())?; // we don’t care about the subjectUniqueId
+                trace!("reading extensions");
+                let identity_key = parse_x509_extensions(reader, &key)?;
+                Ok((key, identity_key))
+            })
+        })?;
+    Ok((raw_certificate, identity_key))
 }
 
 #[cfg(test)]
@@ -257,16 +341,31 @@ mod test {
     fn can_make_a_certificate() {
         drop(env_logger::try_init());
         let keypair = identity::Keypair::generate_ed25519();
-        parse_certificate(
-            &make_cert(&keypair).serialize_der().unwrap(),
-            &keypair.public(),
-        )
-        .unwrap();
+        assert_eq!(
+            parse_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
+                .unwrap()
+                .1,
+            keypair.public()
+        );
+        log::trace!("trying secp256k1!");
         let keypair = identity::Keypair::generate_secp256k1();
-        parse_certificate(
-            &make_cert(&keypair).serialize_der().unwrap(),
-            &keypair.public(),
-        )
-        .unwrap();
+        log::trace!("have a key!");
+        let public = keypair.public();
+        log::trace!("have a public key!");
+        assert_eq!(public, public, "key is not equal to itself?");
+        // assert_eq!(
+        //     identity::PublicKey::from_protobuf_encoding(&public.clone().into_protobuf_encoding())
+        //         .unwrap(),
+        //     public,
+        //     "encoding and decoding corrupted key!"
+        // );
+        log::error!("have a valid key!");
+        assert_eq!(
+            parse_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
+                .unwrap()
+                .1
+                .into_protobuf_encoding(),
+            keypair.public().into_protobuf_encoding()
+        );
     }
 }

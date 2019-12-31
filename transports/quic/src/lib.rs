@@ -55,7 +55,7 @@
 //! `QuicEndpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![deny(unsafe_code, dead_code)]
+#![deny(unsafe_code, dead_code, warnings)]
 mod certificate;
 mod connection;
 mod public_key_proto;
