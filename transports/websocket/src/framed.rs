@@ -41,7 +41,98 @@ const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 /// frame payloads which does not implement [`AsyncRead`] or
 /// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
 #[derive(Debug, Clone)]
-pub struct WsConfig<T> {
+pub struct WsConfig<T>(BaseWsConfig<T>);
+
+impl<T> WsConfig<T> {
+    /// Create a new websocket transport based on another transport.
+    pub fn new(transport: T) -> Self {
+        Self(BaseWsConfig::new(transport))
+    }
+
+    /// Return the configured maximum number of redirects.
+    pub fn max_redirects(&self) -> u8 {
+        self.0.max_redirects()
+    }
+
+    /// Set max. number of redirects to follow.
+    pub fn set_max_redirects(&mut self, max: u8) -> &mut Self {
+        self.0.set_max_redirects(max);
+        self
+    }
+
+    /// Get the max. frame data size we support.
+    pub fn max_data_size(&self) -> usize {
+        self.0.max_data_size()
+    }
+
+    /// Set the max. frame data size we support.
+    pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
+        self.0.set_max_data_size(size);
+        self
+    }
+
+    /// Set the TLS configuration if TLS support is desired.
+    pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
+        self.0.set_tls_config(c);
+        self
+    }
+
+    /// Should the deflate extension (RFC 7692) be used if supported?
+    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
+        self.0.use_deflate(flag);
+        self
+    }
+}
+
+impl<T> Transport for WsConfig<T>
+where
+    T: Transport + Send + Clone + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + Unpin + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    type Output = Connection<T::Output>;
+    type Error = Error<T::Error>;
+    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let stream = self.0.listen_on(addr)?
+            .map_ok(|event| {
+                event.map(|future| {
+                    async {
+                        future.await?
+                            .left()
+                            .ok_or_else(|| Error::FellBack)
+                    }.boxed()
+                })
+            })
+            .boxed();
+
+        Ok(stream)
+    }
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.0.dial(addr)?
+            .and_then(|output| async {
+                output
+                    .left()
+                    .ok_or_else(|| Error::FellBack)
+            })
+            .boxed();
+
+        Ok(future)
+    }
+}
+
+/// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
+/// frame payloads which does not implement [`AsyncRead`] or
+/// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
+#[derive(Debug, Clone)]
+pub struct BaseWsConfig<T> {
     transport: T,
     max_data_size: usize,
     tls_config: tls::Config,
@@ -49,10 +140,10 @@ pub struct WsConfig<T> {
     use_deflate: bool
 }
 
-impl<T> WsConfig<T> {
+impl<T> BaseWsConfig<T> {
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
-        WsConfig {
+        BaseWsConfig {
             transport,
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
@@ -98,17 +189,17 @@ impl<T> WsConfig<T> {
 
 pub(crate) type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
-impl<T> Transport for WsConfig<T>
+impl<T> Transport for BaseWsConfig<T>
 where
     T: Transport + Send + Clone + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
     T::Listener: Send + Unpin + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + fmt::Debug + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = Connection<T::Output>;
-    type Error = Error<T::Error, T::Output>;
+    type Output = Either<Connection<T::Output>, Fallback<T::Output>>;
+    type Error = Error<T::Error>;
     type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -194,17 +285,13 @@ where
                                 .await;
                             match request {
                                 Ok(request) => request.into_key(),
-                                Err(e) => {
-                                    let fallback = match e {
-                                        handshake::Error::Io(_) => None,
-                                        _ => Some(Fallback {
-                                            bytes: server.take_buffer().freeze(),
-                                            stream: server.into_inner(),
-                                        })
-                                    };
-
-                                    return Err(Error::Handshake(Box::new(e), fallback));
-                                }
+                                Err(err) => return match err {
+                                    handshake::Error::Io(_) => Err(Error::Handshake(Box::new(err))),
+                                    _ => Ok(Either::Right(Fallback {
+                                        bytes: server.take_buffer().freeze(),
+                                        stream: server.into_inner(),
+                                    }))
+                                },
                             }
                         };
 
@@ -217,7 +304,7 @@ where
                             };
 
                         server.send_response(&response)
-                            .map_err(|e| Error::Handshake(Box::new(e), None))
+                            .map_err(|e| Error::Handshake(Box::new(e)))
                             .await?;
 
                         let conn = {
@@ -227,7 +314,7 @@ where
                             Connection::new(builder)
                         };
 
-                        Ok(conn)
+                        Ok(Either::Left(conn))
                     };
 
                     ListenerEvent::Upgrade {
@@ -264,7 +351,7 @@ where
                         remaining_redirects -= 1;
                         addr = location_to_multiaddr(&redirect)?
                     }
-                    Ok(Either::Right(conn)) => return Ok(conn),
+                    Ok(Either::Right(conn)) => return Ok(Either::Left(conn)),
                     Err(e) => return Err(e)
                 }
             }
@@ -274,13 +361,13 @@ where
     }
 }
 
-impl<T> WsConfig<T>
+impl<T> BaseWsConfig<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite + Send + Unpin + fmt::Debug + 'static
+    T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error, T::Output>> {
+    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("dial address: {}", address);
 
         let (host_port, dns_name) = host_and_dnsname(&address)?;
@@ -342,14 +429,14 @@ where
             client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
         }
 
-        match client.handshake().map_err(|e| Error::Handshake(Box::new(e), None)).await? {
+        match client.handshake().map_err(|e| Error::Handshake(Box::new(e))).await? {
             handshake::ServerResponse::Redirect { status_code, location } => {
                 debug!("received redirect ({}); location: {}", status_code, location);
                 Ok(Either::Left(location))
             }
             handshake::ServerResponse::Rejected { status_code } => {
                 let msg = format!("server rejected handshake; status code = {}", status_code);
-                Err(Error::Handshake(msg.into(), None))
+                Err(Error::Handshake(msg.into()))
             }
             handshake::ServerResponse::Accepted { .. } => {
                 trace!("websocket handshake with {} successful", address);
@@ -360,7 +447,7 @@ where
 }
 
 // Extract host, port and optionally the DNS name from the given [`Multiaddr`].
-fn host_and_dnsname<T, F: fmt::Debug>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSName>), Error<T, F>> {
+fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSName>), Error<T>> {
     let mut iter = addr.iter();
     match (iter.next(), iter.next()) {
         (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) =>
@@ -379,7 +466,7 @@ fn host_and_dnsname<T, F: fmt::Debug>(addr: &Multiaddr) -> Result<(String, Optio
 }
 
 // Given a location URL, build a new websocket [`Multiaddr`].
-fn location_to_multiaddr<T, F: fmt::Debug>(location: &str) -> Result<Multiaddr, Error<T, F>> {
+fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
     match Url::parse(location) {
         Ok(url) => {
             let mut a = Multiaddr::empty();

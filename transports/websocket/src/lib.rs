@@ -100,13 +100,13 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + Unpin + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + std::fmt::Debug + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Output = RwStreamSink<BytesConnection<T::Output>>;
-    type Error = Error<T::Error, T::Output>;
-    type Listener = MapStream<InnerStream<T::Output, T::Error, T::Output>, WrapperFn<T::Output>>;
-    type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error, T::Output>, WrapperFn<T::Output>>;
-    type Dial = MapFuture<InnerFuture<T::Output, T::Error, T::Output>, WrapperFn<T::Output>>;
+    type Error = Error<T::Error>;
+    type Listener = MapStream<InnerStream<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.transport.map(wrap_connection as WrapperFn<T::Output>).listen_on(addr)
@@ -118,10 +118,10 @@ where
 }
 
 /// Type alias corresponding to `framed::WsConfig::Listener`.
-pub type InnerStream<T, E, F> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E, F>>, Error<E, F>>>;
+pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
-pub type InnerFuture<T, E, F> = BoxFuture<'static, Result<Connection<T>, Error<E, F>>>;
+pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
 pub type WrapperFn<T> = fn(Connection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
