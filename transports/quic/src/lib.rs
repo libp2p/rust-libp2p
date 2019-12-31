@@ -63,7 +63,6 @@
 )]
 #![deny(trivial_casts)]
 mod certificate;
-mod connection;
 use async_macros::ready;
 use async_std::net::UdpSocket;
 pub use certificate::make_cert;
