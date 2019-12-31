@@ -75,11 +75,8 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     params.custom_extensions.push(libp2p_extension);
     params.alg = &LIBP2P_SIGNATURE_ALGORITHM;
     params.key_pair = Some(cert_keypair);
-    let cert = rcgen::Certificate::from_params(params)
+    rcgen::Certificate::from_params(params)
         .expect("certificate generation with valid params will succeed; qed");
-    webpki::EndEntityCert::from(&cert.serialize_der().expect("serializing will work; qed"))
-        .expect("we just made the certificate, so it is valid; qed");
-    cert
 }
 
 /// Read a bitvec into a vector of bytes.  Requires the bitvec to be a whole number of bytes.
