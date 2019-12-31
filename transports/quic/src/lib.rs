@@ -55,12 +55,13 @@
 //! `QuicEndpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![deny(unsafe_code, dead_code, warnings)]
+#![forbid(unused_must_use, unstable_features, warnings, missing_copy_implementations)]
+#![deny(trivial_casts)]
 mod certificate;
 mod connection;
-mod public_key_proto;
 use async_macros::ready;
 use async_std::net::UdpSocket;
+pub use certificate::make_cert;
 use futures::{
     channel::{mpsc, oneshot},
     prelude::*,
@@ -85,7 +86,6 @@ use std::{
     },
     time::Instant,
 };
-pub use certificate::make_cert;
 
 /// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
 ///

@@ -29,7 +29,6 @@ edition = "2018"
 rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
 libp2p-core = { path = "../../core", version = "0.13.1" }
 log = "0.4.8"
-tokio = { version = "0.2.2", features = ["rt-threaded"] }
 ipnet = "2.1.0"
 err-derive = "0.2.1"
 futures = { version = "0.3.1", package = "futures", features = ["compat"] }
@@ -40,6 +39,7 @@ async-macros = "2.0.0"
 futures-timer = "2.0.2"
 env_logger = "0.7.1"
 parking_lot = "0.10.0"
-rcgen = { version = "0.7.0", features = ["x509-parser"] }
+rcgen = "0.7.0"
 protobuf = "2.8.1"
 yasna = { version = "0.3.1", features = ["num-bigint"] }
+webpki = "0.21.0"

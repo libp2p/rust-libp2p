@@ -46,9 +46,7 @@ fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen
                 .write_bitvec_bytes(signature, signature.len() * 8);
         })
     });
-    let mut libp2p_extension = rcgen::CustomExtension::from_oid_content(LIBP2P_OID, contents);
-    libp2p_extension.set_criticality(true);
-    libp2p_extension
+    rcgen::CustomExtension::from_oid_content(LIBP2P_OID, contents)
 }
 
 fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::CustomExtension) {
@@ -77,8 +75,11 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     params.custom_extensions.push(libp2p_extension);
     params.alg = &LIBP2P_SIGNATURE_ALGORITHM;
     params.key_pair = Some(cert_keypair);
-    rcgen::Certificate::from_params(params)
-        .expect("certificate generation with valid params will succeed; qed")
+    let cert = rcgen::Certificate::from_params(params)
+        .expect("certificate generation with valid params will succeed; qed");
+    webpki::EndEntityCert::from(&cert.serialize_der().expect("serializing will work; qed"))
+        .expect("we just made the certificate, so it is valid; qed");
+    cert
 }
 
 /// Read a bitvec into a vector of bytes.  Requires the bitvec to be a whole number of bytes.
@@ -93,72 +94,11 @@ fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1E
     }
 }
 
-const SHA256_OID: &[u64] = &[2, 16, 840, 1, 101, 3, 4, 2, 1];
-const SHA384_OID: &[u64] = &[2, 16, 840, 1, 101, 3, 4, 2, 2];
-const SHA512_OID: &[u64] = &[2, 16, 840, 1, 101, 3, 4, 2, 3];
-const MGF1_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 10];
-const RSA_PSS_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 10];
-const SHA256_WITH_RSA_ENCRYPTION_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 11];
-const SHA384_WITH_RSA_ENCRYPTION_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 12];
-const SHA512_WITH_RSA_ENCRYPTION_OID: &[u64] = &[1, 2, 840, 113549, 1, 1, 13];
-
-/// Read an optional NULL.  Returns None for easier chaining.
-fn read_null(
-    reader: &mut yasna::BERReaderSeq,
-) -> Result<Option<yasna::models::ObjectIdentifier>, yasna::ASN1Error> {
-    reader
-        .read_optional(|reader| reader.read_null())
-        .map(|_| None)
-}
-
-/// Read an X.509 hash algorithm identifier.
-fn read_hash_algid(
-    reader: &mut yasna::BERReaderSeq,
-) -> Result<(yasna::models::ObjectIdentifier, u8), yasna::ASN1Error> {
-    // This is optional, but the default is SHA-1 which is insecure.
-    // So we treat it as required.
-    reader.next().read_sequence(|reader| {
-        let oid = reader.next().read_oid()?;
-        let length = match &**oid.components() {
-            SHA256_OID => 32,
-            SHA384_OID => 48,
-            SHA512_OID => 64,
-            _ => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
-        };
-        read_null(reader)?;
-        Ok((oid, length))
-    })
-}
-
 /// Read an X.509 Algorithm Identifier
 fn read_algid(reader: &mut yasna::BERReaderSeq) -> Result<AlgorithmIdentifier, yasna::ASN1Error> {
-    reader.next().read_sequence(|mut reader| {
+    reader.next().read_sequence(|reader| {
         let algorithm = reader.next().read_oid()?;
-        let parameters = match &**algorithm.components() {
-            RSA_PSS_OID => reader.next().read_sequence(|mut reader| {
-                let (hash_oid, length) = read_hash_algid(&mut reader)?;
-                reader.next().read_sequence(|mut reader| {
-                    let mgf = reader.next().read_oid()?;
-                    if &**mgf.components() != MGF1_OID || length != read_hash_algid(&mut reader)?.1
-                    {
-                        Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
-                    } else {
-                        Ok(())
-                    }
-                })?;
-                if reader.next().read_u8()? != length {
-                    Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
-                } else {
-                    Ok(Some(hash_oid))
-                }
-            }),
-            SHA256_WITH_RSA_ENCRYPTION_OID
-            | SHA384_WITH_RSA_ENCRYPTION_OID
-            | SHA512_WITH_RSA_ENCRYPTION_OID => read_null(&mut reader),
-            // _ => Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
-            _ => unimplemented!("non-RSA keys"),
-        }?;
-
+        let parameters = reader.read_optional(|reader| reader.read_der())?;
         Ok(AlgorithmIdentifier {
             algorithm,
             parameters,
@@ -171,7 +111,7 @@ struct AlgorithmIdentifier {
     #[cfg_attr(test, allow(dead_code))]
     algorithm: yasna::models::ObjectIdentifier,
     #[cfg_attr(test, allow(dead_code))]
-    parameters: Option<yasna::models::ObjectIdentifier>,
+    parameters: Option<Vec<u8>>,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -263,11 +203,59 @@ fn verify_libp2p_extension(
     })
 }
 
-/// Parse an X.509 certificate.  Does NOT verify it.
+fn compute_signature_algorithm(
+    key: &[u8],
+    alg: &AlgorithmIdentifier,
+) -> yasna::ASN1Result<&'static webpki::SignatureAlgorithm> {
+    #![cfg_attr(not(test), allow(dead_code))]
+    use webpki::*;
+    Ok(match (key.len(), &**alg.algorithm.components()) {
+        (32, &[1, 3, 101, 111]) => &ED25519,
+        (33, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P256_SHA256,
+        (65, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P256_SHA256,
+        (33, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P256_SHA384,
+        (65, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P256_SHA384,
+        (49, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P384_SHA256,
+        (97, &[1, 2, 840, 10045, 4, 3, 2]) => &ECDSA_P384_SHA256,
+        (49, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P384_SHA384,
+        (97, &[1, 2, 840, 10045, 4, 3, 3]) => &ECDSA_P384_SHA384,
+        (_, &[1, 2, 840, 113549, 1, 1, 11]) => &RSA_PKCS1_2048_8192_SHA256,
+        (_, &[1, 2, 840, 113549, 1, 1, 12]) => &RSA_PKCS1_2048_8192_SHA384,
+        (_, &[1, 2, 840, 113549, 1, 1, 13]) => &RSA_PKCS1_2048_8192_SHA512,
+        (_, &[1, 2, 840, 113549, 1, 1, 10]) => match alg.parameters {
+            None => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
+            Some(ref e) => yasna::parse_der(e, |reader| {
+                reader.read_sequence(|reader| {
+                    let keytype = reader.next().read_sequence(|reader| {
+                        let keytype = match &**reader.next().read_oid()?.components() {
+                            &[2, 16, 840, 1, 101, 3, 4, 2, 1] => {
+                                &RSA_PSS_2048_8192_SHA256_LEGACY_KEY
+                            }
+                            &[2, 16, 840, 1, 101, 3, 4, 2, 2] => {
+                                &RSA_PSS_2048_8192_SHA384_LEGACY_KEY
+                            }
+                            &[2, 16, 840, 1, 101, 3, 4, 2, 3] => {
+                                &RSA_PSS_2048_8192_SHA512_LEGACY_KEY
+                            }
+                            _ => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
+                        };
+                        reader.read_optional(|reader| reader.read_null())?;
+                        Ok(keytype)
+                    })?;
+                    reader.next().read_der()?; // ignore maskGenAlgorithm
+                    reader.next().read_der()?; // ignore saltLength
+                    Ok(keytype)
+                })
+            })?,
+        },
+        _ => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
+    })
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
-pub fn parse_certificate(
+fn parse_certificate(
     certificate: &[u8],
-) -> yasna::ASN1Result<(X509Certificate, identity::PublicKey)> {
+) -> yasna::ASN1Result<(X509Certificate, Vec<u8>, identity::PublicKey)> {
     trace!("parsing certificate");
     let raw_certificate = yasna::parse_der(certificate, |reader| {
         reader.read_sequence(|mut reader| {
@@ -281,7 +269,7 @@ pub fn parse_certificate(
             })
         })
     })?;
-    let (_certificate_key, identity_key) =
+    let (certificate_key, identity_key) =
         yasna::parse_der(&raw_certificate.tbs_certificate, |reader| {
             trace!("parsing TBScertificate");
             reader.read_sequence(|mut reader| {
@@ -302,25 +290,17 @@ pub fn parse_certificate(
                     );
                     Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?
                 }
-                reader
-                    .next()
-                    .read_sequence_of(|reader| reader.read_der().map(drop))?; // we don’t care about the issuer
+                reader.next().read_der()?; // we don’t care about the issuer
                 trace!("reading validity");
-                reader.next().read_sequence(|reader| {
-                    reader.next().read_der()?;
-                    reader.next().read_der()
-                })?; // we don’t care about the validity
+                reader.next().read_der()?; // we don’t care about the validity
                 trace!("reading subject");
-                reader
-                    .next()
-                    .read_sequence_of(|reader| reader.read_der().map(drop))?; // we don’t care about the subject
+                reader.next().read_der()?; // we don’t care about the subject
                 trace!("reading subjectPublicKeyInfo");
                 let key = reader.next().read_sequence(|mut reader| {
                     trace!("reading subject key algorithm");
-                    let _algid = read_algid(&mut reader)?;
+                    reader.next().read_der()?;
                     trace!("reading subject key");
-                    let key = read_bitvec(&mut reader)?;
-                    Ok(key)
+                    read_bitvec(&mut reader)
                 })?;
                 trace!("reading issuerUniqueId");
                 reader.read_optional(|reader| reader.read_bitvec_bytes())?; // we don’t care about the issuerUniqueId
@@ -331,7 +311,25 @@ pub fn parse_certificate(
                 Ok((key, identity_key))
             })
         })?;
-    Ok((raw_certificate, identity_key))
+    Ok((raw_certificate, certificate_key, identity_key))
+}
+
+pub fn verify_libp2p_certificate(certificate: &[u8]) -> Result<identity::PublicKey, ()> {
+    #![cfg_attr(not(test), allow(dead_code))]
+    let end_entity_cert = webpki::EndEntityCert::from(certificate)
+        .map_err(|e| log::debug!("webpki found invalid certificate: {:?}", e))?;
+    let (raw_certificate, certificate_key, identity_key): (_, Vec<u8>, _) =
+        parse_certificate(certificate).map_err(|e| log::debug!("error in parsing: {:?}", e))?;
+    let algorithm = compute_signature_algorithm(&certificate_key, &raw_certificate.algorithm)
+        .map_err(|e| log::debug!("error getting signature algorithm: {:?}", e))?;
+    end_entity_cert
+        .verify_signature(
+            &algorithm,
+            &raw_certificate.tbs_certificate,
+            &raw_certificate.signature_value,
+        )
+        .map_err(|e| log::debug!("error from webpki: {:?}", e))?;
+    Ok(identity_key)
 }
 
 #[cfg(test)]
@@ -342,9 +340,7 @@ mod test {
         drop(env_logger::try_init());
         let keypair = identity::Keypair::generate_ed25519();
         assert_eq!(
-            parse_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
-                .unwrap()
-                .1,
+            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
             keypair.public()
         );
         log::trace!("trying secp256k1!");
@@ -361,9 +357,8 @@ mod test {
         // );
         log::error!("have a valid key!");
         assert_eq!(
-            parse_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
+            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
                 .unwrap()
-                .1
                 .into_protobuf_encoding(),
             keypair.public().into_protobuf_encoding()
         );
