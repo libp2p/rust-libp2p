@@ -210,21 +210,22 @@ fn verify_libp2p_extension(
 fn compute_signature_algorithm(
     key: &[u8],
     alg: &AlgorithmIdentifier,
-) -> yasna::ASN1Result<&'static webpki::SignatureAlgorithm> {
+) -> yasna::ASN1Result<&'static dyn ring::signature::VerificationAlgorithm> {
     #![cfg_attr(not(test), allow(dead_code))]
     Ok(match (key.len(), &**alg.algorithm.components()) {
-        (32, &[1, 3, 101, 111]) => &webpki::ED25519,
-        (33, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P256_SHA256,
-        (65, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P256_SHA256,
-        (33, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P256_SHA384,
-        (65, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P256_SHA384,
-        (49, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P384_SHA256,
-        (97, &[1, 2, 840, 10045, 4, 3, 2]) => &webpki::ECDSA_P384_SHA256,
-        (49, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P384_SHA384,
-        (97, &[1, 2, 840, 10045, 4, 3, 3]) => &webpki::ECDSA_P384_SHA384,
-        (_, &[1, 2, 840, 113549, 1, 1, 11]) => &webpki::RSA_PKCS1_2048_8192_SHA256,
-        (_, &[1, 2, 840, 113549, 1, 1, 12]) => &webpki::RSA_PKCS1_2048_8192_SHA384,
-        (_, &[1, 2, 840, 113549, 1, 1, 13]) => &webpki::RSA_PKCS1_2048_8192_SHA512,
+        (32, &[1, 3, 101, 111]) => &ring::signature::ED25519,
+        (33, &[1, 2, 840, 10045, 4, 3, 2]) => &ring::signature::ECDSA_P256_SHA256_ASN1,
+        (65, &[1, 2, 840, 10045, 4, 3, 2]) => &ring::signature::ECDSA_P256_SHA256_ASN1,
+        (33, &[1, 2, 840, 10045, 4, 3, 3]) => &ring::signature::ECDSA_P256_SHA384_ASN1,
+        (65, &[1, 2, 840, 10045, 4, 3, 3]) => &ring::signature::ECDSA_P256_SHA384_ASN1,
+        (49, &[1, 2, 840, 10045, 4, 3, 2]) => &ring::signature::ECDSA_P384_SHA256_ASN1,
+        (97, &[1, 2, 840, 10045, 4, 3, 2]) => &ring::signature::ECDSA_P384_SHA256_ASN1,
+        (49, &[1, 2, 840, 10045, 4, 3, 3]) => &ring::signature::ECDSA_P384_SHA384_ASN1,
+        (97, &[1, 2, 840, 10045, 4, 3, 3]) => &ring::signature::ECDSA_P384_SHA384_ASN1,
+        (_, &[1, 2, 840, 113549, 1, 1, 11]) => &ring::signature::RSA_PKCS1_2048_8192_SHA256,
+        (_, &[1, 2, 840, 113549, 1, 1, 12]) => &ring::signature::RSA_PKCS1_2048_8192_SHA384,
+        (_, &[1, 2, 840, 113549, 1, 1, 13]) => &ring::signature::RSA_PKCS1_2048_8192_SHA512,
+        (_, &[1, 2, 840, 113549, 1, 1, 14]) => &ring::signature::RSA_PKCS1_3072_8192_SHA384,
         (_, &[1, 2, 840, 113549, 1, 1, 10]) => match alg.parameters {
             None => return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid)),
             Some(ref e) => yasna::parse_der(e, |reader| {
@@ -232,13 +233,13 @@ fn compute_signature_algorithm(
                     let keytype = reader.next().read_sequence(|reader| {
                         let keytype = match &**reader.next().read_oid()?.components() {
                             &[2, 16, 840, 1, 101, 3, 4, 2, 1] => {
-                                &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY
+                                &ring::signature::RSA_PSS_2048_8192_SHA256
                             }
                             &[2, 16, 840, 1, 101, 3, 4, 2, 2] => {
-                                &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY
+                                &ring::signature::RSA_PSS_2048_8192_SHA384
                             }
                             &[2, 16, 840, 1, 101, 3, 4, 2, 3] => {
-                                &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY
+                                &ring::signature::RSA_PSS_2048_8192_SHA512
                             }
                             _ => {
                                 warn!("unsupported signature algorithm, rejecting!");
@@ -318,21 +319,26 @@ fn parse_certificate(
     Ok((raw_certificate, certificate_key, identity_key))
 }
 
-pub fn verify_libp2p_certificate(certificate: &[u8]) -> Result<identity::PublicKey, ()> {
+/// The name is a misnomer. We don’t bother checking if the certificate is actually well-formed.
+/// We just check that its self-signature is valid, and that its public key is suitably signed.
+pub fn verify_libp2p_certificate(
+    certificate: &[u8],
+) -> Result<identity::PublicKey, ring::error::Unspecified> {
     #![cfg_attr(not(test), allow(dead_code))]
-    let end_entity_cert = webpki::EndEntityCert::from(certificate)
-        .map_err(|e| log::debug!("webpki found invalid certificate: {:?}", e))?;
     let (raw_certificate, certificate_key, identity_key): (_, Vec<u8>, _) =
-        parse_certificate(certificate).map_err(|e| log::debug!("error in parsing: {:?}", e))?;
+        parse_certificate(certificate).map_err(|e| {
+            log::debug!("error in parsing: {:?}", e);
+            ring::error::Unspecified
+        })?;
     let algorithm = compute_signature_algorithm(&certificate_key, &raw_certificate.algorithm)
-        .map_err(|e| log::debug!("error getting signature algorithm: {:?}", e))?;
-    end_entity_cert
-        .verify_signature(
-            &algorithm,
-            &raw_certificate.tbs_certificate,
-            &raw_certificate.signature_value,
-        )
-        .map_err(|e| log::debug!("error from webpki: {:?}", e))?;
+        .map_err(|e| {
+            log::debug!("error getting signature algorithm: {:?}", e);
+            ring::error::Unspecified
+        })?;
+    ring::signature::UnparsedPublicKey::new(algorithm, &certificate_key).verify(
+        &raw_certificate.tbs_certificate,
+        &raw_certificate.signature_value,
+    )?;
     Ok(identity_key)
 }
 

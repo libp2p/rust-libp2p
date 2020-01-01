@@ -31,7 +31,7 @@
 //! use libp2p_core::Multiaddr;
 //!
 //! # fn main() {
-//! let quic_config = QuicConfig::new();
+//! let quic_config = QuicConfig::default();
 //! let quic_endpoint = QuicEndpoint::new(
 //!     &quic_config,
 //!     "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?"),
@@ -63,6 +63,7 @@
 )]
 #![deny(trivial_casts)]
 mod certificate;
+mod verifier;
 use async_macros::ready;
 use async_std::net::UdpSocket;
 pub use certificate::make_cert;
@@ -95,7 +96,7 @@ use std::{
 ///
 /// The QUIC endpoints created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct QuicConfig {
     /// The client configuration.  Quinn provides functions for making one.
     pub client_config: quinn_proto::ClientConfig,
@@ -105,10 +106,64 @@ pub struct QuicConfig {
     pub endpoint_config: Arc<quinn_proto::EndpointConfig>,
 }
 
-impl QuicConfig {
+fn make_client_config(
+    certificate: rustls::Certificate,
+    key: rustls::PrivateKey,
+) -> quinn_proto::ClientConfig {
+    let mut transport = quinn_proto::TransportConfig::default();
+    transport.stream_window_uni = 0;
+    transport.datagram_receive_buffer_size = None;
+    let mut crypto = rustls::ClientConfig::new();
+    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
+    crypto.enable_early_data = true;
+    crypto.set_single_client_cert(vec![certificate], key);
+    let verifier = verifier::VeryInsecureAllowAllCertificatesWithoutChecking;
+    crypto
+        .dangerous()
+        .set_certificate_verifier(Arc::new(verifier));
+    quinn_proto::ClientConfig {
+        transport: Arc::new(transport),
+        crypto: Arc::new(crypto),
+    }
+}
+
+fn make_server_config(
+    certificate: rustls::Certificate,
+    key: rustls::PrivateKey,
+) -> quinn_proto::ServerConfig {
+    let mut transport = quinn_proto::TransportConfig::default();
+    transport.stream_window_uni = 0;
+    transport.datagram_receive_buffer_size = None;
+    let mut crypto = rustls::ServerConfig::new(Arc::new(
+        verifier::VeryInsecureRequireClientCertificateButDoNotCheckIt,
+    ));
+    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
+    crypto
+        .set_single_cert(vec![certificate], key)
+        .expect("we are given a valid cert; qed");
+    let mut config = quinn_proto::ServerConfig::default();
+    config.transport = Arc::new(transport);
+    config.crypto = Arc::new(crypto);
+    config
+}
+
+impl Default for QuicConfig {
     /// Creates a new configuration object for TCP/IP.
-    pub fn new() -> Self {
-        Self::default()
+    fn default() -> Self {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let cert = make_cert(&keypair);
+        let (cert, key) = (
+            rustls::Certificate(
+                cert.serialize_der()
+                    .expect("serialization of a valid cert will succeed; qed"),
+            ),
+            rustls::PrivateKey(cert.serialize_private_key_der()),
+        );
+        Self {
+            client_config: make_client_config(cert.clone(), key.clone()),
+            server_config: Arc::new(make_server_config(cert, key)),
+            endpoint_config: Default::default(),
+        }
     }
 }
 
@@ -330,11 +385,11 @@ impl AsyncWrite for QuicStream {
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Ready(Ok(()))
+        unimplemented!()
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Ready(Ok(()))
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.poll_write(cx, b"").map_ok(drop)
     }
 }
 
@@ -765,10 +820,12 @@ impl Muxer {
         use quinn_proto::Event;
         while let Some(event) = self.connection.poll() {
             match event {
-                Event::StreamOpened { dir: Dir::Uni } => {
-                    trace!("Unidirectional stream opened!");
+                Event::StreamOpened { dir: Dir::Uni } | Event::DatagramReceived => {
+                    panic!("we disabled incoming unidirectional streams and datagrams")
                 }
-                Event::StreamAvailable { dir: Dir::Uni } | Event::DatagramReceived => continue,
+                Event::StreamAvailable { dir: Dir::Uni } => {
+                    panic!("we don’t use unidirectional streams")
+                }
                 Event::StreamReadable { stream } => {
                     trace!("Stream {:?} readable", stream);
                     // Wake up the task waiting on us (if any)
@@ -920,6 +977,10 @@ impl Future for ConnectionDriver {
                 match update {
                     TimerSetting::Stop => timers[timer] = None,
                     TimerSetting::Start(instant) => {
+                        if instant < now {
+                            needs_timer_update = true;
+                            continue;
+                        }
                         trace!("setting timer {:?} for {:?}", timer, instant - now);
                         let mut new_timer = futures_timer::Delay::new(instant - now);
                         match new_timer.poll_unpin(cx) {
@@ -976,12 +1037,12 @@ mod tests {
     fn wildcard_expansion() {
         init();
         let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
-        let listener = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
+        let listener = QuicEndpoint::new(&QuicConfig::default(), addr.clone())
             .expect("endpoint")
             .listen_on(addr)
             .expect("listener");
         let addr: Multiaddr = "/ip4/127.0.0.1/udp/1236/quic".parse().unwrap();
-        let client = QuicEndpoint::new(&QuicConfig::new(), addr.clone())
+        let client = QuicEndpoint::new(&QuicConfig::default(), addr.clone())
             .expect("endpoint")
             .dial(addr)
             .expect("dialer");
@@ -1072,7 +1133,7 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        use super::trace;
+        use super::{trace, StreamMuxer};
         init();
         let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
         let mut ready_tx = Some(ready_tx);
@@ -1081,7 +1142,7 @@ mod tests {
             let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
                 .parse()
                 .expect("bad address?");
-            let quic_config = QuicConfig::new();
+            let quic_config = QuicConfig::default();
             let quic_endpoint = QuicEndpoint::new(&quic_config, addr.clone()).expect("I/O error");
             let mut listener = quic_endpoint.listen_on(addr).unwrap();
 
@@ -1092,11 +1153,14 @@ mod tests {
                         ready_tx.take().unwrap().send(listen_addr).unwrap();
                     }
                     ListenerEvent::Upgrade { upgrade, .. } => {
-                        let mut upgrade = upgrade.await.unwrap().next().await.unwrap();
+                        let mut muxer = upgrade.await.expect("upgrade failed");
+                        let mut socket = muxer.next().await.expect("no incoming stream");
+                        log::warn!("writing data!");
+                        socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
+
                         let mut buf = [0u8; 3];
-                        upgrade.read_exact(&mut buf).await.unwrap();
-                        assert_eq!(buf, [1, 2, 3]);
-                        upgrade.write_all(&[4, 5, 6]).await.unwrap();
+                        socket.read_exact(&mut buf).await.unwrap();
+                        assert_eq!(buf, [4, 5, 6]);
                     }
                     _ => unreachable!(),
                 }
@@ -1105,28 +1169,31 @@ mod tests {
 
         async_std::task::block_on(async move {
             let addr = ready_rx.await.unwrap();
-            let quic_config = QuicConfig::new();
+            let quic_config = QuicConfig::default();
             let quic_endpoint = QuicEndpoint::new(
                 &quic_config,
                 "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
             )
             .unwrap();
             // Obtain a future socket through dialing
-            let mut connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
+            let connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
             trace!("Received a Connection: {:?}", connection);
-            let mut socket = connection.next().await.unwrap();
-            socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
-
+            let mut stream = super::QuicStream {
+                id: connection.open_outbound().await.expect("failed"),
+                muxer: connection.clone(),
+            };
+            log::warn!("have a new stream!");
             let mut buf = [0u8; 3];
-            socket.read_exact(&mut buf).await.unwrap();
-            assert_eq!(buf, [4, 5, 6]);
+            stream.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, [1u8, 2, 3]);
+            stream.write_all(&[4u8, 5, 6]).await.unwrap();
         });
     }
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
         init();
-        let quic = QuicConfig::new();
+        let quic = QuicConfig::default();
 
         let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().ends_with("udp/0/quic"));
@@ -1146,7 +1213,7 @@ mod tests {
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
         init();
-        let config = QuicConfig::new();
+        let config = QuicConfig::default();
 
         let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
         assert!(addr.to_string().contains("udp/0/quic"));
@@ -1165,7 +1232,7 @@ mod tests {
     #[test]
     fn larger_addr_denied() {
         init();
-        let config = QuicConfig::new();
+        let config = QuicConfig::default();
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()
             .unwrap();
