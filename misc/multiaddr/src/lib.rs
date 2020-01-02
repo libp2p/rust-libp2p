@@ -7,7 +7,7 @@ mod errors;
 mod from_url;
 mod util;
 
-use bytes::Bytes;
+use bytes::BytesMut;
 use serde::{
     Deserialize,
     Deserializer,
@@ -29,17 +29,17 @@ pub use self::protocol::Protocol;
 
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]
-pub struct Multiaddr { bytes: Bytes }
+pub struct Multiaddr { bytes: BytesMut }
 
 impl Multiaddr {
     /// Create a new, empty multiaddress.
     pub fn empty() -> Self {
-        Self { bytes: Bytes::new() }
+        Self { bytes: BytesMut::new() }
     }
 
     /// Create a new, empty multiaddress with the given capacity.
     pub fn with_capacity(n: usize) -> Self {
-        Self { bytes: Bytes::with_capacity(n) }
+        Self { bytes: BytesMut::with_capacity(n) }
     }
 
     /// Return the length in bytes of this multiaddress.
@@ -99,19 +99,9 @@ impl Multiaddr {
 
     /// Like [`push`] but more efficient if this `Multiaddr` has no living clones.
     pub fn with(self, p: Protocol<'_>) -> Self {
-        match self.bytes.try_mut() {
-            Ok(bytes) => {
-                let mut w = util::BytesWriter(bytes);
-                p.write_bytes(&mut w).expect("Writing to a `BytesWriter` never fails.");
-                Multiaddr { bytes: w.0.freeze() }
-            }
-            Err(mut bytes) => {
-                let mut w = Vec::new();
-                p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
-                bytes.extend_from_slice(&w);
-                Multiaddr { bytes }
-            }
-        }
+        let mut w = util::BytesWriter(self.bytes);
+        p.write_bytes(&mut w).expect("Writing to a `BytesWriter` never fails.");
+        Multiaddr { bytes: w.0 }
     }
 
     /// Returns the components of this multiaddress.
@@ -217,7 +207,7 @@ impl<'a> FromIterator<Protocol<'a>> for Multiaddr {
         for cmp in iter {
             cmp.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
         }
-        Multiaddr { bytes: writer.into() }
+        Multiaddr { bytes: BytesMut::from_iter(writer) }
     }
 }
 
@@ -238,7 +228,7 @@ impl FromStr for Multiaddr {
             p.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
         }
 
-        Ok(Multiaddr { bytes: writer.into() })
+        Ok(Multiaddr { bytes: BytesMut::from_iter(writer) })
     }
 }
 
@@ -265,7 +255,7 @@ impl<'a> From<Protocol<'a>> for Multiaddr {
     fn from(p: Protocol<'a>) -> Multiaddr {
         let mut w = Vec::new();
         p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
-        Multiaddr { bytes: w.into() }
+        Multiaddr { bytes: BytesMut::from_iter(w) }
     }
 }
 
@@ -300,7 +290,7 @@ impl TryFrom<Vec<u8>> for Multiaddr {
             let (_, s) = Protocol::from_bytes(slice)?;
             slice = s
         }
-        Ok(Multiaddr { bytes: v.into() })
+        Ok(Multiaddr { bytes: BytesMut::from_iter(v) })
     }
 }
 
