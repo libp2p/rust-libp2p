@@ -16,5 +16,5 @@ bytes = "0.4.12"
 log = "0.4.8"
 void = "1.0.2"
 tokio-io = "0.1.12"
-protobuf = "=2.8.1" # note: there exists some semver issues with protobuf at the moment
+protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
