@@ -2,6 +2,11 @@
 
 - Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
 
+# Version 0.13.2 (2020-01-02)
+
+- Fixed the `libp2p-noise` handshake not flushing the underlying stream before waiting for a response.
+- Fixed semver issue with the `protobuf` crate.
+
 # Version 0.13.1 (2019-11-13)
 
 - Maintenance release to bump dependencies and deal with an accidental breaking change in multihash 0.1.4.
