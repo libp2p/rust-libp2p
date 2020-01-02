@@ -46,20 +46,21 @@
 //!
 //! The two nodes should then connect.
 
+use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
 use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
 use libp2p::{
     gossipsub, identity,
-    tokio_codec::{FramedRead, LinesCodec},
     PeerId,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
 
     // Create a random PeerId
@@ -68,7 +69,7 @@ fn main() {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key);
+    let transport = libp2p::build_development_transport(local_key)?;
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net".into());
@@ -113,23 +114,22 @@ fn main() {
     }
 
     // Read full lines from stdin
-    let stdin = tokio_stdin_stdout::stdin(0);
-    let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Kick it off
     let mut listening = false;
-    tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
+    task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
-            match framed_stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(line)) => swarm.publish(&topic, line.as_bytes()),
-                Async::Ready(None) => panic!("Stdin closed"),
-                Async::NotReady => break,
+            match stdin.try_poll_next_unpin(cx)? {
+                Poll::Ready(Some(line)) => swarm.publish(&topic, line.as_bytes()),
+                Poll::Ready(None) => panic!("Stdin closed"),
+                Poll::Pending => break,
             };
         }
 
         loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(gossip_event)) => match gossip_event {
+            match swarm.poll_next_unpin(cx) {
+                Poll::Ready(Some(gossip_event)) => match gossip_event {
                     GossipsubEvent::Message(peer_id, id, message) => println!(
                         "Got message: {} with id: {} from peer: {:?}",
                         String::from_utf8_lossy(&message.data),
@@ -138,7 +138,7 @@ fn main() {
                     ),
                     _ => {}
                 },
-                Async::Ready(None) | Async::NotReady => break,
+                Poll::Ready(None) | Poll::Pending => break,
             }
         }
 
@@ -149,6 +149,6 @@ fn main() {
             }
         }
 
-        Ok(Async::NotReady)
-    }));
+        Poll::Pending
+    }))
 }
