@@ -2,7 +2,7 @@
 name = "libp2p-identify"
 edition = "2018"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.13.1"
+version = "0.13.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../misc/multiaddr" }
-protobuf = "2.8"
+protobuf = "=2.8.1" # note: there exists some semver issues with protobuf at the moment
 smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1.0"

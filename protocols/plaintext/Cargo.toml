@@ -2,7 +2,7 @@
 name = "libp2p-plaintext"
 edition = "2018"
 description = "Plaintext encryption dummy protocol for libp2p"
-version = "0.13.0"
+version = "0.13.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,5 +16,5 @@ bytes = "0.4.12"
 log = "0.4.8"
 void = "1.0.2"
 tokio-io = "0.1.12"
-protobuf = "2.8.1"
+protobuf = "=2.8.1" # note: there exists some semver issues with protobuf at the moment
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
