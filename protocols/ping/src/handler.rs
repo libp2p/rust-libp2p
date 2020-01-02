@@ -282,7 +282,7 @@ mod tests {
     fn tick(h: &mut PingHandler<TcpStream>)
         -> ProtocolsHandlerEvent<protocol::Ping, (), PingResult, PingFailure>
     {
-        futures::executor::block_on(future::poll_fn(|cx| h.poll(cx) ))
+        async_std::task::block_on(future::poll_fn(|cx| h.poll(cx) ))
     }
 
     #[test]

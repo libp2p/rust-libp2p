@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn incoming_event() {
-        futures::executor::block_on(async move {
+        async_std::task::block_on(async move {
             let mem_transport = transport::MemoryTransport::default();
 
             let mut listeners = ListenersStream::new(mem_transport);
