@@ -49,7 +49,6 @@ use log::{debug, trace};
 use std::{
     collections::VecDeque,
     io,
-    iter::{self, FromIterator},
     net::{IpAddr, SocketAddr},
     pin::Pin,
     task::{Context, Poll},
@@ -450,7 +449,7 @@ mod tests {
             .for_each(|_| futures::future::ready(()));
 
         let client = TcpConfig::new().dial(addr).expect("dialer");
-        futures::executor::block_on(futures::future::join(server, client)).1.unwrap();
+        async_std::task::block_on(futures::future::join(server, client)).1.unwrap();
     }
 
     #[test]

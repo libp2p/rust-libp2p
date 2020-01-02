@@ -58,7 +58,6 @@ pub enum KadConnectionType {
 }
 
 impl From<proto::Message_ConnectionType> for KadConnectionType {
-    #[inline]
     fn from(raw: proto::Message_ConnectionType) -> KadConnectionType {
         use proto::Message_ConnectionType::{
             CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
@@ -73,7 +72,6 @@ impl From<proto::Message_ConnectionType> for KadConnectionType {
 }
 
 impl Into<proto::Message_ConnectionType> for KadConnectionType {
-    #[inline]
     fn into(self) -> proto::Message_ConnectionType {
         use proto::Message_ConnectionType::{
             CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
@@ -181,7 +179,6 @@ where
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    #[inline]
     fn upgrade_inbound(self, incoming: Negotiated<C>, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
         codec.set_max_len(4096);
@@ -191,7 +188,9 @@ where
                 .err_into()
                 .with::<_, _, fn(_) -> _, _>(|response| {
                     let proto_struct = resp_msg_to_proto(response);
-                    future::ready(proto_struct.write_to_bytes().map_err(invalid_data))
+                    future::ready(proto_struct.write_to_bytes()
+                        .map(io::Cursor::new)
+                        .map_err(invalid_data))
                 })
                 .and_then::<_, fn(_) -> _>(|bytes| {
                     let request = match protobuf::parse_from_bytes(&bytes) {
@@ -212,7 +211,6 @@ where
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    #[inline]
     fn upgrade_outbound(self, incoming: Negotiated<C>, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
         codec.set_max_len(4096);
@@ -222,7 +220,9 @@ where
                 .err_into()
                 .with::<_, _, fn(_) -> _, _>(|request| {
                     let proto_struct = req_msg_to_proto(request);
-                    future::ready(proto_struct.write_to_bytes().map_err(invalid_data))
+                    future::ready(proto_struct.write_to_bytes()
+                        .map(io::Cursor::new)
+                        .map_err(invalid_data))
                 })
                 .and_then::<_, fn(_) -> _>(|bytes| {
                     let response = match protobuf::parse_from_bytes(&bytes) {
@@ -243,11 +243,11 @@ pub type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
 
 pub type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
-        stream::ErrInto<Framed<S, UviBytes<Vec<u8>>>, io::Error>,
-        Vec<u8>,
+        stream::ErrInto<Framed<S, UviBytes<io::Cursor<Vec<u8>>>>, io::Error>,
+        io::Cursor<Vec<u8>>,
         A,
-        future::Ready<Result<Vec<u8>, io::Error>>,
-        fn(A) -> future::Ready<Result<Vec<u8>, io::Error>>,
+        future::Ready<Result<io::Cursor<Vec<u8>>, io::Error>>,
+        fn(A) -> future::Ready<Result<io::Cursor<Vec<u8>>, io::Error>>,
     >,
     future::Ready<Result<B, io::Error>>,
     fn(BytesMut) -> future::Ready<Result<B, io::Error>>,

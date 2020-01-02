@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Transport, transport::{TransportError, ListenerEvent}};
-use bytes::IntoBuf;
 use fnv::FnvHashMap;
 use futures::{future::{self, Ready}, prelude::*, channel::mpsc, task::Context, task::Poll};
 use lazy_static::lazy_static;
@@ -271,8 +270,7 @@ impl<T> Sink<T> for Chan<T> {
     }
 }
 
-impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
-    #[inline]
+impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
     fn into(self) -> RwStreamSink<Chan<T>> {
         RwStreamSink::new(self)
     }

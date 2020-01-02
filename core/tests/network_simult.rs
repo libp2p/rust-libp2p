@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod util;
-
 use futures::prelude::*;
 use libp2p_core::{identity, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
@@ -111,10 +109,7 @@ fn raw_swarm_simultaneous_connect() {
             let transport = libp2p_tcp::TcpConfig::new()
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
-                .multiplex(libp2p_mplex::MplexConfig::new())
-                .and_then(|(peer, mplex), _| {
-                    util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-                });
+                .multiplex(libp2p_mplex::MplexConfig::new());
             Network::new(transport, local_public_key.into_peer_id())
         };
 
@@ -124,10 +119,7 @@ fn raw_swarm_simultaneous_connect() {
             let transport = libp2p_tcp::TcpConfig::new()
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
-                .multiplex(libp2p_mplex::MplexConfig::new())
-                .and_then(|(peer, mplex), _| {
-                    util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-                });
+                .multiplex(libp2p_mplex::MplexConfig::new());
             Network::new(transport, local_public_key.into_peer_id())
         };
 
@@ -160,7 +152,7 @@ fn raw_swarm_simultaneous_connect() {
             Dialing,
             Connected,
             Replaced,
-            Errored
+            Denied
         }
 
         loop {
@@ -170,7 +162,7 @@ fn raw_swarm_simultaneous_connect() {
             let mut swarm1_dial_start = Delay::new(Duration::new(0, rand::random::<u32>() % 50_000_000));
             let mut swarm2_dial_start = Delay::new(Duration::new(0, rand::random::<u32>() % 50_000_000));
 
-            let future = future::poll_fn(|cx| -> Poll<bool> {
+            let future = future::poll_fn(|cx| {
                 loop {
                     let mut swarm1_not_ready = false;
                     let mut swarm2_not_ready = false;
@@ -210,7 +202,7 @@ fn raw_swarm_simultaneous_connect() {
                                 error: IncomingError::DeniedLowerPriority, ..
                             }) => {
                                 assert_eq!(swarm1_step, Step::Connected);
-                                swarm1_step = Step::Errored
+                                swarm1_step = Step::Denied
                             }
                             Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm2.local_peer_id());
@@ -241,7 +233,7 @@ fn raw_swarm_simultaneous_connect() {
                                 error: IncomingError::DeniedLowerPriority, ..
                             }) => {
                                 assert_eq!(swarm2_step, Step::Connected);
-                                swarm2_step = Step::Errored
+                                swarm2_step = Step::Denied
                             }
                             Poll::Ready(NetworkEvent::Connected { conn_info, .. }) => {
                                 assert_eq!(conn_info, *swarm1.local_peer_id());
@@ -268,9 +260,12 @@ fn raw_swarm_simultaneous_connect() {
 
                     match (swarm1_step, swarm2_step) {
                         | (Step::Connected, Step::Replaced)
-                        | (Step::Connected, Step::Errored)
+                        | (Step::Connected, Step::Denied)
                         | (Step::Replaced, Step::Connected)
-                        | (Step::Errored, Step::Connected) => return Poll::Ready(true),
+                        | (Step::Replaced, Step::Denied)
+                        | (Step::Replaced, Step::Replaced)
+                        | (Step::Denied, Step::Connected)
+                        | (Step::Denied, Step::Replaced) => return Poll::Ready(true),
                         _else => ()
                     }
 
@@ -280,7 +275,7 @@ fn raw_swarm_simultaneous_connect() {
                 }
             });
 
-            if futures::executor::block_on(future) {
+            if async_std::task::block_on(future) {
                 // The test exercised what we wanted to exercise: a simultaneous connect.
                 break
             }

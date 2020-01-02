@@ -7,7 +7,7 @@ mod errors;
 mod from_url;
 mod util;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use get_if_addrs::{get_if_addrs, IfAddr};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{
@@ -293,10 +293,10 @@ impl From<Ipv6Addr> for Multiaddr {
     }
 }
 
-impl TryFrom<Bytes> for Multiaddr {
+impl TryFrom<Vec<u8>> for Multiaddr {
     type Error = Error;
 
-    fn try_from(v: Bytes) -> Result<Self> {
+    fn try_from(v: Vec<u8>) -> Result<Self> {
         // Check if the argument is a valid `Multiaddr` by reading its protocols.
         let mut slice = &v[..];
         while !slice.is_empty() {
@@ -340,22 +340,6 @@ pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, IpNet, Mul
         addrs.push((ip, ipn, ma))
     }
     Ok(addrs)
-}
-
-impl TryFrom<BytesMut> for Multiaddr {
-    type Error = Error;
-
-    fn try_from(v: BytesMut) -> Result<Self> {
-        Multiaddr::try_from(v.freeze())
-    }
-}
-
-impl TryFrom<Vec<u8>> for Multiaddr {
-    type Error = Error;
-
-    fn try_from(v: Vec<u8>) -> Result<Self> {
-        Multiaddr::try_from(Bytes::from(v))
-    }
 }
 
 impl TryFrom<String> for Multiaddr {

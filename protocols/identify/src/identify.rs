@@ -315,7 +315,7 @@ mod tests {
         // it will permit the connection to be closed, as defined by
         // `IdentifyHandler::connection_keep_alive`. Hence the test succeeds if
         // either `Identified` event arrives correctly.
-        futures::executor::block_on(async move {
+        async_std::task::block_on(async move {
             loop {
                 match future::select(swarm1.next(), swarm2.next()).await.factor_second().0 {
                     future::Either::Left(Some(Ok(IdentifyEvent::Received { info, .. }))) => {

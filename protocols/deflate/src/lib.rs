@@ -71,6 +71,7 @@ where
 }
 
 /// Decodes and encodes traffic using DEFLATE.
+#[derive(Debug)]
 pub struct DeflateOutput<S> {
     /// Inner stream where we read compressed data from and write compressed data to.
     inner: S,

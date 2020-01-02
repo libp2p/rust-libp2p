@@ -11,15 +11,15 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-tls = "0.6"
-bytes = "0.4.12"
+bytes = "0.5"
 either = "1.5.3"
 futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.8"
-quicksink = { git = "https://github.com/paritytech/quicksink.git" }
+quicksink = "0.1"
 rustls = "0.16"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
-soketto = { git = "https://github.com/paritytech/soketto.git", branch = "develop", features = ["deflate"] }
+soketto = { version = "0.3", features = ["deflate"] }
 url = "2.1"
 webpki = "0.21"
 webpki-roots = "0.18"

@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered, task::SpawnExt as _};
+use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered};
 use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 
@@ -177,7 +177,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
 
         let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
         if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn(task).expect("spawning a task on a thread pool never fails; qed");
+            threads_pool.spawn_ok(task);
         } else {
             self.local_spawns.push(task);
         }
@@ -213,7 +213,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
         if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn(Box::pin(task)).expect("spawning a task on a threads pool never fails; qed");
+            threads_pool.spawn_ok(Box::pin(task));
         } else {
             self.local_spawns.push(Box::pin(task));
         }

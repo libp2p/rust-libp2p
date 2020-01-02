@@ -174,7 +174,7 @@ where
 
         match Pin::new(&mut this.timer).poll(cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(()) => Poll::Ready(Err(TransportTimeoutError::Timeout)),
+            Poll::Ready(()) => Poll::Ready(Err(TransportTimeoutError::Timeout))
         }
     }
 }
