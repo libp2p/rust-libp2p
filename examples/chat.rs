@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
-    // Use the derive to generate delegating NetworkBehaviour impl and requires the
+    // Use the derive to generate delegating NetworkBehaviour impl and require the
     // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
