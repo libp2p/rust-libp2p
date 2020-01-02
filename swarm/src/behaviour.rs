@@ -36,8 +36,8 @@ use std::{error, task::Context, task::Poll};
 /// [`NetworkBehaviourEventProcess`](trait.NetworkBehaviourEventProcess.html) implementations which
 /// are expected to be provided by the user.
 ///
-/// Optionally one can implement a custom `poll` function, which needs to be tagged with the `#[behaviour(poll_method = "poll")]` attribute, and would be called last with no parameters.
-/// poll method on the struct. The `poll` method takes no parameters and should return
+/// Optionally one can implement a custom `poll` function, which needs to be tagged with the
+/// `#[behaviour(poll_method = "poll")]` attribute, and would be called last with no parameters.
 ///
 /// By default the derive sets the `NetworkBehaviour::OutEvent` as `()` but this can be overriden
 /// with `#[behaviour(out_event = "AnotherType")]`.
