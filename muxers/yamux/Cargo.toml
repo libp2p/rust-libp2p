@@ -15,4 +15,4 @@ libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.8"
 parking_lot = "0.9"
 thiserror = "1.0"
-yamux = { git = "https://github.com/paritytech/yamux.git", branch = "develop" }
+yamux = "0.4"

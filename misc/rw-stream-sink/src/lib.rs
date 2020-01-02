@@ -25,26 +25,19 @@
 //! Each call to [`AsyncWrite::poll_write`] will send one packet to the sink.
 //! Calls to [`AsyncRead::read`] will read from the stream's incoming packets.
 
-use bytes::{IntoBuf, Buf};
 use futures::{prelude::*, ready};
-use std::{io, pin::Pin, task::{Context, Poll}};
+use std::{io::{self, Read}, pin::Pin, task::{Context, Poll}};
+
+static_assertions::const_assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
 
 /// Wraps a [`Stream`] and [`Sink`] whose items are buffers.
 /// Implements [`AsyncRead`] and [`AsyncWrite`].
-pub struct RwStreamSink<S>
-where
-    S: TryStream,
-    <S as TryStream>::Ok: IntoBuf
-{
+pub struct RwStreamSink<S: TryStream> {
     inner: S,
-    current_item: Option<<<S as TryStream>::Ok as IntoBuf>::Buf>
+    current_item: Option<std::io::Cursor<<S as TryStream>::Ok>>
 }
 
-impl<S> RwStreamSink<S>
-where
-    S: TryStream,
-    <S as TryStream>::Ok: IntoBuf
-{
+impl<S: TryStream> RwStreamSink<S> {
     /// Wraps around `inner`.
     pub fn new(inner: S) -> Self {
         RwStreamSink { inner, current_item: None }
@@ -54,35 +47,32 @@ where
 impl<S> AsyncRead for RwStreamSink<S>
 where
     S: TryStream<Error = io::Error> + Unpin,
-    <S as TryStream>::Ok: IntoBuf
+    <S as TryStream>::Ok: AsRef<[u8]>
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         // Grab the item to copy from.
         let item_to_copy = loop {
             if let Some(ref mut i) = self.current_item {
-                if i.has_remaining() {
+                if i.position() < i.get_ref().as_ref().len() as u64 {
                     break i
                 }
             }
             self.current_item = Some(match ready!(self.inner.try_poll_next_unpin(cx)) {
-                Some(Ok(i)) => i.into_buf(),
+                Some(Ok(i)) => std::io::Cursor::new(i),
                 Some(Err(e)) => return Poll::Ready(Err(e)),
                 None => return Poll::Ready(Ok(0)) // EOF
             });
         };
 
         // Copy it!
-        debug_assert!(item_to_copy.has_remaining());
-        let to_copy = std::cmp::min(buf.len(), item_to_copy.remaining());
-        item_to_copy.take(to_copy).copy_to_slice(&mut buf[.. to_copy]);
-        Poll::Ready(Ok(to_copy))
+        Poll::Ready(Ok(item_to_copy.read(buf)?))
     }
 }
 
 impl<S> AsyncWrite for RwStreamSink<S>
 where
     S: TryStream + Sink<<S as TryStream>::Ok, Error = io::Error> + Unpin,
-    <S as TryStream>::Ok: IntoBuf + for<'r> From<&'r [u8]>
+    <S as TryStream>::Ok: for<'r> From<&'r [u8]>
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
         ready!(Pin::new(&mut self.inner).poll_ready(cx)?);
@@ -102,16 +92,11 @@ where
     }
 }
 
-impl<S> Unpin for RwStreamSink<S>
-where
-    S: TryStream,
-    <S as TryStream>::Ok: IntoBuf
-{}
+impl<S: TryStream> Unpin for RwStreamSink<S> {}
 
 #[cfg(test)]
 mod tests {
     use async_std::task;
-    use bytes::Bytes;
     use futures::{channel::mpsc, prelude::*, stream};
     use std::{pin::Pin, task::{Context, Poll}};
     use super::RwStreamSink;
@@ -163,9 +148,9 @@ mod tests {
         let mut wrapper = RwStreamSink::new(Wrapper(rx2.map(Ok), tx1));
 
         task::block_on(async move {
-            tx2.send(Bytes::from("hel")).await.unwrap();
-            tx2.send(Bytes::from("lo wor")).await.unwrap();
-            tx2.send(Bytes::from("ld")).await.unwrap();
+            tx2.send(Vec::from("hel")).await.unwrap();
+            tx2.send(Vec::from("lo wor")).await.unwrap();
+            tx2.send(Vec::from("ld")).await.unwrap();
             tx2.close().await.unwrap();
 
             let mut data = Vec::new();

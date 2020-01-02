@@ -10,17 +10,17 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
-futures_codec = "0.3.1"
+bytes = "0.5"
+futures_codec = "0.3.4"
 futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../misc/multiaddr" }
-protobuf = "2.8"
+protobuf = "= 2.8.1"
 smallvec = "1.0"
 wasm-timer = "0.2"
-unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
+unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 
 [dev-dependencies]
 async-std = "1.0"

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::BytesMut;
+use bytes::{BytesMut, Buf};
 use crate::protocol::{Protocol, MessageReader, Message, Version, ProtocolError};
 use futures::{prelude::*, Async, try_ready};
 use log::debug;
@@ -93,7 +93,7 @@ impl<TInner> Negotiated<TInner> {
         }
 
         if let State::Completed { remaining, .. } = &mut self.state {
-            let _ = remaining.take(); // Drop remaining data flushed above.
+            let _ = remaining.split_to(remaining.len()); // Drop remaining data flushed above.
             return Ok(Async::Ready(()))
         }
 
@@ -232,7 +232,7 @@ where
                     if n == 0 {
                         return Err(io::ErrorKind::WriteZero.into())
                     }
-                    remaining.split_to(n);
+                    remaining.advance(n);
                 }
                 io.write(buf)
             },
@@ -251,7 +251,7 @@ where
                             io::ErrorKind::WriteZero,
                             "Failed to write remaining buffer."))
                     }
-                    remaining.split_to(n);
+                    remaining.advance(n);
                 }
                 io.flush()
             },
@@ -363,7 +363,7 @@ mod tests {
             let cap = rem.len() + free as usize;
             let step = u8::min(free, step) as usize + 1;
             let buf = Capped { buf: Vec::with_capacity(cap), step };
-            let rem = BytesMut::from(rem);
+            let rem = BytesMut::from(&rem[..]);
             let mut io = Negotiated::completed(buf, rem.clone());
             let mut written = 0;
             loop {

@@ -113,7 +113,7 @@ fn deny_incoming_connec() {
 
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let address = futures::executor::block_on(future::poll_fn(|cx| {
+    let address = async_std::task::block_on(future::poll_fn(|cx| {
         if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
             Poll::Ready(listen_addr)
         } else {
@@ -126,7 +126,7 @@ fn deny_incoming_connec() {
         .into_not_connected().unwrap()
         .connect(address.clone(), TestHandler::default().into_node_handler_builder());
 
-    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         match swarm1.poll(cx) {
             Poll::Ready(NetworkEvent::IncomingConnection(inc)) => drop(inc),
             Poll::Ready(_) => unreachable!(),
@@ -182,7 +182,7 @@ fn dial_self() {
 
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let (address, mut swarm) = futures::executor::block_on(
+    let (address, mut swarm) = async_std::task::block_on(
         future::lazy(move |cx| {
             if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll(cx) {
                 Ok::<_, void::Void>((listen_addr, swarm))
@@ -196,7 +196,7 @@ fn dial_self() {
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
-    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::UnknownPeerDialError {
@@ -284,7 +284,7 @@ fn multiple_addresses_err() {
         .connect_iter(addresses.clone(), TestHandler::default().into_node_handler_builder())
         .unwrap();
 
-    futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::DialError {

@@ -11,23 +11,23 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 arrayvec = "0.5.1"
-bytes = "0.4"
+bytes = "0.5"
 either = "1.5"
 fnv = "1.0"
-futures_codec = "0.3.1"
+futures_codec = "0.3.4"
 futures = "0.3.1"
 log = "0.4"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.2.0", path = "../../misc/multihash" }
-protobuf = "2.8"
+protobuf = "= 2.8.1"
 rand = "0.7.2"
 sha2 = "0.8.0"
 smallvec = "1.0"
 wasm-timer = "0.2"
 uint = "0.8"
-unsigned-varint = { version = "0.2.3", features = ["futures-codec"] }
+unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0"
 
 [dev-dependencies]

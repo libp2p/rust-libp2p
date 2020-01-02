@@ -84,7 +84,7 @@ fn ping() {
     };
 
     let result = future::select(Box::pin(peer1), Box::pin(peer2));
-    let ((p1, p2, rtt), _) = futures::executor::block_on(result).factor_first();
+    let ((p1, p2, rtt), _) = async_std::task::block_on(result).factor_first();
     assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
     assert!(rtt < Duration::from_millis(50));
 }

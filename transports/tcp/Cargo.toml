@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-std = "1.0"
-bytes = "0.4.12"
+bytes = "0.5"
 futures = "0.3.1"
 futures-timer = "2.0"
 get_if_addrs = "0.5.3"
