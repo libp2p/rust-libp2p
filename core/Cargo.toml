@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.13.1"
+version = "0.13.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -23,7 +23,7 @@ multihash = { package = "parity-multihash", version = "0.2.0", path = "../misc/m
 multistream-select = { version = "0.6.0", path = "../misc/multistream-select" }
 futures = "0.1"
 parking_lot = "0.9.0"
-protobuf = "2.8"
+protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 quick-error = "1.2"
 rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
