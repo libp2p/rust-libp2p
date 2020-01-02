@@ -17,7 +17,7 @@ libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.8"
 protobuf = "2.8.1"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
-unsigned-varint = { git = "https://github.com/twittner/unsigned-varint.git", branch = "bytes-0.5", features = ["futures-codec"] }
+unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0.2"
 
 [dev-dependencies]

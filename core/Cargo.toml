@@ -32,7 +32,7 @@ rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
 sha2 = "0.8.0"
 smallvec = "1.0"
-unsigned-varint = { git = "https://github.com/twittner/unsigned-varint.git", branch = "bytes-0.5" }
+unsigned-varint = "0.3"
 void = "1"
 zeroize = "1"
 

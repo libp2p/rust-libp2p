@@ -20,7 +20,7 @@ multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../mis
 protobuf = "2.8"
 smallvec = "1.0"
 wasm-timer = "0.2"
-unsigned-varint = { git = "https://github.com/twittner/unsigned-varint.git", branch = "bytes-0.5", features = ["futures-codec"] }
+unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 
 [dev-dependencies]
 async-std = "1.0"
