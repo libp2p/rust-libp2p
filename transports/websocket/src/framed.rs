@@ -20,7 +20,7 @@
 
 use async_tls::{client, server};
 use bytes::BytesMut;
-use crate::{error::Error, tls, fallback::{Fallback, EitherConnection}};
+use crate::{error::Error, tls, fallback::Fallback};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
@@ -105,8 +105,8 @@ where
                 event.map(|future| {
                     async {
                         match future.await? {
-                            EitherConnection::Connection(connection) => Ok(connection),
-                            EitherConnection::Fallback(_) => Err(Error::FellBack)
+                            EitherOutput::First(connection) => Ok(connection),
+                            EitherOutput::Second(fallback) => Err(Error::Handshake(Box::new(fallback.error)))
                         }
                     }.boxed()
                 })
@@ -120,8 +120,8 @@ where
         let future = self.0.dial(addr)?
             .and_then(|output| async {
                 match output {
-                    EitherConnection::Connection(connection) => Ok(connection),
-                    EitherConnection::Fallback(_) => Err(Error::FellBack)
+                    EitherOutput::First(connection) => Ok(connection),
+                    EitherOutput::Second(fallback) => Err(Error::Handshake(Box::new(fallback.error)))
                 }
             })
             .boxed();
@@ -200,7 +200,7 @@ where
     T::ListenerUpgrade: Send + 'static,
     T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = EitherConnection<T::Output>;
+    type Output = EitherOutput<Connection<T::Output>, Fallback<T::Output>>;
     type Error = Error<T::Error>;
     type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -287,11 +287,18 @@ where
                                 .await;
                             match request {
                                 Ok(request) => request.into_key(),
-                                Err(err) => return match err {
-                                    handshake::Error::Io(_) => Err(Error::Handshake(Box::new(err))),
-                                    _ => Ok(EitherConnection::Fallback(Fallback {
+                                Err(err) => {
+                                    match &err {
+                                        handshake::Error::Http(_) => {},
+                                        handshake::Error::HeaderNotFound(name) if name.to_lowercase() == "upgrade" => {},
+                                        handshake::Error::UnexpectedHeader(name) if name.to_lowercase() == "upgrade" => {},
+                                        _ => return Err(Error::Handshake(Box::new(err)))
+                                    };
+
+                                    return Ok(EitherOutput::Second(Fallback {
                                         bytes: server.take_buffer().freeze(),
                                         stream: server.into_inner(),
+                                        error: err
                                     }))
                                 },
                             }
@@ -316,7 +323,7 @@ where
                             Connection::new(builder)
                         };
 
-                        Ok(EitherConnection::Connection(conn))
+                        Ok(EitherOutput::First(conn))
                     };
 
                     ListenerEvent::Upgrade {
@@ -353,7 +360,7 @@ where
                         remaining_redirects -= 1;
                         addr = location_to_multiaddr(&redirect)?
                     }
-                    Ok(Either::Right(conn)) => return Ok(EitherConnection::Connection(conn)),
+                    Ok(Either::Right(conn)) => return Ok(EitherOutput::First(conn)),
                     Err(e) => return Err(e)
                 }
             }

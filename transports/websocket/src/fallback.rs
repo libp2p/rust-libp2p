@@ -20,15 +20,16 @@
 
 use std::pin::Pin;
 use std::task::{Poll, Context};
-use std::io::{self, Read, IoSliceMut};
-use futures::{AsyncRead, AsyncWrite, Stream, Sink};
-use bytes5::Buf;
-use crate::framed::{TlsOrPlain, Connection, OutgoingData};
+use std::io::{self, Read, IoSlice, IoSliceMut};
+use futures::{AsyncRead, AsyncWrite};
+use bytes::Buf;
+use crate::framed::TlsOrPlain;
 
 #[derive(Debug)]
 pub struct Fallback<T> {
 	pub(crate) stream: TlsOrPlain<T>,
-	pub(crate) bytes: bytes5::Bytes
+	pub(crate) bytes: bytes::Bytes,
+	pub(crate) error: soketto::handshake::Error
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin> AsyncRead for Fallback<T> {
@@ -66,68 +67,15 @@ impl<T: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Fallback<T> {
 		Pin::new(&mut self.stream).poll_write(cx, buf)
 	}
 
+	fn poll_write_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<Result<usize, io::Error>> {
+		Pin::new(&mut self.stream).poll_write_vectored(cx, bufs)
+	}
+
 	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
 		Pin::new(&mut self.stream).poll_flush(cx)
 	}
 
 	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
 		Pin::new(&mut self.stream).poll_close(cx)
-	}
-}
-
-#[derive(Debug)]
-pub enum EitherConnection<T> {
-	Fallback(Fallback<T>),
-	Connection(Connection<T>)
-}
-
-impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> AsyncRead for EitherConnection<T> {
-	fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-		match &mut *self {
-			EitherConnection::Fallback(fallback) => Pin::new(fallback).poll_read(cx, buf),
-			EitherConnection::Connection(connection) => Pin::new(connection).poll_next(cx)
-				.map(|item| match item {
-					Some(item) => item?.as_ref().read(buf),
-					None => Ok(0)
-				})
-		}
-	}
-
-	fn poll_read_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
-		match &mut *self {
-			EitherConnection::Fallback(fallback) => Pin::new(fallback).poll_read_vectored(cx, bufs),
-			EitherConnection::Connection(connection) => Pin::new(connection).poll_next(cx)
-				.map(|item| match item {
-					Some(item) => item?.as_ref().read_vectored(bufs),
-					None => Ok(0)
-				})
-		}
-	}
-}
-
-impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> AsyncWrite for EitherConnection<T> {
-	fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-		match &mut *self {
-			EitherConnection::Fallback(fallback) => Pin::new(fallback).poll_write(cx, buf),
-			EitherConnection::Connection(connection) => Poll::Ready(
-				Pin::new(connection)
-					.start_send(OutgoingData::Binary(buf.into()))
-					.map(|_| buf.len())
-			)
-		}
-	}
-
-	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-		match &mut *self {
-			EitherConnection::Fallback(fallback) => Pin::new(fallback).poll_flush(cx),
-			EitherConnection::Connection(connection) => Pin::new(connection).poll_flush(cx)
-		}
-	}
-
-	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-		match &mut *self {
-			EitherConnection::Fallback(fallback) => Pin::new(fallback).poll_close(cx),
-			EitherConnection::Connection(connection) => Pin::new(connection).poll_close(cx)
-		}
 	}
 }

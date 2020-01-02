@@ -38,9 +38,7 @@ pub enum Error<E> {
     /// The location header URL was invalid.
     InvalidRedirectLocation,
     /// Websocket base framing error.
-    Base(Box<dyn error::Error + Send + Sync>),
-    /// The handshake failed, but could fallback.
-    FellBack
+    Base(Box<dyn error::Error + Send + Sync>)
 }
 
 impl<E: fmt::Display> fmt::Display for Error<E> {
@@ -52,8 +50,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
             Error::InvalidMultiaddr(ma) => write!(f, "invalid multi-address: {}", ma),
             Error::TooManyRedirects => f.write_str("too many redirects"),
             Error::InvalidRedirectLocation => f.write_str("invalid redirect location"),
-            Error::Base(err) => write!(f, "{}", err),
-            Error::FellBack => write!(f, "Falling back to base transport not allowed.")
+            Error::Base(err) => write!(f, "{}", err)
         }
     }
 }
@@ -67,8 +64,7 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
             Error::Base(err) => Some(&**err),
             Error::InvalidMultiaddr(_)
             | Error::TooManyRedirects
-            | Error::InvalidRedirectLocation
-            | Error::FellBack => None,
+            | Error::InvalidRedirectLocation => None
         }
     }
 }
