@@ -26,6 +26,7 @@ smallvec = "1.0.0"
 
 [dev-dependencies]
 env_logger = "0.6.0"
+async-std = "1.0"
 libp2p = { path = "../../" }
 libp2p-plaintext = { version = "0.14.0-alpha.1", path = "../plaintext" }
 libp2p-yamux = { version = "0.14.0-alpha.1", path = "../../muxers/yamux" }
