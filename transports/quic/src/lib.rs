@@ -1155,12 +1155,12 @@ mod tests {
                     ListenerEvent::Upgrade { upgrade, .. } => {
                         let mut muxer = upgrade.await.expect("upgrade failed");
                         let mut socket = muxer.next().await.expect("no incoming stream");
-                        log::warn!("writing data!");
-                        socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
 
                         let mut buf = [0u8; 3];
                         socket.read_exact(&mut buf).await.unwrap();
                         assert_eq!(buf, [4, 5, 6]);
+                        log::warn!("writing data!");
+                        socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     }
                     _ => unreachable!(),
                 }
@@ -1183,10 +1183,10 @@ mod tests {
                 muxer: connection.clone(),
             };
             log::warn!("have a new stream!");
+            stream.write_all(&[4u8, 5, 6]).await.unwrap();
             let mut buf = [0u8; 3];
             stream.read_exact(&mut buf).await.unwrap();
             assert_eq!(buf, [1u8, 2, 3]);
-            stream.write_all(&[4u8, 5, 6]).await.unwrap();
         });
     }
 
