@@ -126,8 +126,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // send subscription request to all peers in the topic
-        let mut fixed_event = None; // initialise the event once if needed
         if let Some(peer_list) = self.topic_peers.get(&topic_hash) {
+            let mut fixed_event = None; // initialise the event once if needed
             if fixed_event.is_none() {
                 fixed_event = Some(Arc::new(GossipsubRpc {
                     messages: Vec::new(),
@@ -818,8 +818,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     },
                 );
             }
-            debug!("Completed gossip");
         }
+        debug!("Completed gossip");
     }
 
     /// Handles multiple GRAFT/PRUNE messages and coalesces them into chunked gossip control
