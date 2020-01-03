@@ -142,7 +142,7 @@
 //! [`PublicKey`]: identity::PublicKey
 //! [`Future`]: futures::Future
 //! [`TcpConfig`]: tcp::TcpConfig
-//! [`NetworkBehaviour`]: core::swarm::NetworkBehaviour
+//! [`NetworkBehaviour`]: swarm::NetworkBehaviour
 //! [`StreamMuxer`]: core::muxing::StreamMuxer
 //! [`Yamux`]: yamux::Yamux
 //!
