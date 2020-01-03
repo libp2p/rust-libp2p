@@ -210,17 +210,21 @@ pub struct Outbound(OutboundInner);
 
 impl Future for Outbound {
     type Output = Result<StreamId, std::io::Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        match self.get_mut().0 {
-            ref mut inner @ OutboundInner::Complete(_) => {
-                match std::mem::replace(inner, OutboundInner::Done) {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = &mut *self;
+        match this.0 {
+            OutboundInner::Complete(_) => {
+                match std::mem::replace(&mut this.0, OutboundInner::Done) {
                     OutboundInner::Complete(e) => Ready(e),
                     _ => unreachable!(),
                 }
             }
-            OutboundInner::Pending(ref mut receiver) => receiver
-                .poll_unpin(cx)
-                .map_err(|oneshot::Canceled| std::io::ErrorKind::ConnectionAborted.into()),
+            OutboundInner::Pending(ref mut receiver) => {
+                let result = ready!(receiver.poll_unpin(cx))
+                    .map_err(|oneshot::Canceled| std::io::ErrorKind::ConnectionAborted.into());
+                this.0 = OutboundInner::Done;
+                Ready(result)
+            }
             OutboundInner::Done => panic!("polled after yielding Ready"),
         }
     }
@@ -299,7 +303,7 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context,
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        Pin::new(substream).poll(cx)
+        substream.poll_unpin(cx)
     }
 
     fn read_substream(
@@ -439,11 +443,6 @@ pub struct QuicEndpoint(Arc<Endpoint>, QuicConfig);
 impl QuicEndpoint {
     fn inner(&self) -> MutexGuard<'_, EndpointInner> {
         self.0.inner.lock()
-    }
-
-    /// Retrieves the `Multiaddr` of this `QuicEndpoint`.
-    pub fn addr(&self) -> &Multiaddr {
-        &self.0.address
     }
 
     /// Construct a `QuicEndpoint` with the given `QuicConfig` and `Multiaddr`.
