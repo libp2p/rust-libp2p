@@ -70,7 +70,7 @@ fn main() {
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::build_development_transport(local_key);
 
-    // Create a Floodsub/Gossipsub topic
+    // Create a Gossipsub topic
     let topic = Topic::new("test-net".into());
 
     // Create a Swarm to manage peers and events

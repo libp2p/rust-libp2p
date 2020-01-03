@@ -22,50 +22,58 @@ use crate::protocol::{GossipsubMessage, MessageId};
 use std::borrow::Cow;
 use std::time::Duration;
 
+/// If the `no_source_id` flag is set, the IDENTITY_SOURCE value is used as the source of the
+/// packet.
+pub const IDENTITY_SOURCE: [u8; 3] = [0, 1, 0];
+
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
 pub struct GossipsubConfig {
-    /// The protocol id to negotiate this protocol.
+    /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
     pub protocol_id: Cow<'static, [u8]>,
 
     // Overlay network parameters.
-    /// Number of heartbeats to keep in the `memcache`.
+    /// Number of heartbeats to keep in the `memcache` (default is 5).
     pub history_length: usize,
 
-    /// Number of past heartbeats to gossip about.
+    /// Number of past heartbeats to gossip about (default is 3).
     pub history_gossip: usize,
 
-    /// Target number of peers for the mesh network (D in the spec).
+    /// Target number of peers for the mesh network (D in the spec, default is 6).
     pub mesh_n: usize,
 
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec).
+    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 4).
     pub mesh_n_low: usize,
 
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec).
+    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
+    /// is 12).
     pub mesh_n_high: usize,
 
-    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec).
+    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec, default is 6).
     pub gossip_lazy: usize,
 
-    /// Initial delay in each heartbeat.
+    /// Initial delay in each heartbeat (default is 5 seconds).
     pub heartbeat_initial_delay: Duration,
 
-    /// Time between each heartbeat.
+    /// Time between each heartbeat (default is 1 second).
     pub heartbeat_interval: Duration,
 
-    /// Time to live for fanout peers.
+    /// Time to live for fanout peers (default is 60 seconds).
     pub fanout_ttl: Duration,
 
-    /// The maximum byte size for each gossip.
+    /// The maximum byte size for each gossip (default is 2048 bytes).
     pub max_transmit_size: usize,
 
-    /// Flag determining if gossipsub topics are hashed or sent as plain strings.
+    /// Flag determining if gossipsub topics are hashed or sent as plain strings (default is false).
     pub hash_topics: bool,
+
+    /// When set, all published messages will have a 0 source `PeerId` (default is false).
+    pub no_source_id: bool,
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
     /// true, the user must manually call `propagate_message()` on the behaviour to forward message
-    /// once validated.
+    /// once validated (default is false).
     pub manual_propagation: bool,
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
@@ -94,6 +102,7 @@ impl Default for GossipsubConfig {
             fanout_ttl: Duration::from_secs(60),
             max_transmit_size: 2048,
             hash_topics: false, // default compatibility with floodsub
+            no_source_id: false,
             manual_propagation: false,
             message_id_fn: |message| {
                 // default message id is: source + sequence number
@@ -195,13 +204,18 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    pub fn hash_topics(&mut self, hash_topics: bool) -> &mut Self {
-        self.config.hash_topics = hash_topics;
+    pub fn hash_topics(&mut self) -> &mut Self {
+        self.config.hash_topics = true;
         self
     }
 
-    pub fn manual_propagation(&mut self, manual_propagation: bool) -> &mut Self {
-        self.config.manual_propagation = manual_propagation;
+    pub fn no_source_id(&mut self) -> &mut Self {
+        self.config.no_source_id = true;
+        self
+    }
+
+    pub fn manual_propagation(&mut self) -> &mut Self {
+        self.config.manual_propagation = true;
         self
     }
 
@@ -230,6 +244,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
         let _ = builder.field("max_transmit_size", &self.max_transmit_size);
         let _ = builder.field("hash_topics", &self.hash_topics);
+        let _ = builder.field("no_source_id", &self.no_source_id);
         let _ = builder.field("manual_propagation", &self.manual_propagation);
         builder.finish()
     }

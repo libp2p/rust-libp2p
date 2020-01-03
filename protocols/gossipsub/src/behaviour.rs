@@ -90,6 +90,12 @@ pub struct Gossipsub<TSubstream> {
 impl<TSubstream> Gossipsub<TSubstream> {
     /// Creates a `Gossipsub` struct given a set of parameters specified by `gs_config`.
     pub fn new(local_peer_id: PeerId, gs_config: GossipsubConfig) -> Self {
+        let local_peer_id = if gs_config.no_source_id {
+            PeerId::from_bytes(crate::config::IDENTITY_SOURCE.to_vec()).expect("Valid peer id")
+        } else {
+            local_peer_id
+        };
+
         Gossipsub {
             config: gs_config.clone(),
             events: VecDeque::new(),
@@ -228,7 +234,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             (self.config.message_id_fn)(&message)
         );
 
-        // forward the message to mesh and floodsub peers
+        // forward the message to mesh peers
         let local_peer_id = self.local_peer_id.clone();
         self.forward_msg(message.clone(), &local_peer_id);
 
