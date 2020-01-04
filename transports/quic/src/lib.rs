@@ -416,7 +416,7 @@ impl StreamMuxer for QuicMuxer {
             Ok(None) => Ready(Ok(0)),
             Err(ReadError::Blocked) => {
                 inner.readers.insert(*substream, cx.waker().clone());
-				inner.wake_driver();
+                inner.wake_driver();
                 Pending
             }
             Err(ReadError::UnknownStream) => {
@@ -555,7 +555,7 @@ impl QuicEndpoint {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
         let (new_connections, receive_connections) = mpsc::unbounded();
-        let (event_channel, event_receiver) = mpsc::channel(5);
+        let (event_channel, event_receiver) = mpsc::channel(0);
         new_connections
             .unbounded_send(Ok(ListenerEvent::NewAddress(address.clone())))
             .expect("we have a reference to the peer, so this will not fail; qed");
@@ -1035,8 +1035,9 @@ impl Future for ConnectionDriver {
         let now = Instant::now();
         let this = self.get_mut();
         debug!("being polled for timers!");
-        let mut inner = this.inner.lock();
         loop {
+            let mut inner = this.inner.lock();
+            inner.waker = Some(cx.waker().clone());
             trace!("loop iteration");
             ready!(inner.pre_application_io(cx))?;
             let mut needs_timer_update = ready!(inner.on_application_io(cx))?;
@@ -1079,11 +1080,15 @@ impl Future for ConnectionDriver {
                     }
                 }
                 inner.process_app_events();
+                ready!(inner.on_application_io(cx))?;
+                inner.wake_driver();
+                break;
             } else {
                 break;
             }
         }
 
+        let inner = this.inner.lock();
         if inner.connection.is_drained() {
             debug!(
                 "Connection drained: close reason {}",
