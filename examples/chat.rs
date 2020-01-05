@@ -162,8 +162,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Pending => {
                     if !listening {
                         for addr in Swarm::listeners(&swarm) {
-                            // Since we used the OS assigned port the underlying TCP socket will not
-                            // be opened before the first `swarm.poll`.
                             println!("Listening on {:?}", addr);
                             listening = true;
                         }
