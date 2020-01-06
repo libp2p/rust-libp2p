@@ -82,6 +82,7 @@ use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
     collections::HashMap,
     io,
+    mem::replace,
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, Weak},
@@ -309,19 +310,17 @@ enum OutboundInner {
 pub struct Outbound(OutboundInner);
 
 impl Future for Outbound {
-    type Output = Result<StreamId, std::io::Error>;
+    type Output = Result<StreamId, io::Error>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = &mut *self;
         match this.0 {
-            OutboundInner::Complete(_) => {
-                match std::mem::replace(&mut this.0, OutboundInner::Done) {
-                    OutboundInner::Complete(e) => Ready(e),
-                    _ => unreachable!(),
-                }
-            }
+            OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
+                OutboundInner::Complete(e) => Ready(e),
+                _ => unreachable!(),
+            },
             OutboundInner::Pending(ref mut receiver) => {
                 let result = ready!(receiver.poll_unpin(cx))
-                    .map_err(|oneshot::Canceled| std::io::ErrorKind::ConnectionAborted.into());
+                    .map_err(|oneshot::Canceled| io::ErrorKind::ConnectionAborted.into());
                 this.0 = OutboundInner::Done;
                 Ready(result)
             }
@@ -333,16 +332,17 @@ impl Future for Outbound {
 impl StreamMuxer for QuicMuxer {
     type OutboundSubstream = Outbound;
     type Substream = StreamId;
-    type Error = std::io::Error;
+    type Error = io::Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
         if let Some(ref e) = inner.close_reason {
-            Outbound(OutboundInner::Complete(Err(std::io::Error::new(
+            Outbound(OutboundInner::Complete(Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 e.clone(),
             ))))
         } else if let Some(id) = inner.pending_stream.take() {
             // mandatory ― otherwise we will fail an assertion above
+            inner.wake_driver();
             Outbound(OutboundInner::Complete(Ok(id)))
         } else if let Some(id) = inner.connection.open(Dir::Bi) {
             // optimization: if we can complete synchronously, do so.
@@ -365,14 +365,17 @@ impl StreamMuxer for QuicMuxer {
         debug!("being polled for inbound connections!");
         let mut inner = self.inner();
         if let Some(ref e) = inner.close_reason {
-            return Ready(Err(std::io::Error::new(
+            return Ready(Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 e.clone(),
             )));
         }
+        inner.wake_driver();
         match inner.connection.accept(quinn_proto::Dir::Bi) {
             None => {
-                inner.accept_waker = Some(cx.waker().clone());
+                if let Some(waker) = replace(&mut inner.accept_waker, Some(cx.waker().clone())) {
+                    waker.wake()
+                }
                 Pending
             }
             Some(stream) => Ready(Ok(stream)),
@@ -401,7 +404,7 @@ impl StreamMuxer for QuicMuxer {
             Err(WriteError::UnknownStream) => {
                 panic!("libp2p never uses a closed stream, so this cannot happen; qed")
             }
-            Err(WriteError::Stopped(_)) => Ready(Err(std::io::ErrorKind::ConnectionAborted.into())),
+            Err(WriteError::Stopped(_)) => Ready(Err(io::ErrorKind::ConnectionAborted.into())),
         }
     }
 
@@ -421,7 +424,6 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
-        ready!(inner.pre_application_io(cx))?;
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => {
                 inner.wake_driver();
@@ -680,7 +682,7 @@ impl Future for QuicUpgrade {
         {
             let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
             if let Some(ref e) = inner.close_reason {
-                return Ready(Err(std::io::Error::new(
+                return Ready(Err(io::Error::new(
                     io::ErrorKind::ConnectionAborted,
                     e.clone(),
                 )));
@@ -691,7 +693,7 @@ impl Future for QuicUpgrade {
                 return Pending;
             } else if inner.connection.is_drained() {
                 debug!("connection already drained; failing");
-                return Ready(Err(std::io::Error::new(
+                return Ready(Err(io::Error::new(
                     io::ErrorKind::ConnectionAborted,
                     inner
                         .close_reason
@@ -824,48 +826,66 @@ pub struct Muxer {
 impl Muxer {
     fn wake_driver(&mut self) {
         if let Some(waker) = self.waker.take() {
-            waker.wake()
+            waker.wake();
         }
     }
 
     fn drive_timers(&mut self, cx: &mut Context, now: &mut Instant) -> bool {
         let mut keep_going = false;
-        for (timer, timer_ref) in self.timers.iter_mut() {
-            if let Some(ref mut timer_future) = timer_ref {
-                match timer_future.poll_unpin(cx) {
-                    Pending => continue,
-                    Ready(()) => {
-                        trace!("timer {:?} ready at time {:?}", timer, now);
-                        keep_going = true;
-                        self.connection.handle_timeout(*now, timer);
-                        *timer_ref = None;
+        loop {
+            let mut continue_loop = false;
+            for (timer, timer_ref) in self.timers.iter_mut() {
+                if let Some(ref mut timer_future) = timer_ref {
+                    match timer_future.poll_unpin(cx) {
+                        Pending => continue,
+                        Ready(()) => {
+                            trace!("timer {:?} ready at time {:?}", timer, now);
+                            keep_going = true;
+							continue_loop = true;
+                            self.connection.handle_timeout(*now, timer);
+                            *timer_ref = None;
+                        }
                     }
                 }
             }
-        }
-        while let Some(quinn_proto::TimerUpdate { timer, update }) = self.connection.poll_timers() {
-            use quinn_proto::TimerSetting;
-            match update {
-                TimerSetting::Stop => self.timers[timer] = None,
-                TimerSetting::Start(instant) => {
-                    assert!(instant >= *now);
-                    trace!("setting timer {:?} for {:?}", timer, instant - *now);
-                    let mut new_timer = futures_timer::Delay::new(instant - *now);
-                    match new_timer.poll_unpin(cx) {
-                        Ready(()) => {
-                            warn!("timer {:?} is already Ready!", timer);
-                            *now = Instant::now();
+            while let Some(quinn_proto::TimerUpdate { timer, update }) =
+                self.connection.poll_timers()
+            {
+				keep_going = true;
+				continue_loop = true;
+                use quinn_proto::TimerSetting;
+                match update {
+                    TimerSetting::Stop => self.timers[timer] = None,
+                    TimerSetting::Start(instant) => {
+                        if instant < *now {
                             self.timers[timer] = None;
                             self.connection.handle_timeout(*now, timer);
                             keep_going = true;
+							continue_loop = true;
                             continue;
                         }
-                        Pending => self.timers[timer] = Some(new_timer),
+
+                        trace!("setting timer {:?} for {:?}", timer, instant - *now);
+                        let mut new_timer = futures_timer::Delay::new(instant - *now);
+                        match new_timer.poll_unpin(cx) {
+                            Ready(()) => {
+                                warn!("timer {:?} is already Ready!", timer);
+                                *now = Instant::now();
+                                self.timers[timer] = None;
+                                self.connection.handle_timeout(*now, timer);
+                                keep_going = true;
+								continue_loop = true;
+                                continue;
+                            }
+                            Pending => self.timers[timer] = Some(new_timer),
+                        }
                     }
                 }
             }
+			if !continue_loop {
+				break keep_going
+			}
         }
-        keep_going
     }
 
     fn new(endpoint: Arc<Endpoint>, connection: Connection, handle: ConnectionHandle) -> Self {
@@ -925,7 +945,7 @@ impl Muxer {
 
     fn pre_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<bool, io::Error>> {
         if let Some(ref e) = self.close_reason {
-            return Ready(Err(std::io::Error::new(
+            return Ready(Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 e.clone(),
             )));
@@ -984,7 +1004,7 @@ impl Muxer {
         assert!(self.connection.poll_endpoint_events().is_none());
         assert!(self.connection.poll().is_none());
         if let Some(tx) = self.connection.poll_transmit(Instant::now()) {
-            assert!(std::mem::replace(&mut endpoint.outgoing_packet, Some(tx)).is_none())
+            assert!(replace(&mut endpoint.outgoing_packet, Some(tx)).is_none())
         }
     }
 
@@ -1016,7 +1036,7 @@ impl Muxer {
                     trace!("Bidirectional stream available");
                     if self.connectors.is_empty() {
                         // no task to wake up
-                        return;
+                        continue;
                     }
                     debug_assert!(
                         self.pending_stream.is_none(),
@@ -1026,7 +1046,7 @@ impl Muxer {
                             .expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
                     if let Some(oneshot) = self.connectors.pop_front() {
                         match oneshot.send(stream) {
-                            Ok(()) => return,
+                            Ok(()) => continue,
                             Err(_) => (),
                         }
                     }
@@ -1089,13 +1109,13 @@ impl ConnectionDriver {
 }
 
 impl Future for ConnectionDriver {
-    type Output = Result<(), std::io::Error>;
+    type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut now = Instant::now();
         let this = self.get_mut();
         debug!("being polled for timers!");
+        let mut inner = this.inner.lock();
         loop {
-            let mut inner = this.inner.lock();
             let mut needs_timer_update = false;
             inner.waker = Some(cx.waker().clone());
             trace!("loop iteration");
@@ -1107,8 +1127,6 @@ impl Future for ConnectionDriver {
                 break;
             }
         }
-
-        let inner = this.inner.lock();
         if inner.connection.is_drained() {
             debug!(
                 "Connection drained: close reason {}",
@@ -1263,9 +1281,10 @@ mod tests {
                         let mut socket = muxer.next().await.expect("no incoming stream");
 
                         let mut buf = [0u8; 3];
+                        log::error!("reading data from accepted stream!");
                         socket.read_exact(&mut buf).await.unwrap();
                         assert_eq!(buf, [4, 5, 6]);
-                        log::warn!("writing data!");
+                        log::error!("writing data!");
                         socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     }
                     _ => unreachable!(),
@@ -1291,6 +1310,7 @@ mod tests {
             log::warn!("have a new stream!");
             stream.write_all(&[4u8, 5, 6]).await.unwrap();
             let mut buf = [0u8; 3];
+            log::error!("reading data!");
             stream.read_exact(&mut buf).await.unwrap();
             assert_eq!(buf, [1u8, 2, 3]);
         });
