@@ -356,7 +356,7 @@ where
         }
     }
 
-    /// Sends a message to all nodes.
+    /// Sends an event to all nodes.
     ///
     /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
     /// has been sent to any node yet.
