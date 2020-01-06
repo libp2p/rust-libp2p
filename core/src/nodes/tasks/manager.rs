@@ -67,7 +67,7 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     /// `local_spawns` list instead.
     threads_pool: Option<ThreadPool>,
 
-    /// If no executor is available, we move tasks to this list, and futures are polled on the
+    /// If no executor is available, we move tasks to this set, and futures are polled on the
     /// current thread instead.
     local_spawns: FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>,
 
@@ -221,34 +221,28 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         task_id
     }
 
-    /// Start sending an event to all the tasks, including the pending ones.
+    /// Sends a message to all the tasks, including the pending ones.
     ///
-    /// Must be called only after a successful call to `poll_ready_broadcast`.
-    ///
-    /// After starting a broadcast make sure to finish it with `complete_broadcast`,
-    /// otherwise starting another broadcast or sending an event directly to a
-    /// task would overwrite the pending broadcast.
+    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
+    /// has been sent to any node yet.
     #[must_use]
-    pub fn start_broadcast(&mut self, event: &I)
+    pub fn poll_broadcast(&mut self, event: &I, cx: &mut Context) -> Poll<()>
     where
         I: Clone
     {
         for task in self.tasks.values_mut() {
+            if let Poll::Pending = task.sender.poll_ready(cx) {
+                return Poll::Pending;
+            }
+        }
+
+        for task in self.tasks.values_mut() {
             let msg = ToTaskMessage::HandlerEvent(event.clone());
             match task.sender.start_send(msg) {
                 Ok(()) => {},
-                Err(ref err) if err.is_full() => {},        // TODO: somehow report to user?
+                Err(ref err) if err.is_full() =>
+                    panic!("poll_ready returned Poll::Ready just above; qed"),
                 Err(_) => {},
-            }
-        }
-    }
-
-    /// Wait until we have enough room in senders to broadcast an event.
-    #[must_use]
-    pub fn poll_ready_broadcast(&mut self, cx: &mut Context) -> Poll<()> {
-        for task in self.tasks.values_mut() {
-            if let Poll::Pending = task.sender.poll_ready(cx) {
-                return Poll::Pending;
             }
         }
 
@@ -470,4 +464,3 @@ impl<E, T: fmt::Debug> fmt::Debug for ClosedTask<E, T> {
             .finish()
     }
 }
-

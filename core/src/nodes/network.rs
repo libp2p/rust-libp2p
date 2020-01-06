@@ -845,20 +845,16 @@ where
             })
     }
 
-    /// Start sending an event to all nodes.
+    /// Sends an event to all nodes.
     ///
-    /// Must be called only after a successful call to `poll_ready_broadcast`.
-    pub fn start_broadcast(&mut self, event: &TInEvent)
+    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
+    /// has been sent to any node yet.
+    #[must_use]
+    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
     where
         TInEvent: Clone
     {
-        self.active_nodes.start_broadcast(event)
-    }
-
-    /// Wait until we have enough room in senders to broadcast an event.
-    #[must_use]
-    pub fn poll_ready_broadcast(&mut self, cx: &mut Context) -> Poll<()> {
-        self.active_nodes.poll_ready_broadcast(cx)
+        self.active_nodes.poll_broadcast(event, cx)
     }
 
     /// Returns a list of all the peers we are currently connected to.
