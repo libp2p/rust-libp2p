@@ -192,49 +192,59 @@ impl EndpointInner {
         &mut self,
         socket: &UdpSocket,
         cx: &mut Context,
-    ) -> Result<(bool, Option<(ConnectionHandle, Connection)>), io::Error> {
+    ) -> Poll<Result<(ConnectionHandle, Connection), io::Error>> {
         use quinn_proto::DatagramEvent;
         let mut buf = [0; 1800];
         trace!("endpoint polling for incoming packets!");
-        let (bytes, peer) = match socket.poll_recv_from(cx, &mut buf[..]) {
-            Pending => return Ok((false, None)),
-            Ready(Err(e)) => return Err(e),
-            Ready(Ok(data)) => data,
-        };
-        trace!("got a packet of length {} from {}!", bytes, peer);
-        let (handle, event) =
-            match self
-                .inner
-                .handle(Instant::now(), peer, None, buf[..bytes].into())
-            {
-                Some(e) => e,
-                None => return Ok((false, None)),
-            };
-        trace!("have an event!");
-        match event {
-            DatagramEvent::ConnectionEvent(connection_event) => {
-                let connection = match self.muxers.get(&handle) {
-                    None => panic!("received a ConnectionEvent for an unknown Connection"),
-                    Some(e) => match e.upgrade() {
-                        Some(e) => e,
-                        None => {
-                            debug!("lost our connection!");
-                            return Ok((true, None));
-                        }
-                    },
+        assert!(self.outgoing_packet.is_none());
+        assert!(self.inner.poll_transmit().is_none());
+        loop {
+            let (bytes, peer) = ready!(socket.poll_recv_from(cx, &mut buf[..]))?;
+            trace!("got a packet of length {} from {}!", bytes, peer);
+            let (handle, event) =
+                match self
+                    .inner
+                    .handle(Instant::now(), peer, None, buf[..bytes].into())
+                {
+                    Some(e) => e,
+                    None => {
+                        ready!(self.poll_transmit_pending(socket, cx))?;
+                        continue;
+                    }
                 };
-                trace!("taking connection mutex!");
-                let mut connection = connection.lock();
-                trace!("connection mutex aquired!");
-                connection.process_connection_events(self, connection_event);
-
-                trace!("connection mutex released!");
-            }
-            DatagramEvent::NewConnection(connection) => {
-                return Ok((true, Some((handle, connection))))
+            trace!("have an event!");
+            match event {
+                DatagramEvent::ConnectionEvent(connection_event) => {
+                    match self
+                        .muxers
+                        .get(&handle)
+                        .expect("received a ConnectionEvent for an unknown Connection")
+                        .upgrade()
+                    {
+                        Some(connection) => connection
+                            .lock()
+                            .process_connection_events(self, connection_event),
+                        None => debug!("lost our connection!"),
+                    }
+                    ready!(self.poll_transmit_pending(socket, cx))?
+                }
+                DatagramEvent::NewConnection(connection) => break Ready(Ok((handle, connection))),
             }
         }
-        Ok((true, None))
+    }
+
+    fn poll_transmit_pending(
+        &mut self,
+        socket: &UdpSocket,
+        cx: &mut Context,
+    ) -> Poll<Result<(), io::Error>> {
+        if let Some(tx) = self.outgoing_packet.take() {
+            ready!(self.poll_transmit(socket, cx, tx))?
+        }
+        while let Some(tx) = self.inner.poll_transmit() {
+            ready!(self.poll_transmit(socket, cx, tx))?
+        }
+        Ready(Ok(()))
     }
 
     fn poll_transmit(
@@ -592,71 +602,65 @@ impl QuicEndpoint {
         inner.muxers.insert(handle, Arc::downgrade(&muxer));
         (QuicMuxer(muxer), driver)
     }
+
+    fn accept_muxer(
+        &self,
+        connection: Connection,
+        handle: ConnectionHandle,
+        inner: &mut EndpointInner,
+    ) {
+        let (muxer, driver) = self.create_muxer(connection, handle, &mut *inner);
+        async_std::task::spawn(driver);
+        self.0
+            .new_connections
+            .unbounded_send(Ok(ListenerEvent::Upgrade {
+                upgrade: QuicUpgrade { muxer: Some(muxer) },
+                local_addr: self.0.address.clone(),
+                remote_addr: self.0.address.clone(),
+            }))
+            .expect(
+                "this is an unbounded channel, and we have an instance \
+                 of the peer, so this will never fail; qed",
+            );
+    }
 }
+
 impl Future for QuicEndpoint {
     type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         let this = self.get_mut();
         let mut inner = this.inner();
         'a: loop {
-            let mut should_continue = false;
-            if let Some(packet) = inner.outgoing_packet.take() {
-                ready!(inner.poll_transmit(&this.0.socket, cx, packet))?;
-            }
+            ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
             while let Ready(e) = inner.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
-                let (handle, endpoint_event) = match e {
+                match e {
                     EndpointMessage::ConnectionAccepted => {
                         debug!("accepting connection!");
                         inner.inner.accept();
-                        continue;
                     }
-                    EndpointMessage::EndpointEvent { handle, event } => (handle, event),
-                };
-                debug!("we have an event from connection {:?}", handle);
-                if let Some(connection_event) = inner.inner.handle_event(handle, endpoint_event) {
-                    debug!("we have an event from our endpoint");
-                    let connection = match inner.muxers.get(&handle) {
-                        None => panic!("received a ConnectionEvent for an unknown Connection"),
-                        Some(e) => match e.upgrade() {
-                            Some(e) => e,
-                            None => {
-                                warn!("lost our connection!");
-                                break;
+                    EndpointMessage::EndpointEvent { handle, event } => {
+                        debug!("we have an event from connection {:?}", handle);
+                        if let Some(connection_event) = inner.inner.handle_event(handle, event) {
+                            debug!("we have an event from our endpoint");
+                            match inner
+                                .muxers
+                                .get(&handle)
+                                .expect("received a ConnectionEvent for an unknown Connection")
+                                .upgrade()
+                            {
+                                None => warn!("lost our connection!"),
+                                Some(connection) => connection
+                                    .lock()
+                                    .process_connection_events(&mut inner, connection_event),
                             }
-                        },
-                    };
-                    let mut connection = connection.lock();
-                    connection.process_connection_events(&mut inner, connection_event);
+                        }
+                    }
                 }
+                ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
             }
-            loop {
-                let (received_something, new_connection) =
-                    inner.drive_receive(&this.0.socket, cx)?;
-                should_continue |= received_something;
-                if let Some((handle, connection)) = new_connection {
-                    let (muxer, driver) = this.create_muxer(connection, handle, &mut *inner);
-                    async_std::task::spawn(driver);
-                    this.0
-                        .new_connections
-                        .unbounded_send(Ok(ListenerEvent::Upgrade {
-                            upgrade: QuicUpgrade {
-                                muxer: Some(muxer),
-                            },
-                            local_addr: this.0.address.clone(),
-                            remote_addr: this.0.address.clone(),
-                        }))
-                    .expect(
-                        "this is an unbounded channel, and we have an instance of the peer, so \
-                     this will never fail; qed",
-                    );
-                }
-                if !received_something {
-                    break;
-                }
-            }
-            if !should_continue {
-                break Pending;
-            }
+            let (handle, connection) = ready!(inner.drive_receive(&this.0.socket, cx))?;
+			this.accept_muxer(connection, handle, &mut *inner);
+			ready!(inner.poll_transmit_pending(&this.0.socket, cx))?
         }
     }
 }
@@ -927,6 +931,11 @@ impl Muxer {
         self.send_to_endpoint(endpoint);
         self.process_app_events();
         self.wake_driver();
+        assert!(self.connection.poll_endpoint_events().is_none());
+        assert!(self.connection.poll().is_none());
+        if let Some(tx) = self.connection.poll_transmit(Instant::now()) {
+            assert!(std::mem::replace(&mut endpoint.outgoing_packet, Some(tx)).is_none())
+        }
     }
 
     pub fn process_app_events(&mut self) {
