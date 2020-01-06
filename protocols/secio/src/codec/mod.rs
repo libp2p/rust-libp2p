@@ -21,21 +21,22 @@
 //! Individual messages encoding and decoding. Use this after the algorithms have been
 //! successfully negotiated.
 
-use self::decode::DecoderMiddleware;
-use self::encode::EncoderMiddleware;
+mod decode;
+mod encode;
+mod len_prefix;
 
 use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
+use decode::DecoderMiddleware;
+use encode::EncoderMiddleware;
+use futures::prelude::*;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
-use tokio_io::codec::length_delimited;
-use tokio_io::{AsyncRead, AsyncWrite};
 
-mod decode;
-mod encode;
+pub use len_prefix::LenPrefixCodec;
 
 /// Type returned by `full_codec`.
-pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
+pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<LenPrefixCodec<S>>>;
 
 pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
@@ -103,12 +104,12 @@ impl Hmac {
 }
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
-/// `future::Stream`. The `Stream` and `Sink` produce and accept `BytesMut` objects.
+/// `future::Stream`. The `Stream` and `Sink` produce and accept `Vec<u8>` objects.
 ///
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
-    socket: length_delimited::Framed<S>,
+    socket: LenPrefixCodec<S>,
     cipher_encoding: StreamCipher,
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
@@ -116,64 +117,50 @@ pub fn full_codec<S>(
     remote_nonce: Vec<u8>
 ) -> FullCodec<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
     DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
+
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
-    use crate::stream_cipher::{ctr, Cipher};
-    use super::full_codec;
-    use super::DecoderMiddleware;
-    use super::EncoderMiddleware;
-    use super::Hmac;
+    use super::{full_codec, DecoderMiddleware, EncoderMiddleware, Hmac, LenPrefixCodec};
     use crate::algo_support::Digest;
+    use crate::stream_cipher::{ctr, Cipher};
     use crate::error::SecioError;
-    use bytes::BytesMut;
-    use futures::sync::mpsc::channel;
-    use futures::{Future, Sink, Stream, stream};
-    use rand;
-    use std::io::Error as IoError;
-    use tokio_io::codec::length_delimited::Framed;
+    use async_std::net::{TcpListener, TcpStream};
+    use futures::{prelude::*, channel::mpsc, channel::oneshot};
 
-    const NULL_IV : [u8; 16] = [0;16];
+    const NULL_IV : [u8; 16] = [0; 16];
 
     #[test]
     fn raw_encode_then_decode() {
-        let (data_tx, data_rx) = channel::<BytesMut>(256);
-        let data_tx = data_tx.sink_map_err::<_, IoError>(|_| panic!());
-        let data_rx = data_rx.map_err::<IoError, _>(|_| panic!());
+        let (data_tx, data_rx) = mpsc::channel::<Vec<u8>>(256);
 
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
 
-
-        let encoder = EncoderMiddleware::new(
+        let mut encoder = EncoderMiddleware::new(
             data_tx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
         );
-        let decoder = DecoderMiddleware::new(
-            data_rx,
+
+        let mut decoder = DecoderMiddleware::new(
+            data_rx.map(|v| Ok::<_, SecioError>(v)),
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
             Vec::new()
         );
 
         let data = b"hello world";
-
-        let data_sent = encoder.send(BytesMut::from(data.to_vec())).from_err();
-        let data_received = decoder.into_future().map(|(n, _)| n).map_err(|(e, _)| e);
-        let mut rt = Runtime::new().unwrap();
-
-        let (_, decoded) = rt.block_on(data_sent.join(data_received))
-            .map_err(|_| ())
-            .unwrap();
-        assert_eq!(&decoded.unwrap()[..], &data[..]);
+        async_std::task::block_on(async move {
+            encoder.send(data.to_vec()).await.unwrap();
+            let rx = decoder.next().await.unwrap().unwrap();
+            assert_eq!(rx, data);
+        });
     }
 
     fn full_codec_encode_then_decode(cipher: Cipher) {
@@ -185,53 +172,44 @@ mod tests {
         let data = b"hello world";
         let data_clone = data.clone();
         let nonce = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-        let listener_addr = listener.local_addr().unwrap();
+        let (l_a_tx, l_a_rx) = oneshot::channel();
 
         let nonce2 = nonce.clone();
-        let server = listener.incoming()
-            .into_future()
-            .map_err(|(e, _)| e)
-            .map(move |(connec, _)| {
-                full_codec(
-                    Framed::new(connec.unwrap()),
-                    ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
-                    Hmac::from_key(Digest::Sha256, &hmac_key),
-                    ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
-                    Hmac::from_key(Digest::Sha256, &hmac_key),
-                    nonce2
-                )
-            },
-        );
+        let server = async {
+            let listener = TcpListener::bind(&"127.0.0.1:0").await.unwrap();
+            let listener_addr = listener.local_addr().unwrap();
+            l_a_tx.send(listener_addr).unwrap();
 
-        let client = TcpStream::connect(&listener_addr)
-            .map_err(|e| e.into())
-            .map(move |stream| {
-                full_codec(
-                    Framed::new(stream),
-                    ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
-                    Hmac::from_key(Digest::Sha256, &hmac_key_clone),
-                    ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
-                    Hmac::from_key(Digest::Sha256, &hmac_key_clone),
-                    Vec::new()
-                )
-            });
+            let (connec, _) = listener.accept().await.unwrap();
+            let codec = full_codec(
+                LenPrefixCodec::new(connec, 1024),
+                ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
+                Hmac::from_key(Digest::Sha256, &hmac_key),
+                ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
+                Hmac::from_key(Digest::Sha256, &hmac_key),
+                nonce2.clone()
+            );
 
-        let fin = server
-            .join(client)
-            .from_err::<SecioError>()
-            .and_then(|(server, client)| {
-                client
-                    .send_all(stream::iter_ok::<_, IoError>(vec![nonce.into(), data_clone[..].into()]))
-                    .map(move |_| server)
-                    .from_err()
-            })
-            .and_then(|server| server.concat2().from_err());
+            let outcome = codec.map(|v| v.unwrap()).concat().await;
+            assert_eq!(outcome, data_clone);
+        };
 
-        let mut rt = Runtime::new().unwrap();
-        let received = rt.block_on(fin).unwrap();
-        assert_eq!(received, data);
+        let client = async {
+            let listener_addr = l_a_rx.await.unwrap();
+            let stream = TcpStream::connect(&listener_addr).await.unwrap();
+            let mut codec = full_codec(
+                LenPrefixCodec::new(stream, 1024),
+                ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
+                Hmac::from_key(Digest::Sha256, &hmac_key_clone),
+                ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
+                Hmac::from_key(Digest::Sha256, &hmac_key_clone),
+                Vec::new()
+            );
+            codec.send(nonce.into()).await.unwrap();
+            codec.send(data.to_vec().into()).await.unwrap();
+        };
+
+        async_std::task::block_on(future::join(client, server));
     }
 
     #[test]

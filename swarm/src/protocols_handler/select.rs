@@ -33,8 +33,7 @@ use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, EitherUpgrade, SelectUpgrade, UpgradeError}
 };
-use std::cmp;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of `IntoProtocolsHandler` that combines two protocols into one.
 #[derive(Debug, Clone)]
@@ -62,7 +61,7 @@ where
     TProto2: IntoProtocolsHandler,
     TProto1::Handler: ProtocolsHandler<Substream = TSubstream>,
     TProto2::Handler: ProtocolsHandler<Substream = TSubstream>,
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
     <TProto1::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
     <TProto2::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
     <TProto1::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>,
@@ -107,7 +106,7 @@ impl<TSubstream, TProto1, TProto2>
 where
     TProto1: ProtocolsHandler<Substream = TSubstream>,
     TProto2: ProtocolsHandler<Substream = TSubstream>,
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
     TProto1::InboundProtocol: InboundUpgrade<TSubstream>,
     TProto2::InboundProtocol: InboundUpgrade<TSubstream>,
     TProto1::OutboundProtocol: OutboundUpgrade<TSubstream>,
@@ -201,40 +200,46 @@ where
         cmp::max(self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive())
     }
 
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
+    fn poll(&mut self, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>> {
 
-        match self.proto1.poll().map_err(EitherError::A)? {
-            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event))));
+        match self.proto1.poll(cx) {
+            Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                return Poll::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)));
             },
-            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            Poll::Ready(ProtocolsHandlerEvent::Close(event)) => {
+                return Poll::Ready(ProtocolsHandlerEvent::Close(EitherError::A(event)));
+            },
+            Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol,
                 info,
             }) => {
-                return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol.map_upgrade(EitherUpgrade::A),
                     info: EitherOutput::First(info),
-                }));
+                });
             },
-            Async::NotReady => ()
+            Poll::Pending => ()
         };
 
-        match self.proto2.poll().map_err(EitherError::B)? {
-            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event))));
+        match self.proto2.poll(cx) {
+            Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                return Poll::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)));
             },
-            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            Poll::Ready(ProtocolsHandlerEvent::Close(event)) => {
+                return Poll::Ready(ProtocolsHandlerEvent::Close(EitherError::B(event)));
+            },
+            Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol,
                 info,
             }) => {
-                return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol.map_upgrade(EitherUpgrade::B),
                     info: EitherOutput::Second(info),
-                }));
+                });
             },
-            Async::NotReady => ()
+            Poll::Pending => ()
         };
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }

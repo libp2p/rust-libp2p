@@ -8,17 +8,16 @@ repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
 [dependencies]
-bytes = "0.4"
+bytes = "0.5"
 curve25519-dalek = "1"
-futures = "0.1"
+futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4"
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
-rand = "^0.7.2"
+rand = "0.7.2"
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
-tokio-io = "0.1"
 x25519-dalek = "0.5"
 zeroize = "1"
 

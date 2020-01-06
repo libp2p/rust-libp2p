@@ -12,28 +12,27 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asn1_der = "0.6.1"
 bs58 = "0.3.0"
-bytes = "0.4"
+bytes = "0.5"
 ed25519-dalek = "1.0.0-pre.3"
 failure = "0.1"
 fnv = "1.0"
+futures = { version = "0.3.1", features = ["compat", "io-compat", "executor", "thread-pool"] }
+futures-timer = "2"
 lazy_static = "1.2"
+libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.2.0", path = "../misc/multihash" }
 multistream-select = { version = "0.6.0", path = "../misc/multistream-select" }
-futures = "0.1"
 parking_lot = "0.9.0"
+pin-project = "0.4.6"
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 quick-error = "1.2"
 rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
-libsecp256k1 = { version = "0.3.1", optional = true }
 sha2 = "0.8.0"
-smallvec = "0.6"
-tokio-executor = "0.1.4"
-tokio-io = "0.1"
-wasm-timer = "0.1"
-unsigned-varint = "0.2"
+smallvec = "1.0"
+unsigned-varint = "0.3"
 void = "1"
 zeroize = "1"
 
@@ -42,16 +41,14 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 untrusted = "0.7.0"
 
 [dev-dependencies]
-libp2p-swarm = { version = "0.3.0", path = "../swarm" }
-libp2p-tcp = { version = "0.13.0", path = "../transports/tcp" }
+assert_matches = "1.3"
+async-std = "1.0"
 libp2p-mplex = { version = "0.13.0", path = "../muxers/mplex" }
 libp2p-secio = { version = "0.13.0", path = "../protocols/secio" }
-rand = "0.7.2"
+libp2p-swarm = { version = "0.3.0", path = "../swarm" }
+libp2p-tcp = { version = "0.13.0", path = "../transports/tcp" }
 quickcheck = "0.9.0"
-tokio = "0.1"
-wasm-timer = "0.1"
-assert_matches = "1.3"
-tokio-mock-task = "0.1"
+wasm-timer = "0.2"
 
 [features]
 default = ["secp256k1"]

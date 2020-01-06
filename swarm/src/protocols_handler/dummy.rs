@@ -27,8 +27,7 @@ use crate::protocols_handler::{
 };
 use futures::prelude::*;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade};
-use std::marker::PhantomData;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{marker::PhantomData, task::Context, task::Poll};
 use void::Void;
 
 /// Implementation of `ProtocolsHandler` that doesn't handle anything.
@@ -47,7 +46,7 @@ impl<TSubstream> Default for DummyProtocolsHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for DummyProtocolsHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     type InEvent = Void;
     type OutEvent = Void;
@@ -89,10 +88,10 @@ where
     #[inline]
     fn poll(
         &mut self,
+        _: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Void,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }

@@ -29,7 +29,7 @@
 //!
 //! ```no_run
 //! # fn main() {
-//! use futures::Future;
+//! use futures::prelude::*;
 //! use libp2p_secio::{SecioConfig, SecioOutput};
 //! use libp2p_core::{PeerId, Multiaddr, identity, upgrade};
 //! use libp2p_core::transport::Transport;
@@ -57,20 +57,12 @@
 
 pub use self::error::SecioError;
 
-use bytes::BytesMut;
 use futures::stream::MapErr as StreamMapErr;
-use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{
-    PeerId,
-    PublicKey,
-    identity,
-    upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}
-};
+use futures::prelude::*;
+use libp2p_core::{PeerId, PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
-use std::io;
-use std::iter;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{io, iter, pin::Pin, task::Context, task::Poll};
 
 mod algo_support;
 mod codec;
@@ -93,7 +85,8 @@ pub struct SecioConfig {
     pub(crate) key: identity::Keypair,
     pub(crate) agreements_prop: Option<String>,
     pub(crate) ciphers_prop: Option<String>,
-    pub(crate) digests_prop: Option<String>
+    pub(crate) digests_prop: Option<String>,
+    pub(crate) max_frame_len: usize
 }
 
 impl SecioConfig {
@@ -103,7 +96,8 @@ impl SecioConfig {
             key: kp,
             agreements_prop: None,
             ciphers_prop: None,
-            digests_prop: None
+            digests_prop: None,
+            max_frame_len: 8 * 1024 * 1024
         }
     }
 
@@ -134,13 +128,19 @@ impl SecioConfig {
         self
     }
 
-    fn handshake<T>(self, socket: T) -> impl Future<Item=(PeerId, SecioOutput<T>), Error=SecioError>
+    /// Override the default max. frame length of 8MiB.
+    pub fn max_frame_len(mut self, n: usize) -> Self {
+        self.max_frame_len = n;
+        self
+    }
+
+    fn handshake<T>(self, socket: T) -> impl Future<Output = Result<(PeerId, SecioOutput<T>), SecioError>>
     where
-        T: AsyncRead + AsyncWrite + Send + 'static
+        T: AsyncRead + AsyncWrite + Unpin + Send + 'static
     {
         debug!("Starting secio upgrade");
         SecioMiddleware::handshake(socket, self)
-            .map(|(stream_sink, pubkey, ephemeral)| {
+            .map_ok(|(stream_sink, pubkey, ephemeral)| {
                 let mapped = stream_sink.map_err(map_err as fn(_) -> _);
                 let peer = pubkey.clone().into_peer_id();
                 let io = SecioOutput {
@@ -156,7 +156,7 @@ impl SecioConfig {
 /// Output of the secio protocol.
 pub struct SecioOutput<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> io::Error>>,
@@ -177,55 +177,61 @@ impl UpgradeInfo for SecioConfig {
 
 impl<T> InboundUpgrade<T> for SecioConfig
 where
-    T: AsyncRead + AsyncWrite + Send + 'static
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Output = (PeerId, SecioOutput<Negotiated<T>>);
     type Error = SecioError;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        Box::new(self.handshake(socket))
+        Box::pin(self.handshake(socket))
     }
 }
 
 impl<T> OutboundUpgrade<T> for SecioConfig
 where
-    T: AsyncRead + AsyncWrite + Send + 'static
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Output = (PeerId, SecioOutput<Negotiated<T>>);
     type Error = SecioError;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
-        Box::new(self.handshake(socket))
+        Box::pin(self.handshake(socket))
     }
 }
 
-impl<S: AsyncRead + AsyncWrite> io::Read for SecioOutput<S> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.read(buf)
+impl<S> AsyncRead for SecioOutput<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
+        -> Poll<Result<usize, io::Error>>
+    {
+        AsyncRead::poll_read(Pin::new(&mut self.stream), cx, buf)
     }
 }
 
-impl<S: AsyncRead + AsyncWrite> AsyncRead for SecioOutput<S> {
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        self.stream.prepare_uninitialized_buffer(buf)
+impl<S> AsyncWrite for SecioOutput<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
+        -> Poll<Result<usize, io::Error>>
+    {
+        AsyncWrite::poll_write(Pin::new(&mut self.stream), cx, buf)
     }
-}
 
-impl<S: AsyncRead + AsyncWrite> io::Write for SecioOutput<S> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.stream.write(buf)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context)
+        -> Poll<Result<(), io::Error>>
+    {
+        AsyncWrite::poll_flush(Pin::new(&mut self.stream), cx)
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.stream.flush()
-    }
-}
-
-impl<S: AsyncRead + AsyncWrite> AsyncWrite for SecioOutput<S> {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.stream.shutdown()
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context)
+        -> Poll<Result<(), io::Error>>
+    {
+        AsyncWrite::poll_close(Pin::new(&mut self.stream), cx)
     }
 }
 
@@ -244,54 +250,52 @@ pub struct SecioMiddleware<S> {
 
 impl<S> SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Send,
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     /// Attempts to perform a handshake on the given socket.
     ///
     /// On success, produces a `SecioMiddleware` that can then be used to encode/decode
     /// communications, plus the public key of the remote, plus the ephemeral public key.
     pub fn handshake(socket: S, config: SecioConfig)
-        -> impl Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError>
+        -> impl Future<Output = Result<(SecioMiddleware<S>, PublicKey, Vec<u8>), SecioError>>
     {
-        handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
+        handshake::handshake(socket, config).map_ok(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)
         })
     }
 }
 
-impl<S> Sink for SecioMiddleware<S>
+impl<S> Sink<Vec<u8>> for SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type SinkItem = BytesMut;
-    type SinkError = io::Error;
+    type Error = io::Error;
 
-    #[inline]
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        self.inner.start_send(item)
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_ready(Pin::new(&mut self.inner), cx)
     }
 
-    #[inline]
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.poll_complete()
+    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
+        Sink::start_send(Pin::new(&mut self.inner), item)
     }
 
-    #[inline]
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.close()
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_flush(Pin::new(&mut self.inner), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_close(Pin::new(&mut self.inner), cx)
     }
 }
 
 impl<S> Stream for SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Item = Vec<u8>;
-    type Error = SecioError;
+    type Item = Result<Vec<u8>, SecioError>;
 
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll()
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        Stream::poll_next(Pin::new(&mut self.inner), cx)
     }
 }

@@ -11,10 +11,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 arrayvec = "0.5.1"
-bytes = "0.4"
+bytes = "0.5"
 either = "1.5"
 fnv = "1.0"
-futures = "0.1"
+futures_codec = "0.3.4"
+futures = "0.3.1"
 log = "0.4"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
@@ -23,12 +24,10 @@ multihash = { package = "parity-multihash", version = "0.2.0", path = "../../mis
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 rand = "0.7.2"
 sha2 = "0.8.0"
-smallvec = "0.6"
-tokio-codec = "0.1"
-tokio-io = "0.1"
-wasm-timer = "0.1"
+smallvec = "1.0"
+wasm-timer = "0.2"
 uint = "0.8"
-unsigned-varint = { version = "0.2.1", features = ["codec"] }
+unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0"
 
 [dev-dependencies]
@@ -37,4 +36,3 @@ libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
 libp2p-yamux = { version = "0.13.0", path = "../../muxers/yamux" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
-tokio = "0.1"

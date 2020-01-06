@@ -10,18 +10,19 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4.6"
-futures = "0.1"
+async-tls = "0.6"
+bytes = "0.5"
+either = "1.5.3"
+futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
-log = "0.4.1"
+log = "0.4.8"
+quicksink = "0.1"
+rustls = "0.16"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
-tokio-codec = "0.1.1"
-tokio-io = "0.1.12"
-tokio-rustls = "0.10.1"
-soketto = { version = "0.2.3", features = ["deflate"] }
-url = "2.1.0"
-webpki-roots = "0.18.0"
+soketto = { version = "0.3", features = ["deflate"] }
+url = "2.1"
+webpki = "0.21"
+webpki-roots = "0.18"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.13.0", path = "../tcp" }
-tokio = "0.1.20"

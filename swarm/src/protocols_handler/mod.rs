@@ -50,8 +50,7 @@ use libp2p_core::{
     PeerId,
     upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeError},
 };
-use std::{cmp::Ordering, error, fmt, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 pub use dummy::DummyProtocolsHandler;
@@ -101,7 +100,7 @@ pub trait ProtocolsHandler {
     /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error;
     /// The type of substreams on which the protocol(s) are negotiated.
-    type Substream: AsyncRead + AsyncWrite;
+    type Substream: AsyncRead + AsyncWrite + Unpin;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgrade<Self::Substream>;
     /// The outbound upgrade for the protocol(s) used by the handler.
@@ -169,11 +168,8 @@ pub trait ProtocolsHandler {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
-    ///
-    /// Returning an error will close the connection to the remote.
-    fn poll(&mut self) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error
+    fn poll(&mut self, cx: &mut Context) -> Poll<
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     >;
 
     /// Adds a closure that turns the input event into something else.
@@ -310,7 +306,7 @@ impl<TUpgrade> From<TUpgrade> for SubstreamProtocol<TUpgrade> {
 
 /// Event produced by a handler.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
+pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
         /// The protocol(s) to apply on the substream.
@@ -319,13 +315,16 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
         info: TOutboundOpenInfo,
     },
 
+    /// Close the connection for the given reason.
+    Close(TErr),
+
     /// Other event.
     Custom(TCustom),
 }
 
 /// Event produced by a handler.
-impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
-    ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
+impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
+    ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 {
     /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a
     /// `TOutboundOpenInfo` to something else.
@@ -333,7 +332,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     pub fn map_outbound_open_info<F, I>(
         self,
         map: F,
-    ) -> ProtocolsHandlerEvent<TConnectionUpgrade, I, TCustom>
+    ) -> ProtocolsHandlerEvent<TConnectionUpgrade, I, TCustom, TErr>
     where
         F: FnOnce(TOutboundOpenInfo) -> I,
     {
@@ -345,6 +344,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                 }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
+            ProtocolsHandlerEvent::Close(val) => ProtocolsHandlerEvent::Close(val),
         }
     }
 
@@ -354,7 +354,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     pub fn map_protocol<F, I>(
         self,
         map: F,
-    ) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom>
+    ) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom, TErr>
     where
         F: FnOnce(TConnectionUpgrade) -> I,
     {
@@ -366,6 +366,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                 }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
+            ProtocolsHandlerEvent::Close(val) => ProtocolsHandlerEvent::Close(val),
         }
     }
 
@@ -374,7 +375,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     pub fn map_custom<F, I>(
         self,
         map: F,
-    ) -> ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, I>
+    ) -> ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, I, TErr>
     where
         F: FnOnce(TCustom) -> I,
     {
@@ -383,6 +384,25 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(map(val)),
+            ProtocolsHandlerEvent::Close(val) => ProtocolsHandlerEvent::Close(val),
+        }
+    }
+
+    /// If this is a `Close` event, maps the content to something else.
+    #[inline]
+    pub fn map_close<F, I>(
+        self,
+        map: F,
+    ) -> ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, I>
+    where
+        F: FnOnce(TErr) -> I,
+    {
+        match self {
+            ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
+            }
+            ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
+            ProtocolsHandlerEvent::Close(val) => ProtocolsHandlerEvent::Close(map(val)),
         }
     }
 }

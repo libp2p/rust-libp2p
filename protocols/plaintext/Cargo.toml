@@ -10,11 +10,18 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.1.29"
+bytes = "0.5"
+futures = "0.3.1"
+futures_codec = "0.3.4"
 libp2p-core = { version = "0.13.0", path = "../../core" }
-bytes = "0.4.12"
 log = "0.4.8"
-void = "1.0.2"
-tokio-io = "0.1.12"
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
+unsigned-varint = { version = "0.3", features = ["futures-codec"] }
+void = "1.0.2"
+
+[dev-dependencies]
+env_logger = "0.7.1"
+quickcheck = "0.9.0"
+rand = "0.7"
+futures-timer = "2.0"

@@ -14,8 +14,8 @@ default = ["secp256k1", "libp2p-websocket"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 
 [dependencies]
-bytes = "0.4"
-futures = "0.1"
+bytes = "0.5"
+futures = "0.3.1"
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.2.0", path = "misc/multihash" }
 lazy_static = "1.2"
@@ -33,11 +33,8 @@ libp2p-uds = { version = "0.13.0", path = "transports/uds" }
 libp2p-wasm-ext = { version = "0.6.0", path = "transports/wasm-ext" }
 libp2p-yamux = { version = "0.13.0", path = "muxers/yamux" }
 parking_lot = "0.9.0"
-smallvec = "0.6"
-tokio-codec = "0.1"
-tokio-executor = "0.1"
-tokio-io = "0.1"
-wasm-timer = "0.1"
+smallvec = "1.0"
+wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.5.0", path = "protocols/deflate" }
@@ -48,9 +45,8 @@ libp2p-tcp = { version = "0.13.0", path = "transports/tcp" }
 libp2p-websocket = { version = "0.13.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
+async-std = "1.0"
 env_logger = "0.7.1"
-tokio = "0.1"
-tokio-stdin-stdout = "0.1"
 
 [workspace]
 members = [
@@ -78,3 +74,4 @@ members = [
     "transports/websocket",
     "transports/wasm-ext"
 ]
+
