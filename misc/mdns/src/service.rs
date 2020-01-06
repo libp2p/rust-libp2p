@@ -177,7 +177,7 @@ impl MdnsService {
     // **Note**: Why does `next` take ownership of itself?
     //
     // `MdnsService::next` needs to be called from within `NetworkBehaviour`
-    // implementations. Given that traits can not have async methods the
+    // implementations. Given that traits cannot have async methods the
     // respective `NetworkBehaviour` implementation needs to somehow keep the
     // Future returned by `MdnsService::next` across classic `poll`
     // invocations. The instance method `next` can either take a reference or
@@ -249,7 +249,7 @@ impl MdnsService {
                         }
                     },
                     Err(_) => {
-                        // Error are non-fatal and can happen if we get disconnected from example.
+                        // Errors are non-fatal and can happen if we get disconnected from the network.
                         // The query interval will wake up the task at some point so that we can try again.
                     },
                 },
