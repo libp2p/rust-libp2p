@@ -644,19 +644,16 @@ impl Future for QuicEndpoint {
                     }
                     EndpointMessage::EndpointEvent { handle, event } => {
                         debug!("we have an event from connection {:?}", handle);
-                        if let Some(connection_event) = inner.inner.handle_event(handle, event) {
-                            debug!("we have an event from our endpoint");
-                            match inner
-                                .muxers
-                                .get(&handle)
-                                .expect("received a ConnectionEvent for an unknown Connection")
-                                .upgrade()
-                            {
-                                None => warn!("lost our connection!"),
-                                Some(connection) => connection
+                        match inner.muxers.get(&handle).and_then(|e| e.upgrade()) {
+                            None => drop(inner.muxers.remove(&handle)),
+                            Some(connection) => match inner.inner.handle_event(handle, event) {
+                                None => {
+                                    connection.lock().process_endpoint_communication(&mut inner)
+                                }
+                                Some(event) => connection
                                     .lock()
-                                    .process_connection_events(&mut inner, connection_event),
-                            }
+                                    .process_connection_events(&mut inner, event),
+                            },
                         }
                     }
                 }
@@ -826,66 +823,44 @@ pub struct Muxer {
 impl Muxer {
     fn wake_driver(&mut self) {
         if let Some(waker) = self.waker.take() {
+            debug!("driver awoken!");
             waker.wake();
         }
     }
 
-    fn drive_timers(&mut self, cx: &mut Context, now: &mut Instant) -> bool {
+    fn drive_timers(&mut self, cx: &mut Context) -> bool {
         let mut keep_going = false;
-        loop {
-            let mut continue_loop = false;
-            for (timer, timer_ref) in self.timers.iter_mut() {
-                if let Some(ref mut timer_future) = timer_ref {
-                    match timer_future.poll_unpin(cx) {
-                        Pending => continue,
-                        Ready(()) => {
-                            trace!("timer {:?} ready at time {:?}", timer, now);
-                            keep_going = true;
-							continue_loop = true;
-                            self.connection.handle_timeout(*now, timer);
-                            *timer_ref = None;
-                        }
+        let now = Instant::now();
+        for (timer, timer_ref) in self.timers.iter_mut() {
+            if let Some(ref mut timer_future) = timer_ref {
+                match timer_future.poll_unpin(cx) {
+                    Pending => continue,
+                    Ready(()) => {
+                        keep_going = true;
+                        self.connection.handle_timeout(now, timer);
+                        *timer_ref = None;
                     }
                 }
             }
-            while let Some(quinn_proto::TimerUpdate { timer, update }) =
-                self.connection.poll_timers()
-            {
-				keep_going = true;
-				continue_loop = true;
-                use quinn_proto::TimerSetting;
-                match update {
-                    TimerSetting::Stop => self.timers[timer] = None,
-                    TimerSetting::Start(instant) => {
-                        if instant < *now {
-                            self.timers[timer] = None;
-                            self.connection.handle_timeout(*now, timer);
-                            keep_going = true;
-							continue_loop = true;
-                            continue;
-                        }
-
-                        trace!("setting timer {:?} for {:?}", timer, instant - *now);
-                        let mut new_timer = futures_timer::Delay::new(instant - *now);
-                        match new_timer.poll_unpin(cx) {
-                            Ready(()) => {
-                                warn!("timer {:?} is already Ready!", timer);
-                                *now = Instant::now();
-                                self.timers[timer] = None;
-                                self.connection.handle_timeout(*now, timer);
-                                keep_going = true;
-								continue_loop = true;
-                                continue;
-                            }
-                            Pending => self.timers[timer] = Some(new_timer),
-                        }
-                    }
-                }
-            }
-			if !continue_loop {
-				break keep_going
-			}
         }
+        while let Some(quinn_proto::TimerUpdate { timer, update }) = self.connection.poll_timers() {
+            keep_going = true;
+            use quinn_proto::TimerSetting;
+            match update {
+                TimerSetting::Stop => self.timers[timer] = None,
+                TimerSetting::Start(instant) => {
+                    if instant < now {
+                        self.timers[timer] = None;
+                        self.connection.handle_timeout(now, timer);
+                        continue;
+                    }
+
+                    trace!("setting timer {:?} for {:?}", timer, instant - now);
+                    self.timers[timer] = Some(futures_timer::Delay::new(instant - now));
+                }
+            }
+        }
+        keep_going
     }
 
     fn new(endpoint: Arc<Endpoint>, connection: Connection, handle: ConnectionHandle) -> Self {
@@ -994,10 +969,14 @@ impl Muxer {
 
     /// Process application events
     fn process_connection_events(&mut self, endpoint: &mut EndpointInner, event: ConnectionEvent) {
+        self.connection.handle_event(event);
+        self.process_endpoint_communication(endpoint)
+    }
+
+    fn process_endpoint_communication(&mut self, endpoint: &mut EndpointInner) {
         if self.close_reason.is_some() {
             return;
         }
-        self.connection.handle_event(event);
         self.send_to_endpoint(endpoint);
         self.process_app_events();
         self.wake_driver();
@@ -1111,33 +1090,30 @@ impl ConnectionDriver {
 impl Future for ConnectionDriver {
     type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let mut now = Instant::now();
         let this = self.get_mut();
         debug!("being polled for timers!");
         let mut inner = this.inner.lock();
+        inner.waker = Some(cx.waker().clone());
         loop {
+            if inner.connection.is_drained() {
+                debug!(
+                    "Connection drained: close reason {}",
+                    inner
+                        .close_reason
+                        .as_ref()
+                        .expect("we never have a closed connection with no reason; qed")
+                );
+                break Ready(Ok(()));
+            }
             let mut needs_timer_update = false;
-            inner.waker = Some(cx.waker().clone());
-            trace!("loop iteration");
+            debug!("loop iteration");
             needs_timer_update |= ready!(inner.pre_application_io(cx))?;
             needs_timer_update |= ready!(inner.on_application_io(cx))?;
-            needs_timer_update |= inner.drive_timers(cx, &mut now);
+            needs_timer_update |= inner.drive_timers(cx);
             inner.process_app_events();
             if !needs_timer_update {
-                break;
+                break Pending;
             }
-        }
-        if inner.connection.is_drained() {
-            debug!(
-                "Connection drained: close reason {}",
-                inner
-                    .close_reason
-                    .as_ref()
-                    .expect("we never have a closed connection with no reason; qed")
-            );
-            Ready(Ok(()))
-        } else {
-            Pending
         }
     }
 }
