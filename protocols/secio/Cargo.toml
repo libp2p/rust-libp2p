@@ -2,7 +2,7 @@
 name = "libp2p-secio"
 edition = "2018"
 description = "Secio encryption protocol for libp2p"
-version = "0.13.0"
+version = "0.13.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -18,7 +18,7 @@ hmac = "0.7.0"
 lazy_static = "1.2.0"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.6"
-protobuf = "= 2.8.1"
+protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 quicksink = "0.1"
 rand = "0.7"
 rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }

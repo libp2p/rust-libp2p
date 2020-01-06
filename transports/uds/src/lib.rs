@@ -56,9 +56,6 @@ use log::debug;
 use std::{io, path::PathBuf};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
-///
-/// The Unix sockets created by libp2p will need to be progressed by running the futures and
-/// streams obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone)]
 pub struct UdsConfig {
 }
