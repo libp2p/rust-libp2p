@@ -1644,7 +1644,7 @@ where
     }
 
     /// Sends an event to the handler of the node.
-    pub fn send_event<'s: 'a>(&'s mut self, event: TInEvent) -> impl Future<Output = ()> + 's + 'a {
+    pub fn send_event(&'a mut self, event: TInEvent) -> impl Future<Output = ()> + 'a {
         let mut event = Some(event);
         futures::future::poll_fn(move |cx| {
             match self.poll_ready_event(cx) {
