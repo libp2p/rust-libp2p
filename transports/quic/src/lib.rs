@@ -389,8 +389,12 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         inner.wake_driver();
         match inner.connection.write(*substream, buf) {
-            Ok(bytes) => Ready(Ok(bytes)),
+            Ok(bytes) => {
+                inner.wake_driver();
+                Ready(Ok(bytes))
+            }
             Err(WriteError::Blocked) => {
+                inner.wake_driver();
                 inner.writers.insert(*substream, cx.waker().clone());
                 Pending
             }
@@ -420,18 +424,16 @@ impl StreamMuxer for QuicMuxer {
         ready!(inner.pre_application_io(cx))?;
         match inner.connection.read(*substream, buf) {
             Ok(Some(bytes)) => {
-                ready!(inner.on_application_io(cx)?);
+                inner.wake_driver();
                 Ready(Ok(bytes))
             }
             Ok(None) => Ready(Ok(0)),
             Err(ReadError::Blocked) => {
-                inner.readers.insert(*substream, cx.waker().clone());
                 inner.wake_driver();
+                inner.readers.insert(*substream, cx.waker().clone());
                 Pending
             }
-            Err(ReadError::UnknownStream) => {
-                panic!("libp2p never uses a closed stream, so this cannot happen; qed")
-            }
+            Err(ReadError::UnknownStream) => unreachable!("use of a closed stream by libp2p"),
             Err(ReadError::Reset(_)) => Ready(Err(io::ErrorKind::ConnectionReset.into())),
         }
     }
@@ -659,8 +661,8 @@ impl Future for QuicEndpoint {
                 ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
             }
             let (handle, connection) = ready!(inner.drive_receive(&this.0.socket, cx))?;
-			this.accept_muxer(connection, handle, &mut *inner);
-			ready!(inner.poll_transmit_pending(&this.0.socket, cx))?
+            this.accept_muxer(connection, handle, &mut *inner);
+            ready!(inner.poll_transmit_pending(&this.0.socket, cx))?
         }
     }
 }
@@ -826,6 +828,46 @@ impl Muxer {
         }
     }
 
+    fn drive_timers(&mut self, cx: &mut Context, now: &mut Instant) -> bool {
+        let mut keep_going = false;
+        for (timer, timer_ref) in self.timers.iter_mut() {
+            if let Some(ref mut timer_future) = timer_ref {
+                match timer_future.poll_unpin(cx) {
+                    Pending => continue,
+                    Ready(()) => {
+                        trace!("timer {:?} ready at time {:?}", timer, now);
+                        keep_going = true;
+                        self.connection.handle_timeout(*now, timer);
+                        *timer_ref = None;
+                    }
+                }
+            }
+        }
+        while let Some(quinn_proto::TimerUpdate { timer, update }) = self.connection.poll_timers() {
+            use quinn_proto::TimerSetting;
+            match update {
+                TimerSetting::Stop => self.timers[timer] = None,
+                TimerSetting::Start(instant) => {
+                    assert!(instant >= *now);
+                    trace!("setting timer {:?} for {:?}", timer, instant - *now);
+                    let mut new_timer = futures_timer::Delay::new(instant - *now);
+                    match new_timer.poll_unpin(cx) {
+                        Ready(()) => {
+                            warn!("timer {:?} is already Ready!", timer);
+                            *now = Instant::now();
+                            self.timers[timer] = None;
+                            self.connection.handle_timeout(*now, timer);
+                            keep_going = true;
+                            continue;
+                        }
+                        Pending => self.timers[timer] = Some(new_timer),
+                    }
+                }
+            }
+        }
+        keep_going
+    }
+
     fn new(endpoint: Arc<Endpoint>, connection: Connection, handle: ConnectionHandle) -> Self {
         Muxer {
             pending_stream: None,
@@ -861,7 +903,16 @@ impl Muxer {
         let mut needs_polling = false;
         while let Some(event) = self.connection.poll_endpoint_events() {
             needs_polling = true;
-            self.endpoint_channel.start_send(EndpointMessage::EndpointEvent { handle: self.handle, event }).expect("we checked in `pre_application_io` that this channel had space; that is always called first, and there is a lock preventing concurrency problems; qed");
+            self.endpoint_channel
+                .start_send(EndpointMessage::EndpointEvent {
+                    handle: self.handle,
+                    event,
+                })
+                .expect(
+                    "we checked in `pre_application_io` that this channel had space; \
+                     that is always called first, and \
+                     there is a lock preventing concurrency problems; qed",
+                );
             ready!(self.endpoint_channel.poll_ready(cx))
                 .expect("we have a reference to the peer; qed");
         }
@@ -872,7 +923,7 @@ impl Muxer {
         Ready(Ok(needs_polling))
     }
 
-    fn pre_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn pre_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<bool, io::Error>> {
         if let Some(ref e) = self.close_reason {
             return Ready(Err(std::io::Error::new(
                 io::ErrorKind::ConnectionAborted,
@@ -882,14 +933,13 @@ impl Muxer {
         if let Some(transmit) = self.pending.take() {
             ready!(self.poll_transmit(cx, transmit))?;
         }
-        match self.endpoint_channel.poll_ready(cx) {
-            Pending => {
-                debug!("blocking on endpoint channel");
-                Pending
-            }
-            Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
-            Ready(Ok(e)) => Ready(Ok(e)),
+        ready!(self.endpoint_channel.poll_ready(cx)).expect("we have a reference to the peer; qed");
+        let mut keep_going = false;
+        while let Some(transmit) = self.connection.poll_transmit(Instant::now()) {
+            keep_going = true;
+            ready!(self.poll_transmit(cx, transmit))?;
         }
+        Ready(Ok(keep_going))
     }
 
     fn poll_transmit(
@@ -1041,58 +1091,19 @@ impl ConnectionDriver {
 impl Future for ConnectionDriver {
     type Output = Result<(), std::io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let now = Instant::now();
+        let mut now = Instant::now();
         let this = self.get_mut();
         debug!("being polled for timers!");
         loop {
             let mut inner = this.inner.lock();
+            let mut needs_timer_update = false;
             inner.waker = Some(cx.waker().clone());
             trace!("loop iteration");
-            ready!(inner.pre_application_io(cx))?;
-            let mut needs_timer_update = ready!(inner.on_application_io(cx))?;
-            let Muxer {
-                ref mut timers,
-                ref mut connection,
-                ..
-            } = *inner;
-            for (timer, timer_ref) in timers.iter_mut() {
-                if let Some(ref mut timer_future) = timer_ref {
-                    match timer_future.poll_unpin(cx) {
-                        Pending => continue,
-                        Ready(()) => {
-                            trace!("timer {:?} ready at time {:?}", timer, now);
-                            needs_timer_update = true;
-                            connection.handle_timeout(now, timer);
-                            *timer_ref = None;
-                        }
-                    }
-                }
-            }
-            if needs_timer_update {
-                while let Some(quinn_proto::TimerUpdate { timer, update }) =
-                    connection.poll_timers()
-                {
-                    use quinn_proto::TimerSetting;
-                    match update {
-                        TimerSetting::Stop => timers[timer] = None,
-                        TimerSetting::Start(instant) => {
-                            if instant < now {
-                                panic!();
-                            }
-                            trace!("setting timer {:?} for {:?}", timer, instant - now);
-                            let mut new_timer = futures_timer::Delay::new(instant - now);
-                            match new_timer.poll_unpin(cx) {
-                                Ready(()) => {}
-                                Pending => timers[timer] = Some(new_timer),
-                            }
-                        }
-                    }
-                }
-                inner.process_app_events();
-                ready!(inner.on_application_io(cx))?;
-                inner.wake_driver();
-                break;
-            } else {
+            needs_timer_update |= ready!(inner.pre_application_io(cx))?;
+            needs_timer_update |= ready!(inner.on_application_io(cx))?;
+            needs_timer_update |= inner.drive_timers(cx, &mut now);
+            inner.process_app_events();
+            if !needs_timer_update {
                 break;
             }
         }
