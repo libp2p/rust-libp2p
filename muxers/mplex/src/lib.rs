@@ -341,12 +341,7 @@ where C: AsyncRead + AsyncWrite + Unpin
     inner.notifier_write.insert(cx.waker());
 
     match Sink::poll_ready(Pin::new(&mut inner.inner), &mut Context::from_waker(&waker_ref(&inner.notifier_write))) {
-        Poll::Ready(Ok(())) => {
-            match Sink::start_send(Pin::new(&mut inner.inner), elem) {
-                Ok(()) => Poll::Ready(Ok(())),
-                Err(err) => Poll::Ready(Err(err))
-            }
-        },
+        Poll::Ready(Ok(())) => Poll::Ready(Sink::start_send(Pin::new(&mut inner.inner), elem)),
         Poll::Pending => Poll::Pending,
         Poll::Ready(Err(err)) => Poll::Ready(Err(err))
     }
