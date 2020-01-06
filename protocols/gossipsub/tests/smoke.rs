@@ -207,7 +207,7 @@ fn multi_hop_propagation() {
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
         graph.wait_for(&mut rt, move |ev| {
-            if let GossipsubEvent::Message(_peer_id, _message_id, msg) = ev {
+            if let GossipsubEvent::Message(..) = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {
                     return true;
