@@ -241,7 +241,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
                     // Note that the user is expected to call `poll_ready_broadcast` beforehand,
                     // which returns `Poll::Ready` only if the channel isn't full. Reaching this
                     // path always indicates a mistake in the code.
-                    log::warn!("start_broadcast called while channel was full");
+                    log::warn!("start_broadcast called while channel was full. Have you called `poll_ready_broadcast` before?");
                 },
                 Err(_) => {},
             }
@@ -475,4 +475,3 @@ impl<E, T: fmt::Debug> fmt::Debug for ClosedTask<E, T> {
             .finish()
     }
 }
-
