@@ -67,7 +67,7 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     /// `local_spawns` list instead.
     threads_pool: Option<ThreadPool>,
 
-    /// If no executor is available, we move tasks to this list, and futures are polled on the
+    /// If no executor is available, we move tasks to this set, and futures are polled on the
     /// current thread instead.
     local_spawns: FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>,
 
@@ -237,7 +237,12 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
             let msg = ToTaskMessage::HandlerEvent(event.clone());
             match task.sender.start_send(msg) {
                 Ok(()) => {},
-                Err(ref err) if err.is_full() => {},        // TODO: somehow report to user?
+                Err(ref err) if err.is_full() => {
+                    // Note that the user is expected to call `poll_ready_broadcast` beforehand,
+                    // which returns `Poll::Ready` only if the channel isn't full. Reaching this
+                    // path always indicates a mistake in the code.
+                    log::warn!("start_broadcast called while channel was full");
+                },
                 Err(_) => {},
             }
         }
