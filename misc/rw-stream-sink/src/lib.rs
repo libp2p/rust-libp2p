@@ -18,202 +18,180 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! This crate provides the `RwStreamSink` type. It wraps around a `Stream + Sink` that produces
-//! and accepts byte arrays, and implements `AsyncRead` and `AsyncWrite`.
+//! This crate provides the [`RwStreamSink`] type. It wraps around a [`Stream`]
+//! and [`Sink`] that produces and accepts byte arrays, and implements
+//! [`AsyncRead`] and [`AsyncWrite`].
 //!
-//! Each call to `write()` will send one packet on the sink. Calls to `read()` will read from
-//! incoming packets.
-//!
-//! > **Note**: Although this crate is hosted in the libp2p repo, it is purely a utility crate and
-//! >           not at all specific to libp2p.
+//! Each call to [`AsyncWrite::poll_write`] will send one packet to the sink.
+//! Calls to [`AsyncRead::read`] will read from the stream's incoming packets.
 
-use bytes::{Buf, IntoBuf};
-use futures::{Async, AsyncSink, Poll, Sink, Stream};
-use std::cmp;
-use std::io::Error as IoError;
-use std::io::ErrorKind as IoErrorKind;
-use std::io::{Read, Write};
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures::{prelude::*, ready};
+use std::{io::{self, Read}, pin::Pin, task::{Context, Poll}};
 
-/// Wraps around a `Stream + Sink` whose items are buffers. Implements `AsyncRead` and `AsyncWrite`.
-pub struct RwStreamSink<S>
-where
-    S: Stream,
-    S::Item: IntoBuf,
-{
+static_assertions::const_assert!(std::mem::size_of::<usize>() <= std::mem::size_of::<u64>());
+
+/// Wraps a [`Stream`] and [`Sink`] whose items are buffers.
+/// Implements [`AsyncRead`] and [`AsyncWrite`].
+pub struct RwStreamSink<S: TryStream> {
     inner: S,
-    current_item: Option<<S::Item as IntoBuf>::Buf>,
+    current_item: Option<std::io::Cursor<<S as TryStream>::Ok>>
 }
 
-impl<S> RwStreamSink<S>
-where
-    S: Stream,
-    S::Item: IntoBuf,
-{
+impl<S: TryStream> RwStreamSink<S> {
     /// Wraps around `inner`.
-    pub fn new(inner: S) -> RwStreamSink<S> {
+    pub fn new(inner: S) -> Self {
         RwStreamSink { inner, current_item: None }
-    }
-}
-
-impl<S> Read for RwStreamSink<S>
-where
-    S: Stream<Error = IoError>,
-    S::Item: IntoBuf,
-{
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
-        // Grab the item to copy from.
-        let item_to_copy = loop {
-            if let Some(ref mut i) = self.current_item {
-                if i.has_remaining() {
-                    break i;
-                }
-            }
-
-            self.current_item = Some(match self.inner.poll()? {
-                Async::Ready(Some(i)) => i.into_buf(),
-                Async::Ready(None) => return Ok(0),     // EOF
-                Async::NotReady => return Err(IoErrorKind::WouldBlock.into()),
-            });
-        };
-
-        // Copy it!
-        debug_assert!(item_to_copy.has_remaining());
-        let to_copy = cmp::min(buf.len(), item_to_copy.remaining());
-        item_to_copy.take(to_copy).copy_to_slice(&mut buf[..to_copy]);
-        Ok(to_copy)
     }
 }
 
 impl<S> AsyncRead for RwStreamSink<S>
 where
-    S: Stream<Error = IoError>,
-    S::Item: IntoBuf,
+    S: TryStream<Error = io::Error> + Unpin,
+    <S as TryStream>::Ok: AsRef<[u8]>
 {
-    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [u8]) -> bool {
-        false
-    }
-}
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        // Grab the item to copy from.
+        let item_to_copy = loop {
+            if let Some(ref mut i) = self.current_item {
+                if i.position() < i.get_ref().as_ref().len() as u64 {
+                    break i
+                }
+            }
+            self.current_item = Some(match ready!(self.inner.try_poll_next_unpin(cx)) {
+                Some(Ok(i)) => std::io::Cursor::new(i),
+                Some(Err(e)) => return Poll::Ready(Err(e)),
+                None => return Poll::Ready(Ok(0)) // EOF
+            });
+        };
 
-impl<S> Write for RwStreamSink<S>
-where
-    S: Stream + Sink<SinkError = IoError>,
-    S::SinkItem: for<'r> From<&'r [u8]>,
-    S::Item: IntoBuf,
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
-        let len = buf.len();
-        match self.inner.start_send(buf.into())? {
-            AsyncSink::Ready => Ok(len),
-            AsyncSink::NotReady(_) => Err(IoError::new(IoErrorKind::WouldBlock, "not ready")),
-        }
-    }
-
-    fn flush(&mut self) -> Result<(), IoError> {
-        match self.inner.poll_complete()? {
-            Async::Ready(()) => Ok(()),
-            Async::NotReady => Err(IoError::new(IoErrorKind::WouldBlock, "not ready"))
-        }
+        // Copy it!
+        Poll::Ready(Ok(item_to_copy.read(buf)?))
     }
 }
 
 impl<S> AsyncWrite for RwStreamSink<S>
 where
-    S: Stream + Sink<SinkError = IoError>,
-    S::SinkItem: for<'r> From<&'r [u8]>,
-    S::Item: IntoBuf,
+    S: TryStream + Sink<<S as TryStream>::Ok, Error = io::Error> + Unpin,
+    <S as TryStream>::Ok: for<'r> From<&'r [u8]>
 {
-    fn shutdown(&mut self) -> Poll<(), IoError> {
-        self.inner.close()
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+        ready!(Pin::new(&mut self.inner).poll_ready(cx)?);
+        let n = buf.len();
+        if let Err(e) = Pin::new(&mut self.inner).start_send(buf.into()) {
+            return Poll::Ready(Err(e))
+        }
+        Poll::Ready(Ok(n))
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_close(cx)
     }
 }
 
+impl<S: TryStream> Unpin for RwStreamSink<S> {}
+
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
-    use crate::RwStreamSink;
-    use futures::{prelude::*, stream, sync::mpsc::channel};
-    use std::io::Read;
+    use async_std::task;
+    use futures::{channel::mpsc, prelude::*, stream};
+    use std::{pin::Pin, task::{Context, Poll}};
+    use super::RwStreamSink;
 
     // This struct merges a stream and a sink and is quite useful for tests.
     struct Wrapper<St, Si>(St, Si);
+
     impl<St, Si> Stream for Wrapper<St, Si>
     where
-        St: Stream,
+        St: Stream + Unpin,
+        Si: Unpin
     {
         type Item = St::Item;
-        type Error = St::Error;
-        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-            self.0.poll()
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+            self.0.poll_next_unpin(cx)
         }
     }
-    impl<St, Si> Sink for Wrapper<St, Si>
+
+    impl<St, Si, T> Sink<T> for Wrapper<St, Si>
     where
-        Si: Sink,
+        St: Unpin,
+        Si: Sink<T> + Unpin,
     {
-        type SinkItem = Si::SinkItem;
-        type SinkError = Si::SinkError;
-        fn start_send(
-            &mut self,
-            item: Self::SinkItem,
-        ) -> StartSend<Self::SinkItem, Self::SinkError> {
-            self.1.start_send(item)
+        type Error = Si::Error;
+
+        fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+            Pin::new(&mut self.1).poll_ready(cx)
         }
-        fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-            self.1.poll_complete()
+
+        fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
+            Pin::new(&mut self.1).start_send(item)
         }
-        fn close(&mut self) -> Poll<(), Self::SinkError> {
-            self.1.close()
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+            Pin::new(&mut self.1).poll_flush(cx)
+        }
+
+        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+            Pin::new(&mut self.1).poll_close(cx)
         }
     }
 
     #[test]
     fn basic_reading() {
-        let (tx1, _) = channel::<Vec<u8>>(10);
-        let (tx2, rx2) = channel(10);
+        let (tx1, _) = mpsc::channel::<Vec<u8>>(10);
+        let (mut tx2, rx2) = mpsc::channel(10);
 
-        let mut wrapper = RwStreamSink::new(Wrapper(rx2.map_err(|_| panic!()), tx1));
+        let mut wrapper = RwStreamSink::new(Wrapper(rx2.map(Ok), tx1));
 
-        tx2.send(Bytes::from("hel"))
-            .and_then(|tx| tx.send(Bytes::from("lo wor")))
-            .and_then(|tx| tx.send(Bytes::from("ld")))
-            .wait()
-            .unwrap();
+        task::block_on(async move {
+            tx2.send(Vec::from("hel")).await.unwrap();
+            tx2.send(Vec::from("lo wor")).await.unwrap();
+            tx2.send(Vec::from("ld")).await.unwrap();
+            tx2.close().await.unwrap();
 
-        let mut data = Vec::new();
-        wrapper.read_to_end(&mut data).unwrap();
-        assert_eq!(data, b"hello world");
+            let mut data = Vec::new();
+            wrapper.read_to_end(&mut data).await.unwrap();
+            assert_eq!(data, b"hello world");
+        })
     }
 
     #[test]
     fn skip_empty_stream_items() {
         let data: Vec<&[u8]> = vec![b"", b"foo", b"", b"bar", b"", b"baz", b""];
-        let mut rws = RwStreamSink::new(stream::iter_ok::<_, std::io::Error>(data));
+        let mut rws = RwStreamSink::new(stream::iter(data).map(Ok));
         let mut buf = [0; 9];
-        assert_eq!(3, rws.read(&mut buf).unwrap());
-        assert_eq!(3, rws.read(&mut buf[3..]).unwrap());
-        assert_eq!(3, rws.read(&mut buf[6..]).unwrap());
-        assert_eq!(0, rws.read(&mut buf).unwrap());
-        assert_eq!(b"foobarbaz", &buf[..]);
+        task::block_on(async move {
+            assert_eq!(3, rws.read(&mut buf).await.unwrap());
+            assert_eq!(3, rws.read(&mut buf[3..]).await.unwrap());
+            assert_eq!(3, rws.read(&mut buf[6..]).await.unwrap());
+            assert_eq!(0, rws.read(&mut buf).await.unwrap());
+            assert_eq!(b"foobarbaz", &buf[..])
+        })
     }
 
     #[test]
     fn partial_read() {
         let data: Vec<&[u8]> = vec![b"hell", b"o world"];
-        let mut rws = RwStreamSink::new(stream::iter_ok::<_, std::io::Error>(data));
+        let mut rws = RwStreamSink::new(stream::iter(data).map(Ok));
         let mut buf = [0; 3];
-        assert_eq!(3, rws.read(&mut buf).unwrap());
-        assert_eq!(b"hel", &buf[..3]);
-        assert_eq!(0, rws.read(&mut buf[..0]).unwrap());
-        assert_eq!(1, rws.read(&mut buf).unwrap());
-        assert_eq!(b"l", &buf[..1]);
-        assert_eq!(3, rws.read(&mut buf).unwrap());
-        assert_eq!(b"o w", &buf[..3]);
-        assert_eq!(0, rws.read(&mut buf[..0]).unwrap());
-        assert_eq!(3, rws.read(&mut buf).unwrap());
-        assert_eq!(b"orl", &buf[..3]);
-        assert_eq!(1, rws.read(&mut buf).unwrap());
-        assert_eq!(b"d", &buf[..1]);
-        assert_eq!(0, rws.read(&mut buf).unwrap());
+        task::block_on(async move {
+            assert_eq!(3, rws.read(&mut buf).await.unwrap());
+            assert_eq!(b"hel", &buf[..3]);
+            assert_eq!(0, rws.read(&mut buf[..0]).await.unwrap());
+            assert_eq!(1, rws.read(&mut buf).await.unwrap());
+            assert_eq!(b"l", &buf[..1]);
+            assert_eq!(3, rws.read(&mut buf).await.unwrap());
+            assert_eq!(b"o w", &buf[..3]);
+            assert_eq!(0, rws.read(&mut buf[..0]).await.unwrap());
+            assert_eq!(3, rws.read(&mut buf).await.unwrap());
+            assert_eq!(b"orl", &buf[..3]);
+            assert_eq!(1, rws.read(&mut buf).await.unwrap());
+            assert_eq!(b"d", &buf[..1]);
+            assert_eq!(0, rws.read(&mut buf).await.unwrap());
+        })
     }
 }

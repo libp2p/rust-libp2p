@@ -18,21 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::PlainText2Config;
+use crate::error::PlainTextError;
+use crate::pb::structs::Exchange;
+
 use bytes::BytesMut;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use futures::Future;
-use futures::future;
-use futures::sink::Sink;
-use futures::stream::Stream;
+use futures::prelude::*;
+use futures_codec::Framed;
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
-use crate::pb::structs::Exchange;
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::codec::length_delimited;
-use tokio_io::codec::length_delimited::Framed;
 use protobuf::Message;
-use crate::error::PlainTextError;
-use crate::PlainText2Config;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use unsigned_varint::codec::UviBytes;
 
 struct HandshakeContext<T> {
     config: PlainText2Config,
@@ -68,7 +65,9 @@ impl HandshakeContext<Local> {
         })
     }
 
-    fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandshakeContext<Remote>, PlainTextError> {
+    fn with_remote(self, exchange_bytes: BytesMut)
+        -> Result<HandshakeContext<Remote>, PlainTextError>
+    {
         let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
             Ok(prop) => prop,
             Err(e) => {
@@ -95,7 +94,7 @@ impl HandshakeContext<Local> {
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.clone().into_peer_id() {
-            debug!("The remote's `PeerId` of the exchange isn't consist with the remote public key");
+            debug!("the remote's `PeerId` isn't consistent with the remote's public key");
             return Err(PlainTextError::InvalidPeerId)
         }
 
@@ -109,45 +108,30 @@ impl HandshakeContext<Local> {
     }
 }
 
-pub fn handshake<S>(socket: S, config: PlainText2Config)
-    -> impl Future<Item = (Framed<S, BytesMut>, Remote), Error = PlainTextError>
+pub async fn handshake<S>(socket: S, config: PlainText2Config)
+    -> Result<(Framed<S, UviBytes<BytesMut>>, Remote), PlainTextError>
 where
-    S: AsyncRead + AsyncWrite + Send,
+    S: AsyncRead + AsyncWrite + Send + Unpin,
 {
-    let socket = length_delimited::Builder::new()
-        .big_endian()
-        .length_field_length(4)
-        .new_framed(socket);
+    // The handshake messages all start with a variable-length integer indicating the size.
+    let mut socket = Framed::new(socket, UviBytes::default());
 
-    future::ok::<_, PlainTextError>(())
-        .and_then(|_| {
-            trace!("starting handshake");
-            Ok(HandshakeContext::new(config)?)
-        })
-        // Send our local `Exchange`.
-        .and_then(|context| {
-            trace!("sending exchange to remote");
-            socket.send(BytesMut::from(context.state.exchange_bytes.clone()))
-                .from_err()
-                .map(|s| (s, context))
-        })
-        // Receive the remote's `Exchange`.
-        .and_then(move |(socket, context)| {
-            trace!("receiving the remote's exchange");
-            socket.into_future()
-                .map_err(|(e, _)| e.into())
-                .and_then(move |(prop_raw, socket)| {
-                    let context = match prop_raw {
-                        Some(p) => context.with_remote(p)?,
-                        None => {
-                            debug!("unexpected eof while waiting for remote's exchange");
-                            let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
-                            return Err(err.into());
-                        }
-                    };
+    trace!("starting handshake");
+    let context = HandshakeContext::new(config)?;
 
-                    trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-                    Ok((socket, context.state))
-                })
-        })
+    trace!("sending exchange to remote");
+    socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
+
+    trace!("receiving the remote's exchange");
+    let context = match socket.next().await {
+        Some(p) => context.with_remote(p?)?,
+        None => {
+            debug!("unexpected eof while waiting for remote's exchange");
+            let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
+            return Err(err.into());
+        }
+    };
+
+    trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
+    Ok((socket, context.state))
 }

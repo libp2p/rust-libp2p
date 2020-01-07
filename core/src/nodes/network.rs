@@ -49,9 +49,9 @@ use std::{
     fmt,
     hash::Hash,
     num::NonZeroUsize,
+    pin::Pin,
+    task::{Context, Poll},
 };
-
-pub use crate::nodes::collection::StartTakeOver;
 
 mod tests;
 
@@ -81,7 +81,7 @@ where
     /// If the pair's second element is `AsyncSink::Ready`, the take over
     /// message has been sent and needs to be flushed using
     /// `PeerMut::complete_take_over`.
-    take_over_to_complete: Option<(TPeerId, AsyncSink<InterruptedReachAttempt<TInEvent, (TConnInfo, ConnectedPoint), ()>>)>
+    take_over_to_complete: Option<(TPeerId, InterruptedReachAttempt<TInEvent, (TConnInfo, ConnectedPoint), ()>)>
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
@@ -100,6 +100,13 @@ where
             .field("take_over_to_complete", &self.take_over_to_complete)
             .finish()
     }
+}
+
+impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> Unpin for
+    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+where
+    TTrans: Transport
+{
 }
 
 impl<TConnInfo> ConnectionInfo for (TConnInfo, ConnectedPoint)
@@ -173,7 +180,7 @@ where
         /// The listener that errored.
         listener_id: ListenerId,
         /// The listener error.
-        error: <TTrans::Listener as Stream>::Error
+        error: <TTrans::Listener as TryStream>::Error
     },
 
     /// One of the listeners is now listening on an additional address.
@@ -573,7 +580,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)>,
     TTrans::Error: Send + 'static,
-    TTrans::ListenerUpgrade: Send + 'static,
+    TTrans::ListenerUpgrade: Unpin + Send + 'static,
     THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
@@ -609,9 +616,9 @@ where
                 let connected_point = connected_point.clone();
                 move |(peer_id, muxer)| {
                     if *peer_id.peer_id() == local_peer_id {
-                        Err(InternalReachErr::FoundLocalPeerId)
+                        future::ready(Err(InternalReachErr::FoundLocalPeerId))
                     } else {
-                        Ok(((peer_id, connected_point), muxer))
+                        future::ready(Ok(((peer_id, connected_point), muxer)))
                     }
                 }
             });
@@ -781,7 +788,7 @@ where
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
-        TTrans::Dial: Send + 'static,
+        TTrans::Dial: Unpin + Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TInEvent: Send + 'static,
@@ -797,9 +804,9 @@ where
                 let connected_point = connected_point.clone();
                 move |(peer_id, muxer)| {
                     if *peer_id.peer_id() == local_peer_id {
-                        Err(InternalReachErr::FoundLocalPeerId)
+                        future::ready(Err(InternalReachErr::FoundLocalPeerId))
                     } else {
-                        Ok(((peer_id, connected_point), muxer))
+                        future::ready(Ok(((peer_id, connected_point), muxer)))
                     }
                 }
             });
@@ -838,21 +845,16 @@ where
             })
     }
 
-    /// Start sending an event to all nodes.
+    /// Sends an event to all nodes.
     ///
-    /// Make sure to complete the broadcast with `complete_broadcast`.
+    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
+    /// has been sent to any node yet.
     #[must_use]
-    pub fn start_broadcast(&mut self, event: &TInEvent) -> AsyncSink<()>
+    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
     where
         TInEvent: Clone
     {
-        self.active_nodes.start_broadcast(event)
-    }
-
-    /// Complete a broadcast initiated with `start_broadcast`.
-    #[must_use]
-    pub fn complete_broadcast(&mut self) -> Async<()> {
-        self.active_nodes.complete_broadcast()
+        self.active_nodes.poll_broadcast(event, cx)
     }
 
     /// Returns a list of all the peers we are currently connected to.
@@ -934,7 +936,7 @@ where
     fn start_dial_out(&mut self, peer_id: TPeerId, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Dial: Send + 'static,
+        TTrans::Dial: Unpin + Send + 'static,
         TTrans::Error: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -950,9 +952,9 @@ where
                     .map_err(|err| InternalReachErr::Transport(TransportError::Other(err)))
                     .and_then(move |(actual_conn_info, muxer)| {
                         if *actual_conn_info.peer_id() == expected_peer_id {
-                            Ok(((actual_conn_info, connected_point), muxer))
+                            future::ready(Ok(((actual_conn_info, connected_point), muxer)))
                         } else {
-                            Err(InternalReachErr::PeerIdMismatch { obtained: actual_conn_info })
+                            future::ready(Err(InternalReachErr::PeerIdMismatch { obtained: actual_conn_info }))
                         }
                     });
                 self.active_nodes.add_reach_attempt(fut, handler)
@@ -976,11 +978,12 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
-        TTrans::Dial: Send + 'static,
+        TTrans::Dial: Unpin + Send + 'static,
+        TTrans::Listener: Unpin,
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -998,9 +1001,9 @@ where
             Some(x) if self.incoming_negotiated().count() >= (x as usize)
                 => (),
             _ => {
-                match self.listeners.poll() {
-                    Async::NotReady => (),
-                    Async::Ready(ListenersEvent::Incoming { listener_id, upgrade, local_addr, send_back_addr }) => {
+                match ListenersStream::poll(Pin::new(&mut self.listeners), cx) {
+                    Poll::Pending => (),
+                    Poll::Ready(ListenersEvent::Incoming { listener_id, upgrade, local_addr, send_back_addr }) => {
                         let event = IncomingConnectionEvent {
                             listener_id,
                             upgrade,
@@ -1010,19 +1013,19 @@ where
                             active_nodes: &mut self.active_nodes,
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
                         };
-                        return Async::Ready(NetworkEvent::IncomingConnection(event));
+                        return Poll::Ready(NetworkEvent::IncomingConnection(event));
                     }
-                    Async::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
-                        return Async::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr })
+                    Poll::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
+                        return Poll::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr })
                     }
-                    Async::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
-                        return Async::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
+                    Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
+                        return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
                     }
-                    Async::Ready(ListenersEvent::Closed { listener_id, listener }) => {
-                        return Async::Ready(NetworkEvent::ListenerClosed { listener_id, listener })
+                    Poll::Ready(ListenersEvent::Closed { listener_id, listener }) => {
+                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, listener })
                     }
-                    Async::Ready(ListenersEvent::Error { listener_id, error }) => {
-                        return Async::Ready(NetworkEvent::ListenerError { listener_id, error })
+                    Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
+                        return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })
                     }
                 }
             }
@@ -1031,36 +1034,30 @@ where
         // Attempt to deliver any pending take over messages.
         if let Some((id, interrupted)) = self.take_over_to_complete.take() {
             if let Some(mut peer) = self.active_nodes.peer_mut(&id) {
-                if let AsyncSink::NotReady(i) = interrupted {
-                    if let StartTakeOver::NotReady(i) = peer.start_take_over(i) {
-                        self.take_over_to_complete = Some((id, AsyncSink::NotReady(i)))
-                    } else if let Ok(Async::NotReady) = peer.complete_take_over() {
-                        self.take_over_to_complete = Some((id, AsyncSink::Ready))
-                    }
-                } else if let Ok(Async::NotReady) = peer.complete_take_over() {
-                    self.take_over_to_complete = Some((id, AsyncSink::Ready))
+                if let Poll::Ready(()) = peer.poll_ready_take_over(cx) {
+                    peer.start_take_over(interrupted);
+                } else {
+                    self.take_over_to_complete = Some((id, interrupted));
+                    return Poll::Pending;
                 }
             }
-        }
-        if self.take_over_to_complete.is_some() {
-            return Async::NotReady
         }
 
         // Poll the existing nodes.
         let (action, out_event);
-        match self.active_nodes.poll() {
-            Async::NotReady => return Async::NotReady,
-            Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
+        match self.active_nodes.poll(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(CollectionEvent::NodeReached(reach_event)) => {
                 let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
                 action = a;
                 out_event = e;
             }
-            Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
+            Poll::Ready(CollectionEvent::ReachError { id, error, handler }) => {
                 let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
                 action = a;
                 out_event = e;
             }
-            Async::Ready(CollectionEvent::NodeClosed {
+            Poll::Ready(CollectionEvent::NodeClosed {
                 conn_info,
                 error,
                 ..
@@ -1078,7 +1075,7 @@ where
                     error,
                 };
             }
-            Async::Ready(CollectionEvent::NodeEvent { peer, event }) => {
+            Poll::Ready(CollectionEvent::NodeEvent { peer, event }) => {
                 action = Default::default();
                 out_event = NetworkEvent::NodeEvent { conn_info: peer.info().0.clone(), event };
             }
@@ -1099,17 +1096,15 @@ where
                          out_reach_attempts should always be in sync with the actual \
                          attempts; QED");
             let mut peer = self.active_nodes.peer_mut(&peer_id).unwrap();
-            if let StartTakeOver::NotReady(i) = peer.start_take_over(interrupted) {
-                self.take_over_to_complete = Some((peer_id, AsyncSink::NotReady(i)));
-                return Async::NotReady
-            }
-            if let Ok(Async::NotReady) = peer.complete_take_over() {
-                self.take_over_to_complete = Some((peer_id, AsyncSink::Ready));
-                return Async::NotReady
+            if let Poll::Ready(()) = peer.poll_ready_take_over(cx) {
+                peer.start_take_over(interrupted);
+            } else {
+                self.take_over_to_complete = Some((peer_id, interrupted));
+                return Poll::Pending
             }
         }
 
-        Async::Ready(out_event)
+        Poll::Ready(out_event)
     }
 }
 
@@ -1467,7 +1462,7 @@ impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
-    TTrans::Dial: Send + 'static,
+    TTrans::Dial: Unpin + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
@@ -1644,18 +1639,33 @@ where
                      closed messages; QED")
     }
 
-    /// Start sending an event to the node.
-    pub fn start_send_event(&mut self, event: TInEvent) -> StartSend<TInEvent, ()> {
+    /// Sends an event to the handler of the node.
+    pub fn send_event(&'a mut self, event: TInEvent) -> impl Future<Output = ()> + 'a {
+        let mut event = Some(event);
+        futures::future::poll_fn(move |cx| {
+            match self.poll_ready_event(cx) {
+                Poll::Ready(()) => {
+                    self.start_send_event(event.take().expect("Future called after finished"));
+                    Poll::Ready(())
+                },
+                Poll::Pending => Poll::Pending,
+            }
+        })
+    }
+
+    /// Begin sending an event to the node. Must be called only after a successful call to
+    /// `poll_ready_event`.
+    pub fn start_send_event(&mut self, event: TInEvent) {
         self.active_nodes.peer_mut(&self.peer_id)
             .expect("A PeerConnected is always created with a PeerId in active_nodes; QED")
             .start_send_event(event)
     }
 
-    /// Complete sending an event message, initiated by `start_send_event`.
-    pub fn complete_send_event(&mut self) -> Poll<(), ()> {
+    /// Make sure we are ready to accept an event to be sent with `start_send_event`.
+    pub fn poll_ready_event(&mut self, cx: &mut Context) -> Poll<()> {
         self.active_nodes.peer_mut(&self.peer_id)
             .expect("A PeerConnected is always created with a PeerId in active_nodes; QED")
-            .complete_send_event()
+            .poll_ready_event(cx)
     }
 }
 
@@ -1749,7 +1759,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
-    TTrans::Dial: Send + 'static,
+    TTrans::Dial: Unpin + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,

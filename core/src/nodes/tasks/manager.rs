@@ -27,9 +27,8 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, future::Executor, sync::mpsc};
-use smallvec::SmallVec;
-use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt};
+use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered};
+use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 
 // Implementor notes
@@ -64,12 +63,13 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     /// Identifier for the next task to spawn.
     next_task_id: TaskId,
 
-    /// List of node tasks to spawn.
-    to_spawn: SmallVec<[Box<dyn Future<Item = (), Error = ()> + Send>; 8]>,
+    /// Threads pool where we spawn the nodes' tasks. If `None`, then we push tasks to the
+    /// `local_spawns` list instead.
+    threads_pool: Option<ThreadPool>,
 
-    /// If no tokio executor is available, we move tasks to this list, and futures are polled on
-    /// the current thread instead.
-    local_spawns: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
+    /// If no executor is available, we move tasks to this set, and futures are polled on the
+    /// current thread instead.
+    local_spawns: FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::Sender<(FromTaskMessage<O, H, E, HE, C>, TaskId)>,
@@ -91,16 +91,13 @@ where
 
 /// Information about a running task.
 ///
-/// Contains the sender to deliver event messages to the task,
-/// the associated user data and a pending message if any,
-/// meant to be delivered to the task via the sender.
+/// Contains the sender to deliver event messages to the task, and
+/// the associated user data.
 struct TaskInfo<I, T> {
     /// channel endpoint to send messages to the task
     sender: mpsc::Sender<ToTaskMessage<I>>,
     /// task associated data
     user_data: T,
-    /// any pending event to deliver to the task
-    pending: Option<AsyncSink<ToTaskMessage<I>>>
 }
 
 /// Event produced by the [`Manager`].
@@ -140,11 +137,15 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// Creates a new task manager.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(1);
+        let threads_pool = ThreadPool::builder()
+            .name_prefix("libp2p-nodes-")
+            .create().ok();
+
         Self {
             tasks: FnvHashMap::default(),
             next_task_id: TaskId(0),
-            to_spawn: SmallVec::new(),
-            local_spawns: Vec::new(),
+            threads_pool,
+            local_spawns: FuturesUnordered::new(),
             events_tx: tx,
             events_rx: rx
         }
@@ -156,7 +157,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// processing the node's events.
     pub fn add_reach_attempt<F, M>(&mut self, future: F, user_data: T, handler: H) -> TaskId
     where
-        F: Future<Item = (C, M), Error = E> + Send + 'static,
+        F: Future<Output = Result<(C, M), E>> + Unpin + Send + 'static,
         H: IntoNodeHandler<C> + Send + 'static,
         H::Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O, Error = HE> + Send + 'static,
         E: error::Error + Send + 'static,
@@ -172,10 +173,14 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         self.next_task_id.0 += 1;
 
         let (tx, rx) = mpsc::channel(4);
-        self.tasks.insert(task_id, TaskInfo { sender: tx, user_data, pending: None });
+        self.tasks.insert(task_id, TaskInfo { sender: tx, user_data });
 
-        let task = Box::new(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
-        self.to_spawn.push(task);
+        let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
+        if let Some(threads_pool) = &mut self.threads_pool {
+            threads_pool.spawn_ok(task);
+        } else {
+            self.local_spawns.push(task);
+        }
         task_id
     }
 
@@ -202,71 +207,46 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         self.next_task_id.0 += 1;
 
         let (tx, rx) = mpsc::channel(4);
-        self.tasks.insert(task_id, TaskInfo { sender: tx, user_data, pending: None });
+        self.tasks.insert(task_id, TaskInfo { sender: tx, user_data });
 
-        let task: Task<futures::future::Empty<_, _>, _, _, _, _, _, _> =
+        let task: Task<Pin<Box<futures::future::Pending<_>>>, _, _, _, _, _, _> =
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
-        self.to_spawn.push(Box::new(task));
+        if let Some(threads_pool) = &mut self.threads_pool {
+            threads_pool.spawn_ok(Box::pin(task));
+        } else {
+            self.local_spawns.push(Box::pin(task));
+        }
+
         task_id
     }
 
-    /// Start sending an event to all the tasks, including the pending ones.
+    /// Sends a message to all the tasks, including the pending ones.
     ///
-    /// After starting a broadcast make sure to finish it with `complete_broadcast`,
-    /// otherwise starting another broadcast or sending an event directly to a
-    /// task would overwrite the pending broadcast.
+    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
+    /// has been sent to any node yet.
     #[must_use]
-    pub fn start_broadcast(&mut self, event: &I) -> AsyncSink<()>
+    pub fn poll_broadcast(&mut self, event: &I, cx: &mut Context) -> Poll<()>
     where
         I: Clone
     {
-        if self.complete_broadcast().is_not_ready() {
-            return AsyncSink::NotReady(())
+        for task in self.tasks.values_mut() {
+            if let Poll::Pending = task.sender.poll_ready(cx) {
+                return Poll::Pending;
+            }
         }
 
         for task in self.tasks.values_mut() {
             let msg = ToTaskMessage::HandlerEvent(event.clone());
-            task.pending = Some(AsyncSink::NotReady(msg))
-        }
-
-        AsyncSink::Ready
-    }
-
-    /// Complete a started broadcast.
-    #[must_use]
-    pub fn complete_broadcast(&mut self) -> Async<()> {
-        let mut ready = true;
-
-        for task in self.tasks.values_mut() {
-            match task.pending.take() {
-                Some(AsyncSink::NotReady(msg)) =>
-                    match task.sender.start_send(msg) {
-                        Ok(AsyncSink::NotReady(msg)) => {
-                            task.pending = Some(AsyncSink::NotReady(msg));
-                            ready = false
-                        }
-                        Ok(AsyncSink::Ready) =>
-                            if let Ok(Async::NotReady) = task.sender.poll_complete() {
-                                task.pending = Some(AsyncSink::Ready);
-                                ready = false
-                            }
-                        Err(_) => {}
-                    }
-                Some(AsyncSink::Ready) =>
-                    if let Ok(Async::NotReady) = task.sender.poll_complete() {
-                        task.pending = Some(AsyncSink::Ready);
-                        ready = false
-                    }
-                None => {}
+            match task.sender.start_send(msg) {
+                Ok(()) => {},
+                Err(ref err) if err.is_full() =>
+                    panic!("poll_ready returned Poll::Ready just above; qed"),
+                Err(_) => {},
             }
         }
 
-        if ready {
-            Async::Ready(())
-        } else {
-            Async::NotReady
-        }
+        Poll::Ready(())
     }
 
     /// Grants access to an object that allows controlling a task of the collection.
@@ -285,32 +265,13 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<Event<I, O, H, E, HE, T, C>> {
-        for to_spawn in self.to_spawn.drain() {
-            // We try to use the default executor, but fall back to polling the task manually if
-            // no executor is available. This makes it possible to use the core in environments
-            // outside of tokio.
-            let executor = tokio_executor::DefaultExecutor::current();
-            if let Err(err) = executor.execute(to_spawn) {
-                self.local_spawns.push(err.into_future())
-            }
-        }
-
-        for n in (0 .. self.local_spawns.len()).rev() {
-            let mut task = self.local_spawns.swap_remove(n);
-            match task.poll() {
-                Ok(Async::Ready(())) => {}
-                Ok(Async::NotReady) => self.local_spawns.push(task),
-                // It would normally be desirable to either report or log when a background task
-                // errors. However the default tokio executor doesn't do anything in case of error,
-                // and therefore we mimic this behaviour by also not doing anything.
-                Err(()) => {}
-            }
-        }
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<Event<I, O, H, E, HE, T, C>> {
+        // Advance the content of `local_spawns`.
+        while let Poll::Ready(Some(_)) = Stream::poll_next(Pin::new(&mut self.local_spawns), cx) {}
 
         let (message, task_id) = loop {
-            match self.events_rx.poll() {
-                Ok(Async::Ready(Some((message, task_id)))) => {
+            match Stream::poll_next(Pin::new(&mut self.events_rx), cx) {
+                Poll::Ready(Some((message, task_id))) => {
                     // If the task id is no longer in `self.tasks`, that means that the user called
                     // `close()` on this task earlier. Therefore no new event should be generated
                     // for this task.
@@ -318,13 +279,12 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
                         break (message, task_id)
                     }
                 }
-                Ok(Async::NotReady) => return Async::NotReady,
-                Ok(Async::Ready(None)) => unreachable!("sender and receiver have same lifetime"),
-                Err(()) => unreachable!("An `mpsc::Receiver` does not error.")
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => unreachable!("sender and receiver have same lifetime"),
             }
         };
 
-        Async::Ready(match message {
+        Poll::Ready(match message {
             FromTaskMessage::NodeEvent(event) =>
                 Event::NodeEvent {
                     task: match self.tasks.entry(task_id) {
@@ -360,24 +320,16 @@ pub struct TaskEntry<'a, E, T> {
 }
 
 impl<'a, E, T> TaskEntry<'a, E, T> {
-    /// Begin sending an event to the given node.
-    ///
-    /// Make sure to finish the send operation with `complete_send_event`.
-    pub fn start_send_event(&mut self, event: E) -> StartSend<E, ()> {
+    /// Begin sending an event to the given node. Must be called only after a successful call to
+    /// `poll_ready_event`.
+    pub fn start_send_event(&mut self, event: E) {
         let msg = ToTaskMessage::HandlerEvent(event);
-        if let AsyncSink::NotReady(msg) = self.start_send_event_msg(msg)? {
-            if let ToTaskMessage::HandlerEvent(event) = msg {
-                return Ok(AsyncSink::NotReady(event))
-            } else {
-                unreachable!("we tried to send an handler event, so we get one back if not ready")
-            }
-        }
-        Ok(AsyncSink::Ready)
+        self.start_send_event_msg(msg);
     }
 
-    /// Finish a send operation started with `start_send_event`.
-    pub fn complete_send_event(&mut self) -> Poll<(), ()> {
-        self.complete_send_event_msg()
+    /// Make sure we are ready to accept an event to be sent with `start_send_event`.
+    pub fn poll_ready_event(&mut self, cx: &mut Context) -> Poll<()> {
+        self.poll_ready_event_msg(cx)
     }
 
     /// Returns the user data associated with the task.
@@ -409,79 +361,38 @@ impl<'a, E, T> TaskEntry<'a, E, T> {
     /// As soon as our task (`self`) has some acknowledgment from the remote
     /// that its connection is alive, it will close the connection with `other`.
     ///
-    /// Make sure to complete this operation with `complete_take_over`.
-    #[must_use]
-    pub fn start_take_over(&mut self, t: ClosedTask<E, T>) -> StartTakeOver<T, ClosedTask<E, T>> {
+    /// Must be called only after a successful call to `poll_ready_take_over`.
+    pub fn start_take_over(&mut self, t: ClosedTask<E, T>) {
+        self.start_send_event_msg(ToTaskMessage::TakeOver(t.sender));
+    }
+
+    /// Make sure we are ready to taking over with `start_take_over`.
+    pub fn poll_ready_take_over(&mut self, cx: &mut Context) -> Poll<()> {
+        self.poll_ready_event_msg(cx)
+    }
+
+    /// Sends a message to the task. Must be called only after a successful call to
+    /// `poll_ready_event`.
+    ///
+    /// The API mimicks the one of [`futures::Sink`].
+    fn start_send_event_msg(&mut self, msg: ToTaskMessage<E>) {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
-        let id = t.id();
-        match self.start_send_event_msg(ToTaskMessage::TakeOver(t.sender)) {
-            Ok(AsyncSink::Ready) => StartTakeOver::Ready(t.user_data),
-            Ok(AsyncSink::NotReady(ToTaskMessage::TakeOver(sender))) =>
-                StartTakeOver::NotReady(ClosedTask::new(id, sender, t.user_data)),
-            Ok(AsyncSink::NotReady(_)) =>
-                unreachable!("We tried to send a take over message, so we get one back."),
-            Err(()) => StartTakeOver::Gone
+        match self.inner.get_mut().sender.start_send(msg) {
+            Ok(()) => {},
+            Err(ref err) if err.is_full() => {},        // TODO: somehow report to user?
+            Err(_) => {},
         }
     }
 
-    /// Finish take over started by `start_take_over`.
-    pub fn complete_take_over(&mut self) -> Poll<(), ()> {
-        self.complete_send_event_msg()
-    }
-
-    /// Begin to send a message to the task.
-    ///
-    /// The API mimicks the one of [`futures::Sink`]. If this method returns
-    /// `Ok(AsyncSink::Ready)` drive the sending to completion with
-    /// `complete_send_event_msg`. If the receiving end does not longer exist,
-    /// i.e. the task has ended, we return this information as an error.
-    fn start_send_event_msg(&mut self, msg: ToTaskMessage<E>) -> StartSend<ToTaskMessage<E>, ()> {
-        // We first drive any pending send to completion before starting another one.
-        if self.complete_send_event_msg()?.is_ready() {
-            self.inner.get_mut().pending = Some(AsyncSink::NotReady(msg));
-            Ok(AsyncSink::Ready)
-        } else {
-            Ok(AsyncSink::NotReady(msg))
-        }
-    }
-
-    /// Complete event message deliver started by `start_send_event_msg`.
-    fn complete_send_event_msg(&mut self) -> Poll<(), ()> {
+    /// Wait until we have space to send an event using `start_send_event_msg`.
+    fn poll_ready_event_msg(&mut self, cx: &mut Context) -> Poll<()> {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
         let task = self.inner.get_mut();
-        let state =
-            if let Some(state) = task.pending.take() {
-                state
-            } else {
-                return Ok(Async::Ready(()))
-            };
-        match state {
-            AsyncSink::NotReady(msg) =>
-                match task.sender.start_send(msg).map_err(|_| ())? {
-                    AsyncSink::Ready =>
-                        if task.sender.poll_complete().map_err(|_| ())?.is_not_ready() {
-                            task.pending = Some(AsyncSink::Ready);
-                            Ok(Async::NotReady)
-                        } else {
-                            Ok(Async::Ready(()))
-                        }
-                    AsyncSink::NotReady(msg) => {
-                        task.pending = Some(AsyncSink::NotReady(msg));
-                        Ok(Async::NotReady)
-                    }
-                }
-            AsyncSink::Ready =>
-                if task.sender.poll_complete().map_err(|_| ())?.is_not_ready() {
-                    task.pending = Some(AsyncSink::Ready);
-                    Ok(Async::NotReady)
-                } else {
-                    Ok(Async::Ready(()))
-                }
-        }
+        task.sender.poll_ready(cx).map(|_| ())
     }
 }
 
@@ -492,18 +403,6 @@ impl<E, T: fmt::Debug> fmt::Debug for TaskEntry<'_, E, T> {
             .field(self.user_data())
             .finish()
     }
-}
-
-/// Result of [`TaskEntry::start_take_over`].
-#[derive(Debug)]
-pub enum StartTakeOver<A, B> {
-    /// The take over message has been enqueued.
-    /// Complete the take over with [`TaskEntry::complete_take_over`].
-    Ready(A),
-    /// Not ready to send the take over message to the task.
-    NotReady(B),
-    /// The task to send the take over message is no longer there.
-    Gone
 }
 
 /// Task after it has been closed.
@@ -565,4 +464,3 @@ impl<E, T: fmt::Debug> fmt::Debug for ClosedTask<E, T> {
             .finish()
     }
 }
-

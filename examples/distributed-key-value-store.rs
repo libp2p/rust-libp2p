@@ -29,19 +29,22 @@
 //!
 //! 4. Close with Ctrl-c.
 
+use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{record::Key, Kademlia, KademliaEvent, PutRecordOk, Quorum, Record};
 use libp2p::{
-    build_development_transport, identity,
+    NetworkBehaviour,
+    PeerId,
+    Swarm,
+    build_development_transport,
+    identity,
     mdns::{Mdns, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess,
-    tokio_codec::{FramedRead, LinesCodec},
-    tokio_io::{AsyncRead, AsyncWrite},
-    NetworkBehaviour, PeerId, Swarm,
+    swarm::NetworkBehaviourEventProcess
 };
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -49,17 +52,18 @@ fn main() {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = build_development_transport(local_key);
+    let transport = build_development_transport(local_key)?;
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
         kademlia: Kademlia<TSubstream, MemoryStore>,
-        mdns: Mdns<TSubstream>,
+        mdns: Mdns<TSubstream>
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent>
-        for MyBehaviour<TSubstream>
+    impl<T> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<T>
+    where
+        T: AsyncRead + AsyncWrite
     {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
@@ -71,8 +75,9 @@ fn main() {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<KademliaEvent>
-        for MyBehaviour<TSubstream>
+    impl<T> NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour<T>
+    where
+        T: AsyncRead + AsyncWrite
     {
         // Called when `kademlia` produces an event.
         fn inject_event(&mut self, message: KademliaEvent) {
@@ -108,58 +113,50 @@ fn main() {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id.clone());
         let kademlia = Kademlia::new(local_peer_id.clone(), store);
-
-        let behaviour = MyBehaviour {
-            kademlia,
-            mdns: Mdns::new().expect("Failed to create mDNS service"),
-        };
-
+        let mdns = task::block_on(Mdns::new())?;
+        let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
     };
 
-    // Read full lines from stdin.
-    let stdin = tokio_stdin_stdout::stdin(0);
-    let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
+    // Read full lines from stdin
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns.
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off.
     let mut listening = false;
-    tokio::run(futures::future::poll_fn(move || {
+    task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
-            match framed_stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(line)) => {
-                    handle_input_line(&mut swarm.kademlia, line);
-                }
-                Async::Ready(None) => panic!("Stdin closed"),
-                Async::NotReady => break,
-            };
+            match stdin.try_poll_next_unpin(cx)? {
+                Poll::Ready(Some(line)) => handle_input_line(&mut swarm.kademlia, line),
+                Poll::Ready(None) => panic!("Stdin closed"),
+                Poll::Pending => break
+            }
         }
-
         loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(_)) => {}
-                Async::Ready(None) | Async::NotReady => {
+            match swarm.poll_next_unpin(cx) {
+                Poll::Ready(Some(event)) => println!("{:?}", event),
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => {
                     if !listening {
                         if let Some(a) = Swarm::listeners(&swarm).next() {
                             println!("Listening on {:?}", a);
                             listening = true;
                         }
                     }
-                    break;
+                    break
                 }
             }
         }
-
-        Ok(Async::NotReady)
-    }));
+        Poll::Pending
+    }))
 }
 
-fn handle_input_line<TSubstream: AsyncRead + AsyncWrite>(
-    kademlia: &mut Kademlia<TSubstream, MemoryStore>,
-    line: String,
-) {
+fn handle_input_line<T>(kademlia: &mut Kademlia<T, MemoryStore>, line: String)
+where
+    T: AsyncRead + AsyncWrite
+{
     let mut args = line.split(" ");
 
     match args.next() {

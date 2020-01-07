@@ -19,17 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Transport, transport::{TransportError, ListenerEvent}};
-use bytes::{Bytes, IntoBuf};
 use fnv::FnvHashMap;
-use futures::{future::{self, FutureResult}, prelude::*, sync::mpsc, try_ready};
+use futures::{future::{self, Ready}, prelude::*, channel::mpsc, task::Context, task::Poll};
 use lazy_static::lazy_static;
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64};
+use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64, pin::Pin};
 
 lazy_static! {
-    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Bytes>>>> =
+    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Vec<u8>>>>> =
         Mutex::new(FnvHashMap::default());
 }
 
@@ -39,40 +38,38 @@ pub struct MemoryTransport;
 
 /// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
-    sender: mpsc::Sender<Channel<Bytes>>,
-    channel_to_send: Option<Channel<Bytes>>,
-    channel_to_return: Option<Channel<Bytes>>,
+    sender: mpsc::Sender<Channel<Vec<u8>>>,
+    channel_to_send: Option<Channel<Vec<u8>>>,
+    channel_to_return: Option<Channel<Vec<u8>>>,
 }
 
 impl Future for DialFuture {
-    type Item = Channel<Bytes>;
-    type Error = MemoryTransportError;
+    type Output = Result<Channel<Vec<u8>>, MemoryTransportError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(c) = self.channel_to_send.take() {
-            match self.sender.start_send(c) {
-                Err(_) => return Err(MemoryTransportError::Unreachable),
-                Ok(AsyncSink::NotReady(t)) => {
-                    self.channel_to_send = Some(t);
-                    return Ok(Async::NotReady)
-                },
-                _ => (),
-            }
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match self.sender.poll_ready(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(())) => {},
+            Poll::Ready(Err(_)) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
         }
-        match self.sender.close() {
-            Err(_) => Err(MemoryTransportError::Unreachable),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(_)) => Ok(Async::Ready(self.channel_to_return.take()
-                .expect("Future should not be polled again once complete"))),
+
+        let channel_to_send = self.channel_to_send.take()
+            .expect("Future should not be polled again once complete");
+        match self.sender.start_send(channel_to_send) {
+            Err(_) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
+            Ok(()) => {}
         }
+
+        Poll::Ready(Ok(self.channel_to_return.take()
+                .expect("Future should not be polled again once complete")))
     }
 }
 
 impl Transport for MemoryTransport {
-    type Output = Channel<Bytes>;
+    type Output = Channel<Vec<u8>>;
     type Error = MemoryTransportError;
     type Listener = Listener;
-    type ListenerUpgrade = FutureResult<Self::Output, Self::Error>;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = DialFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
@@ -170,32 +167,33 @@ pub struct Listener {
     /// The address we are listening on.
     addr: Multiaddr,
     /// Receives incoming connections.
-    receiver: mpsc::Receiver<Channel<Bytes>>,
+    receiver: mpsc::Receiver<Channel<Vec<u8>>>,
     /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
     tell_listen_addr: bool
 }
 
 impl Stream for Listener {
-    type Item = ListenerEvent<FutureResult<Channel<Bytes>, MemoryTransportError>>;
-    type Error = MemoryTransportError;
+    type Item = Result<ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>>, MemoryTransportError>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         if self.tell_listen_addr {
             self.tell_listen_addr = false;
-            return Ok(Async::Ready(Some(ListenerEvent::NewAddress(self.addr.clone()))))
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))))
         }
-        let channel = try_ready!(Ok(self.receiver.poll()
-            .expect("Life listeners always have a sender.")));
-        let channel = match channel {
-            Some(c) => c,
-            None => return Ok(Async::Ready(None))
+
+        let channel = match Stream::poll_next(Pin::new(&mut self.receiver), cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(None) => panic!("Alive listeners always have a sender."),
+            Poll::Ready(Some(v)) => v,
         };
+
         let event = ListenerEvent::Upgrade {
-            upgrade: future::ok(channel),
+            upgrade: future::ready(Ok(channel)),
             local_addr: self.addr.clone(),
             remote_addr: Protocol::Memory(self.port.get()).into()
         };
-        Ok(Async::Ready(Some(event)))
+
+        Poll::Ready(Some(Ok(event)))
     }
 }
 
@@ -231,43 +229,48 @@ pub type Channel<T> = RwStreamSink<Chan<T>>;
 /// A channel represents an established, in-memory, logical connection between two endpoints.
 ///
 /// Implements `Sink` and `Stream`.
-pub struct Chan<T = Bytes> {
+pub struct Chan<T = Vec<u8>> {
     incoming: mpsc::Receiver<T>,
     outgoing: mpsc::Sender<T>,
 }
 
-impl<T> Stream for Chan<T> {
-    type Item = T;
-    type Error = io::Error;
+impl<T> Unpin for Chan<T> {
+}
 
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.incoming.poll().map_err(|()| io::ErrorKind::BrokenPipe.into())
+impl<T> Stream for Chan<T> {
+    type Item = Result<T, io::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match Stream::poll_next(Pin::new(&mut self.incoming), cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(Some(Err(io::ErrorKind::BrokenPipe.into()))),
+            Poll::Ready(Some(v)) => Poll::Ready(Some(Ok(v))),
+        }
     }
 }
 
-impl<T> Sink for Chan<T> {
-    type SinkItem = T;
-    type SinkError = io::Error;
+impl<T> Sink<T> for Chan<T> {
+    type Error = io::Error;
 
-    #[inline]
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        self.outgoing.poll_ready(cx)
+            .map(|v| v.map_err(|_| io::ErrorKind::BrokenPipe.into()))
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
         self.outgoing.start_send(item).map_err(|_| io::ErrorKind::BrokenPipe.into())
     }
 
-    #[inline]
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.poll_complete().map_err(|_| io::ErrorKind::BrokenPipe.into())
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
-    #[inline]
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.close().map_err(|_| io::ErrorKind::BrokenPipe.into())
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 }
 
-impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
-    #[inline]
+impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
     fn into(self) -> RwStreamSink<Chan<T>> {
         RwStreamSink::new(self)
     }
