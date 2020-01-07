@@ -34,8 +34,7 @@ use libp2p_core::{
     either::EitherOutput,
     upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade}
 };
-use futures::prelude::*;
-use std::error;
+use std::{error, task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///
@@ -132,13 +131,13 @@ where
         }
     }
 
-    fn poll(&mut self, params: &mut impl PollParameters)
-        -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
+    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(params)
+            inner.poll(cx, params)
         } else {
-            Async::NotReady
+            Poll::Pending
         }
     }
 }
@@ -244,14 +243,14 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     > {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll()
+            inner.poll(cx)
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
 }

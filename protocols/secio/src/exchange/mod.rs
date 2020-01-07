@@ -44,14 +44,14 @@ pub struct AgreementPrivateKey(platform::AgreementPrivateKey);
 ///
 /// Returns the opaque private key and the corresponding public key.
 #[inline]
-pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (AgreementPrivateKey, Vec<u8>), Error = SecioError> {
-    platform::generate_agreement(algorithm).map(|(pr, pu)| (AgreementPrivateKey(pr), pu))
+pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Output = Result<(AgreementPrivateKey, Vec<u8>), SecioError>> {
+    platform::generate_agreement(algorithm).map_ok(|(pr, pu)| (AgreementPrivateKey(pr), pu))
 }
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
 #[inline]
 pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8], out_size: usize)
-    -> impl Future<Item = Vec<u8>, Error = SecioError>
+    -> impl Future<Output = Result<Vec<u8>, SecioError>>
 {
     platform::agree(algorithm, my_private_key.0, other_public_key, out_size)
 }

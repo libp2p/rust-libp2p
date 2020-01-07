@@ -29,7 +29,7 @@
 //! an existing connection to a node should be driven forward (cf.
 //! [`Manager::add_connection`]). Tasks can be referred to by [`TaskId`]
 //! and messages can be sent to individual tasks or all (cf.
-//! [`Manager::start_broadcast`]). Messages produces by tasks can be
+//! [`Manager::poll_broadcast`]). Messages produces by tasks can be
 //! retrieved by polling the manager (cf. [`Manager::poll`]).
 
 mod error;
@@ -37,7 +37,7 @@ mod manager;
 mod task;
 
 pub use error::Error;
-pub use manager::{ClosedTask, TaskEntry, Manager, Event, StartTakeOver};
+pub use manager::{ClosedTask, TaskEntry, Manager, Event};
 
 /// Task identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

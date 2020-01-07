@@ -25,9 +25,8 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use futures::prelude::*;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
@@ -103,10 +102,10 @@ where
     #[inline]
     fn poll(
         &mut self,
+        cx: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
-        self.inner.poll()
+        self.inner.poll(cx)
     }
 }

@@ -49,20 +49,21 @@
 //!
 //! The two nodes then connect.
 
-use futures::prelude::*;
+use async_std::{io, task};
+use futures::{future, prelude::*};
 use libp2p::{
+    Multiaddr,
     PeerId,
     Swarm,
     NetworkBehaviour,
     identity,
-    tokio_codec::{FramedRead, LinesCodec},
-    tokio_io::{AsyncRead, AsyncWrite},
     floodsub::{self, Floodsub, FloodsubEvent},
     mdns::{Mdns, MdnsEvent},
     swarm::NetworkBehaviourEventProcess
 };
+use std::{error::Error, task::{Context, Poll}};
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId
@@ -71,7 +72,7 @@ fn main() {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key);
+    let transport = libp2p::build_development_transport(local_key)?;
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::TopicBuilder::new("chat").build();
@@ -87,18 +88,16 @@ fn main() {
     impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<TSubstream> {
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) => {
+                MdnsEvent::Discovered(list) =>
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                },
-                MdnsEvent::Expired(list) => {
+                MdnsEvent::Expired(list) =>
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
-                }
             }
         }
     }
@@ -114,9 +113,10 @@ fn main() {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
+        let mdns = task::block_on(Mdns::new())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id.clone()),
-            mdns: Mdns::new().expect("Failed to create mDNS service"),
+            mdns
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
@@ -125,42 +125,32 @@ fn main() {
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
-        let dialing = to_dial.clone();
-        match to_dial.parse() {
-            Ok(to_dial) => {
-                match libp2p::Swarm::dial_addr(&mut swarm, to_dial) {
-                    Ok(_) => println!("Dialed {:?}", dialing),
-                    Err(e) => println!("Dial {:?} failed: {:?}", dialing, e)
-                }
-            },
-            Err(err) => println!("Failed to parse address to dial: {:?}", err),
-        }
+        let addr: Multiaddr = to_dial.parse()?;
+        Swarm::dial_addr(&mut swarm, addr)?;
+        println!("Dialed {:?}", to_dial)
     }
 
     // Read full lines from stdin
-    let stdin = tokio_stdin_stdout::stdin(0);
-    let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
-    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     // Kick it off
     let mut listening = false;
-    tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
+    task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
-            match framed_stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
-                Async::Ready(None) => panic!("Stdin closed"),
-                Async::NotReady => break,
-            };
+            match stdin.try_poll_next_unpin(cx)? {
+                Poll::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
+                Poll::Ready(None) => panic!("Stdin closed"),
+                Poll::Pending => break
+            }
         }
-
         loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(_)) => {
-
-                },
-                Async::Ready(None) | Async::NotReady => {
+            match swarm.poll_next_unpin(cx) {
+                Poll::Ready(Some(event)) => println!("{:?}", event),
+                Poll::Ready(None) => return Poll::Ready(Ok(())),
+                Poll::Pending => {
                     if !listening {
                         if let Some(a) = Swarm::listeners(&swarm).next() {
                             println!("Listening on {:?}", a);
@@ -171,7 +161,6 @@ fn main() {
                 }
             }
         }
-
-        Ok(Async::NotReady)
-    }));
+        Poll::Pending
+    }))
 }

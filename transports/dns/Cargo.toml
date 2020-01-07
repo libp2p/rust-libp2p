@@ -12,8 +12,4 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 libp2p-core = { version = "0.13.0", path = "../../core" }
 log = "0.4.1"
-futures = "0.1"
-tokio-dns-unofficial = "0.4"
-
-[dev-dependencies]
-libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
+futures = "0.3.1"

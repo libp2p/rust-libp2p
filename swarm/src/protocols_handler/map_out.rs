@@ -25,8 +25,8 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-use futures::prelude::*;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
+use std::task::{Context, Poll};
 
 /// Wrapper around a protocol handler that turns the output event into something else.
 pub struct MapOutEvent<TProtoHandler, TMap> {
@@ -98,17 +98,18 @@ where
     #[inline]
     fn poll(
         &mut self,
+        cx: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
-        Ok(self.inner.poll()?.map(|ev| {
+        self.inner.poll(cx).map(|ev| {
             match ev {
                 ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
+                ProtocolsHandlerEvent::Close(err) => ProtocolsHandlerEvent::Close(err),
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info } => {
                     ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info }
                 }
             }
-        }))
+        })
     }
 }

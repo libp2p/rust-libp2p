@@ -33,15 +33,14 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
+use futures::{prelude::*, channel::oneshot, future::BoxFuture};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
     transport::{TransportError, ListenerEvent}
 };
-use log::{debug, trace, log_enabled, Level};
-use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
-use tokio_dns::{CpuPoolResolver, Resolver};
+use log::{error, debug, trace};
+use std::{error, fmt, io, net::ToSocketAddrs};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
 ///
@@ -52,24 +51,31 @@ use tokio_dns::{CpuPoolResolver, Resolver};
 /// Listening is unaffected.
 #[derive(Clone)]
 pub struct DnsConfig<T> {
+    /// Underlying transport to use once the DNS addresses have been resolved.
     inner: T,
-    resolver: CpuPoolResolver,
+    /// Pool of threads to use when resolving DNS addresses.
+    thread_pool: futures::executor::ThreadPool,
 }
 
 impl<T> DnsConfig<T> {
     /// Creates a new configuration object for DNS.
-    pub fn new(inner: T) -> DnsConfig<T> {
+    pub fn new(inner: T) -> Result<DnsConfig<T>, io::Error> {
         DnsConfig::with_resolve_threads(inner, 1)
     }
 
     /// Same as `new`, but allows specifying a number of threads for the resolving.
-    pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
-        trace!("Created a CpuPoolResolver");
+    pub fn with_resolve_threads(inner: T, num_threads: usize) -> Result<DnsConfig<T>, io::Error> {
+        let thread_pool = futures::executor::ThreadPool::builder()
+            .pool_size(num_threads)
+            .name_prefix("libp2p-dns-")
+            .create()?;
 
-        DnsConfig {
+        trace!("Created a DNS thread pool");
+
+        Ok(DnsConfig {
             inner,
-            resolver: CpuPoolResolver::new(num_threads),
-        }
+            thread_pool,
+        })
     }
 }
 
@@ -84,34 +90,35 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport,
-    T::Error: 'static,
+    T: Transport + Send + 'static,
+    T::Error: Send,
+    T::Dial: Send
 {
     type Output = T::Output;
     type Error = DnsErr<T::Error>;
     type Listener = stream::MapErr<
-        stream::Map<T::Listener,
+        stream::MapOk<T::Listener,
             fn(ListenerEvent<T::ListenerUpgrade>) -> ListenerEvent<Self::ListenerUpgrade>>,
         fn(T::Error) -> Self::Error>;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
-    type Dial = Either<future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
-        DialFuture<T, JoinFuture<JoinAll<std::vec::IntoIter<Either<
-            ResolveFuture<tokio_dns::IoFuture<Vec<IpAddr>>, T::Error>,
-            FutureResult<Protocol<'static>, Self::Error>>>>
-        >>
+    type Dial = future::Either<
+        future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
+        BoxFuture<'static, Result<Self::Output, Self::Error>>
     >;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let listener = self.inner.listen_on(addr).map_err(|err| err.map(DnsErr::Underlying))?;
         let listener = listener
-            .map::<_, fn(_) -> _>(|event| event.map(|upgr| {
-                upgr.map_err::<fn(_) -> _, _>(DnsErr::Underlying)
+            .map_ok::<_, fn(_) -> _>(|event| event.map(|upgr| {
+                upgr.map_err::<_, fn(_) -> _>(DnsErr::Underlying)
             }))
             .map_err::<_, fn(_) -> _>(DnsErr::Underlying);
         Ok(listener)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // As an optimization, we immediately pass through if no component of the address contain
+        // a DNS protocol.
         let contains_dns = addr.iter().any(|cmp| match cmp {
             Protocol::Dns4(_) => true,
             Protocol::Dns6(_) => true,
@@ -120,44 +127,61 @@ where
 
         if !contains_dns {
             trace!("Pass-through address without DNS: {}", addr);
-            let inner_dial = self.inner.dial(addr).map_err(|err| err.map(DnsErr::Underlying))?;
-            return Ok(Either::A(inner_dial.map_err(DnsErr::Underlying)));
+            let inner_dial = self.inner.dial(addr)
+                .map_err(|err| err.map(DnsErr::Underlying))?;
+            return Ok(inner_dial.map_err::<_, fn(_) -> _>(DnsErr::Underlying).left_future());
         }
 
-        let resolver = self.resolver;
-
         trace!("Dialing address with DNS: {}", addr);
-        let resolve_iters = addr.iter()
-            .map(move |cmp| match cmp {
-                Protocol::Dns4(ref name) =>
-                    Either::A(ResolveFuture {
-                        name: if log_enabled!(Level::Trace) {
-                            Some(name.clone().into_owned())
-                        } else {
-                            None
-                        },
-                        inner: resolver.resolve(name),
-                        ty: ResolveTy::Dns4,
-                        error_ty: PhantomData,
-                    }),
-                Protocol::Dns6(ref name) =>
-                    Either::A(ResolveFuture {
-                        name: if log_enabled!(Level::Trace) {
-                            Some(name.clone().into_owned())
-                        } else {
-                            None
-                        },
-                        inner: resolver.resolve(name),
-                        ty: ResolveTy::Dns6,
-                        error_ty: PhantomData,
-                    }),
-                cmp => Either::B(future::ok(cmp.acquire()))
-            })
-            .collect::<Vec<_>>()
-            .into_iter();
+        let resolve_futs = addr.iter()
+            .map(|cmp| match cmp {
+                Protocol::Dns4(ref name) | Protocol::Dns6(ref name) => {
+                    let name = name.to_string();
+                    let to_resolve = format!("{}:0", name);
+                    let (tx, rx) = oneshot::channel();
+                    self.thread_pool.spawn_ok(async {
+                        let to_resolve = to_resolve;
+                        let _ = tx.send(match to_resolve[..].to_socket_addrs() {
+                            Ok(list) => Ok(list.map(|s| s.ip()).collect::<Vec<_>>()),
+                            Err(e) => Err(e),
+                        });
+                    });
 
-        let new_addr = JoinFuture { addr, future: future::join_all(resolve_iters) };
-        Ok(Either::B(DialFuture { trans: Some(self.inner), future: Either::A(new_addr) }))
+                    async {
+                        let list = rx.await
+                            .map_err(|_| {
+                                error!("DNS resolver crashed");
+                                DnsErr::ResolveFail(name.clone())
+                            })?
+                            .map_err(|err| DnsErr::ResolveError {
+                                domain_name: name.clone(),
+                                error: err,
+                            })?;
+
+                        list.into_iter().next()
+                            .map(|n| Protocol::from(n))      // TODO: doesn't take dns4/dns6 into account
+                            .ok_or_else(|| DnsErr::ResolveFail(name))
+                    }.left_future()
+                },
+                cmp => future::ready(Ok(cmp.acquire())).right_future()
+            })
+            .collect::<stream::FuturesOrdered<_>>();
+
+        let future = resolve_futs.collect::<Vec<_>>()
+            .then(move |outcome| async move {
+                let outcome = outcome.into_iter().collect::<Result<Vec<_>, _>>()?;
+                let outcome = outcome.into_iter().collect::<Multiaddr>();
+                debug!("DNS resolution outcome: {} => {}", addr, outcome);
+
+                match self.inner.dial(outcome) {
+                    Ok(d) => d.await.map_err(DnsErr::Underlying),
+                    Err(TransportError::MultiaddrNotSupported(_addr)) =>
+                        Err(DnsErr::MultiaddrNotSupported),
+                    Err(TransportError::Other(err)) => Err(DnsErr::Underlying(err))
+                }
+            });
+
+        Ok(future.boxed().right_future())
     }
 }
 
@@ -205,116 +229,16 @@ where TErr: error::Error + 'static
     }
 }
 
-// How to resolve; to an IPv4 address or an IPv6 address?
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum ResolveTy {
-    Dns4,
-    Dns6,
-}
-
-/// Future, performing DNS resolution.
-#[derive(Debug)]
-pub struct ResolveFuture<T, E> {
-    name: Option<String>,
-    inner: T,
-    ty: ResolveTy,
-    error_ty: PhantomData<E>,
-}
-
-impl<T, E> Future for ResolveFuture<T, E>
-where
-    T: Future<Item = Vec<IpAddr>, Error = io::Error>
-{
-    type Item = Protocol<'static>;
-    type Error = DnsErr<E>;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let ty = self.ty;
-        let addrs = try_ready!(self.inner.poll().map_err(|error| {
-            let domain_name = self.name.take().unwrap_or_default();
-            DnsErr::ResolveError { domain_name, error }
-        }));
-
-        trace!("DNS component resolution: {:?} => {:?}", self.name, addrs);
-        let mut addrs = addrs
-            .into_iter()
-            .filter_map(move |addr| match (addr, ty) {
-                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(Protocol::Ip4(addr)),
-                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(Protocol::Ip6(addr)),
-                _ => None,
-            });
-        match addrs.next() {
-            Some(a) => Ok(Async::Ready(a)),
-            None => Err(DnsErr::ResolveFail(self.name.take().unwrap_or_default()))
-        }
-    }
-}
-
-/// Build final multi-address from resolving futures.
-#[derive(Debug)]
-pub struct JoinFuture<T> {
-    addr: Multiaddr,
-    future: T
-}
-
-impl<T> Future for JoinFuture<T>
-where
-    T: Future<Item = Vec<Protocol<'static>>>
-{
-    type Item = Multiaddr;
-    type Error = T::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let outcome = try_ready!(self.future.poll());
-        let outcome: Multiaddr = outcome.into_iter().collect();
-        debug!("DNS resolution outcome: {} => {}", self.addr, outcome);
-        Ok(Async::Ready(outcome))
-    }
-}
-
-/// Future, dialing the resolved multi-address.
-#[derive(Debug)]
-pub struct DialFuture<T: Transport, F> {
-    trans: Option<T>,
-    future: Either<F, T::Dial>,
-}
-
-impl<T, F, TErr> Future for DialFuture<T, F>
-where
-    T: Transport<Error = TErr>,
-    F: Future<Item = Multiaddr, Error = DnsErr<TErr>>,
-    TErr: error::Error,
-{
-    type Item = T::Output;
-    type Error = DnsErr<TErr>;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            let next = match self.future {
-                Either::A(ref mut f) => {
-                    let addr = try_ready!(f.poll());
-                    match self.trans.take().unwrap().dial(addr) {
-                        Ok(dial) => Either::B(dial),
-                        Err(_) => return Err(DnsErr::MultiaddrNotSupported)
-                    }
-                }
-                Either::B(ref mut f) => return f.poll().map_err(DnsErr::Underlying)
-            };
-            self.future = next
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use libp2p_tcp::TcpConfig;
-    use futures::future;
+    use super::DnsConfig;
+    use futures::{future::BoxFuture, prelude::*, stream::BoxStream};
     use libp2p_core::{
         Transport,
         multiaddr::{Protocol, Multiaddr},
-        transport::TransportError
+        transport::ListenerEvent,
+        transport::TransportError,
     };
-    use super::DnsConfig;
 
     #[test]
     fn basic_resolve() {
@@ -322,11 +246,11 @@ mod tests {
         struct CustomTransport;
 
         impl Transport for CustomTransport {
-            type Output = <TcpConfig as Transport>::Output;
-            type Error = <TcpConfig as Transport>::Error;
-            type Listener = <TcpConfig as Transport>::Listener;
-            type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = future::Empty<Self::Output, Self::Error>;
+            type Output = ();
+            type Error = std::io::Error;
+            type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
                 unreachable!()
@@ -340,22 +264,36 @@ mod tests {
                     _ => panic!(),
                 };
                 match addr[0] {
-                    Protocol::Dns4(_) => (),
-                    Protocol::Dns6(_) => (),
+                    Protocol::Ip4(_) => (),
+                    Protocol::Ip6(_) => (),
                     _ => panic!(),
                 };
-                Ok(future::empty())
+                Ok(Box::pin(future::ready(Ok(()))))
             }
         }
 
-        let transport = DnsConfig::new(CustomTransport);
+        futures::executor::block_on(async move {
+            let transport = DnsConfig::new(CustomTransport).unwrap();
 
-        let _ = transport
-            .clone()
-            .dial("/dns4/example.com/tcp/20000".parse().unwrap())
-            .unwrap();
-        let _ = transport
-            .dial("/dns6/example.com/tcp/20000".parse().unwrap())
-            .unwrap();
+            let _ = transport
+                .clone()
+                .dial("/dns4/example.com/tcp/20000".parse().unwrap())
+                .unwrap()
+                .await
+                .unwrap();
+
+            let _ = transport
+                .clone()
+                .dial("/dns6/example.com/tcp/20000".parse().unwrap())
+                .unwrap()
+                .await
+                .unwrap();
+
+            let _ = transport
+                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
+                .unwrap()
+                .await
+                .unwrap();
+        });
     }
 }

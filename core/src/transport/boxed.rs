@@ -21,7 +21,7 @@
 use crate::transport::{ListenerEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::{error, fmt, sync::Arc};
+use std::{error, fmt, pin::Pin, sync::Arc};
 
 /// See the `Transport::boxed` method.
 #[inline]
@@ -37,9 +37,9 @@ where
     }
 }
 
-pub type Dial<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
-pub type Listener<O, E> = Box<dyn Stream<Item = ListenerEvent<ListenerUpgrade<O, E>>, Error = E> + Send>;
-pub type ListenerUpgrade<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
+pub type Dial<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
+pub type Listener<O, E> = Pin<Box<dyn Stream<Item = Result<ListenerEvent<ListenerUpgrade<O, E>>, E>> + Send>>;
+pub type ListenerUpgrade<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
 
 trait Abstract<O, E> {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>>;
@@ -56,15 +56,15 @@ where
 {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>> {
         let listener = Transport::listen_on(self.clone(), addr)?;
-        let fut = listener.map(|event| event.map(|upgrade| {
-            Box::new(upgrade) as ListenerUpgrade<O, E>
+        let fut = listener.map_ok(|event| event.map(|upgrade| {
+            Box::pin(upgrade) as ListenerUpgrade<O, E>
         }));
-        Ok(Box::new(fut) as Box<_>)
+        Ok(Box::pin(fut))
     }
 
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
         let fut = Transport::dial(self.clone(), addr)?;
-        Ok(Box::new(fut) as Box<_>)
+        Ok(Box::pin(fut) as Dial<_, _>)
     }
 }
 

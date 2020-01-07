@@ -18,12 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, future, try_ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated};
+use futures::{future::BoxFuture, prelude::*};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use log::debug;
 use rand::{distributions, prelude::*};
 use std::{io, iter, time::Duration};
-use tokio_io::{io as nio, AsyncRead, AsyncWrite};
 use wasm_timer::Instant;
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
@@ -54,126 +53,49 @@ impl UpgradeInfo for Ping {
     }
 }
 
-type RecvPing<T> = nio::ReadExact<Negotiated<T>, [u8; 32]>;
-type SendPong<T> = nio::WriteAll<Negotiated<T>, [u8; 32]>;
-type Flush<T> = nio::Flush<Negotiated<T>>;
-type Shutdown<T> = nio::Shutdown<Negotiated<T>>;
-
 impl<TSocket> InboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = ();
     type Error = io::Error;
-    type Future = future::Map<
-        future::AndThen<
-        future::AndThen<
-        future::AndThen<
-            RecvPing<TSocket>,
-            SendPong<TSocket>, fn((Negotiated<TSocket>, [u8; 32])) -> SendPong<TSocket>>,
-            Flush<TSocket>, fn((Negotiated<TSocket>, [u8; 32])) -> Flush<TSocket>>,
-            Shutdown<TSocket>, fn(Negotiated<TSocket>) -> Shutdown<TSocket>>,
-    fn(Negotiated<TSocket>) -> ()>;
+    type Future = BoxFuture<'static, Result<(), io::Error>>;
 
-    #[inline]
-    fn upgrade_inbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        nio::read_exact(socket, [0; 32])
-            .and_then::<fn(_) -> _, _>(|(sock, buf)| nio::write_all(sock, buf))
-            .and_then::<fn(_) -> _, _>(|(sock, _)| nio::flush(sock))
-            .and_then::<fn(_) -> _, _>(|sock| nio::shutdown(sock))
-            .map(|_| ())
+    fn upgrade_inbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+        async move {
+            let mut payload = [0u8; 32];
+            socket.read_exact(&mut payload).await?;
+            socket.write_all(&payload).await?;
+            socket.close().await?;
+            Ok(())
+        }.boxed()
     }
 }
 
 impl<TSocket> OutboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = Duration;
     type Error = io::Error;
-    type Future = PingDialer<Negotiated<TSocket>>;
+    type Future = BoxFuture<'static, Result<Duration, io::Error>>;
 
-    #[inline]
-    fn upgrade_outbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
         debug!("Preparing ping payload {:?}", payload);
+        async move {
+            socket.write_all(&payload).await?;
+            socket.close().await?;
+            let started = Instant::now();
 
-        PingDialer {
-            state: PingDialerState::Write {
-                inner: nio::write_all(socket, payload),
-            },
-        }
-    }
-}
-
-/// A `PingDialer` is a future that sends a ping and expects to receive a pong.
-pub struct PingDialer<TSocket> {
-    state: PingDialerState<TSocket>
-}
-
-enum PingDialerState<TSocket> {
-    Write {
-        inner: nio::WriteAll<TSocket, [u8; 32]>,
-    },
-    Flush {
-        inner: nio::Flush<TSocket>,
-        payload: [u8; 32],
-    },
-    Read {
-        inner: nio::ReadExact<TSocket, [u8; 32]>,
-        payload: [u8; 32],
-        started: Instant,
-    },
-    Shutdown {
-        inner: nio::Shutdown<TSocket>,
-        rtt: Duration,
-    },
-}
-
-impl<TSocket> Future for PingDialer<TSocket>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = Duration;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            self.state = match self.state {
-                PingDialerState::Write { ref mut inner } => {
-                    let (socket, payload) = try_ready!(inner.poll());
-                    PingDialerState::Flush {
-                        inner: nio::flush(socket),
-                        payload,
-                    }
-                },
-                PingDialerState::Flush { ref mut inner, payload } => {
-                    let socket = try_ready!(inner.poll());
-                    let started = Instant::now();
-                    PingDialerState::Read {
-                        inner: nio::read_exact(socket, [0; 32]),
-                        payload,
-                        started,
-                    }
-                },
-                PingDialerState::Read { ref mut inner, payload, started } => {
-                    let (socket, payload_received) = try_ready!(inner.poll());
-                    let rtt = started.elapsed();
-                    if payload_received != payload {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData, "Ping payload mismatch"));
-                    }
-                    PingDialerState::Shutdown {
-                        inner: nio::shutdown(socket),
-                        rtt,
-                    }
-                },
-                PingDialerState::Shutdown { ref mut inner, rtt } => {
-                    try_ready!(inner.poll());
-                    return Ok(Async::Ready(rtt));
-                },
+            let mut recv_payload = [0u8; 32];
+            socket.read_exact(&mut recv_payload).await?;
+            if recv_payload == payload {
+                Ok(started.elapsed())
+            } else {
+                Err(io::Error::new(io::ErrorKind::InvalidData, "Ping payload mismatch"))
             }
-        }
+        }.boxed()
     }
 }
 
@@ -199,31 +121,23 @@ mod tests {
         let mut listener = MemoryTransport.listen_on(mem_addr).unwrap();
 
         let listener_addr =
-            if let Ok(Async::Ready(Some(ListenerEvent::NewAddress(a)))) = listener.poll() {
+            if let Some(Some(Ok(ListenerEvent::NewAddress(a)))) = listener.next().now_or_never() {
                 a
             } else {
                 panic!("MemoryTransport not listening on an address!");
             };
+        
+        async_std::task::spawn(async move {
+            let listener_event = listener.next().await.unwrap();
+            let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
+            let conn = listener_upgrade.await.unwrap();
+            upgrade::apply_inbound(conn, Ping::default()).await.unwrap();
+        });
 
-        let server = listener
-            .into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(listener_event, _)| {
-                let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
-                let conn = listener_upgrade.wait().unwrap();
-                upgrade::apply_inbound(conn, Ping::default())
-                    .map_err(|e| panic!(e))
-            });
-
-        let client = MemoryTransport.dial(listener_addr).unwrap()
-            .and_then(|c| {
-                upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1)
-                    .map_err(|e| panic!(e))
-            });
-
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.spawn(server.map_err(|e| panic!(e)));
-        let rtt = runtime.block_on(client).expect("RTT");
-        assert!(rtt > Duration::from_secs(0));
+        async_std::task::block_on(async move {
+            let c = MemoryTransport.dial(listener_addr).unwrap().await.unwrap();
+            let rtt = upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1).await.unwrap();
+            assert!(rtt > Duration::from_secs(0));
+        });
     }
 }

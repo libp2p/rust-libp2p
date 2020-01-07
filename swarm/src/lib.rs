@@ -93,7 +93,7 @@ use libp2p_core::{
 };
 use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
-use std::{error, fmt, io, ops::{Deref, DerefMut}};
+use std::{error, fmt, io, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
 
 /// Contains the state of the network, plus the way it should behave.
@@ -140,14 +140,7 @@ where
     banned_peers: HashSet<PeerId>,
 
     /// Pending event message to be delivered.
-    ///
-    /// If the pair's second element is `AsyncSink::NotReady`, the event
-    /// message has yet to be sent using `PeerMut::start_send_event`.
-    ///
-    /// If the pair's second element is `AsyncSink::Ready`, the event
-    /// message has been sent and needs to be flushed using
-    /// `PeerMut::complete_send_event`.
-    send_event_to_complete: Option<(PeerId, AsyncSink<TInEvent>)>
+    send_event_to_complete: Option<(PeerId, TInEvent)>
 }
 
 impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo> Deref for
@@ -172,6 +165,13 @@ where
     }
 }
 
+impl<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo> Unpin for
+    ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo>
+where
+    TTransport: Transport,
+{
+}
+
 impl<TTransport, TBehaviour, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo>
     ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
@@ -180,9 +180,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
-      TTransport::Listener: Send + 'static,
-      TTransport::ListenerUpgrade: Send + 'static,
-      TTransport::Dial: Send + 'static,
+      TTransport::Listener: Unpin + Send + 'static,
+      TTransport::ListenerUpgrade: Unpin + Send + 'static,
+      TTransport::Dial: Unpin + Send + 'static,
       THandlerErr: error::Error,
       THandler: IntoProtocolsHandler + Send + 'static,
       <THandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
@@ -315,9 +315,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
-      TTransport::Listener: Send + 'static,
-      TTransport::ListenerUpgrade: Send + 'static,
-      TTransport::Dial: Send + 'static,
+      TTransport::Listener: Unpin + Send + 'static,
+      TTransport::ListenerUpgrade: Unpin + Send + 'static,
+      TTransport::Dial: Unpin + Send + 'static,
       THandlerErr: error::Error,
       THandler: IntoProtocolsHandler + Send + 'static,
       <THandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
@@ -340,123 +340,123 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       <NodeHandlerWrapper<<THandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
-    type Item = TBehaviour::OutEvent;
-    type Error = io::Error;
+    type Item = Result<TBehaviour::OutEvent, io::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, io::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        // We use a `this` variable because the compiler can't mutably borrow multiple times
+        // across a `Deref`.
+        let this = &mut *self;
+
         loop {
             let mut network_not_ready = false;
 
-            match self.network.poll() {
-                Async::NotReady => network_not_ready = true,
-                Async::Ready(NetworkEvent::NodeEvent { conn_info, event }) => {
-                    self.behaviour.inject_node_event(conn_info.peer_id().clone(), event);
+            match this.network.poll(cx) {
+                Poll::Pending => network_not_ready = true,
+                Poll::Ready(NetworkEvent::NodeEvent { conn_info, event }) => {
+                    this.behaviour.inject_node_event(conn_info.peer_id().clone(), event);
                 },
-                Async::Ready(NetworkEvent::Connected { conn_info, endpoint }) => {
-                    if self.banned_peers.contains(conn_info.peer_id()) {
-                        self.network.peer(conn_info.peer_id().clone())
+                Poll::Ready(NetworkEvent::Connected { conn_info, endpoint }) => {
+                    if this.banned_peers.contains(conn_info.peer_id()) {
+                        this.network.peer(conn_info.peer_id().clone())
                             .into_connected()
                             .expect("the Network just notified us that we were connected; QED")
                             .close();
                     } else {
-                        self.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
+                        this.behaviour.inject_connected(conn_info.peer_id().clone(), endpoint);
                     }
                 },
-                Async::Ready(NetworkEvent::NodeClosed { conn_info, endpoint, .. }) => {
-                    self.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
+                Poll::Ready(NetworkEvent::NodeClosed { conn_info, endpoint, .. }) => {
+                    this.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
                 },
-                Async::Ready(NetworkEvent::Replaced { new_info, closed_endpoint, endpoint, .. }) => {
-                    self.behaviour.inject_replaced(new_info.peer_id().clone(), closed_endpoint, endpoint);
+                Poll::Ready(NetworkEvent::Replaced { new_info, closed_endpoint, endpoint, .. }) => {
+                    this.behaviour.inject_replaced(new_info.peer_id().clone(), closed_endpoint, endpoint);
                 },
-                Async::Ready(NetworkEvent::IncomingConnection(incoming)) => {
-                    let handler = self.behaviour.new_handler();
+                Poll::Ready(NetworkEvent::IncomingConnection(incoming)) => {
+                    let handler = this.behaviour.new_handler();
                     incoming.accept(handler.into_node_handler_builder());
                 },
-                Async::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
-                    if !self.listened_addrs.contains(&listen_addr) {
-                        self.listened_addrs.push(listen_addr.clone())
+                Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) => {
+                    if !this.listened_addrs.contains(&listen_addr) {
+                        this.listened_addrs.push(listen_addr.clone())
                     }
-                    self.behaviour.inject_new_listen_addr(&listen_addr);
+                    this.behaviour.inject_new_listen_addr(&listen_addr);
                 }
-                Async::Ready(NetworkEvent::ExpiredListenerAddress { listen_addr, .. }) => {
-                    self.listened_addrs.retain(|a| a != &listen_addr);
-                    self.behaviour.inject_expired_listen_addr(&listen_addr);
+                Poll::Ready(NetworkEvent::ExpiredListenerAddress { listen_addr, .. }) => {
+                    this.listened_addrs.retain(|a| a != &listen_addr);
+                    this.behaviour.inject_expired_listen_addr(&listen_addr);
                 }
-                Async::Ready(NetworkEvent::ListenerClosed { listener_id, .. }) =>
-                    self.behaviour.inject_listener_closed(listener_id),
-                Async::Ready(NetworkEvent::ListenerError { listener_id, error }) =>
-                    self.behaviour.inject_listener_error(listener_id, &error),
-                Async::Ready(NetworkEvent::IncomingConnectionError { .. }) => {},
-                Async::Ready(NetworkEvent::DialError { peer_id, multiaddr, error, new_state }) => {
-                    self.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
+                Poll::Ready(NetworkEvent::ListenerClosed { listener_id, .. }) =>
+                    this.behaviour.inject_listener_closed(listener_id),
+                Poll::Ready(NetworkEvent::ListenerError { listener_id, error }) =>
+                    this.behaviour.inject_listener_error(listener_id, &error),
+                Poll::Ready(NetworkEvent::IncomingConnectionError { .. }) => {},
+                Poll::Ready(NetworkEvent::DialError { peer_id, multiaddr, error, new_state }) => {
+                    this.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
                     if let network::PeerState::NotConnected = new_state {
-                        self.behaviour.inject_dial_failure(&peer_id);
+                        this.behaviour.inject_dial_failure(&peer_id);
                     }
                 },
-                Async::Ready(NetworkEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
-                    self.behaviour.inject_addr_reach_failure(None, &multiaddr, &error);
+                Poll::Ready(NetworkEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
+                    this.behaviour.inject_addr_reach_failure(None, &multiaddr, &error);
                 },
             }
 
             // Try to deliver pending event.
-            if let Some((id, pending)) = self.send_event_to_complete.take() {
-                if let Some(mut peer) = self.network.peer(id.clone()).into_connected() {
-                    if let AsyncSink::NotReady(e) = pending {
-                        if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(e) {
-                            self.send_event_to_complete = Some((id, a))
-                        } else if let Ok(Async::NotReady) = peer.complete_send_event() {
-                            self.send_event_to_complete = Some((id, AsyncSink::Ready))
-                        }
-                    } else if let Ok(Async::NotReady) = peer.complete_send_event() {
-                        self.send_event_to_complete = Some((id, AsyncSink::Ready))
+            if let Some((id, pending)) = this.send_event_to_complete.take() {
+                if let Some(mut peer) = this.network.peer(id.clone()).into_connected() {
+                    match peer.poll_ready_event(cx) {
+                        Poll::Ready(()) => peer.start_send_event(pending),
+                        Poll::Pending => {
+                            this.send_event_to_complete = Some((id, pending));
+                            return Poll::Pending
+                        },
                     }
                 }
-            }
-            if self.send_event_to_complete.is_some() {
-                return Ok(Async::NotReady)
             }
 
             let behaviour_poll = {
                 let mut parameters = SwarmPollParameters {
-                    local_peer_id: &mut self.network.local_peer_id(),
-                    supported_protocols: &self.supported_protocols,
-                    listened_addrs: &self.listened_addrs,
-                    external_addrs: &self.external_addrs
+                    local_peer_id: &mut this.network.local_peer_id(),
+                    supported_protocols: &this.supported_protocols,
+                    listened_addrs: &this.listened_addrs,
+                    external_addrs: &this.external_addrs
                 };
-                self.behaviour.poll(&mut parameters)
+                this.behaviour.poll(cx, &mut parameters)
             };
 
             match behaviour_poll {
-                Async::NotReady if network_not_ready => return Ok(Async::NotReady),
-                Async::NotReady => (),
-                Async::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
-                    return Ok(Async::Ready(Some(event)))
+                Poll::Pending if network_not_ready => return Poll::Pending,
+                Poll::Pending => (),
+                Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                    return Poll::Ready(Some(Ok(event)))
                 },
-                Async::Ready(NetworkBehaviourAction::DialAddress { address }) => {
-                    let _ = ExpandedSwarm::dial_addr(self, address);
+                Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
+                    let _ = ExpandedSwarm::dial_addr(&mut *this, address);
                 },
-                Async::Ready(NetworkBehaviourAction::DialPeer { peer_id }) => {
-                    if self.banned_peers.contains(&peer_id) {
-                        self.behaviour.inject_dial_failure(&peer_id);
+                Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id }) => {
+                    if this.banned_peers.contains(&peer_id) {
+                        this.behaviour.inject_dial_failure(&peer_id);
                     } else {
-                        ExpandedSwarm::dial(self, peer_id);
+                        ExpandedSwarm::dial(&mut *this, peer_id);
                     }
                 },
-                Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
-                    if let Some(mut peer) = self.network.peer(peer_id.clone()).into_connected() {
-                        if let Ok(a@AsyncSink::NotReady(_)) = peer.start_send_event(event) {
-                            self.send_event_to_complete = Some((peer_id, a))
-                        } else if let Ok(Async::NotReady) = peer.complete_send_event() {
-                            self.send_event_to_complete = Some((peer_id, AsyncSink::Ready))
+                Poll::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
+                    if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
+                        if let Poll::Ready(()) = peer.poll_ready_event(cx) {
+                            peer.start_send_event(event);
+                        } else {
+                            debug_assert!(this.send_event_to_complete.is_none());
+                            this.send_event_to_complete = Some((peer_id, event));
+                            return Poll::Pending;
                         }
                     }
                 },
-                Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    for addr in self.network.address_translation(&address) {
-                        if self.external_addrs.iter().all(|a| *a != addr) {
-                            self.behaviour.inject_new_external_addr(&addr);
+                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
+                    for addr in this.network.address_translation(&address) {
+                        if this.external_addrs.iter().all(|a| *a != addr) {
+                            this.behaviour.inject_new_external_addr(&addr);
                         }
-                        self.external_addrs.add(addr)
+                        this.external_addrs.add(addr)
                     }
                 },
             }
@@ -509,9 +509,9 @@ where TBehaviour: NetworkBehaviour,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
-      TTransport::Listener: Send + 'static,
-      TTransport::ListenerUpgrade: Send + 'static,
-      TTransport::Dial: Send + 'static,
+      TTransport::Listener: Unpin + Send + 'static,
+      TTransport::ListenerUpgrade: Unpin + Send + 'static,
+      TTransport::Dial: Unpin + Send + 'static,
       <TBehaviour as NetworkBehaviour>::ProtocolsHandler: Send + 'static,
       <<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
       <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
@@ -584,8 +584,7 @@ mod tests {
     };
     use libp2p_mplex::Multiplex;
     use futures::prelude::*;
-    use std::marker::PhantomData;
-    use tokio_io::{AsyncRead, AsyncWrite};
+    use std::{marker::PhantomData, task::Context, task::Poll};
     use void::Void;
 
     #[derive(Clone)]
@@ -593,11 +592,9 @@ mod tests {
         marker: PhantomData<TSubstream>,
     }
 
-    trait TSubstream: AsyncRead + AsyncWrite {}
-
     impl<TSubstream> NetworkBehaviour
         for DummyBehaviour<TSubstream>
-        where TSubstream: AsyncRead + AsyncWrite
+        where TSubstream: AsyncRead + AsyncWrite + Unpin
     {
         type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
         type OutEvent = Void;
@@ -617,11 +614,11 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _: &mut impl PollParameters) ->
-            Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
+        fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
+            Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {
-            Async::NotReady
+            Poll::Pending
         }
 
     }

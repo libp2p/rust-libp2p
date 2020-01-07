@@ -10,21 +10,19 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
+bytes = "0.5"
+futures = "0.3.1"
 libp2p-core = { version = "0.13.0", path = "../../core" }
 libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../../misc/multiaddr" }
-futures = "0.1"
 rand = "0.7.2"
-tokio-io = "0.1"
-wasm-timer = "0.1"
 void = "1.0"
+wasm-timer = "0.2"
 
 [dev-dependencies]
+async-std = "1.0"
 libp2p-tcp = { version = "0.13.0", path = "../../transports/tcp" }
 libp2p-secio = { version = "0.13.0", path = "../../protocols/secio" }
 libp2p-yamux = { version = "0.13.0", path = "../../muxers/yamux" }
 quickcheck = "0.9.0"
-tokio = "0.1"
-tokio-tcp = "0.1"
