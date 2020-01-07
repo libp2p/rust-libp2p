@@ -21,7 +21,7 @@ log = "0.4.6"
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 quicksink = "0.1"
 rand = "0.7"
-rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = { version = "0.2.0", path = "../../misc/rw-stream-sink" }
 sha2 = "0.8.0"
 static_assertions = "1"
 twofish = "0.2.0"
