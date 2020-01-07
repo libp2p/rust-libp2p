@@ -392,12 +392,8 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         inner.wake_driver();
         match inner.connection.write(*substream, buf) {
-            Ok(bytes) => {
-                inner.wake_driver();
-                Ready(Ok(bytes))
-            }
+            Ok(bytes) => Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
-                inner.wake_driver();
                 inner.writers.insert(*substream, cx.waker().clone());
                 Pending
             }
@@ -424,14 +420,11 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
+        inner.wake_driver();
         match inner.connection.read(*substream, buf) {
-            Ok(Some(bytes)) => {
-                inner.wake_driver();
-                Ready(Ok(bytes))
-            }
+            Ok(Some(bytes)) => Ready(Ok(bytes)),
             Ok(None) => Ready(Ok(0)),
             Err(ReadError::Blocked) => {
-                inner.wake_driver();
                 inner.readers.insert(*substream, cx.waker().clone());
                 Pending
             }
