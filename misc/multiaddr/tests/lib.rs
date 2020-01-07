@@ -328,3 +328,15 @@ fn replace_ip4_with_ip6() {
     assert_eq!(result.unwrap(), "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap())
 }
 
+#[test]
+fn unknown_protocol_string() {
+    match "/unknown/1.2.3.4".parse::<Multiaddr>() {
+        Ok(_) => assert!(false, "The UnknownProtocolString error should be caused"),
+        Err(e) => match e {
+            crate::Error::UnknownProtocolString(protocol) => {
+                assert_eq!(protocol, "unknown")
+            },
+            _ => assert!(false, "The UnknownProtocolString error should be caused")
+        }
+    }
+}
