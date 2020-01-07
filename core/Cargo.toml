@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.13.2"
+version = "0.14.0-alpha.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -21,9 +21,9 @@ futures-timer = "2"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
-multiaddr = { package = "parity-multiaddr", version = "0.6.0", path = "../misc/multiaddr" }
-multihash = { package = "parity-multihash", version = "0.2.0", path = "../misc/multihash" }
-multistream-select = { version = "0.6.0", path = "../misc/multistream-select" }
+multiaddr = { package = "parity-multiaddr", version = "0.7.0", path = "../misc/multiaddr" }
+multihash = { package = "parity-multihash", version = "0.2.1", path = "../misc/multihash" }
+multistream-select = { version = "0.7.0", path = "../misc/multistream-select" }
 parking_lot = "0.9.0"
 pin-project = "0.4.6"
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
@@ -43,10 +43,10 @@ untrusted = "0.7.0"
 [dev-dependencies]
 assert_matches = "1.3"
 async-std = "1.0"
-libp2p-mplex = { version = "0.13.0", path = "../muxers/mplex" }
-libp2p-secio = { version = "0.13.0", path = "../protocols/secio" }
-libp2p-swarm = { version = "0.3.0", path = "../swarm" }
-libp2p-tcp = { version = "0.13.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.14.0-alpha.1", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.14.0-alpha.1", path = "../protocols/secio" }
+libp2p-swarm = { version = "0.4.0-alpha.1", path = "../swarm" }
+libp2p-tcp = { version = "0.14.0-alpha.1", path = "../transports/tcp" }
 quickcheck = "0.9.0"
 wasm-timer = "0.2"
 
