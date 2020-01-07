@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{muxing::StreamMuxer, ProtocolName, transport::ListenerEvent};
-use futures::prelude::*;
+use futures::{prelude::*, io::{IoSlice, IoSliceMut}};
 use pin_project::{pin_project, project};
 use std::{fmt, io::{Error as IoError, IoSlice, IoSliceMut}, pin::Pin, task::Context, task::Poll};
 
@@ -79,9 +79,11 @@ where
     }
 
     #[project]
-    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<Result<usize, IoError>> {
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut])
+        -> Poll<Result<usize, IoError>>
+    {
         #[project]
-            match self.project() {
+        match self.project() {
             EitherOutput::First(a) => AsyncRead::poll_read_vectored(a, cx, bufs),
             EitherOutput::Second(b) => AsyncRead::poll_read_vectored(b, cx, bufs),
         }
@@ -103,9 +105,11 @@ where
     }
 
     #[project]
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<Result<usize, IoError>> {
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice])
+        -> Poll<Result<usize, IoError>>
+    {
         #[project]
-            match self.project() {
+        match self.project() {
             EitherOutput::First(a) => AsyncWrite::poll_write_vectored(a, cx, bufs),
             EitherOutput::Second(b) => AsyncWrite::poll_write_vectored(b, cx, bufs),
         }
