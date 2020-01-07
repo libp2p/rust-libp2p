@@ -16,7 +16,7 @@ secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 [dependencies]
 bytes = "0.5"
 futures = "0.3.1"
-multiaddr = { package = "parity-multiaddr", version = "0.6.1", path = "misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", version = "0.7.0", path = "misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.2.1", path = "misc/multihash" }
 lazy_static = "1.2"
 libp2p-mplex = { version = "0.14.0-alpha.1", path = "muxers/mplex" }
