@@ -336,15 +336,15 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Returns the next event that happens in the `Swarm`.
     ///
     /// Includes events from the `NetworkBehaviour` but also events about the connections status.
-    pub async fn next_extended(&mut self) -> SwarmEvent<TBehaviour::OutEvent> {
-        future::poll_fn(move |cx| ExpandedSwarm::poll_next_extended(Pin::new(self), cx)).await
+    pub async fn next_event(&mut self) -> SwarmEvent<TBehaviour::OutEvent> {
+        future::poll_fn(move |cx| ExpandedSwarm::poll_next_event(Pin::new(self), cx)).await
     }
 
     /// Returns the next event produced by the [`NetworkBehaviour`].
     pub async fn next(&mut self) -> TBehaviour::OutEvent {
         future::poll_fn(move |cx| {
             loop {
-                let event = futures::ready!(ExpandedSwarm::poll_next_extended(Pin::new(self), cx));
+                let event = futures::ready!(ExpandedSwarm::poll_next_event(Pin::new(self), cx));
                 if let SwarmEvent::Behaviour(event) = event {
                     return Poll::Ready(event);
                 }
@@ -355,7 +355,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Internal function used by everything event-related.
     ///
     /// Polls the `Swarm` for the next event.
-    fn poll_next_extended(mut self: Pin<&mut Self>, cx: &mut Context)
+    fn poll_next_event(mut self: Pin<&mut Self>, cx: &mut Context)
         -> Poll<SwarmEvent<TBehaviour::OutEvent>>
     {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -531,7 +531,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
-            let event = futures::ready!(ExpandedSwarm::poll_next_extended(self.as_mut(), cx));
+            let event = futures::ready!(ExpandedSwarm::poll_next_event(self.as_mut(), cx));
             if let SwarmEvent::Behaviour(event) = event {
                 return Poll::Ready(Some(event));
             }

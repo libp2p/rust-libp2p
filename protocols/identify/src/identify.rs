@@ -302,10 +302,10 @@ mod tests {
         };
 
         Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-    
+
         let listen_addr = async_std::task::block_on(async {
             loop {
-                let swarm1_fut = swarm1.next_extended();
+                let swarm1_fut = swarm1.next_event();
                 pin_mut!(swarm1_fut);
                 match swarm1_fut.await {
                     SwarmEvent::NewListenAddr(addr) => return addr,
