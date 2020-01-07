@@ -21,7 +21,7 @@
 use crate::{muxing::StreamMuxer, ProtocolName, transport::ListenerEvent};
 use futures::prelude::*;
 use pin_project::{pin_project, project};
-use std::{fmt, io::{Error as IoError}, pin::Pin, task::Context, task::Poll};
+use std::{fmt, io::{Error as IoError, IoSlice, IoSliceMut}, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
 pub enum EitherError<A, B> {
@@ -77,6 +77,15 @@ where
             EitherOutput::Second(b) => AsyncRead::poll_read(b, cx, buf),
         }
     }
+
+    #[project]
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<Result<usize, IoError>> {
+        #[project]
+            match self.project() {
+            EitherOutput::First(a) => AsyncRead::poll_read_vectored(a, cx, bufs),
+            EitherOutput::Second(b) => AsyncRead::poll_read_vectored(b, cx, bufs),
+        }
+    }
 }
 
 impl<A, B> AsyncWrite for EitherOutput<A, B>
@@ -90,6 +99,15 @@ where
         match self.project() {
             EitherOutput::First(a) => AsyncWrite::poll_write(a, cx, buf),
             EitherOutput::Second(b) => AsyncWrite::poll_write(b, cx, buf),
+        }
+    }
+
+    #[project]
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<Result<usize, IoError>> {
+        #[project]
+            match self.project() {
+            EitherOutput::First(a) => AsyncWrite::poll_write_vectored(a, cx, bufs),
+            EitherOutput::Second(b) => AsyncWrite::poll_write_vectored(b, cx, bufs),
         }
     }
 
