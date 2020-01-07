@@ -358,18 +358,14 @@ where
 
     /// Sends an event to all nodes.
     ///
-    /// Must be called only after a successful call to `poll_ready_broadcast`.
-    pub fn start_broadcast(&mut self, event: &TInEvent)
+    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
+    /// has been sent to any node yet.
+    #[must_use]
+    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
     where
         TInEvent: Clone
     {
-        self.inner.start_broadcast(event)
-    }
-
-    /// Wait until we have enough room in senders to broadcast an event.
-    #[must_use]
-    pub fn poll_ready_broadcast(&mut self, cx: &mut Context) -> Poll<()> {
-        self.inner.poll_ready_broadcast(cx)
+        self.inner.poll_broadcast(event, cx)
     }
 
     /// Adds an existing connection to a node to the collection.
