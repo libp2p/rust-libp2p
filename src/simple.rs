@@ -20,9 +20,8 @@
 
 use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use bytes::Bytes;
-use futures::{future::FromErr, prelude::*};
-use std::{iter, io::Error as IoError, sync::Arc};
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures::prelude::*;
+use std::{iter, sync::Arc};
 
 /// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
 #[derive(Debug)]
@@ -35,7 +34,6 @@ pub struct SimpleProtocol<F> {
 
 impl<F> SimpleProtocol<F> {
     /// Builds a `SimpleProtocol`.
-    #[inline]
     pub fn new<N>(info: N, upgrade: F) -> SimpleProtocol<F>
     where
         N: Into<Bytes>,
@@ -48,7 +46,6 @@ impl<F> SimpleProtocol<F> {
 }
 
 impl<F> Clone for SimpleProtocol<F> {
-    #[inline]
     fn clone(&self) -> Self {
         SimpleProtocol {
             info: self.info.clone(),
@@ -61,42 +58,39 @@ impl<F> UpgradeInfo for SimpleProtocol<F> {
     type Info = Bytes;
     type InfoIter = iter::Once<Self::Info>;
 
-    #[inline]
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(self.info.clone())
     }
 }
 
-impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
+impl<C, F, O, A, E> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(Negotiated<C>) -> O,
-    O: IntoFuture<Error = IoError>
+    O: Future<Output = Result<A, E>> + Unpin
 {
-    type Output = O::Item;
-    type Error = IoError;
-    type Future = FromErr<O::Future, IoError>;
+    type Output = A;
+    type Error = E;
+    type Future = O;
 
-    #[inline]
     fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         let upgrade = &self.upgrade;
-        upgrade(socket).into_future().from_err()
+        upgrade(socket)
     }
 }
 
-impl<C, F, O> OutboundUpgrade<C> for SimpleProtocol<F>
+impl<C, F, O, A, E> OutboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(Negotiated<C>) -> O,
-    O: IntoFuture<Error = IoError>
+    O: Future<Output = Result<A, E>> + Unpin
 {
-    type Output = O::Item;
-    type Error = IoError;
-    type Future = FromErr<O::Future, IoError>;
+    type Output = A;
+    type Error = E;
+    type Future = O;
 
-    #[inline]
     fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         let upgrade = &self.upgrade;
-        upgrade(socket).into_future().from_err()
+        upgrade(socket)
     }
 }

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use multistream_select::Negotiated;
+use crate::Negotiated;
 
 /// Upgrade that can be disabled at runtime.
 ///

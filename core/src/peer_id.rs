@@ -28,7 +28,7 @@ use std::{convert::TryFrom, fmt, str::FromStr};
 /// automatically used as the peer id using an identity multihash.
 //
 // Note: see `from_public_key` for how this value will be used in the future.
-const MAX_INLINE_KEY_LENGTH: usize = 42;
+const _MAX_INLINE_KEY_LENGTH: usize = 42;
 
 /// Identifier of a peer of the network.
 ///

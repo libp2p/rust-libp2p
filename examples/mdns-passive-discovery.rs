@@ -18,26 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
+use async_std::task;
 use libp2p::mdns::service::{MdnsPacket, MdnsService};
-use std::io;
+use std::error::Error;
 
-fn main() {
-    // This example provides passive discovery of the libp2p nodes on the network that send
-    // mDNS queries and answers.
-
-    // We start by creating the service.
-    let mut service = MdnsService::new().expect("Error while creating mDNS service");
-
-    // Create a never-ending `Future` that polls the service for events.
-    let future = futures::future::poll_fn(move || -> Poll<(), io::Error> {
+fn main() -> Result<(), Box<dyn Error>> {
+    // This example provides passive discovery of the libp2p nodes on the
+    // network that send mDNS queries and answers.
+    task::block_on(async move {
+        let mut service = MdnsService::new().await?;
         loop {
-            // Grab the next available packet from the service.
-            let packet = match service.poll() {
-                Async::Ready(packet) => packet,
-                Async::NotReady => return Ok(Async::NotReady),
-            };
-
+            let (srv, packet) = service.next().await;
             match packet {
                 MdnsPacket::Query(query) => {
                     // We detected a libp2p mDNS query on the network. In a real application, you
@@ -63,9 +54,7 @@ fn main() {
                     println!("Detected service query from {:?}", query.remote_addr());
                 }
             }
+            service = srv
         }
-    });
-
-    // Blocks the thread until the future runs to completion (which will never happen).
-    tokio::run(future.map_err(|err| panic!("{:?}", err)));
+    })
 }
