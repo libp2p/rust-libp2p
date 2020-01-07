@@ -2,7 +2,7 @@
 name = "libp2p-floodsub"
 edition = "2018"
 description = "Floodsub protocol for libp2p"
-version = "0.13.1"
+version = "0.14.0-alpha.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,8 +15,8 @@ bytes = "0.5"
 cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.3.1"
-libp2p-core = { version = "0.13.0", path = "../../core" }
-libp2p-swarm = { version = "0.3.0", path = "../../swarm" }
+libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
+libp2p-swarm = { version = "0.4.0-alpha.1", path = "../../swarm" }
 protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
 rand = "0.7"
 smallvec = "1.0"
