@@ -244,9 +244,9 @@ where
 
 // Handshake pattern IK /////////////////////////////////////////////////////
 
-impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
+impl<T, C, R> InboundUpgrade<T> for NoiseConfig<IK, C, R>
 where
-    NoiseConfig<IK, C>: UpgradeInfo,
+    NoiseConfig<IK, C, R>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
