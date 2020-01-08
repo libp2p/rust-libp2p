@@ -683,3 +683,23 @@ where
     }
 }
 
+
+impl<T> AsyncWrite for Connection<T>
+    where
+        T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    fn poll_write(self: Pin<&mut Self>, _: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+        Poll::Ready(
+            self.start_send(OutgoingData::Binary(buf.into()))
+                .map(|_| buf.len())
+        )
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Sink::poll_flush(self, cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Sink::poll_close(self, cx)
+    }
+}

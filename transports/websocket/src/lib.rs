@@ -165,19 +165,19 @@ where
     type Error = io::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_ready(cx)
+        Sink::poll_ready(Pin::new(&mut self.0), cx)
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> io::Result<()> {
-        Pin::new(&mut self.0).start_send(framed::OutgoingData::Binary(item))
+        Sink::start_send(Pin::new(&mut self.0), framed::OutgoingData::Binary(item))
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
+        Sink::poll_flush(Pin::new(&mut self.0), cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_close(cx)
+        Sink::poll_close(Pin::new(&mut self.0), cx)
     }
 }
 
