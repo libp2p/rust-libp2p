@@ -26,7 +26,11 @@ lru = "0.1.17"
 smallvec = "1.0.0"
 
 [dev-dependencies]
+env_logger = "0.6.0"
 libp2p = { path = "../../" }
+libp2p-plaintext = { version = "0.13.0", path = "../plaintext" }
+libp2p-yamux = { version = "0.13.0", path = "../../muxers/yamux" }
+quickcheck = "0.9.0"
+rand = "0.7.2"
 tokio = "0.1"
 tokio-stdin-stdout = "0.1"
-env_logger = "0.6.0"
