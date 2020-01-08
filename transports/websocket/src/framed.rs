@@ -631,6 +631,27 @@ where
     }
 }
 
+impl<T> AsyncRead for Connection<T>
+    where
+        T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        self.poll_next(cx)
+            .map(|item| match item {
+                Some(item) => io::Read::read(&mut item?.as_ref(), buf),
+                None => Ok(0)
+            })
+    }
+
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [io::IoSliceMut]) -> Poll<io::Result<usize>> {
+        self.poll_next(cx)
+            .map(|item| match item {
+                Some(item) => io::Read::read_vectored(&mut item?.as_ref(), bufs),
+                None => Ok(0)
+            })
+    }
+}
+
 impl<T> Sink<OutgoingData> for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
