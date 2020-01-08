@@ -5,9 +5,7 @@ pub use multihash;
 mod protocol;
 mod errors;
 mod from_url;
-mod util;
 
-use bytes::Bytes;
 use serde::{
     Deserialize,
     Deserializer,
@@ -18,28 +16,36 @@ use serde::{
 use std::{
     convert::TryFrom,
     fmt,
+    io,
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     result::Result as StdResult,
-    str::FromStr
+    str::FromStr,
+    sync::Arc
 };
 pub use self::errors::{Result, Error};
 pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 pub use self::protocol::Protocol;
 
+static_assertions::const_assert! {
+    // This check is most certainly overkill right now, but done here
+    // anyway to ensure the `as u64` casts in this crate are safe.
+    std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
+}
+
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]
-pub struct Multiaddr { bytes: Bytes }
+pub struct Multiaddr { bytes: Arc<Vec<u8>> }
 
 impl Multiaddr {
     /// Create a new, empty multiaddress.
     pub fn empty() -> Self {
-        Self { bytes: Bytes::new() }
+        Self { bytes: Arc::new(Vec::new()) }
     }
 
     /// Create a new, empty multiaddress with the given capacity.
     pub fn with_capacity(n: usize) -> Self {
-        Self { bytes: Bytes::with_capacity(n) }
+        Self { bytes: Arc::new(Vec::with_capacity(n)) }
     }
 
     /// Return the length in bytes of this multiaddress.
@@ -65,9 +71,9 @@ impl Multiaddr {
     /// ```
     ///
     pub fn push(&mut self, p: Protocol<'_>) {
-        let mut w = Vec::new();
-        p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
-        self.bytes.extend_from_slice(&w);
+        let mut w = io::Cursor::<&mut Vec<u8>>::new(Arc::make_mut(&mut self.bytes));
+        w.set_position(w.get_ref().len() as u64);
+        p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.")
     }
 
     /// Pops the last `Protocol` of this multiaddr, or `None` if the multiaddr is empty.
@@ -93,25 +99,16 @@ impl Multiaddr {
             slice = s
         };
         let remaining_len = self.bytes.len() - slice.len();
-        self.bytes.truncate(remaining_len);
+        Arc::make_mut(&mut self.bytes).truncate(remaining_len);
         Some(protocol)
     }
 
-    /// Like [`push`] but more efficient if this `Multiaddr` has no living clones.
-    pub fn with(self, p: Protocol<'_>) -> Self {
-        match self.bytes.try_mut() {
-            Ok(bytes) => {
-                let mut w = util::BytesWriter(bytes);
-                p.write_bytes(&mut w).expect("Writing to a `BytesWriter` never fails.");
-                Multiaddr { bytes: w.0.freeze() }
-            }
-            Err(mut bytes) => {
-                let mut w = Vec::new();
-                p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
-                bytes.extend_from_slice(&w);
-                Multiaddr { bytes }
-            }
-        }
+    /// Like [`push`] but consumes `self`.
+    pub fn with(mut self, p: Protocol<'_>) -> Self {
+        let mut w = io::Cursor::<&mut Vec<u8>>::new(Arc::make_mut(&mut self.bytes));
+        w.set_position(w.get_ref().len() as u64);
+        p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.");
+        self
     }
 
     /// Returns the components of this multiaddress.
@@ -217,7 +214,7 @@ impl<'a> FromIterator<Protocol<'a>> for Multiaddr {
         for cmp in iter {
             cmp.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
         }
-        Multiaddr { bytes: writer.into() }
+        Multiaddr { bytes: Arc::new(writer) }
     }
 }
 
@@ -238,7 +235,7 @@ impl FromStr for Multiaddr {
             p.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
         }
 
-        Ok(Multiaddr { bytes: writer.into() })
+        Ok(Multiaddr { bytes: Arc::new(writer) })
     }
 }
 
@@ -265,7 +262,7 @@ impl<'a> From<Protocol<'a>> for Multiaddr {
     fn from(p: Protocol<'a>) -> Multiaddr {
         let mut w = Vec::new();
         p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
-        Multiaddr { bytes: w.into() }
+        Multiaddr { bytes: Arc::new(w) }
     }
 }
 
@@ -300,7 +297,7 @@ impl TryFrom<Vec<u8>> for Multiaddr {
             let (_, s) = Protocol::from_bytes(slice)?;
             slice = s
         }
-        Ok(Multiaddr { bytes: v.into() })
+        Ok(Multiaddr { bytes: Arc::new(v) })
     }
 }
 
@@ -413,4 +410,3 @@ macro_rules! multiaddr {
         }
     }
 }
-
