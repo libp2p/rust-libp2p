@@ -90,7 +90,7 @@ impl<TSubstream> Mdns<TSubstream> {
     /// Builds a new `Mdns` behaviour.
     pub async fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(Mdns {
-            service: MaybeBusyMdnsService::Free(MdnsService::new().await?),
+            service: MaybeBusyMdnsService::Free(MdnsService::new()?),
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
             marker: PhantomData,
