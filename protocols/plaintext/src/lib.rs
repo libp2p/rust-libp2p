@@ -43,7 +43,7 @@ use void::Void;
 
 mod error;
 mod handshake;
-mod pb;
+mod structs_proto;
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
 ///
