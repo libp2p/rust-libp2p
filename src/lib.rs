@@ -248,7 +248,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
         .and_then(move |io, endpoint| {
             libp2p_core::upgrade::apply(
                 io,
-                PnetConfig {},
+                PnetConfig::default(),
                 endpoint,
                 libp2p_core::transport::upgrade::Version::V1,
             )
