@@ -61,6 +61,7 @@ mod apply;
 mod denied;
 mod either;
 mod error;
+mod from_fn;
 mod map;
 mod optional;
 mod select;
@@ -75,6 +76,7 @@ pub use self::{
     denied::DeniedUpgrade,
     either::EitherUpgrade,
     error::UpgradeError,
+    from_fn::{from_fn, FromFnUpgrade},
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
     select::SelectUpgrade,
