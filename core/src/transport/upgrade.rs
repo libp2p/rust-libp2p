@@ -182,11 +182,13 @@ where
 /// in the context of negotiating a secure channel.
 ///
 /// Configured through [`Builder::authenticate`].
+#[pin_project::pin_project]
 pub struct Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<C> + OutboundUpgrade<C>
 {
+    #[pin]
     inner: EitherUpgrade<C, U>
 }
 
@@ -200,8 +202,9 @@ where
 {
     type Output = <EitherUpgrade<C, U> as Future>::Output;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        Future::poll(Pin::new(&mut self.inner), cx)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        Future::poll(this.inner, cx)
     }
 }
 
@@ -209,12 +212,14 @@ where
 /// top of an authenticated transport.
 ///
 /// Configured through [`Builder::multiplex`].
+#[pin_project::pin_project]
 pub struct Multiplex<C, U, I>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<C> + OutboundUpgrade<C>,
 {
     info: Option<I>,
+    #[pin]
     upgrade: EitherUpgrade<C, U>,
 }
 
@@ -226,21 +231,15 @@ where
 {
     type Output = Result<(I, M), UpgradeError<E>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let m = match ready!(Future::poll(Pin::new(&mut self.upgrade), cx)) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let m = match ready!(Future::poll(this.upgrade, cx)) {
             Ok(m) => m,
             Err(err) => return Poll::Ready(Err(err)),
         };
-        let i = self.info.take().expect("Multiplex future polled after completion.");
+        let i = this.info.take().expect("Multiplex future polled after completion.");
         Poll::Ready(Ok((i, m)))
     }
-}
-
-impl<C, U, I> Unpin for Multiplex<C, U, I>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C> + OutboundUpgrade<C>,
-{
 }
 
 /// An inbound or outbound upgrade.
