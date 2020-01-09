@@ -24,7 +24,6 @@
 //! peer ID will be generated randomly.
 
 use async_std::task;
-use futures::prelude::*;
 use libp2p::{
     Swarm,
     PeerId,
@@ -90,7 +89,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Kick it off!
     task::block_on(async move {
-        while let Some(event) = swarm.try_next().await? {
+        loop {
+            let event = swarm.next().await;
             if let KademliaEvent::GetClosestPeersResult(result) = event {
                 match result {
                     Ok(ok) =>

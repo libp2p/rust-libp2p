@@ -128,7 +128,7 @@ fn bootstrap() {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(Ok(KademliaEvent::BootstrapResult(Ok(ok))))) => {
+                            Poll::Ready(Some(KademliaEvent::BootstrapResult(Ok(ok)))) => {
                                 assert_eq!(i, 0);
                                 assert_eq!(ok.peer, swarm_ids[0]);
                                 let known = swarm.kbuckets.iter()
@@ -138,7 +138,7 @@ fn bootstrap() {
                                 return Poll::Ready(())
                             }
                             // Ignore any other event.
-                            Poll::Ready(Some(Ok(_))) => (),
+                            Poll::Ready(Some(_)) => (),
                             e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                             Poll::Pending => break,
                         }
@@ -186,7 +186,7 @@ fn query_iter() {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(Ok(KademliaEvent::GetClosestPeersResult(Ok(ok))))) => {
+                            Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
                                 assert_eq!(&ok.key[..], search_target.as_bytes());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert_eq!(swarm.queries.size(), 0);
@@ -196,7 +196,7 @@ fn query_iter() {
                                 return Poll::Ready(());
                             }
                             // Ignore any other event.
-                            Poll::Ready(Some(Ok(_))) => (),
+                            Poll::Ready(Some(_)) => (),
                             e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                             Poll::Pending => break,
                         }
@@ -234,13 +234,13 @@ fn unresponsive_not_returned_direct() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(Ok(KademliaEvent::GetClosestPeersResult(Ok(ok))))) => {
+                        Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 0);
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
-                        Poll::Ready(Some(Ok(_))) => (),
+                        Poll::Ready(Some(_)) => (),
                         e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                         Poll::Pending => break,
                     }
@@ -278,14 +278,14 @@ fn unresponsive_not_returned_indirect() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(Ok(KademliaEvent::GetClosestPeersResult(Ok(ok))))) => {
+                        Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
-                        Poll::Ready(Some(Ok(_))) => (),
+                        Poll::Ready(Some(_)) => (),
                         e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                         Poll::Pending => break,
                     }
@@ -314,7 +314,7 @@ fn get_record_not_found() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(Ok(KademliaEvent::GetRecordResult(Err(e))))) => {
+                        Poll::Ready(Some(KademliaEvent::GetRecordResult(Err(e)))) => {
                             if let GetRecordError::NotFound { key, closest_peers, } = e {
                                 assert_eq!(key, target_key);
                                 assert_eq!(closest_peers.len(), 2);
@@ -326,7 +326,7 @@ fn get_record_not_found() {
                             }
                         }
                         // Ignore any other event.
-                        Poll::Ready(Some(Ok(_))) => (),
+                        Poll::Ready(Some(_)) => (),
                         e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                         Poll::Pending => break,
                     }
@@ -375,8 +375,8 @@ fn put_record() {
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(Ok(KademliaEvent::PutRecordResult(res)))) |
-                            Poll::Ready(Some(Ok(KademliaEvent::RepublishRecordResult(res)))) => {
+                            Poll::Ready(Some(KademliaEvent::PutRecordResult(res))) |
+                            Poll::Ready(Some(KademliaEvent::RepublishRecordResult(res))) => {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
@@ -387,7 +387,7 @@ fn put_record() {
                                 }
                             }
                             // Ignore any other event.
-                            Poll::Ready(Some(Ok(_))) => (),
+                            Poll::Ready(Some(_)) => (),
                             e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                             Poll::Pending => break,
                         }
@@ -474,13 +474,13 @@ fn get_value() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(Ok(KademliaEvent::GetRecordResult(Ok(ok))))) => {
+                        Poll::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
                             assert_eq!(ok.records.len(), 1);
                             assert_eq!(ok.records.first(), Some(&record));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
-                        Poll::Ready(Some(Ok(_))) => (),
+                        Poll::Ready(Some(_)) => (),
                         e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                         Poll::Pending => break,
                     }
@@ -513,13 +513,13 @@ fn get_value_many() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(Ok(KademliaEvent::GetRecordResult(Ok(ok))))) => {
+                        Poll::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
                             assert_eq!(ok.records.len(), num_results);
                             assert_eq!(ok.records.first(), Some(&record));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
-                        Poll::Ready(Some(Ok(_))) => (),
+                        Poll::Ready(Some(_)) => (),
                         e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                         Poll::Pending => break,
                     }
@@ -561,8 +561,8 @@ fn add_provider() {
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(Ok(KademliaEvent::StartProvidingResult(res)))) |
-                            Poll::Ready(Some(Ok(KademliaEvent::RepublishProviderResult(res)))) => {
+                            Poll::Ready(Some(KademliaEvent::StartProvidingResult(res))) |
+                            Poll::Ready(Some(KademliaEvent::RepublishProviderResult(res))) => {
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
@@ -572,7 +572,7 @@ fn add_provider() {
                                 }
                             }
                             // Ignore any other event.
-                            Poll::Ready(Some(Ok(_))) => (),
+                            Poll::Ready(Some(_)) => (),
                             e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
                             Poll::Pending => break,
                         }
@@ -669,7 +669,7 @@ fn exceed_jobs_max_queries() {
             for _ in 0 .. num {
                 // There are no other nodes, so the queries finish instantly.
                 if let Poll::Ready(Some(e)) = swarms[0].poll_next_unpin(ctx) {
-                    if let Ok(KademliaEvent::BootstrapResult(r)) = e {
+                    if let KademliaEvent::BootstrapResult(r) = e {
                         assert!(r.is_ok(), "Unexpected error")
                     } else {
                         panic!("Unexpected event: {:?}", e)

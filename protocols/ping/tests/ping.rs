@@ -60,7 +60,7 @@ fn ping() {
         }
 
         loop {
-            match swarm1.next().await.unwrap().unwrap() {
+            match swarm1.next().await {
                 PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
                     return (pid1.clone(), peer, rtt)
                 },
@@ -74,7 +74,7 @@ fn ping() {
         Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
 
         loop {
-            match swarm2.next().await.unwrap().unwrap() {
+            match swarm2.next().await {
                 PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
                     return (pid2.clone(), peer, rtt)
                 },
