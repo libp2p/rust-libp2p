@@ -1,4 +1,4 @@
-// Copyright 2017-2018 Parity Technologies (UK) Ltd.
+// Copyright 2017-2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -55,14 +55,12 @@
 //! `QuicEndpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![forbid(
-    unused_must_use,
-    unstable_features,
-    warnings,
-    missing_copy_implementations
-)]
+#![forbid(unused_must_use, unstable_features, warnings)]
+#![deny(missing_copy_implementations)]
 #![deny(trivial_casts)]
 mod certificate;
+#[cfg(test)]
+mod tests;
 mod verifier;
 use async_macros::ready;
 use async_std::net::UdpSocket;
@@ -92,6 +90,36 @@ use std::{
     },
     time::Instant,
 };
+#[derive(Debug)]
+pub struct QuicSubstream {
+    id: StreamId,
+    status: SubstreamStatus,
+}
+
+#[derive(Debug)]
+enum SubstreamStatus {
+    Live,
+    Finishing(oneshot::Receiver<()>),
+    Finished,
+}
+
+impl QuicSubstream {
+    fn new(id: StreamId) -> Self {
+        let status = SubstreamStatus::Live;
+        Self { id, status }
+    }
+
+    fn id(&self) -> StreamId {
+        self.id
+    }
+
+    fn is_live(&self) -> bool {
+        match self.status {
+            SubstreamStatus::Live => true,
+            SubstreamStatus::Finishing(_) | SubstreamStatus::Finished => false,
+        }
+    }
+}
 
 /// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
 ///
@@ -310,16 +338,17 @@ enum OutboundInner {
 pub struct Outbound(OutboundInner);
 
 impl Future for Outbound {
-    type Output = Result<StreamId, io::Error>;
+    type Output = Result<QuicSubstream, io::Error>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = &mut *self;
         match this.0 {
             OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
-                OutboundInner::Complete(e) => Ready(e),
+                OutboundInner::Complete(e) => Ready(e.map(QuicSubstream::new)),
                 _ => unreachable!(),
             },
             OutboundInner::Pending(ref mut receiver) => {
                 let result = ready!(receiver.poll_unpin(cx))
+                    .map(QuicSubstream::new)
                     .map_err(|oneshot::Canceled| io::ErrorKind::ConnectionAborted.into());
                 this.0 = OutboundInner::Done;
                 Ready(result)
@@ -331,7 +360,7 @@ impl Future for Outbound {
 
 impl StreamMuxer for QuicMuxer {
     type OutboundSubstream = Outbound;
-    type Substream = StreamId;
+    type Substream = QuicSubstream;
     type Error = io::Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
@@ -356,7 +385,21 @@ impl StreamMuxer for QuicMuxer {
         }
     }
     fn destroy_outbound(&self, _: Outbound) {}
-    fn destroy_substream(&self, _substream: Self::Substream) {}
+    fn destroy_substream(&self, substream: Self::Substream) {
+        let mut inner = self.inner();
+        if let Some(waker) = inner.writers.remove(&substream.id()) {
+            waker.wake();
+        }
+        if let Some(waker) = inner.readers.remove(&substream.id()) {
+            waker.wake();
+        }
+        drop(inner.connection.finish(substream.id()));
+        drop(
+            inner
+                .connection
+                .stop_sending(substream.id(), Default::default()),
+        )
+    }
     fn is_remote_acknowledged(&self) -> bool {
         true
     }
@@ -378,7 +421,7 @@ impl StreamMuxer for QuicMuxer {
                 }
                 Pending
             }
-            Some(stream) => Ready(Ok(stream)),
+            Some(id) => Ready(Ok(QuicSubstream::new(id))),
         }
     }
 
@@ -389,12 +432,32 @@ impl StreamMuxer for QuicMuxer {
         buf: &[u8],
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::WriteError;
+        if !substream.is_live() {
+            return Ready(Err(io::ErrorKind::ConnectionAborted.into()));
+        }
         let mut inner = self.inner();
         inner.wake_driver();
-        match inner.connection.write(*substream, buf) {
+        if let Some(ref e) = inner.close_reason {
+            return Ready(Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                e.clone(),
+            )));
+        }
+
+        assert!(
+            !inner.connection.is_drained(),
+            "attempting to write to a drained connection"
+        );
+        match inner.connection.write(substream.id(), buf) {
             Ok(bytes) => Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
-                inner.writers.insert(*substream, cx.waker().clone());
+                if let Some(ref e) = inner.close_reason {
+                    return Ready(Err(io::Error::new(
+                        io::ErrorKind::ConnectionAborted,
+                        e.clone(),
+                    )));
+                }
+                inner.writers.insert(substream.id(), cx.waker().clone());
                 Pending
             }
             Err(WriteError::UnknownStream) => {
@@ -421,11 +484,15 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
         inner.wake_driver();
-        match inner.connection.read(*substream, buf) {
+        if inner.close_reason.is_some() {
+            // FIXME!!!
+            return Ready(Ok(0));
+        }
+        match inner.connection.read(substream.id(), buf) {
             Ok(Some(bytes)) => Ready(Ok(bytes)),
             Ok(None) => Ready(Ok(0)),
             Err(ReadError::Blocked) => {
-                inner.readers.insert(*substream, cx.waker().clone());
+                inner.readers.insert(substream.id(), cx.waker().clone());
                 Pending
             }
             Err(ReadError::UnknownStream) => unreachable!("use of a closed stream by libp2p"),
@@ -435,95 +502,55 @@ impl StreamMuxer for QuicMuxer {
 
     fn shutdown_substream(
         &self,
-        _cx: &mut Context,
+        cx: &mut Context,
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
-        Ready(
-            self.inner()
-                .connection
-                .finish(*substream)
-                .map_err(|e| match e {
-                    quinn_proto::FinishError::UnknownStream => {
-                        panic!("libp2p never uses a closed stream, so this cannot happen; qed")
-                    }
-                    quinn_proto::FinishError::Stopped { .. } => {
-                        io::ErrorKind::ConnectionReset.into()
-                    }
-                }),
-        )
+        match substream.status {
+            SubstreamStatus::Finished => return Ready(Ok(())),
+            SubstreamStatus::Finishing(ref mut channel) => {
+                self.inner().wake_driver();
+                return channel
+                    .poll_unpin(cx)
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e.clone()));
+            }
+            SubstreamStatus::Live => {}
+        }
+        let mut inner = self.inner();
+        inner.wake_driver();
+        inner
+            .connection
+            .finish(substream.id())
+            .map_err(|e| match e {
+                quinn_proto::FinishError::UnknownStream => {
+                    unreachable!("we checked for this above!")
+                }
+                quinn_proto::FinishError::Stopped { .. } => {
+                    io::Error::from(io::ErrorKind::ConnectionReset)
+                }
+            })?;
+        let (sender, mut receiver) = oneshot::channel();
+        assert!(receiver.poll_unpin(cx).is_pending());
+        substream.status = SubstreamStatus::Finishing(receiver);
+        assert!(inner.finishers.insert(substream.id(), sender).is_none());
+        Pending
     }
 
     fn flush_substream(
         &self,
-        cx: &mut Context,
-        substream: &mut Self::Substream,
+        _cx: &mut Context,
+        _substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
-        self.write_substream(cx, substream, b"").map_ok(drop)
+        Ready(Ok(()))
     }
 
     fn flush_all(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Ready(Ok(()))
     }
 
-    fn close(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Ready(Ok(self.inner().connection.close(
-            Instant::now(),
-            Default::default(),
-            Default::default(),
-        )))
-    }
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone)]
-pub struct QuicStream {
-    id: StreamId,
-    muxer: QuicMuxer,
-}
-
-#[cfg(test)]
-impl AsyncWrite for QuicStream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        let inner = self.get_mut();
-        inner.muxer.write_substream(cx, &mut inner.id, buf)
-    }
-
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        unimplemented!()
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        self.poll_write(cx, b"").map_ok(drop)
-    }
-}
-
-#[cfg(test)]
-impl AsyncRead for QuicStream {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        let inner = self.get_mut();
-        inner.muxer.read_substream(cx, &mut inner.id, buf)
-    }
-}
-
-#[cfg(test)]
-impl Stream for QuicMuxer {
-    type Item = QuicStream;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.poll_inbound(cx).map(|x| match x {
-            Ok(id) => Some(QuicStream {
-                id,
-                muxer: self.get_mut().clone(),
-            }),
-            Err(_) => None,
-        })
+    fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let mut inner = self.inner();
+        inner.shutdown();
+        inner.driver().poll_unpin(cx)
     }
 }
 
@@ -594,10 +621,11 @@ impl QuicEndpoint {
         connection: Connection,
         handle: ConnectionHandle,
         inner: &mut EndpointInner,
-    ) -> (QuicMuxer, ConnectionDriver) {
+    ) -> QuicMuxer {
         let (driver, muxer) = ConnectionDriver::new(Muxer::new(self.0.clone(), connection, handle));
         inner.muxers.insert(handle, Arc::downgrade(&muxer));
-        (QuicMuxer(muxer), driver)
+        (*muxer).lock().driver = Some(async_std::task::spawn(driver));
+        QuicMuxer(muxer)
     }
 
     fn accept_muxer(
@@ -606,8 +634,7 @@ impl QuicEndpoint {
         handle: ConnectionHandle,
         inner: &mut EndpointInner,
     ) {
-        let (muxer, driver) = self.create_muxer(connection, handle, &mut *inner);
-        async_std::task::spawn(driver);
+        let muxer = self.create_muxer(connection, handle, &mut *inner);
         self.0
             .new_connections
             .unbounded_send(Ok(ListenerEvent::Upgrade {
@@ -753,8 +780,7 @@ impl Transport for &QuicEndpoint {
                 TransportError::Other(io::ErrorKind::InvalidInput.into())
             });
         let (handle, conn) = s?;
-        let (muxer, driver) = self.create_muxer(conn, handle, &mut inner);
-        async_std::task::spawn(driver);
+        let muxer = self.create_muxer(conn, handle, &mut inner);
         Ok(QuicUpgrade { muxer: Some(muxer) })
     }
 }
@@ -797,20 +823,43 @@ pub struct Muxer {
     writers: HashMap<StreamId, std::task::Waker>,
     /// Tasks blocked on reading
     readers: HashMap<StreamId, std::task::Waker>,
+    /// Tasks blocked on finishing
+    finishers: HashMap<StreamId, oneshot::Sender<()>>,
     /// Task waiting for new connections, or for this connection to complete.
     accept_waker: Option<std::task::Waker>,
     /// Tasks waiting to make a connection
     connectors: StreamSenderQueue,
     /// Pending transmit
     pending: Option<quinn_proto::Transmit>,
-    /// The timers being used by this connection
-    timers: quinn_proto::TimerTable<Option<futures_timer::Delay>>,
+    /// The timer being used by this connection
+    timer: Option<futures_timer::Delay>,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
     /// Waker to wake up the driver
     waker: Option<std::task::Waker>,
     /// Channel for endpoint events
     endpoint_channel: mpsc::Sender<EndpointMessage>,
+    /// Last timeout
+    last_timeout: Option<Instant>,
+    /// Join handle for the driver
+    driver: Option<async_std::task::JoinHandle<Result<(), io::Error>>>,
+}
+
+impl Drop for Muxer {
+    fn drop(&mut self) {
+        self.shutdown()
+    }
+}
+
+impl Drop for QuicMuxer {
+    fn drop(&mut self) {
+        let mut inner = self.inner();
+        inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
+        // inner
+        //     .connection
+        //     .close(Instant::now(), Default::default(), Default::default());
+        inner.shutdown();
+    }
 }
 
 impl Muxer {
@@ -821,56 +870,62 @@ impl Muxer {
         }
     }
 
-    fn drive_timers(&mut self, cx: &mut Context) -> bool {
-        let mut keep_going = false;
-        let now = Instant::now();
-        for (timer, timer_ref) in self.timers.iter_mut() {
-            if let Some(ref mut timer_future) = timer_ref {
-                match timer_future.poll_unpin(cx) {
-                    Pending => continue,
-                    Ready(()) => {
-                        keep_going = true;
-                        self.connection.handle_timeout(now, timer);
-                        *timer_ref = None;
-                    }
-                }
-            }
-        }
-        while let Some(quinn_proto::TimerUpdate { timer, update }) = self.connection.poll_timers() {
-            keep_going = true;
-            use quinn_proto::TimerSetting;
-            match update {
-                TimerSetting::Stop => self.timers[timer] = None,
-                TimerSetting::Start(instant) => {
-                    if instant < now {
-                        self.timers[timer] = None;
-                        self.connection.handle_timeout(now, timer);
-                        continue;
-                    }
+    fn driver(&mut self) -> &mut async_std::task::JoinHandle<Result<(), io::Error>> {
+        self.driver
+            .as_mut()
+            .expect("we don’t call this until the driver is spawned; qed")
+    }
 
-                    trace!("setting timer {:?} for {:?}", timer, instant - now);
-                    self.timers[timer] = Some(futures_timer::Delay::new(instant - now));
+    fn drive_timer(&mut self, cx: &mut Context, now: Instant) -> bool {
+        let mut keep_going = false;
+        loop {
+            match self.connection.poll_timeout() {
+                None => {
+                    self.timer = None;
+                    self.last_timeout = None
+                }
+                Some(t) if t <= now => {
+                    self.connection.handle_timeout(now);
+                    keep_going = true;
+                    continue;
+                }
+                t if t == self.last_timeout => {}
+                t => {
+                    let delay = t.expect("already checked to be Some; qed") - now;
+                    self.timer = Some(futures_timer::Delay::new(delay))
                 }
             }
+            break;
+        }
+
+        while let Some(ref mut timer) = self.timer {
+            if timer.poll_unpin(cx).is_pending() {
+                break;
+            }
+            self.connection.handle_timeout(now);
+            keep_going = true
         }
         keep_going
     }
 
     fn new(endpoint: Arc<Endpoint>, connection: Connection, handle: ConnectionHandle) -> Self {
         Muxer {
+            last_timeout: None,
             pending_stream: None,
             connection,
             handle,
             writers: HashMap::new(),
             readers: HashMap::new(),
+            finishers: HashMap::new(),
             accept_waker: None,
             connectors: Default::default(),
             endpoint: endpoint.clone(),
             pending: None,
-            timers: quinn_proto::TimerTable::new(|| None),
+            timer: None,
             close_reason: None,
             waker: None,
             endpoint_channel: endpoint.event_channel.clone(),
+            driver: None,
         }
     }
 
@@ -912,12 +967,6 @@ impl Muxer {
     }
 
     fn pre_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<bool, io::Error>> {
-        if let Some(ref e) = self.close_reason {
-            return Ready(Err(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                e.clone(),
-            )));
-        }
         if let Some(transmit) = self.pending.take() {
             ready!(self.poll_transmit(cx, transmit))?;
         }
@@ -958,6 +1007,26 @@ impl Muxer {
                 r
             }
         }
+    }
+
+    fn shutdown(&mut self) {
+        if let Some(w) = self.accept_waker.take() {
+            w.wake()
+        }
+        for (_, v) in self.writers.drain() {
+            v.wake();
+        }
+        for (_, v) in self.readers.drain() {
+            v.wake();
+        }
+        for (_, _) in self.finishers.drain() {}
+        self.connectors.truncate(0);
+        if !self.connection.is_drained() {
+            self.connection
+                .close(Instant::now(), Default::default(), Default::default());
+            self.process_app_events();
+        }
+        self.wake_driver();
     }
 
     /// Process application events
@@ -1016,10 +1085,10 @@ impl Muxer {
                     );
                     let stream = self.connection.open(Dir::Bi)
                             .expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
-                    if let Some(oneshot) = self.connectors.pop_front() {
+                    while let Some(oneshot) = self.connectors.pop_front() {
                         match oneshot.send(stream) {
-                            Ok(()) => continue,
-                            Err(_) => (),
+                            Ok(()) => break,
+                            Err(_) => {}
                         }
                     }
                     self.pending_stream = Some(stream)
@@ -1027,21 +1096,16 @@ impl Muxer {
                 Event::ConnectionLost { reason } => {
                     debug!("lost connection due to {:?}", reason);
                     self.close_reason = Some(reason);
-                    if let Some(w) = self.accept_waker.take() {
-                        w.wake()
-                    }
-                    for (_, v) in self.writers.drain() {
-                        v.wake();
-                    }
-                    for (_, v) in self.readers.drain() {
-                        v.wake();
-                    }
-                    self.connectors.truncate(0);
+                    self.shutdown();
                 }
                 Event::StreamFinished { stream, .. } => {
                     // Wake up the task waiting on us (if any)
+                    debug!("Stream {:?} finished!", stream);
                     if let Some((_, waker)) = self.writers.remove_entry(&stream) {
                         waker.wake()
+                    }
+                    if let Some((_, sender)) = self.finishers.remove_entry(&stream) {
+                        drop(sender.send(()))
                     }
                 }
                 // These are separate events, but are handled the same way.
@@ -1084,253 +1148,50 @@ impl Future for ConnectionDriver {
     type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.get_mut();
-        debug!("being polled for timers!");
+        debug!("being polled for timer!");
         let mut inner = this.inner.lock();
         inner.waker = Some(cx.waker().clone());
+        let now = Instant::now();
         loop {
-            if inner.connection.is_drained() {
-                debug!(
-                    "Connection drained: close reason {}",
-                    inner
-                        .close_reason
-                        .as_ref()
-                        .expect("we never have a closed connection with no reason; qed")
-                );
-                break Ready(Ok(()));
-            }
             let mut needs_timer_update = false;
-            debug!("loop iteration");
+            needs_timer_update |= inner.drive_timer(cx, now);
             needs_timer_update |= ready!(inner.pre_application_io(cx))?;
             needs_timer_update |= ready!(inner.on_application_io(cx))?;
-            needs_timer_update |= inner.drive_timers(cx);
             inner.process_app_events();
-            if !needs_timer_update {
+            if inner.connection.is_drained() {
+                break Ready(
+                    match inner
+                        .close_reason
+                        .clone()
+                        .expect("we never have a closed connection with no reason; qed")
+                    {
+                        quinn_proto::ConnectionError::LocallyClosed => {
+                            if needs_timer_update {
+                                debug!("continuing until all events are finished");
+                                continue;
+                            } else {
+                                debug!("exiting driver");
+                                Ok(())
+                            }
+                        }
+                        e @ quinn_proto::ConnectionError::TimedOut => {
+                            Err(io::Error::new(io::ErrorKind::TimedOut, e))
+                        }
+                        e @ quinn_proto::ConnectionError::Reset => {
+                            Err(io::Error::new(io::ErrorKind::ConnectionReset, e))
+                        }
+                        e @ quinn_proto::ConnectionError::TransportError { .. } => {
+                            Err(io::Error::new(io::ErrorKind::InvalidData, e))
+                        }
+                        e @ quinn_proto::ConnectionError::ConnectionClosed { .. } => {
+                            Err(io::Error::new(io::ErrorKind::ConnectionAborted, e))
+                        }
+                        e => Err(io::Error::new(io::ErrorKind::Other, e)),
+                    },
+                );
+            } else if !needs_timer_update {
                 break Pending;
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{multiaddr_to_socketaddr, QuicConfig, QuicEndpoint};
-    use futures::prelude::*;
-    use libp2p_core::{
-        multiaddr::{Multiaddr, Protocol},
-        transport::ListenerEvent,
-        Transport,
-    };
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-    fn init() {
-        drop(env_logger::try_init());
-    }
-
-    #[test]
-    fn wildcard_expansion() {
-        init();
-        let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
-        let listener = QuicEndpoint::new(&QuicConfig::default(), addr.clone())
-            .expect("endpoint")
-            .listen_on(addr)
-            .expect("listener");
-        let addr: Multiaddr = "/ip4/127.0.0.1/udp/1236/quic".parse().unwrap();
-        let client = QuicEndpoint::new(&QuicConfig::default(), addr.clone())
-            .expect("endpoint")
-            .dial(addr)
-            .expect("dialer");
-
-        // Process all initial `NewAddress` events and make sure they
-        // do not contain wildcard address or port.
-        let server = listener
-            .take_while(|event| match event.as_ref().unwrap() {
-                ListenerEvent::NewAddress(a) => {
-                    let mut iter = a.iter();
-                    match iter.next().expect("ip address") {
-                        Protocol::Ip4(_ip) => {} // assert!(!ip.is_unspecified()),
-                        Protocol::Ip6(_ip) => {} // assert!(!ip.is_unspecified()),
-                        other => panic!("Unexpected protocol: {}", other),
-                    }
-                    if let Protocol::Udp(port) = iter.next().expect("port") {
-                        assert_ne!(0, port)
-                    } else {
-                        panic!("No UDP port in address: {}", a)
-                    }
-                    futures::future::ready(true)
-                }
-                _ => futures::future::ready(false),
-            })
-            .for_each(|_| futures::future::ready(()));
-
-        async_std::task::spawn(server);
-        futures::executor::block_on(client).unwrap();
-    }
-
-    #[test]
-    fn multiaddr_to_udp_conversion() {
-        use std::net::Ipv6Addr;
-        init();
-        assert!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
-                .is_err()
-        );
-
-        assert!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap())
-                .is_err()
-        );
-
-        assert_eq!(
-            multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/udp/12345/quic"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            ),
-            Ok(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                12345,
-            ))
-        );
-        assert_eq!(
-            multiaddr_to_socketaddr(
-                &"/ip4/255.255.255.255/udp/8080/quic"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            ),
-            Ok(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-                8080,
-            ))
-        );
-        assert_eq!(
-            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
-            Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                12345,
-            ))
-        );
-        assert_eq!(
-            multiaddr_to_socketaddr(
-                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
-                    .parse::<Multiaddr>()
-                    .unwrap()
-            ),
-            Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(
-                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                )),
-                8080,
-            ))
-        );
-    }
-
-    #[test]
-    fn communicating_between_dialer_and_listener() {
-        use super::{trace, StreamMuxer};
-        init();
-        let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
-        let mut ready_tx = Some(ready_tx);
-
-        async_std::task::spawn(async move {
-            let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
-                .parse()
-                .expect("bad address?");
-            let quic_config = QuicConfig::default();
-            let quic_endpoint = QuicEndpoint::new(&quic_config, addr.clone()).expect("I/O error");
-            let mut listener = quic_endpoint.listen_on(addr).unwrap();
-
-            loop {
-                trace!("awaiting connection");
-                match listener.next().await.unwrap().unwrap() {
-                    ListenerEvent::NewAddress(listen_addr) => {
-                        ready_tx.take().unwrap().send(listen_addr).unwrap();
-                    }
-                    ListenerEvent::Upgrade { upgrade, .. } => {
-                        let mut muxer = upgrade.await.expect("upgrade failed");
-                        let mut socket = muxer.next().await.expect("no incoming stream");
-
-                        let mut buf = [0u8; 3];
-                        log::error!("reading data from accepted stream!");
-                        socket.read_exact(&mut buf).await.unwrap();
-                        assert_eq!(buf, [4, 5, 6]);
-                        log::error!("writing data!");
-                        socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
-                    }
-                    _ => unreachable!(),
-                }
-            }
-        });
-
-        async_std::task::block_on(async move {
-            let addr = ready_rx.await.unwrap();
-            let quic_config = QuicConfig::default();
-            let quic_endpoint = QuicEndpoint::new(
-                &quic_config,
-                "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
-            )
-            .unwrap();
-            // Obtain a future socket through dialing
-            let connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
-            trace!("Received a Connection: {:?}", connection);
-            let mut stream = super::QuicStream {
-                id: connection.open_outbound().await.expect("failed"),
-                muxer: connection.clone(),
-            };
-            log::warn!("have a new stream!");
-            stream.write_all(&[4u8, 5, 6]).await.unwrap();
-            let mut buf = [0u8; 3];
-            log::error!("reading data!");
-            stream.read_exact(&mut buf).await.unwrap();
-            assert_eq!(buf, [1u8, 2, 3]);
-        });
-    }
-
-    #[test]
-    fn replace_port_0_in_returned_multiaddr_ipv4() {
-        init();
-        let quic = QuicConfig::default();
-
-        let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
-        assert!(addr.to_string().ends_with("udp/0/quic"));
-
-        let quic = QuicEndpoint::new(&quic, addr.clone()).expect("no error");
-
-        let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        assert!(!new_addr.to_string().contains("tcp/0"));
-    }
-
-    #[test]
-    fn replace_port_0_in_returned_multiaddr_ipv6() {
-        init();
-        let config = QuicConfig::default();
-
-        let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
-        assert!(addr.to_string().contains("udp/0/quic"));
-        let quic = QuicEndpoint::new(&config, addr.clone()).expect("no error");
-
-        let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
-            .next()
-            .expect("some event")
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        assert!(!new_addr.to_string().contains("tcp/0"));
-    }
-
-    #[test]
-    fn larger_addr_denied() {
-        init();
-        let config = QuicConfig::default();
-        let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
-            .parse::<Multiaddr>()
-            .unwrap();
-        assert!(QuicEndpoint::new(&config, addr).is_err())
     }
 }
