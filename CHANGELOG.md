@@ -1,6 +1,14 @@
-# Next Version
+# Version 0.14.0-alpha.1 (2020-01-07)
 
+- Upgraded the crate to stable futures.
 - Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
+- Refactored the `core::upgrade` module to provide async functions.
+- Changed the `Stream` trait implementation of `Swarm` to no longer return a `Result`.
+- Added the `Swarm::next` and `Swarm::next_event` functions and the `SwarmEvent` enum.
+- Changed `ProtocolsHandler::poll` to no longer return an error. Instead, `ProtocolsHandlerEvent` has a new `Close` variant which corresponds to what an error represented before.
+- Changed all the traits that have a `poll` function (i.e. `NetworkBehaviour`, `ProtocolsHandler`, `NodeHandler`) to have an additional `&mut Context` parameter, to reflect the changes in the `Future` trait.
+- Revamped the API of `libp2p_websockets::framed`.
+- Added protocol string to `Error::UnknownProtocolString`.
 
 # Version 0.13.2 (2020-01-02)
 

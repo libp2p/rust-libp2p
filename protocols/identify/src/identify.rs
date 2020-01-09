@@ -254,20 +254,18 @@ pub enum IdentifyEvent {
 #[cfg(test)]
 mod tests {
     use crate::{Identify, IdentifyEvent};
-    use futures::prelude::*;
+    use futures::{prelude::*, pin_mut};
     use libp2p_core::{
         identity,
         PeerId,
         muxing::StreamMuxer,
-        Multiaddr,
         Transport,
         upgrade
     };
     use libp2p_tcp::TcpConfig;
     use libp2p_secio::SecioConfig;
-    use libp2p_swarm::Swarm;
+    use libp2p_swarm::{Swarm, SwarmEvent};
     use libp2p_mplex::MplexConfig;
-    use rand::{Rng, thread_rng};
     use std::{fmt, io};
 
     fn transport() -> (identity::PublicKey, impl Transport<
@@ -303,13 +301,19 @@ mod tests {
             (swarm, pubkey)
         };
 
-        let addr: Multiaddr = {
-            let port = thread_rng().gen_range(49152, std::u16::MAX);
-            format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap()
-        };
+        Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-        Swarm::listen_on(&mut swarm1, addr.clone()).unwrap();
-        Swarm::dial_addr(&mut swarm2, addr.clone()).unwrap();
+        let listen_addr = async_std::task::block_on(async {
+            loop {
+                let swarm1_fut = swarm1.next_event();
+                pin_mut!(swarm1_fut);
+                match swarm1_fut.await {
+                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    _ => {}
+                }
+            }
+        });
+        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
@@ -317,8 +321,13 @@ mod tests {
         // either `Identified` event arrives correctly.
         async_std::task::block_on(async move {
             loop {
-                match future::select(swarm1.next(), swarm2.next()).await.factor_second().0 {
-                    future::Either::Left(Some(Ok(IdentifyEvent::Received { info, .. }))) => {
+                let swarm1_fut = swarm1.next();
+                pin_mut!(swarm1_fut);
+                let swarm2_fut = swarm2.next();
+                pin_mut!(swarm2_fut);
+
+                match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
+                    future::Either::Left(IdentifyEvent::Received { info, .. }) => {
                         assert_eq!(info.public_key, pubkey2);
                         assert_eq!(info.protocol_version, "c");
                         assert_eq!(info.agent_version, "d");
@@ -326,7 +335,7 @@ mod tests {
                         assert!(info.listen_addrs.is_empty());
                         return;
                     }
-                    future::Either::Right(Some(Ok(IdentifyEvent::Received { info, .. }))) => {
+                    future::Either::Right(IdentifyEvent::Received { info, .. }) => {
                         assert_eq!(info.public_key, pubkey1);
                         assert_eq!(info.protocol_version, "a");
                         assert_eq!(info.agent_version, "b");
