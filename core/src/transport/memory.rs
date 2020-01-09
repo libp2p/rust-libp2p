@@ -281,7 +281,6 @@ mod tests {
     use super::*;
     use rand::Rng;
     use std::io::Write;
-    use tokio::runtime::current_thread::{Runtime};
 
     #[test]
     fn parse_memory_addr_works() {
@@ -320,39 +319,37 @@ mod tests {
 
         // Setup listener.
 
-        let rand_port: NonZeroU64;
-        loop {
-            if let Some(port) = NonZeroU64::new(rand::random()) {
-                rand_port = port;
-                break;
-            }
-        }
-
+        let rand_port = rand::random::<u64>() + 1;
         let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+        let cloned_t1_addr = t1_addr.clone();
+
         let t1 = MemoryTransport::default();
-        let listener = t1.listen_on(t1_addr.clone()).unwrap()
-            .filter_map(ListenerEvent::into_upgrade)
-            .take(1)
-            .for_each(|(sock, _)| {
-                sock.and_then(|sock| {
-                    tokio_io::io::read_exact(sock, [0; 3])
-                        .map(|(_, buf)| assert_eq!(buf, msg))
-                        .map_err(|err| panic!("IO error {:?}", err))
-                })
-            });
+
+        let listener = async move {
+            let listener = t1.listen_on(t1_addr.clone()).unwrap();
+
+            let upgrade = listener.filter_map(|ev| futures::future::ready(
+                ListenerEvent::into_upgrade(ev.unwrap())
+            )).next().await.unwrap();
+
+            let mut socket = upgrade.0.await.unwrap();
+
+            let mut buf = [0; 3];
+            socket.read_exact(&mut buf).await.unwrap();
+
+            assert_eq!(buf, msg);
+        };
 
         // Setup dialer.
 
         let t2 = MemoryTransport::default();
-        let dialer = t2.dial(t1_addr).unwrap()
-            .then(|socket| {
-                tokio_io::io::write_all(socket.unwrap(), &msg)
-            })
-            .map_err(|e| panic!("IO error {:?}", e));
+        let dialer = async move {
+            let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
+            socket.write_all(&msg).await.unwrap();
+        };
 
         // Wait for both to finish.
 
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(dialer.join(listener));
+        futures::executor::block_on(futures::future::join(listener, dialer));
     }
 }
