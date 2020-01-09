@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, Negotiated};
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use crate::{Endpoint, Negotiated};
 
 use futures::prelude::*;
 use std::{iter, pin::Pin};
@@ -63,7 +63,10 @@ where
 ///
 /// The upgrade consists in calling the function passed when creating this struct.
 #[derive(Debug, Clone)]
-pub struct FromFnUpgrade<P, F> { protocol_name: P, fun: F }
+pub struct FromFnUpgrade<P, F> {
+    protocol_name: P,
+    fun: F,
+}
 
 impl<P, F> UpgradeInfo for FromFnUpgrade<P, F>
 where
