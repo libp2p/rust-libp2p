@@ -23,6 +23,8 @@ use futures::prelude::*;
 use libp2p_core::{upgrade::Negotiated, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use salsa20::stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek};
 use salsa20::XSalsa20;
+use std::num::ParseIntError;
+use std::str::FromStr;
 use std::{
     io, iter,
     pin::Pin,
@@ -31,21 +33,92 @@ use std::{
 
 use rand::RngCore;
 use std::error;
-use std::fmt;
+use std::fmt::{self, Write};
 use std::io::Error as IoError;
 
 const KEY_LENGTH: usize = 32;
 const NONCE_LENGTH: usize = 24;
 
+#[derive(Copy, Clone)]
+pub struct PSK([u8; KEY_LENGTH]);
+
+fn parse_hex_key(s: &str) -> Result<[u8; KEY_LENGTH], KeyParseError> {
+    if s.len() == KEY_LENGTH * 2 {
+        let mut r = [0u8; KEY_LENGTH];
+        for i in 0..KEY_LENGTH {
+            r[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
+                .map_err(KeyParseError::InvalidKeyChar)?;
+        }
+        Ok(r)
+    } else {
+        Err(KeyParseError::InvalidKeyLength)
+    }
+}
+
+/// Convert bytes to a hex representation
+fn to_hex(bytes: &[u8]) -> String {
+    let mut hex = String::with_capacity(bytes.len() * 2);
+
+    for byte in bytes {
+        write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+    }
+
+    hex
+}
+
+impl FromStr for PSK {
+    type Err = KeyParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut lines = s.lines();
+        let keytype = lines.next().ok_or(KeyParseError::InvalidKeyFile)?;
+        let encoding = lines.next().ok_or(KeyParseError::InvalidKeyFile)?;
+        let key = lines.next().ok_or(KeyParseError::InvalidKeyFile)?;
+        if keytype != "/key/swarm/psk/1.0.0/" {
+            return Err(KeyParseError::InvalidKeyType);
+        }
+        if encoding != "/base16/" {
+            return Err(KeyParseError::InvalidKeyEncoding);
+        }
+        let key = parse_hex_key(key.trim_end())?;
+        Ok(PSK(key))
+    }
+}
+
+impl fmt::Debug for PSK {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("PSK").field(&to_hex(&self.0)).finish()
+    }
+}
+
+impl fmt::Display for PSK {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "/key/swarm/psk/1.0.0/")?;
+        writeln!(f, "/base16/")?;
+        writeln!(f, "{}", to_hex(&self.0))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum KeyParseError {
+    InvalidKeyFile,
+    InvalidKeyType,
+    InvalidKeyEncoding,
+    InvalidKeyLength,
+    InvalidKeyChar(ParseIntError),
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct PnetConfig {
-    key: [u8; KEY_LENGTH],
+    key: PSK,
 }
 impl PnetConfig {
+    pub fn new(key: PSK) -> Self {
+        Self { key }
+    }
     pub fn default() -> Self {
-        Self {
-            key: *b"01234567890123456789012345678901",
-        }
+        let key = PSK::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
+        Self { key }
     }
 
     async fn handshake<TSocket>(self, mut socket: TSocket) -> Result<PnetOutput<TSocket>, PnetError>
@@ -57,8 +130,8 @@ impl PnetConfig {
         rand::thread_rng().fill_bytes(&mut local_nonce);
         socket.write_all(&local_nonce).await?;
         socket.read_exact(&mut remote_nonce).await?;
-        let write_cipher = XSalsa20::new(&self.key.into(), &local_nonce.into());
-        let read_cipher = XSalsa20::new(&self.key.into(), &remote_nonce.into());
+        let write_cipher = XSalsa20::new(&self.key.0.into(), &local_nonce.into());
+        let read_cipher = XSalsa20::new(&self.key.0.into(), &remote_nonce.into());
         Ok(PnetOutput::new(socket, write_cipher, read_cipher))
     }
 }
@@ -125,7 +198,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
         let size = std::cmp::min(buf.len(), self.write_buffer.len());
         let write_buffer = &mut self.write_buffer[0..size];
         write_buffer.copy_from_slice(&buf[..size]);
-        self.write_cipher.seek(self.write_offset);
+        if self.write_cipher.current_pos() != self.write_offset {
+            self.write_cipher.seek(self.write_offset);
+        }
         self.write_cipher.apply_keystream(write_buffer);
         println!("sending");
         println!("p: {:02x?}", &buf[..size]);
