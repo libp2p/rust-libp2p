@@ -28,7 +28,6 @@ twofish = "0.2.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
-untrusted = "0.7.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.10"
