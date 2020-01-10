@@ -578,7 +578,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)>,
     TTrans::Error: Send + 'static,
-    TTrans::ListenerUpgrade: Unpin + Send + 'static,
+    TTrans::ListenerUpgrade: Send + 'static,
     THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
@@ -788,7 +788,7 @@ where
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
-        TTrans::Dial: Unpin + Send + 'static,
+        TTrans::Dial: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TInEvent: Send + 'static,
@@ -936,7 +936,7 @@ where
     fn start_dial_out(&mut self, peer_id: TPeerId, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Dial: Unpin + Send + 'static,
+        TTrans::Dial: Send + 'static,
         TTrans::Error: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -982,8 +982,7 @@ where
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
-        TTrans::Dial: Unpin + Send + 'static,
-        TTrans::Listener: Unpin,
+        TTrans::Dial: Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -1462,7 +1461,7 @@ impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
-    TTrans::Dial: Unpin + Send + 'static,
+    TTrans::Dial: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
@@ -1759,7 +1758,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
-    TTrans::Dial: Unpin + Send + 'static,
+    TTrans::Dial: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
