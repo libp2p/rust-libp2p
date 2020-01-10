@@ -63,7 +63,7 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self.transport.dial(addr.clone()).map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
-            inner: Either::Left(dialed_fut),
+            inner: Either::Left(Box::pin(dialed_fut)),
             args: Some((self.fun, ConnectedPoint::Dialer { address: addr })),
             marker: PhantomPinned,
         };
@@ -106,7 +106,7 @@ where
                         };
                         ListenerEvent::Upgrade {
                             upgrade: AndThenFuture {
-                                inner: Either::Left(upgrade),
+                                inner: Either::Left(Box::pin(upgrade)),
                                 args: Some((this.fun.clone(), point)),
                                 marker: PhantomPinned,
                             },
@@ -131,7 +131,7 @@ where
 /// Applies a function to the result of the inner future.
 #[derive(Debug)]
 pub struct AndThenFuture<TFut, TMap, TMapOut> {
-    inner: Either<TFut, TMapOut>,
+    inner: Either<Pin<Box<TFut>>, Pin<Box<TMapOut>>>,
     args: Option<(TMap, ConnectedPoint)>,
     marker: PhantomPinned,
 }
@@ -144,22 +144,20 @@ where
 {
     type Output = Result<TMapOut::Ok, EitherError<TFut::Error, TMapOut::Error>>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
-            let future = match this.inner {
-                Either::Left(ref mut future) => {
-                    let item = match TryFuture::try_poll(unsafe { Pin::new_unchecked(future) }, cx) {
+            let future = match &mut self.inner {
+                Either::Left(future) => {
+                    let item = match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => v,
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::A(err))),
                         Poll::Pending => return Poll::Pending,
                     };
-                    let (f, a) = this.args.take().expect("AndThenFuture has already finished.");
+                    let (f, a) = self.args.take().expect("AndThenFuture has already finished.");
                     f(item, a)
                 }
-                Either::Right(ref mut future) => {
-                    return match TryFuture::try_poll(unsafe { Pin::new_unchecked(future) }, cx) {
+                Either::Right(future) => {
+                    return match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => Poll::Ready(Ok(v)),
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::B(err))),
                         Poll::Pending => Poll::Pending,
@@ -167,7 +165,10 @@ where
                 }
             };
 
-            this.inner = Either::Right(future);
+            self.inner = Either::Right(Box::pin(future));
         }
     }
+}
+
+impl<TFut, TMap, TMapOut> Unpin for AndThenFuture<TFut, TMap, TMapOut> {
 }

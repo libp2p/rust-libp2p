@@ -100,9 +100,6 @@ where
         AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>
     > where
         T: Transport<Output = C>,
-        T::Dial: Unpin,
-        T::Listener: Unpin,
-        T::ListenerUpgrade: Unpin,
         I: ConnectionInfo,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
@@ -132,9 +129,6 @@ where
     pub fn apply<C, D, U, I, E>(self, upgrade: U) -> Builder<Upgrade<T, U>>
     where
         T: Transport<Output = (I, C)>,
-        T::Dial: Unpin,
-        T::Listener: Unpin,
-        T::ListenerUpgrade: Unpin,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         I: ConnectionInfo,
@@ -160,9 +154,6 @@ where
         -> AndThen<T, impl FnOnce((I, C), ConnectedPoint) -> Multiplex<C, U, I> + Clone>
     where
         T: Transport<Output = (I, C)>,
-        T::Dial: Unpin,
-        T::Listener: Unpin,
-        T::ListenerUpgrade: Unpin,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         I: ConnectionInfo,
@@ -260,9 +251,6 @@ impl<T, U> Upgrade<T, U> {
 impl<T, C, D, U, I, E> Transport for Upgrade<T, U>
 where
     T: Transport<Output = (I, C)>,
-    T::Dial: Unpin,
-    T::Listener: Unpin,
-    T::ListenerUpgrade: Unpin,
     T::Error: 'static,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<C, Output = D, Error = E>,
@@ -279,7 +267,7 @@ where
         let future = self.inner.dial(addr.clone())
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
-            future,
+            future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade))
         })
     }
@@ -288,7 +276,7 @@ where
         let stream = self.inner.listen_on(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(ListenerStream {
-            stream,
+            stream: Box::pin(stream),
             upgrade: self.upgrade
         })
     }
@@ -335,13 +323,13 @@ where
     U: OutboundUpgrade<C>,
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    future: F,
+    future: Pin<Box<F>>,
     upgrade: future::Either<Option<U>, (Option<I>, OutboundUpgradeApply<C, U>)>
 }
 
 impl<F, U, I, C, D> Future for DialUpgradeFuture<F, U, I, C>
 where
-    F: TryFuture<Ok = (I, C)> + Unpin,
+    F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<C, Output = D>,
     U::Error: Error
@@ -356,7 +344,7 @@ where
         loop {
             this.upgrade = match this.upgrade {
                 future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(Pin::new(&mut this.future), cx).map_err(TransportUpgradeError::Transport)) {
+                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx).map_err(TransportUpgradeError::Transport)) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
@@ -385,13 +373,13 @@ where
 
 /// The [`Transport::Listener`] stream of an [`Upgrade`]d transport.
 pub struct ListenerStream<S, U> {
-    stream: S,
+    stream: Pin<Box<S>>,
     upgrade: U
 }
 
 impl<S, U, F, I, C, D> Stream for ListenerStream<S, U>
 where
-    S: TryStream<Ok = ListenerEvent<F>> + Unpin,
+    S: TryStream<Ok = ListenerEvent<F>>,
     F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<C, Output = D> + Clone
@@ -399,11 +387,11 @@ where
     type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>>, TransportUpgradeError<S::Error, U::Error>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match ready!(TryStream::try_poll_next(Pin::new(&mut self.stream), cx)) {
+        match ready!(TryStream::try_poll_next(self.stream.as_mut(), cx)) {
             Some(Ok(event)) => {
                 let event = event.map(move |future| {
                     ListenerUpgradeFuture {
-                        future,
+                        future: Box::pin(future),
                         upgrade: future::Either::Left(Some(self.upgrade.clone()))
                     }
                 });
@@ -426,13 +414,13 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<C>
 {
-    future: F,
+    future: Pin<Box<F>>,
     upgrade: future::Either<Option<U>, (Option<I>, InboundUpgradeApply<C, U>)>
 }
 
 impl<F, U, I, C, D> Future for ListenerUpgradeFuture<F, U, I, C>
 where
-    F: TryFuture<Ok = (I, C)> + Unpin,
+    F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<C, Output = D>,
     U::Error: Error
@@ -447,7 +435,7 @@ where
         loop {
             this.upgrade = match this.upgrade {
                 future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(Pin::new(&mut this.future), cx).map_err(TransportUpgradeError::Transport)) {
+                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx).map_err(TransportUpgradeError::Transport)) {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err))
                     };
