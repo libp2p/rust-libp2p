@@ -17,18 +17,17 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use futures::prelude::*;
 use futures::future::BoxFuture;
-use libp2p_core::{
-    InboundUpgrade,
-    OutboundUpgrade,
-    UpgradeInfo,
-    upgrade::Negotiated,
-};
-use std::{io, iter, pin::Pin, task::{Context, Poll}};
-use salsa20::XSalsa20;
+use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::prelude::*;
+use libp2p_core::{upgrade::Negotiated, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use salsa20::stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek};
-use futures::io::{AsyncWriteExt, AsyncReadExt};
+use salsa20::XSalsa20;
+use std::{
+    io, iter,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use rand::RngCore;
 use std::error;
@@ -40,17 +39,19 @@ const NONCE_LENGTH: usize = 24;
 
 #[derive(Debug, Copy, Clone)]
 pub struct PnetConfig {
-    key: [u8; KEY_LENGTH]
+    key: [u8; KEY_LENGTH],
 }
 impl PnetConfig {
     pub fn default() -> Self {
         Self {
-            key: *b"01234567890123456789012345678901"
+            key: *b"01234567890123456789012345678901",
         }
     }
 
     async fn handshake<TSocket>(self, mut socket: TSocket) -> Result<PnetOutput<TSocket>, PnetError>
-            where TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static {        
+    where
+        TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
         let mut local_nonce = [0u8; NONCE_LENGTH];
         let mut remote_nonce = [0u8; NONCE_LENGTH];
         rand::thread_rng().fill_bytes(&mut local_nonce);
@@ -72,8 +73,9 @@ impl UpgradeInfo for PnetConfig {
 }
 
 impl<C> InboundUpgrade<C> for PnetConfig
-    where
-        C: AsyncRead + AsyncWrite + Send + Unpin + 'static {
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     type Output = PnetOutput<Negotiated<C>>;
     type Error = PnetError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -84,8 +86,9 @@ impl<C> InboundUpgrade<C> for PnetConfig
 }
 
 impl<C> OutboundUpgrade<C> for PnetConfig
-    where
-        C: AsyncRead + AsyncWrite + Send + Unpin + 'static {
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     type Output = PnetOutput<Negotiated<C>>;
     type Error = PnetError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -95,8 +98,7 @@ impl<C> OutboundUpgrade<C> for PnetConfig
     }
 }
 
-pub struct PnetOutput<S>
-{
+pub struct PnetOutput<S> {
     inner: S,
     read_cipher: XSalsa20,
     write_cipher: XSalsa20,
@@ -106,14 +108,38 @@ pub struct PnetOutput<S>
 
 impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
     fn new(inner: S, write_cipher: XSalsa20, read_cipher: XSalsa20) -> Self {
-        Self { inner, write_cipher, read_cipher, write_offset: 0, write_buffer: [0; 1024] }
+        Self {
+            inner,
+            write_cipher,
+            read_cipher,
+            write_offset: 0,
+            write_buffer: [0; 1024],
+        }
+    }
+
+    fn encrypt_and_write(
+        &mut self,
+        cx: &mut Context,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let size = std::cmp::min(buf.len(), self.write_buffer.len());
+        let write_buffer = &mut self.write_buffer[0..size];
+        write_buffer.copy_from_slice(&buf[..size]);
+        self.write_cipher.seek(self.write_offset);
+        self.write_cipher.apply_keystream(write_buffer);
+        println!("sending");
+        println!("p: {:02x?}", &buf[..size]);
+        println!("c: {:02x?}", &write_buffer);
+        Pin::new(&mut self.inner).poll_write(cx, &self.write_buffer[..size])
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PnetOutput<S> {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
-        -> Poll<Result<usize, io::Error>>
-    {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
         let result = Pin::new(&mut self.as_mut().inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
             println!("receiving");
@@ -126,37 +152,26 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PnetOutput<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
-        -> Poll<Result<usize, io::Error>>
-    {
-        let mut tmp = buf.to_vec();
-        let offset = self.write_offset;
-        self.write_cipher.seek(offset);
-
-        println!("sending");
-        println!("p: {:02x?}", &tmp);
-        self.write_cipher.apply_keystream(&mut tmp);
-        println!("c: {:02x?}", &tmp);
-        let result = Pin::new(&mut self.as_mut().inner).poll_write(cx, &tmp);
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let result = self.as_mut().encrypt_and_write(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
             self.write_offset += *size as u64;
         }
         result
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.as_mut().inner).poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context)
-        -> Poll<Result<(), io::Error>>
-    {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.as_mut().inner).poll_close(cx)
     }
 }
-
 
 /// Error at the SECIO layer communication.
 #[derive(Debug)]
@@ -184,8 +199,7 @@ impl fmt::Display for PnetError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PnetError::IoError(e) =>
-                write!(f, "I/O error: {}", e),
+            PnetError::IoError(e) => write!(f, "I/O error: {}", e),
         }
     }
 }
