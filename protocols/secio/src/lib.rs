@@ -59,7 +59,7 @@ pub use self::error::SecioError;
 
 use futures::stream::MapErr as StreamMapErr;
 use futures::prelude::*;
-use libp2p_core::{PeerId, PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
+use libp2p_core::{PeerId, PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
 use std::{io, iter, pin::Pin, task::Context, task::Poll};
@@ -179,11 +179,11 @@ impl<T> InboundUpgrade<T> for SecioConfig
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = (PeerId, SecioOutput<Negotiated<T>>);
+    type Output = (PeerId, SecioOutput<T>);
     type Error = SecioError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         Box::pin(self.handshake(socket))
     }
 }
@@ -192,11 +192,11 @@ impl<T> OutboundUpgrade<T> for SecioConfig
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    type Output = (PeerId, SecioOutput<Negotiated<T>>);
+    type Output = (PeerId, SecioOutput<T>);
     type Error = SecioError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         Box::pin(self.handshake(socket))
     }
 }

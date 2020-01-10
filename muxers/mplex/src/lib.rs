@@ -28,7 +28,7 @@ use bytes::Bytes;
 use libp2p_core::{
     Endpoint,
     StreamMuxer,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated},
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use log::{debug, trace};
 use parking_lot::Mutex;
@@ -159,11 +159,11 @@ impl<C> InboundUpgrade<C> for MplexConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Multiplex<Negotiated<C>>;
+    type Output = Multiplex<C>;
     type Error = IoError;
     type Future = future::Ready<Result<Self::Output, IoError>>;
 
-    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(self.upgrade(socket)))
     }
 }
@@ -172,11 +172,11 @@ impl<C> OutboundUpgrade<C> for MplexConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Multiplex<Negotiated<C>>;
+    type Output = Multiplex<C>;
     type Error = IoError;
     type Future = future::Ready<Result<Self::Output, IoError>>;
 
-    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(self.upgrade(socket)))
     }
 }

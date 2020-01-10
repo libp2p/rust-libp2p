@@ -23,7 +23,7 @@ use futures::prelude::*;
 use libp2p_core::{
     Multiaddr,
     PublicKey,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
@@ -125,11 +125,11 @@ impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = ReplySubstream<Negotiated<C>>;
+    type Output = ReplySubstream<C>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
 
-    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
         future::ok(ReplySubstream { inner: socket })
     }
@@ -143,7 +143,7 @@ where
     type Error = upgrade::ReadOneError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: C, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             socket.close().await?;
             let msg = upgrade::read_one(&mut socket, 4096).await?;
