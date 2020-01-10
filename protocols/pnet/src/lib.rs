@@ -27,7 +27,6 @@ use libp2p_core::{
 };
 use std::{io, iter, pin::Pin, task::{Context, Poll}};
 use salsa20::XSalsa20;
-use salsa20::stream_cipher::generic_array::GenericArray;
 use salsa20::stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek};
 use futures::io::{AsyncWriteExt, AsyncReadExt};
 
@@ -49,6 +48,18 @@ impl PnetConfig {
             key: *b"01234567890123456789012345678901"
         }
     }
+
+    async fn handshake<TSocket>(self, mut socket: TSocket) -> Result<PnetOutput<TSocket>, PnetError>
+            where TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static {        
+        let mut local_nonce = [0u8; NONCE_LENGTH];
+        let mut remote_nonce = [0u8; NONCE_LENGTH];
+        rand::thread_rng().fill_bytes(&mut local_nonce);
+        socket.write_all(&local_nonce).await?;
+        socket.read_exact(&mut remote_nonce).await?;
+        let write_cipher = XSalsa20::new(&self.key.into(), &local_nonce.into());
+        let read_cipher = XSalsa20::new(&self.key.into(), &remote_nonce.into());
+        Ok(PnetOutput::new(socket, write_cipher, read_cipher))
+    }
 }
 
 impl UpgradeInfo for PnetConfig {
@@ -67,17 +78,8 @@ impl<C> InboundUpgrade<C> for PnetConfig
     type Error = PnetError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, mut i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        // read the nonce
-        let mut nonce = [0u8; NONCE_LENGTH];
-        Box::pin(async move {
-            i.read_exact(&mut nonce).await?;
-            let key = GenericArray::from_slice(&self.key);
-            let nonce = GenericArray::from_slice(&nonce);
-            let cipher = XSalsa20::new(&key, &nonce);            
-            println!("got nonce {:?}", nonce);
-            Ok(PnetOutput::new(i, cipher))
-        })
+    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
+        Box::pin(self.handshake(i))
     }
 }
 
@@ -88,33 +90,23 @@ impl<C> OutboundUpgrade<C> for PnetConfig
     type Error = PnetError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, mut i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        // create and write a nonce        
-        let mut nonce = [0u8; NONCE_LENGTH];
-        rand::thread_rng().fill_bytes(&mut nonce);
-        Box::pin(async move {
-            i.write_all(&nonce).await?;
-            let key = GenericArray::from_slice(&self.key);
-            let nonce = GenericArray::from_slice(&nonce);
-            let cipher = XSalsa20::new(&key, &nonce);
-            println!("wrote nonce {:?}", nonce);
-            Ok(PnetOutput::new(i, cipher))
-        })
+    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
+        Box::pin(self.handshake(i))
     }
 }
 
-/// Output of the pnet protocol.
 pub struct PnetOutput<S>
 {
     inner: S,
-    cipher: XSalsa20,
-    read_offset: u64,
+    read_cipher: XSalsa20,
+    write_cipher: XSalsa20,
     write_offset: u64,
+    write_buffer: [u8; 1024],
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
-    fn new(inner: S, cipher: XSalsa20) -> Self {
-        Self { inner, cipher, read_offset: 0, write_offset: 0 }
+    fn new(inner: S, write_cipher: XSalsa20, read_cipher: XSalsa20) -> Self {
+        Self { inner, write_cipher, read_cipher, write_offset: 0, write_buffer: [0; 1024] }
     }
 }
 
@@ -124,13 +116,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PnetOutput<S> {
     {
         let result = Pin::new(&mut self.as_mut().inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
-            let offset = self.read_offset;
-            self.cipher.seek(offset);
             println!("receiving");
             println!("c: {:02x?}", &buf[..*size]);
-            self.cipher.apply_keystream(&mut buf[..*size]);
+            self.read_cipher.apply_keystream(&mut buf[..*size]);
             println!("p: {:02x?}", &buf[..*size]);
-            self.read_offset += *size as u64;
         }
         result
     }
@@ -142,11 +131,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
     {
         let mut tmp = buf.to_vec();
         let offset = self.write_offset;
-        self.cipher.seek(offset);
+        self.write_cipher.seek(offset);
 
         println!("sending");
         println!("p: {:02x?}", &tmp);
-        self.cipher.apply_keystream(&mut tmp);
+        self.write_cipher.apply_keystream(&mut tmp);
         println!("c: {:02x?}", &tmp);
         let result = Pin::new(&mut self.as_mut().inner).poll_write(cx, &tmp);
         if let Poll::Ready(Ok(size)) = &result {
