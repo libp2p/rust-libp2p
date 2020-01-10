@@ -88,7 +88,7 @@ impl fmt::Debug for MaybeBusyMdnsService {
 
 impl<TSubstream> Mdns<TSubstream> {
     /// Builds a new `Mdns` behaviour.
-    pub async fn new() -> io::Result<Mdns<TSubstream>> {
+    pub fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(Mdns {
             service: MaybeBusyMdnsService::Free(MdnsService::new()?),
             discovered_nodes: SmallVec::new(),
