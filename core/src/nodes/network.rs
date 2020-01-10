@@ -171,8 +171,6 @@ where
     ListenerClosed {
         /// The listener ID that closed.
         listener_id: ListenerId,
-        /// The listener which closed.
-        listener: TTrans::Listener,
     },
 
     /// One of the listeners errored.
@@ -309,7 +307,7 @@ where
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ListenerClosed { listener_id, .. } => {
+            NetworkEvent::ListenerClosed { listener_id } => {
                 f.debug_struct("ListenerClosed")
                     .field("listener_id", listener_id)
                     .finish()
@@ -735,7 +733,9 @@ where
     }
 
     /// Remove a previously added listener.
-    pub fn remove_listener(&mut self, id: ListenerId) -> Option<TTrans::Listener> {
+    ///
+    /// Returns `Ok(())` if a listener with this ID was in the list.
+    pub fn remove_listener(&mut self, id: ListenerId) -> Result<(), ()> {
         self.listeners.remove_listener(id)
     }
 
@@ -1021,8 +1021,8 @@ where
                     Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
                         return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
                     }
-                    Poll::Ready(ListenersEvent::Closed { listener_id, listener }) => {
-                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, listener })
+                    Poll::Ready(ListenersEvent::Closed { listener_id }) => {
+                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id })
                     }
                     Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
                         return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })

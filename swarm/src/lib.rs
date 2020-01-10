@@ -251,7 +251,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Remove some listener.
-    pub fn remove_listener(me: &mut Self, id: ListenerId) -> Option<TTransport::Listener> {
+    ///
+    /// Returns `Ok(())` if there was a listener with this ID.
+    pub fn remove_listener(me: &mut Self, id: ListenerId) -> Result<(), ()> {
         me.network.remove_listener(id)
     }
 
