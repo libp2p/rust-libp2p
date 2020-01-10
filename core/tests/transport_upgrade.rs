@@ -23,7 +23,7 @@ mod util;
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{Transport, MemoryTransport};
-use libp2p_core::upgrade::{self, UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
 use multiaddr::{Multiaddr, Protocol};
