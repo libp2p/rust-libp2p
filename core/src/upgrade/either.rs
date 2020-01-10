@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Negotiated,
     either::{EitherOutput, EitherError, EitherFuture2, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
-use multistream_select::Negotiated;
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]

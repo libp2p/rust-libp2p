@@ -18,32 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{muxing, Transport, transport::ListenerEvent};
+use libp2p_core::{muxing, upgrade, Transport};
 use libp2p_tcp::TcpConfig;
-use futures::prelude::*;
-use std::sync::{Arc, mpsc};
-use std::thread;
-use tokio::{
-    codec::length_delimited::Builder,
-    runtime::current_thread::Runtime
-};
+use futures::{channel::oneshot, prelude::*};
+use std::sync::Arc;
 
 #[test]
 fn client_to_server_outbound() {
     // Simulate a client sending a message to a server through a multiplex upgrade.
 
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = oneshot::channel();
 
-    let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+    let bg_thread = async_std::task::spawn(async move {
+        let mplex = libp2p_mplex::MplexConfig::new();
+
+        let transport = TcpConfig::new().and_then(move |c, e|
+            upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener.by_ref().wait()
-            .next()
+        let addr = listener.next().await
             .expect("some event")
             .expect("no error")
             .into_new_address()
@@ -51,106 +47,80 @@ fn client_to_server_outbound() {
 
         tx.send(addr).unwrap();
 
-        let future = listener
-            .filter_map(ListenerEvent::into_upgrade)
-            .into_future()
-            .map_err(|(err, _)| panic!("{:?}", err))
-            .and_then(|(client, _)| client.unwrap().0)
-            .map_err(|err| panic!("{:?}", err))
-            .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Builder::new().new_read(client))
-            .and_then(|client| {
-                client
-                    .into_future()
-                    .map_err(|(err, _)| err)
-                    .map(|(msg, _)| msg)
-            })
-            .and_then(|msg| {
-                let msg = msg.unwrap();
-                assert_eq!(msg, "hello world");
-                Ok(())
-            });
+        let client = listener
+            .next().await
+            .unwrap()
+            .unwrap()
+            .into_upgrade().unwrap().0.await.unwrap();
+        
+        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
 
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(future).unwrap();
+        let mut buf = Vec::new();
+        outbound.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, b"hello world");
     });
 
-    let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+    async_std::task::block_on(async {
+        let mplex = libp2p_mplex::MplexConfig::new();
+        let transport = TcpConfig::new().and_then(move |c, e|
+            upgrade::apply(c, mplex, e, upgrade::Version::V1));
+    
+        let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+        inbound.write_all(b"hello world").await.unwrap();
+        inbound.close().await.unwrap();
 
-    let future = transport
-        .dial(rx.recv().unwrap())
-        .unwrap()
-        .map_err(|err| panic!("{:?}", err))
-        .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Builder::new().new_write(server))
-        .and_then(|server| server.send("hello world".into()))
-        .map(|_| ());
-
-    let mut rt = Runtime::new().unwrap();
-    let _ = rt.block_on(future).unwrap();
-    bg_thread.join().unwrap();
+        bg_thread.await;
+    });
 }
 
 #[test]
 fn client_to_server_inbound() {
     // Simulate a client sending a message to a server through a multiplex upgrade.
 
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = oneshot::channel();
 
-    let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+    let bg_thread = async_std::task::spawn(async move {
+        let mplex = libp2p_mplex::MplexConfig::new();
+
+        let transport = TcpConfig::new().and_then(move |c, e|
+            upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener.by_ref().wait()
-            .next()
+        let addr = listener.next().await
             .expect("some event")
             .expect("no error")
             .into_new_address()
             .expect("listen address");
 
-
         tx.send(addr).unwrap();
 
-        let future = listener
-            .filter_map(ListenerEvent::into_upgrade)
-            .into_future()
-            .map_err(|(err, _)| panic!("{:?}", err))
-            .and_then(|(client, _)| client.unwrap().0)
-            .map_err(|err| panic!("{:?}", err))
-            .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Builder::new().new_read(client))
-            .and_then(|client| {
-                client
-                    .into_future()
-                    .map_err(|(err, _)| err)
-                    .map(|(msg, _)| msg)
-            })
-            .and_then(|msg| {
-                let msg = msg.unwrap();
-                assert_eq!(msg, "hello world");
-                Ok(())
-            });
+        let client = listener
+            .next().await
+            .unwrap()
+            .unwrap()
+            .into_upgrade().unwrap().0.await.unwrap();
+        
+        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
 
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(future).unwrap();
+        let mut buf = Vec::new();
+        inbound.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, b"hello world");
     });
 
-    let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
+    async_std::task::block_on(async {
+        let mplex = libp2p_mplex::MplexConfig::new();
+        let transport = TcpConfig::new().and_then(move |c, e|
+            upgrade::apply(c, mplex, e, upgrade::Version::V1));
+    
+        let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+        outbound.write_all(b"hello world").await.unwrap();
+        outbound.close().await.unwrap();
 
-    let future = transport
-        .dial(rx.recv().unwrap())
-        .unwrap()
-        .map_err(|err| panic!("{:?}", err))
-        .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Builder::new().new_write(server))
-        .and_then(|server| server.send("hello world".into()))
-        .map(|_| ());
-
-    let mut rt = Runtime::new().unwrap();
-    let _ = rt.block_on(future).unwrap();
-    bg_thread.join().unwrap();
+        bg_thread.await;
+    });
 }

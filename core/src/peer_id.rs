@@ -20,7 +20,7 @@
 
 use crate::PublicKey;
 use bs58;
-use quick_error::quick_error;
+use thiserror::Error;
 use multihash;
 use std::{convert::TryFrom, fmt, str::FromStr};
 
@@ -56,11 +56,19 @@ impl PeerId {
     #[inline]
     pub fn from_public_key(key: PublicKey) -> PeerId {
         let key_enc = key.into_protobuf_encoding();
+
+        // Note: before 0.12, this was incorrectly implemented and `SHA2256` was always used.
+        // Starting from version 0.13, rust-libp2p accepts both hashed and non-hashed keys as
+        // input (see `from_bytes`). Starting from version 0.15, rust-libp2p will switch to
+        // not hashing the key (a.k.a. the correct behaviour).
+        // In other words, rust-libp2p 0.13 is compatible with all versions of rust-libp2p.
+        // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.15 and above.
         let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             multihash::Hash::Identity
         } else {
             multihash::Hash::SHA2256
         };
+
         let multihash = multihash::encode(hash_algorithm, &key_enc)
             .expect("identity and sha2-256 are always supported by known public key types");
         PeerId { multihash }
@@ -88,7 +96,7 @@ impl PeerId {
     /// returns back the data as an error.
     #[inline]
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
-        if data.algorithm() == multihash::Hash::SHA2256 {
+        if data.algorithm() == multihash::Hash::SHA2256 || data.algorithm() == multihash::Hash::Identity {
             Ok(PeerId { multihash: data })
         } else {
             Err(data)
@@ -206,18 +214,12 @@ impl Into<multihash::Multihash> for PeerId {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum ParseError {
-        B58(e: bs58::decode::DecodeError) {
-            display("base-58 decode error: {}", e)
-            cause(e)
-            from()
-        }
-        MultiHash {
-            display("decoding multihash failed")
-        }
-    }
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("base-58 decode error: {0}")]
+    B58(#[from] bs58::decode::Error),
+    #[error("decoding multihash failed")]
+    MultiHash,
 }
 
 impl FromStr for PeerId {

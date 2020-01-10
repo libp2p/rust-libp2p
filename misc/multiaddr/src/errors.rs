@@ -14,7 +14,7 @@ pub enum Error {
     InvalidUvar(decode::Error),
     ParsingError(Box<dyn error::Error + Send + Sync>),
     UnknownProtocolId(u32),
-    UnknownProtocolString,
+    UnknownProtocolString(String),
     #[doc(hidden)]
     __Nonexhaustive
 }
@@ -28,7 +28,7 @@ impl fmt::Display for Error {
             Error::InvalidUvar(e) => write!(f, "failed to decode unsigned varint: {}", e),
             Error::ParsingError(e) => write!(f, "failed to parse: {}", e),
             Error::UnknownProtocolId(id) => write!(f, "unknown protocol id: {}", id),
-            Error::UnknownProtocolString => f.write_str("unknown protocol string"),
+            Error::UnknownProtocolString(string) => write!(f, "unknown protocol string: {}", string),
             Error::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }
@@ -57,8 +57,8 @@ impl From<multihash::DecodeOwnedError> for Error {
     }
 }
 
-impl From<bs58::decode::DecodeError> for Error {
-    fn from(err: bs58::decode::DecodeError) -> Error {
+impl From<bs58::decode::Error> for Error {
+    fn from(err: bs58::decode::Error) -> Error {
         Error::ParsingError(err.into())
     }
 }

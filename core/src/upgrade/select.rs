@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Negotiated,
     either::{EitherOutput, EitherError, EitherFuture2, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
-use multistream_select::Negotiated;
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.

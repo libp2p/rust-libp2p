@@ -1,3 +1,37 @@
+# Version 0.14.0-alpha.1 (2020-01-07)
+
+- Upgraded the crate to stable futures.
+- Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
+- Refactored the `core::upgrade` module to provide async functions.
+- Changed the `Stream` trait implementation of `Swarm` to no longer return a `Result`.
+- Added the `Swarm::next` and `Swarm::next_event` functions and the `SwarmEvent` enum.
+- Changed `ProtocolsHandler::poll` to no longer return an error. Instead, `ProtocolsHandlerEvent` has a new `Close` variant which corresponds to what an error represented before.
+- Changed all the traits that have a `poll` function (i.e. `NetworkBehaviour`, `ProtocolsHandler`, `NodeHandler`) to have an additional `&mut Context` parameter, to reflect the changes in the `Future` trait.
+- Revamped the API of `libp2p_websockets::framed`.
+- Added protocol string to `Error::UnknownProtocolString`.
+
+# Version 0.13.2 (2020-01-02)
+
+- Fixed the `libp2p-noise` handshake not flushing the underlying stream before waiting for a response.
+- Fixed semver issue with the `protobuf` crate.
+
+# Version 0.13.1 (2019-11-13)
+
+- Maintenance release to bump dependencies and deal with an accidental breaking change in multihash 0.1.4.
+
+# Version 0.13.0 (2019-11-05)
+
+- Reworked the transport upgrade API. See https://github.com/libp2p/rust-libp2p/pull/1240 for more information.
+- Added a parameter allowing to choose the protocol negotiation protocol when upgrading a connection or a substream. See https://github.com/libp2p/rust-libp2p/pull/1245 for more information.
+- Added an alternative `multistream-select` protocol called `V1Lazy`.
+- Added `PlainText2Config` that implements the `/plaintext/2.0.0` protocol.
+- Refactored `libp2p-identify`. Some items have been renamed.
+- Now accepting `PeerId`s using the `identity` hashing algorithm as valid.
+- Removed `libp2p-observed` and `libp2p-ratelimit`.
+- Fixed mDNS long peer IDs not being transmitted properly.
+- Added some `Debug` trait implementations.
+- Fixed potential arithmetic overflows in `libp2p-kad` and `multistream-select`.
+
 # Version 0.12.0 (2019-08-15)
 
 - In some situations, `multistream-select` will now assume that protocol negotiation immediately succeeds. If it turns out that it failed, an error is generated when reading or writing from/to the stream.

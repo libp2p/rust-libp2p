@@ -35,7 +35,7 @@ use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
@@ -230,7 +230,7 @@ impl<TSubstream> Floodsub<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Floodsub<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubConfig, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
@@ -359,18 +359,19 @@ where
 
     fn poll(
         &mut self,
+        _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Async<
+    ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(event);
+            return Poll::Ready(event);
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
 

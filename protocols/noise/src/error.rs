@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::identity;
-use snow::SnowError;
+use snow::error::Error as SnowError;
 use std::{error::Error, fmt, io};
 
 /// libp2p_noise error type.
@@ -31,6 +31,9 @@ pub enum NoiseError {
     Noise(SnowError),
     /// A public key is invalid.
     InvalidKey,
+    /// Authentication in a [`NoiseAuthenticated`](crate::NoiseAuthenticated)
+    /// upgrade failed.
+    AuthenticationFailed,
     /// A handshake payload is invalid.
     InvalidPayload(protobuf::ProtobufError),
     /// A signature was required and could not be created.
@@ -46,6 +49,7 @@ impl fmt::Display for NoiseError {
             NoiseError::Noise(e) => write!(f, "{}", e),
             NoiseError::InvalidKey => f.write_str("invalid public key"),
             NoiseError::InvalidPayload(e) => write!(f, "{}", e),
+            NoiseError::AuthenticationFailed => f.write_str("Authentication failed"),
             NoiseError::SigningError(e) => write!(f, "{}", e),
             NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
@@ -58,6 +62,7 @@ impl Error for NoiseError {
             NoiseError::Io(e) => Some(e),
             NoiseError::Noise(_) => None, // TODO: `SnowError` should implement `Error`.
             NoiseError::InvalidKey => None,
+            NoiseError::AuthenticationFailed => None,
             NoiseError::InvalidPayload(e) => Some(e),
             NoiseError::SigningError(e) => Some(e),
             NoiseError::__Nonexhaustive => None

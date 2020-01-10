@@ -18,30 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::listen_handler::IdentifyListenHandler;
-use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
-use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
+use crate::handler::{IdentifyHandler, IdentifyHandlerEvent};
+use crate::protocol::{IdentifyInfo, ReplySubstream};
 use futures::prelude::*;
 use libp2p_core::{
     ConnectedPoint,
     Multiaddr,
     PeerId,
     PublicKey,
-    either::EitherOutput,
-    upgrade::Negotiated
+    upgrade::{Negotiated, ReadOneError, UpgradeError}
 };
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
     PollParameters,
     ProtocolsHandler,
-    ProtocolsHandlerSelect,
     ProtocolsHandlerUpgrErr
 };
-use smallvec::SmallVec;
-use std::{collections::HashMap, collections::VecDeque, io};
-use tokio_io::{AsyncRead, AsyncWrite};
-use void::Void;
+use std::{collections::HashMap, collections::VecDeque, io, pin::Pin, task::Context, task::Poll};
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -54,24 +48,36 @@ pub struct Identify<TSubstream> {
     local_public_key: PublicKey,
     /// For each peer we're connected to, the observed address to send back to it.
     observed_addresses: HashMap<PeerId, Multiaddr>,
-    /// List of senders to answer, with the observed multiaddr.
-    to_answer: SmallVec<[(PeerId, IdentifySender<Negotiated<TSubstream>>, Multiaddr); 4]>,
-    /// List of futures that send back information back to remotes.
-    futures: SmallVec<[(PeerId, IdentifySenderFuture<Negotiated<TSubstream>>); 4]>,
-    /// Events that need to be produced outside when polling..
-    events: VecDeque<NetworkBehaviourAction<EitherOutput<Void, Void>, IdentifyEvent>>,
+    /// Pending replies to send.
+    pending_replies: VecDeque<Reply<TSubstream>>,
+    /// Pending events to be emitted when polled.
+    events: VecDeque<NetworkBehaviourAction<(), IdentifyEvent>>,
+}
+
+/// A pending reply to an inbound identification request.
+enum Reply<TSubstream> {
+    /// The reply is queued for sending.
+    Queued {
+        peer: PeerId,
+        io: ReplySubstream<Negotiated<TSubstream>>,
+        observed: Multiaddr
+    },
+    /// The reply is being sent.
+    Sending {
+        peer: PeerId,
+        io: Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>,
+    }
 }
 
 impl<TSubstream> Identify<TSubstream> {
-    /// Creates a `Identify`.
+    /// Creates a new `Identify` network behaviour.
     pub fn new(protocol_version: String, agent_version: String, local_public_key: PublicKey) -> Self {
         Identify {
             protocol_version,
             agent_version,
             local_public_key,
             observed_addresses: HashMap::new(),
-            to_answer: SmallVec::new(),
-            futures: SmallVec::new(),
+            pending_replies: VecDeque::new(),
             events: VecDeque::new(),
         }
     }
@@ -79,13 +85,13 @@ impl<TSubstream> Identify<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Identify<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
+    type ProtocolsHandler = IdentifyHandler<TSubstream>;
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        IdentifyListenHandler::new().select(PeriodicIdHandler::new())
+        IdentifyHandler::new()
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -111,52 +117,57 @@ where
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
-                        peer_id,
-                        info: remote.info,
-                        observed_addr: remote.observed_addr.clone(),
-                    }));
-                self.events
-                    .push_back(NetworkBehaviourAction::ReportObservedAddr {
+            IdentifyHandlerEvent::Identified(remote) => {
+                self.events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        IdentifyEvent::Received {
+                            peer_id,
+                            info: remote.info,
+                            observed_addr: remote.observed_addr.clone(),
+                        }));
+                self.events.push_back(
+                    NetworkBehaviourAction::ReportObservedAddr {
                         address: remote.observed_addr,
                     });
             }
-            EitherOutput::First(sender) => {
+            IdentifyHandlerEvent::Identify(sender) => {
                 let observed = self.observed_addresses.get(&peer_id)
                     .expect("We only receive events from nodes we're connected to. We insert \
                              into the hashmap when we connect to a node and remove only when we \
                              disconnect; QED");
-                self.to_answer.push((peer_id, sender, observed.clone()));
+                self.pending_replies.push_back(
+                    Reply::Queued {
+                        peer: peer_id,
+                        io: sender,
+                        observed: observed.clone()
+                    });
             }
-            EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
-                        peer_id,
-                        error: err,
-                    }));
+            IdentifyHandlerEvent::IdentificationError(error) => {
+                self.events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        IdentifyEvent::Error { peer_id, error }));
             }
         }
     }
 
     fn poll(
         &mut self,
+        cx: &mut Context,
         params: &mut impl PollParameters,
-    ) -> Async<
+    ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(event);
+            return Poll::Ready(event);
         }
 
-        for (peer_id, sender, observed) in self.to_answer.drain() {
+        if let Some(r) = self.pending_replies.pop_front() {
             // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
             // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
-            let protocols = params
+            let protocols: Vec<_> = params
                 .supported_protocols()
                 .map(|p| String::from_utf8_lossy(&p).to_string())
                 .collect();
@@ -164,91 +175,98 @@ where
             let mut listen_addrs: Vec<_> = params.external_addresses().collect();
             listen_addrs.extend(params.listened_addresses());
 
-            let send_back_info = IdentifyInfo {
-                public_key: self.local_public_key.clone(),
-                protocol_version: self.protocol_version.clone(),
-                agent_version: self.agent_version.clone(),
-                listen_addrs,
-                protocols,
-            };
-
-            let future = sender.send(send_back_info, &observed);
-            self.futures.push((peer_id, future));
-        }
-
-        // Removes each future one by one, and pushes them back if they're not ready.
-        for n in (0..self.futures.len()).rev() {
-            let (peer_id, mut future) = self.futures.swap_remove(n);
-            match future.poll() {
-                Ok(Async::Ready(())) => {
-                    let event = IdentifyEvent::SendBack {
-                        peer_id,
-                        result: Ok(()),
-                    };
-                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                },
-                Ok(Async::NotReady) => self.futures.push((peer_id, future)),
-                Err(err) => {
-                    let event = IdentifyEvent::SendBack {
-                        peer_id,
-                        result: Err(err),
-                    };
-                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                },
+            let mut sending = 0;
+            let to_send = self.pending_replies.len() + 1;
+            let mut reply = Some(r);
+            loop {
+                match reply {
+                    Some(Reply::Queued { peer, io, observed }) => {
+                        let info = IdentifyInfo {
+                            public_key: self.local_public_key.clone(),
+                            protocol_version: self.protocol_version.clone(),
+                            agent_version: self.agent_version.clone(),
+                            listen_addrs: listen_addrs.clone(),
+                            protocols: protocols.clone(),
+                        };
+                        let io = Box::pin(io.send(info, &observed));
+                        reply = Some(Reply::Sending { peer, io });
+                    }
+                    Some(Reply::Sending { peer, mut io }) => {
+                        sending += 1;
+                        match Future::poll(Pin::new(&mut io), cx) {
+                            Poll::Ready(Ok(())) => {
+                                let event = IdentifyEvent::Sent { peer_id: peer };
+                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                            },
+                            Poll::Pending => {
+                                self.pending_replies.push_back(Reply::Sending { peer, io });
+                                if sending == to_send {
+                                    // All remaining futures are NotReady
+                                    break
+                                } else {
+                                    reply = self.pending_replies.pop_front();
+                                }
+                            }
+                            Poll::Ready(Err(err)) => {
+                                let event = IdentifyEvent::Error {
+                                    peer_id: peer,
+                                    error: ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err.into()))
+                                };
+                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                            },
+                        }
+                    }
+                    None => unreachable!()
+                }
             }
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
 
-/// Event generated by the `Identify`.
+/// Event emitted  by the `Identify` behaviour.
 #[derive(Debug)]
 pub enum IdentifyEvent {
-    /// We obtained identification information from the remote
-    Identified {
-        /// Peer that has been successfully identified.
+    /// Identifying information has been received from a peer.
+    Received {
+        /// The peer that has been identified.
         peer_id: PeerId,
-        /// Information of the remote.
+        /// The information provided by the peer.
         info: IdentifyInfo,
-        /// Address the remote observes us as.
+        /// The address observed by the peer for the local node.
         observed_addr: Multiaddr,
+    },
+    /// Identifying information of the local node has been sent to a peer.
+    Sent {
+        /// The peer that the information has been sent to.
+        peer_id: PeerId,
     },
     /// Error while attempting to identify the remote.
     Error {
-        /// Peer that we fail to identify.
+        /// The peer with whom the error originated.
         peer_id: PeerId,
-        /// The error that happened.
-        error: ProtocolsHandlerUpgrErr<io::Error>,
-    },
-    /// Finished sending back our identification information to a remote.
-    SendBack {
-        /// Peer that we sent our identification info to.
-        peer_id: PeerId,
-        /// Contains the error that potentially happened when sending back.
-        result: Result<(), io::Error>,
+        /// The error that occurred.
+        error: ProtocolsHandlerUpgrErr<ReadOneError>,
     },
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{Identify, IdentifyEvent};
-    use futures::{future, prelude::*};
+    use futures::{prelude::*, pin_mut};
     use libp2p_core::{
         identity,
         PeerId,
-        upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
         muxing::StreamMuxer,
-        Multiaddr,
-        Transport
+        Transport,
+        upgrade
     };
     use libp2p_tcp::TcpConfig;
     use libp2p_secio::SecioConfig;
-    use libp2p_swarm::Swarm;
+    use libp2p_swarm::{Swarm, SwarmEvent};
     use libp2p_mplex::MplexConfig;
-    use rand::Rng;
     use std::{fmt, io};
-    use tokio::runtime::current_thread;
 
     fn transport() -> (identity::PublicKey, impl Transport<
         Output = (PeerId, impl StreamMuxer<Substream = impl Send, OutboundSubstream = impl Send, Error = impl Into<io::Error>>),
@@ -261,15 +279,9 @@ mod tests {
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
             .nodelay(true)
-            .with_upgrade(SecioConfig::new(id_keys))
-            .and_then(move |out, endpoint| {
-                let peer_id = out.remote_key.into_peer_id();
-                let peer_id2 = peer_id.clone();
-                let upgrade = MplexConfig::default()
-                    .map_outbound(move |muxer| (peer_id, muxer))
-                    .map_inbound(move |muxer| (peer_id2, muxer));
-                upgrade::apply(out.stream, upgrade, endpoint)
-            });
+            .upgrade(upgrade::Version::V1)
+            .authenticate(SecioConfig::new(id_keys))
+            .multiplex(MplexConfig::new());
         (pubkey, transport)
     }
 
@@ -289,52 +301,51 @@ mod tests {
             (swarm, pubkey)
         };
 
-        let addr: Multiaddr = {
-            let port = rand::thread_rng().gen_range(49152, std::u16::MAX);
-            format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap()
-        };
+        Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-        Swarm::listen_on(&mut swarm1, addr.clone()).unwrap();
-        Swarm::dial_addr(&mut swarm2, addr.clone()).unwrap();
+        let listen_addr = async_std::task::block_on(async {
+            loop {
+                let swarm1_fut = swarm1.next_event();
+                pin_mut!(swarm1_fut);
+                match swarm1_fut.await {
+                    SwarmEvent::NewListenAddr(addr) => return addr,
+                    _ => {}
+                }
+            }
+        });
+        Swarm::dial_addr(&mut swarm2, listen_addr).unwrap();
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
-        // `PeriodicIdHandler::connection_keep_alive`. Hence the test succeeds if
+        // `IdentifyHandler::connection_keep_alive`. Hence the test succeeds if
         // either `Identified` event arrives correctly.
-        current_thread::Runtime::new().unwrap().block_on(
-            future::poll_fn(move || -> Result<_, io::Error> {
-                loop {
-                    match swarm1.poll().unwrap() {
-                        Async::Ready(Some(IdentifyEvent::Identified { info, .. })) => {
-                            assert_eq!(info.public_key, pubkey2);
-                            assert_eq!(info.protocol_version, "c");
-                            assert_eq!(info.agent_version, "d");
-                            assert!(!info.protocols.is_empty());
-                            assert!(info.listen_addrs.is_empty());
-                            return Ok(Async::Ready(()))
-                        },
-                        Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
-                        Async::Ready(e) => panic!("{:?}", e),
-                        Async::NotReady => {}
-                    }
+        async_std::task::block_on(async move {
+            loop {
+                let swarm1_fut = swarm1.next();
+                pin_mut!(swarm1_fut);
+                let swarm2_fut = swarm2.next();
+                pin_mut!(swarm2_fut);
 
-                    match swarm2.poll().unwrap() {
-                        Async::Ready(Some(IdentifyEvent::Identified { info, .. })) => {
-                            assert_eq!(info.public_key, pubkey1);
-                            assert_eq!(info.protocol_version, "a");
-                            assert_eq!(info.agent_version, "b");
-                            assert!(!info.protocols.is_empty());
-                            assert_eq!(info.listen_addrs.len(), 1);
-                            return Ok(Async::Ready(()))
-                        },
-                        Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
-                        Async::Ready(e) => panic!("{:?}", e),
-                        Async::NotReady => break
+                match future::select(swarm1_fut, swarm2_fut).await.factor_second().0 {
+                    future::Either::Left(IdentifyEvent::Received { info, .. }) => {
+                        assert_eq!(info.public_key, pubkey2);
+                        assert_eq!(info.protocol_version, "c");
+                        assert_eq!(info.agent_version, "d");
+                        assert!(!info.protocols.is_empty());
+                        assert!(info.listen_addrs.is_empty());
+                        return;
                     }
+                    future::Either::Right(IdentifyEvent::Received { info, .. }) => {
+                        assert_eq!(info.public_key, pubkey1);
+                        assert_eq!(info.protocol_version, "a");
+                        assert_eq!(info.agent_version, "b");
+                        assert!(!info.protocols.is_empty());
+                        assert_eq!(info.listen_addrs.len(), 1);
+                        return;
+                    }
+                    _ => {}
                 }
-
-                Ok(Async::NotReady)
-            }))
-            .unwrap();
+            }
+        })
     }
 }

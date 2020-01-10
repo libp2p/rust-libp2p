@@ -35,7 +35,7 @@ pub struct Key(Bytes);
 impl Key {
     /// Creates a new key from the bytes of the input.
     pub fn new<K: AsRef<[u8]>>(key: &K) -> Self {
-        Key(Bytes::from(key.as_ref()))
+        Key(Bytes::copy_from_slice(key.as_ref()))
     }
 
     /// Copies the bytes of the key into a new vector.
