@@ -61,7 +61,7 @@ impl<S> DecoderMiddleware<S> {
 
 impl<S> Stream for DecoderMiddleware<S>
 where
-    S: TryStream<Ok = Vec<u8>> + Unpin,
+    S: TryStream<Ok = Vec<u8>>,
     S::Error: Into<SecioError>,
 {
     type Item = Result<Vec<u8>, SecioError>;
