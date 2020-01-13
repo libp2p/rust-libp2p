@@ -16,7 +16,7 @@ futures = "0.3.1"
 futures_codec = "0.3.4"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 log = "0.4"
-parking_lot = "0.9"
+parking_lot = "0.10"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 
 [dev-dependencies]

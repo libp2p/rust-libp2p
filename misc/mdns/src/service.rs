@@ -23,8 +23,7 @@ use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, PeerId};
-use multiaddr::Protocol;
+use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
@@ -550,11 +549,10 @@ impl fmt::Debug for MdnsPeer {
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;
-    use libp2p_core::PeerId;
+    use libp2p_core::{PeerId, multiaddr::multihash::*};
     use std::{io::{Error, ErrorKind}, time::Duration};
     use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
-    use multiaddr::multihash::*;
 
     fn discover(peer_id: PeerId) {
         block_on(async {
