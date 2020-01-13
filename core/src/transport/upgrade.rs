@@ -25,6 +25,7 @@ pub use crate::upgrade::Version;
 use crate::{
     ConnectedPoint,
     ConnectionInfo,
+    Negotiated,
     transport::{
         Transport,
         TransportError,
@@ -103,8 +104,8 @@ where
         I: ConnectionInfo,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: InboundUpgrade<C, Output = (I, D), Error = E>,
-        U: OutboundUpgrade<C, Output = (I, D), Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = (I, D), Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = (I, D), Error = E> + Clone,
         E: Error + 'static,
     {
         let version = self.version;
@@ -132,8 +133,8 @@ where
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         I: ConnectionInfo,
-        U: InboundUpgrade<C, Output = D, Error = E>,
-        U: OutboundUpgrade<C, Output = D, Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
         E: Error + 'static,
     {
         Builder::new(Upgrade::new(self.inner, upgrade), self.version)
@@ -157,8 +158,8 @@ where
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         I: ConnectionInfo,
-        U: InboundUpgrade<C, Output = M, Error = E>,
-        U: OutboundUpgrade<C, Output = M, Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
         E: Error + 'static,
     {
         let version = self.version;
@@ -177,7 +178,7 @@ where
 pub struct Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C> + OutboundUpgrade<C>
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>
 {
     #[pin]
     inner: EitherUpgrade<C, U>
@@ -186,9 +187,9 @@ where
 impl<C, U> Future for Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C> + OutboundUpgrade<C,
-        Output = <U as InboundUpgrade<C>>::Output,
-        Error = <U as InboundUpgrade<C>>::Error
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>,
+        Output = <U as InboundUpgrade<Negotiated<C>>>::Output,
+        Error = <U as InboundUpgrade<Negotiated<C>>>::Error
     >
 {
     type Output = <EitherUpgrade<C, U> as Future>::Output;
@@ -207,7 +208,7 @@ where
 pub struct Multiplex<C, U, I>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C> + OutboundUpgrade<C>,
+    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
 {
     info: Option<I>,
     #[pin]
@@ -217,8 +218,8 @@ where
 impl<C, U, I, M, E> Future for Multiplex<C, U, I>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C, Output = M, Error = E>,
-    U: OutboundUpgrade<C, Output = M, Error = E>
+    U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+    U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>
 {
     type Output = Result<(I, M), UpgradeError<E>>;
 
@@ -253,8 +254,8 @@ where
     T: Transport<Output = (I, C)>,
     T::Error: 'static,
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C, Output = D, Error = E>,
-    U: OutboundUpgrade<C, Output = D, Error = E> + Clone,
+    U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
+    U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
     E: Error + 'static
 {
     type Output = (I, D);
@@ -320,7 +321,7 @@ where
 /// The [`Transport::Dial`] future of an [`Upgrade`]d transport.
 pub struct DialUpgradeFuture<F, U, I, C>
 where
-    U: OutboundUpgrade<C>,
+    U: OutboundUpgrade<Negotiated<C>>,
     C: AsyncRead + AsyncWrite + Unpin,
 {
     future: Pin<Box<F>>,
@@ -331,7 +332,7 @@ impl<F, U, I, C, D> Future for DialUpgradeFuture<F, U, I, C>
 where
     F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<C, Output = D>,
+    U: OutboundUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error
 {
     type Output = Result<(I, D), TransportUpgradeError<F::Error, U::Error>>;
@@ -366,7 +367,7 @@ where
 
 impl<F, U, I, C> Unpin for DialUpgradeFuture<F, U, I, C>
 where
-    U: OutboundUpgrade<C>,
+    U: OutboundUpgrade<Negotiated<C>>,
     C: AsyncRead + AsyncWrite + Unpin,
 {
 }
@@ -382,7 +383,7 @@ where
     S: TryStream<Ok = ListenerEvent<F>>,
     F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C, Output = D> + Clone
+    U: InboundUpgrade<Negotiated<C>, Output = D> + Clone
 {
     type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>>, TransportUpgradeError<S::Error, U::Error>>;
 
@@ -412,7 +413,7 @@ impl<S, U> Unpin for ListenerStream<S, U> {
 pub struct ListenerUpgradeFuture<F, U, I, C>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C>
+    U: InboundUpgrade<Negotiated<C>>
 {
     future: Pin<Box<F>>,
     upgrade: future::Either<Option<U>, (Option<I>, InboundUpgradeApply<C, U>)>
@@ -422,7 +423,7 @@ impl<F, U, I, C, D> Future for ListenerUpgradeFuture<F, U, I, C>
 where
     F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C, Output = D>,
+    U: InboundUpgrade<Negotiated<C>, Output = D>,
     U::Error: Error
 {
     type Output = Result<(I, D), TransportUpgradeError<F::Error, U::Error>>;
@@ -458,6 +459,6 @@ where
 impl<F, U, I, C> Unpin for ListenerUpgradeFuture<F, U, I, C>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<C>
+    U: InboundUpgrade<Negotiated<C>>
 {
 }
