@@ -85,7 +85,8 @@ pub struct SecioConfig {
     pub(crate) key: identity::Keypair,
     pub(crate) agreements_prop: Option<String>,
     pub(crate) ciphers_prop: Option<String>,
-    pub(crate) digests_prop: Option<String>
+    pub(crate) digests_prop: Option<String>,
+    pub(crate) max_frame_len: usize
 }
 
 impl SecioConfig {
@@ -95,7 +96,8 @@ impl SecioConfig {
             key: kp,
             agreements_prop: None,
             ciphers_prop: None,
-            digests_prop: None
+            digests_prop: None,
+            max_frame_len: 8 * 1024 * 1024
         }
     }
 
@@ -126,6 +128,12 @@ impl SecioConfig {
         self
     }
 
+    /// Override the default max. frame length of 8MiB.
+    pub fn max_frame_len(mut self, n: usize) -> Self {
+        self.max_frame_len = n;
+        self
+    }
+
     fn handshake<T>(self, socket: T) -> impl Future<Output = Result<(PeerId, SecioOutput<T>), SecioError>>
     where
         T: AsyncRead + AsyncWrite + Unpin + Send + 'static
@@ -148,7 +156,7 @@ impl SecioConfig {
 /// Output of the secio protocol.
 pub struct SecioOutput<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     /// The encrypted stream.
     pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> io::Error>>,
@@ -193,7 +201,10 @@ where
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
+impl<S> AsyncRead for SecioOutput<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
@@ -201,7 +212,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for SecioOutput<S> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for SecioOutput<S> {
+impl<S> AsyncWrite for SecioOutput<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
@@ -254,7 +268,7 @@ where
 
 impl<S> Sink<Vec<u8>> for SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Error = io::Error;
 
@@ -277,7 +291,7 @@ where
 
 impl<S> Stream for SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
     type Item = Result<Vec<u8>, SecioError>;
 

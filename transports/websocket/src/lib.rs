@@ -146,10 +146,12 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
-            match ready!(self.0.try_poll_next_unpin(cx)?) {
-                Some(framed::IncomingData::Binary(d)) => return Poll::Ready(Some(Ok(d))),
-                None => return Poll::Ready(None),
-                _ => {}
+            if let Some(item) = ready!(self.0.try_poll_next_unpin(cx)?) {
+                if item.is_data() {
+                    return Poll::Ready(Some(Ok(BytesMut::from(item.as_ref()))))
+                }
+            } else {
+                return Poll::Ready(None)
             }
         }
     }

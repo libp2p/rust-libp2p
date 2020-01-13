@@ -210,7 +210,8 @@ where
 
                         let conn = {
                             let mut builder = server.into_builder();
-                            builder.set_max_message_size(max_size).set_max_frame_size(max_size);
+                            builder.set_max_message_size(max_size);
+                            builder.set_max_frame_size(max_size);
                             Connection::new(builder)
                         };
 
@@ -406,17 +407,36 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 /// The websocket connection.
 pub struct Connection<T> {
     receiver: BoxStream<'static, Result<data::Incoming, connection::Error>>,
-    sender: Pin<Box<dyn Sink<data::Outgoing, Error = connection::Error> + Send>>,
+    sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
     _marker: std::marker::PhantomData<T>
 }
 
 /// Data received over the websocket connection.
 #[derive(Debug, Clone)]
-pub enum IncomingData {
-    /// We received some binary data.
-    Binary(BytesMut),
-    /// We received a PONG.
-    Pong(BytesMut)
+pub struct IncomingData(data::Incoming);
+
+impl IncomingData {
+    pub fn is_binary(&self) -> bool {
+        self.0.is_binary()
+    }
+
+    pub fn is_text(&self) -> bool {
+        self.0.is_text()
+    }
+
+    pub fn is_data(&self) -> bool {
+        self.0.is_data()
+    }
+
+    pub fn is_pong(&self) -> bool {
+        self.0.is_pong()
+    }
+}
+
+impl AsRef<[u8]> for IncomingData {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
 }
 
 /// Data sent over the websocket connection.
@@ -445,15 +465,28 @@ where
         let (sender, receiver) = builder.finish();
         let sink = quicksink::make_sink(sender, |mut sender, action| async move {
             match action {
-                quicksink::Action::Send(x) => sender.send(x).await?,
+                quicksink::Action::Send(OutgoingData::Binary(x)) => {
+                    sender.send_binary_mut(x).await?
+                }
+                quicksink::Action::Send(OutgoingData::Ping(x)) => {
+                    let data = x.as_ref().try_into().map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "PING data must be < 126 bytes")
+                    })?;
+                    sender.send_ping(data).await?
+                }
+                quicksink::Action::Send(OutgoingData::Pong(x)) => {
+                    let data = x.as_ref().try_into().map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "PONG data must be < 126 bytes")
+                    })?;
+                    sender.send_pong(data).await?
+                }
                 quicksink::Action::Flush => sender.flush().await?,
                 quicksink::Action::Close => sender.close().await?
             }
             Ok(sender)
         });
-        let stream = connection::into_stream(receiver);
         Connection {
-            receiver: Box::pin(stream),
+            receiver: connection::into_stream(receiver).boxed(),
             sender: Box::pin(sink),
             _marker: std::marker::PhantomData
         }
@@ -484,11 +517,7 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));
         let item = item.map(|result| {
-            result.map(|incoming| match incoming {
-                data::Incoming::Data(d) => IncomingData::Binary(d.into()),
-                data::Incoming::Pong(p) => IncomingData::Pong(p)
-            })
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            result.map(IncomingData).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
         });
         Poll::Ready(item)
     }
@@ -507,22 +536,6 @@ where
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: OutgoingData) -> io::Result<()> {
-        let item = match item {
-            OutgoingData::Binary(d) => data::Outgoing::Data(soketto::Data::Binary(d)),
-            OutgoingData::Ping(p) => {
-                let p = p.try_into().map_err(|()| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "PING data must be < 126 bytes")
-                })?;
-                data::Outgoing::Ping(p)
-            }
-            OutgoingData::Pong(p) => {
-                let p = p.try_into().map_err(|()| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "PONG data must be < 126 bytes")
-                })?;
-                data::Outgoing::Pong(p)
-            }
-
-        };
         Pin::new(&mut self.sender)
             .start_send(item)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))

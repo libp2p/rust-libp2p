@@ -20,7 +20,7 @@
 
 use crate::PlainText2Config;
 use crate::error::PlainTextError;
-use crate::pb::structs::Exchange;
+use crate::structs_proto::Exchange;
 
 use bytes::BytesMut;
 use futures::prelude::*;
@@ -120,7 +120,7 @@ where
     let context = HandshakeContext::new(config)?;
 
     trace!("sending exchange to remote");
-    socket.send(BytesMut::from(context.state.exchange_bytes.clone())).await?;
+    socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
 
     trace!("receiving the remote's exchange");
     let context = match socket.next().await {

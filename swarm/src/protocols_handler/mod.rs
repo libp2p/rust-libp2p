@@ -168,8 +168,6 @@ pub trait ProtocolsHandler {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
-    ///
-    /// Returning an error will close the connection to the remote.
     fn poll(&mut self, cx: &mut Context) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     >;

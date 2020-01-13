@@ -40,7 +40,7 @@ pub async fn listener_select_proto<R, I>(
     protocols: I,
 ) -> Result<(I::Item, Negotiated<R>), NegotiationError>
 where
-    R: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    R: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     I: IntoIterator,
     I::Item: AsRef<[u8]>
 {

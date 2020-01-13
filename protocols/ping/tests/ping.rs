@@ -60,7 +60,7 @@ fn ping() {
         }
 
         loop {
-            match swarm1.next().await.unwrap().unwrap() {
+            match swarm1.next().await {
                 PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
                     return (pid1.clone(), peer, rtt)
                 },
@@ -74,7 +74,7 @@ fn ping() {
         Swarm::dial_addr(&mut swarm2, rx.next().await.unwrap()).unwrap();
 
         loop {
-            match swarm2.next().await.unwrap().unwrap() {
+            match swarm2.next().await {
                 PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
                     return (pid2.clone(), peer, rtt)
                 },
@@ -84,7 +84,7 @@ fn ping() {
     };
 
     let result = future::select(Box::pin(peer1), Box::pin(peer2));
-    let ((p1, p2, rtt), _) = futures::executor::block_on(result).factor_first();
+    let ((p1, p2, rtt), _) = async_std::task::block_on(result).factor_first();
     assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
     assert!(rtt < Duration::from_millis(50));
 }

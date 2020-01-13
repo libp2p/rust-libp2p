@@ -24,7 +24,6 @@
 //! peer ID will be generated randomly.
 
 use async_std::task;
-use futures::prelude::*;
 use libp2p::{
     Swarm,
     PeerId,
@@ -90,7 +89,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Kick it off!
     task::block_on(async move {
-        while let Some(event) = swarm.try_next().await? {
+        loop {
+            let event = swarm.next().await;
             if let KademliaEvent::GetClosestPeersResult(result) = event {
                 match result {
                     Ok(ok) =>
@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         } else {
                             // The example is considered failed as there
                             // should always be at least 1 reachable peer.
-                            panic!("Query finished with no closest peers.")
+                            println!("Query finished with no closest peers.")
                         }
                     Err(GetClosestPeersError::Timeout { peers, .. }) =>
                         if !peers.is_empty() {
@@ -107,11 +107,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         } else {
                             // The example is considered failed as there
                             // should always be at least 1 reachable peer.
-                            panic!("Query timed out with no closest peers.");
+                            println!("Query timed out with no closest peers.");
                         }
-                }
+                };
+
+                break;
             }
         }
+
         Ok(())
     })
 }

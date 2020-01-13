@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![cfg_attr(feature = "async-await", feature(async_await))]
-
 //! Transports, upgrades, multiplexing and node handling of *libp2p*.
 //!
 //! The main concepts of libp2p-core are:

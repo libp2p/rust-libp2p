@@ -139,7 +139,7 @@ impl TryFrom<&[u8]> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Self::try_from(Bytes::from(value))
+        Self::try_from(Bytes::copy_from_slice(value))
     }
 }
 
@@ -295,7 +295,7 @@ impl Message {
             if len == 0 || len > rem.len() || rem[len - 1] != b'\n' {
                 return Err(ProtocolError::InvalidMessage)
             }
-            let p = Protocol::try_from(Bytes::from(&rem[.. len - 1]))?;
+            let p = Protocol::try_from(Bytes::copy_from_slice(&rem[.. len - 1]))?;
             protocols.push(p);
             remaining = &rem[len ..]
         }

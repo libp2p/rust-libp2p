@@ -23,8 +23,7 @@ use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, PeerId};
-use multiaddr::Protocol;
+use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
@@ -177,7 +176,7 @@ impl MdnsService {
     // **Note**: Why does `next` take ownership of itself?
     //
     // `MdnsService::next` needs to be called from within `NetworkBehaviour`
-    // implementations. Given that traits can not have async methods the
+    // implementations. Given that traits cannot have async methods the
     // respective `NetworkBehaviour` implementation needs to somehow keep the
     // Future returned by `MdnsService::next` across classic `poll`
     // invocations. The instance method `next` can either take a reference or
@@ -249,7 +248,7 @@ impl MdnsService {
                         }
                     },
                     Err(_) => {
-                        // Error are non-fatal and can happen if we get disconnected from example.
+                        // Errors are non-fatal and can happen if we get disconnected from the network.
                         // The query interval will wake up the task at some point so that we can try again.
                     },
                 },
@@ -550,11 +549,10 @@ impl fmt::Debug for MdnsPeer {
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;
-    use libp2p_core::PeerId;
+    use libp2p_core::{PeerId, multiaddr::multihash::*};
     use std::{io::{Error, ErrorKind}, time::Duration};
     use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
-    use multiaddr::multihash::*;
 
     fn discover(peer_id: PeerId) {
         block_on(async {

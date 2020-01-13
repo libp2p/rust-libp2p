@@ -2,7 +2,7 @@
 name = "rw-stream-sink"
 edition = "2018"
 description = "Adaptator between Stream/Sink and AsyncRead/AsyncWrite"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,8 +10,8 @@ keywords = ["networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4.12"
 futures = "0.3.1"
+static_assertions = "1"
 
 [dev-dependencies]
 async-std = "1.0"

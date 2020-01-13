@@ -171,7 +171,7 @@ impl<'a> Protocol<'a> {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Memory(s.parse()?))
             }
-            _ => Err(Error::UnknownProtocolString)
+            unknown => Err(Error::UnknownProtocolString(unknown.to_string()))
         }
     }
 
