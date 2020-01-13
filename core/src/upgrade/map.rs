@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Negotiated;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::prelude::*;
 use std::{pin::Pin, task::Context, task::Poll};
@@ -54,7 +53,7 @@ where
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
             inner: self.upgrade.upgrade_inbound(sock, info),
             map: Some(self.fun)
@@ -70,7 +69,7 @@ where
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_outbound(sock, info)
     }
 }
@@ -105,7 +104,7 @@ where
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_inbound(sock, info)
     }
 }
@@ -119,7 +118,7 @@ where
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
             inner: self.upgrade.upgrade_outbound(sock, info),
             map: Some(self.fun)
@@ -158,7 +157,7 @@ where
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
             fut: self.upgrade.upgrade_inbound(sock, info),
             fun: Some(self.fun)
@@ -174,7 +173,7 @@ where
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_outbound(sock, info)
     }
 }
@@ -210,7 +209,7 @@ where
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
             fut: self.upgrade.upgrade_outbound(sock, info),
             fun: Some(self.fun)
@@ -226,7 +225,7 @@ where
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_inbound(sock, info)
     }
 }

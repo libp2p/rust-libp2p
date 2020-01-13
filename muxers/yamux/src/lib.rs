@@ -22,7 +22,7 @@
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
 use futures::{future, prelude::*, ready, stream::{BoxStream, LocalBoxStream}};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{fmt, io, iter, pin::Pin, task::Context};
 use thiserror::Error;
@@ -205,11 +205,11 @@ impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = Yamux<Incoming<Negotiated<C>>>;
+    type Output = Yamux<Incoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Server)))
     }
 }
@@ -218,11 +218,11 @@ impl<C> InboundUpgrade<C> for LocalConfig
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static
 {
-    type Output = Yamux<LocalIncoming<Negotiated<C>>>;
+    type Output = Yamux<LocalIncoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Server)))
     }
 }
@@ -231,11 +231,11 @@ impl<C> OutboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = Yamux<Incoming<Negotiated<C>>>;
+    type Output = Yamux<Incoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Client)))
     }
 }
@@ -244,11 +244,11 @@ impl<C> OutboundUpgrade<C> for LocalConfig
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static
 {
-    type Output = Yamux<LocalIncoming<Negotiated<C>>>;
+    type Output = Yamux<LocalIncoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Client)))
     }
 }
