@@ -14,7 +14,7 @@ futures = "0.3.1"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 libp2p-swarm = { version = "0.4.0-alpha.1", path = "../../swarm" }
 log = "0.4.1"
-protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
+prost = "0.6"
 smallvec = "1.0"
 wasm-timer = "0.2"
 
@@ -23,3 +23,7 @@ async-std = "1.0"
 libp2p-mplex = { version = "0.14.0-alpha.1", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.14.0-alpha.1", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.14.0-alpha.1", path = "../../transports/tcp" }
+
+[build-dependencies]
+prost-build = "0.6"
+

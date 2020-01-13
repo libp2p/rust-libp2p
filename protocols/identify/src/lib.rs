@@ -43,4 +43,8 @@ pub use self::protocol::IdentifyInfo;
 mod handler;
 mod identify;
 mod protocol;
-mod structs_proto;
+
+mod structs_proto {
+    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+}
+
