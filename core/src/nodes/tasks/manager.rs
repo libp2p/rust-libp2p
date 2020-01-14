@@ -157,7 +157,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// processing the node's events.
     pub fn add_reach_attempt<F, M>(&mut self, future: F, user_data: T, handler: H) -> TaskId
     where
-        F: Future<Output = Result<(C, M), E>> + Unpin + Send + 'static,
+        F: Future<Output = Result<(C, M), E>> + Send + 'static,
         H: IntoNodeHandler<C> + Send + 'static,
         H::Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O, Error = HE> + Send + 'static,
         E: error::Error + Send + 'static,

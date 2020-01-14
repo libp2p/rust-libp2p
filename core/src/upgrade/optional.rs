@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use crate::Negotiated;
 
 /// Upgrade that can be disabled at runtime.
 ///
@@ -60,7 +59,7 @@ where
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         if let Some(inner) = self.0 {
             inner.upgrade_inbound(sock, info)
         } else {
@@ -77,7 +76,7 @@ where
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         if let Some(inner) = self.0 {
             inner.upgrade_outbound(sock, info)
         } else {
