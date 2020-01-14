@@ -322,7 +322,7 @@ where
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Output = Result<(TConnInfo, TMuxer), TReachErr>> + Unpin + Send + 'static,
+        TFut: Future<Output = Result<(TConnInfo, TMuxer), TReachErr>> + Send + 'static,
         THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,

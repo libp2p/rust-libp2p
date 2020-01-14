@@ -8,7 +8,6 @@ repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
 [dependencies]
-bytes = "0.5"
 curve25519-dalek = "1"
 futures = "0.3.1"
 lazy_static = "1.2"
@@ -25,5 +24,4 @@ zeroize = "1"
 env_logger = "0.7.1"
 libp2p-tcp = { version = "0.14.0-alpha.1", path = "../../transports/tcp" }
 quickcheck = "0.9.0"
-tokio = "0.1"
 sodiumoxide = "^0.2.5"

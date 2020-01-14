@@ -20,7 +20,7 @@
 
 use crate::PlainText2Config;
 use crate::error::PlainTextError;
-use crate::pb::structs::Exchange;
+use crate::structs_proto::Exchange;
 
 use bytes::BytesMut;
 use futures::prelude::*;

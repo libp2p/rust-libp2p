@@ -37,7 +37,7 @@ use crate::record::{self, Record};
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use protobuf::{self, Message};
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
@@ -175,11 +175,11 @@ impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = KadInStreamSink<Negotiated<C>>;
+    type Output = KadInStreamSink<C>;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_inbound(self, incoming: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
         codec.set_max_len(4096);
 
@@ -207,11 +207,11 @@ impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = KadOutStreamSink<Negotiated<C>>;
+    type Output = KadOutStreamSink<C>;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_outbound(self, incoming: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
         codec.set_max_len(4096);
 
