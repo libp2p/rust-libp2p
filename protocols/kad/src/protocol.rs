@@ -75,7 +75,7 @@ impl Into<proto::message::ConnectionType> for KadConnectionType {
         match self {
             KadConnectionType::NotConnected => NotConnected,
             KadConnectionType::Connected => Connected,
-            KadConnectionType::CanConnect => CannotConnect,
+            KadConnectionType::CanConnect => CanConnect,
             KadConnectionType::CannotConnect => CannotConnect,
         }
     }
