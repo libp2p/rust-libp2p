@@ -13,6 +13,6 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.1"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 log = "0.4.8"
-parking_lot = "0.9"
+parking_lot = "0.10"
 thiserror = "1.0"
 yamux = "0.4"

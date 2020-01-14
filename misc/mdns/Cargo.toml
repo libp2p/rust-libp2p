@@ -19,9 +19,8 @@ lazy_static = "1.2"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 libp2p-swarm = { version = "0.4.0-alpha.1", path = "../../swarm" }
 log = "0.4"
-multiaddr = { package = "parity-multiaddr", version = "0.7.0", path = "../multiaddr" }
 net2 = "0.2"
-rand = "0.6"
+rand = "0.7"
 smallvec = "1.0"
 void = "1.0"
 wasm-timer = "0.2.4"

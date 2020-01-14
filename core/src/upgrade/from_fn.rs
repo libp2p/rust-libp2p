@@ -18,11 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
-use crate::{Endpoint, Negotiated};
+use crate::{Endpoint, upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo}};
 
 use futures::prelude::*;
-use std::{iter, pin::Pin};
+use std::iter;
 
 /// Initializes a new [`FromFnUpgrade`].
 ///
@@ -43,7 +42,6 @@ use std::{iter, pin::Pin};
 ///                     return Err(upgrade::ReadOneError::from(io::Error::from(io::ErrorKind::Other)));
 ///                 }
 ///             }
-///
 ///             Ok(sock)
 ///         }), cp, upgrade::Version::V1)
 ///     });
@@ -83,29 +81,29 @@ where
 impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
-    F: FnOnce(Negotiated<C>, Endpoint) -> Fut,
+    F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
     type Output = Out;
     type Error = Err;
-    type Future = Pin<Box<Fut>>; // TODO: don't box the future
+    type Future = Fut;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, _: Self::Info) -> Self::Future {
-        Box::pin((self.fun)(sock, Endpoint::Listener))
+    fn upgrade_inbound(self, sock: C, _: Self::Info) -> Self::Future {
+        (self.fun)(sock, Endpoint::Listener)
     }
 }
 
 impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
-    F: FnOnce(Negotiated<C>, Endpoint) -> Fut,
+    F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
     type Output = Out;
     type Error = Err;
-    type Future = Pin<Box<Fut>>; // TODO: don't box the future
+    type Future = Fut;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, _: Self::Info) -> Self::Future {
-        Box::pin((self.fun)(sock, Endpoint::Dialer))
+    fn upgrade_outbound(self, sock: C, _: Self::Info) -> Self::Future {
+        (self.fun)(sock, Endpoint::Dialer)
     }
 }

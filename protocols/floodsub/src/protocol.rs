@@ -55,7 +55,7 @@ where
     type Error = FloodsubDecodeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, mut socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let packet = upgrade::read_one(&mut socket, 2048).await?;
             let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
@@ -171,7 +171,7 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     #[inline]
-    fn upgrade_outbound(self, mut socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let bytes = self.into_bytes();
             upgrade::write_one(&mut socket, bytes).await?;
