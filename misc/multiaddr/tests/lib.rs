@@ -104,12 +104,12 @@ impl Arbitrary for Proto {
                 let mut a = [0; 10];
                 g.fill(&mut a);
                 Proto(Onion(Cow::Owned(a), g.gen()))
-            }
+            },
             23 => {
                 let mut a = Vec::with_capacity(35);
                 g.fill_bytes(&mut a);
-                Proto(Onion3(Cow::Owned(a), g.gen()))
-            }
+                Proto(Onion3((a, g.gen()).into()))
+            },
              _ => panic!("outside range")
         }
     }
@@ -222,7 +222,7 @@ fn construct_success() {
     ma_valid(
         "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234",
         "BD03ADADEC040BE047F9658668B11A504F3155001F231A37F54C4476C07FB4CC139ED7E30304D2",
-        vec![Onion3(Cow::Owned(vec![173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3]), 1234)],
+        vec![Onion3((vec![173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3].as_slice(), 1234).into())],
     );
 }
 

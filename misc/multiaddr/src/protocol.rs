@@ -14,6 +14,7 @@ use std::{
     str::{self, FromStr}
 };
 use unsigned_varint::{encode, decode};
+use crate::onion_addr::Onion3Addr;
 
 const DCCP: u32 = 33;
 const DNS4: u32 = 54;
@@ -76,7 +77,7 @@ pub enum Protocol<'a> {
     /// Contains the "port" to contact. Similar to TCP or UDP, 0 means "assign me a port".
     Memory(u64),
     Onion(Cow<'a, [u8; 10]>, u16),
-    Onion3(Cow<'a, [u8]>, u16),
+    Onion3(Onion3Addr<'a>),
     P2p(Multihash),
     P2pCircuit,
     Quic,
@@ -156,7 +157,7 @@ impl<'a> Protocol<'a> {
                 iter.next()
                     .ok_or(Error::InvalidProtocolString)
                     .and_then(|s| read_onion3(&s.to_uppercase()))
-                    .map(|(a, p)| Protocol::Onion3(Cow::Owned(a.to_vec()), p)),
+                    .map(|(a, p)| Protocol::Onion3((a, p).into())),
             "quic" => Ok(Protocol::Quic),
             "ws" => Ok(Protocol::Ws(Cow::Borrowed("/"))),
             "wss" => Ok(Protocol::Wss(Cow::Borrowed("/"))),
@@ -252,7 +253,7 @@ impl<'a> Protocol<'a> {
             ONION3 => {
                 let (data, rest) = split_at(37, input)?;
                 let port = BigEndian::read_u16(&data[35 ..]);
-                Ok((Protocol::Onion3(Cow::Borrowed(array_ref!(data, 0, 35)), port), rest))
+                Ok((Protocol::Onion3((array_ref!(data, 0, 35), port).into()), rest))
             }
             P2P => {
                 let (n, input) = decode::usize(input)?;
@@ -362,10 +363,10 @@ impl<'a> Protocol<'a> {
                 w.write_all(addr.as_ref())?;
                 w.write_u16::<BigEndian>(*port)?
             }
-            Protocol::Onion3(addr, port) => {
+            Protocol::Onion3(addr) => {
                 w.write_all(encode::u32(ONION3, &mut buf))?;
-                w.write_all(addr.as_ref())?;
-                w.write_u16::<BigEndian>(*port)?
+                w.write_all(addr.hash().as_ref())?;
+                w.write_u16::<BigEndian>(addr.port())?
             }
             Protocol::Quic => w.write_all(encode::u32(QUIC, &mut buf))?,
             Protocol::Utp => w.write_all(encode::u32(UTP, &mut buf))?,
@@ -414,7 +415,7 @@ impl<'a> Protocol<'a> {
             P2pWebSocketStar => P2pWebSocketStar,
             Memory(a) => Memory(a),
             Onion(addr, port) => Onion(Cow::Owned(addr.into_owned()), port),
-            Onion3(addr, port) => Onion3(Cow::Owned(addr.into_owned()), port),
+            Onion3(addr) => Onion3(addr.into_owned()),
             P2p(a) => P2p(a),
             P2pCircuit => P2pCircuit,
             Quic => Quic,
@@ -449,9 +450,9 @@ impl<'a> fmt::Display for Protocol<'a> {
                 let s = BASE32.encode(addr.as_ref());
                 write!(f, "/onion/{}:{}", s.to_lowercase(), port)
             }
-            Onion3(addr, port) => {
-                let s = BASE32.encode(addr.as_ref());
-                write!(f, "/onion3/{}:{}", s.to_lowercase(), port)
+            Onion3(addr ) => {
+                let s = BASE32.encode(addr.hash());
+                write!(f, "/onion3/{}:{}", s.to_lowercase(), addr.port())
             }
             P2p(c) => write!(f, "/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
             P2pCircuit => f.write_str("/p2p-circuit"),

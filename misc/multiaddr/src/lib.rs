@@ -3,6 +3,7 @@
 pub use multihash;
 
 mod protocol;
+mod onion_addr;
 mod errors;
 mod from_url;
 
