@@ -11,6 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
+pin-project = "0.4.6"
 static_assertions = "1"
 
 [dev-dependencies]

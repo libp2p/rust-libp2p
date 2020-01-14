@@ -171,8 +171,6 @@ where
     ListenerClosed {
         /// The listener ID that closed.
         listener_id: ListenerId,
-        /// The listener which closed.
-        listener: TTrans::Listener,
     },
 
     /// One of the listeners errored.
@@ -309,7 +307,7 @@ where
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ListenerClosed { listener_id, .. } => {
+            NetworkEvent::ListenerClosed { listener_id } => {
                 f.debug_struct("ListenerClosed")
                     .field("listener_id", listener_id)
                     .finish()
@@ -580,7 +578,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)>,
     TTrans::Error: Send + 'static,
-    TTrans::ListenerUpgrade: Unpin + Send + 'static,
+    TTrans::ListenerUpgrade: Send + 'static,
     THandler: IntoNodeHandler<(TConnInfo, ConnectedPoint)> + Send + 'static,
     THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
@@ -735,7 +733,9 @@ where
     }
 
     /// Remove a previously added listener.
-    pub fn remove_listener(&mut self, id: ListenerId) -> Option<TTrans::Listener> {
+    ///
+    /// Returns `Ok(())` if a listener with this ID was in the list.
+    pub fn remove_listener(&mut self, id: ListenerId) -> Result<(), ()> {
         self.listeners.remove_listener(id)
     }
 
@@ -788,7 +788,7 @@ where
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
-        TTrans::Dial: Unpin + Send + 'static,
+        TTrans::Dial: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TInEvent: Send + 'static,
@@ -936,7 +936,7 @@ where
     fn start_dial_out(&mut self, peer_id: TPeerId, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Dial: Unpin + Send + 'static,
+        TTrans::Dial: Send + 'static,
         TTrans::Error: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -982,8 +982,7 @@ where
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
-        TTrans::Dial: Unpin + Send + 'static,
-        TTrans::Listener: Unpin,
+        TTrans::Dial: Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -1021,8 +1020,8 @@ where
                     Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
                         return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
                     }
-                    Poll::Ready(ListenersEvent::Closed { listener_id, listener }) => {
-                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, listener })
+                    Poll::Ready(ListenersEvent::Closed { listener_id }) => {
+                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id })
                     }
                     Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
                         return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })
@@ -1462,7 +1461,7 @@ impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
-    TTrans::Dial: Unpin + Send + 'static,
+    TTrans::Dial: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
@@ -1759,7 +1758,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, 
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
-    TTrans::Dial: Unpin + Send + 'static,
+    TTrans::Dial: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,

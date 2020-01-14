@@ -32,7 +32,9 @@ static_assertions::const_assert!(std::mem::size_of::<usize>() <= std::mem::size_
 
 /// Wraps a [`Stream`] and [`Sink`] whose items are buffers.
 /// Implements [`AsyncRead`] and [`AsyncWrite`].
+#[pin_project::pin_project]
 pub struct RwStreamSink<S: TryStream> {
+    #[pin]
     inner: S,
     current_item: Option<std::io::Cursor<<S as TryStream>::Ok>>
 }
@@ -49,15 +51,17 @@ where
     S: TryStream<Error = io::Error> + Unpin,
     <S as TryStream>::Ok: AsRef<[u8]>
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let mut this = self.project();
+
         // Grab the item to copy from.
         let item_to_copy = loop {
-            if let Some(ref mut i) = self.current_item {
+            if let Some(ref mut i) = this.current_item {
                 if i.position() < i.get_ref().as_ref().len() as u64 {
                     break i
                 }
             }
-            self.current_item = Some(match ready!(self.inner.try_poll_next_unpin(cx)) {
+            *this.current_item = Some(match ready!(this.inner.as_mut().try_poll_next(cx)) {
                 Some(Ok(i)) => std::io::Cursor::new(i),
                 Some(Err(e)) => return Poll::Ready(Err(e)),
                 None => return Poll::Ready(Ok(0)) // EOF
@@ -74,25 +78,26 @@ where
     S: TryStream + Sink<<S as TryStream>::Ok, Error = io::Error> + Unpin,
     <S as TryStream>::Ok: for<'r> From<&'r [u8]>
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
-        ready!(Pin::new(&mut self.inner).poll_ready(cx)?);
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let mut this = self.project();
+        ready!(this.inner.as_mut().poll_ready(cx)?);
         let n = buf.len();
-        if let Err(e) = Pin::new(&mut self.inner).start_send(buf.into()) {
+        if let Err(e) = this.inner.start_send(buf.into()) {
             return Poll::Ready(Err(e))
         }
         Poll::Ready(Ok(n))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_close(cx)
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_close(cx)
     }
 }
-
-impl<S: TryStream> Unpin for RwStreamSink<S> {}
 
 #[cfg(test)]
 mod tests {

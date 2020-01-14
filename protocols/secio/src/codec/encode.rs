@@ -31,9 +31,11 @@ use std::{pin::Pin, task::Context, task::Poll};
 /// prefix is not covered by this module.
 ///
 /// Also implements `Stream` for convenience.
+#[pin_project::pin_project]
 pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,
+    #[pin]
     raw_sink: S,
 }
 
@@ -49,38 +51,43 @@ impl<S> EncoderMiddleware<S> {
 
 impl<S> Sink<Vec<u8>> for EncoderMiddleware<S>
 where
-    S: Sink<Vec<u8>> + Unpin,
+    S: Sink<Vec<u8>>,
 {
     type Error = S::Error;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::poll_ready(Pin::new(&mut self.raw_sink), cx)
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        Sink::poll_ready(this.raw_sink, cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, mut data_buf: Vec<u8>) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, mut data_buf: Vec<u8>) -> Result<(), Self::Error> {
+        let this = self.project();
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
-        self.cipher_state.encrypt(&mut data_buf[..]);
-        let signature = self.hmac.sign(&data_buf[..]);
+        this.cipher_state.encrypt(&mut data_buf[..]);
+        let signature = this.hmac.sign(&data_buf[..]);
         data_buf.extend_from_slice(signature.as_ref());
-        Sink::start_send(Pin::new(&mut self.raw_sink), data_buf)
+        Sink::start_send(this.raw_sink, data_buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::poll_flush(Pin::new(&mut self.raw_sink), cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        Sink::poll_flush(this.raw_sink, cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Sink::poll_close(Pin::new(&mut self.raw_sink), cx)
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        Sink::poll_close(this.raw_sink, cx)
     }
 }
 
 impl<S> Stream for EncoderMiddleware<S>
 where
-    S: Stream + Unpin,
+    S: Stream,
 {
     type Item = S::Item;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        Stream::poll_next(Pin::new(&mut self.raw_sink), cx)
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        Stream::poll_next(this.raw_sink, cx)
     }
 }

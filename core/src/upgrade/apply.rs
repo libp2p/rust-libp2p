@@ -86,7 +86,7 @@ where
         upgrade: U,
     },
     Upgrade {
-        future: U::Future
+        future: Pin<Box<U::Future>>
     },
     Undefined
 }
@@ -102,7 +102,6 @@ impl<C, U> Future for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>>,
-    U::Future: Unpin,
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
@@ -118,7 +117,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_inbound(Compat01As03::new(io), info.0)
+                        future: Box::pin(upgrade.upgrade_inbound(Compat01As03::new(io), info.0))
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -163,7 +162,7 @@ where
         upgrade: U
     },
     Upgrade {
-        future: U::Future
+        future: Pin<Box<U::Future>>
     },
     Undefined
 }
@@ -179,7 +178,6 @@ impl<C, U> Future for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<Negotiated<C>>,
-    U::Future: Unpin,
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
@@ -195,7 +193,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(Compat01As03::new(connection), info.0)
+                        future: Box::pin(upgrade.upgrade_outbound(Compat01As03::new(connection), info.0))
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
