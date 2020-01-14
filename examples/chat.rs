@@ -79,13 +79,30 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
+    // Use the derive to generate delegating NetworkBehaviour impl and require the
+    // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
         floodsub: Floodsub<TSubstream>,
         mdns: Mdns<TSubstream>,
+
+        // Struct fields which do not implement NetworkBehaviour need to be ignored
+        #[behaviour(ignore)]
+        #[allow(dead_code)]
+        ignored_member: bool,
+    }
+
+    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour<TSubstream> {
+        // Called when `floodsub` produces an event.
+        fn inject_event(&mut self, message: FloodsubEvent) {
+            if let FloodsubEvent::Message(message) = message {
+                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+            }
+        }
     }
 
     impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<TSubstream> {
+        // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
                 MdnsEvent::Discovered(list) =>
@@ -102,21 +119,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour<TSubstream> {
-        // Called when `floodsub` produces an event.
-        fn inject_event(&mut self, message: FloodsubEvent) {
-            if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
-            }
-        }
-    }
-
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mdns = task::block_on(Mdns::new())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id.clone()),
-            mdns
+            mdns,
+            ignored_member: false,
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
@@ -152,8 +161,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
                 Poll::Pending => {
                     if !listening {
-                        if let Some(a) = Swarm::listeners(&swarm).next() {
-                            println!("Listening on {:?}", a);
+                        for addr in Swarm::listeners(&swarm) {
+                            println!("Listening on {:?}", addr);
                             listening = true;
                         }
                     }
