@@ -279,6 +279,8 @@ impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
+    use std::io::Write;
 
     #[test]
     fn parse_memory_addr_works() {
@@ -311,5 +313,43 @@ mod tests {
         assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_ok());
     }
 
-    // TODO: test that is actually works
+    #[test]
+    fn communicating_between_dialer_and_listener() {
+        let msg = [1, 2, 3];
+
+        // Setup listener.
+
+        let rand_port = rand::random::<u64>().saturating_add(1);
+        let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+        let cloned_t1_addr = t1_addr.clone();
+
+        let t1 = MemoryTransport::default();
+
+        let listener = async move {
+            let listener = t1.listen_on(t1_addr.clone()).unwrap();
+
+            let upgrade = listener.filter_map(|ev| futures::future::ready(
+                ListenerEvent::into_upgrade(ev.unwrap())
+            )).next().await.unwrap();
+
+            let mut socket = upgrade.0.await.unwrap();
+
+            let mut buf = [0; 3];
+            socket.read_exact(&mut buf).await.unwrap();
+
+            assert_eq!(buf, msg);
+        };
+
+        // Setup dialer.
+
+        let t2 = MemoryTransport::default();
+        let dialer = async move {
+            let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
+            socket.write_all(&msg).await.unwrap();
+        };
+
+        // Wait for both to finish.
+
+        futures::executor::block_on(futures::future::join(listener, dialer));
+    }
 }
