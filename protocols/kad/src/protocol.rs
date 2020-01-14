@@ -378,20 +378,20 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
         },
         KadResponseMsg::FindNode { closer_peers } => proto::Message {
             r#type: proto::message::MessageType::FindNode as i32,
-            cluster_level_raw: 10,
+            cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
             .. proto::Message::default()
         },
         KadResponseMsg::GetProviders { closer_peers, provider_peers } => proto::Message {
             r#type: proto::message::MessageType::GetProviders as i32,
-            cluster_level_raw: 10,
+            cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
             provider_peers: provider_peers.into_iter().map(KadPeer::into).collect(),
             .. proto::Message::default()
         },
         KadResponseMsg::GetValue { record, closer_peers } => proto::Message {
             r#type: proto::message::MessageType::GetValue as i32,
-            cluster_level_raw: 10,
+            cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
             record: record.map(record_to_proto),
             .. proto::Message::default()
