@@ -33,6 +33,7 @@ libp2p-uds = { version = "0.14.0-alpha.1", path = "transports/uds" }
 libp2p-wasm-ext = { version = "0.7.0-alpha.1", path = "transports/wasm-ext" }
 libp2p-yamux = { version = "0.14.0-alpha.1", path = "muxers/yamux" }
 parking_lot = "0.10.0"
+pin-project = "0.4.6"
 smallvec = "1.0"
 wasm-timer = "0.2.4"
 

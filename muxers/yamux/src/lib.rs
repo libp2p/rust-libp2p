@@ -288,7 +288,7 @@ impl<T> fmt::Debug for LocalIncoming<T> {
     }
 }
 
-impl<T: Unpin> Stream for Incoming<T> {
+impl<T> Stream for Incoming<T> {
     type Item = Result<yamux::Stream, YamuxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
@@ -300,7 +300,10 @@ impl<T: Unpin> Stream for Incoming<T> {
     }
 }
 
-impl<T: Unpin> Stream for LocalIncoming<T> {
+impl<T> Unpin for Incoming<T> {
+}
+
+impl<T> Stream for LocalIncoming<T> {
     type Item = Result<yamux::Stream, YamuxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
@@ -310,4 +313,7 @@ impl<T: Unpin> Stream for LocalIncoming<T> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.stream.size_hint()
     }
+}
+
+impl<T> Unpin for LocalIncoming<T> {
 }

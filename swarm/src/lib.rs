@@ -207,9 +207,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
-      TTransport::Listener: Unpin + Send + 'static,
-      TTransport::ListenerUpgrade: Unpin + Send + 'static,
-      TTransport::Dial: Unpin + Send + 'static,
+      TTransport::Listener: Send + 'static,
+      TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
       THandlerErr: error::Error,
       THandler: IntoProtocolsHandler + Send + 'static,
       <THandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
@@ -251,7 +251,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Remove some listener.
-    pub fn remove_listener(me: &mut Self, id: ListenerId) -> Option<TTransport::Listener> {
+    ///
+    /// Returns `Ok(())` if there was a listener with this ID.
+    pub fn remove_listener(me: &mut Self, id: ListenerId) -> Result<(), ()> {
         me.network.remove_listener(id)
     }
 
@@ -502,9 +504,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
-      TTransport::Listener: Unpin + Send + 'static,
-      TTransport::ListenerUpgrade: Unpin + Send + 'static,
-      TTransport::Dial: Unpin + Send + 'static,
+      TTransport::Listener: Send + 'static,
+      TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
       THandlerErr: error::Error,
       THandler: IntoProtocolsHandler + Send + 'static,
       <THandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
@@ -584,9 +586,9 @@ where TBehaviour: NetworkBehaviour,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
-      TTransport::Listener: Unpin + Send + 'static,
-      TTransport::ListenerUpgrade: Unpin + Send + 'static,
-      TTransport::Dial: Unpin + Send + 'static,
+      TTransport::Listener: Send + 'static,
+      TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
       <TBehaviour as NetworkBehaviour>::ProtocolsHandler: Send + 'static,
       <<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
       <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,

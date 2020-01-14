@@ -67,7 +67,7 @@ impl<C, F, O, A, E> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
-    O: Future<Output = Result<A, E>> + Unpin
+    O: Future<Output = Result<A, E>>,
 {
     type Output = A;
     type Error = E;
@@ -83,7 +83,7 @@ impl<C, F, O, A, E> OutboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
-    O: Future<Output = Result<A, E>> + Unpin
+    O: Future<Output = Result<A, E>>,
 {
     type Output = A;
     type Error = E;
