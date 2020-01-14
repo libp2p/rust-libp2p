@@ -25,12 +25,12 @@ use libp2p_core::{
     transport::ListenerEvent,
     Transport,
 };
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[derive(Debug)]
 pub struct QuicStream {
     id: Option<QuicSubstream>,
     muxer: QuicMuxer,
+    shutdown: bool,
 }
 
 impl AsyncWrite for QuicStream {
@@ -39,21 +39,21 @@ impl AsyncWrite for QuicStream {
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
+        assert!(!self.shutdown, "written after close");
         let inner = self.get_mut();
-        inner.muxer.write_substream(
-            cx,
-            &mut inner.id.as_mut().expect("written to after being closed"),
-            buf,
-        )
+        inner
+            .muxer
+            .write_substream(cx, inner.id.as_mut().unwrap(), buf)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         debug!("trying to close");
+        self.shutdown = true;
         let inner = self.get_mut();
-        inner.muxer.shutdown_substream(
-            cx,
-            inner.id.as_mut().expect("written to after being closed"),
-        )
+        ready!(inner
+            .muxer
+            .shutdown_substream(cx, inner.id.as_mut().unwrap()))?;
+        Ready(Ok(()))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
@@ -70,7 +70,8 @@ impl AsyncRead for QuicStream {
         let inner = self.get_mut();
         inner
             .muxer
-            .read_substream(cx, &mut inner.id.as_mut().expect("read after close"), buf)
+            .read_substream(cx, inner.id.as_mut().unwrap(), buf)
+            .map_err(|e| panic!("unexpected error {:?}", e))
     }
 }
 
@@ -86,17 +87,15 @@ impl Drop for QuicStream {
 impl futures::Stream for QuicMuxer {
     type Item = QuicStream;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.poll_inbound(cx).map(|x| match x {
-            Ok(id) => Some(QuicStream {
-                id: Some(id),
-                muxer: self.get_mut().clone(),
-            }),
-            Err(_) => None,
-        })
+        Ready(Some(QuicStream {
+            id: Some(ready!(self.poll_inbound(cx)).expect("bug")),
+            muxer: self.get_mut().clone(),
+            shutdown: false,
+        }))
     }
 }
 
-fn init() {
+pub(crate) fn init() {
     drop(env_logger::try_init());
 }
 
@@ -111,12 +110,12 @@ impl Future for QuicMuxer {
 fn wildcard_expansion() {
     init();
     let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
-    let listener = QuicEndpoint::new(&QuicConfig::default(), addr.clone())
+    let listener = Endpoint::new(QuicConfig::default(), addr.clone())
         .expect("endpoint")
         .listen_on(addr)
         .expect("listener");
     let addr: Multiaddr = "/ip4/127.0.0.1/udp/1236/quic".parse().unwrap();
-    let client = QuicEndpoint::new(&QuicConfig::default(), addr.clone())
+    let client = Endpoint::new(QuicConfig::default(), addr.clone())
         .expect("endpoint")
         .dial(addr)
         .expect("dialer");
@@ -148,74 +147,35 @@ fn wildcard_expansion() {
 }
 
 #[test]
-fn multiaddr_to_udp_conversion() {
-    use std::net::Ipv6Addr;
-    init();
-    assert!(
-        multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err()
-    );
-
-    assert!(
-        multiaddr_to_socketaddr(&"/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap()).is_err()
-    );
-
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/12345/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Ok(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            12345,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/255.255.255.255/udp/8080/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Ok(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-            8080,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
-        Ok(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-            12345,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Ok(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(
-                65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-            )),
-            8080,
-        ))
-    );
-}
-
-#[test]
 fn communicating_between_dialer_and_listener() {
     use super::{trace, StreamMuxer};
     init();
     let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
     let mut ready_tx = Some(ready_tx);
 
+    #[cfg(any())]
+    async fn create_slowdown() {
+        futures_timer::Delay::new(std::time::Duration::new(1, 0)).await
+    }
+
+    #[cfg(any())]
+    struct BlockJoin<T> {
+        handle: Option<async_std::task::JoinHandle<T>>,
+    }
+
+    #[cfg(any())]
+    impl<T> Drop for BlockJoin<T> {
+        fn drop(&mut self) {
+            drop(async_std::task::block_on(self.handle.take().unwrap()))
+        }
+    }
+
     let _handle = async_std::task::spawn(async move {
         let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
             .parse()
             .expect("bad address?");
         let quic_config = QuicConfig::default();
-        let quic_endpoint = QuicEndpoint::new(&quic_config, addr.clone()).expect("I/O error");
+        let quic_endpoint = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
         let mut listener = quic_endpoint.listen_on(addr).unwrap();
 
         loop {
@@ -229,16 +189,16 @@ fn communicating_between_dialer_and_listener() {
                     let mut socket: QuicStream = muxer.next().await.expect("no incoming stream");
 
                     let mut buf = [0u8; 3];
-                    log::error!("reading data from accepted stream!");
+                    log::debug!("reading data from accepted stream!");
                     socket.read_exact(&mut buf).await.unwrap();
                     assert_eq!(buf, [4, 5, 6]);
-                    log::error!("writing data!");
+                    log::debug!("writing data!");
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
-                    log::error!("data written!");
+                    log::debug!("data written!");
                     socket.close().await.unwrap();
                     assert_eq!(socket.read(&mut buf).await.unwrap(), 0);
                     drop(socket);
-                    log::error!("end of stream");
+                    log::debug!("end of stream");
                     muxer.await.unwrap();
                     break;
                 }
@@ -246,12 +206,16 @@ fn communicating_between_dialer_and_listener() {
             }
         }
     });
+    #[cfg(any())]
+    let _join = BlockJoin {
+        handle: Some(_handle),
+    };
 
-    async_std::task::block_on(async move {
+    let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();
         let quic_config = QuicConfig::default();
-        let quic_endpoint = QuicEndpoint::new(
-            &quic_config,
+        let quic_endpoint = Endpoint::new(
+            quic_config,
             "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
         )
         .unwrap();
@@ -261,21 +225,24 @@ fn communicating_between_dialer_and_listener() {
         let mut stream = QuicStream {
             id: Some(connection.open_outbound().await.expect("failed")),
             muxer: connection.clone(),
+            shutdown: false,
         };
         log::warn!("have a new stream!");
         stream.write_all(&[4u8, 5, 6]).await.unwrap();
         let mut buf = [0u8; 3];
-        log::error!("reading data!");
+        log::debug!("reading data!");
         stream.read_exact(&mut buf).await.unwrap();
         assert_eq!(buf, [1u8, 2, 3]);
-        log::error!("data read!");
+        log::debug!("data read!");
         stream.close().await.unwrap();
+        log::debug!("checking for EOF!");
         assert_eq!(stream.read(&mut buf).await.unwrap(), 0);
         drop(stream);
         connection.await.unwrap();
-        log::error!("awaiting handle!");
-        _handle.await;
+        log::debug!("awaiting handle!");
     });
+    async_std::task::block_on(_handle);
+    async_std::task::block_on(second_handle);
 }
 
 #[test]
@@ -286,7 +253,7 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
     let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
     assert!(addr.to_string().ends_with("udp/0/quic"));
 
-    let quic = QuicEndpoint::new(&quic, addr.clone()).expect("no error");
+    let quic = Endpoint::new(quic, addr.clone()).expect("no error");
 
     let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
         .next()
@@ -305,7 +272,7 @@ fn replace_port_0_in_returned_multiaddr_ipv6() {
 
     let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
     assert!(addr.to_string().contains("udp/0/quic"));
-    let quic = QuicEndpoint::new(&config, addr.clone()).expect("no error");
+    let quic = Endpoint::new(config, addr.clone()).expect("no error");
 
     let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
         .next()
@@ -324,5 +291,5 @@ fn larger_addr_denied() {
     let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
         .parse::<Multiaddr>()
         .unwrap();
-    assert!(QuicEndpoint::new(&config, addr).is_err())
+    assert!(Endpoint::new(config, addr).is_err())
 }

@@ -27,13 +27,13 @@
 //! Example:
 //!
 //! ```
-//! use libp2p_quic::{QuicConfig, QuicEndpoint};
+//! use libp2p_quic::{QuicConfig, Endpoint};
 //! use libp2p_core::Multiaddr;
 //!
 //! # fn main() {
 //! let quic_config = QuicConfig::default();
-//! let quic_endpoint = QuicEndpoint::new(
-//!     &quic_config,
+//! let quic_endpoint = Endpoint::new(
+//!     quic_config,
 //!     "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?"),
 //! )
 //! .expect("I/O error");
@@ -49,41 +49,38 @@
 //!
 //! # Design Notes
 //!
-//! The entry point is the `QuicEndpoint` struct.  It represents a single QUIC endpoint.  You
+//! The entry point is the `Endpoint` struct.  It represents a single QUIC endpoint.  You
 //! should generally have one of these per process.
 //!
-//! `QuicEndpoint` manages a background task that processes all incoming packets.  Each
+//! `Endpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
 #![forbid(unused_must_use, unstable_features, warnings)]
 #![deny(missing_copy_implementations)]
 #![deny(trivial_casts)]
 mod certificate;
+mod endpoint;
 #[cfg(test)]
 mod tests;
 mod verifier;
 use async_macros::ready;
-use async_std::net::UdpSocket;
 pub use certificate::make_cert;
+pub use endpoint::Endpoint;
+use endpoint::EndpointInner;
 use futures::{
     channel::{mpsc, oneshot},
     prelude::*,
 };
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerEvent, TransportError},
-    StreamMuxer, Transport,
-};
-use log::{debug, trace, warn};
+use libp2p_core::StreamMuxer;
+use log::{debug, trace};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
     collections::HashMap,
     io,
     mem::replace,
-    net::SocketAddr,
     pin::Pin,
-    sync::{Arc, Weak},
+    sync::Arc,
     task::{
         Context,
         Poll::{self, Pending, Ready},
@@ -140,8 +137,8 @@ fn make_client_config(
     key: rustls::PrivateKey,
 ) -> quinn_proto::ClientConfig {
     let mut transport = quinn_proto::TransportConfig::default();
-    transport.stream_window_uni = 0;
-    transport.datagram_receive_buffer_size = None;
+    transport.stream_window_uni(0);
+    transport.datagram_receive_buffer_size(None);
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.enable_early_data = true;
@@ -161,8 +158,8 @@ fn make_server_config(
     key: rustls::PrivateKey,
 ) -> quinn_proto::ServerConfig {
     let mut transport = quinn_proto::TransportConfig::default();
-    transport.stream_window_uni = 0;
-    transport.datagram_receive_buffer_size = None;
+    transport.stream_window_uni(0);
+    transport.datagram_receive_buffer_size(None);
     let mut crypto = rustls::ServerConfig::new(Arc::new(
         verifier::VeryInsecureRequireClientCertificateButDoNotCheckIt,
     ));
@@ -203,120 +200,6 @@ enum EndpointMessage {
         handle: ConnectionHandle,
         event: quinn_proto::EndpointEvent,
     },
-}
-
-#[derive(Debug)]
-struct EndpointInner {
-    inner: quinn_proto::Endpoint,
-    muxers: HashMap<ConnectionHandle, Weak<Mutex<Muxer>>>,
-    driver: Option<async_std::task::JoinHandle<Result<(), io::Error>>>,
-    /// Pending packet
-    outgoing_packet: Option<quinn_proto::Transmit>,
-    /// Used to receive events from connections
-    event_receiver: mpsc::Receiver<EndpointMessage>,
-}
-
-impl EndpointInner {
-    fn drive_receive(
-        &mut self,
-        socket: &UdpSocket,
-        cx: &mut Context,
-    ) -> Poll<Result<(ConnectionHandle, Connection), io::Error>> {
-        use quinn_proto::DatagramEvent;
-        let mut buf = [0; 1800];
-        trace!("endpoint polling for incoming packets!");
-        assert!(self.outgoing_packet.is_none());
-        assert!(self.inner.poll_transmit().is_none());
-        loop {
-            let (bytes, peer) = ready!(socket.poll_recv_from(cx, &mut buf[..]))?;
-            trace!("got a packet of length {} from {}!", bytes, peer);
-            let (handle, event) =
-                match self
-                    .inner
-                    .handle(Instant::now(), peer, None, buf[..bytes].into())
-                {
-                    Some(e) => e,
-                    None => {
-                        ready!(self.poll_transmit_pending(socket, cx))?;
-                        continue;
-                    }
-                };
-            trace!("have an event!");
-            match event {
-                DatagramEvent::ConnectionEvent(connection_event) => {
-                    match self
-                        .muxers
-                        .get(&handle)
-                        .expect("received a ConnectionEvent for an unknown Connection")
-                        .upgrade()
-                    {
-                        Some(connection) => connection
-                            .lock()
-                            .process_connection_events(self, connection_event),
-                        None => debug!("lost our connection!"),
-                    }
-                    ready!(self.poll_transmit_pending(socket, cx))?
-                }
-                DatagramEvent::NewConnection(connection) => break Ready(Ok((handle, connection))),
-            }
-        }
-    }
-
-    fn poll_transmit_pending(
-        &mut self,
-        socket: &UdpSocket,
-        cx: &mut Context,
-    ) -> Poll<Result<(), io::Error>> {
-        if let Some(tx) = self.outgoing_packet.take() {
-            ready!(self.poll_transmit(socket, cx, tx))?
-        }
-        while let Some(tx) = self.inner.poll_transmit() {
-            ready!(self.poll_transmit(socket, cx, tx))?
-        }
-        Ready(Ok(()))
-    }
-
-    fn poll_transmit(
-        &mut self,
-        socket: &UdpSocket,
-        cx: &mut Context,
-        packet: quinn_proto::Transmit,
-    ) -> Poll<Result<(), io::Error>> {
-        match socket.poll_send_to(cx, &packet.contents, &packet.destination) {
-            Pending => {
-                self.outgoing_packet = Some(packet);
-                return Pending;
-            }
-            Ready(Ok(size)) => {
-                debug_assert_eq!(size, packet.contents.len());
-                trace!(
-                    "sent packet of length {} to {}",
-                    packet.contents.len(),
-                    packet.destination
-                );
-                Ready(Ok(()))
-            }
-            Ready(Err(e)) => return Ready(Err(e)),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Endpoint {
-    /// The single UDP socket used for I/O
-    socket: UdpSocket,
-    /// A `Mutex` protecting the QUIC state machine.
-    inner: Mutex<EndpointInner>,
-    /// The channel on which new connections are sent.  This is bounded in practice by the accept
-    /// backlog.
-    new_connections: mpsc::UnboundedSender<Result<ListenerEvent<QuicUpgrade>, io::Error>>,
-    /// The channel used to receive new connections.
-    receive_connections:
-        Mutex<Option<mpsc::UnboundedReceiver<Result<ListenerEvent<QuicUpgrade>, io::Error>>>>,
-    /// Connections send their events to this
-    event_channel: mpsc::Sender<EndpointMessage>,
-    /// The `Multiaddr`
-    address: Multiaddr,
 }
 
 #[derive(Debug, Clone)]
@@ -495,7 +378,7 @@ impl StreamMuxer for QuicMuxer {
                 inner.readers.insert(substream.id(), cx.waker().clone());
                 Pending
             }
-            Err(ReadError::UnknownStream) => unreachable!("use of a closed stream by libp2p"),
+            Err(ReadError::UnknownStream) => Ready(Ok(0)),
             Err(ReadError::Reset(_)) => Ready(Err(io::ErrorKind::ConnectionReset.into())),
         }
     }
@@ -554,138 +437,6 @@ impl StreamMuxer for QuicMuxer {
     }
 }
 
-/// A QUIC endpoint.  Each endpoint has its own configuration and listening socket.
-///
-/// You and You generally need only one of these per process.  Endpoints are thread-safe, so you
-/// can share them among as many threads as you like.  However, performance may be better if you
-/// have one per CPU core, as this reduces lock contention.  Most applications will not need to
-/// worry about this.  `QuicEndpoint` tries to use fine-grained locking to reduce the overhead.
-///
-/// `QuicEndpoint` wraps the underlying data structure in an `Arc`, so cloning it just bumps the
-/// reference count.  All state is shared between the clones.  For example, you can pass different
-/// clones to `listen_on`.  Each incoming connection will be received by exactly one of them.
-///
-/// The **only** valid `Multiaddr` to pass to `listen_on` or `dial` is the one used to create the
-/// `QuicEndpoint`.  You can obtain this via the `addr` method.  If you pass a different one, you
-/// will get `TransportError::MultiaddrNotSuppported`.
-#[derive(Debug, Clone)]
-pub struct QuicEndpoint(Arc<Endpoint>, QuicConfig);
-
-impl QuicEndpoint {
-    fn inner(&self) -> MutexGuard<'_, EndpointInner> {
-        self.0.inner.lock()
-    }
-
-    /// Construct a `QuicEndpoint` with the given `QuicConfig` and `Multiaddr`.
-    pub fn new(
-        config: &QuicConfig,
-        address: Multiaddr,
-    ) -> Result<Self, TransportError<<&Self as Transport>::Error>> {
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&address) {
-            sa
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(address));
-        };
-        // NOT blocking, as per man:bind(2), as we pass an IP address.
-        let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
-        let (new_connections, receive_connections) = mpsc::unbounded();
-        let (event_channel, event_receiver) = mpsc::channel(0);
-        new_connections
-            .unbounded_send(Ok(ListenerEvent::NewAddress(address.clone())))
-            .expect("we have a reference to the peer, so this will not fail; qed");
-        Ok(Self(
-            Arc::new(Endpoint {
-                socket,
-                inner: Mutex::new(EndpointInner {
-                    inner: quinn_proto::Endpoint::new(
-                        config.endpoint_config.clone(),
-                        Some(config.server_config.clone()),
-                    )
-                    .map_err(|_| TransportError::Other(io::ErrorKind::InvalidData.into()))?,
-                    muxers: HashMap::new(),
-                    driver: None,
-                    event_receiver,
-                    outgoing_packet: None,
-                }),
-                address,
-                receive_connections: Mutex::new(Some(receive_connections)),
-                new_connections,
-                event_channel,
-            }),
-            config.clone(),
-        ))
-    }
-
-    fn create_muxer(
-        &self,
-        connection: Connection,
-        handle: ConnectionHandle,
-        inner: &mut EndpointInner,
-    ) -> QuicMuxer {
-        let (driver, muxer) = ConnectionDriver::new(Muxer::new(self.0.clone(), connection, handle));
-        inner.muxers.insert(handle, Arc::downgrade(&muxer));
-        (*muxer).lock().driver = Some(async_std::task::spawn(driver));
-        QuicMuxer(muxer)
-    }
-
-    fn accept_muxer(
-        &self,
-        connection: Connection,
-        handle: ConnectionHandle,
-        inner: &mut EndpointInner,
-    ) {
-        let muxer = self.create_muxer(connection, handle, &mut *inner);
-        self.0
-            .new_connections
-            .unbounded_send(Ok(ListenerEvent::Upgrade {
-                upgrade: QuicUpgrade { muxer: Some(muxer) },
-                local_addr: self.0.address.clone(),
-                remote_addr: self.0.address.clone(),
-            }))
-            .expect(
-                "this is an unbounded channel, and we have an instance \
-                 of the peer, so this will never fail; qed",
-            );
-    }
-}
-
-impl Future for QuicEndpoint {
-    type Output = Result<(), io::Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        let this = self.get_mut();
-        let mut inner = this.inner();
-        'a: loop {
-            ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
-            while let Ready(e) = inner.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
-                match e {
-                    EndpointMessage::ConnectionAccepted => {
-                        debug!("accepting connection!");
-                        inner.inner.accept();
-                    }
-                    EndpointMessage::EndpointEvent { handle, event } => {
-                        debug!("we have an event from connection {:?}", handle);
-                        match inner.muxers.get(&handle).and_then(|e| e.upgrade()) {
-                            None => drop(inner.muxers.remove(&handle)),
-                            Some(connection) => match inner.inner.handle_event(handle, event) {
-                                None => {
-                                    connection.lock().process_endpoint_communication(&mut inner)
-                                }
-                                Some(event) => connection
-                                    .lock()
-                                    .process_connection_events(&mut inner, event),
-                            },
-                        }
-                    }
-                }
-                ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
-            }
-            let (handle, connection) = ready!(inner.drive_receive(&this.0.socket, cx))?;
-            this.accept_muxer(connection, handle, &mut *inner);
-            ready!(inner.poll_transmit_pending(&this.0.socket, cx))?
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct QuicUpgrade {
     muxer: Option<QuicMuxer>,
@@ -731,82 +482,6 @@ impl Future for QuicUpgrade {
     }
 }
 
-impl Transport for &QuicEndpoint {
-    type Output = QuicMuxer;
-    type Error = io::Error;
-    type Listener =
-        mpsc::UnboundedReceiver<Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
-    type ListenerUpgrade = QuicUpgrade;
-    type Dial = QuicUpgrade;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if addr != self.0.address {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-        let res = (self.0)
-            .receive_connections
-            .lock()
-            .take()
-            .ok_or_else(|| TransportError::Other(io::ErrorKind::AlreadyExists.into()));
-        let mut inner = self.inner();
-        if inner.driver.is_none() {
-            inner.driver = Some(async_std::task::spawn(self.clone()))
-        }
-        res
-    }
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-                debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                return Err(TransportError::Other(
-                    io::ErrorKind::ConnectionRefused.into(),
-                ));
-            }
-            socket_addr
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
-        let mut inner = self.inner();
-        if inner.driver.is_none() {
-            inner.driver = Some(async_std::task::spawn(self.clone()))
-        }
-
-        let s: Result<(_, Connection), _> = inner
-            .inner
-            .connect(self.1.client_config.clone(), socket_addr, "localhost")
-            .map_err(|e| {
-                warn!("Connection error: {:?}", e);
-                TransportError::Other(io::ErrorKind::InvalidInput.into())
-            });
-        let (handle, conn) = s?;
-        let muxer = self.create_muxer(conn, handle, &mut inner);
-        Ok(QuicUpgrade { muxer: Some(muxer) })
-    }
-}
-
-// This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
-    let mut iter = addr.iter();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
-    let proto3 = iter.next().ok_or(())?;
-
-    if iter.next().is_some() {
-        return Err(());
-    }
-
-    match (proto1, proto2, proto3) {
-        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok(SocketAddr::new(ip.into(), port))
-        }
-        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok(SocketAddr::new(ip.into(), port))
-        }
-        _ => Err(()),
-    }
-}
-
 type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
 
 #[derive(Debug)]
@@ -814,7 +489,7 @@ pub struct Muxer {
     /// The pending stream, if any.
     pending_stream: Option<StreamId>,
     /// The associated endpoint
-    endpoint: Arc<Endpoint>,
+    endpoint: Endpoint,
     /// The `quinn_proto::Connection` struct.
     connection: Connection,
     /// Connection handle
@@ -908,7 +583,7 @@ impl Muxer {
         keep_going
     }
 
-    fn new(endpoint: Arc<Endpoint>, connection: Connection, handle: ConnectionHandle) -> Self {
+    fn new(endpoint: Endpoint, connection: Connection, handle: ConnectionHandle) -> Self {
         Muxer {
             last_timeout: None,
             pending_stream: None,
@@ -919,12 +594,12 @@ impl Muxer {
             finishers: HashMap::new(),
             accept_waker: None,
             connectors: Default::default(),
-            endpoint: endpoint.clone(),
+            endpoint_channel: endpoint.event_channel(),
+            endpoint: endpoint,
             pending: None,
             timer: None,
             close_reason: None,
             waker: None,
-            endpoint_channel: endpoint.event_channel.clone(),
             driver: None,
         }
     }
@@ -933,8 +608,7 @@ impl Muxer {
     /// fail.
     fn send_to_endpoint(&mut self, endpoint: &mut EndpointInner) {
         while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
-            if let Some(connection_event) = endpoint.inner.handle_event(self.handle, endpoint_event)
-            {
+            if let Some(connection_event) = endpoint.handle_event(self.handle, endpoint_event) {
                 self.connection.handle_event(connection_event)
             }
         }
@@ -991,7 +665,6 @@ impl Muxer {
         );
         match self
             .endpoint
-            .socket
             .poll_send_to(cx, &transmit.contents, &transmit.destination)
         {
             Pending => {
@@ -1019,7 +692,9 @@ impl Muxer {
         for (_, v) in self.readers.drain() {
             v.wake();
         }
-        for (_, _) in self.finishers.drain() {}
+        for (_, sender) in self.finishers.drain() {
+            drop(sender.send(()))
+        }
         self.connectors.truncate(0);
         if !self.connection.is_drained() {
             self.connection
@@ -1045,7 +720,7 @@ impl Muxer {
         assert!(self.connection.poll_endpoint_events().is_none());
         assert!(self.connection.poll().is_none());
         if let Some(tx) = self.connection.poll_transmit(Instant::now()) {
-            assert!(replace(&mut endpoint.outgoing_packet, Some(tx)).is_none())
+            endpoint.set_pending_packet(tx)
         }
     }
 
@@ -1123,7 +798,7 @@ impl Muxer {
 #[derive(Debug)]
 struct ConnectionDriver {
     inner: Arc<Mutex<Muxer>>,
-    endpoint: Arc<Endpoint>,
+    endpoint: Endpoint,
     outgoing_packet: Option<quinn_proto::Transmit>,
 }
 
