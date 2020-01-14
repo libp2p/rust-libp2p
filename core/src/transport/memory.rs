@@ -319,7 +319,7 @@ mod tests {
 
         // Setup listener.
 
-        let rand_port = rand::random::<u64>() + 1;
+        let rand_port = rand::random::<u64>().saturating_add(1);
         let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
         let cloned_t1_addr = t1_addr.clone();
 
