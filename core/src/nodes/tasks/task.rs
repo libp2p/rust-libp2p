@@ -198,29 +198,23 @@ where
                     // Check if dialing succeeded.
                     match Future::poll(Pin::new(future), cx) {
                         Poll::Ready(Ok((conn_info, muxer))) => {
-                            if let State::Future { handler, events_buffer, .. } =
-                                mem::replace(&mut this.state, State::Undefined) {
-                                let mut node = HandledNode::new(muxer, handler.into_handler(&conn_info));
-                                for event in events_buffer {
-                                    node.inject_event(event)
-                                }
-                                this.state = State::SendEvent {
-                                    node: Some(node),
-                                    event: FromTaskMessage::NodeReached(conn_info)
-                                }
-                            } else {
-                                unreachable!("can only be reached if this.state is State::Future; qed")
+                            let (handler, events_buffer) = this.state.extract_handler_events_buffer()
+                                .expect("can only be reached if this.state is Future; qed");
+                            let mut node = HandledNode::new(muxer, handler.into_handler(&conn_info));
+                            for event in events_buffer {
+                                node.inject_event(event)
+                            }
+                            this.state = State::SendEvent {
+                                node: Some(node),
+                                event: FromTaskMessage::NodeReached(conn_info)
                             }
                         }
                         Poll::Pending => return Poll::Pending,
                         Poll::Ready(Err(e)) => {
-                            if let State::Future { handler, .. } =
-                                mem::replace(&mut this.state, State::Undefined) {
-                                let event = FromTaskMessage::TaskClosed(Error::Reach(e), Some(handler));
-                                this.state = State::SendEvent { node: None, event }
-                            } else {
-                                unreachable!("can only be reached if this.state is State::Future; qed")
-                            }
+                            let (handler, _) = this.state.extract_handler_events_buffer()
+                                .expect("can only be reached if this.state is Future; qed");
+                            let event = FromTaskMessage::TaskClosed(Error::Reach(e), Some(handler));
+                            this.state = State::SendEvent { node: None, event }
                         }
                     }
                 }
@@ -235,12 +229,9 @@ where
                                 this.taken_over.push(take_over),
                             Poll::Ready(None) => {
                                 // Node closed by the external API; start closing.
-                                if let State::Node(node) =
-                                    mem::replace(&mut this.state, State::Undefined) {
-                                    this.state = State::Closing(node.close());
-                                } else {
-                                    unreachable!("can only be reached if this.state is State::Node; qed")
-                                }
+                                let node = this.state.extract_node()
+                                    .expect("can only be reached if this.state is Node; qed");
+                                this.state = State::Closing(node.close());
                                 continue 'poll
                             }
                         }
@@ -253,15 +244,12 @@ where
                         match HandledNode::poll(Pin::new(node), cx) {
                             Poll::Pending => return Poll::Pending,
                             Poll::Ready(Ok(event)) => {
-                                if let State::Node(node) =
-                                    mem::replace(&mut this.state, State::Undefined) {
-                                    this.state = State::SendEvent {
-                                        node: Some(node),
-                                        event: FromTaskMessage::NodeEvent(event)
-                                    };
-                                } else {
-                                    unreachable!("can only be reached if this.state is State::Node; qed")
-                                }
+                                let node = this.state.extract_node()
+                                    .expect("can only be reached if this.state is Node; qed");
+                                this.state = State::SendEvent {
+                                    node: Some(node),
+                                    event: FromTaskMessage::NodeEvent(event)
+                                };
                                 continue 'poll
                             }
                             Poll::Ready(Err(err)) => {
@@ -286,12 +274,9 @@ where
                             Poll::Ready(None) =>
                                 // Node closed by the external API; start closing.
                                 if node.is_some() {
-                                    if let State::SendEvent { node: Some(node), .. } =
-                                        mem::replace(&mut this.state, State::Undefined) {
-                                        this.state = State::Closing(node.close());
-                                    } else {
-                                        unreachable!("can only be reached if this.state is State::SendEvent; qed")
-                                    }
+                                    let node = this.state.extract_node()
+                                        .expect("we just checked node.is_some(); qed");
+                                    this.state = State::Closing(node.close());
                                     continue 'poll
                                 } else {
                                     this.state = State::Undefined;
@@ -313,32 +298,26 @@ where
                             // We assume that if `poll_ready` has succeeded, then sending the event
                             // will succeed as well. If it turns out that it didn't, we will detect
                             // the closing at the next loop iteration.
-                            if let State::SendEvent { node, event } =
-                                mem::replace(&mut this.state, State::Undefined) {
-                                let _ = this.sender.start_send((event, this.id));
-                                if let Some(n) = node {
-                                    if close {
-                                        this.state = State::Closing(n.close())
-                                    } else {
-                                        this.state = State::Node(n)
-                                    }
+                            let (node, event) = this.state.extract_send_event()
+                                .expect("we can only reach here from SendEvent; qed");
+                            let _ = this.sender.start_send((event, this.id));
+                            if let Some(n) = node {
+                                if close {
+                                    this.state = State::Closing(n.close())
                                 } else {
-                                    // Since we have no node we terminate this task.
-                                    assert!(close);
-                                    return Poll::Ready(())
+                                    this.state = State::Node(n)
                                 }
                             } else {
-                                unreachable!("can only be reached if this.state is State::SendEvent; qed")
+                                // Since we have no node we terminate this task.
+                                assert!(close);
+                                return Poll::Ready(())
                             }
                         },
                         Poll::Ready(Err(_)) => {
-                            if node.is_some() {
-                                if let State::SendEvent { node: Some(node), .. } =
-                                    mem::replace(&mut this.state, State::Undefined) {
-                                    this.state = State::Closing(node.close());
-                                } else {
-                                    unreachable!("can only be reached if this.state is State::SendEvent; qed")
-                                }
+                            let (node, _) = this.state.extract_send_event()
+                                .expect("we can only reach here from SendEvent; qed");
+                            if let Some(node) = node {
+                                this.state = State::Closing(node.close());
                                 continue 'poll
                             }
                             // We can not communicate to the outside and there is no
@@ -363,3 +342,69 @@ where
     }
 }
 
+impl<F, M, H, I, O, E, C> State<F, M, H, I, O, E, C>
+where
+    M: StreamMuxer,
+    H: IntoNodeHandler<C>,
+    H::Handler: NodeHandler<Substream = Substream<M>>
+{
+    /// Extracts the `NodeHandler` from `self`, if any.
+    /// If so, replaces `self` with `Undefined`.
+    fn extract_node(&mut self) -> Option<HandledNode<M, H::Handler>> {
+        match self {
+            State::SendEvent { node: Some(_), .. } => {
+                if let State::SendEvent { node: Some(node), .. } =
+                    mem::replace(self, State::Undefined)
+                {
+                    return Some(node);
+                } else {
+                    unreachable!("we just checked the same match pattern above; qed")
+                }
+            }
+            State::Node(_) => {
+                if let State::Node(node) = mem::replace(self, State::Undefined) {
+                    return Some(node);
+                } else {
+                    unreachable!("we just checked the same match pattern above; qed")
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Extracts the components of `Future` from `self`, if relevant.
+    /// If so, replaces `self` with `Undefined`.
+    fn extract_handler_events_buffer(&mut self) -> Option<(H, Vec<I>)> {
+        match self {
+            State::Future { .. } => {
+                if let State::Future { handler, events_buffer, .. } =
+                    mem::replace(self, State::Undefined)
+                {
+                    return Some((handler, events_buffer));
+                } else {
+                    unreachable!("we just checked the same match pattern above; qed")
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Extracts the components of `SendEvent` from `self`, if relevant.
+    /// If so, replaces `self` with `Undefined`.
+    fn extract_send_event(&mut self)
+        -> Option<(Option<HandledNode<M, H::Handler>>, FromTaskMessage<O, H, E, <H::Handler as NodeHandler>::Error, C>)>
+    {
+        match self {
+            State::SendEvent { .. } => {
+                if let State::SendEvent { node, event } =
+                    mem::replace(self, State::Undefined)
+                {
+                    return Some((node, event));
+                } else {
+                    unreachable!("we just checked the same match pattern above; qed")
+                }
+            }
+            _ => None,
+        }
+    }
+}
