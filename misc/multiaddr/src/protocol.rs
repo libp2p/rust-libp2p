@@ -415,7 +415,7 @@ impl<'a> Protocol<'a> {
             P2pWebSocketStar => P2pWebSocketStar,
             Memory(a) => Memory(a),
             Onion(addr, port) => Onion(Cow::Owned(addr.into_owned()), port),
-            Onion3(addr) => Onion3(addr.into_owned()),
+            Onion3(addr) => Onion3(addr.acquire()),
             P2p(a) => P2p(a),
             P2pCircuit => P2pCircuit,
             Quic => Quic,

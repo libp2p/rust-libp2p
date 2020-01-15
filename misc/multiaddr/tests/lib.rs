@@ -76,7 +76,7 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 23) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 24) { // TODO: Add Protocol::Quic
              0 => Proto(Dccp(g.gen())),
              1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
              2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
@@ -106,7 +106,7 @@ impl Arbitrary for Proto {
                 Proto(Onion(Cow::Owned(a), g.gen()))
             },
             23 => {
-                let mut a = Vec::with_capacity(35);
+                let mut a = [0; 35];
                 g.fill_bytes(&mut a);
                 Proto(Onion3((a, g.gen()).into()))
             },
@@ -222,7 +222,7 @@ fn construct_success() {
     ma_valid(
         "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234",
         "BD03ADADEC040BE047F9658668B11A504F3155001F231A37F54C4476C07FB4CC139ED7E30304D2",
-        vec![Onion3((vec![173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3].as_slice(), 1234).into())],
+        vec![Onion3(([173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3], 1234).into())],
     );
 }
 
