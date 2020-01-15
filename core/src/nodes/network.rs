@@ -70,7 +70,7 @@ where
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
     reach_attempts: ReachAttempts<TPeerId>,
 
-    /// Max numer of incoming connections.
+    /// Max number of incoming connections.
     incoming_limit: Option<u32>,
 
     /// Unfinished take over message to be delivered.
