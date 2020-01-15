@@ -179,8 +179,8 @@ where
         let this = &mut *self;
 
         'poll: loop {
-            match this.state {
-                State::Future { ref mut future, ref mut events_buffer, .. } => {
+            match &mut this.state {
+                State::Future { future, events_buffer, .. } => {
                     // If this.receiver is closed, we stop the task.
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
@@ -224,7 +224,7 @@ where
                         }
                     }
                 }
-                State::Node(ref mut node) => {
+                State::Node(node) => {
                     // Start by handling commands received from the outside of the task.
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
@@ -273,7 +273,7 @@ where
                     }
                 }
                 // Deliver an event to the outside.
-                State::SendEvent { ref mut node, ref event } => {
+                State::SendEvent { node, event } => {
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
                             Poll::Pending => break,
@@ -347,7 +347,7 @@ where
                         }
                     }
                 }
-                State::Closing(ref mut closing) =>
+                State::Closing(closing) =>
                     match Future::poll(Pin::new(closing), cx) {
                         Poll::Ready(_) => {
                             this.state = State::Undefined;
