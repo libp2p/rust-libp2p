@@ -16,6 +16,10 @@ fnv = "1.0"
 futures = "0.3.1"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 libp2p-swarm = { version = "0.4.0-alpha.1", path = "../../swarm" }
-protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
+prost = "0.6"
 rand = "0.7"
 smallvec = "1.0"
+
+[build-dependencies]
+prost-build = "0.6"
+

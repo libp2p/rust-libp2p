@@ -20,7 +20,7 @@
 
 use bs58;
 use crate::rpc_proto;
-use protobuf::Message;
+use prost::Message;
 
 /// Represents the hash of a topic.
 ///
@@ -33,12 +33,10 @@ pub struct TopicHash {
 
 impl TopicHash {
     /// Builds a new `TopicHash` from the given hash.
-    #[inline]
     pub fn from_raw(hash: String) -> TopicHash {
         TopicHash { hash }
     }
 
-    #[inline]
     pub fn into_string(self) -> String {
         self.hash
     }
@@ -53,28 +51,24 @@ pub struct Topic {
 
 impl Topic {
     /// Returns the hash of the topic.
-    #[inline]
     pub fn hash(&self) -> &TopicHash {
         &self.hash
     }
 }
 
 impl AsRef<TopicHash> for Topic {
-    #[inline]
     fn as_ref(&self) -> &TopicHash {
         &self.hash
     }
 }
 
 impl From<Topic> for TopicHash {
-    #[inline]
     fn from(topic: Topic) -> TopicHash {
         topic.hash
     }
 }
 
 impl<'a> From<&'a Topic> for TopicHash {
-    #[inline]
     fn from(topic: &'a Topic) -> TopicHash {
         topic.hash.clone()
     }
@@ -91,21 +85,22 @@ impl TopicBuilder {
     where
         S: Into<String>,
     {
-        let mut builder = rpc_proto::TopicDescriptor::new();
-        builder.set_name(name.into());
-
-        TopicBuilder { builder }
+        TopicBuilder {
+            builder: rpc_proto::TopicDescriptor {
+                name: Some(name.into()),
+                auth: None,
+                enc: None
+            }
+        }
     }
 
     /// Turns the builder into an actual `Topic`.
     pub fn build(self) -> Topic {
-        let bytes = self
-            .builder
-            .write_to_bytes()
-            .expect("protobuf message is always valid");
+        let mut buf = Vec::with_capacity(self.builder.encoded_len());
+        self.builder.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
         // TODO: https://github.com/libp2p/rust-libp2p/issues/473
         let hash = TopicHash {
-            hash: bs58::encode(&bytes).into_string(),
+            hash: bs58::encode(&buf).into_string(),
         };
         Topic {
             descriptor: self.builder,
