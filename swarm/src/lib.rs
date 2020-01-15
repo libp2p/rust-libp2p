@@ -78,7 +78,7 @@ pub use protocols_handler::{
 };
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError};
-use futures::prelude::*;
+use futures::{prelude::*, executor::ThreadPoolBuilder, task::Spawn};
 use libp2p_core::{
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
@@ -145,6 +145,7 @@ where
         TOutEvent,
         NodeHandlerWrapperBuilder<THandler>,
         NodeHandlerWrapperError<THandlerErr>,
+        Box<dyn Spawn>,
         TConnInfo,
         PeerId,
     >,
@@ -574,6 +575,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
 pub struct SwarmBuilder<TTransport, TBehaviour> {
     incoming_limit: Option<u32>,
+    executor: Option<Box<dyn Spawn>>,
     local_peer_id: PeerId,
     transport: TTransport,
     behaviour: TBehaviour,
@@ -611,9 +613,16 @@ where TBehaviour: NetworkBehaviour,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     pub fn new(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self {
+        let executor = ThreadPoolBuilder::new()
+            .name_prefix("libp2p-task-")
+            .create()
+            .ok()
+            .map(|tp| Box::new(tp) as Box<_>);
+
         SwarmBuilder {
             incoming_limit: None,
             local_peer_id,
+            executor,
             transport,
             behaviour,
         }
@@ -621,6 +630,14 @@ where TBehaviour: NetworkBehaviour,
 
     pub fn incoming_limit(mut self, incoming_limit: Option<u32>) -> Self {
         self.incoming_limit = incoming_limit;
+        self
+    }
+
+    /// Sets the executor to use to spawn background tasks.
+    ///
+    /// By default, uses a threads pool.
+    pub fn executor(mut self, executor: impl Spawn + 'static) -> Self {
+        self.executor = Some(Box::new(executor));
         self
     }
 
@@ -633,7 +650,12 @@ where TBehaviour: NetworkBehaviour,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        let network = Network::new_with_incoming_limit(self.transport, self.local_peer_id, self.incoming_limit);
+        let network = Network::new_with_incoming_limit(
+            self.transport,
+            self.local_peer_id,
+            self.executor,
+            self.incoming_limit
+        );
 
         ExpandedSwarm {
             network,
