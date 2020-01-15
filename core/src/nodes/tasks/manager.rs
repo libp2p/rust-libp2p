@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered};
+use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered, task::{Spawn, SpawnExt as _}};
 use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 
@@ -52,7 +52,7 @@ use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 //
 
 /// Implementation of [`Stream`] that handles a collection of nodes.
-pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
+pub struct Manager<I, O, H, E, HE, T, Sp = ThreadPool, C = PeerId> {
     /// Collection of managed tasks.
     ///
     /// Closing the sender interrupts the task. It is possible that we receive
@@ -63,9 +63,9 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     /// Identifier for the next task to spawn.
     next_task_id: TaskId,
 
-    /// Threads pool where we spawn the nodes' tasks. If `None`, then we push tasks to the
+    /// Custom executor where we spawn the nodes' tasks. If `None`, then we push tasks to the
     /// `local_spawns` list instead.
-    threads_pool: Option<ThreadPool>,
+    executor: Option<Sp>,
 
     /// If no executor is available, we move tasks to this set, and futures are polled on the
     /// current thread instead.
@@ -78,7 +78,7 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     events_rx: mpsc::Receiver<(FromTaskMessage<O, H, E, HE, C>, TaskId)>
 }
 
-impl<I, O, H, E, HE, T, C> fmt::Debug for Manager<I, O, H, E, HE, T, C>
+impl<I, O, H, E, HE, T, Sp, C> fmt::Debug for Manager<I, O, H, E, HE, T, Sp, C>
 where
     T: fmt::Debug
 {
@@ -133,18 +133,15 @@ pub enum Event<'a, I, O, H, E, HE, T, C = PeerId> {
     }
 }
 
-impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
-    /// Creates a new task manager.
-    pub fn new() -> Self {
+impl<I, O, H, E, HE, T, Sp, C> Manager<I, O, H, E, HE, T, Sp, C> {
+    /// Creates a new task manager. If `Some` is passed, uses the given executor to spawn tasks.
+    /// Otherwise, background tasks are executed locally when you call `poll`.
+    pub fn new(executor: Option<Sp>) -> Self {
         let (tx, rx) = mpsc::channel(1);
-        let threads_pool = ThreadPool::builder()
-            .name_prefix("libp2p-nodes-")
-            .create().ok();
-
         Self {
             tasks: FnvHashMap::default(),
             next_task_id: TaskId(0),
-            threads_pool,
+            executor,
             local_spawns: FuturesUnordered::new(),
             events_tx: tx,
             events_rx: rx
@@ -157,6 +154,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// processing the node's events.
     pub fn add_reach_attempt<F, M>(&mut self, future: F, user_data: T, handler: H) -> TaskId
     where
+        Sp: Spawn,
         F: Future<Output = Result<(C, M), E>> + Send + 'static,
         H: IntoNodeHandler<C> + Send + 'static,
         H::Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O, Error = HE> + Send + 'static,
@@ -176,8 +174,14 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         self.tasks.insert(task_id, TaskInfo { sender: tx, user_data });
 
         let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
-        if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn_ok(task);
+        if let Some(executor) = &self.executor {
+            if executor.status().is_ok() {
+                if executor.spawn(task).is_err() {
+                    log::error!("Failed to spawn task for peer");
+                }
+            } else {
+                self.local_spawns.push(task);
+            }
         } else {
             self.local_spawns.push(task);
         }
@@ -192,6 +196,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// reached.
     pub fn add_connection<M, Handler>(&mut self, user_data: T, muxer: M, handler: Handler) -> TaskId
     where
+        Sp: Spawn,
         H: IntoNodeHandler<C, Handler = Handler> + Send + 'static,
         Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O, Error = HE> + Send + 'static,
         E: error::Error + Send + 'static,
@@ -212,8 +217,14 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         let task: Task<Pin<Box<futures::future::Pending<_>>>, _, _, _, _, _, _> =
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
-        if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn_ok(Box::pin(task));
+        if let Some(executor) = &self.executor {
+            if executor.status().is_ok() {
+                if executor.spawn(Box::pin(task)).is_err() {
+                    log::error!("Failed to spawn task for peer");
+                }
+            } else {
+                self.local_spawns.push(Box::pin(task));
+            }
         } else {
             self.local_spawns.push(Box::pin(task));
         }

@@ -28,24 +28,24 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::prelude::*;
+use futures::{prelude::*, task::Spawn};
 use std::{error, fmt, hash::Hash, mem, task::Context, task::Poll};
 
 /// Implementation of `Stream` that handles a collection of nodes.
-pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo = PeerId, TPeerId = PeerId> {
+pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo = PeerId, TPeerId = PeerId> {
     /// Object that handles the tasks.
     ///
     /// The user data contains the state of the task. If `Connected`, then a corresponding entry
     /// must be present in `nodes`.
-    inner: tasks::Manager<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TaskState<TConnInfo, TUserData>, TConnInfo>,
+    inner: tasks::Manager<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TaskState<TConnInfo, TUserData>, TSpawn, TConnInfo>,
 
     /// List of nodes, with the task id that handles this node. The corresponding entry in `tasks`
     /// must always be in the `Connected` state.
     nodes: FnvHashMap<TPeerId, TaskId>,
 }
 
-impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> fmt::Debug for
-    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> fmt::Debug for
+    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 where
     TConnInfo: fmt::Debug,
 {
@@ -54,8 +54,8 @@ where
     }
 }
 
-impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> Unpin for
-    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> { }
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> Unpin for
+    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> { }
 
 /// State of a task.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,10 +67,10 @@ enum TaskState<TConnInfo, TUserData> {
 }
 
 /// Event that can happen on the `CollectionStream`.
-pub enum CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> {
+pub enum CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> {
     /// A connection to a node has succeeded. You must use the provided event in order to accept
     /// the connection.
-    NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>),
+    NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>),
 
     /// A connection to a node has errored.
     ///
@@ -103,8 +103,8 @@ pub enum CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerE
     },
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> fmt::Debug for
-    CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> fmt::Debug for
+    CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 where TOutEvent: fmt::Debug,
       TReachErr: fmt::Debug,
       THandlerErr: fmt::Debug,
@@ -143,17 +143,17 @@ where TOutEvent: fmt::Debug,
 
 /// Event that happens when we reach a node.
 #[must_use = "The node reached event is used to accept the newly-opened connection"]
-pub struct CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo = PeerId, TPeerId = PeerId> {
+pub struct CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo = PeerId, TPeerId = PeerId> {
     /// Information about the connection, or `None` if it's been extracted.
     conn_info: Option<TConnInfo>,
     /// The task id that reached the node.
     id: TaskId,
     /// The `CollectionStream` we are referencing.
-    parent: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>,
+    parent: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>,
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
-    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 {
     /// Returns the information of the connection.
     pub fn connection_info(&self) -> &TConnInfo {
@@ -176,8 +176,8 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConn
     }
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
-    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash,
@@ -242,8 +242,8 @@ where
     }
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> fmt::Debug for
-    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> fmt::Debug for
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 where
     TConnInfo: fmt::Debug,
 {
@@ -255,8 +255,8 @@ where
     }
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId> Drop for
-    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId> Drop for
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 {
     fn drop(&mut self) {
         let task = self.parent.inner.task(self.id)
@@ -300,17 +300,17 @@ impl ConnectionInfo for PeerId {
     }
 }
 
-impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
-    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
+    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>
 where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash,
 {
-    /// Creates a new empty collection.
-    #[inline]
-    pub fn new() -> Self {
+    /// Creates a new empy collection. If `executor` is `Some`, uses the given executor to spawn
+    /// tasks. Otherwise, runs tasks locally.
+    pub fn new(executor: Option<TSpawn>) -> Self {
         CollectionStream {
-            inner: tasks::Manager::new(),
+            inner: tasks::Manager::new(executor),
             nodes: Default::default(),
         }
     }
@@ -322,6 +322,7 @@ where
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
+        TSpawn: Spawn,
         TFut: Future<Output = Result<(TConnInfo, TMuxer), TReachErr>> + Send + 'static,
         THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
@@ -374,6 +375,7 @@ where
     pub fn add_connection<TMuxer>(&mut self, conn_info: TConnInfo, user_data: TUserData, muxer: TMuxer, handler: THandler::Handler)
         -> CollectionNodeAccept<TConnInfo, TUserData>
     where
+        TSpawn: Spawn,
         THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,
@@ -444,7 +446,7 @@ where
     /// > **Note**: we use a regular `poll` method instead of implementing `Stream` in order to
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<CollectionEvent<'_, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TConnInfo, TPeerId>>
+    pub fn poll(&mut self, cx: &mut Context) -> Poll<CollectionEvent<'_, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TSpawn, TConnInfo, TPeerId>>
     where
         TConnInfo: Clone,   // TODO: Clone shouldn't be necessary
     {
