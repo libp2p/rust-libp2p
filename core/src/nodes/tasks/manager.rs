@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered, task::{Spawn, SpawnExt as _}};
+use futures::{prelude::*, channel::mpsc, stream::FuturesUnordered, task::{Spawn, SpawnExt as _}};
 use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 
@@ -52,7 +52,7 @@ use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 //
 
 /// Implementation of [`Stream`] that handles a collection of nodes.
-pub struct Manager<I, O, H, E, HE, T, Sp = ThreadPool, C = PeerId> {
+pub struct Manager<I, O, H, E, HE, T, Sp, C = PeerId> {
     /// Collection of managed tasks.
     ///
     /// Closing the sender interrupts the task. It is possible that we receive
