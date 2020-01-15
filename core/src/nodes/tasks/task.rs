@@ -27,7 +27,7 @@ use crate::{
 };
 use futures::{prelude::*, channel::mpsc, stream};
 use smallvec::SmallVec;
-use std::{pin::Pin, task::Context, task::Poll};
+use std::{mem, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, Error};
 
 /// Message to transmit from the public API to a task.
@@ -179,13 +179,16 @@ where
         let this = &mut *self;
 
         'poll: loop {
-            match std::mem::replace(&mut this.state, State::Undefined) {
-                State::Future { mut future, handler, mut events_buffer } => {
+            match this.state {
+                State::Future { ref mut future, ref mut events_buffer, .. } => {
                     // If this.receiver is closed, we stop the task.
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
                             Poll::Pending => break,
-                            Poll::Ready(None) => return Poll::Ready(()),
+                            Poll::Ready(None) => {
+                                this.state = State::Undefined;
+                                return Poll::Ready(())
+                            },
                             Poll::Ready(Some(ToTaskMessage::HandlerEvent(event))) =>
                                 events_buffer.push(event),
                             Poll::Ready(Some(ToTaskMessage::TakeOver(take_over))) =>
@@ -193,28 +196,35 @@ where
                         }
                     }
                     // Check if dialing succeeded.
-                    match Future::poll(Pin::new(&mut future), cx) {
+                    match Future::poll(Pin::new(future), cx) {
                         Poll::Ready(Ok((conn_info, muxer))) => {
-                            let mut node = HandledNode::new(muxer, handler.into_handler(&conn_info));
-                            for event in events_buffer {
-                                node.inject_event(event)
-                            }
-                            this.state = State::SendEvent {
-                                node: Some(node),
-                                event: FromTaskMessage::NodeReached(conn_info)
+                            if let State::Future { handler, events_buffer, .. } =
+                                mem::replace(&mut this.state, State::Undefined) {
+                                let mut node = HandledNode::new(muxer, handler.into_handler(&conn_info));
+                                for event in events_buffer {
+                                    node.inject_event(event)
+                                }
+                                this.state = State::SendEvent {
+                                    node: Some(node),
+                                    event: FromTaskMessage::NodeReached(conn_info)
+                                }
+                            } else {
+                                unreachable!("can only be reached if this.state is State::Future; qed")
                             }
                         }
-                        Poll::Pending => {
-                            this.state = State::Future { future, handler, events_buffer };
-                            return Poll::Pending
-                        }
+                        Poll::Pending => return Poll::Pending,
                         Poll::Ready(Err(e)) => {
-                            let event = FromTaskMessage::TaskClosed(Error::Reach(e), Some(handler));
-                            this.state = State::SendEvent { node: None, event }
+                            if let State::Future { handler, .. } =
+                                mem::replace(&mut this.state, State::Undefined) {
+                                let event = FromTaskMessage::TaskClosed(Error::Reach(e), Some(handler));
+                                this.state = State::SendEvent { node: None, event }
+                            } else {
+                                unreachable!("can only be reached if this.state is State::Future; qed")
+                            }
                         }
                     }
                 }
-                State::Node(mut node) => {
+                State::Node(ref mut node) => {
                     // Start by handling commands received from the outside of the task.
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
@@ -225,7 +235,12 @@ where
                                 this.taken_over.push(take_over),
                             Poll::Ready(None) => {
                                 // Node closed by the external API; start closing.
-                                this.state = State::Closing(node.close());
+                                if let State::Node(node) =
+                                    mem::replace(&mut this.state, State::Undefined) {
+                                    this.state = State::Closing(node.close());
+                                } else {
+                                    unreachable!("can only be reached if this.state is State::Node; qed")
+                                }
                                 continue 'poll
                             }
                         }
@@ -235,16 +250,18 @@ where
                         if !this.taken_over.is_empty() && node.is_remote_acknowledged() {
                             this.taken_over.clear()
                         }
-                        match HandledNode::poll(Pin::new(&mut node), cx) {
-                            Poll::Pending => {
-                                this.state = State::Node(node);
-                                return Poll::Pending
-                            }
+                        match HandledNode::poll(Pin::new(node), cx) {
+                            Poll::Pending => return Poll::Pending,
                             Poll::Ready(Ok(event)) => {
-                                this.state = State::SendEvent {
-                                    node: Some(node),
-                                    event: FromTaskMessage::NodeEvent(event)
-                                };
+                                if let State::Node(node) =
+                                    mem::replace(&mut this.state, State::Undefined) {
+                                    this.state = State::SendEvent {
+                                        node: Some(node),
+                                        event: FromTaskMessage::NodeEvent(event)
+                                    };
+                                } else {
+                                    unreachable!("can only be reached if this.state is State::Node; qed")
+                                }
                                 continue 'poll
                             }
                             Poll::Ready(Err(err)) => {
@@ -256,7 +273,7 @@ where
                     }
                 }
                 // Deliver an event to the outside.
-                State::SendEvent { mut node, event } => {
+                State::SendEvent { ref mut node, ref event } => {
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.receiver), cx) {
                             Poll::Pending => break,
@@ -268,10 +285,16 @@ where
                                 this.taken_over.push(take_over),
                             Poll::Ready(None) =>
                                 // Node closed by the external API; start closing.
-                                if let Some(n) = node {
-                                    this.state = State::Closing(n.close());
+                                if node.is_some() {
+                                    if let State::SendEvent { node: Some(node), .. } =
+                                        mem::replace(&mut this.state, State::Undefined) {
+                                        this.state = State::Closing(node.close());
+                                    } else {
+                                        unreachable!("can only be reached if this.state is State::SendEvent; qed")
+                                    }
                                     continue 'poll
                                 } else {
+                                    this.state = State::Undefined;
                                     return Poll::Ready(()) // end task
                                 }
                         }
@@ -285,30 +308,37 @@ where
                             false
                         };
                     match this.sender.poll_ready(cx) {
-                        Poll::Pending => {
-                            self.state = State::SendEvent { node, event };
-                            return Poll::Pending
-                        }
+                        Poll::Pending => return Poll::Pending,
                         Poll::Ready(Ok(())) => {
                             // We assume that if `poll_ready` has succeeded, then sending the event
                             // will succeed as well. If it turns out that it didn't, we will detect
                             // the closing at the next loop iteration.
-                            let _ = this.sender.start_send((event, this.id));
-                            if let Some(n) = node {
-                                if close {
-                                    this.state = State::Closing(n.close())
+                            if let State::SendEvent { node, event } =
+                                mem::replace(&mut this.state, State::Undefined) {
+                                let _ = this.sender.start_send((event, this.id));
+                                if let Some(n) = node {
+                                    if close {
+                                        this.state = State::Closing(n.close())
+                                    } else {
+                                        this.state = State::Node(n)
+                                    }
                                 } else {
-                                    this.state = State::Node(n)
+                                    // Since we have no node we terminate this task.
+                                    assert!(close);
+                                    return Poll::Ready(())
                                 }
                             } else {
-                                // Since we have no node we terminate this task.
-                                assert!(close);
-                                return Poll::Ready(())
+                                unreachable!("can only be reached if this.state is State::SendEvent; qed")
                             }
                         },
                         Poll::Ready(Err(_)) => {
-                            if let Some(n) = node {
-                                this.state = State::Closing(n.close());
+                            if node.is_some() {
+                                if let State::SendEvent { node: Some(node), .. } =
+                                    mem::replace(&mut this.state, State::Undefined) {
+                                    this.state = State::Closing(node.close());
+                                } else {
+                                    unreachable!("can only be reached if this.state is State::SendEvent; qed")
+                                }
                                 continue 'poll
                             }
                             // We can not communicate to the outside and there is no
@@ -317,14 +347,13 @@ where
                         }
                     }
                 }
-                State::Closing(mut closing) =>
-                    match Future::poll(Pin::new(&mut closing), cx) {
-                        Poll::Ready(_) =>
-                            return Poll::Ready(()), // end task
-                        Poll::Pending => {
-                            this.state = State::Closing(closing);
-                            return Poll::Pending
+                State::Closing(ref mut closing) =>
+                    match Future::poll(Pin::new(closing), cx) {
+                        Poll::Ready(_) => {
+                            this.state = State::Undefined;
+                            return Poll::Ready(()) // end task
                         }
+                        Poll::Pending => return Poll::Pending,
                     }
                 // This happens if a previous poll has resolved the future.
                 // The API contract of futures is that we should not be polled again.
