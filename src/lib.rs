@@ -264,14 +264,7 @@ pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PSK)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     Ok(CommonTransport::new()?
-        .and_then(move |io, endpoint| {
-            libp2p_core::upgrade::apply(
-                io,
-                PnetConfig::new(psk),
-                endpoint,
-                libp2p_core::transport::upgrade::Version::V1,
-            )
-        })
+        .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
         .upgrade(core::upgrade::Version::V1)
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))

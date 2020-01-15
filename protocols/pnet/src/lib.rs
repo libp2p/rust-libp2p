@@ -17,16 +17,14 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use futures::future::BoxFuture;
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::prelude::*;
-use libp2p_core::{upgrade::Negotiated, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use salsa20::stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek};
 use salsa20::XSalsa20;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::{
-    io, iter,
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -121,7 +119,7 @@ impl PnetConfig {
         Self { key }
     }
 
-    async fn handshake<TSocket>(self, mut socket: TSocket) -> Result<PnetOutput<TSocket>, PnetError>
+    pub async fn handshake<TSocket>(self, mut socket: TSocket) -> Result<PnetOutput<TSocket>, PnetError>
     where
         TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -133,41 +131,6 @@ impl PnetConfig {
         let write_cipher = XSalsa20::new(&self.key.0.into(), &local_nonce.into());
         let read_cipher = XSalsa20::new(&self.key.0.into(), &remote_nonce.into());
         Ok(PnetOutput::new(socket, write_cipher, read_cipher))
-    }
-}
-
-impl UpgradeInfo for PnetConfig {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/pnet/1.0.0")
-    }
-}
-
-impl<C> InboundUpgrade<C> for PnetConfig
-where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    type Output = PnetOutput<Negotiated<C>>;
-    type Error = PnetError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        Box::pin(self.handshake(i))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for PnetConfig
-where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    type Output = PnetOutput<Negotiated<C>>;
-    type Error = PnetError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
-        Box::pin(self.handshake(i))
     }
 }
 
