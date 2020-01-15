@@ -72,7 +72,7 @@ use futures::{
     prelude::*,
 };
 use libp2p_core::StreamMuxer;
-use log::{debug, trace};
+use log::{debug, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
@@ -412,7 +412,10 @@ impl StreamMuxer for QuicMuxer {
                 }
             })?;
         let (sender, mut receiver) = oneshot::channel();
-        assert!(receiver.poll_unpin(cx).is_pending());
+        assert!(
+            receiver.poll_unpin(cx).is_pending(),
+            "we haven’t written to the peer yet"
+        );
         substream.status = SubstreamStatus::Finishing(receiver);
         assert!(inner.finishers.insert(substream.id(), sender).is_none());
         Pending
@@ -442,43 +445,46 @@ pub struct QuicUpgrade {
     muxer: Option<QuicMuxer>,
 }
 
+#[cfg(test)]
+impl Drop for QuicUpgrade {
+    fn drop(&mut self) {
+        debug!("dropping upgrade!");
+        assert!(
+            self.muxer.is_none(),
+            "dropped before being polled to completion"
+        );
+    }
+}
+
 impl Future for QuicUpgrade {
     type Output = Result<QuicMuxer, io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let muxer = &mut self.get_mut().muxer;
         trace!("outbound polling!");
-        {
+        let res = {
             let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
             if let Some(ref e) = inner.close_reason {
-                return Ready(Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    e.clone(),
-                )));
+                Err(io::Error::new(io::ErrorKind::ConnectionAborted, e.clone()))
             } else if inner.connection.is_handshaking() {
-                assert!(inner.close_reason.is_none());
                 assert!(!inner.connection.is_drained(), "deadlock");
-                inner.accept_waker = Some(cx.waker().clone());
+                inner.handshake_waker = Some(cx.waker().clone());
                 return Pending;
-            } else if inner.connection.is_drained() {
-                debug!("connection already drained; failing");
-                return Ready(Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    inner
-                        .close_reason
-                        .as_ref()
-                        .expect("drained connections have a close reason")
-                        .clone(),
-                )));
             } else if inner.connection.side().is_server() {
                 ready!(inner.endpoint_channel.poll_ready(cx))
-                    .expect("the other side is not closed; qed");
-                inner
+                    .expect("we have a reference to the peer; qed");
+                Ok(inner
                     .endpoint_channel
                     .start_send(EndpointMessage::ConnectionAccepted)
-                    .expect("we just checked that we can send some data; qed");
+                    .expect(
+                        "we only send one datum per clone of the channel, so we have capacity \
+                         to send this; qed",
+                    ))
+            } else {
+                Ok(())
             }
-        }
-        Ready(Ok(muxer.take().expect("impossible")))
+        };
+        let muxer = muxer.take().expect("polled after yielding Ready");
+        Ready(res.map(|()| muxer))
     }
 }
 
@@ -500,7 +506,9 @@ pub struct Muxer {
     readers: HashMap<StreamId, std::task::Waker>,
     /// Tasks blocked on finishing
     finishers: HashMap<StreamId, oneshot::Sender<()>>,
-    /// Task waiting for new connections, or for this connection to complete.
+    /// Task waiting for new connections
+    handshake_waker: Option<std::task::Waker>,
+    /// Task waiting for new connections
     accept_waker: Option<std::task::Waker>,
     /// Tasks waiting to make a connection
     connectors: StreamSenderQueue,
@@ -528,12 +536,13 @@ impl Drop for Muxer {
 
 impl Drop for QuicMuxer {
     fn drop(&mut self) {
-        let mut inner = self.inner();
-        inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
-        // inner
-        //     .connection
-        //     .close(Instant::now(), Default::default(), Default::default());
-        inner.shutdown();
+        let inner = self.inner();
+        debug!("dropping muxer with side {:?}", inner.connection.side());
+        #[cfg(test)]
+        assert!(
+            !inner.connection.is_handshaking(),
+            "dropped a connection that was still handshaking"
+        );
     }
 }
 
@@ -593,6 +602,7 @@ impl Muxer {
             readers: HashMap::new(),
             finishers: HashMap::new(),
             accept_waker: None,
+            handshake_waker: None,
             connectors: Default::default(),
             endpoint_channel: endpoint.event_channel(),
             endpoint: endpoint,
@@ -668,6 +678,13 @@ impl Muxer {
             .poll_send_to(cx, &transmit.contents, &transmit.destination)
         {
             Pending => {
+                if let Some(packet) = self.pending.take() {
+                    warn!(
+                        "dropping packet of length {} to {} on the floor!",
+                        packet.contents.len(),
+                        packet.destination
+                    );
+                }
                 self.pending = Some(transmit);
                 Pending
             }
@@ -686,6 +703,9 @@ impl Muxer {
         if let Some(w) = self.accept_waker.take() {
             w.wake()
         }
+        if let Some(w) = self.handshake_waker.take() {
+            w.wake()
+        }
         for (_, v) in self.writers.drain() {
             v.wake();
         }
@@ -696,6 +716,7 @@ impl Muxer {
             drop(sender.send(()))
         }
         self.connectors.truncate(0);
+        self.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
         if !self.connection.is_drained() {
             self.connection
                 .close(Instant::now(), Default::default(), Default::default());
@@ -783,9 +804,15 @@ impl Muxer {
                         drop(sender.send(()))
                     }
                 }
-                // These are separate events, but are handled the same way.
-                Event::StreamOpened { dir: Dir::Bi } | Event::Connected => {
-                    debug!("connected or stream opened!");
+                Event::Connected => {
+                    debug!("connected!");
+                    assert!(!self.connection.is_handshaking(), "quinn-proto bug");
+                    if let Some(w) = self.handshake_waker.take() {
+                        w.wake()
+                    }
+                }
+                Event::StreamOpened { dir: Dir::Bi } => {
+                    debug!("stream opened!");
                     if let Some(w) = self.accept_waker.take() {
                         w.wake()
                     }

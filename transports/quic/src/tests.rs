@@ -185,7 +185,9 @@ fn communicating_between_dialer_and_listener() {
                     ready_tx.take().unwrap().send(listen_addr).unwrap();
                 }
                 ListenerEvent::Upgrade { upgrade, .. } => {
+                    log::debug!("got a connection upgrade!");
                     let mut muxer: QuicMuxer = upgrade.await.expect("upgrade failed");
+                    log::debug!("got a new muxer!");
                     let mut socket: QuicStream = muxer.next().await.expect("no incoming stream");
 
                     let mut buf = [0u8; 3];
@@ -238,7 +240,6 @@ fn communicating_between_dialer_and_listener() {
         log::debug!("checking for EOF!");
         assert_eq!(stream.read(&mut buf).await.unwrap(), 0);
         drop(stream);
-        connection.await.unwrap();
         log::debug!("awaiting handle!");
     });
     async_std::task::block_on(_handle);

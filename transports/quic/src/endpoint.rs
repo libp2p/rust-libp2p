@@ -74,10 +74,8 @@ impl EndpointInner {
         cx: &mut Context,
     ) -> Poll<Result<(ConnectionHandle, Connection), io::Error>> {
         use quinn_proto::DatagramEvent;
-        let mut buf = [0; 1800];
+        let mut buf = vec![0; 65535];
         trace!("endpoint polling for incoming packets!");
-        assert!(self.outgoing_packet.is_none());
-        assert!(self.inner.poll_transmit().is_none());
         loop {
             let (bytes, peer) = ready!(socket.poll_recv_from(cx, &mut buf[..]))?;
             trace!("got a packet of length {} from {}!", bytes, peer);
@@ -87,10 +85,7 @@ impl EndpointInner {
                     .handle(Instant::now(), peer, None, buf[..bytes].into())
                 {
                     Some(e) => e,
-                    None => {
-                        ready!(self.poll_transmit_pending(socket, cx))?;
-                        continue;
-                    }
+                    None => continue,
                 };
             trace!("have an event!");
             match event {
@@ -135,8 +130,11 @@ impl EndpointInner {
     ) -> Poll<Result<(), io::Error>> {
         match socket.poll_send_to(cx, &packet.contents, &packet.destination) {
             Pending => {
+                if self.outgoing_packet.is_some() {
+                    warn!("Discarding packet!")
+                }
                 self.outgoing_packet = Some(packet);
-                return Pending;
+                return Ready(Ok(()));
             }
             Ready(Ok(size)) => {
                 debug_assert_eq!(size, packet.contents.len());
