@@ -6,15 +6,15 @@ authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 
 [dependencies]
-libp2p-swarm = { path = "../../swarm" }
-libp2p-core = { path = "../../core" }
+libp2p-swarm = { version = "0.4.0-alpha.1", path = "../../swarm" }
+libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 bs58 = "0.2.2"
 bytes = "0.5"
 byteorder = "1.3.1"
 fnv = "1.0.6"
 futures = { version = "0.3.1" }
 protobuf = "= 2.8.1"
-rand = "0.6.5"
+rand = "0.7.2"
 futures_codec = "0.3.4"
 wasm-timer = "0.2"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
@@ -25,12 +25,8 @@ lru = "0.1.17"
 smallvec = "1.0.0"
 
 [dev-dependencies]
-env_logger = "0.6.0"
 async-std = "1.0"
-libp2p = { path = "../../" }
+env_logger = "0.7.1"
 libp2p-plaintext = { version = "0.14.0-alpha.1", path = "../plaintext" }
 libp2p-yamux = { version = "0.14.0-alpha.1", path = "../../muxers/yamux" }
 quickcheck = "0.9.0"
-rand = "0.7.2"
-tokio = "0.1"
-tokio-stdin-stdout = "0.1"
