@@ -78,7 +78,7 @@ pub use protocols_handler::{
 };
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError};
-use futures::{prelude::*, executor::ThreadPoolBuilder, task::Spawn};
+use futures::{prelude::*, executor::ThreadPoolBuilder, task::{FutureObj, Spawn}};
 use libp2p_core::{
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
@@ -638,6 +638,23 @@ where TBehaviour: NetworkBehaviour,
     /// By default, uses a threads pool.
     pub fn executor(mut self, executor: impl Spawn + 'static) -> Self {
         self.executor = Some(Box::new(executor));
+        self
+    }
+
+    /// Shortcut for calling `executor` with an object that calls the given closure.
+    pub fn executor_fn(mut self, executor: impl Fn(FutureObj<'static, ()>) + 'static) -> Self {
+        use futures::task::SpawnError;
+        struct SpawnImpl<F>(F);
+        impl<F: Fn(FutureObj<'static, ()>)> Spawn for SpawnImpl<F> {
+            fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
+                (self.0)(future);
+                Ok(())
+            }
+            fn status(&self) -> Result<(), SpawnError> {
+                Ok(())
+            }
+        }
+        self.executor = Some(Box::new(SpawnImpl(executor)));
         self
     }
 
