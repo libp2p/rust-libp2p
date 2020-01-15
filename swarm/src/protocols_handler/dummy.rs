@@ -26,9 +26,8 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr
 };
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade};
-use std::marker::PhantomData;
-use tokio_io::{AsyncRead, AsyncWrite};
+use libp2p_core::{Negotiated, upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade}};
+use std::{marker::PhantomData, task::Context, task::Poll};
 use void::Void;
 
 /// Implementation of `ProtocolsHandler` that doesn't handle anything.
@@ -47,7 +46,7 @@ impl<TSubstream> Default for DummyProtocolsHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for DummyProtocolsHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     type InEvent = Void;
     type OutEvent = Void;
@@ -65,14 +64,14 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        _: <Self::InboundProtocol as InboundUpgrade<Negotiated<TSubstream>>>::Output
     ) {
     }
 
     #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        _: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<TSubstream>>>::Output,
         _: Self::OutboundOpenInfo
     ) {
     }
@@ -81,7 +80,7 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error>) {}
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
@@ -89,10 +88,10 @@ where
     #[inline]
     fn poll(
         &mut self,
+        _: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Void,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }

@@ -27,10 +27,9 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr,
     ProtocolsHandlerEvent
 };
-use std::{error::Error, io, fmt, num::NonZeroU32, time::Duration};
+use std::{error::Error, io, fmt, num::NonZeroU32, pin::Pin, task::Context, task::Poll, time::Duration};
 use std::collections::VecDeque;
-use tokio_io::{AsyncRead, AsyncWrite};
-use wasm_timer::{Delay, Instant};
+use wasm_timer::Delay;
 use void::Void;
 
 /// The configuration for outbound pings.
@@ -176,7 +175,7 @@ impl<TSubstream> PingHandler<TSubstream> {
     pub fn new(config: PingConfig) -> Self {
         PingHandler {
             config,
-            next_ping: Delay::new(Instant::now()),
+            next_ping: Delay::new(Duration::new(0, 0)),
             pending_results: VecDeque::with_capacity(2),
             failures: 0,
             _marker: std::marker::PhantomData
@@ -186,7 +185,7 @@ impl<TSubstream> PingHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for PingHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type InEvent = Void;
     type OutEvent = PingResult;
@@ -228,36 +227,36 @@ where
         }
     }
 
-    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult>, Self::Error> {
+    fn poll(&mut self, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult, Self::Error>> {
         if let Some(result) = self.pending_results.pop_back() {
             if let Ok(PingSuccess::Ping { .. }) = result {
-                let next_ping = Instant::now() + self.config.interval;
                 self.failures = 0;
-                self.next_ping.reset(next_ping);
+                self.next_ping.reset(self.config.interval);
             }
             if let Err(e) = result {
                 self.failures += 1;
                 if self.failures >= self.config.max_failures.get() {
-                    return Err(e)
+                    return Poll::Ready(ProtocolsHandlerEvent::Close(e))
                 } else {
-                    return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(Err(e))))
+                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(e)))
                 }
             }
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(result)))
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(result))
         }
 
-        match self.next_ping.poll() {
-            Ok(Async::Ready(())) => {
-                self.next_ping.reset(Instant::now() + self.config.timeout);
+        match Future::poll(Pin::new(&mut self.next_ping), cx) {
+            Poll::Ready(Ok(())) => {
+                self.next_ping.reset(self.config.timeout);
                 let protocol = SubstreamProtocol::new(protocol::Ping)
                     .with_timeout(self.config.timeout);
-                Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol,
                     info: (),
-                }))
+                })
             },
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(e) => Err(PingFailure::Other { error: Box::new(e) })
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(e)) =>
+                Poll::Ready(ProtocolsHandlerEvent::Close(PingFailure::Other { error: Box::new(e) }))
         }
     }
 }
@@ -266,11 +265,10 @@ where
 mod tests {
     use super::*;
 
+    use async_std::net::TcpStream;
     use futures::future;
     use quickcheck::*;
     use rand::Rng;
-    use tokio_tcp::TcpStream;
-    use tokio::runtime::current_thread::Runtime;
 
     impl Arbitrary for PingConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> PingConfig {
@@ -281,11 +279,10 @@ mod tests {
         }
     }
 
-    fn tick(h: &mut PingHandler<TcpStream>) -> Result<
-        ProtocolsHandlerEvent<protocol::Ping, (), PingResult>,
-        PingFailure
-    > {
-        Runtime::new().unwrap().block_on(future::poll_fn(|| h.poll() ))
+    fn tick(h: &mut PingHandler<TcpStream>)
+        -> ProtocolsHandlerEvent<protocol::Ping, (), PingResult, PingFailure>
+    {
+        async_std::task::block_on(future::poll_fn(|cx| h.poll(cx) ))
     }
 
     #[test]
@@ -293,34 +290,25 @@ mod tests {
         fn prop(cfg: PingConfig, ping_rtt: Duration) -> bool {
             let mut h = PingHandler::<TcpStream>::new(cfg);
 
-            // The first ping is scheduled "immediately".
-            let start = h.next_ping.deadline();
-            assert!(start <= Instant::now());
-
             // Send ping
             match tick(&mut h) {
-                Ok(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info: _ }) => {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol, info: _ } => {
                     // The handler must use the configured timeout.
                     assert_eq!(protocol.timeout(), &h.config.timeout);
-                    // The next ping must be scheduled no earlier than the ping timeout.
-                    assert!(h.next_ping.deadline() >= start + h.config.timeout);
                 }
                 e => panic!("Unexpected event: {:?}", e)
             }
-
-            let now = Instant::now();
 
             // Receive pong
             h.inject_fully_negotiated_outbound(ping_rtt, ());
             match tick(&mut h) {
-                Ok(ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { rtt }))) => {
+                ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { rtt })) => {
                     // The handler must report the given RTT.
                     assert_eq!(rtt, ping_rtt);
-                    // The next ping must be scheduled no earlier than the ping interval.
-                    assert!(now + h.config.interval <= h.next_ping.deadline());
                 }
                 e => panic!("Unexpected event: {:?}", e)
             }
+
             true
         }
 
@@ -334,20 +322,20 @@ mod tests {
         for _ in 0 .. h.config.max_failures.get() - 1 {
             h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
             match tick(&mut h) {
-                Ok(ProtocolsHandlerEvent::Custom(Err(PingFailure::Timeout))) => {}
+                ProtocolsHandlerEvent::Custom(Err(PingFailure::Timeout)) => {}
                 e => panic!("Unexpected event: {:?}", e)
             }
         }
         h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
         match tick(&mut h) {
-            Err(PingFailure::Timeout) => {
+            ProtocolsHandlerEvent::Close(PingFailure::Timeout) => {
                 assert_eq!(h.failures, h.config.max_failures.get());
             }
             e => panic!("Unexpected event: {:?}", e)
         }
         h.inject_fully_negotiated_outbound(Duration::from_secs(1), ());
         match tick(&mut h) {
-            Ok(ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { .. }))) => {
+            ProtocolsHandlerEvent::Custom(Ok(PingSuccess::Ping { .. })) => {
                 // A success resets the counter for consecutive failures.
                 assert_eq!(h.failures, 0);
             }

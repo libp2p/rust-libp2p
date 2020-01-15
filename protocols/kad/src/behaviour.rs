@@ -39,7 +39,7 @@ use smallvec::SmallVec;
 use std::{borrow::Cow, error, iter, marker::PhantomData, time::Duration};
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::task::{Context, Poll};
 use wasm_timer::Instant;
 
 /// Network behaviour that handles Kademlia.
@@ -1010,7 +1010,7 @@ where
 
 impl<TSubstream, TStore> NetworkBehaviour for Kademlia<TSubstream, TStore>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
     for<'a> TStore: RecordStore<'a>,
 {
     type ProtocolsHandler = KademliaHandler<TSubstream, QueryId>;
@@ -1304,7 +1304,7 @@ where
         };
     }
 
-    fn poll(&mut self, parameters: &mut impl PollParameters) -> Async<
+    fn poll(&mut self, cx: &mut Context, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
@@ -1319,7 +1319,7 @@ where
         if let Some(mut job) = self.add_provider_job.take() {
             let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
             for _ in 0 .. num {
-                if let Async::Ready(r) = job.poll(&mut self.store, now) {
+                if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
                     self.start_add_provider(r.key, AddProviderContext::Republish)
                 } else {
                     break
@@ -1333,7 +1333,7 @@ where
         if let Some(mut job) = self.put_record_job.take() {
             let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
             for _ in 0 .. num {
-                if let Async::Ready(r) = job.poll(&mut self.store, now) {
+                if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
                     let context = if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
                         PutRecordContext::Republish
                     } else {
@@ -1350,7 +1350,7 @@ where
         loop {
             // Drain queued events first.
             if let Some(event) = self.queued_events.pop_front() {
-                return Async::Ready(event);
+                return Poll::Ready(event);
             }
 
             // Drain applied pending entries from the routing table.
@@ -1361,7 +1361,7 @@ where
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage())
                 };
-                return Async::Ready(NetworkBehaviourAction::GenerateEvent(event))
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
             }
 
             // Look for a finished query.
@@ -1369,12 +1369,12 @@ where
                 match self.queries.poll(now) {
                     QueryPoolState::Finished(q) => {
                         if let Some(event) = self.query_finished(q, parameters) {
-                            return Async::Ready(NetworkBehaviourAction::GenerateEvent(event))
+                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
                         }
                     }
                     QueryPoolState::Timeout(q) => {
                         if let Some(event) = self.query_timeout(q) {
-                            return Async::Ready(NetworkBehaviourAction::GenerateEvent(event))
+                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
                         }
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
@@ -1406,7 +1406,7 @@ where
             // If no new events have been queued either, signal `NotReady` to
             // be polled again later.
             if self.queued_events.is_empty() {
-                return Async::NotReady
+                return Poll::Pending
             }
         }
     }

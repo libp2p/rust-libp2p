@@ -158,8 +158,6 @@ pub use futures;
 pub use multiaddr;
 #[doc(inline)]
 pub use multihash;
-pub use tokio_codec;
-pub use tokio_io;
 
 #[doc(inline)]
 pub use libp2p_core as core;
@@ -234,21 +232,23 @@ use std::{error, io, time::Duration};
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 pub fn build_development_transport(
     keypair: identity::Keypair,
-) -> impl Transport<
-    Output = (
-        PeerId,
-        impl core::muxing::StreamMuxer<
-                OutboundSubstream = impl Send,
-                Substream = impl Send,
-                Error = impl Into<io::Error>,
-            > + Send
-            + Sync,
-    ),
-    Error = impl error::Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send,
-> + Clone {
+) -> io::Result<
+    impl Transport<
+            Output = (
+                PeerId,
+                impl core::muxing::StreamMuxer<
+                        OutboundSubstream = impl Send,
+                        Substream = impl Send,
+                        Error = impl Into<io::Error>,
+                    > + Send
+                    + Sync,
+            ),
+            Error = impl error::Error + Send,
+            Listener = impl Send,
+            Dial = impl Send,
+            ListenerUpgrade = impl Send,
+        > + Clone,
+> {
     build_tcp_ws_secio_mplex_yamux(keypair)
 }
 
@@ -260,27 +260,32 @@ pub fn build_development_transport(
 /// > **Note**: If you ever need to express the type of this `Transport`.
 pub fn build_tcp_ws_secio_mplex_yamux(
     keypair: identity::Keypair,
-) -> impl Transport<
-    Output = (
-        PeerId,
-        impl core::muxing::StreamMuxer<
-                OutboundSubstream = impl Send,
-                Substream = impl Send,
-                Error = impl Into<io::Error>,
-            > + Send
-            + Sync,
-    ),
-    Error = impl error::Error + Send,
-    Listener = impl Send,
-    Dial = impl Send,
-    ListenerUpgrade = impl Send,
-> + Clone {
-    CommonTransport::new()
+) -> io::Result<
+    impl Transport<
+            Output = (
+                PeerId,
+                impl core::muxing::StreamMuxer<
+                        OutboundSubstream = impl Send,
+                        Substream = impl Send,
+                        Error = impl Into<io::Error>,
+                    > + Send
+                    + Sync,
+            ),
+            Error = impl error::Error + Send,
+            Listener = impl Send,
+            Dial = impl Send,
+            ListenerUpgrade = impl Send,
+        > + Clone,
+> {
+    Ok(CommonTransport::new()?
         .upgrade(core::upgrade::Version::V1)
         .authenticate(secio::SecioConfig::new(keypair))
-        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .multiplex(core::upgrade::SelectUpgrade::new(
+            yamux::Config::default(),
+            mplex::MplexConfig::new(),
+        ))
         .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
-        .timeout(Duration::from_secs(20))
+        .timeout(Duration::from_secs(20)))
 }
 
 /// Implementation of `Transport` that supports the most common protocols.
@@ -317,27 +322,27 @@ struct CommonTransportInner {
 impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-    pub fn new() -> CommonTransport {
+    pub fn new() -> io::Result<CommonTransport> {
         let tcp = tcp::TcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::new(tcp);
+        let transport = dns::DnsConfig::new(tcp)?;
         #[cfg(feature = "libp2p-websocket")]
         let transport = {
             let trans_clone = transport.clone();
             transport.or_transport(websocket::WsConfig::new(trans_clone))
         };
 
-        CommonTransport {
+        Ok(CommonTransport {
             inner: CommonTransportInner { inner: transport },
-        }
+        })
     }
 
     /// Initializes the `CommonTransport`.
     #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-    pub fn new() -> CommonTransport {
+    pub fn new() -> io::Result<CommonTransport> {
         let inner = core::transport::dummy::DummyTransport::new();
-        CommonTransport {
+        Ok(CommonTransport {
             inner: CommonTransportInner { inner },
-        }
+        })
     }
 }
 

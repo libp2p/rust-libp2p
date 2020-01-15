@@ -31,11 +31,11 @@ use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
+    Negotiated,
     either::EitherOutput,
     upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade}
 };
-use futures::prelude::*;
-use std::error;
+use std::{error, task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///
@@ -132,13 +132,13 @@ where
         }
     }
 
-    fn poll(&mut self, params: &mut impl PollParameters)
-        -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
+    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(params)
+            inner.poll(cx, params)
         } else {
-            Async::NotReady
+            Poll::Pending
         }
     }
 }
@@ -207,7 +207,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        out: <Self::InboundProtocol as InboundUpgrade<Negotiated<Self::Substream>>>::Output
     ) {
         let out = match out {
             EitherOutput::First(out) => out,
@@ -220,7 +220,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        out: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
@@ -232,7 +232,7 @@ where
             .inject_event(event)
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error>) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
     }
@@ -244,14 +244,14 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     > {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll()
+            inner.poll(cx)
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
 }

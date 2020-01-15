@@ -26,10 +26,9 @@ use crate::protocols_handler::{
     SubstreamProtocol
 };
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
+use libp2p_core::{Negotiated, upgrade::{InboundUpgrade, OutboundUpgrade}};
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{error, marker::PhantomData, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 /// Implementation of `ProtocolsHandler` that opens a new substream for each individual message.
@@ -38,13 +37,13 @@ use wasm_timer::Instant;
 // TODO: Debug
 pub struct OneShotHandler<TSubstream, TInProto, TOutProto, TOutEvent>
 where
-    TOutProto: OutboundUpgrade<TSubstream>,
+    TOutProto: OutboundUpgrade<Negotiated<TSubstream>>,
 {
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInProto>,
     /// If `Some`, something bad happened and we should shut down the handler with an error.
     pending_error:
-        Option<ProtocolsHandlerUpgrErr<<TOutProto as OutboundUpgrade<TSubstream>>::Error>>,
+        Option<ProtocolsHandlerUpgrErr<<TOutProto as OutboundUpgrade<Negotiated<TSubstream>>>::Error>>,
     /// Queue of events to produce in `poll()`.
     events_out: SmallVec<[TOutEvent; 4]>,
     /// Queue of outbound substreams to open.
@@ -64,7 +63,7 @@ where
 impl<TSubstream, TInProto, TOutProto, TOutEvent>
     OneShotHandler<TSubstream, TInProto, TOutProto, TOutEvent>
 where
-    TOutProto: OutboundUpgrade<TSubstream>,
+    TOutProto: OutboundUpgrade<Negotiated<TSubstream>>,
 {
     /// Creates a `OneShotHandler`.
     #[inline]
@@ -120,8 +119,8 @@ where
 impl<TSubstream, TInProto, TOutProto, TOutEvent> Default
     for OneShotHandler<TSubstream, TInProto, TOutProto, TOutEvent>
 where
-    TOutProto: OutboundUpgrade<TSubstream>,
-    TInProto: InboundUpgrade<TSubstream> + Default,
+    TOutProto: OutboundUpgrade<Negotiated<TSubstream>>,
+    TInProto: InboundUpgrade<Negotiated<TSubstream>> + Default,
 {
     #[inline]
     fn default() -> Self {
@@ -132,9 +131,9 @@ where
 impl<TSubstream, TInProto, TOutProto, TOutEvent> ProtocolsHandler
     for OneShotHandler<TSubstream, TInProto, TOutProto, TOutEvent>
 where
-    TSubstream: AsyncRead + AsyncWrite,
-    TInProto: InboundUpgrade<TSubstream>,
-    TOutProto: OutboundUpgrade<TSubstream>,
+    TSubstream: AsyncRead + AsyncWrite + Unpin,
+    TInProto: InboundUpgrade<Negotiated<TSubstream>>,
+    TOutProto: OutboundUpgrade<Negotiated<TSubstream>>,
     TInProto::Output: Into<TOutEvent>,
     TOutProto::Output: Into<TOutEvent>,
     TOutProto::Error: error::Error + 'static,
@@ -143,7 +142,7 @@ where
     type InEvent = TOutProto;
     type OutEvent = TOutEvent;
     type Error = ProtocolsHandlerUpgrErr<
-        <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+        <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error,
     >;
     type Substream = TSubstream;
     type InboundProtocol = TInProto;
@@ -158,7 +157,7 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output,
+        out: <Self::InboundProtocol as InboundUpgrade<Negotiated<Self::Substream>>>::Output,
     ) {
         // If we're shutting down the connection for inactivity, reset the timeout.
         if !self.keep_alive.is_yes() {
@@ -171,7 +170,7 @@ where
     #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        out: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Output,
         _: Self::OutboundOpenInfo,
     ) {
         self.dial_negotiated -= 1;
@@ -193,7 +192,7 @@ where
         &mut self,
         _: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error,
+            <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error,
         >,
     ) {
         if self.pending_error.is_none() {
@@ -208,18 +207,18 @@ where
 
     fn poll(
         &mut self,
+        _: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        Self::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
         if let Some(err) = self.pending_error.take() {
-            return Err(err);
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
         }
 
         if !self.events_out.is_empty() {
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(
                 self.events_out.remove(0),
-            )));
+            ));
         } else {
             self.events_out.shrink_to_fit();
         }
@@ -227,17 +226,17 @@ where
         if !self.dial_queue.is_empty() {
             if self.dial_negotiated < self.max_dial_negotiated {
                 self.dial_negotiated += 1;
-                return Ok(Async::Ready(
+                return Poll::Ready(
                     ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(self.dial_queue.remove(0)),
                         info: (),
                     },
-                ));
+                );
             }
         } else {
             self.dial_queue.shrink_to_fit();
         }
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
