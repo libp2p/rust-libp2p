@@ -306,7 +306,7 @@ where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash,
 {
-    /// Creates a new empy collection. If `executor` is `Some`, uses the given executor to spawn
+    /// Creates a new empty collection. If `executor` is `Some`, uses the given executor to spawn
     /// tasks. Otherwise, runs tasks locally.
     pub fn new(executor: Option<TSpawn>) -> Self {
         CollectionStream {
