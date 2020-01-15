@@ -42,7 +42,10 @@ use void::Void;
 
 mod error;
 mod handshake;
-mod structs_proto;
+mod structs_proto {
+    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+}
+
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
 ///

@@ -15,7 +15,7 @@ futures = "0.3.1"
 futures_codec = "0.3.4"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 log = "0.4.8"
-protobuf = "=2.8.1" # note: see https://github.com/libp2p/rust-libp2p/issues/1363
+prost = "0.6"
 rw-stream-sink = { version = "0.2.0", path = "../../misc/rw-stream-sink" }
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0.2"
@@ -24,3 +24,7 @@ void = "1.0.2"
 env_logger = "0.7.1"
 quickcheck = "0.9.0"
 rand = "0.7"
+
+[build-dependencies]
+prost-build = "0.6"
+

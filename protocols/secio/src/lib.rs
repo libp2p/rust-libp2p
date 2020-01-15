@@ -69,8 +69,9 @@ mod codec;
 mod error;
 mod exchange;
 mod handshake;
-// #[allow(rust_2018_idioms)]
-mod structs_proto;
+mod structs_proto {
+    include!(concat!(env!("OUT_DIR"), "/spipe.pb.rs"));
+}
 mod stream_cipher;
 
 pub use crate::algo_support::Digest;

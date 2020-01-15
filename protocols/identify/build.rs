@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,33 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [Identify] protocol.
-//!
-//! This implementation of the protocol periodically exchanges
-//! [`IdentifyInfo`] messages between the peers on an established connection.
-//!
-//! At least one identification request is sent on a newly established
-//! connection, beyond which the behaviour does not keep connections alive.
-//!
-//! # Usage
-//!
-//! The [`Identify`] struct implements a `NetworkBehaviour` that negotiates
-//! and executes the protocol on every established connection, emitting
-//! [`IdentifyEvent`]s.
-//!
-//! [Identify]: https://github.com/libp2p/specs/tree/master/identify
-//! [`Identify`]: self::Identify
-//! [`IdentifyEvent`]: self::IdentifyEvent
-//! [`IdentifyInfo`]: self::IdentifyEvent
-
-pub use self::identify::{Identify, IdentifyEvent};
-pub use self::protocol::IdentifyInfo;
-
-mod handler;
-mod identify;
-mod protocol;
-
-mod structs_proto {
-    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+fn main() {
+	prost_build::compile_protos(&["src/structs.proto"], &["src"]).unwrap();
 }
 

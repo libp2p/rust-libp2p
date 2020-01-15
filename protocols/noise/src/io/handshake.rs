@@ -20,7 +20,9 @@
 
 //! Noise protocol handshake I/O.
 
-mod payload_proto;
+mod payload_proto {
+    include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
+}
 
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
@@ -29,7 +31,7 @@ use libp2p_core::identity;
 use futures::prelude::*;
 use futures::task;
 use futures::io::AsyncReadExt;
-use protobuf::Message;
+use prost::Message;
 use std::{pin::Pin, task::Context};
 use super::NoiseOutput;
 
@@ -363,10 +365,10 @@ where
 
     let mut payload_buf = vec![0; len];
     state.io.read_exact(&mut payload_buf).await?;
-    let pb: payload_proto::Identity = protobuf::parse_from_bytes(&payload_buf)?;
+    let pb = payload_proto::Identity::decode(&payload_buf[..])?;
 
     if !pb.pubkey.is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(pb.get_pubkey())
+        let pk = identity::PublicKey::from_protobuf_encoding(&pb.pubkey)
             .map_err(|_| NoiseError::InvalidKey)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
@@ -387,17 +389,18 @@ async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::Identity::new();
+    let mut pb = payload_proto::Identity::default();
     if state.send_identity {
-        pb.set_pubkey(state.identity.public.clone().into_protobuf_encoding());
+        pb.pubkey = state.identity.public.clone().into_protobuf_encoding()
     }
     if let Some(ref sig) = state.identity.signature {
-        pb.set_signature(sig.clone());
+        pb.signature = sig.clone()
     }
-    let pb_bytes = pb.write_to_bytes()?;
-    let len = (pb_bytes.len() as u16).to_be_bytes();
+    let mut buf = Vec::with_capacity(pb.encoded_len());
+    pb.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+    let len = (buf.len() as u16).to_be_bytes();
     state.io.write_all(&len).await?;
-    state.io.write_all(&pb_bytes).await?;
+    state.io.write_all(&buf).await?;
     state.io.flush().await?;
     Ok(())
 }
