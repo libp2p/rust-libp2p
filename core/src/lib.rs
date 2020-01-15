@@ -35,11 +35,14 @@
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
 
+mod keys_proto {
+    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
+}
+
 /// Multi-address re-export.
 pub use multiaddr;
 pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
-mod keys_proto;
 mod peer_id;
 mod translation;
 

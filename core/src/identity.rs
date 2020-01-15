@@ -149,62 +149,67 @@ impl PublicKey {
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use protobuf::Message;
-        let mut public_key = keys_proto::PublicKey::new();
-        match self {
-            PublicKey::Ed25519(key) => {
-                public_key.set_Type(keys_proto::KeyType::Ed25519);
-                public_key.set_Data(key.encode().to_vec());
-            },
+        use prost::Message;
+
+        let public_key = match self {
+            PublicKey::Ed25519(key) =>
+                keys_proto::PublicKey {
+                    r#type: keys_proto::KeyType::Ed25519 as i32,
+                    data: key.encode().to_vec()
+                },
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-            PublicKey::Rsa(key) => {
-                public_key.set_Type(keys_proto::KeyType::RSA);
-                public_key.set_Data(key.encode_x509());
-            },
+            PublicKey::Rsa(key) =>
+                keys_proto::PublicKey {
+                    r#type: keys_proto::KeyType::Rsa as i32,
+                    data: key.encode_x509()
+                },
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(key) => {
-                public_key.set_Type(keys_proto::KeyType::Secp256k1);
-                public_key.set_Data(key.encode().to_vec());
-            },
+            PublicKey::Secp256k1(key) =>
+                keys_proto::PublicKey {
+                    r#type: keys_proto::KeyType::Secp256k1 as i32,
+                    data: key.encode().to_vec()
+                }
         };
 
-        public_key
-            .write_to_bytes()
-            .expect("Encoding public key into protobuf failed.")
+        let mut buf = Vec::with_capacity(public_key.encoded_len());
+        public_key.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        buf
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+        use prost::Message;
+
         #[allow(unused_mut)] // Due to conditional compilation.
-        let mut pubkey = protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes)
+        let mut pubkey = keys_proto::PublicKey::decode(bytes)
             .map_err(|e| DecodingError::new("Protobuf").source(e))?;
 
-        match pubkey.get_Type() {
+        let key_type = keys_proto::KeyType::from_i32(pubkey.r#type)
+            .ok_or_else(|| DecodingError::new(format!("unknown key type: {}", pubkey.r#type)))?;
+
+        match key_type {
             keys_proto::KeyType::Ed25519 => {
-                ed25519::PublicKey::decode(pubkey.get_Data())
-                    .map(PublicKey::Ed25519)
+                ed25519::PublicKey::decode(&pubkey.data).map(PublicKey::Ed25519)
             },
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-            keys_proto::KeyType::RSA => {
-                rsa::PublicKey::decode_x509(&pubkey.take_Data())
-                    .map(PublicKey::Rsa)
+            keys_proto::KeyType::Rsa => {
+                rsa::PublicKey::decode_x509(&pubkey.data).map(PublicKey::Rsa)
             }
             #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-            keys_proto::KeyType::RSA => {
+            keys_proto::KeyType::Rsa => {
                 log::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))
             },
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
-                secp256k1::PublicKey::decode(pubkey.get_Data())
-                    .map(PublicKey::Secp256k1)
+                secp256k1::PublicKey::decode(&pubkey.data).map(PublicKey::Secp256k1)
             }
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err("Unsupported".to_string().into())
-            },
+            }
         }
     }
 

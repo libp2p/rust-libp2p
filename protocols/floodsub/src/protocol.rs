@@ -22,7 +22,7 @@ use crate::rpc_proto;
 use crate::topic::TopicHash;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
-use protobuf::{ProtobufError, Message as ProtobufMessage};
+use prost::Message;
 use std::{error, fmt, io, iter, pin::Pin};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
@@ -31,7 +31,6 @@ pub struct FloodsubConfig {}
 
 impl FloodsubConfig {
     /// Builds a new `FloodsubConfig`.
-    #[inline]
     pub fn new() -> FloodsubConfig {
         FloodsubConfig {}
     }
@@ -41,7 +40,6 @@ impl UpgradeInfo for FloodsubConfig {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
-    #[inline]
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(b"/floodsub/1.0.0")
     }
@@ -58,18 +56,17 @@ where
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let packet = upgrade::read_one(&mut socket, 2048).await?;
-            let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
+            let rpc = rpc_proto::Rpc::decode(&packet[..])?;
 
-            let mut messages = Vec::with_capacity(rpc.get_publish().len());
-            for mut publish in rpc.take_publish().into_iter() {
+            let mut messages = Vec::with_capacity(rpc.publish.len());
+            for publish in rpc.publish.into_iter() {
                 messages.push(FloodsubMessage {
-                    source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
+                    source: PeerId::from_bytes(publish.from.unwrap_or_default()).map_err(|_| {
                         FloodsubDecodeError::InvalidPeerId
                     })?,
-                    data: publish.take_data(),
-                    sequence_number: publish.take_seqno(),
-                    topics: publish
-                        .take_topicIDs()
+                    data: publish.data.unwrap_or_default(),
+                    sequence_number: publish.seqno.unwrap_or_default(),
+                    topics: publish.topic_ids
                         .into_iter()
                         .map(TopicHash::from_raw)
                         .collect(),
@@ -78,16 +75,15 @@ where
 
             Ok(FloodsubRpc {
                 messages,
-                subscriptions: rpc
-                    .take_subscriptions()
+                subscriptions: rpc.subscriptions
                     .into_iter()
-                    .map(|mut sub| FloodsubSubscription {
-                        action: if sub.get_subscribe() {
+                    .map(|sub| FloodsubSubscription {
+                        action: if Some(true) == sub.subscribe {
                             FloodsubSubscriptionAction::Subscribe
                         } else {
                             FloodsubSubscriptionAction::Unsubscribe
                         },
-                        topic: TopicHash::from_raw(sub.take_topicid()),
+                        topic: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
                     })
                     .collect(),
             })
@@ -101,21 +97,19 @@ pub enum FloodsubDecodeError {
     /// Error when reading the packet from the socket.
     ReadError(upgrade::ReadOneError),
     /// Error when decoding the raw buffer into a protobuf.
-    ProtobufError(ProtobufError),
+    ProtobufError(prost::DecodeError),
     /// Error when parsing the `PeerId` in the message.
     InvalidPeerId,
 }
 
 impl From<upgrade::ReadOneError> for FloodsubDecodeError {
-    #[inline]
     fn from(err: upgrade::ReadOneError) -> Self {
         FloodsubDecodeError::ReadError(err)
     }
 }
 
-impl From<ProtobufError> for FloodsubDecodeError {
-    #[inline]
-    fn from(err: ProtobufError) -> Self {
+impl From<prost::DecodeError> for FloodsubDecodeError {
+    fn from(err: prost::DecodeError) -> Self {
         FloodsubDecodeError::ProtobufError(err)
     }
 }
@@ -156,7 +150,6 @@ impl UpgradeInfo for FloodsubRpc {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
-    #[inline]
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(b"/floodsub/1.0.0")
     }
@@ -170,7 +163,6 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    #[inline]
     fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let bytes = self.into_bytes();
@@ -183,33 +175,34 @@ where
 impl FloodsubRpc {
     /// Turns this `FloodsubRpc` into a message that can be sent to a substream.
     fn into_bytes(self) -> Vec<u8> {
-        let mut proto = rpc_proto::RPC::new();
+        let rpc = rpc_proto::Rpc {
+            publish: self.messages.into_iter()
+                .map(|msg| {
+                    rpc_proto::Message {
+                        from: Some(msg.source.into_bytes()),
+                        data: Some(msg.data),
+                        seqno: Some(msg.sequence_number),
+                        topic_ids: msg.topics
+                            .into_iter()
+                            .map(TopicHash::into_string)
+                            .collect()
+                    }
+                })
+                .collect(),
 
-        for message in self.messages {
-            let mut msg = rpc_proto::Message::new();
-            msg.set_from(message.source.into_bytes());
-            msg.set_data(message.data);
-            msg.set_seqno(message.sequence_number);
-            msg.set_topicIDs(
-                message
-                    .topics
-                    .into_iter()
-                    .map(TopicHash::into_string)
-                    .collect(),
-            );
-            proto.mut_publish().push(msg);
-        }
+            subscriptions: self.subscriptions.into_iter()
+                .map(|topic| {
+                    rpc_proto::rpc::SubOpts {
+                        subscribe: Some(topic.action == FloodsubSubscriptionAction::Subscribe),
+                        topic_id: Some(topic.topic.into_string())
+                    }
+                })
+                .collect()
+        };
 
-        for topic in self.subscriptions {
-            let mut subscription = rpc_proto::RPC_SubOpts::new();
-            subscription.set_subscribe(topic.action == FloodsubSubscriptionAction::Subscribe);
-            subscription.set_topicid(topic.topic.into_string());
-            proto.mut_subscriptions().push(subscription);
-        }
-
-        proto
-            .write_to_bytes()
-            .expect("there is no situation in which the protobuf message can be invalid")
+        let mut buf = Vec::with_capacity(rpc.encoded_len());
+        rpc.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        buf
     }
 }
 

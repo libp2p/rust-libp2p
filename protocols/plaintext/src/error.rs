@@ -21,7 +21,6 @@
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
-use protobuf::error::ProtobufError;
 
 #[derive(Debug)]
 pub enum PlainTextError {
@@ -29,7 +28,7 @@ pub enum PlainTextError {
     IoError(IoError),
 
     /// Failed to parse the handshake protobuf message.
-    InvalidPayload(Option<ProtobufError>),
+    InvalidPayload(Option<prost::DecodeError>),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
     InvalidPeerId,
@@ -68,8 +67,8 @@ impl From<IoError> for PlainTextError {
     }
 }
 
-impl From<ProtobufError> for PlainTextError {
-    fn from(err: ProtobufError) -> PlainTextError {
+impl From<prost::DecodeError> for PlainTextError {
+    fn from(err: prost::DecodeError) -> PlainTextError {
         PlainTextError::InvalidPayload(Some(err))
     }
 }

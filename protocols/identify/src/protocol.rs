@@ -26,9 +26,7 @@ use libp2p_core::{
     upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 use log::{debug, trace};
-use protobuf::Message as ProtobufMessage;
-use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
-use protobuf::RepeatedField;
+use prost::Message;
 use std::convert::TryFrom;
 use std::{fmt, io, iter, pin::Pin};
 
@@ -78,18 +76,18 @@ where
 
         let pubkey_bytes = info.public_key.into_protobuf_encoding();
 
-        let mut message = structs_proto::Identify::new();
-        message.set_agentVersion(info.agent_version);
-        message.set_protocolVersion(info.protocol_version);
-        message.set_publicKey(pubkey_bytes);
-        message.set_listenAddrs(listen_addrs);
-        message.set_observedAddr(observed_addr.to_vec());
-        message.set_protocols(RepeatedField::from_vec(info.protocols));
+        let message = structs_proto::Identify {
+            agent_version: Some(info.agent_version),
+            protocol_version: Some(info.protocol_version),
+            public_key: Some(pubkey_bytes),
+            listen_addrs: listen_addrs,
+            observed_addr: Some(observed_addr.to_vec()),
+            protocols: info.protocols
+        };
 
         async move {
-            let bytes = message
-                .write_to_bytes()
-                .expect("writing protobuf failed; should never happen");
+            let mut bytes = Vec::with_capacity(message.encoded_len());
+            message.encode(&mut bytes).expect("Vec<u8> provides capacity as needed");
             upgrade::write_one(&mut self.inner, &bytes).await
         }
     }
@@ -170,8 +168,8 @@ where
 // Turns a protobuf message into an `IdentifyInfo` and an observed address. If something bad
 // happens, turn it into an `io::Error`.
 fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<(IdentifyInfo, Multiaddr), io::Error> {
-    match protobuf_parse_from_bytes::<structs_proto::Identify>(msg.as_ref()) {
-        Ok(mut msg) => {
+    match structs_proto::Identify::decode(msg.as_ref()) {
+        Ok(msg) => {
             // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
             // an `io::Error`.
             fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, io::Error> {
@@ -181,22 +179,22 @@ fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<(IdentifyInfo, Multiaddr), i
 
             let listen_addrs = {
                 let mut addrs = Vec::new();
-                for addr in msg.take_listenAddrs().into_iter() {
+                for addr in msg.listen_addrs.into_iter() {
                     addrs.push(bytes_to_multiaddr(addr)?);
                 }
                 addrs
             };
 
-            let public_key = PublicKey::from_protobuf_encoding(msg.get_publicKey())
+            let public_key = PublicKey::from_protobuf_encoding(&msg.public_key.unwrap_or_default())
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-            let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
+            let observed_addr = bytes_to_multiaddr(msg.observed_addr.unwrap_or_default())?;
             let info = IdentifyInfo {
                 public_key,
-                protocol_version: msg.take_protocolVersion(),
-                agent_version: msg.take_agentVersion(),
+                protocol_version: msg.protocol_version.unwrap_or_default(),
+                agent_version: msg.agent_version.unwrap_or_default(),
                 listen_addrs,
-                protocols: msg.take_protocols().into_vec(),
+                protocols: msg.protocols
             };
 
             Ok((info, observed_addr))
