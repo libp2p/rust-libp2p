@@ -77,7 +77,7 @@ pub use protocols_handler::{
     SubstreamProtocol
 };
 
-use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError};
+use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
 use futures::prelude::*;
 use libp2p_core::{
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
@@ -85,7 +85,6 @@ use libp2p_core::{
     nodes::{
         ListenerId,
         collection::ConnectionInfo,
-        handled_node::NodeHandler,
         node::Substream,
         network::{self, Network, NetworkEvent}
     },
@@ -202,35 +201,33 @@ where
 impl<TTransport, TBehaviour, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo>
     ExpandedSwarm<TTransport, TBehaviour, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
       TMuxer: StreamMuxer + Send + Sync + 'static,
-      <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
-      <TMuxer as StreamMuxer>::Substream: Send + 'static,
+      TMuxer::OutboundSubstream: Send + 'static,
+      TMuxer::Substream: Send + 'static,
       TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone,
       TTransport::Error: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,
-      THandlerErr: error::Error,
+      THandlerErr: error::Error + Send + 'static,
       THandler: IntoProtocolsHandler + Send + 'static,
-      <THandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
-      <NodeHandlerWrapper<<THandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
+      <THandler::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <THandler::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
+      <THandler::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
 {
     /// Builds a new `Swarm`.
     pub fn new(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self {
@@ -383,7 +380,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         return Poll::Ready(SwarmEvent::Connected(conn_info.peer_id().clone()));
                     }
                 },
-                Poll::Ready(NetworkEvent::NodeClosed { conn_info, endpoint, .. }) => {
+                Poll::Ready(NetworkEvent::NodeClosed { conn_info, endpoint, error }) => {
+                    log::trace!("Connection {:?} with endpoint {:?} closed by {:?}",
+                                conn_info, endpoint, error);
                     this.behaviour.inject_disconnected(conn_info.peer_id(), endpoint);
                     return Poll::Ready(SwarmEvent::Disconnected(conn_info.peer_id().clone()));
                 },
@@ -507,26 +506,24 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,
-      THandlerErr: error::Error,
+      THandlerErr: error::Error + Send + 'static,
       THandler: IntoProtocolsHandler + Send + 'static,
-      <THandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<THandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <NodeHandlerWrapper<<THandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Substream = Substream<TMuxer>, Error = THandlerErr> + Send + 'static,
+      <THandler::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <THandler::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <THandler::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     type Item = TBehaviour::OutEvent;
@@ -589,25 +586,24 @@ where TBehaviour: NetworkBehaviour,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,
-      <TBehaviour as NetworkBehaviour>::ProtocolsHandler: Send + 'static,
-      <<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
-      <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
-      <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
-      <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
-      <NodeHandlerWrapper<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      TBehaviour::ProtocolsHandler: Send + 'static,
+      <TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<Substream<TMuxer>>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Future: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Negotiated<Substream<TMuxer>>>>::Error: Send + 'static,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     pub fn new(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self {
