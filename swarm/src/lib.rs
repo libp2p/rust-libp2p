@@ -613,16 +613,10 @@ where TBehaviour: NetworkBehaviour,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     pub fn new(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self {
-        let executor = ThreadPoolBuilder::new()
-            .name_prefix("libp2p-task-")
-            .create()
-            .ok()
-            .map(|tp| Box::new(tp) as Box<_>);
-
         SwarmBuilder {
             incoming_limit: None,
             local_peer_id,
-            executor,
+            executor: None,
             transport,
             behaviour,
         }
@@ -667,10 +661,18 @@ where TBehaviour: NetworkBehaviour,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
+        let executor = self.executor.or_else(|| {
+            ThreadPoolBuilder::new()
+                .name_prefix("libp2p-task-")
+                .create()
+                .ok()
+                .map(|tp| Box::new(tp) as Box<_>)
+        });
+
         let network = Network::new_with_incoming_limit(
             self.transport,
             self.local_peer_id,
-            self.executor,
+            executor,
             self.incoming_limit
         );
 
