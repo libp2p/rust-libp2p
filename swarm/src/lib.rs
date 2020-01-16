@@ -78,8 +78,9 @@ pub use protocols_handler::{
 };
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError};
-use futures::{prelude::*, executor::ThreadPoolBuilder, task::{FutureObj, Spawn}};
+use futures::{prelude::*, executor::ThreadPoolBuilder};
 use libp2p_core::{
+    Executor,
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
@@ -145,7 +146,6 @@ where
         TOutEvent,
         NodeHandlerWrapperBuilder<THandler>,
         NodeHandlerWrapperError<THandlerErr>,
-        Box<dyn Spawn>,
         TConnInfo,
         PeerId,
     >,
@@ -575,7 +575,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
 pub struct SwarmBuilder<TTransport, TBehaviour> {
     incoming_limit: Option<u32>,
-    executor: Option<Box<dyn Spawn>>,
+    executor: Option<Box<dyn Executor>>,
     local_peer_id: PeerId,
     transport: TTransport,
     behaviour: TBehaviour,
@@ -630,25 +630,8 @@ where TBehaviour: NetworkBehaviour,
     /// Sets the executor to use to spawn background tasks.
     ///
     /// By default, uses a threads pool.
-    pub fn executor(mut self, executor: impl Spawn + 'static) -> Self {
+    pub fn executor(mut self, executor: impl Executor + 'static) -> Self {
         self.executor = Some(Box::new(executor));
-        self
-    }
-
-    /// Shortcut for calling `executor` with an object that calls the given closure.
-    pub fn executor_fn(mut self, executor: impl Fn(FutureObj<'static, ()>) + 'static) -> Self {
-        use futures::task::SpawnError;
-        struct SpawnImpl<F>(F);
-        impl<F: Fn(FutureObj<'static, ()>)> Spawn for SpawnImpl<F> {
-            fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
-                (self.0)(future);
-                Ok(())
-            }
-            fn status(&self) -> Result<(), SpawnError> {
-                Ok(())
-            }
-        }
-        self.executor = Some(Box::new(SpawnImpl(executor)));
         self
     }
 

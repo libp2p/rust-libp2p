@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    PeerId,
+    Executor, PeerId,
     muxing::StreamMuxer,
     nodes::{
         handled_node::{HandledNode, IntoNodeHandler, NodeHandler},
@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, channel::mpsc, stream::FuturesUnordered, task::{Spawn, SpawnExt as _}};
+use futures::{prelude::*, channel::mpsc, stream::FuturesUnordered};
 use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 
@@ -52,7 +52,7 @@ use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 //
 
 /// Implementation of [`Stream`] that handles a collection of nodes.
-pub struct Manager<I, O, H, E, HE, T, Sp, C = PeerId> {
+pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     /// Collection of managed tasks.
     ///
     /// Closing the sender interrupts the task. It is possible that we receive
@@ -65,7 +65,7 @@ pub struct Manager<I, O, H, E, HE, T, Sp, C = PeerId> {
 
     /// Custom executor where we spawn the nodes' tasks. If `None`, then we push tasks to the
     /// `local_spawns` list instead.
-    executor: Option<Sp>,
+    executor: Option<Box<dyn Executor>>,
 
     /// If no executor is available, we move tasks to this set, and futures are polled on the
     /// current thread instead.
@@ -78,7 +78,7 @@ pub struct Manager<I, O, H, E, HE, T, Sp, C = PeerId> {
     events_rx: mpsc::Receiver<(FromTaskMessage<O, H, E, HE, C>, TaskId)>
 }
 
-impl<I, O, H, E, HE, T, Sp, C> fmt::Debug for Manager<I, O, H, E, HE, T, Sp, C>
+impl<I, O, H, E, HE, T, C> fmt::Debug for Manager<I, O, H, E, HE, T, C>
 where
     T: fmt::Debug
 {
@@ -133,10 +133,10 @@ pub enum Event<'a, I, O, H, E, HE, T, C = PeerId> {
     }
 }
 
-impl<I, O, H, E, HE, T, Sp, C> Manager<I, O, H, E, HE, T, Sp, C> {
+impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// Creates a new task manager. If `Some` is passed, uses the given executor to spawn tasks.
     /// Otherwise, background tasks are executed locally when you call `poll`.
-    pub fn new(executor: Option<Sp>) -> Self {
+    pub fn new(executor: Option<Box<dyn Executor>>) -> Self {
         let (tx, rx) = mpsc::channel(1);
         Self {
             tasks: FnvHashMap::default(),
@@ -154,7 +154,6 @@ impl<I, O, H, E, HE, T, Sp, C> Manager<I, O, H, E, HE, T, Sp, C> {
     /// processing the node's events.
     pub fn add_reach_attempt<F, M>(&mut self, future: F, user_data: T, handler: H) -> TaskId
     where
-        Sp: Spawn,
         F: Future<Output = Result<(C, M), E>> + Send + 'static,
         H: IntoNodeHandler<C> + Send + 'static,
         H::Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O, Error = HE> + Send + 'static,
@@ -175,13 +174,7 @@ impl<I, O, H, E, HE, T, Sp, C> Manager<I, O, H, E, HE, T, Sp, C> {
 
         let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
         if let Some(executor) = &self.executor {
-            if executor.status().is_ok() {
-                if executor.spawn(task).is_err() {
-                    log::error!("Failed to spawn task for peer");
-                }
-            } else {
-                self.local_spawns.push(task);
-            }
+            executor.exec(task.into())
         } else {
             self.local_spawns.push(task);
         }
@@ -196,7 +189,6 @@ impl<I, O, H, E, HE, T, Sp, C> Manager<I, O, H, E, HE, T, Sp, C> {
     /// reached.
     pub fn add_connection<M, Handler>(&mut self, user_data: T, muxer: M, handler: Handler) -> TaskId
     where
-        Sp: Spawn,
         H: IntoNodeHandler<C, Handler = Handler> + Send + 'static,
         Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O, Error = HE> + Send + 'static,
         E: error::Error + Send + 'static,
@@ -218,13 +210,7 @@ impl<I, O, H, E, HE, T, Sp, C> Manager<I, O, H, E, HE, T, Sp, C> {
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
         if let Some(executor) = &self.executor {
-            if executor.status().is_ok() {
-                if executor.spawn(Box::pin(task)).is_err() {
-                    log::error!("Failed to spawn task for peer");
-                }
-            } else {
-                self.local_spawns.push(Box::pin(task));
-            }
+            executor.exec(Box::pin(task).into())
         } else {
             self.local_spawns.push(Box::pin(task));
         }
