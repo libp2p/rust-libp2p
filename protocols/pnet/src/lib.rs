@@ -119,15 +119,18 @@ impl PnetConfig {
         Self { key }
     }
 
-    pub async fn handshake<TSocket>(self, mut socket: TSocket) -> Result<PnetOutput<TSocket>, PnetError>
+    pub async fn handshake<TSocket>(
+        self,
+        mut socket: TSocket,
+    ) -> Result<PnetOutput<TSocket>, PnetError>
     where
         TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         let mut local_nonce = [0u8; NONCE_LENGTH];
         let mut remote_nonce = [0u8; NONCE_LENGTH];
         rand::thread_rng().fill_bytes(&mut local_nonce);
-        socket.write_all(&local_nonce).await?;
-        socket.read_exact(&mut remote_nonce).await?;
+        socket.write_all(&local_nonce).await.map_err(PnetError::HandshakeError)?;
+        socket.read_exact(&mut remote_nonce).await.map_err(PnetError::HandshakeError)?;
         let write_cipher = XSalsa20::new(&self.key.0.into(), &local_nonce.into());
         let read_cipher = XSalsa20::new(&self.key.0.into(), &remote_nonce.into());
         Ok(PnetOutput::new(socket, write_cipher, read_cipher))
@@ -214,6 +217,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
 /// Error at the SECIO layer communication.
 #[derive(Debug)]
 pub enum PnetError {
+    /// Error during handshake.
+    HandshakeError(IoError),
     /// I/O error.
     IoError(IoError),
 }
@@ -228,6 +233,7 @@ impl From<IoError> for PnetError {
 impl error::Error for PnetError {
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
+            PnetError::HandshakeError(ref err) => Some(err),
             PnetError::IoError(ref err) => Some(err),
         }
     }
@@ -238,6 +244,7 @@ impl fmt::Display for PnetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             PnetError::IoError(e) => write!(f, "I/O error: {}", e),
+            PnetError::HandshakeError(e) => write!(f, "Handshake error: {}", e),
         }
     }
 }
