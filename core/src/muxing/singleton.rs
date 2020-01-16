@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, muxing::StreamMuxer};
+use crate::{connection::Endpoint, muxing::StreamMuxer};
 use futures::prelude::*;
 use parking_lot::Mutex;
 use std::{io, pin::Pin, sync::atomic::{AtomicBool, Ordering}, task::Context, task::Poll};

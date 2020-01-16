@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, nodes::ListenerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ListenerId};
 use std::{error, task::Context, task::Poll};
 
 /// A behaviour for the network. Allows customizing the swarm.
@@ -93,6 +93,10 @@ pub trait NetworkBehaviour: Send + 'static {
     /// The default implementation of this method calls `inject_disconnected` followed with
     /// `inject_connected`. This is a logically safe way to implement this behaviour. However, you
     /// may want to overwrite this method in the situations where this isn't appropriate.
+    #[deprecated(since = "0.6.0", note =
+        "Connections are no longer replaced and this function no longer called. \
+        It will eventually be removed from the trait."
+    )]
     fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
         self.inject_disconnected(&peer_id, closed_endpoint);
         self.inject_connected(peer_id, new_endpoint);

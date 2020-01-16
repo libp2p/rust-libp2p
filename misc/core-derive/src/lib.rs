@@ -57,7 +57,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let into_proto_select_ident = quote!{::libp2p::swarm::IntoProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
     let connected_point = quote!{::libp2p::core::ConnectedPoint};
-    let listener_id = quote!{::libp2p::core::nodes::ListenerId};
+    let listener_id = quote!{::libp2p::core::connection::ListenerId};
 
     let poll_parameters = quote!{::libp2p::swarm::PollParameters};
 

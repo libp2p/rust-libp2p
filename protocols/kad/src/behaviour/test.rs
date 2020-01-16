@@ -33,6 +33,7 @@ use futures::{
 use libp2p_core::{
     PeerId,
     Transport,
+    connection::Substream,
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, multiaddr},

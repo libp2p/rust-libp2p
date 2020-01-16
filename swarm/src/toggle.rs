@@ -87,12 +87,6 @@ where
         }
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_replaced(peer_id, closed_endpoint, new_endpoint)
-        }
-    }
-
     fn inject_node_event(
         &mut self,
         peer_id: PeerId,

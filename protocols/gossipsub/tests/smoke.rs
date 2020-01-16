@@ -30,11 +30,15 @@ use std::{
 };
 
 use libp2p_core::{
+    Multiaddr,
+    PeerId,
+    Transport,
+    connection::Substream,
     identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,
     transport::MemoryTransport,
-    upgrade, Multiaddr, Transport,
+    upgrade,
 };
 use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 use libp2p_plaintext::PlainText2Config;

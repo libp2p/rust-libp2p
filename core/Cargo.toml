@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 asn1_der = "0.6.1"
 bs58 = "0.3.0"
 ed25519-dalek = "1.0.0-pre.3"
+either = "1.5"
 fnv = "1.0"
 futures = { version = "0.3.1", features = ["compat", "io-compat", "executor", "thread-pool"] }
 futures-timer = "3"
