@@ -39,17 +39,17 @@ use std::error;
 use std::fmt::{self, Write};
 use std::io::Error as IoError;
 
-const KEY_LENGTH: usize = 32;
-const NONCE_LENGTH: usize = 24;
+const KEY_SIZE: usize = 32;
+const NONCE_SIZE: usize = 24;
 const WRITE_BUFFER_SIZE: usize = 1024;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub struct PSK([u8; KEY_LENGTH]);
+pub struct PSK([u8; KEY_SIZE]);
 
-fn parse_hex_key(s: &str) -> Result<[u8; KEY_LENGTH], KeyParseError> {
-    if s.len() == KEY_LENGTH * 2 {
-        let mut r = [0u8; KEY_LENGTH];
-        for i in 0..KEY_LENGTH {
+fn parse_hex_key(s: &str) -> Result<[u8; KEY_SIZE], KeyParseError> {
+    if s.len() == KEY_SIZE * 2 {
+        let mut r = [0u8; KEY_SIZE];
+        for i in 0..KEY_SIZE {
             r[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
                 .map_err(KeyParseError::InvalidKeyChar)?;
         }
@@ -59,8 +59,8 @@ fn parse_hex_key(s: &str) -> Result<[u8; KEY_LENGTH], KeyParseError> {
     }
 }
 
-fn to_hex(bytes: &[u8; KEY_LENGTH]) -> String {
-    let mut hex = String::with_capacity(KEY_LENGTH * 2);
+fn to_hex(bytes: &[u8; KEY_SIZE]) -> String {
+    let mut hex = String::with_capacity(KEY_SIZE * 2);
 
     for byte in bytes {
         write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
@@ -101,7 +101,7 @@ impl fmt::Display for PSK {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyParseError {
     InvalidKeyFile,
     InvalidKeyType,
@@ -127,8 +127,8 @@ impl PnetConfig {
         TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         trace!("exchanging nonces");
-        let mut local_nonce = [0u8; NONCE_LENGTH];
-        let mut remote_nonce = [0u8; NONCE_LENGTH];
+        let mut local_nonce = [0u8; NONCE_SIZE];
+        let mut remote_nonce = [0u8; NONCE_SIZE];
         rand::thread_rng().fill_bytes(&mut local_nonce);
         socket
             .write_all(&local_nonce)
@@ -263,7 +263,7 @@ mod tests {
 
     impl Arbitrary for PSK {
         fn arbitrary<G: Gen>(g: &mut G) -> PSK {
-            let mut key = [0; KEY_LENGTH];
+            let mut key = [0; KEY_SIZE];
             g.fill_bytes(&mut key);
             PSK(key)
         }
@@ -276,5 +276,22 @@ mod tests {
             text.parse::<PSK>().map(|res| res == key).unwrap_or(false)
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn(PSK) -> _);
+    }
+
+    #[test]
+    fn psk_parse_failure() {
+        use KeyParseError::*;
+        assert_eq!("".parse::<PSK>().unwrap_err(), InvalidKeyFile);
+        assert_eq!("a\nb\nc".parse::<PSK>().unwrap_err(), InvalidKeyType);
+        assert_eq!(
+            "/key/swarm/psk/1.0.0/\nx\ny".parse::<PSK>().unwrap_err(),
+            InvalidKeyEncoding
+        );
+        assert_eq!(
+            "/key/swarm/psk/1.0.0/\n/base16/\ny"
+                .parse::<PSK>()
+                .unwrap_err(),
+            InvalidKeyLength
+        );
     }
 }
