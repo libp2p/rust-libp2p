@@ -47,12 +47,13 @@ impl AsyncWrite for QuicStream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        debug!("trying to close");
         self.shutdown = true;
         let inner = self.get_mut();
+        debug!("trying to close {:?}", inner.id);
         ready!(inner
             .muxer
             .shutdown_substream(cx, inner.id.as_mut().unwrap()))?;
+        debug!("closed {:?}", inner.id);
         Ready(Ok(()))
     }
 
@@ -96,7 +97,11 @@ impl futures::Stream for QuicMuxer {
 }
 
 pub(crate) fn init() {
-    drop(env_logger::try_init());
+    use tracing_subscriber::{fmt::Subscriber, EnvFilter};
+    Subscriber::builder()
+        .with_env_filter(EnvFilter::try_from_default_env().expect("test suite is run incorrectly"))
+        .try_init()
+        .expect("error")
 }
 
 impl Future for QuicMuxer {
@@ -192,7 +197,12 @@ fn communicating_between_dialer_and_listener() {
 
                     let mut buf = [0u8; 3];
                     log::debug!("reading data from accepted stream!");
-                    socket.read_exact(&mut buf).await.unwrap();
+                    {
+                        let mut count = 0;
+                        while count < buf.len() {
+                            count += socket.read(&mut buf[count..]).await.unwrap();
+                        }
+                    }
                     assert_eq!(buf, [4, 5, 6]);
                     log::debug!("writing data!");
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
@@ -202,6 +212,7 @@ fn communicating_between_dialer_and_listener() {
                     drop(socket);
                     log::debug!("end of stream");
                     muxer.await.unwrap();
+                    log::debug!("finished!");
                     break;
                 }
                 _ => unreachable!(),
@@ -231,15 +242,24 @@ fn communicating_between_dialer_and_listener() {
         };
         log::debug!("have a new stream!");
         stream.write_all(&[4u8, 5, 6]).await.unwrap();
+        stream.close().await.unwrap();
         let mut buf = [0u8; 3];
         log::debug!("reading data!");
-        stream.read_exact(&mut buf).await.unwrap();
+        {
+            let mut count = 0;
+            while count < buf.len() {
+                let read = stream.read(&mut buf[count..]).await.unwrap();
+                assert_ne!(read, 0usize);
+                count += read;
+            }
+        }
         assert_eq!(buf, [1u8, 2, 3]);
         log::debug!("data read!");
-        stream.close().await.unwrap();
         log::debug!("checking for EOF!");
         assert_eq!(stream.read(&mut buf).await.unwrap(), 0);
         drop(stream);
+		log::debug!("have EOF!");
+		connection.await;
         log::debug!("awaiting handle!");
     });
     async_std::task::block_on(_handle);

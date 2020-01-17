@@ -44,3 +44,7 @@ protobuf = "2.8.1"
 yasna = { version = "0.3.1", features = ["num-bigint"] }
 ring = "0.16.9"
 webpki = "0.21.0"
+
+[dev-dependencies]
+tracing-subscriber = "0.1.6"
+tracing = "0.1.12"

@@ -38,7 +38,7 @@ use std::{
         Context,
         Poll::{self, Pending, Ready},
     },
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[derive(Debug)]
@@ -50,8 +50,6 @@ pub(super) struct EndpointInner {
     outgoing_packet: Option<quinn_proto::Transmit>,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
-    /// Bad timer
-    bad_timer: futures_timer::Delay,
 }
 
 impl EndpointInner {
@@ -266,7 +264,6 @@ impl Endpoint {
                 driver: None,
                 event_receiver,
                 outgoing_packet: None,
-                bad_timer: futures_timer::Delay::new(Duration::new(1, 0)),
             }),
             address,
             receive_connections: Mutex::new(Some(receive_connections)),
@@ -317,9 +314,6 @@ impl Future for Endpoint {
         loop {
             let mut inner = this.inner();
             inner.drive_events(cx);
-            while inner.bad_timer.poll_unpin(cx).is_ready() {
-                inner.bad_timer = futures_timer::Delay::new(Duration::new(1, 0));
-            }
             match inner.drive_receive(&this.0.socket, cx) {
                 Pending => {
                     inner.poll_transmit_pending(&this.0.socket, cx)?;
