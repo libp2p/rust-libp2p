@@ -24,7 +24,7 @@ use futures::{
 use log::trace;
 use salsa20::{
     stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek},
-    XSalsa20,
+    Salsa20, XSalsa20,
 };
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -35,6 +35,7 @@ use std::{
 };
 
 use rand::RngCore;
+use sha3::{digest::ExtendableOutput, Shake128};
 use std::error;
 use std::fmt::{self, Write};
 use std::io::Error as IoError;
@@ -42,9 +43,26 @@ use std::io::Error as IoError;
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
 const WRITE_BUFFER_SIZE: usize = 1024;
+const FINGERPRINT_SIZE: usize = 16;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct PSK([u8; KEY_SIZE]);
+
+impl PSK {
+    /// compute PSK fingerprint similar to how it is done in go-ipfs
+    pub fn fingerprint(&self) -> Fingerprint {
+        use std::io::{Read, Write};
+        let mut enc = [0u8; 64];
+        let nonce: [u8; 8] = *b"finprint";
+        let mut out = [0u8; 16];
+        let mut cipher = Salsa20::new(&self.0.into(), &nonce.into());
+        cipher.apply_keystream(&mut enc);
+        let mut hasher = Shake128::default();
+        hasher.write_all(&enc).expect("shake128 failed");
+        hasher.xof_result().read(&mut out).expect("shake128 failed");
+        Fingerprint(out)
+    }
+}
 
 fn parse_hex_key(s: &str) -> Result<[u8; KEY_SIZE], KeyParseError> {
     if s.len() == KEY_SIZE * 2 {
@@ -59,8 +77,8 @@ fn parse_hex_key(s: &str) -> Result<[u8; KEY_SIZE], KeyParseError> {
     }
 }
 
-fn to_hex(bytes: &[u8; KEY_SIZE]) -> String {
-    let mut hex = String::with_capacity(KEY_SIZE * 2);
+fn to_hex(bytes: &[u8]) -> String {
+    let mut hex = String::with_capacity(bytes.len() * 2);
 
     for byte in bytes {
         write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
@@ -98,6 +116,15 @@ impl fmt::Display for PSK {
         writeln!(f, "/key/swarm/psk/1.0.0/")?;
         writeln!(f, "/base16/")?;
         writeln!(f, "{}", to_hex(&self.0))
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct Fingerprint([u8; FINGERPRINT_SIZE]);
+
+impl fmt::Display for Fingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", to_hex(&self.0))
     }
 }
 
@@ -293,5 +320,14 @@ mod tests {
                 .unwrap_err(),
             InvalidKeyLength
         );
+    }
+
+    #[test]
+    fn fingerprint() {
+        // checked against go-ipfs output
+        let key = "/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683".parse::<PSK>().unwrap();
+        let expected = "45fc986bbc9388a11d939df26f730f0c";
+        let actual = key.fingerprint().to_string();
+        assert_eq!(expected, actual);
     }
 }

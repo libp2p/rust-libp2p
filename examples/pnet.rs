@@ -52,19 +52,19 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    Multiaddr,
-    PeerId,
-    Swarm,
-    NetworkBehaviour,
-    identity,
+    build_tcp_ws_pnet_secio_mplex_yamux,
     floodsub::{self, Floodsub, FloodsubEvent},
-    pnet::PSK,
+    identity,
     mdns::{Mdns, MdnsEvent},
+    pnet::PSK,
     swarm::NetworkBehaviourEventProcess,
-    build_tcp_ws_pnet_secio_mplex_yamux
+    Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
-use std::{error::Error, task::{Context, Poll}};
 use std::str::FromStr;
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     let psk = PSK::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
     println!("Local peer id: {:?}", local_peer_id);
-    println!("Swarm key: {:?}", psk);
+    println!("Swarm key fingerprint: {}", psk.fingerprint());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
     let transport = build_tcp_ws_pnet_secio_mplex_yamux(local_key, psk)?;
@@ -97,29 +97,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         ignored_member: bool,
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour<TSubstream> {
+    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent>
+        for MyBehaviour<TSubstream>
+    {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+                println!(
+                    "Received: '{:?}' from {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    message.source
+                );
             }
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<TSubstream> {
+    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent>
+        for MyBehaviour<TSubstream>
+    {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) =>
+                MdnsEvent::Discovered(list) => {
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                MdnsEvent::Expired(list) =>
+                }
+                MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
+                }
             }
         }
     }
@@ -157,7 +167,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break
+                Poll::Pending => break,
             }
         }
         loop {
@@ -171,7 +181,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             listening = true;
                         }
                     }
-                    break
+                    break;
                 }
             }
         }

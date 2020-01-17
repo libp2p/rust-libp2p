@@ -20,6 +20,7 @@ rw-stream-sink = { version = "0.2.0", path = "../../misc/rw-stream-sink" }
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0.2"
 salsa20 = "0.3.0"
+sha3 = "0.8"
 rand = "0.7"
 
 [dev-dependencies]
