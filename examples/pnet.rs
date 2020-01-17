@@ -58,10 +58,13 @@ use libp2p::{
     NetworkBehaviour,
     identity,
     floodsub::{self, Floodsub, FloodsubEvent},
+    pnet::PSK,
     mdns::{Mdns, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    swarm::NetworkBehaviourEventProcess,
+    build_tcp_ws_pnet_secio_mplex_yamux
 };
 use std::{error::Error, task::{Context, Poll}};
+use std::str::FromStr;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -69,13 +72,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
+    let psk = PSK::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
     println!("Local peer id: {:?}", local_peer_id);
+    println!("Swarm key: {:?}", psk);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key)?;
+    let transport = build_tcp_ws_pnet_secio_mplex_yamux(local_key, psk)?;
 
     // Create a Floodsub topic
-    let floodsub_topic = floodsub::Topic::new("chat");
+    let floodsub_topic = floodsub::TopicBuilder::new("chat").build();
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
@@ -150,7 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.floodsub.publish(floodsub_topic.clone(), line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break
             }
