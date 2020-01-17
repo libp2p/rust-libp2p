@@ -31,7 +31,6 @@ use libp2p_core::{
     InboundUpgrade,
     OutboundUpgrade,
     UpgradeInfo,
-    upgrade::Negotiated,
     PeerId,
     PublicKey,
 };
@@ -43,7 +42,10 @@ use void::Void;
 
 mod error;
 mod handshake;
-mod pb;
+mod structs_proto {
+    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+}
+
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
 ///
@@ -84,21 +86,21 @@ impl UpgradeInfo for PlainText1Config {
 }
 
 impl<C> InboundUpgrade<C> for PlainText1Config {
-    type Output = Negotiated<C>;
+    type Output = C;
     type Error = Void;
-    type Future = Ready<Result<Negotiated<C>, Self::Error>>;
+    type Future = Ready<Result<C, Self::Error>>;
 
-    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(i))
     }
 }
 
 impl<C> OutboundUpgrade<C> for PlainText1Config {
-    type Output = Negotiated<C>;
+    type Output = C;
     type Error = Void;
-    type Future = Ready<Result<Negotiated<C>, Self::Error>>;
+    type Future = Ready<Result<C, Self::Error>>;
 
-    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(i))
     }
 }
@@ -123,11 +125,11 @@ impl<C> InboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = (PeerId, PlainTextOutput<Negotiated<C>>);
+    type Output = (PeerId, PlainTextOutput<C>);
     type Error = PlainTextError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         Box::pin(self.handshake(socket))
     }
 }
@@ -136,11 +138,11 @@ impl<C> OutboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = (PeerId, PlainTextOutput<Negotiated<C>>);
+    type Output = (PeerId, PlainTextOutput<C>);
     type Error = PlainTextError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         Box::pin(self.handshake(socket))
     }
 }

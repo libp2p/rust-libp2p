@@ -32,8 +32,11 @@ pub mod record;
 mod addresses;
 mod behaviour;
 mod jobs;
-mod dht_proto;
 mod query;
+
+mod dht_proto {
+    include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));
+}
 
 pub use addresses::Addresses;
 pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};

@@ -20,7 +20,7 @@
 
 use crate::PublicKey;
 use bs58;
-use quick_error::quick_error;
+use thiserror::Error;
 use multihash;
 use std::{convert::TryFrom, fmt, str::FromStr};
 
@@ -218,18 +218,12 @@ impl Into<multihash::Multihash> for PeerId {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum ParseError {
-        B58(e: bs58::decode::Error) {
-            display("base-58 decode error: {}", e)
-            cause(e)
-            from()
-        }
-        MultiHash {
-            display("decoding multihash failed")
-        }
-    }
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("base-58 decode error: {0}")]
+    B58(#[from] bs58::decode::Error),
+    #[error("decoding multihash failed")]
+    MultiHash,
 }
 
 impl FromStr for PeerId {

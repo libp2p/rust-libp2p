@@ -526,7 +526,7 @@ pub struct Muxer {
     /// Waker to wake up the driver
     waker: Option<std::task::Waker>,
     /// Channel for endpoint events
-    endpoint_channel: mpsc::UnboundedSender<EndpointMessage>,
+    endpoint_channel: mpsc::Sender<EndpointMessage>,
     /// Last timeout
     last_timeout: Option<Instant>,
     /// Join handle for the driver

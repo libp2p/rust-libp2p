@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    Negotiated,
     either::{EitherOutput, EitherError, EitherFuture2, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
@@ -65,7 +64,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
             EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
             EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info))
@@ -82,7 +81,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
             EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
             EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info))

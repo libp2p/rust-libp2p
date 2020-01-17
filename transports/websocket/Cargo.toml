@@ -18,7 +18,7 @@ libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 log = "0.4.8"
 quicksink = "0.1"
 rustls = "0.16"
-rw-stream-sink = { version = "0.1.1", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = { version = "0.2.0", path = "../../misc/rw-stream-sink" }
 soketto = { version = "0.3", features = ["deflate"] }
 url = "2.1"
 webpki = "0.21"
