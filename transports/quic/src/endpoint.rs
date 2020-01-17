@@ -17,7 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::QuicConfig;
+use crate::{EndpointMessage, QuicConfig};
 use async_macros::ready;
 use async_std::net::{SocketAddr, UdpSocket};
 use futures::{channel::mpsc, prelude::*};
@@ -26,7 +26,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionHandle};
 use std::{
@@ -38,7 +38,7 @@ use std::{
         Context,
         Poll::{self, Pending, Ready},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[derive(Debug)]
@@ -49,7 +49,9 @@ pub(super) struct EndpointInner {
     /// Pending packet
     outgoing_packet: Option<quinn_proto::Transmit>,
     /// Used to receive events from connections
-    event_receiver: mpsc::Receiver<super::EndpointMessage>,
+    event_receiver: mpsc::Receiver<EndpointMessage>,
+    /// Bad timer
+    bad_timer: futures_timer::Delay,
 }
 
 impl EndpointInner {
@@ -64,8 +66,25 @@ impl EndpointInner {
         self.inner.handle_event(handle, event)
     }
 
-    pub(super) fn set_pending_packet(&mut self, packet: quinn_proto::Transmit) {
-        assert!(std::mem::replace(&mut self.outgoing_packet, Some(packet)).is_none())
+    fn drive_events(&mut self, cx: &mut Context) {
+        while let Ready(e) = self.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
+            match e {
+                EndpointMessage::ConnectionAccepted => {
+                    debug!("accepting connection!");
+                    self.inner.accept();
+                }
+                EndpointMessage::EndpointEvent { handle, event } => {
+                    debug!("we have an event from connection {:?}", handle);
+                    match self.muxers.get(&handle).and_then(|e| e.upgrade()) {
+                        None => drop(self.muxers.remove(&handle)),
+                        Some(connection) => match self.inner.handle_event(handle, event) {
+                            None => connection.lock().process_endpoint_communication(self),
+                            Some(event) => connection.lock().process_connection_events(self, event),
+                        },
+                    }
+                }
+            }
+        }
     }
 
     fn drive_receive(
@@ -101,10 +120,13 @@ impl EndpointInner {
                             .process_connection_events(self, connection_event),
                         None => debug!("lost our connection!"),
                     }
-                    ready!(self.poll_transmit_pending(socket, cx))?
                 }
-                DatagramEvent::NewConnection(connection) => break Ready(Ok((handle, connection))),
+                DatagramEvent::NewConnection(connection) => {
+                    debug!("new connection detected!");
+                    break Ready(Ok((handle, connection)));
+                }
             }
+            trace!("event processed!")
         }
     }
 
@@ -112,14 +134,29 @@ impl EndpointInner {
         &mut self,
         socket: &UdpSocket,
         cx: &mut Context,
-    ) -> Poll<Result<(), io::Error>> {
+    ) -> Result<(), io::Error> {
+        self.poll_transmit_pending_raw(socket, cx).map_err(|e| {
+            error!("I/O error: {:?}", e);
+            e
+        })
+    }
+
+    fn poll_transmit_pending_raw(
+        &mut self,
+        socket: &UdpSocket,
+        cx: &mut Context,
+    ) -> Result<(), io::Error> {
         if let Some(tx) = self.outgoing_packet.take() {
-            ready!(self.poll_transmit(socket, cx, tx))?
+            if self.poll_transmit(socket, cx, tx)? {
+                return Ok(());
+            }
         }
         while let Some(tx) = self.inner.poll_transmit() {
-            ready!(self.poll_transmit(socket, cx, tx))?
+            if self.poll_transmit(socket, cx, tx)? {
+                break;
+            }
         }
-        Ready(Ok(()))
+        Ok(())
     }
 
     fn poll_transmit(
@@ -127,25 +164,20 @@ impl EndpointInner {
         socket: &UdpSocket,
         cx: &mut Context,
         packet: quinn_proto::Transmit,
-    ) -> Poll<Result<(), io::Error>> {
-        match socket.poll_send_to(cx, &packet.contents, &packet.destination) {
-            Pending => {
-                if self.outgoing_packet.is_some() {
-                    warn!("Discarding packet!")
+    ) -> Result<bool, io::Error> {
+        loop {
+            break match socket.poll_send_to(cx, &packet.contents, &packet.destination) {
+                Pending => {
+                    self.outgoing_packet = Some(packet);
+                    Ok(true)
                 }
-                self.outgoing_packet = Some(packet);
-                return Ready(Ok(()));
-            }
-            Ready(Ok(size)) => {
-                debug_assert_eq!(size, packet.contents.len());
-                trace!(
-                    "sent packet of length {} to {}",
-                    packet.contents.len(),
-                    packet.destination
-                );
-                Ready(Ok(()))
-            }
-            Ready(Err(e)) => return Ready(Err(e)),
+                Ready(Ok(size)) => {
+                    trace!("sent packet of length {} to {}", size, packet.destination);
+                    Ok(false)
+                }
+                Ready(Err(e)) if e.kind() == io::ErrorKind::ConnectionReset => continue,
+                Ready(Err(e)) => Err(e),
+            };
         }
     }
 }
@@ -164,7 +196,7 @@ struct EndpointData {
         Option<mpsc::UnboundedReceiver<Result<ListenerEvent<super::QuicUpgrade>, io::Error>>>,
     >,
     /// Connections send their events to this
-    event_channel: mpsc::Sender<super::EndpointMessage>,
+    event_channel: mpsc::Sender<EndpointMessage>,
     /// The `Multiaddr`
     address: Multiaddr,
     /// The configuration
@@ -190,10 +222,13 @@ pub struct Endpoint(Arc<EndpointData>);
 
 impl Endpoint {
     fn inner(&self) -> MutexGuard<'_, EndpointInner> {
-        self.0.inner.lock()
+        trace!("acquiring lock!");
+        let q = self.0.inner.lock();
+        trace!("lock acquired!");
+        q
     }
 
-    pub(super) fn event_channel(&self) -> mpsc::Sender<super::EndpointMessage> {
+    pub(super) fn event_channel(&self) -> mpsc::Sender<EndpointMessage> {
         self.0.event_channel.clone()
     }
 
@@ -220,9 +255,6 @@ impl Endpoint {
         let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
         let (new_connections, receive_connections) = mpsc::unbounded();
         let (event_channel, event_receiver) = mpsc::channel(0);
-        new_connections
-            .unbounded_send(Ok(ListenerEvent::NewAddress(address.clone())))
-            .expect("we have a reference to the peer, so this will not fail; qed");
         Ok(Self(Arc::new(EndpointData {
             socket,
             inner: Mutex::new(EndpointInner {
@@ -234,6 +266,7 @@ impl Endpoint {
                 driver: None,
                 event_receiver,
                 outgoing_packet: None,
+                bad_timer: futures_timer::Delay::new(Duration::new(1, 0)),
             }),
             address,
             receive_connections: Mutex::new(Some(receive_connections)),
@@ -280,37 +313,27 @@ impl Endpoint {
 impl Future for Endpoint {
     type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        use super::EndpointMessage;
         let this = self.get_mut();
-        let mut inner = this.inner();
-        'a: loop {
-            ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
-            while let Ready(e) = inner.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
-                match e {
-                    EndpointMessage::ConnectionAccepted => {
-                        debug!("accepting connection!");
-                        inner.inner.accept();
-                    }
-                    EndpointMessage::EndpointEvent { handle, event } => {
-                        debug!("we have an event from connection {:?}", handle);
-                        match inner.muxers.get(&handle).and_then(|e| e.upgrade()) {
-                            None => drop(inner.muxers.remove(&handle)),
-                            Some(connection) => match inner.inner.handle_event(handle, event) {
-                                None => {
-                                    connection.lock().process_endpoint_communication(&mut inner)
-                                }
-                                Some(event) => connection
-                                    .lock()
-                                    .process_connection_events(&mut inner, event),
-                            },
-                        }
-                    }
-                }
-                ready!(inner.poll_transmit_pending(&this.0.socket, cx))?;
+        loop {
+            let mut inner = this.inner();
+            inner.drive_events(cx);
+            while inner.bad_timer.poll_unpin(cx).is_ready() {
+                inner.bad_timer = futures_timer::Delay::new(Duration::new(1, 0));
             }
-            let (handle, connection) = ready!(inner.drive_receive(&this.0.socket, cx))?;
-            this.accept_muxer(connection, handle, &mut *inner);
-            ready!(inner.poll_transmit_pending(&this.0.socket, cx))?
+            match inner.drive_receive(&this.0.socket, cx) {
+                Pending => {
+                    inner.poll_transmit_pending(&this.0.socket, cx)?;
+                    break Pending;
+                }
+                Ready(Ok((handle, connection))) => {
+                    this.accept_muxer(connection, handle, &mut *inner);
+                    inner.poll_transmit_pending(&this.0.socket, cx)?;
+                }
+                Ready(Err(e)) => {
+                    log::error!("I/O error: {:?}", e);
+                    return Ready(Err(e));
+                }
+            }
         }
     }
 }
@@ -334,7 +357,11 @@ impl Transport for &Endpoint {
             .ok_or_else(|| TransportError::Other(io::ErrorKind::AlreadyExists.into()));
         let mut inner = self.inner();
         if inner.driver.is_none() {
-            inner.driver = Some(async_std::task::spawn(self.clone()))
+            inner.driver = Some(async_std::task::spawn(self.clone()));
+            self.0
+                .new_connections
+                .unbounded_send(Ok(ListenerEvent::NewAddress(addr)))
+                .expect("we have a reference to the peer, so this will not fail; qed");
         }
         res
     }

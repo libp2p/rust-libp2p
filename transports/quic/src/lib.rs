@@ -72,7 +72,7 @@ use futures::{
     prelude::*,
 };
 use libp2p_core::StreamMuxer;
-use log::{debug, trace, warn};
+use log::{debug, error, trace};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
@@ -85,7 +85,7 @@ use std::{
         Context,
         Poll::{self, Pending, Ready},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 #[derive(Debug)]
 pub struct QuicSubstream {
@@ -378,7 +378,10 @@ impl StreamMuxer for QuicMuxer {
                 inner.readers.insert(substream.id(), cx.waker().clone());
                 Pending
             }
-            Err(ReadError::UnknownStream) => Ready(Ok(0)),
+            Err(ReadError::UnknownStream) => {
+                error!("you used a stream that was already closed!");
+                Ready(Ok(0))
+            }
             Err(ReadError::Reset(_)) => Ready(Err(io::ErrorKind::ConnectionReset.into())),
         }
     }
@@ -516,12 +519,14 @@ pub struct Muxer {
     pending: Option<quinn_proto::Transmit>,
     /// The timer being used by this connection
     timer: Option<futures_timer::Delay>,
+    /// Bad delay used as a temporary hack
+    bad_timer: futures_timer::Delay,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
     /// Waker to wake up the driver
     waker: Option<std::task::Waker>,
     /// Channel for endpoint events
-    endpoint_channel: mpsc::Sender<EndpointMessage>,
+    endpoint_channel: mpsc::UnboundedSender<EndpointMessage>,
     /// Last timeout
     last_timeout: Option<Instant>,
     /// Join handle for the driver
@@ -608,6 +613,7 @@ impl Muxer {
             endpoint: endpoint,
             pending: None,
             timer: None,
+            bad_timer: futures_timer::Delay::new(Duration::new(1, 0)),
             close_reason: None,
             waker: None,
             driver: None,
@@ -625,77 +631,71 @@ impl Muxer {
     }
 
     /// Call when I/O is done by the application.  `bytes` is the number of bytes of I/O done.
-    fn on_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<bool, io::Error>> {
-        let now = Instant::now();
-        let mut needs_polling = false;
-        while let Some(event) = self.connection.poll_endpoint_events() {
-            needs_polling = true;
-            self.endpoint_channel
-                .start_send(EndpointMessage::EndpointEvent {
-                    handle: self.handle,
-                    event,
-                })
-                .expect(
-                    "we checked in `pre_application_io` that this channel had space; \
-                     that is always called first, and \
-                     there is a lock preventing concurrency problems; qed",
-                );
-            ready!(self.endpoint_channel.poll_ready(cx))
-                .expect("we have a reference to the peer; qed");
+    fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) {
+        loop {
+            match self.endpoint_channel.poll_ready(cx) {
+                Pending => break,
+                Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
+                Ready(Ok(())) => {}
+            }
+            if let Some(event) = self.connection.poll_endpoint_events() {
+                self.endpoint_channel
+                    .start_send(EndpointMessage::EndpointEvent {
+                        handle: self.handle,
+                        event,
+                    })
+                    .expect(
+                        "we checked in `pre_application_io` that this channel had space; \
+                         that is always called first, and there is a lock preventing concurrency \
+                         problems; qed",
+                    )
+            } else {
+                break;
+            }
         }
-        while let Some(transmit) = self.connection.poll_transmit(now) {
-            ready!(self.poll_transmit(cx, transmit))?;
-            needs_polling = true;
-        }
-        Ready(Ok(needs_polling))
     }
 
-    fn pre_application_io(&mut self, cx: &mut Context<'_>) -> Poll<Result<bool, io::Error>> {
+    fn pre_application_io(
+        &mut self,
+        now: Instant,
+        cx: &mut Context<'_>,
+    ) -> Result<bool, io::Error> {
         if let Some(transmit) = self.pending.take() {
-            ready!(self.poll_transmit(cx, transmit))?;
+            if self.poll_transmit(cx, transmit)? {
+                return Ok(false);
+            }
         }
-        ready!(self.endpoint_channel.poll_ready(cx)).expect("we have a reference to the peer; qed");
-        let mut keep_going = false;
-        while let Some(transmit) = self.connection.poll_transmit(Instant::now()) {
-            keep_going = true;
-            ready!(self.poll_transmit(cx, transmit))?;
+        let mut needs_timer_update = false;
+        while let Some(transmit) = self.connection.poll_transmit(now) {
+            needs_timer_update = true;
+            if self.poll_transmit(cx, transmit)? {
+                break;
+            }
         }
-        Ready(Ok(keep_going))
+        Ok(needs_timer_update)
     }
 
     fn poll_transmit(
         &mut self,
         cx: &mut Context<'_>,
         transmit: quinn_proto::Transmit,
-    ) -> Poll<Result<usize, io::Error>> {
-        trace!(
-            "sending packet of length {} to {}",
-            transmit.contents.len(),
-            transmit.destination
-        );
-        match self
-            .endpoint
-            .poll_send_to(cx, &transmit.contents, &transmit.destination)
-        {
-            Pending => {
-                if let Some(packet) = self.pending.take() {
-                    warn!(
-                        "dropping packet of length {} to {} on the floor!",
-                        packet.contents.len(),
-                        packet.destination
-                    );
+    ) -> Result<bool, io::Error> {
+        loop {
+            let res = self
+                .endpoint
+                .poll_send_to(cx, &transmit.contents, &transmit.destination);
+            break match res {
+                Pending => {
+                    self.pending = Some(transmit);
+                    Ok(true)
                 }
-                self.pending = Some(transmit);
-                Pending
-            }
-            r @ Ready(_) => {
-                trace!(
-                    "sent packet of length {} to {}",
-                    transmit.contents.len(),
-                    transmit.destination
-                );
-                r
-            }
+                Ready(Ok(size)) => {
+                    trace!("sent packet of length {} to {}", size, transmit.destination);
+                    Ok(false)
+                }
+                Ready(Err(e)) if e.kind() == io::ErrorKind::ConnectionReset => continue,
+                Ready(Err(e)) => Err(e),
+            };
         }
     }
 
@@ -740,14 +740,11 @@ impl Muxer {
         self.wake_driver();
         assert!(self.connection.poll_endpoint_events().is_none());
         assert!(self.connection.poll().is_none());
-        if let Some(tx) = self.connection.poll_transmit(Instant::now()) {
-            endpoint.set_pending_packet(tx)
-        }
     }
 
     pub fn process_app_events(&mut self) {
         use quinn_proto::Event;
-        while let Some(event) = self.connection.poll() {
+        'a: while let Some(event) = self.connection.poll() {
             match event {
                 Event::StreamOpened { dir: Dir::Uni } | Event::DatagramReceived => {
                     panic!("we disabled incoming unidirectional streams and datagrams")
@@ -775,7 +772,7 @@ impl Muxer {
                         // no task to wake up
                         continue;
                     }
-                    debug_assert!(
+                    assert!(
                         self.pending_stream.is_none(),
                         "we cannot have both pending tasks and a pending stream; qed"
                     );
@@ -783,7 +780,7 @@ impl Muxer {
                             .expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
                     while let Some(oneshot) = self.connectors.pop_front() {
                         match oneshot.send(stream) {
-                            Ok(()) => break,
+                            Ok(()) => continue 'a,
                             Err(_) => {}
                         }
                     }
@@ -849,6 +846,7 @@ impl ConnectionDriver {
 impl Future for ConnectionDriver {
     type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        // cx.waker().wake_by_ref();
         let this = self.get_mut();
         debug!("being polled for timer!");
         let mut inner = this.inner.lock();
@@ -857,9 +855,12 @@ impl Future for ConnectionDriver {
         loop {
             let mut needs_timer_update = false;
             needs_timer_update |= inner.drive_timer(cx, now);
-            needs_timer_update |= ready!(inner.pre_application_io(cx))?;
-            needs_timer_update |= ready!(inner.on_application_io(cx))?;
+            needs_timer_update |= inner.pre_application_io(now, cx)?;
+            inner.poll_endpoint_events(cx);
             inner.process_app_events();
+            while inner.bad_timer.poll_unpin(cx).is_ready() {
+                inner.bad_timer = futures_timer::Delay::new(Duration::new(1, 0))
+            }
             if inner.connection.is_drained() {
                 break Ready(
                     match inner

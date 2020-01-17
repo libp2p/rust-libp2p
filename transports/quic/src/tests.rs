@@ -229,7 +229,7 @@ fn communicating_between_dialer_and_listener() {
             muxer: connection.clone(),
             shutdown: false,
         };
-        log::warn!("have a new stream!");
+        log::debug!("have a new stream!");
         stream.write_all(&[4u8, 5, 6]).await.unwrap();
         let mut buf = [0u8; 3];
         log::debug!("reading data!");
