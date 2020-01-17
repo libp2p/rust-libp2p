@@ -17,10 +17,15 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use futures::io::{AsyncReadExt, AsyncWriteExt};
-use futures::prelude::*;
-use salsa20::stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek};
-use salsa20::XSalsa20;
+use futures::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    prelude::*,
+};
+use log::trace;
+use salsa20::{
+    stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek},
+    XSalsa20,
+};
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::{
@@ -36,8 +41,9 @@ use std::io::Error as IoError;
 
 const KEY_LENGTH: usize = 32;
 const NONCE_LENGTH: usize = 24;
+const WRITE_BUFFER_SIZE: usize = 1024;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct PSK([u8; KEY_LENGTH]);
 
 fn parse_hex_key(s: &str) -> Result<[u8; KEY_LENGTH], KeyParseError> {
@@ -53,9 +59,8 @@ fn parse_hex_key(s: &str) -> Result<[u8; KEY_LENGTH], KeyParseError> {
     }
 }
 
-/// Convert bytes to a hex representation
-fn to_hex(bytes: &[u8]) -> String {
-    let mut hex = String::with_capacity(bytes.len() * 2);
+fn to_hex(bytes: &[u8; KEY_LENGTH]) -> String {
+    let mut hex = String::with_capacity(KEY_LENGTH * 2);
 
     for byte in bytes {
         write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
@@ -68,18 +73,17 @@ impl FromStr for PSK {
     type Err = KeyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut lines = s.lines();
-        let keytype = lines.next().ok_or(KeyParseError::InvalidKeyFile)?;
-        let encoding = lines.next().ok_or(KeyParseError::InvalidKeyFile)?;
-        let key = lines.next().ok_or(KeyParseError::InvalidKeyFile)?;
-        if keytype != "/key/swarm/psk/1.0.0/" {
-            return Err(KeyParseError::InvalidKeyType);
+        if let &[keytype, encoding, key] = s.lines().take(3).collect::<Vec<_>>().as_slice() {
+            if keytype != "/key/swarm/psk/1.0.0/" {
+                return Err(KeyParseError::InvalidKeyType);
+            }
+            if encoding != "/base16/" {
+                return Err(KeyParseError::InvalidKeyEncoding);
+            }
+            parse_hex_key(key.trim_end()).map(PSK)
+        } else {
+            Err(KeyParseError::InvalidKeyFile)
         }
-        if encoding != "/base16/" {
-            return Err(KeyParseError::InvalidKeyEncoding);
-        }
-        let key = parse_hex_key(key.trim_end())?;
-        Ok(PSK(key))
     }
 }
 
@@ -114,10 +118,6 @@ impl PnetConfig {
     pub fn new(key: PSK) -> Self {
         Self { key }
     }
-    pub fn default() -> Self {
-        let key = PSK::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
-        Self { key }
-    }
 
     pub async fn handshake<TSocket>(
         self,
@@ -126,11 +126,19 @@ impl PnetConfig {
     where
         TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
+        trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_LENGTH];
         let mut remote_nonce = [0u8; NONCE_LENGTH];
         rand::thread_rng().fill_bytes(&mut local_nonce);
-        socket.write_all(&local_nonce).await.map_err(PnetError::HandshakeError)?;
-        socket.read_exact(&mut remote_nonce).await.map_err(PnetError::HandshakeError)?;
+        socket
+            .write_all(&local_nonce)
+            .await
+            .map_err(PnetError::HandshakeError)?;
+        socket
+            .read_exact(&mut remote_nonce)
+            .await
+            .map_err(PnetError::HandshakeError)?;
+        trace!("setting up ciphers");
         let write_cipher = XSalsa20::new(&self.key.0.into(), &local_nonce.into());
         let read_cipher = XSalsa20::new(&self.key.0.into(), &remote_nonce.into());
         Ok(PnetOutput::new(socket, write_cipher, read_cipher))
@@ -142,7 +150,7 @@ pub struct PnetOutput<S> {
     read_cipher: XSalsa20,
     write_cipher: XSalsa20,
     write_offset: u64,
-    write_buffer: [u8; 1024],
+    write_buffer: [u8; WRITE_BUFFER_SIZE],
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
@@ -152,7 +160,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
             write_cipher,
             read_cipher,
             write_offset: 0,
-            write_buffer: [0; 1024],
+            write_buffer: [0; WRITE_BUFFER_SIZE],
         }
     }
 
@@ -165,12 +173,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
         let write_buffer = &mut self.write_buffer[0..size];
         write_buffer.copy_from_slice(&buf[..size]);
         if self.write_cipher.current_pos() != self.write_offset {
+            trace!("seeking to {}", self.write_offset);
             self.write_cipher.seek(self.write_offset);
         }
+        trace!("encrypting {} bytes", size);
         self.write_cipher.apply_keystream(write_buffer);
-        println!("sending");
-        println!("p: {:02x?}", &buf[..size]);
-        println!("c: {:02x?}", &write_buffer);
         Pin::new(&mut self.inner).poll_write(cx, &self.write_buffer[..size])
     }
 }
@@ -183,10 +190,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PnetOutput<S> {
     ) -> Poll<Result<usize, io::Error>> {
         let result = Pin::new(&mut self.as_mut().inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
-            println!("receiving");
-            println!("c: {:02x?}", &buf[..*size]);
+            trace!("read {} bytes", size);
             self.read_cipher.apply_keystream(&mut buf[..*size]);
-            println!("p: {:02x?}", &buf[..*size]);
+            trace!("decrypted {} bytes", size);
         }
         result
     }
@@ -200,6 +206,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
     ) -> Poll<Result<usize, io::Error>> {
         let result = self.as_mut().encrypt_and_write(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
+            trace!("wrote {} bytes", size);
             self.write_offset += *size as u64;
         }
         result
@@ -214,7 +221,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
     }
 }
 
-/// Error at the SECIO layer communication.
+/// Error when writing or reading private swarms
 #[derive(Debug)]
 pub enum PnetError {
     /// Error during handshake.
@@ -243,8 +250,31 @@ impl fmt::Display for PnetError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PnetError::IoError(e) => write!(f, "I/O error: {}", e),
             PnetError::HandshakeError(e) => write!(f, "Handshake error: {}", e),
+            PnetError::IoError(e) => write!(f, "I/O error: {}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quickcheck::*;
+
+    impl Arbitrary for PSK {
+        fn arbitrary<G: Gen>(g: &mut G) -> PSK {
+            let mut key = [0; KEY_LENGTH];
+            g.fill_bytes(&mut key);
+            PSK(key)
+        }
+    }
+
+    #[test]
+    fn psk_tostring_parse() {
+        fn prop(key: PSK) -> bool {
+            let text = key.to_string();
+            text.parse::<PSK>().map(|res| res == key).unwrap_or(false)
+        }
+        QuickCheck::new().tests(10).quickcheck(prop as fn(PSK) -> _);
     }
 }
