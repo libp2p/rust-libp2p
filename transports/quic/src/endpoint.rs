@@ -351,10 +351,6 @@ impl Transport for &Endpoint {
         let mut inner = self.inner();
         if inner.driver.is_none() {
             inner.driver = Some(async_std::task::spawn(EndpointDriver(self.0.clone())));
-            self.0
-                .new_connections
-                .unbounded_send(Ok(ListenerEvent::NewAddress(addr)))
-                .expect("we have a reference to the peer, so this will not fail; qed");
         }
         res
     }

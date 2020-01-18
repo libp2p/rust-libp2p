@@ -115,40 +115,32 @@ impl Future for QuicMuxer {
 fn wildcard_expansion() {
     init();
     let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
-    let listener = Endpoint::new(QuicConfig::default(), addr.clone())
+    let mut listener = Endpoint::new(QuicConfig::default(), addr.clone())
         .expect("endpoint")
         .listen_on(addr)
         .expect("listener");
-    let addr: Multiaddr = "/ip4/127.0.0.1/udp/1236/quic".parse().unwrap();
-    let client = Endpoint::new(QuicConfig::default(), addr.clone())
-        .expect("endpoint")
-        .dial(addr)
-        .expect("dialer");
 
     // Process all initial `NewAddress` events and make sure they
     // do not contain wildcard address or port.
-    let server = listener
-        .take_while(|event| match event.as_ref().unwrap() {
-            ListenerEvent::NewAddress(a) => {
-                let mut iter = a.iter();
-                match iter.next().expect("ip address") {
-                    Protocol::Ip4(_ip) => {} // assert!(!ip.is_unspecified()),
-                    Protocol::Ip6(_ip) => {} // assert!(!ip.is_unspecified()),
-                    other => panic!("Unexpected protocol: {}", other),
-                }
-                if let Protocol::Udp(port) = iter.next().expect("port") {
-                    assert_ne!(0, port)
-                } else {
-                    panic!("No UDP port in address: {}", a)
-                }
-                futures::future::ready(true)
+    match futures::executor::block_on(listener.next())
+        .unwrap()
+        .unwrap()
+    {
+        ListenerEvent::NewAddress(a) => {
+            let mut iter = a.iter();
+            match iter.next().expect("ip address") {
+                Protocol::Ip4(_ip) => {} // assert!(!ip.is_unspecified()),
+                Protocol::Ip6(_ip) => {} // assert!(!ip.is_unspecified()),
+                other => panic!("Unexpected protocol: {}", other),
             }
-            _ => futures::future::ready(false),
-        })
-        .for_each(|_| futures::future::ready(()));
-
-    async_std::task::spawn(server);
-    futures::executor::block_on(client).unwrap();
+            if let Protocol::Udp(port) = iter.next().expect("port") {
+                assert_ne!(0, port)
+            } else {
+                panic!("No UDP port in address: {}", a)
+            }
+        }
+        _ => panic!("NewAddress is the first event"),
+    }
 }
 
 #[test]
