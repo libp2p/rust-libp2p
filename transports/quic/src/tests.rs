@@ -72,7 +72,6 @@ impl AsyncRead for QuicStream {
         inner
             .muxer
             .read_substream(cx, inner.id.as_mut().unwrap(), buf)
-            .map_err(|e| panic!("unexpected error {:?}", e))
     }
 }
 
@@ -98,10 +97,11 @@ impl futures::Stream for QuicMuxer {
 
 pub(crate) fn init() {
     use tracing_subscriber::{fmt::Subscriber, EnvFilter};
-    Subscriber::builder()
-        .with_env_filter(EnvFilter::try_from_default_env().expect("test suite is run incorrectly"))
-        .try_init()
-        .expect("error")
+    drop(
+        Subscriber::builder()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init(),
+    )
 }
 
 impl Future for QuicMuxer {
@@ -208,9 +208,10 @@ fn communicating_between_dialer_and_listener() {
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     log::debug!("data written!");
                     socket.close().await.unwrap();
+                    log::debug!("socket closed!");
                     assert_eq!(socket.read(&mut buf).await.unwrap(), 0);
-                    drop(socket);
                     log::debug!("end of stream");
+                    drop(socket);
                     muxer.await.unwrap();
                     log::debug!("finished!");
                     break;
@@ -258,8 +259,8 @@ fn communicating_between_dialer_and_listener() {
         log::debug!("checking for EOF!");
         assert_eq!(stream.read(&mut buf).await.unwrap(), 0);
         drop(stream);
-		log::debug!("have EOF!");
-		connection.await;
+        log::debug!("have EOF!");
+        connection.await.expect("closed successfully");
         log::debug!("awaiting handle!");
     });
     async_std::task::block_on(_handle);

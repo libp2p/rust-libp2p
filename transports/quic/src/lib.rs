@@ -60,6 +60,7 @@
 #![deny(trivial_casts)]
 mod certificate;
 mod endpoint;
+mod socket;
 #[cfg(test)]
 mod tests;
 mod verifier;
@@ -139,6 +140,11 @@ fn make_client_config(
     let mut transport = quinn_proto::TransportConfig::default();
     transport.stream_window_uni(0);
     transport.datagram_receive_buffer_size(None);
+    use std::time::Duration;
+    // transport
+    //     .idle_timeout(None)
+    //     .expect("None is a valid timeout");
+    transport.keep_alive_interval(Some(Duration::new(0, 100)));
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.enable_early_data = true;
@@ -320,6 +326,10 @@ impl StreamMuxer for QuicMuxer {
             return Ready(Err(io::ErrorKind::ConnectionAborted.into()));
         }
         let mut inner = self.inner();
+        debug_assert!(
+            inner.finishers.get(&substream.id()).is_some(),
+            "no entry in finishers map for write stream"
+        );
         inner.wake_driver();
         if let Some(ref e) = inner.close_reason {
             return Ready(Err(io::Error::new(
@@ -371,6 +381,10 @@ impl StreamMuxer for QuicMuxer {
         match inner.connection.read(substream.id(), buf) {
             Ok(Some(bytes)) => Ready(Ok(bytes)),
             Ok(None) => Ready(Ok(0)),
+            Err(ReadError::Blocked) if inner.connection_lost => {
+                // Ready(Err(io::ErrorKind::ConnectionReset.into()))
+                Ready(Ok(0))
+            }
             Err(ReadError::Blocked) => {
                 inner.readers.insert(substream.id(), cx.waker().clone());
                 Pending
@@ -446,6 +460,8 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         if inner.connection.is_closed() {
             return Ready(Ok(()));
+        } else if inner.close_reason.is_some() {
+            return Ready(Ok(()));
         } else if inner.finishers.is_empty() {
             inner.shutdown();
             inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
@@ -466,7 +482,8 @@ impl StreamMuxer for QuicMuxer {
             if channel.is_some() {
                 true
             } else {
-                connection.finish(*id).is_ok()
+                drop(connection.finish(*id));
+                true
             }
         });
         Pending
@@ -535,7 +552,7 @@ pub struct Muxer {
     /// The pending stream, if any.
     pending_stream: Option<StreamId>,
     /// The associated endpoint
-    endpoint: Endpoint,
+    endpoint: Arc<endpoint::EndpointData>,
     /// The `quinn_proto::Connection` struct.
     connection: Connection,
     /// Connection handle
@@ -568,11 +585,15 @@ pub struct Muxer {
     driver: Option<async_std::task::JoinHandle<Result<(), io::Error>>>,
     /// Close waker
     close_waker: Option<std::task::Waker>,
+    /// Have we gotten a connection lost event?
+    connection_lost: bool,
 }
 
 impl Drop for Muxer {
     fn drop(&mut self) {
-        self.shutdown()
+        if self.close_reason.is_none() {
+            self.shutdown()
+        }
     }
 }
 
@@ -604,7 +625,7 @@ impl Muxer {
 
     fn drive_timer(&mut self, cx: &mut Context, now: Instant) -> bool {
         let mut keep_going = false;
-        loop {
+        'outer: loop {
             match self.connection.poll_timeout() {
                 None => {
                     self.timer = None;
@@ -621,21 +642,26 @@ impl Muxer {
                     self.timer = Some(futures_timer::Delay::new(delay))
                 }
             }
+            if let Some(ref mut timer) = self.timer {
+                if timer.poll_unpin(cx).is_ready() {
+                    self.connection.handle_timeout(now);
+                    keep_going = true;
+                    continue 'outer;
+                }
+            }
             break;
         }
 
-        while let Some(ref mut timer) = self.timer {
-            if timer.poll_unpin(cx).is_pending() {
-                break;
-            }
-            self.connection.handle_timeout(now);
-            keep_going = true
-        }
         keep_going
     }
 
-    fn new(endpoint: Endpoint, connection: Connection, handle: ConnectionHandle) -> Self {
+    fn new(
+        endpoint: Arc<endpoint::EndpointData>,
+        connection: Connection,
+        handle: ConnectionHandle,
+    ) -> Self {
         Muxer {
+            connection_lost: false,
             close_waker: None,
             last_timeout: None,
             pending_stream: None,
@@ -698,17 +724,22 @@ impl Muxer {
         now: Instant,
         cx: &mut Context<'_>,
     ) -> Result<bool, io::Error> {
+        let mut needs_timer_update = false;
         if let Some(transmit) = self.pending.take() {
+            trace!("trying to send packet!");
+            needs_timer_update = true;
             if self.poll_transmit(cx, transmit)? {
                 return Ok(false);
             }
+            trace!("packet sent!");
         }
-        let mut needs_timer_update = false;
         while let Some(transmit) = self.connection.poll_transmit(now) {
+            trace!("trying to send packet!");
             needs_timer_update = true;
             if self.poll_transmit(cx, transmit)? {
                 break;
             }
+            trace!("packet sent!");
         }
         Ok(needs_timer_update)
     }
@@ -719,18 +750,16 @@ impl Muxer {
         transmit: quinn_proto::Transmit,
     ) -> Result<bool, io::Error> {
         loop {
-            let res = self
-                .endpoint
-                .poll_send_to(cx, &transmit.contents, &transmit.destination);
+            let res =
+                self.endpoint
+                    .socket()
+                    .poll_send_to(cx, &transmit.contents, &transmit.destination);
             break match res {
                 Pending => {
                     self.pending = Some(transmit);
                     Ok(true)
                 }
-                Ready(Ok(size)) => {
-                    trace!("sent packet of length {} to {}", size, transmit.destination);
-                    Ok(false)
-                }
+                Ready(Ok(_)) => Ok(false),
                 Ready(Err(e)) if e.kind() == io::ErrorKind::ConnectionReset => continue,
                 Ready(Err(e)) => Err(e),
             };
@@ -843,6 +872,7 @@ impl Muxer {
                     debug!("lost connection due to {:?}", reason);
                     assert!(self.connection.is_closed());
                     self.close_reason = Some(reason);
+                    self.connection_lost = true;
                     self.close_waker.take().map(|e| e.wake());
                     self.shutdown();
                 }
@@ -884,7 +914,7 @@ impl Muxer {
 #[derive(Debug)]
 struct ConnectionDriver {
     inner: Arc<Mutex<Muxer>>,
-    endpoint: Endpoint,
+    endpoint: Arc<endpoint::EndpointData>,
     outgoing_packet: Option<quinn_proto::Transmit>,
 }
 
@@ -952,6 +982,7 @@ impl Future for ConnectionDriver {
                     },
                 );
             } else if !needs_timer_update {
+                assert!(inner.connection.poll_transmit(now).is_none());
                 break if inner.close_reason.is_none() {
                     Pending
                 } else if needs_to_send_endpoint_events {
