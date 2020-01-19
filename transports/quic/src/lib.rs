@@ -140,11 +140,11 @@ fn make_client_config(
     let mut transport = quinn_proto::TransportConfig::default();
     transport.stream_window_uni(0);
     transport.datagram_receive_buffer_size(None);
-    use std::time::Duration;
+    // use std::time::Duration;
     // transport
     //     .idle_timeout(None)
     //     .expect("None is a valid timeout");
-    transport.keep_alive_interval(Some(Duration::new(0, 100)));
+    // transport.keep_alive_interval(Some(Duration::new(0, 100)));
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.enable_early_data = true;
