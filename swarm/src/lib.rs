@@ -78,8 +78,9 @@ pub use protocols_handler::{
 };
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
-use futures::prelude::*;
+use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}};
 use libp2p_core::{
+    Executor,
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
@@ -571,6 +572,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
 pub struct SwarmBuilder<TTransport, TBehaviour> {
     incoming_limit: Option<u32>,
+    executor: Option<Box<dyn Executor>>,
     local_peer_id: PeerId,
     transport: TTransport,
     behaviour: TBehaviour,
@@ -610,6 +612,7 @@ where TBehaviour: NetworkBehaviour,
         SwarmBuilder {
             incoming_limit: None,
             local_peer_id,
+            executor: None,
             transport,
             behaviour,
         }
@@ -617,6 +620,26 @@ where TBehaviour: NetworkBehaviour,
 
     pub fn incoming_limit(mut self, incoming_limit: Option<u32>) -> Self {
         self.incoming_limit = incoming_limit;
+        self
+    }
+
+    /// Sets the executor to use to spawn background tasks.
+    ///
+    /// By default, uses a threads pool.
+    pub fn executor(mut self, executor: impl Executor + 'static) -> Self {
+        self.executor = Some(Box::new(executor));
+        self
+    }
+
+    /// Shortcut for calling `executor` with an object that calls the given closure.
+    pub fn executor_fn(mut self, executor: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + 'static) -> Self {
+        struct SpawnImpl<F>(F);
+        impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
+            fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+                (self.0)(f)
+            }
+        }
+        self.executor = Some(Box::new(SpawnImpl(executor)));
         self
     }
 
@@ -629,7 +652,27 @@ where TBehaviour: NetworkBehaviour,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        let network = Network::new_with_incoming_limit(self.transport, self.local_peer_id, self.incoming_limit);
+        let executor = self.executor.or_else(|| {
+            struct PoolWrapper(ThreadPool);
+            impl Executor for PoolWrapper {
+                fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+                    self.0.spawn_ok(f)
+                }
+            }
+
+            ThreadPoolBuilder::new()
+                .name_prefix("libp2p-task-")
+                .create()
+                .ok()
+                .map(|tp| Box::new(PoolWrapper(tp)) as Box<_>)
+        });
+
+        let network = Network::new_with_incoming_limit(
+            self.transport,
+            self.local_peer_id,
+            executor,
+            self.incoming_limit
+        );
 
         ExpandedSwarm {
             network,

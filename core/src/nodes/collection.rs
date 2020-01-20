@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Executor,
     PeerId,
     muxing::StreamMuxer,
     nodes::{
@@ -306,11 +307,11 @@ where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash,
 {
-    /// Creates a new empty collection.
-    #[inline]
-    pub fn new() -> Self {
+    /// Creates a new empty collection. If `executor` is `Some`, uses the given executor to spawn
+    /// tasks. Otherwise, runs tasks locally.
+    pub fn new(executor: Option<Box<dyn Executor>>) -> Self {
         CollectionStream {
-            inner: tasks::Manager::new(),
+            inner: tasks::Manager::new(executor),
             nodes: Default::default(),
         }
     }

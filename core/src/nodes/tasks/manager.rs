@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    PeerId,
+    Executor, PeerId,
     muxing::StreamMuxer,
     nodes::{
         handled_node::{HandledNode, IntoNodeHandler, NodeHandler},
@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, channel::mpsc, executor::ThreadPool, stream::FuturesUnordered};
+use futures::{prelude::*, channel::mpsc, stream::FuturesUnordered};
 use std::{collections::hash_map::{Entry, OccupiedEntry}, error, fmt, pin::Pin, task::Context, task::Poll};
 use super::{TaskId, task::{Task, FromTaskMessage, ToTaskMessage}, Error};
 
@@ -63,9 +63,9 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
     /// Identifier for the next task to spawn.
     next_task_id: TaskId,
 
-    /// Threads pool where we spawn the nodes' tasks. If `None`, then we push tasks to the
+    /// Custom executor where we spawn the nodes' tasks. If `None`, then we push tasks to the
     /// `local_spawns` list instead.
-    threads_pool: Option<ThreadPool>,
+    executor: Option<Box<dyn Executor>>,
 
     /// If no executor is available, we move tasks to this set, and futures are polled on the
     /// current thread instead.
@@ -134,17 +134,14 @@ pub enum Event<'a, I, O, H, E, HE, T, C = PeerId> {
 }
 
 impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
-    /// Creates a new task manager.
-    pub fn new() -> Self {
+    /// Creates a new task manager. If `Some` is passed, uses the given executor to spawn tasks.
+    /// Otherwise, background tasks are executed locally when you call `poll`.
+    pub fn new(executor: Option<Box<dyn Executor>>) -> Self {
         let (tx, rx) = mpsc::channel(1);
-        let threads_pool = ThreadPool::builder()
-            .name_prefix("libp2p-nodes-")
-            .create().ok();
-
         Self {
             tasks: FnvHashMap::default(),
             next_task_id: TaskId(0),
-            threads_pool,
+            executor,
             local_spawns: FuturesUnordered::new(),
             events_tx: tx,
             events_rx: rx
@@ -176,8 +173,8 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         self.tasks.insert(task_id, TaskInfo { sender: tx, user_data });
 
         let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
-        if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn_ok(task);
+        if let Some(executor) = &self.executor {
+            executor.exec(task as Pin<Box<_>>)
         } else {
             self.local_spawns.push(task);
         }
@@ -212,8 +209,8 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
         let task: Task<Pin<Box<futures::future::Pending<_>>>, _, _, _, _, _, _> =
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
-        if let Some(threads_pool) = &mut self.threads_pool {
-            threads_pool.spawn_ok(Box::pin(task));
+        if let Some(executor) = &self.executor {
+            executor.exec(Box::pin(task))
         } else {
             self.local_spawns.push(Box::pin(task));
         }

@@ -20,7 +20,7 @@
 
 use crate::muxing::StreamMuxer;
 use crate::{
-    ConnectedPoint, Multiaddr, PeerId, address_translation,
+    ConnectedPoint, Executor, Multiaddr, PeerId, address_translation,
     nodes::{
         collection::{
             CollectionEvent,
@@ -688,11 +688,11 @@ where
     TPeerId: Eq + Hash + Clone,
 {
     /// Creates a new node events stream.
-    pub fn new(transport: TTrans, local_peer_id: TPeerId) -> Self {
+    pub fn new(transport: TTrans, local_peer_id: TPeerId, executor: Option<Box<dyn Executor>>) -> Self {
         // TODO: with_capacity?
         Network {
             listeners: ListenersStream::new(transport),
-            active_nodes: CollectionStream::new(),
+            active_nodes: CollectionStream::new(executor),
             reach_attempts: ReachAttempts {
                 local_peer_id,
                 out_reach_attempts: Default::default(),
@@ -706,12 +706,12 @@ where
 
     /// Creates a new node event stream with incoming connections limit.
     pub fn new_with_incoming_limit(transport: TTrans,
-        local_peer_id: TPeerId, incoming_limit: Option<u32>) -> Self
+        local_peer_id: TPeerId, executor: Option<Box<dyn Executor>>, incoming_limit: Option<u32>) -> Self
     {
         Network {
             incoming_limit,
             listeners: ListenersStream::new(transport),
-            active_nodes: CollectionStream::new(),
+            active_nodes: CollectionStream::new(executor),
             reach_attempts: ReachAttempts {
                 local_peer_id,
                 out_reach_attempts: Default::default(),
