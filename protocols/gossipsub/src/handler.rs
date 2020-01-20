@@ -25,7 +25,7 @@ use libp2p_core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use log::{trace, warn};
+use log::{debug, trace, warn};
 use smallvec::SmallVec;
 use std::{
     borrow::Cow,
@@ -213,7 +213,7 @@ where
                             return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(e))) => {
-                            // TODO: Should we really just close here? Not even log the error?
+                            debug!("Inbound substream error while awaiting input: {:?}", e);
                             self.inbound_substream = Some(InboundSubstreamState::Closing(substream));
                         }
                         // peer closed the stream
@@ -236,8 +236,8 @@ where
                         }
                         break;
                     }
-                    // TODO: Shouldn't we at least log the error in debug mode?
-                    Poll::Ready(Err(_)) => {
+                    Poll::Ready(Err(e)) => {
+                        debug!("Inbound substream error while closing: {:?}", e);
                         return Poll::Ready(ProtocolsHandlerEvent::Close(io::Error::new(
                             io::ErrorKind::BrokenPipe,
                             "Failed to close stream",
@@ -290,7 +290,6 @@ where
                             }
                         }
                         Poll::Ready(Err(e)) => {
-                            // TODO: Is this what we want?
                             return Poll::Ready(ProtocolsHandlerEvent::Close(e));
                         }
                         Poll::Pending => {
