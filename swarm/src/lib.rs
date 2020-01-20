@@ -78,7 +78,7 @@ pub use protocols_handler::{
 };
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
-use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}, future::FutureObj};
+use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}};
 use libp2p_core::{
     Executor,
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
@@ -632,10 +632,10 @@ where TBehaviour: NetworkBehaviour,
     }
 
     /// Shortcut for calling `executor` with an object that calls the given closure.
-    pub fn executor_fn(mut self, executor: impl Fn(FutureObj<'static, ()>) + 'static) -> Self {
+    pub fn executor_fn(mut self, executor: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + 'static) -> Self {
         struct SpawnImpl<F>(F);
-        impl<F: Fn(FutureObj<'static, ()>)> Executor for SpawnImpl<F> {
-            fn exec(&self, f: FutureObj<'static, ()>) {
+        impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
+            fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
                 (self.0)(f)
             }
         }
@@ -655,7 +655,7 @@ where TBehaviour: NetworkBehaviour,
         let executor = self.executor.or_else(|| {
             struct PoolWrapper(ThreadPool);
             impl Executor for PoolWrapper {
-                fn exec(&self, f: FutureObj<'static, ()>) {
+                fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
                     self.0.spawn_ok(f)
                 }
             }

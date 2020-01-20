@@ -43,7 +43,7 @@ mod keys_proto {
 pub use multiaddr;
 pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
-use futures::task::FutureObj;
+use std::{future::Future, pin::Pin};
 
 mod peer_id;
 mod translation;
@@ -160,23 +160,23 @@ impl ConnectedPoint {
 
 /// Implemented on objects that can .
 pub trait Executor {
-    fn exec(&self, f: FutureObj<'static, ()>);
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>);
 }
 
 impl<'a, T: ?Sized + Executor> Executor for &'a T {
-    fn exec(&self, f: FutureObj<'static, ()>) {
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
         T::exec(&**self, f)
     }
 }
 
 impl<'a, T: ?Sized + Executor> Executor for &'a mut T {
-    fn exec(&self, f: FutureObj<'static, ()>) {
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
         T::exec(&**self, f)
     }
 }
 
 impl<T: ?Sized + Executor> Executor for Box<T> {
-    fn exec(&self, f: FutureObj<'static, ()>) {
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
         T::exec(&**self, f)
     }
 }

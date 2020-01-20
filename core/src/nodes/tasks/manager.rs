@@ -174,7 +174,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
 
         let task = Box::pin(Task::new(task_id, self.events_tx.clone(), rx, future, handler));
         if let Some(executor) = &self.executor {
-            executor.exec(task.into())
+            executor.exec(task as Pin<Box<_>>)
         } else {
             self.local_spawns.push(task);
         }
@@ -210,7 +210,7 @@ impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
             Task::node(task_id, self.events_tx.clone(), rx, HandledNode::new(muxer, handler));
 
         if let Some(executor) = &self.executor {
-            executor.exec(Box::pin(task).into())
+            executor.exec(Box::pin(task))
         } else {
             self.local_spawns.push(Box::pin(task));
         }
