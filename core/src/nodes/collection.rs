@@ -309,7 +309,7 @@ where
 {
     /// Creates a new empty collection. If `executor` is `Some`, uses the given executor to spawn
     /// tasks. Otherwise, runs tasks locally.
-    pub fn new(executor: Option<Box<dyn Executor>>) -> Self {
+    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
         CollectionStream {
             inner: tasks::Manager::new(executor),
             nodes: Default::default(),
