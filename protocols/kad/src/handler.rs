@@ -403,7 +403,7 @@ where
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(10)),
         }
     }
 
@@ -645,6 +645,8 @@ where
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
+        let had_any_substream = !self.substreams.is_empty();
+
         // We remove each element from `substreams` one by one and add them back.
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
@@ -673,10 +675,13 @@ where
             }
         }
 
-        if self.substreams.is_empty() {
-            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-        } else {
-            self.keep_alive = KeepAlive::Yes;
+        if had_any_substream {
+            if self.substreams.is_empty() {
+                // We destroyed all substreams in this function.
+                self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+            } else {
+                self.keep_alive = KeepAlive::Yes;
+            }
         }
 
         Poll::Pending
