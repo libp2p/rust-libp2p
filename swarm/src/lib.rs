@@ -78,7 +78,7 @@ pub use protocols_handler::{
 };
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError};
-use futures::{prelude::*, executor::ThreadPoolBuilder, future::FutureObj};
+use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}, future::FutureObj};
 use libp2p_core::{
     Executor,
     Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
@@ -657,11 +657,18 @@ where TBehaviour: NetworkBehaviour,
             .collect();
 
         let executor = self.executor.or_else(|| {
+            struct PoolWrapper(ThreadPool);
+            impl Executor for PoolWrapper {
+                fn exec(&self, f: FutureObj<'static, ()>) {
+                    self.0.spawn_ok(f)
+                }
+            }
+
             ThreadPoolBuilder::new()
                 .name_prefix("libp2p-task-")
                 .create()
                 .ok()
-                .map(|tp| Box::new(tp) as Box<_>)
+                .map(|tp| Box::new(PoolWrapper(tp)) as Box<_>)
         });
 
         let network = Network::new_with_incoming_limit(

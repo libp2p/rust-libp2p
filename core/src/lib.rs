@@ -43,6 +43,8 @@ mod keys_proto {
 pub use multiaddr;
 pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
+use futures::task::FutureObj;
+
 mod peer_id;
 mod translation;
 
@@ -156,44 +158,25 @@ impl ConnectedPoint {
     }
 }
 
-use futures::task::FutureObj;
-
+/// Implemented on objects that can .
 pub trait Executor {
     fn exec(&self, f: FutureObj<'static, ()>);
 }
 
-impl<T: Executor> Executor for Box<T> {
+impl<'a, T: ?Sized + Executor> Executor for &'a T {
     fn exec(&self, f: FutureObj<'static, ()>) {
         T::exec(&**self, f)
     }
 }
 
-#[cfg(feature = "tokio")]
-impl Executor for tokio::runtime::Runtime {
+impl<'a, T: ?Sized + Executor> Executor for &'a mut T {
     fn exec(&self, f: FutureObj<'static, ()>) {
-        self.spawn(f);
+        T::exec(&**self, f)
     }
 }
 
-#[cfg(feature = "tokio")]
-impl Executor for tokio::runtime::Handle {
+impl<T: ?Sized + Executor> Executor for Box<T> {
     fn exec(&self, f: FutureObj<'static, ()>) {
-        self.spawn(f);
-    }
-}
-
-impl Executor for futures::executor::ThreadPool {
-    fn exec(&self, f: FutureObj<'static, ()>) {
-        self.spawn_ok(f)
-    }
-}
-
-#[cfg(feature = "async-std")]
-pub struct AsyncStdPool;
-
-#[cfg(feature = "async-std")]
-impl Executor for AsyncStdPool {
-    fn exec(&self, f: FutureObj<'static, ()>) {
-        async_std::task::spawn(f);
+        T::exec(&**self, f)
     }
 }
