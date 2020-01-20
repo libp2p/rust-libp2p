@@ -306,7 +306,6 @@ where
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            // TODO: Is this what we want?
                             return Poll::Ready(ProtocolsHandlerEvent::Close(e))
                         }
                         Poll::Pending => {
@@ -325,8 +324,8 @@ where
                         }
                         break;
                     }
-                    Poll::Ready(Err(_)) => {
-                        // TODO: Why do we not at least log the error (`_`)?
+                    Poll::Ready(Err(e)) => {
+                        debug!("Outbound substream error while closing: {:?}", e);
                         return Poll::Ready(ProtocolsHandlerEvent::Close(io::Error::new(
                             io::ErrorKind::BrokenPipe,
                             "Failed to close outbound substream",
