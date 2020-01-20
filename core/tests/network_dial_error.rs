@@ -98,7 +98,7 @@ fn deny_incoming_connec() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = futures::executor::ThreadPool::new().unwrap();
+        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
         Network::new(transport, local_public_key.into(), Some(thread_pool))
     };
 
@@ -109,7 +109,7 @@ fn deny_incoming_connec() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = futures::executor::ThreadPool::new().unwrap();
+        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
         Network::new(transport, local_public_key.into(), Some(thread_pool))
     };
 
@@ -179,7 +179,7 @@ fn dial_self() {
                 // negotiation to complete.
                 util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
             });
-        let thread_pool = futures::executor::ThreadPool::new().unwrap();
+        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
         Network::new(transport, local_public_key.into(), Some(thread_pool))
     };
 
@@ -251,7 +251,7 @@ fn dial_self_by_id() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = futures::executor::ThreadPool::new().unwrap();
+        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
         Network::new(transport, local_public_key.into(), Some(thread_pool))
     };
 
@@ -270,7 +270,7 @@ fn multiple_addresses_err() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = futures::executor::ThreadPool::new().unwrap();
+        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
         Network::new(transport, local_public_key.into(), Some(thread_pool))
     };
 

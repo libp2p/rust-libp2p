@@ -110,7 +110,7 @@ fn raw_swarm_simultaneous_connect() {
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
                 .multiplex(libp2p_mplex::MplexConfig::new());
-            let thread_pool = futures::executor::ThreadPool::new().unwrap();
+            let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
             Network::new(transport, local_public_key.into_peer_id(), Some(thread_pool))
         };
 
@@ -121,7 +121,7 @@ fn raw_swarm_simultaneous_connect() {
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
                 .multiplex(libp2p_mplex::MplexConfig::new());
-            let thread_pool = futures::executor::ThreadPool::new().unwrap();
+            let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
             Network::new(transport, local_public_key.into_peer_id(), Some(thread_pool))
         };
 

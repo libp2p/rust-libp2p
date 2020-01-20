@@ -11,6 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asn1_der = "0.6.1"
+async-std = { version = "1.4", optional = true }
 bs58 = "0.3.0"
 ed25519-dalek = "1.0.0-pre.3"
 fnv = "1.0"
@@ -30,6 +31,7 @@ rw-stream-sink = { version = "0.2.0", path = "../misc/rw-stream-sink" }
 sha2 = "0.8.0"
 smallvec = "1.0"
 thiserror = "1.0"
+tokio = { version = "0.2", features = ["rt-threaded"], optional = true }
 unsigned-varint = "0.3"
 void = "1"
 zeroize = "1"

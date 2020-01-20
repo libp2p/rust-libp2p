@@ -156,3 +156,44 @@ impl ConnectedPoint {
     }
 }
 
+use futures::task::FutureObj;
+
+pub trait Executor {
+    fn exec(&self, f: FutureObj<'static, ()>);
+}
+
+impl<T: Executor> Executor for Box<T> {
+    fn exec(&self, f: FutureObj<'static, ()>) {
+        T::exec(&**self, f)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Executor for tokio::runtime::Runtime {
+    fn exec(&self, f: FutureObj<'static, ()>) {
+        self.spawn(f);
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Executor for tokio::runtime::Handle {
+    fn exec(&self, f: FutureObj<'static, ()>) {
+        self.spawn(f);
+    }
+}
+
+impl Executor for futures::executor::ThreadPool {
+    fn exec(&self, f: FutureObj<'static, ()>) {
+        self.spawn_ok(f)
+    }
+}
+
+#[cfg(feature = "async-std")]
+pub struct AsyncStdPool;
+
+#[cfg(feature = "async-std")]
+impl Executor for AsyncStdPool {
+    fn exec(&self, f: FutureObj<'static, ()>) {
+        async_std::task::spawn(f);
+    }
+}

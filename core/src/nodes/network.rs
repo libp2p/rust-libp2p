@@ -20,7 +20,7 @@
 
 use crate::muxing::StreamMuxer;
 use crate::{
-    ConnectedPoint, Multiaddr, PeerId, address_translation,
+    ConnectedPoint, Executor, Multiaddr, PeerId, address_translation,
     nodes::{
         collection::{
             CollectionEvent,
@@ -42,7 +42,7 @@ use crate::{
     transport::{Transport, TransportError}
 };
 use fnv::FnvHashMap;
-use futures::{prelude::*, future, task::Spawn};
+use futures::{prelude::*, future};
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
     error,
@@ -56,7 +56,7 @@ use std::{
 mod tests;
 
 /// Implementation of `Stream` that handles the nodes.
-pub struct Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo = PeerId, TPeerId = PeerId>
+pub struct Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId>
 where
     TTrans: Transport,
 {
@@ -64,7 +64,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TSpawn, (TConnInfo, ConnectedPoint), TPeerId>,
+    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
 
     /// The reach attempts of the network.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
@@ -84,8 +84,8 @@ where
     take_over_to_complete: Option<(TPeerId, InterruptedReachAttempt<TInEvent, (TConnInfo, ConnectedPoint), ()>)>
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> fmt::Debug for
-    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
+    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: fmt::Debug + Transport,
     TConnInfo: fmt::Debug,
@@ -102,8 +102,8 @@ where
     }
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> Unpin for
-    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> Unpin for
+    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport
 {
@@ -163,7 +163,7 @@ struct OutReachAttempt {
 }
 
 /// Event that can happen on the `Network`.
-pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo = PeerId, TPeerId = PeerId>
+pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId>
 where
     TTrans: Transport,
 {
@@ -198,7 +198,7 @@ where
     },
 
     /// A new connection arrived on a listener.
-    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>),
+    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>),
 
     /// A new connection was arriving on a listener, but an error happened when negotiating it.
     ///
@@ -283,8 +283,8 @@ where
     },
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> fmt::Debug for
-    NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
+    NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TOutEvent: fmt::Debug,
     TTrans: Transport,
@@ -554,7 +554,7 @@ where TTransErr: error::Error + 'static
 }
 
 /// A new connection arrived on a listener.
-pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where TTrans: Transport
 {
     /// The listener who received the connection.
@@ -568,15 +568,14 @@ where TTrans: Transport
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
     /// Reference to the `active_nodes` field of the `Network`.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TSpawn, (TConnInfo, ConnectedPoint), TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
     /// Reference to the `other_reach_attempts` field of the `Network`.
     other_reach_attempts: &'a mut Vec<(ReachAttemptId, ConnectedPoint)>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, TPeerId>
+    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
-    TSpawn: Spawn,
     TTrans: Transport<Output = (TConnInfo, TMuxer)>,
     TTrans::Error: Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
@@ -629,8 +628,8 @@ where
     }
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where TTrans: Transport
 {
     /// Returns the `IncomingInfo` corresponding to this incoming connection.
@@ -676,8 +675,8 @@ impl<'a> IncomingInfo<'a> {
     }
 }
 
-impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, TPeerId>
+    Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
@@ -689,7 +688,7 @@ where
     TPeerId: Eq + Hash + Clone,
 {
     /// Creates a new node events stream.
-    pub fn new(transport: TTrans, local_peer_id: TPeerId, executor: Option<TSpawn>) -> Self {
+    pub fn new(transport: TTrans, local_peer_id: TPeerId, executor: Option<Box<dyn Executor>>) -> Self {
         // TODO: with_capacity?
         Network {
             listeners: ListenersStream::new(transport),
@@ -707,7 +706,7 @@ where
 
     /// Creates a new node event stream with incoming connections limit.
     pub fn new_with_incoming_limit(transport: TTrans,
-        local_peer_id: TPeerId, executor: Option<TSpawn>, incoming_limit: Option<u32>) -> Self
+        local_peer_id: TPeerId, executor: Option<Box<dyn Executor>>, incoming_limit: Option<u32>) -> Self
     {
         Network {
             incoming_limit,
@@ -787,7 +786,6 @@ where
     /// The second parameter is the handler to use if we manage to reach a node.
     pub fn dial(&mut self, addr: Multiaddr, handler: THandler) -> Result<(), TransportError<TTrans::Error>>
     where
-        TSpawn: Spawn,
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
         TTrans::Dial: Send + 'static,
@@ -894,7 +892,7 @@ where
     }
 
     /// Grants access to a struct that represents a peer.
-    pub fn peer(&mut self, peer_id: TPeerId) -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> {
+    pub fn peer(&mut self, peer_id: TPeerId) -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> {
         if peer_id == self.reach_attempts.local_peer_id {
             return Peer::LocalNode;
         }
@@ -937,7 +935,6 @@ where
     /// given peer.
     fn start_dial_out(&mut self, peer_id: TPeerId, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
     where
-        TSpawn: Spawn,
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Dial: Send + 'static,
         TTrans::Error: Send + 'static,
@@ -981,9 +978,8 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>>
     where
-        TSpawn: Spawn,
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
         TTrans::Dial: Send + 'static,
@@ -1136,10 +1132,10 @@ impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
 ///
 /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
 /// >           panics will likely happen.
-fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>(
+fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
-    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TSpawn, (TConnInfo, ConnectedPoint), TPeerId>,
-) -> (ActionItem<THandler, TPeerId>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>)
+    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
+) -> (ActionItem<THandler, TPeerId>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
 where
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TMuxer: StreamMuxer + Send + Sync + 'static,
@@ -1288,12 +1284,12 @@ where
 ///
 /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
 /// >           panics will likely happen.
-fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>(
+fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
     reach_id: ReachAttemptId,
     error: InternalReachErr<TTrans::Error, TConnInfo>,
     handler: THandler,
-) -> (ActionItem<THandler, TPeerId>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>)
+) -> (ActionItem<THandler, TPeerId>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>)
 where
     TTrans: Transport,
     TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
@@ -1406,28 +1402,28 @@ where
 }
 
 /// State of a peer in the system.
-pub enum Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+pub enum Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
 {
     /// We are connected to this peer.
-    Connected(PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>),
+    Connected(PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>),
 
     /// We are currently attempting to connect to this peer.
-    PendingConnect(PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>),
+    PendingConnect(PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>),
 
     /// We are not connected to this peer at all.
     ///
     /// > **Note**: It is however possible that a pending incoming connection is being negotiated
     /// > and will connect to this peer, but we don't know it yet.
-    NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>),
+    NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>),
 
     /// The requested peer is the local node.
     LocalNode,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> fmt::Debug for
-    Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
+    Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId>,
@@ -1460,10 +1456,9 @@ where
 }
 
 // TODO: add other similar methods that wrap to the ones of `PeerNotConnected`
-impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
-    TSpawn: Spawn,
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
     TTrans::Dial: Send + 'static,
@@ -1480,7 +1475,7 @@ where
     TPeerId: Eq + Hash + Clone + Send + 'static,
 {
     /// If we are connected, returns the `PeerConnected`.
-    pub fn into_connected(self) -> Option<PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>> {
+    pub fn into_connected(self) -> Option<PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>> {
         match self {
             Peer::Connected(peer) => Some(peer),
             _ => None,
@@ -1488,7 +1483,7 @@ where
     }
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
-    pub fn into_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>> {
+    pub fn into_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>> {
         match self {
             Peer::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -1496,7 +1491,7 @@ where
     }
 
     /// If we are not connected, returns the `PeerNotConnected`.
-    pub fn into_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>> {
+    pub fn into_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>> {
         match self {
             Peer::NotConnected(peer) => Some(peer),
             _ => None,
@@ -1510,7 +1505,7 @@ where
     ///
     /// Returns an error if we are `LocalNode`.
     pub fn or_connect(self, addr: Multiaddr, handler: THandler)
-        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>, Self>
+        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>, Self>
     {
         self.or_connect_with(move |_| addr, handler)
     }
@@ -1523,7 +1518,7 @@ where
     ///
     /// Returns an error if we are `LocalNode`.
     pub fn or_connect_with<TFn>(self, addr: TFn, handler: THandler)
-        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>, Self>
+        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>, Self>
     where
         TFn: FnOnce(&TPeerId) -> Multiaddr,
     {
@@ -1540,19 +1535,19 @@ where
 }
 
 /// Peer we are potentially going to connect to.
-pub enum PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+pub enum PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport
 {
     /// We are connected to this peer.
-    Connected(PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>),
+    Connected(PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>),
 
     /// We are currently attempting to connect to this peer.
-    PendingConnect(PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>),
+    PendingConnect(PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>),
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
@@ -1568,7 +1563,7 @@ where
     }
 
     /// If we are connected, returns the `PeerConnected`.
-    pub fn into_connected(self) -> Option<PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>> {
+    pub fn into_connected(self) -> Option<PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>> {
         match self {
             PeerPotentialConnect::Connected(peer) => Some(peer),
             _ => None,
@@ -1576,7 +1571,7 @@ where
     }
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
-    pub fn into_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>> {
+    pub fn into_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>> {
         match self {
             PeerPotentialConnect::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -1585,11 +1580,11 @@ where
 }
 
 /// Access to a peer we are connected to.
-pub struct PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+pub struct PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where TTrans: Transport,
 {
     /// Reference to the `active_nodes` of the parent.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TSpawn, (TConnInfo, ConnectedPoint), TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
     /// Reference to the `connected_points` field of the parent.
     connected_points: &'a mut FnvHashMap<TPeerId, ConnectedPoint>,
     /// Reference to the `out_reach_attempts` field of the parent.
@@ -1597,7 +1592,7 @@ where TTrans: Transport,
     peer_id: TPeerId,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
@@ -1675,16 +1670,16 @@ where
 
 /// Access to a peer we are attempting to connect to.
 #[derive(Debug)]
-pub struct PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+pub struct PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport
 {
     attempt: OccupiedEntry<'a, TPeerId, OutReachAttempt>,
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), TSpawn, (TConnInfo, ConnectedPoint), TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TConnInfo>, THandlerErr, (), (TConnInfo, ConnectedPoint), TPeerId>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
+    PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
@@ -1737,16 +1732,16 @@ where
 }
 
 /// Access to a peer we're not connected to.
-pub struct PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+pub struct PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
 {
     peer_id: TPeerId,
-    nodes: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>,
+    nodes: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId> fmt::Debug for
-    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId> fmt::Debug for
+    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     TPeerId: fmt::Debug,
@@ -1758,10 +1753,9 @@ where
     }
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
-    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr, TConnInfo, TPeerId>
+    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
 where
-    TSpawn: Spawn,
     TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
     TTrans::Error: Send + 'static,
     TTrans::Dial: Send + 'static,
@@ -1780,7 +1774,7 @@ where
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
     pub fn connect(self, addr: Multiaddr, handler: THandler)
-        -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+        -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
     where
         TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
         TPeerId: Eq + Hash + Clone + Send + 'static,
@@ -1797,7 +1791,7 @@ where
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
     pub fn connect_iter<TIter>(self, addrs: TIter, handler: THandler)
-        -> Result<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>, Self>
+        -> Result<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>, Self>
     where
         TIter: IntoIterator<Item = Multiaddr>,
         TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
@@ -1821,7 +1815,7 @@ where
     /// Panics if `conn_info.peer_id()` is not the current peer.
     ///
     pub fn inject_connection(self, conn_info: TConnInfo, connected_point: ConnectedPoint, muxer: TMuxer, handler: THandler::Handler)
-        -> PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+        -> PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
     where
         TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Clone + Send + 'static,
         TPeerId: Eq + Hash + Clone,
@@ -1847,7 +1841,7 @@ where
 
     /// Inner implementation of `connect`.
     fn connect_inner(self, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
-        -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TSpawn, TConnInfo, TPeerId>
+        -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TConnInfo, TPeerId>
     where
         TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
         TPeerId: Eq + Hash + Clone + Send + 'static,
