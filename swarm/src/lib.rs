@@ -572,7 +572,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
 pub struct SwarmBuilder<TTransport, TBehaviour> {
     incoming_limit: Option<u32>,
-    executor: Option<Box<dyn Executor>>,
+    executor: Option<Box<dyn Executor + Send>>,
     local_peer_id: PeerId,
     transport: TTransport,
     behaviour: TBehaviour,
@@ -626,13 +626,13 @@ where TBehaviour: NetworkBehaviour,
     /// Sets the executor to use to spawn background tasks.
     ///
     /// By default, uses a threads pool.
-    pub fn executor(mut self, executor: impl Executor + 'static) -> Self {
+    pub fn executor(mut self, executor: impl Executor + Send + 'static) -> Self {
         self.executor = Some(Box::new(executor));
         self
     }
 
     /// Shortcut for calling `executor` with an object that calls the given closure.
-    pub fn executor_fn(mut self, executor: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + 'static) -> Self {
+    pub fn executor_fn(mut self, executor: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + 'static) -> Self {
         struct SpawnImpl<F>(F);
         impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
             fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {

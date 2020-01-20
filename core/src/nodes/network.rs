@@ -688,7 +688,7 @@ where
     TPeerId: Eq + Hash + Clone,
 {
     /// Creates a new node events stream.
-    pub fn new(transport: TTrans, local_peer_id: TPeerId, executor: Option<Box<dyn Executor>>) -> Self {
+    pub fn new(transport: TTrans, local_peer_id: TPeerId, executor: Option<Box<dyn Executor + Send>>) -> Self {
         // TODO: with_capacity?
         Network {
             listeners: ListenersStream::new(transport),
@@ -706,7 +706,7 @@ where
 
     /// Creates a new node event stream with incoming connections limit.
     pub fn new_with_incoming_limit(transport: TTrans,
-        local_peer_id: TPeerId, executor: Option<Box<dyn Executor>>, incoming_limit: Option<u32>) -> Self
+        local_peer_id: TPeerId, executor: Option<Box<dyn Executor + Send>>, incoming_limit: Option<u32>) -> Self
     {
         Network {
             incoming_limit,

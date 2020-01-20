@@ -65,7 +65,7 @@ pub struct Manager<I, O, H, E, HE, T, C = PeerId> {
 
     /// Custom executor where we spawn the nodes' tasks. If `None`, then we push tasks to the
     /// `local_spawns` list instead.
-    executor: Option<Box<dyn Executor>>,
+    executor: Option<Box<dyn Executor + Send>>,
 
     /// If no executor is available, we move tasks to this set, and futures are polled on the
     /// current thread instead.
@@ -136,7 +136,7 @@ pub enum Event<'a, I, O, H, E, HE, T, C = PeerId> {
 impl<I, O, H, E, HE, T, C> Manager<I, O, H, E, HE, T, C> {
     /// Creates a new task manager. If `Some` is passed, uses the given executor to spawn tasks.
     /// Otherwise, background tasks are executed locally when you call `poll`.
-    pub fn new(executor: Option<Box<dyn Executor>>) -> Self {
+    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
         let (tx, rx) = mpsc::channel(1);
         Self {
             tasks: FnvHashMap::default(),
