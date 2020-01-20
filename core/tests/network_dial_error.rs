@@ -98,8 +98,7 @@ fn deny_incoming_connec() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
-        Network::new(transport, local_public_key.into(), Some(thread_pool))
+        Network::new(transport, local_public_key.into(), None)
     };
 
     let mut swarm2 = {
@@ -109,8 +108,7 @@ fn deny_incoming_connec() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
-        Network::new(transport, local_public_key.into(), Some(thread_pool))
+        Network::new(transport, local_public_key.into(), None)
     };
 
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -179,8 +177,7 @@ fn dial_self() {
                 // negotiation to complete.
                 util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
             });
-        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
-        Network::new(transport, local_public_key.into(), Some(thread_pool))
+        Network::new(transport, local_public_key.into(), None)
     };
 
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -251,8 +248,7 @@ fn dial_self_by_id() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
-        Network::new(transport, local_public_key.into(), Some(thread_pool))
+        Network::new(transport, local_public_key.into(), None)
     };
 
     let peer_id = swarm.local_peer_id().clone();
@@ -270,8 +266,7 @@ fn multiple_addresses_err() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        let thread_pool = Box::new(futures::executor::ThreadPool::new().unwrap());
-        Network::new(transport, local_public_key.into(), Some(thread_pool))
+        Network::new(transport, local_public_key.into(), None)
     };
 
     let mut addresses = Vec::new();
