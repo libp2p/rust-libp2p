@@ -74,8 +74,6 @@ impl Socket {
                     return Poll::Pending;
                 }
                 Poll::Ready(Ok(_)) => {}
-                // FIXME is this even possible?
-                Poll::Ready(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
             trace!(
@@ -97,8 +95,6 @@ impl Socket {
                     );
                     continue;
                 }
-                // FIXME is this even possible?
-                Poll::Ready(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionReset => continue,
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
             self.pending = Some(transmit);

@@ -745,20 +745,17 @@ impl Muxer {
         cx: &mut Context<'_>,
         transmit: quinn_proto::Transmit,
     ) -> Result<bool, io::Error> {
-        loop {
-            let res =
-                self.endpoint
-                    .socket()
-                    .poll_send_to(cx, &transmit.contents, &transmit.destination);
-            break match res {
-                Poll::Pending => {
-                    self.pending = Some(transmit);
-                    Ok(true)
-                }
-                Poll::Ready(Ok(_)) => Ok(false),
-                Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::ConnectionReset => continue,
-                Poll::Ready(Err(e)) => Err(e),
-            };
+        let res =
+            self.endpoint
+                .socket()
+                .poll_send_to(cx, &transmit.contents, &transmit.destination);
+        match res {
+            Poll::Pending => {
+                self.pending = Some(transmit);
+                Ok(true)
+            }
+            Poll::Ready(Ok(_)) => Ok(false),
+            Poll::Ready(Err(e)) => Err(e),
         }
     }
 
