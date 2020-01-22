@@ -23,7 +23,7 @@
 //! This provides a central location for socket I/O, and logs all incoming and outgoing packets.
 
 use async_std::net::UdpSocket;
-use log::{debug, trace};
+use log::trace;
 use quinn_proto::{Connection, Endpoint, Transmit};
 use std::{io::Result, task::Context, task::Poll, time::Instant};
 
@@ -58,6 +58,42 @@ pub(crate) struct Socket {
     pending: Option<Transmit>,
 }
 
+pub fn raw_send(cx: &mut Context, socket: &UdpSocket, packet: &Transmit) -> Poll<Result<()>> {
+    match socket.poll_send_to(cx, &packet.contents, &packet.destination) {
+        Poll::Pending => {
+            trace!("not able to send packet right away");
+            return Poll::Pending;
+        }
+        Poll::Ready(Ok(e)) => {
+            trace!("sent packet of length {} to {}", e, packet.destination);
+            return Poll::Ready(Ok(()));
+        }
+        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+    }
+}
+
+pub fn receive_from(
+    cx: &mut Context,
+    socket: &UdpSocket,
+    buf: &mut [u8],
+) -> Poll<Result<(usize, std::net::SocketAddr)>> {
+    loop {
+        match socket.poll_recv_from(cx, buf) {
+            Poll::Pending => {
+                trace!("no packets available yet");
+                break Poll::Pending;
+            }
+            Poll::Ready(Ok(e)) => {
+                trace!("received packet of length {} from {}", e.0, e.1);
+                break Poll::Ready(Ok(e));
+            }
+            // May be injected by a malicious ICMP packet
+            Poll::Ready(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
+            Poll::Ready(Err(e)) => break Poll::Ready(Err(e)),
+        }
+    }
+}
+
 impl Socket {
     pub fn send_packet(
         &mut self,
@@ -68,37 +104,23 @@ impl Socket {
     ) -> Poll<Result<()>> {
         if let Some(ref mut transmit) = self.pending {
             trace!("trying to send packet!");
-            match socket.poll_send_to(cx, &transmit.contents, &transmit.destination) {
-                Poll::Pending => {
-                    debug!("not able to send packet right away");
-                    return Poll::Pending;
-                }
-                Poll::Ready(Ok(_)) => {}
+            match raw_send(cx, socket, &transmit) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Ok(())) => {}
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
-            trace!(
-                "sent packet of length {} to {}",
-                transmit.contents.len(),
-                transmit.destination
-            );
         }
         self.pending = None;
         while let Some(transmit) = source.get_packet(Dummy, now) {
             trace!("trying to send packet!");
-            match socket.poll_send_to(cx, &transmit.contents, &transmit.destination) {
-                Poll::Pending => debug!("not able to send packet right away"),
-                Poll::Ready(Ok(_)) => {
-                    trace!(
-                        "sent packet of length {} to {}",
-                        transmit.contents.len(),
-                        transmit.destination
-                    );
-                    continue;
+            match raw_send(cx, socket, &transmit) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Pending => {
+                    self.pending = Some(transmit);
+                    return Poll::Pending;
                 }
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
-            self.pending = Some(transmit);
-            return Poll::Pending;
         }
         Poll::Ready(Ok(()))
     }

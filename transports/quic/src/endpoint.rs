@@ -96,7 +96,7 @@ impl EndpointInner {
         use quinn_proto::DatagramEvent;
         let mut buf = vec![0; 65535];
         loop {
-            let (bytes, peer) = ready!(socket.poll_recv_from(cx, &mut buf[..]))?;
+            let (bytes, peer) = ready!(crate::socket::receive_from(cx, socket, &mut buf[..])?);
             let (handle, event) =
                 match self
                     .inner
