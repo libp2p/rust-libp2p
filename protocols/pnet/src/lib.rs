@@ -176,11 +176,12 @@ impl PnetConfig {
 
 #[pin_project]
 pub struct PnetOutput<S> {
+    #[pin]
     inner: CryptWriter<S>,
     read_cipher: XSalsa20,
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
+impl<S: AsyncRead + AsyncWrite> PnetOutput<S> {
     fn new(inner: S, write_cipher: XSalsa20, read_cipher: XSalsa20) -> Self {
         Self {
             inner: CryptWriter::with_capacity(WRITE_BUFFER_SIZE, inner, write_cipher),
@@ -189,37 +190,38 @@ impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PnetOutput<S> {
+impl<S: AsyncRead + AsyncWrite> AsyncRead for PnetOutput<S> {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
-        let result = Pin::new(&mut self.as_mut().inner.get_mut()).poll_read(cx, buf);
+        let this = self.project();
+        let result = this.inner.get_pin_mut().poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
             trace!("read {} bytes", size);
-            self.read_cipher.apply_keystream(&mut buf[..*size]);
+            this.read_cipher.apply_keystream(&mut buf[..*size]);
             trace!("decrypted {} bytes", size);
         }
         result
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
+impl<S: AsyncRead + AsyncWrite> AsyncWrite for PnetOutput<S> {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
+        self.project().inner.poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.as_mut().inner).poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.as_mut().inner).poll_close(cx)
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_close(cx)
     }
 }
 
