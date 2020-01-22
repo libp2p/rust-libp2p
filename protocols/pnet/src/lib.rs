@@ -17,10 +17,9 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use futures::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    prelude::*,
-};
+
+use futures::prelude::*;
+use pin_project::pin_project;
 use log::trace;
 use salsa20::{
     stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek},
@@ -29,6 +28,7 @@ use salsa20::{
 use std::num::ParseIntError;
 use std::str::FromStr;
 use std::{
+    cmp,
     io,
     pin::Pin,
     task::{Context, Poll},
@@ -46,10 +46,10 @@ const WRITE_BUFFER_SIZE: usize = 1024;
 const FINGERPRINT_SIZE: usize = 16;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub struct PSK([u8; KEY_SIZE]);
+pub struct PreSharedKey([u8; KEY_SIZE]);
 
-impl PSK {
-    /// compute PSK fingerprint similar to how it is done in go-ipfs
+impl PreSharedKey {
+    /// compute PreSharedKey fingerprint similar to how it is done in go-ipfs
     pub fn fingerprint(&self) -> Fingerprint {
         use std::io::{Read, Write};
         let mut enc = [0u8; 64];
@@ -87,7 +87,7 @@ fn to_hex(bytes: &[u8]) -> String {
     hex
 }
 
-impl FromStr for PSK {
+impl FromStr for PreSharedKey {
     type Err = KeyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -98,20 +98,20 @@ impl FromStr for PSK {
             if encoding != "/base16/" {
                 return Err(KeyParseError::InvalidKeyEncoding);
             }
-            parse_hex_key(key.trim_end()).map(PSK)
+            parse_hex_key(key.trim_end()).map(PreSharedKey)
         } else {
             Err(KeyParseError::InvalidKeyFile)
         }
     }
 }
 
-impl fmt::Debug for PSK {
+impl fmt::Debug for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PSK").field(&to_hex(&self.0)).finish()
+        f.debug_tuple("PreSharedKey").field(&to_hex(&self.0)).finish()
     }
 }
 
-impl fmt::Display for PSK {
+impl fmt::Display for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "/key/swarm/psk/1.0.0/")?;
         writeln!(f, "/base16/")?;
@@ -139,10 +139,10 @@ pub enum KeyParseError {
 
 #[derive(Debug, Copy, Clone)]
 pub struct PnetConfig {
-    key: PSK,
+    key: PreSharedKey,
 }
 impl PnetConfig {
-    pub fn new(key: PSK) -> Self {
+    pub fn new(key: PreSharedKey) -> Self {
         Self { key }
     }
 
@@ -172,6 +172,7 @@ impl PnetConfig {
     }
 }
 
+#[pin_project]
 pub struct PnetOutput<S> {
     inner: S,
     read_cipher: XSalsa20,
@@ -196,7 +197,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        let size = std::cmp::min(buf.len(), self.write_buffer.len());
+        let size = cmp::min(buf.len(), self.write_buffer.len());
         let write_buffer = &mut self.write_buffer[0..size];
         write_buffer.copy_from_slice(&buf[..size]);
         if self.write_cipher.current_pos() != self.write_offset {
@@ -288,35 +289,35 @@ mod tests {
     use super::*;
     use quickcheck::*;
 
-    impl Arbitrary for PSK {
-        fn arbitrary<G: Gen>(g: &mut G) -> PSK {
+    impl Arbitrary for PreSharedKey {
+        fn arbitrary<G: Gen>(g: &mut G) -> PreSharedKey {
             let mut key = [0; KEY_SIZE];
             g.fill_bytes(&mut key);
-            PSK(key)
+            PreSharedKey(key)
         }
     }
 
     #[test]
     fn psk_tostring_parse() {
-        fn prop(key: PSK) -> bool {
+        fn prop(key: PreSharedKey) -> bool {
             let text = key.to_string();
-            text.parse::<PSK>().map(|res| res == key).unwrap_or(false)
+            text.parse::<PreSharedKey>().map(|res| res == key).unwrap_or(false)
         }
-        QuickCheck::new().tests(10).quickcheck(prop as fn(PSK) -> _);
+        QuickCheck::new().tests(10).quickcheck(prop as fn(PreSharedKey) -> _);
     }
 
     #[test]
     fn psk_parse_failure() {
         use KeyParseError::*;
-        assert_eq!("".parse::<PSK>().unwrap_err(), InvalidKeyFile);
-        assert_eq!("a\nb\nc".parse::<PSK>().unwrap_err(), InvalidKeyType);
+        assert_eq!("".parse::<PreSharedKey>().unwrap_err(), InvalidKeyFile);
+        assert_eq!("a\nb\nc".parse::<PreSharedKey>().unwrap_err(), InvalidKeyType);
         assert_eq!(
-            "/key/swarm/psk/1.0.0/\nx\ny".parse::<PSK>().unwrap_err(),
+            "/key/swarm/psk/1.0.0/\nx\ny".parse::<PreSharedKey>().unwrap_err(),
             InvalidKeyEncoding
         );
         assert_eq!(
             "/key/swarm/psk/1.0.0/\n/base16/\ny"
-                .parse::<PSK>()
+                .parse::<PreSharedKey>()
                 .unwrap_err(),
             InvalidKeyLength
         );
@@ -325,7 +326,7 @@ mod tests {
     #[test]
     fn fingerprint() {
         // checked against go-ipfs output
-        let key = "/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683".parse::<PSK>().unwrap();
+        let key = "/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683".parse::<PreSharedKey>().unwrap();
         let expected = "45fc986bbc9388a11d939df26f730f0c";
         let actual = key.fingerprint().to_string();
         assert_eq!(expected, actual);

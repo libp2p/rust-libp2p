@@ -56,7 +56,7 @@ use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
     mdns::{Mdns, MdnsEvent},
-    pnet::PSK,
+    pnet::PreSharedKey,
     swarm::NetworkBehaviourEventProcess,
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    let psk = PSK::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
+    let psk = PreSharedKey::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
     println!("Local peer id: {:?}", local_peer_id);
     println!("Swarm key fingerprint: {}", psk.fingerprint());
 

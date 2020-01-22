@@ -152,7 +152,7 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
-use libp2p_pnet::{PnetConfig, PSK};
+use libp2p_pnet::{PnetConfig, PreSharedKey};
 pub use bytes;
 pub use futures;
 #[doc(inline)]
@@ -260,7 +260,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PSK)
+pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     Ok(CommonTransport::new()?
