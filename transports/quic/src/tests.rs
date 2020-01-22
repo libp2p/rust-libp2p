@@ -54,11 +54,11 @@ impl AsyncWrite for QuicStream {
             .muxer
             .shutdown_substream(cx, inner.id.as_mut().unwrap()))?;
         debug!("closed {:?}", inner.id);
-        Ready(Ok(()))
+        Poll::Ready(Ok(()))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        Ready(Ok(()))
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -87,7 +87,7 @@ impl Drop for QuicStream {
 impl futures::Stream for QuicMuxer {
     type Item = QuicStream;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        Ready(Some(QuicStream {
+        Poll::Ready(Some(QuicStream {
             id: Some(ready!(self.poll_inbound(cx)).expect("bug")),
             muxer: self.get_mut().clone(),
             shutdown: false,

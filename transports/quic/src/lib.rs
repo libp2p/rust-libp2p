@@ -82,10 +82,7 @@ use std::{
     mem::replace,
     pin::Pin,
     sync::Arc,
-    task::{
-        Context,
-        Poll::{self, Pending, Ready},
-    },
+    task::{Context, Poll},
     time::Instant,
 };
 #[derive(Debug)]
@@ -229,7 +226,7 @@ impl Future for Outbound {
         let this = &mut *self;
         match this.0 {
             OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
-                OutboundInner::Complete(e) => Ready(e.map(QuicSubstream::new)),
+                OutboundInner::Complete(e) => Poll::Ready(e.map(QuicSubstream::new)),
                 _ => unreachable!(),
             },
             OutboundInner::Pending(ref mut receiver) => {
@@ -237,7 +234,7 @@ impl Future for Outbound {
                     .map(QuicSubstream::new)
                     .map_err(|oneshot::Canceled| io::ErrorKind::ConnectionAborted.into());
                 this.0 = OutboundInner::Done;
-                Ready(result)
+                Poll::Ready(result)
             }
             OutboundInner::Done => panic!("polled after yielding Ready"),
         }
@@ -288,7 +285,7 @@ impl StreamMuxer for QuicMuxer {
         debug!("being polled for inbound connections!");
         let mut inner = self.inner();
         if inner.connection.is_drained() {
-            return Ready(Err(io::Error::new(
+            return Poll::Ready(Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 inner
                     .close_reason
@@ -303,11 +300,11 @@ impl StreamMuxer for QuicMuxer {
                 if let Some(waker) = replace(&mut inner.accept_waker, Some(cx.waker().clone())) {
                     waker.wake()
                 }
-                Pending
+                Poll::Pending
             }
             Some(id) => {
                 inner.finishers.insert(id, None);
-                Ready(Ok(QuicSubstream::new(id)))
+                Poll::Ready(Ok(QuicSubstream::new(id)))
             }
         }
     }
@@ -320,7 +317,7 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::WriteError;
         if !substream.is_live() {
-            return Ready(Err(io::ErrorKind::ConnectionAborted.into()));
+            return Poll::Ready(Err(io::ErrorKind::ConnectionAborted.into()));
         }
         let mut inner = self.inner();
         debug_assert!(
@@ -329,7 +326,7 @@ impl StreamMuxer for QuicMuxer {
         );
         inner.wake_driver();
         if let Some(ref e) = inner.close_reason {
-            return Ready(Err(io::Error::new(
+            return Poll::Ready(Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
                 e.clone(),
             )));
@@ -340,21 +337,23 @@ impl StreamMuxer for QuicMuxer {
             "attempting to write to a drained connection"
         );
         match inner.connection.write(substream.id(), buf) {
-            Ok(bytes) => Ready(Ok(bytes)),
+            Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
                 if let Some(ref e) = inner.close_reason {
-                    return Ready(Err(io::Error::new(
+                    return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::ConnectionAborted,
                         e.clone(),
                     )));
                 }
                 inner.writers.insert(substream.id(), cx.waker().clone());
-                Pending
+                Poll::Pending
             }
             Err(WriteError::UnknownStream) => {
                 panic!("libp2p never uses a closed stream, so this cannot happen; qed")
             }
-            Err(WriteError::Stopped(_)) => Ready(Err(io::ErrorKind::ConnectionAborted.into())),
+            Err(WriteError::Stopped(_)) => {
+                Poll::Ready(Err(io::ErrorKind::ConnectionAborted.into()))
+            }
         }
     }
 
@@ -376,21 +375,21 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         inner.wake_driver();
         match inner.connection.read(substream.id(), buf) {
-            Ok(Some(bytes)) => Ready(Ok(bytes)),
-            Ok(None) => Ready(Ok(0)),
+            Ok(Some(bytes)) => Poll::Ready(Ok(bytes)),
+            Ok(None) => Poll::Ready(Ok(0)),
             Err(ReadError::Blocked) if inner.connection_lost => {
-                // Ready(Err(io::ErrorKind::ConnectionReset.into()))
-                Ready(Ok(0))
+                // Poll::Ready(Err(io::ErrorKind::ConnectionReset.into()))
+                Poll::Ready(Ok(0))
             }
             Err(ReadError::Blocked) => {
                 inner.readers.insert(substream.id(), cx.waker().clone());
-                Pending
+                Poll::Pending
             }
             Err(ReadError::UnknownStream) => {
                 error!("you used a stream that was already closed!");
-                Ready(Ok(0))
+                Poll::Ready(Ok(0))
             }
-            Err(ReadError::Reset(_)) => Ready(Err(io::ErrorKind::ConnectionReset.into())),
+            Err(ReadError::Reset(_)) => Poll::Ready(Err(io::ErrorKind::ConnectionReset.into())),
         }
     }
 
@@ -400,7 +399,7 @@ impl StreamMuxer for QuicMuxer {
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
         match substream.status {
-            SubstreamStatus::Finished => return Ready(Ok(())),
+            SubstreamStatus::Finished => return Poll::Ready(Ok(())),
             SubstreamStatus::Finishing(ref mut channel) => {
                 self.inner().wake_driver();
                 return channel
@@ -437,7 +436,7 @@ impl StreamMuxer for QuicMuxer {
             .insert(substream.id(), Some(sender))
             .unwrap()
             .is_none());
-        Pending
+        Poll::Pending
     }
 
     fn flush_substream(
@@ -445,28 +444,28 @@ impl StreamMuxer for QuicMuxer {
         _cx: &mut Context,
         _substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
-        Ready(Ok(()))
+        Poll::Ready(Ok(()))
     }
 
     fn flush_all(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Ready(Ok(()))
+        Poll::Ready(Ok(()))
     }
 
     fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         trace!("close() called");
         let mut inner = self.inner();
         if inner.connection.is_closed() {
-            return Ready(Ok(()));
+            return Poll::Ready(Ok(()));
         } else if inner.close_reason.is_some() {
-            return Ready(Ok(()));
+            return Poll::Ready(Ok(()));
         } else if inner.finishers.is_empty() {
             inner.shutdown();
             inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
             drop(inner.driver().poll_unpin(cx));
-            return Ready(Ok(()));
+            return Poll::Ready(Ok(()));
         } else if inner.close_waker.is_some() {
             inner.close_waker = Some(cx.waker().clone());
-            return Pending;
+            return Poll::Pending;
         } else {
             inner.close_waker = Some(cx.waker().clone())
         }
@@ -483,7 +482,7 @@ impl StreamMuxer for QuicMuxer {
                 true
             }
         });
-        Pending
+        Poll::Pending
     }
 }
 
@@ -522,7 +521,7 @@ impl Future for QuicUpgrade {
             } else if inner.connection.is_handshaking() {
                 assert!(!inner.connection.is_closed(), "deadlock");
                 inner.handshake_waker = Some(cx.waker().clone());
-                return Pending;
+                return Poll::Pending;
             } else if inner.connection.side().is_server() {
                 ready!(inner.endpoint_channel.poll_ready(cx))
                     .expect("we have a reference to the peer; qed");
@@ -538,7 +537,7 @@ impl Future for QuicUpgrade {
             }
         };
         let muxer = muxer.take().expect("polled after yielding Ready");
-        Ready(res.map(|()| muxer))
+        Poll::Ready(res.map(|()| muxer))
     }
 }
 
@@ -695,9 +694,9 @@ impl Muxer {
     fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) -> bool {
         loop {
             match self.endpoint_channel.poll_ready(cx) {
-                Pending => break true,
-                Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
-                Ready(Ok(())) => {}
+                Poll::Pending => break true,
+                Poll::Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
+                Poll::Ready(Ok(())) => {}
             }
             if let Some(event) = self.connection.poll_endpoint_events() {
                 self.endpoint_channel
@@ -752,13 +751,13 @@ impl Muxer {
                     .socket()
                     .poll_send_to(cx, &transmit.contents, &transmit.destination);
             break match res {
-                Pending => {
+                Poll::Pending => {
                     self.pending = Some(transmit);
                     Ok(true)
                 }
-                Ready(Ok(_)) => Ok(false),
-                Ready(Err(e)) if e.kind() == io::ErrorKind::ConnectionReset => continue,
-                Ready(Err(e)) => Err(e),
+                Poll::Ready(Ok(_)) => Ok(false),
+                Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::ConnectionReset => continue,
+                Poll::Ready(Err(e)) => Err(e),
             };
         }
     }
@@ -948,7 +947,7 @@ impl Future for ConnectionDriver {
             needs_timer_update |= inner.process_app_events();
             let needs_to_send_endpoint_events = inner.poll_endpoint_events(cx);
             if inner.connection.is_drained() {
-                break Ready(
+                break Poll::Ready(
                     match inner
                         .close_reason
                         .clone()
@@ -981,12 +980,12 @@ impl Future for ConnectionDriver {
             } else if !needs_timer_update {
                 assert!(inner.connection.poll_transmit(now).is_none());
                 break if inner.close_reason.is_none() {
-                    Pending
+                    Poll::Pending
                 } else if needs_to_send_endpoint_events {
                     debug!("still have endpoint events to send!");
-                    Pending
+                    Poll::Pending
                 } else {
-                    Ready(Ok(()))
+                    Poll::Ready(Ok(()))
                 };
             }
         }

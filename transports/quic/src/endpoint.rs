@@ -35,10 +35,7 @@ use std::{
     io,
     pin::Pin,
     sync::{Arc, Weak},
-    task::{
-        Context,
-        Poll::{self, Pending, Ready},
-    },
+    task::{Context, Poll},
     time::Instant,
 };
 
@@ -71,7 +68,7 @@ impl EndpointInner {
     }
 
     fn drive_events(&mut self, cx: &mut Context) {
-        while let Ready(e) = self.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
+        while let Poll::Ready(e) = self.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
             match e {
                 EndpointMessage::ConnectionAccepted => {
                     debug!("accepting connection!");
@@ -120,7 +117,7 @@ impl EndpointInner {
                 }
                 DatagramEvent::NewConnection(connection) => {
                     debug!("new connection detected!");
-                    break Ready(Ok((handle, connection)));
+                    break Poll::Ready(Ok((handle, connection)));
                 }
             }
             trace!("event processed!")
@@ -306,25 +303,25 @@ impl Future for EndpointDriver {
             inner.drive_events(cx);
             trace!("driving incoming packets");
             match inner.drive_receive(&this.0.socket, cx) {
-                Pending => {
+                Poll::Pending => {
                     debug!("no new connections");
                     drop(inner.poll_transmit_pending(&this.0.socket, cx)?);
                     trace!("returning Pending");
-                    break Pending;
+                    break Poll::Pending;
                 }
-                Ready(Ok((handle, connection))) => {
+                Poll::Ready(Ok((handle, connection))) => {
                     trace!("have a new connection");
                     this.accept_muxer(connection, handle, &mut *inner);
                     trace!("connection accepted");
                     match inner.poll_transmit_pending(&this.0.socket, cx)? {
-                        Pending => break Pending,
-                        Ready(()) if inner.refcount == 0 => break Ready(Ok(())),
-                        Ready(()) => break Pending,
+                        Poll::Pending => break Poll::Pending,
+                        Poll::Ready(()) if inner.refcount == 0 => break Poll::Ready(Ok(())),
+                        Poll::Ready(()) => break Poll::Pending,
                     }
                 }
-                Ready(Err(e)) => {
+                Poll::Ready(Err(e)) => {
                     log::error!("I/O error: {:?}", e);
-                    return Ready(Err(e));
+                    return Poll::Ready(Err(e));
                 }
             }
         }
