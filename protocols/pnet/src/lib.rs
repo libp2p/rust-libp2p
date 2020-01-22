@@ -18,27 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod crypt_writer;
 use futures::prelude::*;
 use pin_project::pin_project;
 use log::trace;
 use salsa20::{
-    stream_cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek},
+    stream_cipher::{NewStreamCipher, SyncStreamCipher},
     Salsa20, XSalsa20,
 };
-use std::num::ParseIntError;
-use std::str::FromStr;
 use std::{
-    cmp,
     io,
+    error,
+    num::ParseIntError,
+    str::FromStr,
     pin::Pin,
+    io::Error as IoError,
     task::{Context, Poll},
+    fmt::{self, Write},
 };
-
 use rand::RngCore;
 use sha3::{digest::ExtendableOutput, Shake128};
-use std::error;
-use std::fmt::{self, Write};
-use std::io::Error as IoError;
+use crypt_writer::CryptWriter;
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -174,39 +174,16 @@ impl PnetConfig {
 
 #[pin_project]
 pub struct PnetOutput<S> {
-    inner: S,
+    inner: CryptWriter<S>,
     read_cipher: XSalsa20,
-    write_cipher: XSalsa20,
-    write_offset: u64,
-    write_buffer: [u8; WRITE_BUFFER_SIZE],
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> PnetOutput<S> {
     fn new(inner: S, write_cipher: XSalsa20, read_cipher: XSalsa20) -> Self {
         Self {
-            inner,
-            write_cipher,
+            inner: CryptWriter::with_capacity(WRITE_BUFFER_SIZE, inner, write_cipher),
             read_cipher,
-            write_offset: 0,
-            write_buffer: [0; WRITE_BUFFER_SIZE],
         }
-    }
-
-    fn encrypt_and_write(
-        &mut self,
-        cx: &mut Context,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        let size = cmp::min(buf.len(), self.write_buffer.len());
-        let write_buffer = &mut self.write_buffer[0..size];
-        write_buffer.copy_from_slice(&buf[..size]);
-        if self.write_cipher.current_pos() != self.write_offset {
-            trace!("seeking to {}", self.write_offset);
-            self.write_cipher.seek(self.write_offset);
-        }
-        trace!("encrypting {} bytes", size);
-        self.write_cipher.apply_keystream(write_buffer);
-        Pin::new(&mut self.inner).poll_write(cx, &self.write_buffer[..size])
     }
 }
 
@@ -216,7 +193,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PnetOutput<S> {
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
-        let result = Pin::new(&mut self.as_mut().inner).poll_read(cx, buf);
+        let result = Pin::new(&mut self.as_mut().inner.get_mut()).poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
             trace!("read {} bytes", size);
             self.read_cipher.apply_keystream(&mut buf[..*size]);
@@ -232,12 +209,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PnetOutput<S> {
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        let result = self.as_mut().encrypt_and_write(cx, buf);
-        if let Poll::Ready(Ok(size)) = &result {
-            trace!("wrote {} bytes", size);
-            self.write_offset += *size as u64;
-        }
-        result
+        Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
