@@ -18,15 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{fmt, pin::Pin};
-use pin_project::pin_project;
-use log::trace;
 use futures::{
-    ready,
     io::{self, AsyncWrite},
+    ready,
     task::{Context, Poll},
 };
-use salsa20::{XSalsa20, stream_cipher::SyncStreamCipher};
+use log::trace;
+use pin_project::pin_project;
+use salsa20::{stream_cipher::SyncStreamCipher, XSalsa20};
+use std::{fmt, pin::Pin};
 
 /// A writer that encrypts and forwards to an inner writer
 #[pin_project]
@@ -40,7 +40,6 @@ pub struct CryptWriter<W> {
 
 impl<W: AsyncWrite> CryptWriter<W> {
     /// Creates a new `CryptWriter` with the specified buffer capacity.
-    /// ```
     pub fn with_capacity(capacity: usize, inner: W, cipher: XSalsa20) -> CryptWriter<W> {
         CryptWriter {
             inner,

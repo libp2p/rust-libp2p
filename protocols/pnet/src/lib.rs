@@ -19,26 +19,26 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod crypt_writer;
+use crypt_writer::CryptWriter;
 use futures::prelude::*;
-use pin_project::pin_project;
 use log::trace;
+use pin_project::pin_project;
+use rand::RngCore;
 use salsa20::{
     stream_cipher::{NewStreamCipher, SyncStreamCipher},
     Salsa20, XSalsa20,
 };
-use std::{
-    io,
-    error,
-    num::ParseIntError,
-    str::FromStr,
-    pin::Pin,
-    io::Error as IoError,
-    task::{Context, Poll},
-    fmt::{self, Write},
-};
-use rand::RngCore;
 use sha3::{digest::ExtendableOutput, Shake128};
-use crypt_writer::CryptWriter;
+use std::{
+    error,
+    fmt::{self, Write},
+    io,
+    io::Error as IoError,
+    num::ParseIntError,
+    pin::Pin,
+    str::FromStr,
+    task::{Context, Poll},
+};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -107,7 +107,9 @@ impl FromStr for PreSharedKey {
 
 impl fmt::Debug for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PreSharedKey").field(&to_hex(&self.0)).finish()
+        f.debug_tuple("PreSharedKey")
+            .field(&to_hex(&self.0))
+            .finish()
     }
 }
 
@@ -273,18 +275,27 @@ mod tests {
     fn psk_tostring_parse() {
         fn prop(key: PreSharedKey) -> bool {
             let text = key.to_string();
-            text.parse::<PreSharedKey>().map(|res| res == key).unwrap_or(false)
+            text.parse::<PreSharedKey>()
+                .map(|res| res == key)
+                .unwrap_or(false)
         }
-        QuickCheck::new().tests(10).quickcheck(prop as fn(PreSharedKey) -> _);
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(PreSharedKey) -> _);
     }
 
     #[test]
     fn psk_parse_failure() {
         use KeyParseError::*;
         assert_eq!("".parse::<PreSharedKey>().unwrap_err(), InvalidKeyFile);
-        assert_eq!("a\nb\nc".parse::<PreSharedKey>().unwrap_err(), InvalidKeyType);
         assert_eq!(
-            "/key/swarm/psk/1.0.0/\nx\ny".parse::<PreSharedKey>().unwrap_err(),
+            "a\nb\nc".parse::<PreSharedKey>().unwrap_err(),
+            InvalidKeyType
+        );
+        assert_eq!(
+            "/key/swarm/psk/1.0.0/\nx\ny"
+                .parse::<PreSharedKey>()
+                .unwrap_err(),
             InvalidKeyEncoding
         );
         assert_eq!(
