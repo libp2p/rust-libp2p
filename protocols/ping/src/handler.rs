@@ -157,7 +157,7 @@ impl Error for PingFailure {
 /// and answering ping queries.
 ///
 /// If the remote doesn't respond, produces an error that closes the connection.
-pub struct PingHandler<TSubstream> {
+pub struct PingHandler {
     /// Configuration options.
     config: PingConfig,
     /// The timer for when to send the next ping.
@@ -167,10 +167,9 @@ pub struct PingHandler<TSubstream> {
     pending_results: VecDeque<PingResult>,
     /// The number of consecutive ping failures that occurred.
     failures: u32,
-    _marker: std::marker::PhantomData<TSubstream>
 }
 
-impl<TSubstream> PingHandler<TSubstream> {
+impl PingHandler {
     /// Builds a new `PingHandler` with the given configuration.
     pub fn new(config: PingConfig) -> Self {
         PingHandler {
@@ -178,15 +177,11 @@ impl<TSubstream> PingHandler<TSubstream> {
             next_ping: Delay::new(Duration::new(0, 0)),
             pending_results: VecDeque::with_capacity(2),
             failures: 0,
-            _marker: std::marker::PhantomData
         }
     }
 }
 
-impl<TSubstream> ProtocolsHandler for PingHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
+impl ProtocolsHandler for PingHandler {
     type InEvent = Void;
     type OutEvent = PingResult;
     type Error = PingFailure;

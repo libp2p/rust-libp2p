@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{BoxSubstream, NegotiatedBoxSubstream};
+use crate::BoxSubstream;
 use crate::protocols_handler::{
     KeepAlive,
     ProtocolsHandler,

@@ -55,7 +55,6 @@
 
 mod behaviour;
 mod registry;
-mod substream;
 
 pub mod protocols_handler;
 pub mod toggle;
@@ -77,18 +76,20 @@ pub use protocols_handler::{
     OneShotHandler,
     SubstreamProtocol
 };
-pub use substream::{BoxSubstream, NegotiatedBoxSubstream};
+
+
+pub type BoxSubstream = Substream<StreamMuxerBox>;
+pub type NegotiatedBoxSubstream = Negotiated<BoxSubstream>;
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
 use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}};
 use libp2p_core::{
-    Executor,
-    Transport, Multiaddr, Negotiated, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
+    Executor, Negotiated,
+    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::{StreamMuxer, StreamMuxerBox},
     nodes::{
-        ListenerId,
+        ListenerId, Substream,
         collection::ConnectionInfo,
-        node::Substream,
         network::{self, Network, NetworkEvent}
     },
     transport::{
