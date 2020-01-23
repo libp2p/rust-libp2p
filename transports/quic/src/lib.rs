@@ -66,8 +66,8 @@ mod tests;
 mod verifier;
 use async_macros::ready;
 pub use certificate::make_cert;
-pub use endpoint::Endpoint;
 use endpoint::EndpointInner;
+pub use endpoint::{Endpoint, Listener};
 use futures::{
     channel::{mpsc, oneshot},
     prelude::*,
@@ -723,7 +723,6 @@ impl Muxer {
         let mut needs_timer_update = false;
         if let Some(transmit) = self.pending.take() {
             trace!("trying to send packet!");
-            needs_timer_update = true;
             if self.poll_transmit(cx, transmit)? {
                 return Ok(false);
             }
@@ -745,10 +744,7 @@ impl Muxer {
         cx: &mut Context<'_>,
         transmit: quinn_proto::Transmit,
     ) -> Result<bool, io::Error> {
-        let res =
-            self.endpoint
-                .socket()
-                .poll_send_to(cx, &transmit.contents, &transmit.destination);
+        let res = self.endpoint.socket().poll_send_to(cx, &transmit);
         match res {
             Poll::Pending => {
                 self.pending = Some(transmit);

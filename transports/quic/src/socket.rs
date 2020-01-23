@@ -23,97 +23,98 @@
 //! This provides a central location for socket I/O, and logs all incoming and outgoing packets.
 
 use async_std::net::UdpSocket;
-use log::trace;
-use quinn_proto::{Connection, Endpoint, Transmit};
-use std::{io::Result, task::Context, task::Poll, time::Instant};
+use log::{trace, warn};
+use quinn_proto::Transmit;
+use std::{io::Result, task::Context, task::Poll};
 
-mod private {
-    use super::Instant;
-    pub(crate) struct Dummy;
-    /// A trait for packet generators
-    pub(crate) trait PacketGen {
-        /// Get the next packet to be sent, if any.
-        fn get_packet(&mut self, dummy: Dummy, now: Instant) -> Option<quinn_proto::Transmit>;
-    }
-}
-
-use private::Dummy;
-pub(crate) use private::PacketGen;
-
-impl PacketGen for Endpoint {
-    fn get_packet(&mut self, Dummy: Dummy, _now: Instant) -> Option<quinn_proto::Transmit> {
-        self.poll_transmit()
-    }
-}
-
-impl PacketGen for Connection {
-    fn get_packet(&mut self, Dummy: Dummy, now: Instant) -> Option<quinn_proto::Transmit> {
-        self.poll_transmit(now)
-    }
-}
-
-/// A socket wrapper for libp2p-quic
+/// A pending packet for libp2p-quic
 #[derive(Debug, Default)]
-pub(crate) struct Socket {
+pub(crate) struct Pending {
     pending: Option<Transmit>,
 }
 
-pub fn raw_send(cx: &mut Context, socket: &UdpSocket, packet: &Transmit) -> Poll<Result<()>> {
-    match socket.poll_send_to(cx, &packet.contents, &packet.destination) {
-        Poll::Pending => {
-            trace!("not able to send packet right away");
-            return Poll::Pending;
-        }
-        Poll::Ready(Ok(e)) => {
-            trace!("sent packet of length {} to {}", e, packet.destination);
-            return Poll::Ready(Ok(()));
-        }
-        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-    }
+/// A socket wrapper for libp2p-quic
+#[derive(Debug)]
+pub(crate) struct Socket {
+    socket: UdpSocket,
 }
 
-pub fn receive_from(
-    cx: &mut Context,
-    socket: &UdpSocket,
-    buf: &mut [u8],
-) -> Poll<Result<(usize, std::net::SocketAddr)>> {
-    loop {
-        match socket.poll_recv_from(cx, buf) {
+impl Socket {
+    /// Transmit a packet if possible, with appropriate logging.
+    pub fn poll_send_to(&self, cx: &mut Context, packet: &Transmit) -> Poll<Result<()>> {
+        match self
+            .socket
+            .poll_send_to(cx, &packet.contents, &packet.destination)
+        {
             Poll::Pending => {
-                trace!("no packets available yet");
-                break Poll::Pending;
+                trace!("not able to send packet right away");
+                return Poll::Pending;
             }
             Poll::Ready(Ok(e)) => {
-                trace!("received packet of length {} from {}", e.0, e.1);
-                break Poll::Ready(Ok(e));
+                trace!("sent packet of length {} to {}", e, packet.destination);
+                return Poll::Ready(Ok(()));
             }
-            // May be injected by a malicious ICMP packet
-            Poll::Ready(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
-            Poll::Ready(Err(e)) => break Poll::Ready(Err(e)),
+            Poll::Ready(Err(e)) => {
+                warn!("Fatal I/O error: {:?}", e);
+                return Poll::Ready(Err(e));
+            }
+        }
+    }
+
+    /// A wrapper around `recv_from` that handles ECONNRESET and logging
+    pub fn recv_from(
+        &self,
+        cx: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<(usize, std::net::SocketAddr)>> {
+        loop {
+            match self.socket.poll_recv_from(cx, buf) {
+                Poll::Pending => {
+                    trace!("no packets available yet");
+                    break Poll::Pending;
+                }
+                Poll::Ready(Ok(e)) => {
+                    trace!("received packet of length {} from {}", e.0, e.1);
+                    break Poll::Ready(Ok(e));
+                }
+                // May be injected by a malicious ICMP packet
+                Poll::Ready(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionReset => {
+                    warn!("Got ECONNRESET from recv_from() - possible MITM attack")
+                }
+                Poll::Ready(Err(e)) => {
+                    warn!("Fatal I/O error: {:?}", e);
+                    break Poll::Ready(Err(e));
+                }
+            }
         }
     }
 }
 
 impl Socket {
+    pub fn new(socket: UdpSocket) -> Self {
+        Self { socket }
+    }
+}
+
+impl Pending {
     pub fn send_packet(
         &mut self,
         cx: &mut Context,
-        socket: &UdpSocket,
-        source: &mut dyn PacketGen,
-        now: Instant,
+        socket: &Socket,
+        source: &mut dyn FnMut() -> Option<Transmit>,
     ) -> Poll<Result<()>> {
         if let Some(ref mut transmit) = self.pending {
             trace!("trying to send packet!");
-            match raw_send(cx, socket, &transmit) {
+            match socket.poll_send_to(cx, &transmit) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Ok(())) => {}
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
         }
         self.pending = None;
-        while let Some(transmit) = source.get_packet(Dummy, now) {
+        while let Some(transmit) = source() {
             trace!("trying to send packet!");
-            match raw_send(cx, socket, &transmit) {
+            match socket.poll_send_to(cx, &transmit) {
                 Poll::Ready(Ok(())) => {}
                 Poll::Pending => {
                     self.pending = Some(transmit);

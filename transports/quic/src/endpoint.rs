@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-use crate::{EndpointMessage, QuicConfig};
+use crate::{socket, EndpointMessage, QuicConfig};
 use async_macros::ready;
-use async_std::net::{SocketAddr, UdpSocket};
+use async_std::net::SocketAddr;
 use futures::{channel::mpsc, prelude::*};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -44,7 +44,7 @@ pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
     muxers: HashMap<ConnectionHandle, Weak<Mutex<super::Muxer>>>,
     driver: Option<async_std::task::JoinHandle<Result<(), io::Error>>>,
-    socket: crate::socket::Socket,
+    pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
     refcount: u64,
@@ -90,13 +90,13 @@ impl EndpointInner {
 
     fn drive_receive(
         &mut self,
-        socket: &UdpSocket,
+        socket: &socket::Socket,
         cx: &mut Context,
     ) -> Poll<Result<(ConnectionHandle, Connection), io::Error>> {
         use quinn_proto::DatagramEvent;
         let mut buf = vec![0; 65535];
         loop {
-            let (bytes, peer) = ready!(crate::socket::receive_from(cx, socket, &mut buf[..])?);
+            let (bytes, peer) = ready!(socket.recv_from(cx, &mut buf[..])?);
             let (handle, event) =
                 match self
                     .inner
@@ -126,18 +126,18 @@ impl EndpointInner {
 
     fn poll_transmit_pending(
         &mut self,
-        socket: &UdpSocket,
+        socket: &socket::Socket,
         cx: &mut Context,
     ) -> Poll<Result<(), io::Error>> {
-        self.socket
-            .send_packet(cx, socket, &mut self.inner, Instant::now())
+        let Self { inner, pending, .. } = self;
+        pending.send_packet(cx, socket, &mut || inner.poll_transmit())
     }
 }
 
 #[derive(Debug)]
 pub(super) struct EndpointData {
     /// The single UDP socket used for I/O
-    socket: UdpSocket,
+    socket: socket::Socket,
     /// A `Mutex` protecting the QUIC state machine.
     inner: Mutex<EndpointInner>,
     /// The channel on which new connections are sent.  This is bounded in practice by the accept
@@ -160,7 +160,7 @@ impl EndpointData {
         self.event_channel.clone()
     }
 
-    pub(super) fn socket(&self) -> &UdpSocket {
+    pub(super) fn socket(&self) -> &socket::Socket {
         &self.socket
     }
 }
@@ -222,16 +222,16 @@ impl Endpoint {
         let (new_connections, receive_connections) = mpsc::unbounded();
         let (event_channel, event_receiver) = mpsc::channel(0);
         let return_value = Self(Arc::new(EndpointData {
-            socket,
+            socket: socket::Socket::new(socket),
             inner: Mutex::new(EndpointInner {
                 inner: quinn_proto::Endpoint::new(
                     config.endpoint_config.clone(),
                     Some(config.server_config.clone()),
                 ),
                 muxers: HashMap::new(),
-                socket: Default::default(),
                 driver: None,
                 event_receiver,
+                pending: Default::default(),
                 refcount: 2,
             }),
             address: address.clone(),
@@ -302,14 +302,13 @@ impl Future for EndpointDriver {
             trace!("driving events");
             inner.drive_events(cx);
             trace!("driving incoming packets");
-            match inner.drive_receive(&this.0.socket, cx) {
+            match inner.drive_receive(&this.0.socket, cx)? {
                 Poll::Pending => {
-                    debug!("no new connections");
                     drop(inner.poll_transmit_pending(&this.0.socket, cx)?);
                     trace!("returning Pending");
                     break Poll::Pending;
                 }
-                Poll::Ready(Ok((handle, connection))) => {
+                Poll::Ready((handle, connection)) => {
                     trace!("have a new connection");
                     this.accept_muxer(connection, handle, &mut *inner);
                     trace!("connection accepted");
@@ -319,20 +318,31 @@ impl Future for EndpointDriver {
                         Poll::Ready(()) => break Poll::Pending,
                     }
                 }
-                Poll::Ready(Err(e)) => {
-                    log::error!("I/O error: {:?}", e);
-                    return Poll::Ready(Err(e));
-                }
             }
         }
+    }
+}
+
+/// A QUIC listener
+#[derive(Debug)]
+pub struct Listener {
+    reference: Arc<EndpointData>,
+    channel: mpsc::UnboundedReceiver<Result<ListenerEvent<super::QuicUpgrade>, io::Error>>,
+}
+
+impl Unpin for Listener {}
+
+impl Stream for Listener {
+    type Item = Result<ListenerEvent<super::QuicUpgrade>, io::Error>;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.get_mut().channel.poll_next_unpin(cx)
     }
 }
 
 impl Transport for &Endpoint {
     type Output = super::QuicMuxer;
     type Error = io::Error;
-    type Listener =
-        mpsc::UnboundedReceiver<Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+    type Listener = Listener;
     type ListenerUpgrade = super::QuicUpgrade;
     type Dial = super::QuicUpgrade;
 
@@ -340,16 +350,17 @@ impl Transport for &Endpoint {
         if addr != self.0.address {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
-        let res = (self.0)
+        let channel = (self.0)
             .receive_connections
             .lock()
             .take()
-            .ok_or_else(|| TransportError::Other(io::ErrorKind::AlreadyExists.into()));
+            .ok_or_else(|| TransportError::Other(io::ErrorKind::AlreadyExists.into()))?;
         let mut inner = self.inner();
+        let reference = self.0.clone();
         if inner.driver.is_none() {
-            inner.driver = Some(async_std::task::spawn(EndpointDriver(self.0.clone())));
+            inner.driver = Some(async_std::task::spawn(EndpointDriver(reference.clone())));
         }
-        res
+        Ok(Listener { channel, reference })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {

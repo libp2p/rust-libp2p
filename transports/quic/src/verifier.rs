@@ -46,11 +46,11 @@ impl rustls::ServerCertVerifier for VeryInsecureAllowAllCertificatesWithoutCheck
         _dns_name: webpki::DNSNameRef,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-		if presented_certs.len() > 0 {
-			Ok(rustls::ServerCertVerified::assertion())
-		} else {
-			Err(rustls::TLSError::NoCertificatesPresented)
-		}
+        if presented_certs.len() > 0 {
+            Ok(rustls::ServerCertVerified::assertion())
+        } else {
+            Err(rustls::TLSError::NoCertificatesPresented)
+        }
     }
 }
 
@@ -67,10 +67,10 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireClientCertificateButDoNot
         &self,
         presented_certs: &[rustls::Certificate],
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-		if presented_certs.len() > 0 {
-			Ok(rustls::ClientCertVerified::assertion())
-		} else {
-			Err(rustls::TLSError::NoCertificatesPresented)
-		}
+        if presented_certs.len() > 0 {
+            Ok(rustls::ClientCertVerified::assertion())
+        } else {
+            Err(rustls::TLSError::NoCertificatesPresented)
+        }
     }
 }
