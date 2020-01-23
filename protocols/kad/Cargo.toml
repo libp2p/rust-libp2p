@@ -20,7 +20,7 @@ log = "0.4"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 libp2p-swarm = { version = "0.4.0-alpha.1", path = "../../swarm" }
 multihash = { package = "parity-multihash", version = "0.2.1", path = "../../misc/multihash" }
-prost = "0.6"
+prost = "0.6.1"
 rand = "0.7.2"
 sha2 = "0.8.0"
 smallvec = "1.0"
