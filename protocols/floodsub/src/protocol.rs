@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::rpc_proto;
+use crate::topic::Topic;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use prost::Message;
 use std::{error, fmt, io, iter, pin::Pin};
@@ -67,6 +68,7 @@ where
                     sequence_number: publish.seqno.unwrap_or_default(),
                     topics: publish.topic_ids
                         .into_iter()
+                        .map(Topic::new)
                         .collect(),
                 });
             }
@@ -81,7 +83,7 @@ where
                         } else {
                             FloodsubSubscriptionAction::Unsubscribe
                         },
-                        topic: sub.topic_id.unwrap_or_default(),
+                        topic: Topic::new(sub.topic_id.unwrap_or_default()),
                     })
                     .collect(),
             })
@@ -182,6 +184,7 @@ impl FloodsubRpc {
                         seqno: Some(msg.sequence_number),
                         topic_ids: msg.topics
                             .into_iter()
+                            .map(|topic| topic.into())
                             .collect()
                     }
                 })
@@ -191,7 +194,7 @@ impl FloodsubRpc {
                 .map(|topic| {
                     rpc_proto::rpc::SubOpts {
                         subscribe: Some(topic.action == FloodsubSubscriptionAction::Subscribe),
-                        topic_id: Some(topic.topic)
+                        topic_id: Some(topic.topic.into())
                     }
                 })
                 .collect()
@@ -218,7 +221,7 @@ pub struct FloodsubMessage {
     /// List of topics this message belongs to.
     ///
     /// Each message can belong to multiple topics at once.
-    pub topics: Vec<String>,
+    pub topics: Vec<Topic>,
 }
 
 /// A subscription received by the floodsub system.
@@ -227,7 +230,7 @@ pub struct FloodsubSubscription {
     /// Action to perform.
     pub action: FloodsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
-    pub topic: String,
+    pub topic: Topic,
 }
 
 /// Action that a subscription wants to perform.

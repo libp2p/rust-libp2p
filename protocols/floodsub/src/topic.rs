@@ -18,30 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::rpc_proto;
-
 /// Built topic.
-#[derive(Debug, Clone)]
-pub struct Topic {
-    descriptor: rpc_proto::TopicDescriptor,
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Topic(String);
 
 impl Topic {
     /// Returns the id of the topic.
     #[inline]
     pub fn id(&self) -> &str {
-        &self.descriptor.name.as_deref().unwrap_or_default()
+        &self.0
     }
 
     pub fn new<S>(name: S) -> Topic
     where
         S: Into<String>,
     {
-        let descriptor = rpc_proto::TopicDescriptor {
-            name: Some(name.into()),
-            enc: None,
-            auth: None,
-        };
-        Topic { descriptor }
+        Topic(name.into())
+    }
+}
+
+impl Into<String> for Topic {
+    fn into(self) -> String {
+        self.0
     }
 }
