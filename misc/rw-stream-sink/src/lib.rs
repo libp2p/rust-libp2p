@@ -48,7 +48,7 @@ impl<S: TryStream> RwStreamSink<S> {
 
 impl<S> AsyncRead for RwStreamSink<S>
 where
-    S: TryStream<Error = io::Error> + Unpin,
+    S: TryStream<Error = io::Error>,
     <S as TryStream>::Ok: AsRef<[u8]>
 {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
@@ -75,7 +75,7 @@ where
 
 impl<S> AsyncWrite for RwStreamSink<S>
 where
-    S: TryStream + Sink<<S as TryStream>::Ok, Error = io::Error> + Unpin,
+    S: TryStream + Sink<<S as TryStream>::Ok, Error = io::Error>,
     <S as TryStream>::Ok: for<'r> From<&'r [u8]>
 {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
