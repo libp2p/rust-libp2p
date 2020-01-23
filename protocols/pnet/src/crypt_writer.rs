@@ -34,7 +34,6 @@ pub struct CryptWriter<W> {
     #[pin]
     inner: W,
     buf: Vec<u8>,
-    written: usize,
     cipher: XSalsa20,
 }
 
@@ -44,7 +43,6 @@ impl<W: AsyncWrite> CryptWriter<W> {
         CryptWriter {
             inner,
             buf: Vec::with_capacity(capacity),
-            written: 0,
             cipher,
         }
     }
@@ -55,69 +53,86 @@ impl<W: AsyncWrite> CryptWriter<W> {
     pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut W> {
         self.project().inner
     }
+}
 
-    /// Poll buffer flushing until completion
-    ///
-    /// Copied from async_std BufWriter
-    fn poll_flush_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let mut this = self.project();
-        let len = this.buf.len();
-        let mut ret = Ok(());
-        while *this.written < len {
-            match this
-                .inner
-                .as_mut()
-                .poll_write(cx, &this.buf[*this.written..])
-            {
-                Poll::Ready(Ok(0)) => {
-                    ret = Err(io::Error::new(
+/// Write the contents of a Vec<u8> into an AsyncWrite.
+///
+/// The handling 0 byte progress and the Interrupted error was taken from BufWriter in async_std.
+///
+/// If this fn returns Ready(Ok(())), the buffer will be completely flushed.
+fn poll_flush_buf<W: AsyncWrite>(
+    inner: &mut Pin<&mut W>,
+    buf: &mut Vec<u8>,
+    cx: &mut Context<'_>,
+) -> Poll<io::Result<()>> {
+    let mut ret = Poll::Ready(Ok(()));
+    let mut written = 0;
+    let len = buf.len();
+    while written < len {
+        match inner.as_mut().poll_write(cx, &buf[written..]) {
+            Poll::Ready(Ok(n)) => {
+                if n > 0 {
+                    // we made progress, so try again
+                    written += n;
+                } else {
+                    // we got Ok but got no progress whatsoever, so bail out so we don't spin writing 0 bytes.
+                    ret = Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "Failed to write buffered data",
-                    ));
+                    )));
                     break;
                 }
-                Poll::Ready(Ok(n)) => *this.written += n,
-                Poll::Ready(Err(ref e)) if e.kind() == io::ErrorKind::Interrupted => {}
-                Poll::Ready(Err(e)) => {
-                    ret = Err(e);
-                    break;
-                }
-                Poll::Pending => return Poll::Pending,
             }
+            Poll::Ready(Err(e)) => {
+                // Interrupted is the only error that we consider to be recoverable by trying again
+                if e.kind() != io::ErrorKind::Interrupted {
+                    // for any other error, don't try again
+                    ret = Poll::Ready(Err(e));
+                    break;
+                }
+            }
+            Poll::Pending => break,
         }
-        if *this.written > 0 {
-            this.buf.drain(..*this.written);
-        }
-        *this.written = 0;
-        Poll::Ready(ret)
     }
+    if written > 0 {
+        buf.drain(..written);
+    }
+    ret
 }
 
 impl<W: AsyncWrite> AsyncWrite for CryptWriter<W> {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        let mut this = self.project();
         // completely flush the buffer, returning pending if not possible
-        ready!(self.as_mut().poll_flush_buf(cx))?;
-        let this = self.project();
+        ready!(poll_flush_buf(&mut this.inner, this.buf, cx))?;
+        // if we get here, the buffer is empty
         let res = Pin::new(&mut *this.buf).poll_write(cx, buf);
         if let Poll::Ready(Ok(count)) = res {
             this.cipher.apply_keystream(&mut this.buf[0..count]);
             trace!("encrypted {} bytes", count);
         };
-        res
+        // flush immediately afterwards, but if we get a pending we don't care
+        if let Poll::Ready(Err(e)) = poll_flush_buf(&mut this.inner, this.buf, cx) {
+            Poll::Ready(Err(e))
+        } else {
+            res
+        }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        ready!(self.as_mut().poll_flush_buf(cx))?;
-        self.get_pin_mut().poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+        ready!(poll_flush_buf(&mut this.inner, this.buf, cx))?;
+        this.inner.poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        ready!(self.as_mut().poll_flush_buf(cx))?;
-        self.get_pin_mut().poll_close(cx)
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+        ready!(poll_flush_buf(&mut this.inner, this.buf, cx))?;
+        this.inner.poll_close(cx)
     }
 }
 
