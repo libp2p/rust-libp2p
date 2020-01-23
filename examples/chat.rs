@@ -82,9 +82,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Use the derive to generate delegating NetworkBehaviour impl and require the
     // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
-    struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
-        floodsub: Floodsub<TSubstream>,
-        mdns: Mdns<TSubstream>,
+    struct MyBehaviour {
+        floodsub: Floodsub,
+        mdns: Mdns,
 
         // Struct fields which do not implement NetworkBehaviour need to be ignored
         #[behaviour(ignore)]
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ignored_member: bool,
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour<TSubstream> {
+    impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<TSubstream> {
+    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {

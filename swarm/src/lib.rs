@@ -224,7 +224,8 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         TMuxer::OutboundSubstream: Send + 'static,
         <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
         <TMuxer as StreamMuxer>::Substream: Send + 'static,
-        TTransport: Transport<Output = (TConnInfo, TMuxer), Error = io::Error> + Send + Sync + Clone + 'static,
+        TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone + Send + Sync + 'static,
+        TTransport::Error: error::Error + Send + Sync + 'static,
         TTransport::Listener: Send + 'static,
         TTransport::ListenerUpgrade: Send + 'static,
         TTransport::Dial: Send + 'static,
@@ -585,13 +586,15 @@ where TBehaviour: NetworkBehaviour,
         TMuxer::OutboundSubstream: Send + 'static,
         <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
         <TMuxer as StreamMuxer>::Substream: Send + 'static,
-        TTransport: Transport<Output = (TConnInfo, TMuxer), Error = io::Error> + Clone + Send + Sync + 'static,
+        TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone + Send + Sync + 'static,
+        TTransport::Error: error::Error + Send + Sync + 'static,
         TTransport::Listener: Send + 'static,
         TTransport::ListenerUpgrade: Send + 'static,
         TTransport::Dial: Send + 'static,
     {
         let transport = transport
             .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             .boxed();
 
         SwarmBuilder {
