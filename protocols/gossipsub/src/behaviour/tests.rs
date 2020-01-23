@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use async_std::net::TcpStream;
 
     // helper functions for testing
 
@@ -13,14 +14,14 @@ mod tests {
         topics: Vec<String>,
         to_subscribe: bool,
     ) -> (
-        Gossipsub<tokio::net::TcpStream>,
+        Gossipsub<TcpStream>,
         Vec<PeerId>,
         Vec<TopicHash>,
     ) {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub<tokio::net::TcpStream> = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub<TcpStream> = Gossipsub::new(PeerId::random(), gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -40,7 +41,7 @@ mod tests {
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
-            <Gossipsub<tokio::net::TcpStream> as NetworkBehaviour>::inject_connected(
+            <Gossipsub<TcpStream> as NetworkBehaviour>::inject_connected(
                 &mut gs,
                 peer.clone(),
                 dummy_connected_point.clone(),

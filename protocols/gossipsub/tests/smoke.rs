@@ -18,9 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![cfg(test)]
-
 use futures::prelude::*;
+use log::debug;
+use quickcheck::{QuickCheck, TestResult};
+use rand::{random, seq::SliceRandom, SeedableRng};
+use std::{
+    io::Error,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use libp2p_core::{
     identity,
     multiaddr::Protocol,
@@ -29,16 +37,10 @@ use libp2p_core::{
     transport::{boxed::Boxed, MemoryTransport},
     upgrade, Multiaddr, PeerId, Transport,
 };
+use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
-use log::debug;
-use quickcheck::{QuickCheck, TestResult};
-use rand::{random, seq::SliceRandom, SeedableRng};
-use std::{io::Error, time::Duration};
-use tokio::{runtime::current_thread::Runtime, util::FutureExt};
-
-use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 
 type TestSwarm =
     Swarm<Boxed<(PeerId, StreamMuxerBox), Error>, Gossipsub<Substream<StreamMuxerBox>>>;
@@ -48,19 +50,18 @@ struct Graph {
 }
 
 impl Future for Graph {
-    type Item = (Multiaddr, GossipsubEvent);
-    type Error = ();
+    type Output = (Multiaddr, GossipsubEvent);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
-            match node.poll().expect("no error while polling") {
-                Async::Ready(Some(event)) => return Ok(Async::Ready((addr.clone(), event))),
-                Async::Ready(None) => panic!("unexpected None when polling nodes"),
-                Async::NotReady => {}
+            match node.poll_next_unpin(cx) {
+                Poll::Ready(Some(event)) => return Poll::Ready((addr.clone(), event)),
+                Poll::Ready(None) => panic!("unexpected None when polling nodes"),
+                Poll::Pending => {}
             }
         }
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
 
@@ -106,34 +107,33 @@ impl Graph {
             nodes: connected_nodes,
         }
     }
+
     /// Polls the graph and passes each event into the provided FnMut until it returns `true`.
-    fn wait_for<F>(self, rt: &mut Runtime, mut f: F) -> Self
+    fn wait_for<F>(self, mut f: F) -> Self
     where
         F: FnMut(GossipsubEvent) -> bool,
     {
         // The future below should return self. Given that it is a FnMut and not a FnOnce, one needs
-        // to wrap `self` in an Option, leaving a `None` behind after the final `Async::Ready`.
+        // to wrap `self` in an Option, leaving a `None` behind after the final `Poll::Ready`.
         let mut this = Some(self);
 
-        let fut = futures::future::poll_fn(move || -> Result<_, ()> {
-            match &mut this {
-                Some(graph) => loop {
-                    match graph.poll().expect("no error while polling") {
-                        Async::Ready((_addr, ev)) => {
-                            if f(ev) {
-                                return Ok(Async::Ready(this.take().unwrap()));
-                            }
+        let fut = futures::future::poll_fn(move |cx| match &mut this {
+            Some(graph) => loop {
+                match graph.poll_unpin(cx) {
+                    Poll::Ready((_addr, ev)) => {
+                        if f(ev) {
+                            return Poll::Ready(this.take().unwrap());
                         }
-                        Async::NotReady => return Ok(Async::NotReady),
                     }
-                },
-                None => panic!("future called after final return"),
-            }
-        })
-        .timeout(Duration::from_secs(10))
-        .map_err(|e| panic!("{:?}", e));
+                    Poll::Pending => return Poll::Pending,
+                }
+            },
+            None => panic!("future called after final return"),
+        });
 
-        rt.block_on(fut).unwrap()
+        let fut = async_std::future::timeout(Duration::from_secs(10), fut);
+
+        futures::executor::block_on(fut).unwrap()
     }
 }
 
@@ -159,7 +159,7 @@ fn build_node() -> (Multiaddr, TestSwarm) {
     let mut addr: Multiaddr = Protocol::Memory(port).into();
     Swarm::listen_on(&mut swarm, addr.clone()).unwrap();
 
-    addr = addr.with(libp2p::core::multiaddr::Protocol::P2p(
+    addr = addr.with(libp2p_core::multiaddr::Protocol::P2p(
         public_key.into_peer_id().into(),
     ));
 
@@ -177,8 +177,6 @@ fn multi_hop_propagation() {
 
         debug!("number nodes: {:?}, seed: {:?}", num_nodes, seed);
 
-        let mut rt = Runtime::new().unwrap();
-
         let mut graph = Graph::new_connected(num_nodes, seed);
         let number_nodes = graph.nodes.len();
 
@@ -190,7 +188,7 @@ fn multi_hop_propagation() {
 
         // Wait for all nodes to be subscribed.
         let mut subscribed = 0;
-        graph = graph.wait_for(&mut rt, move |ev| {
+        graph = graph.wait_for(move |ev| {
             if let GossipsubEvent::Subscribed { .. } = ev {
                 subscribed += 1;
                 if subscribed == (number_nodes - 1) * 2 {
@@ -206,7 +204,7 @@ fn multi_hop_propagation() {
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
-        graph.wait_for(&mut rt, move |ev| {
+        graph.wait_for(move |ev| {
             if let GossipsubEvent::Message(..) = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {

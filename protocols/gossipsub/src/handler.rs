@@ -25,12 +25,15 @@ use libp2p_core::upgrade::{InboundUpgrade, Negotiated, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use log::{trace, warn};
+use log::{debug, trace, warn};
 use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::io;
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{
+    borrow::Cow,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+use futures_codec::Framed;
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
 pub struct GossipsubHandler<TSubstream>
@@ -119,7 +122,7 @@ where
 
 impl<TSubstream> ProtocolsHandler for GossipsubHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type InEvent = GossipsubRpc;
     type OutEvent = GossipsubRpc;
@@ -135,7 +138,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        substream: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output,
+        substream: <Self::InboundProtocol as InboundUpgrade<Negotiated<TSubstream>>>::Output,
     ) {
         // new inbound substream. Replace the current one, if it exists.
         trace!("New inbound substream request");
@@ -144,7 +147,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        substream: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        substream: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<TSubstream>>>::Output,
         message: Self::OutboundOpenInfo,
     ) {
         // Should never establish a new outbound substream if one already exists.
@@ -180,20 +183,20 @@ where
 
     fn poll(
         &mut self,
-    ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        io::Error,
-    > {
+        cx: &mut Context,
+    ) -> Poll<ProtocolsHandlerEvent<
+        Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error,
+    >> {
         // determine if we need to create the stream
         if !self.send_queue.is_empty() && self.outbound_substream.is_none() {
             let message = self.send_queue.remove(0);
             self.send_queue.shrink_to_fit();
-            return Ok(Async::Ready(
+            return Poll::Ready(
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     protocol: self.listen_protocol.clone(),
                     info: message,
                 },
-            ));
+            );
         }
 
         loop {
@@ -203,44 +206,46 @@ where
             ) {
                 // inbound idle state
                 Some(InboundSubstreamState::WaitingInput(mut substream)) => {
-                    match substream.poll() {
-                        Ok(Async::Ready(Some(message))) => {
+                    match substream.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(message))) => {
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(message)));
+                            return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
+                        }
+                        Poll::Ready(Some(Err(e))) => {
+                            debug!("Inbound substream error while awaiting input: {:?}", e);
+                            self.inbound_substream = Some(InboundSubstreamState::Closing(substream));
                         }
                         // peer closed the stream
-                        Ok(Async::Ready(None)) => {
+                        Poll::Ready(None) => {
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
-                        Ok(Async::NotReady) => {
+                        Poll::Pending => {
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
                             break;
                         }
-                        Err(_) => {
-                            self.inbound_substream = Some(InboundSubstreamState::Closing(substream))
-                        }
                     }
                 }
-                Some(InboundSubstreamState::Closing(mut substream)) => match substream.close() {
-                    Ok(Async::Ready(())) => {
+                Some(InboundSubstreamState::Closing(mut substream)) => match Sink::poll_close(Pin::new(&mut substream), cx) {
+                    Poll::Ready(Ok(())) => {
                         self.inbound_substream = None;
                         if self.outbound_substream.is_none() {
                             self.keep_alive = KeepAlive::No;
                         }
                         break;
                     }
-                    Ok(Async::NotReady) => {
-                        self.inbound_substream = Some(InboundSubstreamState::Closing(substream));
-                        break;
-                    }
-                    Err(_) => {
-                        return Err(io::Error::new(
+                    Poll::Ready(Err(e)) => {
+                        debug!("Inbound substream error while closing: {:?}", e);
+                        return Poll::Ready(ProtocolsHandlerEvent::Close(io::Error::new(
                             io::ErrorKind::BrokenPipe,
                             "Failed to close stream",
-                        ))
+                        )))
+                    }
+                    Poll::Pending => {
+                        self.inbound_substream = Some(InboundSubstreamState::Closing(substream));
+                        break;
                     }
                 },
                 None => {
@@ -272,12 +277,22 @@ where
                     }
                 }
                 Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {
-                    match substream.start_send(message)? {
-                        AsyncSink::Ready => {
-                            self.outbound_substream =
-                                Some(OutboundSubstreamState::PendingFlush(substream))
+                    match Sink::poll_ready(Pin::new(&mut substream), cx) {
+                        Poll::Ready(Ok(())) => {
+                            match Sink::start_send(Pin::new(&mut substream), message) {
+                                Ok(()) => {
+                                    self.outbound_substream =
+                                        Some(OutboundSubstreamState::PendingFlush(substream))
+                                }
+                                Err(e) => {
+                                    return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                                }
+                            }
                         }
-                        AsyncSink::NotReady(message) => {
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                        }
+                        Poll::Pending => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
                             break;
@@ -285,12 +300,15 @@ where
                     }
                 }
                 Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
-                    match substream.poll_complete()? {
-                        Async::Ready(()) => {
+                    match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                        Poll::Ready(Ok(())) => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
-                        Async::NotReady => {
+                        Poll::Ready(Err(e)) => {
+                            return Poll::Ready(ProtocolsHandlerEvent::Close(e))
+                        }
+                        Poll::Pending => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingFlush(substream));
                             break;
@@ -298,23 +316,24 @@ where
                     }
                 }
                 // Currently never used - manual shutdown may implement this in the future
-                Some(OutboundSubstreamState::_Closing(mut substream)) => match substream.close() {
-                    Ok(Async::Ready(())) => {
+                Some(OutboundSubstreamState::_Closing(mut substream)) => match Sink::poll_close(Pin::new(&mut substream), cx) {
+                    Poll::Ready(Ok(()) )=> {
                         self.outbound_substream = None;
                         if self.inbound_substream.is_none() {
                             self.keep_alive = KeepAlive::No;
                         }
                         break;
                     }
-                    Ok(Async::NotReady) => {
-                        self.outbound_substream = Some(OutboundSubstreamState::_Closing(substream));
-                        break;
-                    }
-                    Err(_) => {
-                        return Err(io::Error::new(
+                    Poll::Ready(Err(e)) => {
+                        debug!("Outbound substream error while closing: {:?}", e);
+                        return Poll::Ready(ProtocolsHandlerEvent::Close(io::Error::new(
                             io::ErrorKind::BrokenPipe,
                             "Failed to close outbound substream",
-                        ))
+                        )))
+                    }
+                    Poll::Pending => {
+                        self.outbound_substream = Some(OutboundSubstreamState::_Closing(substream));
+                        break;
                     }
                 },
                 None => {
@@ -327,6 +346,6 @@ where
             }
         }
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }

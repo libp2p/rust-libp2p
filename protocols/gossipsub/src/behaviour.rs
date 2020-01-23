@@ -33,13 +33,17 @@ use log::{debug, error, info, trace, warn};
 use lru::LruCache;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
-use std::collections::hash_map::HashMap;
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Instant;
-use std::{collections::VecDeque, iter, marker::PhantomData};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Interval;
+use std::{
+    collections::HashSet,
+    collections::VecDeque,
+    collections::hash_map::HashMap,
+    iter,
+    marker::PhantomData,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Instant,
+};
+use wasm_timer::Interval;
 
 mod tests;
 
@@ -112,7 +116,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 gs_config.message_id_fn,
             ),
             received: LruCache::new(256), // keep track of the last 256 messages
-            heartbeat: Interval::new(
+            heartbeat: Interval::new_at(
                 Instant::now() + gs_config.heartbeat_initial_delay,
                 gs_config.heartbeat_interval,
             ),
@@ -987,7 +991,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Gossipsub<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type ProtocolsHandler = GossipsubHandler<TSubstream>;
     type OutEvent = GossipsubEvent;
@@ -1123,8 +1127,9 @@ where
 
     fn poll(
         &mut self,
+        cx: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Async<
+    ) -> Poll<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
@@ -1138,35 +1143,35 @@ where
                     event: send_event,
                 } => match Arc::try_unwrap(send_event) {
                     Ok(event) => {
-                        return Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event });
+                        return Poll::Ready(NetworkBehaviourAction::SendEvent { peer_id, event });
                     }
                     Err(event) => {
-                        return Async::Ready(NetworkBehaviourAction::SendEvent {
+                        return Poll::Ready(NetworkBehaviourAction::SendEvent {
                             peer_id,
                             event: (*event).clone(),
                         });
                     }
                 },
                 NetworkBehaviourAction::GenerateEvent(e) => {
-                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(e));
+                    return Poll::Ready(NetworkBehaviourAction::GenerateEvent(e));
                 }
                 NetworkBehaviourAction::DialAddress { address } => {
-                    return Async::Ready(NetworkBehaviourAction::DialAddress { address });
+                    return Poll::Ready(NetworkBehaviourAction::DialAddress { address });
                 }
                 NetworkBehaviourAction::DialPeer { peer_id } => {
-                    return Async::Ready(NetworkBehaviourAction::DialPeer { peer_id });
+                    return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id });
                 }
                 NetworkBehaviourAction::ReportObservedAddr { address } => {
-                    return Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address });
+                    return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address });
                 }
             }
         }
 
-        while let Ok(Async::Ready(Some(_))) = self.heartbeat.poll() {
+        while let Poll::Ready(Some(())) = self.heartbeat.poll_next_unpin(cx) {
             self.heartbeat();
         }
 
-        Async::NotReady
+        Poll::Pending
     }
 }
 

@@ -4,13 +4,17 @@ use crate::topic::TopicHash;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use bytes::BytesMut;
+use futures::prelude::*;
 use futures::future;
-use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use protobuf::Message as ProtobufMessage;
-use std::borrow::Cow;
-use std::{io, iter};
-use tokio_codec::{Decoder, Encoder, Framed};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{
+    borrow::Cow,
+    io,
+    iter,
+    pin::Pin,
+};
+use futures_codec::{Decoder, Encoder, Framed};
 use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
@@ -54,31 +58,31 @@ impl UpgradeInfo for ProtocolConfig {
 
 impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = Framed<upgrade::Negotiated<TSocket>, GossipsubCodec>;
+    type Output = Framed<TSocket, GossipsubCodec>;
     type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
-        future::ok(Framed::new(socket, GossipsubCodec { length_codec }))
+        Box::pin(future::ok(Framed::new(socket, GossipsubCodec { length_codec })))
     }
 }
 
 impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
 where
-    TSocket: AsyncWrite + AsyncRead,
+    TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
-    type Output = Framed<upgrade::Negotiated<TSocket>, GossipsubCodec>;
+    type Output = Framed<TSocket, GossipsubCodec>;
     type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
-        future::ok(Framed::new(socket, GossipsubCodec { length_codec }))
+        Box::pin(future::ok(Framed::new(socket, GossipsubCodec { length_codec })))
     }
 }
 
