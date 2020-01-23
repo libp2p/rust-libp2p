@@ -1,5 +1,7 @@
 syntax = "proto2";
 
+package structs;
+
 message Exchange {
   optional bytes id = 1;
   optional bytes pubkey = 2;

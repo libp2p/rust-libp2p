@@ -28,8 +28,7 @@ use crate::structs_proto::{Exchange, Propose};
 use futures::prelude::*;
 use libp2p_core::PublicKey;
 use log::{debug, trace};
-use protobuf::Message as ProtobufMessage;
-use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
+use prost::Message;
 use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
@@ -63,35 +62,36 @@ where
     let local_public_key_encoded = config.key.public().into_protobuf_encoding();
 
     // Send our proposition with our nonce, public key and supported protocols.
-    let mut local_proposition = Propose::new();
-    local_proposition.set_rand(local_nonce.to_vec());
-    local_proposition.set_pubkey(local_public_key_encoded.clone());
+    let local_proposition = Propose {
+        rand: Some(local_nonce.to_vec()),
+        pubkey: Some(local_public_key_encoded.clone()),
+        exchanges: if let Some(ref p) = config.agreements_prop {
+            trace!("agreements proposition: {}", p);
+            Some(p.clone())
+        } else {
+            trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+            Some(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
+        },
+        ciphers: if let Some(ref p) = config.ciphers_prop {
+            trace!("ciphers proposition: {}", p);
+            Some(p.clone())
+        } else {
+            trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
+            Some(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
+        },
+        hashes: if let Some(ref p) = config.digests_prop {
+            trace!("digests proposition: {}", p);
+            Some(p.clone())
+        } else {
+            Some(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
+        }
+    };
 
-    if let Some(ref p) = config.agreements_prop {
-        trace!("agreements proposition: {}", p);
-        local_proposition.set_exchanges(p.clone())
-    } else {
-        trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
-        local_proposition.set_exchanges(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
-    }
-
-    if let Some(ref p) = config.ciphers_prop {
-        trace!("ciphers proposition: {}", p);
-        local_proposition.set_ciphers(p.clone())
-    } else {
-        trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
-        local_proposition.set_ciphers(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
-    }
-
-    if let Some(ref p) = config.digests_prop {
-        trace!("digests proposition: {}", p);
-        local_proposition.set_hashes(p.clone())
-    } else {
-        trace!("digests proposition: {}", algo_support::DEFAULT_DIGESTS_PROPOSITION);
-        local_proposition.set_hashes(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
-    }
-
-    let local_proposition_bytes = local_proposition.write_to_bytes()?;
+    let local_proposition_bytes = {
+        let mut buf = Vec::with_capacity(local_proposition.encoded_len());
+        local_proposition.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        buf
+    };
     trace!("starting handshake; local nonce = {:?}", local_nonce);
 
     trace!("sending proposition to remote");
@@ -107,7 +107,7 @@ where
         },
     };
 
-    let mut remote_proposition = match protobuf_parse_from_bytes::<Propose>(&remote_proposition_bytes) {
+    let remote_proposition = match Propose::decode(&remote_proposition_bytes[..]) {
         Ok(prop) => prop,
         Err(_) => {
             debug!("failed to parse remote's proposition protobuf message");
@@ -115,8 +115,8 @@ where
         }
     };
 
-    let remote_public_key_encoded = remote_proposition.take_pubkey();
-    let remote_nonce = remote_proposition.take_rand();
+    let remote_public_key_encoded = remote_proposition.pubkey.unwrap_or_default();
+    let remote_nonce = remote_proposition.rand.unwrap_or_default();
 
     let remote_public_key = match PublicKey::from_protobuf_encoding(&remote_public_key_encoded) {
         Ok(p) => p,
@@ -152,7 +152,7 @@ where
         let ours = config.agreements_prop.as_ref()
             .map(|s| s.as_ref())
             .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
-        let theirs = &remote_proposition.get_exchanges();
+        let theirs = &remote_proposition.exchanges.unwrap_or_default();
         match algo_support::select_agreement(hashes_ordering, ours, theirs) {
             Ok(a) => a,
             Err(err) => {
@@ -166,7 +166,7 @@ where
         let ours = config.ciphers_prop.as_ref()
             .map(|s| s.as_ref())
             .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
-        let theirs = &remote_proposition.get_ciphers();
+        let theirs = &remote_proposition.ciphers.unwrap_or_default();
         match algo_support::select_cipher(hashes_ordering, ours, theirs) {
             Ok(a) => {
                 debug!("selected cipher: {:?}", a);
@@ -183,7 +183,7 @@ where
         let ours = config.digests_prop.as_ref()
             .map(|s| s.as_ref())
             .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
-        let theirs = &remote_proposition.get_hashes();
+        let theirs = &remote_proposition.hashes.unwrap_or_default();
         match algo_support::select_digest(hashes_ordering, ours, theirs) {
             Ok(a) => {
                 debug!("selected hash: {:?}", a);
@@ -206,15 +206,19 @@ where
         data_to_sign.extend_from_slice(&remote_proposition_bytes);
         data_to_sign.extend_from_slice(&tmp_pub_key);
 
-        let mut exchange = Exchange::new();
-        exchange.set_epubkey(tmp_pub_key.clone());
-        match config.key.sign(&data_to_sign) {
-            Ok(sig) => exchange.set_signature(sig),
-            Err(_) => return Err(SecioError::SigningFailure)
+        Exchange {
+            epubkey: Some(tmp_pub_key.clone()),
+            signature: match config.key.sign(&data_to_sign) {
+                Ok(sig) => Some(sig),
+                Err(_) => return Err(SecioError::SigningFailure)
+            }
         }
-        exchange
     };
-    let local_exch = local_exchange.write_to_bytes()?;
+    let local_exch = {
+        let mut buf = Vec::with_capacity(local_exchange.encoded_len());
+        local_exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        buf
+    };
 
     // Send our local `Exchange`.
     trace!("sending exchange to remote");
@@ -231,7 +235,7 @@ where
             },
         };
 
-        match protobuf_parse_from_bytes::<Exchange>(&raw) {
+        match Exchange::decode(&raw[..]) {
             Ok(e) => {
                 trace!("received and decoded the remote's exchange");
                 e
@@ -249,9 +253,9 @@ where
     {
         let mut data_to_verify = remote_proposition_bytes.clone();
         data_to_verify.extend_from_slice(&local_proposition_bytes);
-        data_to_verify.extend_from_slice(remote_exch.get_epubkey());
+        data_to_verify.extend_from_slice(remote_exch.epubkey.as_deref().unwrap_or_default());
 
-        if !remote_public_key.verify(&data_to_verify, remote_exch.get_signature()) {
+        if !remote_public_key.verify(&data_to_verify, &remote_exch.signature.unwrap_or_default()) {
             return Err(SecioError::SignatureVerificationFailed)
         }
 
@@ -260,7 +264,12 @@ where
 
     // Generate a key from the local ephemeral private key and the remote ephemeral public key,
     // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
-    let key_material = exchange::agree(chosen_exchange, tmp_priv_key, remote_exch.get_epubkey(), chosen_hash.num_bytes()).await?;
+    let key_material = exchange::agree(
+        chosen_exchange,
+        tmp_priv_key,
+        &remote_exch.epubkey.unwrap_or_default(),
+        chosen_hash.num_bytes()
+    ).await?;
 
     // Generate a key from the local ephemeral private key and the remote ephemeral public key,
     // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.

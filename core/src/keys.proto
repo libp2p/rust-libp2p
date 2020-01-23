@@ -1,5 +1,7 @@
 syntax = "proto2";
 
+package keys_proto;
+
 enum KeyType {
   RSA = 0;
   Ed25519 = 1;
