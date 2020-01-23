@@ -225,7 +225,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
         <TMuxer as StreamMuxer>::Substream: Send + 'static,
         TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone + Send + Sync + 'static,
-        TTransport::Error: error::Error + Send + Sync + 'static,
+        TTransport::Error: Send + Sync + 'static,
         TTransport::Listener: Send + 'static,
         TTransport::ListenerUpgrade: Send + 'static,
         TTransport::Dial: Send + 'static,
@@ -587,7 +587,7 @@ where TBehaviour: NetworkBehaviour,
         <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
         <TMuxer as StreamMuxer>::Substream: Send + 'static,
         TTransport: Transport<Output = (TConnInfo, TMuxer)> + Clone + Send + Sync + 'static,
-        TTransport::Error: error::Error + Send + Sync + 'static,
+        TTransport::Error: Send + Sync + 'static,
         TTransport::Listener: Send + 'static,
         TTransport::ListenerUpgrade: Send + 'static,
         TTransport::Dial: Send + 'static,
@@ -687,20 +687,15 @@ mod tests {
         transport::dummy::{DummyStream, DummyTransport}
     };
     use libp2p_mplex::Multiplex;
-    use futures::prelude::*;
-    use std::{marker::PhantomData, task::Context, task::Poll};
+    use std::task::{Context, Poll};
     use void::Void;
 
     #[derive(Clone)]
-    struct DummyBehaviour<TSubstream> {
-        marker: PhantomData<TSubstream>,
+    struct DummyBehaviour {
     }
 
-    impl<TSubstream> NetworkBehaviour
-        for DummyBehaviour<TSubstream>
-        where TSubstream: AsyncRead + AsyncWrite + Unpin
-    {
-        type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
+    impl NetworkBehaviour for DummyBehaviour {
+        type ProtocolsHandler = DummyProtocolsHandler;
         type OutEvent = Void;
 
         fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -735,8 +730,7 @@ mod tests {
     fn test_build_swarm() {
         let id = get_random_id();
         let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
-        let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour, id.into())
+        let swarm = SwarmBuilder::new(transport, DummyBehaviour {}, id.into())
             .incoming_limit(Some(4)).build();
         assert_eq!(swarm.network.incoming_limit(), Some(4));
     }
@@ -745,8 +739,7 @@ mod tests {
     fn test_build_swarm_with_max_listeners_none() {
         let id = get_random_id();
         let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
-        let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour, id.into()).build();
+        let swarm = SwarmBuilder::new(transport, DummyBehaviour {}, id.into()).build();
         assert!(swarm.network.incoming_limit().is_none())
     }
 }
