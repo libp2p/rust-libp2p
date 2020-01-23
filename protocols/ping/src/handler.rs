@@ -190,7 +190,6 @@ where
     type InEvent = Void;
     type OutEvent = PingResult;
     type Error = PingFailure;
-    type Substream = TSubstream;
     type InboundProtocol = protocol::Ping;
     type OutboundProtocol = protocol::Ping;
     type OutboundOpenInfo = ();

@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{BoxSubstream, NegotiatedBoxSubstream};
 use crate::protocols_handler::{
     KeepAlive,
     ProtocolsHandler,
@@ -102,12 +103,12 @@ where
     handler: TProtoHandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in:
-        Vec<(InboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::InboundProtocol>, Delay)>,
+        Vec<(InboundUpgradeApply<BoxSubstream, TProtoHandler::InboundProtocol>, Delay)>,
     /// Futures that upgrade outgoing substreams. The first element of the tuple is the userdata
     /// to pass back once successfully opened.
     negotiating_out: Vec<(
         TProtoHandler::OutboundOpenInfo,
-        OutboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::OutboundProtocol>,
+        OutboundUpgradeApply<BoxSubstream, TProtoHandler::OutboundProtocol>,
         Delay,
     )>,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
@@ -184,7 +185,7 @@ where
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
     type Error = NodeHandlerWrapperError<TProtoHandler::Error>;
-    type Substream = TProtoHandler::Substream;
+    type Substream = BoxSubstream;
     // The first element of the tuple is the unique upgrade identifier
     // (see `unique_dial_upgrade_id`).
     type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo, Duration);

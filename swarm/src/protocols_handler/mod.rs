@@ -44,10 +44,10 @@ mod node_handler;
 mod one_shot;
 mod select;
 
-use futures::prelude::*;
+use crate::NegotiatedBoxSubstream;
+
 use libp2p_core::{
     ConnectedPoint,
-    Negotiated,
     PeerId,
     upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeError},
 };
@@ -95,19 +95,17 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// continue reading data until the remote closes its side of the connection.
 pub trait ProtocolsHandler {
     /// Custom event that can be received from the outside.
-    type InEvent;
+    type InEvent: Send + 'static;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
-    type OutEvent;
+    type OutEvent: Send + 'static;
     /// The type of errors returned by [`ProtocolsHandler::poll`].
-    type Error: error::Error;
-    /// The type of substreams on which the protocol(s) are negotiated.
-    type Substream: AsyncRead + AsyncWrite + Unpin;
+    type Error: error::Error + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
-    type InboundProtocol: InboundUpgrade<Negotiated<Self::Substream>>;
+    type InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream>;
     /// The outbound upgrade for the protocol(s) used by the handler.
-    type OutboundProtocol: OutboundUpgrade<Negotiated<Self::Substream>>;
+    type OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream>;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
-    type OutboundOpenInfo;
+    type OutboundOpenInfo: Send + 'static;
 
     /// The [`InboundUpgrade`] to apply on inbound substreams to negotiate the
     /// desired protocols.
@@ -121,7 +119,7 @@ pub trait ProtocolsHandler {
     /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Negotiated<Self::Substream>>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output
     );
 
     /// Injects the output of a successful upgrade on a new outbound substream.
@@ -130,7 +128,7 @@ pub trait ProtocolsHandler {
     /// [`ProtocolsHandlerEvent::OutboundSubstreamRequest`].
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
         info: Self::OutboundOpenInfo
     );
 
@@ -142,7 +140,7 @@ pub trait ProtocolsHandler {
         &mut self,
         info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error
+            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error
         >
     );
 

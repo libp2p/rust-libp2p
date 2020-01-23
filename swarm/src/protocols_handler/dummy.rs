@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::NegotiatedBoxSubstream;
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -51,7 +52,6 @@ where
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;
-    type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
@@ -80,7 +80,7 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error>) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error>) {}
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }

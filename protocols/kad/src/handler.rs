@@ -428,7 +428,7 @@ where
 impl<TSubstream, TUserData> ProtocolsHandler for KademliaHandler<TSubstream, TUserData>
 where
     TSubstream: AsyncRead + AsyncWrite + Unpin,
-    TUserData: Clone,
+    TUserData: Clone + Send + 'static,
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
