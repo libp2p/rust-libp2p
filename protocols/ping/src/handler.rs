@@ -259,7 +259,6 @@ impl ProtocolsHandler for PingHandler {
 mod tests {
     use super::*;
 
-    use async_std::net::TcpStream;
     use futures::future;
     use quickcheck::*;
     use rand::Rng;
@@ -273,7 +272,7 @@ mod tests {
         }
     }
 
-    fn tick(h: &mut PingHandler<TcpStream>)
+    fn tick(h: &mut PingHandler)
         -> ProtocolsHandlerEvent<protocol::Ping, (), PingResult, PingFailure>
     {
         async_std::task::block_on(future::poll_fn(|cx| h.poll(cx) ))
@@ -282,7 +281,7 @@ mod tests {
     #[test]
     fn ping_interval() {
         fn prop(cfg: PingConfig, ping_rtt: Duration) -> bool {
-            let mut h = PingHandler::<TcpStream>::new(cfg);
+            let mut h = PingHandler::new(cfg);
 
             // Send ping
             match tick(&mut h) {
@@ -312,7 +311,7 @@ mod tests {
     #[test]
     fn max_failures() {
         let cfg = PingConfig::arbitrary(&mut StdGen::new(rand::thread_rng(), 100));
-        let mut h = PingHandler::<TcpStream>::new(cfg);
+        let mut h = PingHandler::new(cfg);
         for _ in 0 .. h.config.max_failures.get() - 1 {
             h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
             match tick(&mut h) {

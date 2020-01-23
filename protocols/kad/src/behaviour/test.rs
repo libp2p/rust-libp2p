@@ -34,8 +34,7 @@ use libp2p_core::{
     PeerId,
     Transport,
     identity,
-    transport::{MemoryTransport, boxed::Boxed},
-    nodes::Substream,
+    transport::MemoryTransport,
     multiaddr::{Protocol, multiaddr},
     muxing::StreamMuxerBox,
     upgrade
@@ -45,13 +44,10 @@ use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng};
-use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
+use std::{collections::{HashSet, HashMap}, num::NonZeroUsize, u64};
 use multihash::{Multihash, Hash::SHA2256};
 
-type TestSwarm = Swarm<
-    Boxed<(PeerId, StreamMuxerBox), io::Error>,
-    Kademlia<Substream<StreamMuxerBox>, MemoryStore>
->;
+type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
 fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
