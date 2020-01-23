@@ -41,8 +41,7 @@ mod keys_proto {
 
 /// Multi-address re-export.
 pub use multiaddr;
-pub type Negotiated<T> =
-    futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
+pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
 use std::{future::Future, pin::Pin};
 
@@ -56,14 +55,14 @@ pub mod nodes;
 pub mod transport;
 pub mod upgrade;
 
-pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use muxing::StreamMuxer;
-pub use nodes::ConnectionInfo;
 pub use peer_id::PeerId;
-pub use translation::address_translation;
+pub use identity::PublicKey;
 pub use transport::Transport;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
+pub use translation::address_translation;
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
+pub use nodes::ConnectionInfo;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
@@ -79,7 +78,7 @@ impl std::ops::Not for Endpoint {
     fn not(self) -> Self::Output {
         match self {
             Endpoint::Dialer => Endpoint::Listener,
-            Endpoint::Listener => Endpoint::Dialer,
+            Endpoint::Listener => Endpoint::Dialer
         }
     }
 }
@@ -118,7 +117,7 @@ pub enum ConnectedPoint {
         local_addr: Multiaddr,
         /// Stack of protocols used to send back data to the remote.
         send_back_addr: Multiaddr,
-    },
+    }
 }
 
 impl From<&'_ ConnectedPoint> for Endpoint {
@@ -138,7 +137,7 @@ impl ConnectedPoint {
     pub fn to_endpoint(&self) -> Endpoint {
         match self {
             ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener,
+            ConnectedPoint::Listener { .. } => Endpoint::Listener
         }
     }
 
@@ -146,7 +145,7 @@ impl ConnectedPoint {
     pub fn is_dialer(&self) -> bool {
         match self {
             ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false,
+            ConnectedPoint::Listener { .. } => false
         }
     }
 
@@ -154,7 +153,7 @@ impl ConnectedPoint {
     pub fn is_listener(&self) -> bool {
         match self {
             ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true,
+            ConnectedPoint::Listener { .. } => true
         }
     }
 }
