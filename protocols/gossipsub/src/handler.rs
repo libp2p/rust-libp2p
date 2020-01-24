@@ -234,19 +234,19 @@ where
                 }
                 Some(InboundSubstreamState::Closing(mut substream)) => {
                     match Sink::poll_close(Pin::new(&mut substream), cx) {
-                        Poll::Ready(Ok(())) => {
+                        Poll::Ready(res) => {
+                            if let Err(e) = res {
+                                // Don't close the connection but just drop the inbound substream.
+                                // In case the remote has more to send, they will open up a new
+                                // substream.
+                                debug!("Inbound substream error while closing: {:?}", e);
+                            }
+
                             self.inbound_substream = None;
                             if self.outbound_substream.is_none() {
                                 self.keep_alive = KeepAlive::No;
                             }
                             break;
-                        }
-                        Poll::Ready(Err(e)) => {
-                            debug!("Inbound substream error while closing: {:?}", e);
-                            return Poll::Ready(ProtocolsHandlerEvent::Close(io::Error::new(
-                                io::ErrorKind::BrokenPipe,
-                                "Failed to close stream",
-                            )));
                         }
                         Poll::Pending => {
                             self.inbound_substream =
@@ -297,6 +297,7 @@ where
                             }
                         }
                         Poll::Ready(Err(e)) => {
+                            debug!("Outbound substream error while sending output: {:?}", e);
                             return Poll::Ready(ProtocolsHandlerEvent::Close(e));
                         }
                         Poll::Pending => {
