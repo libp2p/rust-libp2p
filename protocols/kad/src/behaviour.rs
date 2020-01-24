@@ -1006,6 +1006,7 @@ where
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     for<'a> TStore: RecordStore<'a>,
+    TStore: Send + 'static,
 {
     type ProtocolsHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;

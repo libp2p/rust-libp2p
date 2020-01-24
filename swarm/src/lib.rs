@@ -203,7 +203,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
       THandlerErr: error::Error + Send + 'static,
       THandler: IntoProtocolsHandler + Send + 'static,
-      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr>,
       <THandler::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
       <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
       <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
@@ -496,7 +496,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
       TInEvent: Send + 'static,
       TOutEvent: Send + 'static,
-      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr>,
       <THandler::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
       <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
       <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
@@ -564,8 +564,6 @@ pub struct SwarmBuilder<TBehaviour, TConnInfo> {
 
 impl<TBehaviour, TConnInfo> SwarmBuilder<TBehaviour, TConnInfo>
 where TBehaviour: NetworkBehaviour,
-      TBehaviour::ProtocolsHandler: Send + 'static,
-      <TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler + Send + 'static,
       <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
       <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
       <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
@@ -672,6 +670,38 @@ where TBehaviour: NetworkBehaviour,
             send_event_to_complete: None
         }
     }
+}
+
+#[derive(Clone, Default)]
+pub struct DummyBehaviour {
+}
+
+impl NetworkBehaviour for DummyBehaviour {
+    type ProtocolsHandler = protocols_handler::DummyProtocolsHandler;
+    type OutEvent = void::Void;
+
+    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        protocols_handler::DummyProtocolsHandler::default()
+    }
+
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
+    }
+
+    fn inject_connected(&mut self, _: PeerId, _: libp2p_core::ConnectedPoint) {}
+
+    fn inject_disconnected(&mut self, _: &PeerId, _: libp2p_core::ConnectedPoint) {}
+
+    fn inject_node_event(&mut self, _: PeerId,
+        _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
+
+    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
+        Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as
+        ProtocolsHandler>::InEvent, Self::OutEvent>>
+    {
+        Poll::Pending
+    }
+
 }
 
 #[cfg(test)]

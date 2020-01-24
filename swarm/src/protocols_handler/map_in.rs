@@ -53,6 +53,7 @@ where
     TProtoHandler: ProtocolsHandler,
     TMap: Fn(TNewIn) -> Option<TProtoHandler::InEvent>,
     TNewIn: Send + 'static,
+    TMap: Send + 'static,
 {
     type InEvent = TNewIn;
     type OutEvent = TProtoHandler::OutEvent;

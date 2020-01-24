@@ -93,7 +93,7 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
-pub trait ProtocolsHandler {
+pub trait ProtocolsHandler: Send + 'static {
     /// Custom event that can be received from the outside.
     type InEvent: Send + 'static;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
@@ -101,9 +101,9 @@ pub trait ProtocolsHandler {
     /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
-    type InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream>;
+    type InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static;
     /// The outbound upgrade for the protocol(s) used by the handler.
-    type OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream>;
+    type OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream> + Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
     type OutboundOpenInfo: Send + 'static;
 
@@ -448,7 +448,7 @@ where
 }
 
 /// Prototype for a `ProtocolsHandler`.
-pub trait IntoProtocolsHandler {
+pub trait IntoProtocolsHandler: Send + 'static {
     /// The protocols handler.
     type Handler: ProtocolsHandler;
 

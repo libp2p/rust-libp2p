@@ -78,10 +78,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 vec![
                     quote!{#ty: #trait_to_impl},
                     quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>},
-                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler: #protocols_handler},
-                    // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<::libp2p::core::Negotiated<::libp2p::swarm::NegotiatedBoxSubstream>>},
-                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<::libp2p::core::Negotiated<::libp2p::swarm::NegotiatedBoxSubstream>>},
                 ]
             })
             .collect::<Vec<_>>();

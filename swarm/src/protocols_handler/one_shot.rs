@@ -128,7 +128,7 @@ where
 impl<TInProto, TOutProto, TOutEvent> ProtocolsHandler
     for OneShotHandler<TInProto, TOutProto, TOutEvent>
 where
-    TInProto: InboundUpgrade<NegotiatedBoxSubstream>,
+    TInProto: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
     TOutProto: OutboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
     TInProto::Output: Into<TOutEvent>,
     TOutProto::Output: Into<TOutEvent>,

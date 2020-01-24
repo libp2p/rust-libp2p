@@ -51,6 +51,7 @@ where
     TProtoHandler: ProtocolsHandler,
     TMap: FnMut(TProtoHandler::OutEvent) -> TNewOut,
     TNewOut: Send + 'static,
+    TMap: Send + 'static,
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TNewOut;
