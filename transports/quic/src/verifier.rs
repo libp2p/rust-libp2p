@@ -26,7 +26,7 @@
 /// **by design**.  Instead, it is the application’s job to check the peer ID that libp2p-quic
 /// provides.  libp2p-quic does guarantee that the connection is to a peer with the secret key
 /// corresponing to its `PeerId`, unless that endpoint has done something insecure.
-pub struct VeryInsecureAllowAllCertificatesWithoutChecking;
+pub struct VeryInsecureRequireExactlyOneServerCertificateButDoNotCheckIt;
 
 /// A ClientCertVerifier that requires client authentication, but considers any certificate to be
 /// valid, and does no checking whatsoever.
@@ -36,9 +36,9 @@ pub struct VeryInsecureAllowAllCertificatesWithoutChecking;
 /// **by design**.  Instead, it is the application’s job to check the peer ID that libp2p-quic
 /// provides.  libp2p-quic does guarantee that the connection is to a peer with the secret key
 /// corresponing to its `PeerId`, unless that endpoint has done something insecure.
-pub struct VeryInsecureRequireClientCertificateButDoNotCheckIt;
+pub struct VeryInsecureRequireExactlyOneClientCertificateButDoNotCheckIt;
 
-impl rustls::ServerCertVerifier for VeryInsecureAllowAllCertificatesWithoutChecking {
+impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneServerCertificateButDoNotCheckIt {
     fn verify_server_cert(
         &self,
         _roots: &rustls::RootCertStore,
@@ -46,7 +46,7 @@ impl rustls::ServerCertVerifier for VeryInsecureAllowAllCertificatesWithoutCheck
         _dns_name: webpki::DNSNameRef,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        if presented_certs.len() > 0 {
+        if presented_certs.len() == 1 {
             Ok(rustls::ServerCertVerified::assertion())
         } else {
             Err(rustls::TLSError::NoCertificatesPresented)
@@ -54,7 +54,7 @@ impl rustls::ServerCertVerifier for VeryInsecureAllowAllCertificatesWithoutCheck
     }
 }
 
-impl rustls::ClientCertVerifier for VeryInsecureRequireClientCertificateButDoNotCheckIt {
+impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneClientCertificateButDoNotCheckIt {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -67,7 +67,7 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireClientCertificateButDoNot
         &self,
         presented_certs: &[rustls::Certificate],
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-        if presented_certs.len() > 0 {
+        if presented_certs.len() == 1 {
             Ok(rustls::ClientCertVerified::assertion())
         } else {
             Err(rustls::TLSError::NoCertificatesPresented)

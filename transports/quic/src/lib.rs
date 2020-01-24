@@ -31,7 +31,8 @@
 //! use libp2p_core::Multiaddr;
 //!
 //! # fn main() {
-//! let quic_config = QuicConfig::default();
+//! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+//! let quic_config = QuicConfig::new(&keypair);
 //! let quic_endpoint = Endpoint::new(
 //!     quic_config,
 //!     "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?"),
@@ -143,7 +144,7 @@ fn make_client_config(
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.enable_early_data = true;
     crypto.set_single_client_cert(vec![certificate], key);
-    let verifier = verifier::VeryInsecureAllowAllCertificatesWithoutChecking;
+    let verifier = verifier::VeryInsecureRequireExactlyOneServerCertificateButDoNotCheckIt;
     crypto
         .dangerous()
         .set_certificate_verifier(Arc::new(verifier));
@@ -161,7 +162,7 @@ fn make_server_config(
     transport.stream_window_uni(0);
     transport.datagram_receive_buffer_size(None);
     let mut crypto = rustls::ServerConfig::new(Arc::new(
-        verifier::VeryInsecureRequireClientCertificateButDoNotCheckIt,
+        verifier::VeryInsecureRequireExactlyOneClientCertificateButDoNotCheckIt,
     ));
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto
@@ -173,10 +174,9 @@ fn make_server_config(
     config
 }
 
-impl Default for QuicConfig {
+impl QuicConfig {
     /// Creates a new configuration object for TCP/IP.
-    fn default() -> Self {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
         let cert = make_cert(&keypair);
         let (cert, key) = (
             rustls::Certificate(
@@ -503,7 +503,7 @@ impl Drop for QuicUpgrade {
 }
 
 impl Future for QuicUpgrade {
-    type Output = Result<QuicMuxer, io::Error>;
+    type Output = Result<(libp2p_core::PeerId, QuicMuxer), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let muxer = &mut self.get_mut().muxer;
         trace!("outbound polling!");
@@ -517,7 +517,7 @@ impl Future for QuicUpgrade {
                         .as_ref()
                         .expect("closed connections always have a reason; qed")
                         .clone(),
-                ))
+                ))?;
             } else if inner.connection.is_handshaking() {
                 assert!(!inner.connection.is_closed(), "deadlock");
                 inner.handshake_waker = Some(cx.waker().clone());
@@ -525,19 +525,33 @@ impl Future for QuicUpgrade {
             } else if inner.connection.side().is_server() {
                 ready!(inner.endpoint_channel.poll_ready(cx))
                     .expect("we have a reference to the peer; qed");
-                Ok(inner
+                inner
                     .endpoint_channel
                     .start_send(EndpointMessage::ConnectionAccepted)
-                    .expect(
-                        "we only send one datum per clone of the channel, so we have capacity \
-                         to send this; qed",
-                    ))
-            } else {
-                Ok(())
+                    .expect("we just checked that we have capacity to send this; qed")
             }
+
+            let peer_certificates: Vec<rustls::Certificate> = inner
+                .connection
+                .crypto_session()
+                .get_peer_certificates()
+                .expect("we have finished handshaking, so we have exactly one certificate; qed");
+            certificate::verify_libp2p_certificate(
+                peer_certificates
+                    .get(0)
+                    .expect(
+                        "our certificate verifiers require exactly one \
+                         certificate to be presented, so an empty certificate \
+                         chain would already have been rejected; qed",
+                    )
+                    .as_ref(),
+            )
         };
         let muxer = muxer.take().expect("polled after yielding Ready");
-        Poll::Ready(res.map(|()| muxer))
+        Poll::Ready(match res {
+            Ok(e) => Ok((e, muxer)),
+            Err(ring::error::Unspecified) => Err(io::ErrorKind::InvalidData.into()),
+        })
     }
 }
 

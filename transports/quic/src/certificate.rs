@@ -323,7 +323,7 @@ fn parse_certificate(
 /// We just check that its self-signature is valid, and that its public key is suitably signed.
 pub fn verify_libp2p_certificate(
     certificate: &[u8],
-) -> Result<identity::PublicKey, ring::error::Unspecified> {
+) -> Result<libp2p_core::PeerId, ring::error::Unspecified> {
     #![cfg_attr(not(test), allow(dead_code))]
     let (raw_certificate, certificate_key, identity_key): (_, Vec<u8>, _) =
         parse_certificate(certificate).map_err(|e| {
@@ -339,7 +339,7 @@ pub fn verify_libp2p_certificate(
         &raw_certificate.tbs_certificate,
         &raw_certificate.signature_value,
     )?;
-    Ok(identity_key)
+    Ok(identity_key.into())
 }
 
 #[cfg(test)]
@@ -351,7 +351,7 @@ mod test {
         let keypair = identity::Keypair::generate_ed25519();
         assert_eq!(
             verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
-            keypair.public()
+            libp2p_core::PeerId::from_public_key(keypair.public())
         );
         log::trace!("trying secp256k1!");
         let keypair = identity::Keypair::generate_secp256k1();
@@ -361,10 +361,8 @@ mod test {
         assert_eq!(public, public, "key is not equal to itself?");
         log::debug!("have a valid key!");
         assert_eq!(
-            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap(),)
-                .unwrap()
-                .into_protobuf_encoding(),
-            keypair.public().into_protobuf_encoding()
+            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            libp2p_core::PeerId::from_public_key(keypair.public())
         );
     }
 }

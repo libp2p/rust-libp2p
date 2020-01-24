@@ -340,7 +340,7 @@ impl Stream for Listener {
 }
 
 impl Transport for &Endpoint {
-    type Output = super::QuicMuxer;
+    type Output = (libp2p_core::PeerId, super::QuicMuxer);
     type Error = io::Error;
     type Listener = Listener;
     type ListenerUpgrade = super::QuicUpgrade;

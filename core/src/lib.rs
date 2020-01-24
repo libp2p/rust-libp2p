@@ -23,17 +23,26 @@
 //! The main concepts of libp2p-core are:
 //!
 //! - A [`PeerId`] is a unique global identifier for a node on the network.
-//!   Each node must have a different `PeerId`. Normally, a `PeerId` is the
+//!   Each node must have a different [`PeerId`]. Normally, a [`PeerId`] is the
 //!   hash of the public key used to negotiate encryption on the
 //!   communication channel, thereby guaranteeing that they cannot be spoofed.
 //! - The [`Transport`] trait defines how to reach a remote node or listen for
-//!   incoming remote connections. See the `transport` module.
+//!   incoming remote connections. See the [`transport`] module.
 //! - The [`StreamMuxer`] trait is implemented on structs that hold a connection
 //!   to a remote and can subdivide this connection into multiple substreams.
-//!   See the `muxing` module.
+//!   See the [`muxing`] module.
 //! - The [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] traits
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
+//!
+//! [`PeerId`]: <struct.PeerId.html>
+//! [`UpgradeInfo`]: <upgrade/trait.UpgradeInfo.html>
+//! [`InboundUpgrade`]: <upgrade/trait.InboundUpgrade.html>
+//! [`OutboundUpgrade`]: <upgrade/trait.OutboundUpgrade.html>
+//! [`Transport`]: <transport/trait.Transport.html>
+//! [`transport`]: <transport/index.html>
+//! [`StreamMuxer`]: <muxing/trait.StreamMuxer.html>
+//! [`muxing`]: <muxing/index.html>
 
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
