@@ -11,7 +11,7 @@
 - Fixed `libp2p-kad` keeping connections alive when it shouldn't.
 - Fixed `InboundUpgrade` not always properly implemented on `NoiseConfig`.
 
-# Version 0.15.0 (2020-01-07)
+# Version 0.14.0-alpha.1 (2020-01-07)
 
 - Upgraded the crate to stable futures.
 - Use varints instead of fixed sized (4 byte) integers to delimit plaintext 2.0 messages to align implementation with the specification.
