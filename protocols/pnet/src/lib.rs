@@ -1,4 +1,4 @@
-// Copyright 2019 Parity Technologies (UK) Ltd.
+// Copyright 2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,6 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! The `pnet` protocol implements *Pre-shared Key Based Private Networks in libp2p*,
+//! as specified in [the spec](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md)
+//!
+//! Libp2p nodes configured with a pre-shared key can only communicate with other nodes with
+//! the same key.
 mod crypt_writer;
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
@@ -45,11 +50,16 @@ const NONCE_SIZE: usize = 24;
 const WRITE_BUFFER_SIZE: usize = 1024;
 const FINGERPRINT_SIZE: usize = 16;
 
+/// A pre-shared key, consisting of 32 bytes of random data.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct PreSharedKey([u8; KEY_SIZE]);
 
 impl PreSharedKey {
-    /// compute PreSharedKey fingerprint similar to how it is done in go-ipfs
+    /// Compute PreSharedKey fingerprint identical to the go-libp2p fingerprint.
+    /// The computation of the fingerprint is not specified in the spec.
+    ///
+    /// This provides a way to check that private keys are properly configured
+    /// without dumping the key itself to the console.
     pub fn fingerprint(&self) -> Fingerprint {
         use std::io::{Read, Write};
         let mut enc = [0u8; 64];
@@ -87,6 +97,9 @@ fn to_hex(bytes: &[u8]) -> String {
     hex
 }
 
+/// Parses a PreSharedKey from a key file
+///
+/// currently supports only base16 encoding.
 impl FromStr for PreSharedKey {
     type Err = KeyParseError;
 
@@ -113,6 +126,7 @@ impl fmt::Debug for PreSharedKey {
     }
 }
 
+/// Dumps a PreSharedKey in key file format compatible with go-libp2p
 impl fmt::Display for PreSharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "/key/swarm/psk/1.0.0/")?;
@@ -121,26 +135,36 @@ impl fmt::Display for PreSharedKey {
     }
 }
 
+/// A PreSharedKey fingerprint computed from a PreSharedKey
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Fingerprint([u8; FINGERPRINT_SIZE]);
 
+/// Dumps the fingerprint as hex
 impl fmt::Display for Fingerprint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", to_hex(&self.0))
     }
 }
 
+/// Error when parsing a PreSharedKey
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyParseError {
+    /// file does not have the expected structure
     InvalidKeyFile,
+    /// unsupported key type
     InvalidKeyType,
+    /// unsupported key encoding. Currently only base16 is supported
     InvalidKeyEncoding,
+    /// Key is of the wrong length
     InvalidKeyLength,
+    /// key string contains a char that is not consistent with the specified encoding
     InvalidKeyChar(ParseIntError),
 }
 
+/// Private network configuration
 #[derive(Debug, Copy, Clone)]
 pub struct PnetConfig {
+    /// the PreSharedKey to use for encryption
     key: PreSharedKey,
 }
 impl PnetConfig {
@@ -148,6 +172,10 @@ impl PnetConfig {
         Self { key }
     }
 
+    /// upgrade a connection to use pre shared key encryption.
+    ///
+    /// the upgrade works by both sides exchanging 24 byte nonces and then encrypting
+    /// subsequent traffic with XSalsa20
     pub async fn handshake<TSocket>(
         self,
         mut socket: TSocket,
@@ -174,6 +202,8 @@ impl PnetConfig {
     }
 }
 
+/// The result of a handshake. This implements AsyncRead and AsyncWrite and can therefore
+/// be used as base for additional upgrades.
 #[pin_project]
 pub struct PnetOutput<S> {
     #[pin]
