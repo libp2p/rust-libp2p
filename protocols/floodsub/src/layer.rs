@@ -91,7 +91,7 @@ impl<TSubstream> Floodsub<TSubstream> {
                     event: FloodsubRpc {
                         messages: Vec::new(),
                         subscriptions: vec![FloodsubSubscription {
-                            topic: topic,
+                            topic,
                             action: FloodsubSubscriptionAction::Subscribe,
                         }],
                     },
@@ -167,12 +167,12 @@ impl<TSubstream> Floodsub<TSubstream> {
     }
 
     /// Publishes a message to the network, if we're subscribed to the topic only.
-    pub fn publish(&mut self, topic: Topic, data: impl Into<Vec<u8>>) {
+    pub fn publish(&mut self, topic: impl Into<Topic>, data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message to the network, even if we're not subscribed to the topic.
-    pub fn publish_any(&mut self, topic: Topic, data: impl Into<Vec<u8>>) {
+    pub fn publish_any(&mut self, topic: impl Into<Topic>, data: impl Into<Vec<u8>>) {
         self.publish_many_any(iter::once(topic), data)
     }
 
@@ -180,16 +180,16 @@ impl<TSubstream> Floodsub<TSubstream> {
     ///
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
-    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = Topic>, data: impl Into<Vec<u8>>) {
+    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<Topic>>, data: impl Into<Vec<u8>>) {
         self.publish_many_inner(topic, data, true)
     }
 
     /// Publishes a message with multiple topics to the network, even if we're not subscribed to any of the topics.
-    pub fn publish_many_any(&mut self, topic: impl IntoIterator<Item = Topic>, data: impl Into<Vec<u8>>) {
+    pub fn publish_many_any(&mut self, topic: impl IntoIterator<Item = impl Into<Topic>>, data: impl Into<Vec<u8>>) {
         self.publish_many_inner(topic, data, false)
     }
 
-    fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = Topic>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
+    fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = impl Into<Topic>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
@@ -197,7 +197,7 @@ impl<TSubstream> Floodsub<TSubstream> {
             // with packets with the predetermined sequence numbers and absorb our legitimate
             // messages. We therefore use a random number.
             sequence_number: rand::random::<[u8; 20]>().to_vec(),
-            topics: topic.into_iter().map(Topic::new).collect(),
+            topics: topic.into_iter().map(Into::into).collect(),
         };
 
         let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t == u));

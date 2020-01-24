@@ -37,8 +37,8 @@ impl Topic {
     }
 }
 
-impl Into<String> for Topic {
-    fn into(self) -> String {
-        self.0
+impl From<Topic> for String {
+    fn from(topic: Topic) -> String {
+        topic.0
     }
 }
