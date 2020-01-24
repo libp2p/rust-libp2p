@@ -1,20 +1,35 @@
+// Copyright 2020 Sigma Prime Pty Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 use crate::behaviour::GossipsubRpc;
 use crate::rpc_proto;
 use crate::topic::TopicHash;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use bytes::BytesMut;
-use futures::prelude::*;
 use futures::future;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
-use protobuf::Message as ProtobufMessage;
-use std::{
-    borrow::Cow,
-    io,
-    iter,
-    pin::Pin,
-};
+use futures::prelude::*;
 use futures_codec::{Decoder, Encoder, Framed};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use prost::Message as ProtobufMessage;
+use std::{borrow::Cow, io, iter, pin::Pin};
 use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
@@ -67,7 +82,10 @@ where
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
-        Box::pin(future::ok(Framed::new(socket, GossipsubCodec { length_codec })))
+        Box::pin(future::ok(Framed::new(
+            socket,
+            GossipsubCodec { length_codec },
+        )))
     }
 }
 
@@ -82,7 +100,10 @@ where
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
-        Box::pin(future::ok(Framed::new(socket, GossipsubCodec { length_codec })))
+        Box::pin(future::ok(Framed::new(
+            socket,
+            GossipsubCodec { length_codec },
+        )))
     }
 }
 
@@ -98,33 +119,41 @@ impl Encoder for GossipsubCodec {
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut proto = rpc_proto::RPC::new();
-
-        for message in item.messages.into_iter() {
-            let mut msg = rpc_proto::Message::new();
-            msg.set_from(message.source.into_bytes());
-            msg.set_data(message.data);
-            msg.set_seqno(message.sequence_number.to_be_bytes().to_vec());
-            msg.set_topicIDs(
-                message
+        // messages
+        let publish = item
+            .messages
+            .into_iter()
+            .map(|message| rpc_proto::Message {
+                from: Some(message.source.into_bytes()),
+                data: Some(message.data),
+                seqno: Some(message.sequence_number.to_be_bytes().to_vec()),
+                topic_ids: message
                     .topics
                     .into_iter()
                     .map(TopicHash::into_string)
                     .collect(),
-            );
-            proto.mut_publish().push(msg);
-        }
+            })
+            .collect::<Vec<_>>();
 
-        for subscription in item.subscriptions.into_iter() {
-            let mut rpc_subscription = rpc_proto::RPC_SubOpts::new();
-            rpc_subscription
-                .set_subscribe(subscription.action == GossipsubSubscriptionAction::Subscribe);
-            rpc_subscription.set_topicid(subscription.topic_hash.into_string());
-            proto.mut_subscriptions().push(rpc_subscription);
-        }
+        // subscriptions
+        let subscriptions = item
+            .subscriptions
+            .into_iter()
+            .map(|sub| rpc_proto::rpc::SubOpts {
+                subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
+                topic_id: Some(sub.topic_hash.into_string()),
+            })
+            .collect::<Vec<_>>();
 
-        // gossipsub control messages
-        let mut control_msg = rpc_proto::ControlMessage::new();
+        // control messages
+        let mut control = rpc_proto::ControlMessage {
+            ihave: Vec::new(),
+            iwant: Vec::new(),
+            graft: Vec::new(),
+            prune: Vec::new(),
+        };
+
+        let empty_control_msg = item.control_msgs.is_empty();
 
         for action in item.control_msgs {
             match action {
@@ -133,41 +162,50 @@ impl Encoder for GossipsubCodec {
                     topic_hash,
                     message_ids,
                 } => {
-                    let mut rpc_ihave = rpc_proto::ControlIHave::new();
-                    rpc_ihave.set_topicID(topic_hash.into_string());
-                    for msg_id in message_ids {
-                        rpc_ihave.mut_messageIDs().push(msg_id.0);
-                    }
-                    control_msg.mut_ihave().push(rpc_ihave);
+                    let rpc_ihave = rpc_proto::ControlIHave {
+                        topic_id: Some(topic_hash.into_string()),
+                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
+                    };
+                    control.ihave.push(rpc_ihave);
                 }
                 GossipsubControlAction::IWant { message_ids } => {
-                    let mut rpc_iwant = rpc_proto::ControlIWant::new();
-                    for msg_id in message_ids {
-                        rpc_iwant.mut_messageIDs().push(msg_id.0);
-                    }
-                    control_msg.mut_iwant().push(rpc_iwant);
+                    let rpc_iwant = rpc_proto::ControlIWant {
+                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
+                    };
+                    control.iwant.push(rpc_iwant);
                 }
                 GossipsubControlAction::Graft { topic_hash } => {
-                    let mut rpc_graft = rpc_proto::ControlGraft::new();
-                    rpc_graft.set_topicID(topic_hash.into_string());
-                    control_msg.mut_graft().push(rpc_graft);
+                    let rpc_graft = rpc_proto::ControlGraft {
+                        topic_id: Some(topic_hash.into_string()),
+                    };
+                    control.graft.push(rpc_graft);
                 }
                 GossipsubControlAction::Prune { topic_hash } => {
-                    let mut rpc_prune = rpc_proto::ControlPrune::new();
-                    rpc_prune.set_topicID(topic_hash.into_string());
-                    control_msg.mut_prune().push(rpc_prune);
+                    let rpc_prune = rpc_proto::ControlPrune {
+                        topic_id: Some(topic_hash.into_string()),
+                    };
+                    control.prune.push(rpc_prune);
                 }
             }
         }
 
-        proto.set_control(control_msg);
+        let rpc = rpc_proto::Rpc {
+            subscriptions,
+            publish,
+            control: if empty_control_msg {
+                None
+            } else {
+                Some(control)
+            },
+        };
 
-        let bytes = proto
-            .write_to_bytes()
-            .expect("there is no situation in which the protobuf message can be invalid");
+        let mut buf = Vec::with_capacity(rpc.encoded_len());
+
+        rpc.encode(&mut buf)
+            .expect("Buffer has sufficient capacity");
 
         // length prefix the protobuf message, ensuring the max limit is not hit
-        self.length_codec.encode(Bytes::from(bytes), dst)
+        self.length_codec.encode(Bytes::from(buf), dst)
     }
 }
 
@@ -181,94 +219,99 @@ impl Decoder for GossipsubCodec {
             None => return Ok(None),
         };
 
-        let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
+        let rpc = rpc_proto::Rpc::decode(&packet[..])?;
 
-        let mut messages = Vec::with_capacity(rpc.get_publish().len());
-        for mut publish in rpc.take_publish().into_iter() {
+        let mut messages = Vec::with_capacity(rpc.publish.len());
+        for publish in rpc.publish.into_iter() {
             // ensure the sequence number is a u64
-            let raw_seq = publish.take_seqno();
-            if raw_seq.len() != 8 {
+            let seq_no = publish.seqno.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "sequence number was not provided",
+                )
+            })?;
+            if seq_no.len() != 8 {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "sequence number has an incorrect size",
                 ));
             }
             messages.push(GossipsubMessage {
-                source: PeerId::from_bytes(publish.take_from())
+                source: PeerId::from_bytes(publish.from.unwrap_or_default())
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id"))?,
-                data: publish.take_data(),
-                sequence_number: BigEndian::read_u64(&raw_seq),
+                data: publish.data.unwrap_or_default(),
+                sequence_number: BigEndian::read_u64(&seq_no),
                 topics: publish
-                    .take_topicIDs()
+                    .topic_ids
                     .into_iter()
                     .map(TopicHash::from_raw)
                     .collect(),
             });
         }
 
-        let mut rpc_control = rpc.take_control();
-        let mut control_msgs = vec![];
-        // Collect the gossipsub control messages
-        let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_ihave()
-            .into_iter()
-            .map(|mut ihave| GossipsubControlAction::IHave {
-                topic_hash: TopicHash::from_raw(ihave.take_topicID()),
-                message_ids: ihave
-                    .take_messageIDs()
-                    .into_vec()
-                    .into_iter()
-                    .map(|x| MessageId(x))
-                    .collect::<Vec<_>>(),
-            })
-            .collect();
+        let mut control_msgs = Vec::new();
 
-        let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_iwant()
-            .into_iter()
-            .map(|mut iwant| GossipsubControlAction::IWant {
-                message_ids: iwant
-                    .take_messageIDs()
-                    .into_vec()
-                    .into_iter()
-                    .map(|x| MessageId(x))
-                    .collect::<Vec<_>>(),
-            })
-            .collect();
+        if let Some(rpc_control) = rpc.control {
+            // Collect the gossipsub control messages
+            let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+                .ihave
+                .into_iter()
+                .map(|ihave| GossipsubControlAction::IHave {
+                    topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
+                    message_ids: ihave
+                        .message_ids
+                        .into_iter()
+                        .map(|x| MessageId(x))
+                        .collect::<Vec<_>>(),
+                })
+                .collect();
 
-        let graft_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_graft()
-            .into_iter()
-            .map(|mut graft| GossipsubControlAction::Graft {
-                topic_hash: TopicHash::from_raw(graft.take_topicID()),
-            })
-            .collect();
+            let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+                .iwant
+                .into_iter()
+                .map(|iwant| GossipsubControlAction::IWant {
+                    message_ids: iwant
+                        .message_ids
+                        .into_iter()
+                        .map(|x| MessageId(x))
+                        .collect::<Vec<_>>(),
+                })
+                .collect();
 
-        let prune_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_prune()
-            .into_iter()
-            .map(|mut prune| GossipsubControlAction::Prune {
-                topic_hash: TopicHash::from_raw(prune.take_topicID()),
-            })
-            .collect();
+            let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+                .graft
+                .into_iter()
+                .map(|graft| GossipsubControlAction::Graft {
+                    topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                })
+                .collect();
 
-        control_msgs.extend(ihave_msgs);
-        control_msgs.extend(iwant_msgs);
-        control_msgs.extend(graft_msgs);
-        control_msgs.extend(prune_msgs);
+            let prune_msgs: Vec<GossipsubControlAction> = rpc_control
+                .prune
+                .into_iter()
+                .map(|prune| GossipsubControlAction::Prune {
+                    topic_hash: TopicHash::from_raw(prune.topic_id.unwrap_or_default()),
+                })
+                .collect();
+
+            control_msgs.extend(ihave_msgs);
+            control_msgs.extend(iwant_msgs);
+            control_msgs.extend(graft_msgs);
+            control_msgs.extend(prune_msgs);
+        }
 
         Ok(Some(GossipsubRpc {
             messages,
             subscriptions: rpc
-                .take_subscriptions()
+                .subscriptions
                 .into_iter()
-                .map(|mut sub| GossipsubSubscription {
-                    action: if sub.get_subscribe() {
+                .map(|sub| GossipsubSubscription {
+                    action: if Some(true) == sub.subscribe {
                         GossipsubSubscriptionAction::Subscribe
                     } else {
                         GossipsubSubscriptionAction::Unsubscribe
                     },
-                    topic_hash: TopicHash::from_raw(sub.take_topicid()),
+                    topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
                 })
                 .collect(),
             control_msgs,

@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -34,9 +34,9 @@ use lru::LruCache;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
+    collections::hash_map::HashMap,
     collections::HashSet,
     collections::VecDeque,
-    collections::hash_map::HashMap,
     iter,
     marker::PhantomData,
     sync::Arc,

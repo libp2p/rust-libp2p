@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -141,8 +141,11 @@ mod behaviour;
 mod config;
 mod handler;
 mod mcache;
-mod rpc_proto;
 mod topic;
+
+mod rpc_proto {
+    include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));
+}
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc};
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder};

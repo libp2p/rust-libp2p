@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -20,7 +20,7 @@
 
 use crate::rpc_proto;
 use base64::encode;
-use protobuf::Message;
+use prost::Message;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
@@ -58,16 +58,16 @@ impl Topic {
     /// Creates a `TopicHash` by SHA256 hashing the topic then base64 encoding the
     /// hash.
     pub fn sha256_hash(&self) -> TopicHash {
-        let mut topic_descripter = rpc_proto::TopicDescriptor::new();
-        topic_descripter.set_name(self.topic.clone());
-        let hash = encode(
-            Sha256::digest(
-                &topic_descripter
-                    .write_to_bytes()
-                    .expect("Message is always valid"),
-            )
-            .as_slice(),
-        );
+        let topic_descripter = rpc_proto::TopicDescriptor {
+            name: Some(self.topic.clone()),
+            auth: None,
+            enc: None,
+        };
+        let mut bytes = Vec::with_capacity(topic_descripter.encoded_len());
+        topic_descripter
+            .encode(&mut bytes)
+            .expect("buffer is large enough");
+        let hash = encode(Sha256::digest(&bytes).as_slice());
 
         TopicHash { hash }
     }

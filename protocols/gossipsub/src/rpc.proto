@@ -8,7 +8,7 @@ message RPC {
 
 	message SubOpts {
 		optional bool subscribe = 1; // subscribe or unsubscribe
-		optional string topicid = 2;
+		optional string topic_id = 2;
 	}
 
 	optional ControlMessage control = 3;
@@ -18,7 +18,7 @@ message Message {
 	optional bytes from = 1;
 	optional bytes data = 2;
 	optional bytes seqno = 3;
-	repeated string topicIDs = 4;
+	repeated string topic_ids = 4;
 }
 
 message ControlMessage {
@@ -29,20 +29,20 @@ message ControlMessage {
 }
 
 message ControlIHave {
-	optional string topicID = 1;
-	repeated string messageIDs = 2;
+	optional string topic_id = 1;
+	repeated string message_ids = 2;
 }
 
 message ControlIWant {
-	repeated string messageIDs = 1;
+	repeated string message_ids= 1;
 }
 
 message ControlGraft {
-	optional string topicID = 1;
+	optional string topic_id = 1;
 }
 
 message ControlPrune {
-	optional string topicID = 1;
+	optional string topic_id = 1;
 }
 
 // topicID = hash(topicDescriptor); (not the topic.name)
@@ -64,7 +64,7 @@ message TopicDescriptor {
 
 	message EncOpts {
 		optional EncMode mode = 1;
-		repeated bytes keyHashes = 2; // the hashes of the shared keys used (salted)
+		repeated bytes key_hashes = 2; // the hashes of the shared keys used (salted)
 
 		enum EncMode {
 			NONE = 0; // no encryption, anyone can read
