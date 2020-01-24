@@ -41,9 +41,8 @@ use std::{
     marker::PhantomData,
     sync::Arc,
     task::{Context, Poll},
-    time::Instant,
 };
-use wasm_timer::Interval;
+use wasm_timer::{Instant, Interval};
 
 mod tests;
 
