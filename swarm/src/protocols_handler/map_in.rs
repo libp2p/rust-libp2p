@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::NegotiatedBoxSubstream;
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -70,7 +71,7 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output
     ) {
         self.inner.inject_fully_negotiated_inbound(protocol)
     }
@@ -78,7 +79,7 @@ where
     #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.inject_fully_negotiated_outbound(protocol, info)
@@ -92,7 +93,7 @@ where
     }
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
 

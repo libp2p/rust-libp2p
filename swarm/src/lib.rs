@@ -55,6 +55,7 @@
 
 mod behaviour;
 mod registry;
+mod upgrade;
 
 pub mod protocols_handler;
 pub mod toggle;
@@ -76,7 +77,9 @@ pub use protocols_handler::{
     OneShotHandler,
     SubstreamProtocol
 };
-
+pub use upgrade::{
+    UpgradeInfoSend,
+};
 
 pub type BoxSubstream = Substream<StreamMuxerBox>;
 pub type NegotiatedBoxSubstream = Negotiated<BoxSubstream>;
@@ -204,18 +207,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandlerErr: error::Error + Send + 'static,
       THandler: IntoProtocolsHandler + Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr>,
-      <THandler::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
-      <THandler::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
 {
     /// Builds a new `Swarm`.
     pub fn new<TTransport, TMuxer>(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self
@@ -497,18 +488,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       TInEvent: Send + 'static,
       TOutEvent: Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr>,
-      <THandler::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<THandler::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <THandler::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<THandler::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     type Item = TBehaviour::OutEvent;
@@ -564,18 +543,6 @@ pub struct SwarmBuilder<TBehaviour, TConnInfo> {
 
 impl<TBehaviour, TConnInfo> SwarmBuilder<TBehaviour, TConnInfo>
 where TBehaviour: NetworkBehaviour,
-      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream> + Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Future: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error: Send + 'static,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
 {
     pub fn new<TTransport, TMuxer>(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self

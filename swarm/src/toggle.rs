@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::NegotiatedBoxSubstream;
+use crate::upgrade::{SendWrapper, InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters};
 use crate::protocols_handler::{
     KeepAlive,
@@ -173,9 +174,9 @@ where
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(inner.inbound_protocol())
+            EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
         } else {
-            EitherUpgrade::B(DeniedUpgrade)
+            EitherUpgrade::B(SendWrapper(DeniedUpgrade))
         }
     }
 }
@@ -192,21 +193,21 @@ where
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
     type Error = TInner::Error;
-    type InboundProtocol = EitherUpgrade<TInner::InboundProtocol, DeniedUpgrade>;
+    type InboundProtocol = EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if let Some(inner) = self.inner.as_ref() {
-            inner.listen_protocol().map_upgrade(EitherUpgrade::A)
+            inner.listen_protocol().map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
         } else {
-            SubstreamProtocol::new(EitherUpgrade::B(DeniedUpgrade))
+            SubstreamProtocol::new(EitherUpgrade::B(SendWrapper(DeniedUpgrade)))
         }
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output
+        out: <Self::InboundProtocol as InboundUpgradeSend>::Output
     ) {
         let out = match out {
             EitherOutput::First(out) => out,
@@ -219,7 +220,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        out: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
@@ -231,7 +232,7 @@ where
             .inject_event(event)
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
     }

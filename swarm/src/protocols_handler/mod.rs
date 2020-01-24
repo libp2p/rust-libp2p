@@ -44,7 +44,10 @@ mod node_handler;
 mod one_shot;
 mod select;
 
-use crate::NegotiatedBoxSubstream;
+use crate::{
+    NegotiatedBoxSubstream,
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
+};
 
 use libp2p_core::{
     ConnectedPoint,
@@ -101,9 +104,9 @@ pub trait ProtocolsHandler: Send + 'static {
     /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
-    type InboundProtocol: InboundUpgrade<NegotiatedBoxSubstream> + Send + 'static;
+    type InboundProtocol: InboundUpgradeSend + Send + 'static;
     /// The outbound upgrade for the protocol(s) used by the handler.
-    type OutboundProtocol: OutboundUpgrade<NegotiatedBoxSubstream> + Send + 'static;
+    type OutboundProtocol: OutboundUpgradeSend;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
     type OutboundOpenInfo: Send + 'static;
 
@@ -119,7 +122,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output
     );
 
     /// Injects the output of a successful upgrade on a new outbound substream.
@@ -128,7 +131,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// [`ProtocolsHandlerEvent::OutboundSubstreamRequest`].
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo
     );
 
@@ -140,7 +143,7 @@ pub trait ProtocolsHandler: Send + 'static {
         &mut self,
         info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error
+            <Self::OutboundProtocol as OutboundUpgradeSend>::Error
         >
     );
 
