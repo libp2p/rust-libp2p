@@ -24,7 +24,7 @@ multihash = { package = "parity-multihash", version = "0.2.1", path = "../misc/m
 multistream-select = { version = "0.7.0", path = "../misc/multistream-select" }
 parking_lot = "0.10.0"
 pin-project = "0.4.6"
-prost = "0.6"
+prost = "0.6.1"
 rand = "0.7"
 rw-stream-sink = { version = "0.2.0", path = "../misc/rw-stream-sink" }
 sha2 = "0.8.0"

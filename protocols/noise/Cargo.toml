@@ -13,7 +13,7 @@ futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 log = "0.4"
-prost = "0.6"
+prost = "0.6.1"
 rand = "0.7.2"
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
