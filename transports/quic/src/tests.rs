@@ -245,7 +245,7 @@ fn communicating_between_dialer_and_listener() {
             let mut count = 0;
             while count < buf.len() {
                 let read = stream.read(&mut buf[count..]).await.unwrap();
-                assert_ne!(read, 0usize);
+                assert_ne!(read, 0usize, "premature end of file");
                 count += read;
             }
         }

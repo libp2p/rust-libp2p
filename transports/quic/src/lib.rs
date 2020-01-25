@@ -635,7 +635,7 @@ impl Muxer {
 
     fn drive_timer(&mut self, cx: &mut Context, now: Instant) -> bool {
         let mut keep_going = false;
-        'outer: loop {
+        loop {
             match self.connection.poll_timeout() {
                 None => {
                     self.timer = None;
@@ -656,7 +656,7 @@ impl Muxer {
                 if timer.poll_unpin(cx).is_ready() {
                     self.connection.handle_timeout(now);
                     keep_going = true;
-                    continue 'outer;
+                    continue;
                 }
             }
             break;
@@ -706,25 +706,23 @@ impl Muxer {
     /// Send endpoint events.  Returns true if and only if there are endpoint events remaining to
     /// be sent.
     fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) -> bool {
+        let mut keep_going = false;
         loop {
             match self.endpoint_channel.poll_ready(cx) {
-                Poll::Pending => break true,
+                Poll::Pending => break keep_going,
                 Poll::Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
                 Poll::Ready(Ok(())) => {}
             }
             if let Some(event) = self.connection.poll_endpoint_events() {
+                keep_going = true;
                 self.endpoint_channel
                     .start_send(EndpointMessage::EndpointEvent {
                         handle: self.handle,
                         event,
                     })
-                    .expect(
-                        "we checked in `pre_application_io` that this channel had space; \
-                         that is always called first, and there is a lock preventing concurrency \
-                         problems; qed",
-                    )
+                    .expect("we just checked that we have capacity; qed");
             } else {
-                break false;
+                break keep_going;
             }
         }
     }
@@ -952,7 +950,7 @@ impl Future for ConnectionDriver {
             needs_timer_update |= inner.drive_timer(cx, now);
             needs_timer_update |= inner.pre_application_io(now, cx)?;
             needs_timer_update |= inner.process_app_events();
-            let needs_to_send_endpoint_events = inner.poll_endpoint_events(cx);
+            needs_timer_update |= inner.poll_endpoint_events(cx);
             if inner.connection.is_drained() {
                 break Poll::Ready(
                     match inner
@@ -985,15 +983,7 @@ impl Future for ConnectionDriver {
                     },
                 );
             } else if !needs_timer_update {
-                assert!(inner.connection.poll_transmit(now).is_none());
-                break if inner.close_reason.is_none() {
-                    Poll::Pending
-                } else if needs_to_send_endpoint_events {
-                    debug!("still have endpoint events to send!");
-                    Poll::Pending
-                } else {
-                    Poll::Ready(Ok(()))
-                };
+                break Poll::Pending;
             }
         }
     }

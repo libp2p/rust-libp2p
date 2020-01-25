@@ -112,7 +112,12 @@ impl EndpointInner {
                         Some(connection) => connection
                             .lock()
                             .process_connection_events(self, connection_event),
-                        None => debug!("lost our connection!"),
+                        None => {
+                            debug!("lost our connection!");
+                            assert!(self
+                                .handle_event(handle, quinn_proto::EndpointEvent::drained())
+                                .is_none())
+                        }
                     }
                 }
                 DatagramEvent::NewConnection(connection) => {
