@@ -23,8 +23,9 @@ use super::*;
 use crate::{K_VALUE, ALPHA_VALUE};
 use crate::kbucket::{Key, KeyBytes, Distance};
 use libp2p_core::PeerId;
-use std::{time::Duration, iter::FromIterator};
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::num::NonZeroU8;
+use std::{time::Duration, iter::FromIterator};
 use wasm_timer::Instant;
 
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
@@ -45,6 +46,14 @@ pub struct ClosestPeersIter {
 
     /// The number of peers for which the iterator is currently waiting for results.
     num_waiting: usize,
+
+    /// The next disjoint path to pursue.
+    ///
+    /// When the disjoint path feature is enabled (see
+    /// [`ClosestPeersIterConfig::disjoint_paths`]) queries should try to explore different
+    /// disjoint paths within the graph in a round robin fashion. `next_disjoint_path` tracks which
+    /// path to continue exploring next.
+    next_disjoint_path: PathId,
 }
 
 /// Configuration for a `ClosestPeersIter`.
@@ -70,6 +79,14 @@ pub struct ClosestPeersIterConfig {
     /// the peer when evaluating the termination conditions, until and unless a
     /// result is delivered. Defaults to `10` seconds.
     pub peer_timeout: Duration,
+
+    /// The number of disjoint query paths to use.
+    ///
+    /// As described in the S-Kademlia paper: When exploring the network for a given target one can
+    /// use disjoint paths to protect against adversarial nodes being along some, but not all paths.
+    ///
+    /// Setting `disjoint_paths` to `1` effectively disables the feature.
+    pub disjoint_paths: NonZeroU8,
 }
 
 impl Default for ClosestPeersIterConfig {
@@ -78,6 +95,7 @@ impl Default for ClosestPeersIterConfig {
             parallelism: ALPHA_VALUE.get(),
             num_results: K_VALUE.get(),
             peer_timeout: Duration::from_secs(10),
+            disjoint_paths: unsafe { NonZeroU8::new_unchecked(1) },
         }
     }
 }
@@ -105,7 +123,7 @@ impl ClosestPeersIter {
                 .into_iter()
                 .map(|key| {
                     let distance = key.distance(&target);
-                    let state = PeerState::NotContacted;
+                    let state = PeerState::NotContacted(None);
                     (distance, Peer { key, state })
                 })
                 .take(config.num_results));
@@ -118,7 +136,8 @@ impl ClosestPeersIter {
             target,
             state,
             closest_peers,
-            num_waiting: 0
+            num_waiting: 0,
+            next_disjoint_path: PathId(0)
         }
     }
 
@@ -147,20 +166,23 @@ impl ClosestPeersIter {
 
         let key = Key::from(peer.clone());
         let distance = key.distance(&self.target);
+        let path_id;
 
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
             Entry::Vacant(..) => return,
             Entry::Occupied(mut e) => match e.get().state {
-                PeerState::Waiting(..) => {
+                PeerState::Waiting((_, path)) => {
+                    path_id = path;
                     debug_assert!(self.num_waiting > 0);
                     self.num_waiting -= 1;
                     e.get_mut().state = PeerState::Succeeded;
                 }
-                PeerState::Unresponsive => {
+                PeerState::Unresponsive(path) => {
+                    path_id = path;
                     e.get_mut().state = PeerState::Succeeded;
                 }
-                PeerState::NotContacted
+                PeerState::NotContacted(_)
                     | PeerState::Failed
                     | PeerState::Succeeded => return
             }
@@ -173,7 +195,7 @@ impl ClosestPeersIter {
         for peer in closer_peers {
             let key = peer.into();
             let distance = self.target.distance(&key);
-            let peer = Peer { key, state: PeerState::NotContacted };
+            let peer = Peer { key, state: PeerState::NotContacted(Some(path_id)) };
             self.closest_peers.entry(distance).or_insert(peer);
             // The iterator makes progress if the new peer is either closer to the target
             // than any peer seen so far (i.e. is the first entry), or the iterator did
@@ -227,7 +249,7 @@ impl ClosestPeersIter {
                     self.num_waiting -= 1;
                     e.get_mut().state = PeerState::Failed
                 }
-                PeerState::Unresponsive => {
+                PeerState::Unresponsive(_) => {
                     e.get_mut().state = PeerState::Failed
                 }
                 _ => {}
@@ -256,6 +278,7 @@ impl ClosestPeersIter {
         self.waiting().any(|p| peer == p)
     }
 
+
     /// Advances the state of the iterator, potentially getting a new peer to contact.
     pub fn next(&mut self, now: Instant) -> PeersIterState {
         if let State::Finished = self.state {
@@ -272,16 +295,17 @@ impl ClosestPeersIter {
         // Check if the iterator is at capacity w.r.t. the allowed parallelism.
         let at_capacity = self.at_capacity();
 
+        // Check for timed-out peers, being at capacity or overall success.
         for peer in self.closest_peers.values_mut() {
             match peer.state {
-                PeerState::Waiting(timeout) => {
+                PeerState::Waiting((timeout, disjoint_path_id)) => {
                     if now >= timeout {
                         // Unresponsive peers no longer count towards the limit for the
                         // bounded parallelism, though they might still be ongoing and
                         // their results can still be delivered to the iterator.
                         debug_assert!(self.num_waiting > 0);
                         self.num_waiting -= 1;
-                        peer.state = PeerState::Unresponsive
+                        peer.state = PeerState::Unresponsive(disjoint_path_id)
                     }
                     else if at_capacity {
                         // The iterator is still waiting for a result from a peer and is
@@ -296,31 +320,71 @@ impl ClosestPeersIter {
                         result_counter = None;
                     }
                 }
-
                 PeerState::Succeeded =>
                     if let Some(ref mut cnt) = result_counter {
                         *cnt += 1;
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
-                        if *cnt >= self.config.num_results {
+                        if *cnt > self.config.num_results {
                             self.state = State::Finished;
                             return PeersIterState::Finished
                         }
                     }
+                _ => {},
+            }
+        }
 
-                PeerState::NotContacted =>
-                    if !at_capacity {
-                        let timeout = now + self.config.peer_timeout;
-                        peer.state = PeerState::Waiting(timeout);
-                        self.num_waiting += 1;
-                        return PeersIterState::Waiting(Some(Cow::Borrowed(peer.key.preimage())))
-                    } else {
+        let mut ignore_paths = u8::from(self.config.disjoint_paths) == 1;
+
+        // Find a peer worth querying next.
+        loop {
+            for peer in self.closest_peers.values_mut() {
+                if let PeerState::NotContacted(peer_path_id) = peer.state {
+                    if at_capacity {
                         return PeersIterState::WaitingAtCapacity
                     }
 
-                PeerState::Unresponsive | PeerState::Failed => {
-                    // Skip over unresponsive or failed peers.
+                    let timeout = now + self.config.peer_timeout;
+
+                    // If we care about disjoint paths, the given peer has a path and that path is
+                    // not the one we are looking for, ignore the peer.
+                    if let Some(path) = peer_path_id  {
+                        if !ignore_paths && self.next_disjoint_path != path {
+                            continue;
+                        }
+                    }
+
+                    // Getting this far implies that we found a peer to query next, given that
+                    // either:
+                    //
+                    // - Using disjoint paths is disabled, thereby ignoring paths.
+                    //
+                    // - The peer_path_id is None thereby the peer is from the initial set and thus
+                    //   not part of a path yet.
+                    //
+                    // - The peer_path_id is equal to self.next_disjoint_path, thus exactly what we
+                    //   are looking for.
+
+                    peer.state = PeerState::Waiting((timeout, self.next_disjoint_path));
+                    self.next_disjoint_path = PathId(
+                        (self.next_disjoint_path.0 + 1) % (u8::from(self.config.disjoint_paths)),
+                    );
+
+                    self.num_waiting += 1;
+
+                    // TODO: Shouldn't need to clone here. Compiler complaining about borrow
+                    // from previous iteration.
+                    return PeersIterState::Waiting(Some(Cow::Owned(peer.key.preimage().clone())))
                 }
+            }
+
+            // We haven't found a peer worth querying next.
+            if !ignore_paths {
+                // Let's try again, ignoring usage of disjoint paths this time.
+                ignore_paths = true;
+            } else {
+                // Let's give up for now.
+                break;
             }
         }
 
@@ -416,6 +480,9 @@ enum State {
     Finished
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct PathId(u8);
+
 /// Representation of a peer in the context of a iterator.
 #[derive(Debug, Clone)]
 struct Peer {
@@ -429,16 +496,16 @@ enum PeerState {
     /// The peer has not yet been contacted.
     ///
     /// This is the starting state for every peer.
-    NotContacted,
+    NotContacted(Option<PathId>),
 
     /// The iterator is waiting for a result from the peer.
-    Waiting(Instant),
+    Waiting((Instant, PathId)),
 
     /// A result was not delivered for the peer within the configured timeout.
     ///
     /// The peer is not taken into account for the termination conditions
     /// of the iterator until and unless it responds.
-    Unresponsive,
+    Unresponsive(PathId),
 
     /// Obtaining a result from the peer has failed.
     ///
@@ -471,6 +538,7 @@ mod tests {
             parallelism: g.gen_range(1, 10),
             num_results: g.gen_range(1, 25),
             peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+            disjoint_paths: unsafe { NonZeroU8::new_unchecked(g.gen_range(1, 10)) },
         };
         ClosestPeersIter::with_config(config, target, known_closest_peers)
     }
@@ -498,7 +566,7 @@ mod tests {
         let none_contacted = states
             .iter()
             .all(|s| match s {
-                PeerState::NotContacted => true,
+                PeerState::NotContacted(_) => true,
                 _ => false
             });
 
@@ -511,10 +579,10 @@ mod tests {
         assert_eq!(iter.into_result().count(), 0,
             "Unexpected closest peers in new iterator");
     }
-
     #[test]
     fn termination_and_parallelism() {
         fn prop(mut iter: ClosestPeersIter) {
+            iter.config.disjoint_paths = unsafe { NonZeroU8::new_unchecked(1) };
             let now = Instant::now();
             let mut rng = thread_rng();
 
@@ -587,7 +655,111 @@ mod tests {
             // the case if the iterator finished with fewer than the requested number
             // of results.
             let all_contacted = iter.closest_peers.values().all(|e| match e.state {
-                PeerState::NotContacted | PeerState::Waiting { .. } => false,
+                PeerState::NotContacted(_) | PeerState::Waiting { .. } => false,
+                _ => true
+            });
+
+            let target = iter.target.clone();
+            let num_results = iter.config.num_results;
+            let result = iter.into_result();
+            let closest = result.map(Key::from).collect::<Vec<_>>();
+
+            assert!(sorted(&target, &closest));
+
+            if closest.len() < num_results {
+                // The iterator returned fewer results than requested. Therefore
+                // either the initial number of known peers must have been
+                // less than the desired number of results, or there must
+                // have been failures.
+                assert!(num_known < num_results || num_failures > 0);
+                // All peers must have been contacted.
+                assert!(all_contacted, "Not all peers have been contacted.");
+            } else {
+                assert_eq!(num_results, closest.len(), "Too  many results.");
+            }
+        }
+
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+    }
+
+    #[test]
+    fn termination_and_parallelism_disjoint() {
+        fn prop(mut iter: ClosestPeersIter) {
+            let now = Instant::now();
+            let mut rng = thread_rng();
+
+            let mut not_yet_contacted = iter.closest_peers
+                .values()
+                .map(|e| e.key.clone())
+                .collect::<Vec<_>>();
+
+            let num_known = not_yet_contacted.len();
+
+            let mut in_flight: Vec<Key<_>> = vec![];
+            let mut num_failures = 0;
+
+            'finished: loop {
+                if not_yet_contacted.is_empty() && in_flight.is_empty() {
+                    break;
+                }
+
+                loop {
+                    if not_yet_contacted.is_empty() {
+                        break;
+                    }
+
+                    match iter.next(now) {
+                        PeersIterState::Finished => break 'finished,
+                        PeersIterState::Waiting(Some(p)) => {
+                            match not_yet_contacted.iter().position(|k| &*p == k.preimage()) {
+                                Some(pos) => {
+                                    in_flight.push(not_yet_contacted.remove(pos));
+                                },
+                                None => panic!("expected one of {:?} but got {:?}", not_yet_contacted, &*p),
+                            }
+                        },
+                        PeersIterState::Waiting(None) => panic!("Expected another peer."),
+                        PeersIterState::WaitingAtCapacity => {
+                            break;
+                        }
+                    }
+                }
+
+                let num_waiting = iter.num_waiting();
+                assert_eq!(num_waiting, in_flight.len());
+
+                // Check the bounded parallelism.
+                if iter.at_capacity() {
+                    assert_eq!(iter.next(now), PeersIterState::WaitingAtCapacity)
+                }
+
+                // Report results back to the iterator with a random number of "closer"
+                // peers or an error, thus finishing the "in-flight requests".
+                for (i, k) in in_flight.drain(0..).enumerate() {
+                    if rng.gen_bool(0.75) {
+                        let num_closer = rng.gen_range(0, iter.config.num_results + 1);
+                        let closer_peers = random_peers(num_closer).collect::<Vec<_>>();
+                        not_yet_contacted.extend(closer_peers.iter().cloned().map(Key::from));
+                        iter.on_success(k.preimage(), closer_peers);
+                    } else {
+                        num_failures += 1;
+                        iter.on_failure(k.preimage());
+                    }
+                    assert_eq!(iter.num_waiting(), num_waiting - (i + 1));
+                }
+
+                assert!(in_flight.is_empty());
+            }
+
+            // The iterator must be finished.
+            assert_eq!(iter.next(now), PeersIterState::Finished);
+            assert_eq!(iter.state, State::Finished);
+
+            // Determine if all peers have been contacted by the iterator. This _must_ be
+            // the case if the iterator finished with fewer than the requested number
+            // of results.
+            let all_contacted = iter.closest_peers.values().all(|e| match e.state {
+                PeerState::NotContacted(_) | PeerState::Waiting { .. } => false,
                 _ => true
             });
 
@@ -667,7 +839,7 @@ mod tests {
             // Advancing the iterator again should mark the first peer as unresponsive.
             let _ = iter.next(now);
             match &iter.closest_peers.values().next().unwrap() {
-                Peer { key, state: PeerState::Unresponsive } => {
+                Peer { key, state: PeerState::Unresponsive(_) } => {
                     assert_eq!(key.preimage(), &peer);
                 },
                 Peer { state, .. } => panic!("Unexpected peer state: {:?}", state)
@@ -690,5 +862,82 @@ mod tests {
         }
 
         QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+    }
+
+    #[test]
+    fn s_kademlia_disjoint_paths() {
+        let target: KeyBytes = Key::from(PeerId::random()).into();
+
+        let mut pool = [0; 12].into_iter().map(|_| Key::from(PeerId::random())).collect::<Vec<_>>();
+        pool.sort_unstable_by(|a, b| {
+            target.distance(a).cmp(&target.distance(b))
+        });
+        let known_closest_peers = pool.split_off(pool.len() - 3);
+
+        let mut config = ClosestPeersIterConfig::default();
+        config.disjoint_paths = NonZeroU8::new(3).unwrap();
+
+        let mut closest_peers_iter = ClosestPeersIter::with_config(
+            config,
+            target,
+            known_closest_peers.clone(),
+        );
+
+        for i in 0..3 {
+            assert_eq!(
+                PeersIterState::Waiting(Some(Cow::Borrowed(known_closest_peers[i].preimage()))),
+                closest_peers_iter.next(Instant::now()),
+            );
+        }
+
+        // At capacity.
+        assert_eq!(
+            PeersIterState::WaitingAtCapacity,
+            closest_peers_iter.next(Instant::now()),
+        );
+
+        let response_2 = pool.split_off(pool.len() - 3);
+        let response_3 = pool.split_off(pool.len() - 3);
+        // Keys are closer than any of the previous two responses from honest node 1 and 2.
+        let malicious_response_1 = pool.split_off(pool.len() - 3);
+
+        // Response from malicious peer 1.
+        closest_peers_iter.on_success(
+            known_closest_peers[0].preimage(),
+            malicious_response_1.clone().into_iter().map(|k| k.preimage().clone()),
+        );
+
+        // Response from peer 2.
+        closest_peers_iter.on_success(
+            known_closest_peers[1].preimage(),
+            response_2.clone().into_iter().map(|k| k.preimage().clone()),
+        );
+
+        // Response from peer 3.
+        closest_peers_iter.on_success(
+            known_closest_peers[2].preimage(),
+            response_3.clone().into_iter().map(|k| k.preimage().clone()),
+        );
+
+        assert_eq!(
+            PeersIterState::Waiting(Some(Cow::Borrowed(malicious_response_1[0].preimage()))),
+            closest_peers_iter.next(Instant::now()),
+        );
+
+        assert_eq!(
+            PeersIterState::Waiting(Some(Cow::Borrowed(response_2[0].preimage()))),
+            closest_peers_iter.next(Instant::now()),
+        );
+
+        assert_eq!(
+            PeersIterState::Waiting(Some(Cow::Borrowed(response_3[0].preimage()))),
+            closest_peers_iter.next(Instant::now()),
+        );
+
+        // At capacity.
+        assert_eq!(
+            PeersIterState::WaitingAtCapacity,
+            closest_peers_iter.next(Instant::now()),
+        );
     }
 }
