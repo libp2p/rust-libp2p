@@ -78,8 +78,11 @@ pub use protocols_handler::{
     SubstreamProtocol
 };
 
-pub type BoxSubstream = Substream<StreamMuxerBox>;
-pub type NegotiatedBoxSubstream = Negotiated<BoxSubstream>;
+/// Substream for which a protocol has been chosen.
+///
+/// Implements the [`AsyncRead`](futures::io::AsyncRead) and
+/// [`AsyncWrite`](futures::io::AsyncWrite) traits.
+pub type NegotiatedBoxSubstream = Negotiated<Substream<StreamMuxerBox>>;
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
 use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}};
