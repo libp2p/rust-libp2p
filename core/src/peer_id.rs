@@ -53,16 +53,15 @@ impl fmt::Display for PeerId {
 
 impl PeerId {
     /// Builds a `PeerId` from a public key.
-    #[inline]
     pub fn from_public_key(key: PublicKey) -> PeerId {
         let key_enc = key.into_protobuf_encoding();
 
         // Note: before 0.12, this was incorrectly implemented and `SHA2256` was always used.
         // Starting from version 0.13, rust-libp2p accepts both hashed and non-hashed keys as
-        // input (see `from_bytes`). Starting from version 0.15, rust-libp2p will switch to
+        // input (see `from_bytes`). Starting from version 0.16, rust-libp2p will switch to
         // not hashing the key (a.k.a. the correct behaviour).
         // In other words, rust-libp2p 0.13 is compatible with all versions of rust-libp2p.
-        // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.15 and above.
+        // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.16 and above.
         let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             multihash::Hash::Identity
         } else {
@@ -76,7 +75,6 @@ impl PeerId {
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
     /// back the data as an error.
-    #[inline]
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
@@ -94,7 +92,6 @@ impl PeerId {
 
     /// Turns a `Multihash` into a `PeerId`. If the multihash doesn't use the correct algorithm,
     /// returns back the data as an error.
-    #[inline]
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
         if data.algorithm() == multihash::Hash::SHA2256 || data.algorithm() == multihash::Hash::Identity {
             Ok(PeerId { multihash: data })
@@ -106,7 +103,6 @@ impl PeerId {
     /// Generates a random peer ID from a cryptographically secure PRNG.
     ///
     /// This is useful for randomly walking on a DHT, or for testing purposes.
-    #[inline]
     pub fn random() -> PeerId {
         PeerId {
             multihash: multihash::Multihash::random(multihash::Hash::SHA2256)
@@ -116,7 +112,6 @@ impl PeerId {
     /// Returns a raw bytes representation of this `PeerId`.
     ///
     /// Note that this is not the same as the public key of the peer.
-    #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
         self.multihash.into_bytes()
     }
@@ -124,21 +119,13 @@ impl PeerId {
     /// Returns a raw bytes representation of this `PeerId`.
     ///
     /// Note that this is not the same as the public key of the peer.
-    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         self.multihash.as_bytes()
     }
 
     /// Returns a base-58 encoded string of this `PeerId`.
-    #[inline]
     pub fn to_base58(&self) -> String {
         bs58::encode(self.multihash.as_bytes()).into_string()
-    }
-
-    /// Returns the raw bytes of the hash of this `PeerId`.
-    #[inline]
-    pub fn digest(&self) -> &[u8] {
-        self.multihash.digest()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
@@ -222,19 +209,21 @@ impl PartialEq<PeerId> for PeerId {
     }
 }
 
-// TODO: remove
+// TODO: The semantics of that function aren't very precise. It is possible for two `PeerId`s to
+//       compare equal while their bytes representation are not. Right now, this `AsRef`
+//       implementation is only used to define precedence over two `PeerId`s in case of a
+//       simultaneous connection between two nodes. Since the simultaneous connection system
+//       is planned to be removed (https://github.com/libp2p/rust-libp2p/issues/912), we went for
+//       we keeping that function with the intent of removing it as soon as possible.
 impl AsRef<[u8]> for PeerId {
-    #[inline]
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-// TODO: From instead
-impl Into<multihash::Multihash> for PeerId {
-    #[inline]
-    fn into(self) -> multihash::Multihash {
-        self.multihash
+impl From<PeerId> for multihash::Multihash {
+    fn from(peer_id: PeerId) -> Self {
+        peer_id.multihash
     }
 }
 
