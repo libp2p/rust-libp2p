@@ -24,7 +24,7 @@ use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
+use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -505,7 +505,15 @@ impl MdnsPeer {
                     Err(_) => return None,
                 };
                 match addr.pop() {
-                    Some(Protocol::P2p(ref peer_id)) if peer_id == &my_peer_id => (),
+                    Some(Protocol::P2p(peer_id)) => {
+                        if let Ok(peer_id) = PeerId::try_from(peer_id) {
+                            if peer_id != my_peer_id {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    },
                     _ => return None,
                 };
                 Some(addr)
