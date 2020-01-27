@@ -1,3 +1,16 @@
+# Version 0.15.0 (2020-01-24)
+
+- Added `libp2p-gossipsub`.
+- Added `SwarmBuilder::executor` to allow configuring which tasks executor to use.
+- Added `TokioTcpConfig` in `libp2p-tcp` and `TokioUdsConfig` in `libp2p-uds` behind `tokio` features. These structs use `tokio` and require a `tokio` runtime executor to be configured via `SwarmBuilder::executor`.
+- Changed the `OutboundUpgrade` and `InboundUpgrade` traits to no longer be passed a `Negotiated<C>` but just a `C`. The `Negotiated` is now in the trait bounds requirements of `ProtocolsHandler`.
+- Fixed `libp2p-wasm-ext` returning `Err(WouldBlock)` rather than `Pending`.
+- Fixed `libp2p-dns` not segregating DNS4 and DNS6.
+- Removed some unnecessary `Unpin` requirements on futures.
+- Changed `Mdns::new` to no longer be `async`.
+- Fixed `libp2p-kad` keeping connections alive when it shouldn't.
+- Fixed `InboundUpgrade` not always properly implemented on `NoiseConfig`.
+
 # Version 0.14.0-alpha.1 (2020-01-07)
 
 - Upgraded the crate to stable futures.
