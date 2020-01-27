@@ -32,4 +32,4 @@ mod rpc_proto {
 
 pub use self::layer::{Floodsub, FloodsubEvent};
 pub use self::protocol::{FloodsubMessage, FloodsubRpc};
-pub use self::topic::{Topic, TopicBuilder, TopicHash};
+pub use self::topic::Topic;
