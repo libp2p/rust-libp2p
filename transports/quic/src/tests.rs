@@ -19,17 +19,24 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
+use async_macros::ready;
 use futures::prelude::*;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::ListenerEvent,
-    Transport,
+    StreamMuxer, Transport,
+};
+use log::{debug, trace};
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 #[derive(Debug)]
 pub struct QuicStream {
-    id: Option<QuicSubstream>,
-    muxer: QuicMuxer,
+    id: Option<Substream>,
+    muxer: Muxer,
     shutdown: bool,
 }
 
@@ -84,7 +91,7 @@ impl Drop for QuicStream {
     }
 }
 
-impl futures::Stream for QuicMuxer {
+impl futures::Stream for Muxer {
     type Item = QuicStream;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         Poll::Ready(Some(QuicStream {
@@ -104,7 +111,7 @@ pub(crate) fn init() {
     )
 }
 
-impl Future for QuicMuxer {
+impl Future for Muxer {
     type Output = Result<(), io::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         self.get_mut().close(cx)
@@ -116,7 +123,7 @@ fn wildcard_expansion() {
     init();
     let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let mut listener = Endpoint::new(QuicConfig::new(&keypair), addr.clone())
+    let mut listener = Endpoint::new(Config::new(&keypair), addr.clone())
         .expect("endpoint")
         .listen_on(addr)
         .expect("listener");
@@ -146,7 +153,6 @@ fn wildcard_expansion() {
 
 #[test]
 fn communicating_between_dialer_and_listener() {
-    use super::{trace, StreamMuxer};
     init();
     let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
     let mut ready_tx = Some(ready_tx);
@@ -174,7 +180,7 @@ fn communicating_between_dialer_and_listener() {
         let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
             .parse()
             .expect("bad address?");
-        let quic_config = QuicConfig::new(&keypair2);
+        let quic_config = Config::new(&keypair2);
         let quic_endpoint = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
         let mut listener = quic_endpoint.listen_on(addr).unwrap();
 
@@ -186,7 +192,7 @@ fn communicating_between_dialer_and_listener() {
                 }
                 ListenerEvent::Upgrade { upgrade, .. } => {
                     log::debug!("got a connection upgrade!");
-                    let (id, mut muxer): (_, QuicMuxer) = upgrade.await.expect("upgrade failed");
+                    let (id, mut muxer): (_, Muxer) = upgrade.await.expect("upgrade failed");
                     log::debug!("got a new muxer!");
                     let mut socket: QuicStream = muxer.next().await.expect("no incoming stream");
 
@@ -222,7 +228,7 @@ fn communicating_between_dialer_and_listener() {
 
     let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();
-        let quic_config = QuicConfig::new(&keypair);
+        let quic_config = Config::new(&keypair);
         let quic_endpoint = Endpoint::new(
             quic_config,
             "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
@@ -269,7 +275,7 @@ fn communicating_between_dialer_and_listener() {
 fn replace_port_0_in_returned_multiaddr_ipv4() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let config = QuicConfig::new(&keypair);
+    let config = Config::new(&keypair);
 
     let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
     assert!(addr.to_string().ends_with("udp/0/quic"));
@@ -290,7 +296,7 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
 fn replace_port_0_in_returned_multiaddr_ipv6() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let config = QuicConfig::new(&keypair);
+    let config = Config::new(&keypair);
 
     let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
     assert!(addr.to_string().contains("udp/0/quic"));
@@ -310,7 +316,7 @@ fn replace_port_0_in_returned_multiaddr_ipv6() {
 fn larger_addr_denied() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let config = QuicConfig::new(&keypair);
+    let config = Config::new(&keypair);
     let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
         .parse::<Multiaddr>()
         .unwrap();

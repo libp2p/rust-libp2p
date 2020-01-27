@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-use crate::{socket, EndpointMessage, QuicConfig};
+use crate::{connection::EndpointMessage, socket, Config, Upgrade};
 use async_macros::ready;
 use async_std::net::SocketAddr;
 use futures::{channel::mpsc, prelude::*};
@@ -42,12 +42,11 @@ use std::{
 #[derive(Debug)]
 pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
-    muxers: HashMap<ConnectionHandle, Weak<Mutex<super::Muxer>>>,
+    muxers: HashMap<ConnectionHandle, Weak<Mutex<super::connection::Muxer>>>,
     driver: Option<async_std::task::JoinHandle<Result<(), io::Error>>>,
     pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
-    refcount: u64,
 }
 
 impl EndpointInner {
@@ -78,10 +77,10 @@ impl EndpointInner {
                     debug!("we have an event from connection {:?}", handle);
                     match self.muxers.get(&handle).and_then(|e| e.upgrade()) {
                         None => drop(self.muxers.remove(&handle)),
-                        Some(connection) => match self.inner.handle_event(handle, event) {
-                            None => connection.lock().process_endpoint_communication(self),
-                            Some(event) => connection.lock().process_connection_events(self, event),
-                        },
+                        Some(connection) => {
+                            let event = self.inner.handle_event(handle, event);
+                            connection.lock().process_connection_events(self, event)
+                        }
                     }
                 }
             }
@@ -111,7 +110,7 @@ impl EndpointInner {
                     match self.muxers.get(&handle).and_then(|e| e.upgrade()) {
                         Some(connection) => connection
                             .lock()
-                            .process_connection_events(self, connection_event),
+                            .process_connection_events(self, Some(connection_event)),
                         None => {
                             debug!("lost our connection!");
                             assert!(self
@@ -147,17 +146,16 @@ pub(super) struct EndpointData {
     inner: Mutex<EndpointInner>,
     /// The channel on which new connections are sent.  This is bounded in practice by the accept
     /// backlog.
-    new_connections: mpsc::UnboundedSender<Result<ListenerEvent<super::QuicUpgrade>, io::Error>>,
+    new_connections: mpsc::UnboundedSender<Result<ListenerEvent<Upgrade>, io::Error>>,
     /// The channel used to receive new connections.
-    receive_connections: Mutex<
-        Option<mpsc::UnboundedReceiver<Result<ListenerEvent<super::QuicUpgrade>, io::Error>>>,
-    >,
+    receive_connections:
+        Mutex<Option<mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, io::Error>>>>,
     /// Connections send their events to this
     event_channel: mpsc::Sender<EndpointMessage>,
     /// The `Multiaddr`
     address: Multiaddr,
     /// The configuration
-    config: QuicConfig,
+    config: Config,
 }
 
 impl EndpointData {
@@ -189,21 +187,6 @@ pub struct Endpoint(Arc<EndpointData>);
 
 struct EndpointDriver(Arc<EndpointData>);
 
-impl Drop for Endpoint {
-    fn drop(&mut self) {
-        let mut inner = self.inner();
-        let decrement = if self.0.receive_connections.lock().is_some() {
-            2
-        } else {
-            1
-        };
-        inner.refcount = inner
-            .refcount
-            .checked_sub(decrement)
-            .expect("we do accurate reference counting; qed");
-    }
-}
-
 impl Endpoint {
     fn inner(&self) -> MutexGuard<'_, EndpointInner> {
         trace!("acquiring lock!");
@@ -212,9 +195,9 @@ impl Endpoint {
         q
     }
 
-    /// Construct a `Endpoint` with the given `QuicConfig` and `Multiaddr`.
+    /// Construct a `Endpoint` with the given `Config` and `Multiaddr`.
     pub fn new(
-        config: QuicConfig,
+        config: Config,
         address: Multiaddr,
     ) -> Result<Self, TransportError<<&'static Self as Transport>::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&address) {
@@ -237,7 +220,6 @@ impl Endpoint {
                 driver: None,
                 event_receiver,
                 pending: Default::default(),
-                refcount: 2,
             }),
             address: address.clone(),
             receive_connections: Mutex::new(Some(receive_connections)),
@@ -262,12 +244,10 @@ fn create_muxer(
     connection: Connection,
     handle: ConnectionHandle,
     inner: &mut EndpointInner,
-) -> super::QuicMuxer {
-    let (driver, muxer) =
-        super::ConnectionDriver::new(super::Muxer::new(endpoint, connection, handle));
-    inner.muxers.insert(handle, Arc::downgrade(&muxer));
-    (*muxer).lock().driver = Some(async_std::task::spawn(driver));
-    super::QuicMuxer(muxer)
+) -> Upgrade {
+    super::connection::ConnectionDriver::spawn(endpoint, connection, handle, |weak| {
+        inner.muxers.insert(handle, weak);
+    })
 }
 
 impl EndpointDriver {
@@ -277,12 +257,12 @@ impl EndpointDriver {
         handle: ConnectionHandle,
         inner: &mut EndpointInner,
     ) {
-        let muxer = create_muxer(self.0.clone(), connection, handle, &mut *inner);
+        let upgrade = create_muxer(self.0.clone(), connection, handle, &mut *inner);
         if self
             .0
             .new_connections
             .unbounded_send(Ok(ListenerEvent::Upgrade {
-                upgrade: super::QuicUpgrade { muxer: Some(muxer) },
+                upgrade,
                 local_addr: self.0.address.clone(),
                 remote_addr: self.0.address.clone(),
             }))
@@ -290,10 +270,6 @@ impl EndpointDriver {
         {
             inner.inner.accept();
             inner.inner.reject_new_connections();
-            inner.refcount = inner
-                .refcount
-                .checked_sub(1)
-                .expect("attempt to decrement below zero");
         }
     }
 }
@@ -319,7 +295,9 @@ impl Future for EndpointDriver {
                     trace!("connection accepted");
                     match inner.poll_transmit_pending(&this.0.socket, cx)? {
                         Poll::Pending => break Poll::Pending,
-                        Poll::Ready(()) if inner.refcount == 0 => break Poll::Ready(Ok(())),
+                        Poll::Ready(()) if Arc::strong_count(&this.0) == 1 => {
+                            break Poll::Ready(Ok(()))
+                        }
                         Poll::Ready(()) => break Poll::Pending,
                     }
                 }
@@ -332,24 +310,24 @@ impl Future for EndpointDriver {
 #[derive(Debug)]
 pub struct Listener {
     reference: Arc<EndpointData>,
-    channel: mpsc::UnboundedReceiver<Result<ListenerEvent<super::QuicUpgrade>, io::Error>>,
+    channel: mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, io::Error>>,
 }
 
 impl Unpin for Listener {}
 
 impl Stream for Listener {
-    type Item = Result<ListenerEvent<super::QuicUpgrade>, io::Error>;
+    type Item = Result<ListenerEvent<Upgrade>, io::Error>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         self.get_mut().channel.poll_next_unpin(cx)
     }
 }
 
 impl Transport for &Endpoint {
-    type Output = (libp2p_core::PeerId, super::QuicMuxer);
+    type Output = (libp2p_core::PeerId, super::Muxer);
     type Error = io::Error;
     type Listener = Listener;
-    type ListenerUpgrade = super::QuicUpgrade;
-    type Dial = super::QuicUpgrade;
+    type ListenerUpgrade = Upgrade;
+    type Dial = Upgrade;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if addr != self.0.address {
@@ -397,8 +375,7 @@ impl Transport for &Endpoint {
                 TransportError::Other(io::ErrorKind::InvalidInput.into())
             });
         let (handle, conn) = s?;
-        let muxer = create_muxer(self.0.clone(), conn, handle, &mut inner);
-        Ok(super::QuicUpgrade { muxer: Some(muxer) })
+        Ok(create_muxer(self.0.clone(), conn, handle, &mut inner))
     }
 }
 
