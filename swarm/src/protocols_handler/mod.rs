@@ -44,15 +44,12 @@ mod node_handler;
 mod one_shot;
 mod select;
 
-use crate::{
-    NegotiatedBoxSubstream,
-    upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
-};
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeError},
+    upgrade::{self, UpgradeError},
 };
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{upgrade::{UpgradeInfoSend as _, SendWrapper}, BoxSubstream};
+use crate::{upgrade::SendWrapper, BoxSubstream};
 use crate::protocols_handler::{
     KeepAlive,
     ProtocolsHandler,
@@ -26,6 +26,7 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
+
 use futures::prelude::*;
 use libp2p_core::{
     ConnectedPoint,

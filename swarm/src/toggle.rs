@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::NegotiatedBoxSubstream;
-use crate::upgrade::{SendWrapper, InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters};
+use crate::upgrade::{SendWrapper, InboundUpgradeSend, OutboundUpgradeSend};
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -29,12 +28,13 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr,
     IntoProtocolsHandler
 };
+
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
     either::EitherOutput,
-    upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade}
+    upgrade::{DeniedUpgrade, EitherUpgrade}
 };
 use std::{error, task::Context, task::Poll};
 

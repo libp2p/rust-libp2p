@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-
 // collection of tests for the gossipsub network behaviour
 
 #[cfg(test)]
@@ -34,11 +33,7 @@ mod tests {
         peer_no: usize,
         topics: Vec<String>,
         to_subscribe: bool,
-    ) -> (
-        Gossipsub<TcpStream>,
-        Vec<PeerId>,
-        Vec<TopicHash>,
-    ) {
+    ) -> (Gossipsub<TcpStream>, Vec<PeerId>, Vec<TopicHash>) {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct

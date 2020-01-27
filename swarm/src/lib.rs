@@ -87,8 +87,7 @@ pub type NegotiatedBoxSubstream = Negotiated<BoxSubstream>;
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
 use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}};
 use libp2p_core::{
-    Executor, Negotiated,
-    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
+    Executor, Negotiated, Transport, Multiaddr, PeerId, ProtocolName,
     muxing::{StreamMuxer, StreamMuxerBox},
     nodes::{
         ListenerId, Substream,

@@ -21,7 +21,7 @@
 use crate::NegotiatedBoxSubstream;
 
 use futures::prelude::*;
-use libp2p_core::{either, upgrade};
+use libp2p_core::upgrade;
 
 pub trait UpgradeInfoSend: Send + 'static {
     type Info: upgrade::ProtocolName + Clone + Send + 'static;
