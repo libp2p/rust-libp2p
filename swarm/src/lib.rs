@@ -77,9 +77,6 @@ pub use protocols_handler::{
     OneShotHandler,
     SubstreamProtocol
 };
-pub use upgrade::{
-    UpgradeInfoSend,
-};
 
 pub type BoxSubstream = Substream<StreamMuxerBox>;
 pub type NegotiatedBoxSubstream = Negotiated<BoxSubstream>;
@@ -103,6 +100,7 @@ use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
+use upgrade::UpgradeInfoSend as _;
 
 /// Contains the state of the network, plus the way it should behave.
 pub type Swarm<TBehaviour, TConnInfo = PeerId> = ExpandedSwarm<

@@ -44,7 +44,11 @@ mod node_handler;
 mod one_shot;
 mod select;
 
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+pub use crate::upgrade::{
+    InboundUpgradeSend,
+    OutboundUpgradeSend,
+    UpgradeInfoSend,
+};
 
 use libp2p_core::{
     ConnectedPoint,
