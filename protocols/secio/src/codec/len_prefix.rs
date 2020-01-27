@@ -91,7 +91,7 @@ where
 
 impl<T> Stream for LenPrefixCodec<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    T: AsyncRead + AsyncWrite + Send + 'static
 {
     type Item = io::Result<Vec<u8>>;
 
@@ -102,7 +102,7 @@ where
 
 impl<T> Sink<Vec<u8>> for LenPrefixCodec<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    T: AsyncRead + AsyncWrite + Send + 'static
 {
     type Error = io::Error;
 
@@ -121,4 +121,7 @@ where
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.sink).poll_close(cx)
     }
+}
+
+impl<T> Unpin for LenPrefixCodec<T> {
 }

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{prelude::*, ready};
-use libp2p_core::{Negotiated, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::{io, iter, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
@@ -48,11 +48,11 @@ impl<C> InboundUpgrade<C> for DeflateConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = DeflateOutput<Negotiated<C>>;
+    type Output = DeflateOutput<C>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, r: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, r: C, _: Self::Info) -> Self::Future {
         future::ok(DeflateOutput::new(r, self.compression))
     }
 }
@@ -61,11 +61,11 @@ impl<C> OutboundUpgrade<C> for DeflateConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = DeflateOutput<Negotiated<C>>;
+    type Output = DeflateOutput<C>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, w: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, w: C, _: Self::Info) -> Self::Future {
         future::ok(DeflateOutput::new(w, self.compression))
     }
 }

@@ -108,14 +108,14 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<Negotiated<TSubstream>>>::Output
     ) {
         self.events.push(IdentifyHandlerEvent::Identify(protocol))
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<TSubstream>>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
         self.events.push(IdentifyHandlerEvent::Identified(protocol));

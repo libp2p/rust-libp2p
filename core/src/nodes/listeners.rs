@@ -60,7 +60,7 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///             ListenersEvent::AddressExpired { listener_id, listen_addr } => {
 ///                 println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
 ///             },
-///             ListenersEvent::Closed { listener_id, .. } => {
+///             ListenersEvent::Closed { listener_id } => {
 ///                 println!("Listener {:?} has been closed", listener_id);
 ///             },
 ///             ListenersEvent::Error { listener_id, error } => {
@@ -84,7 +84,9 @@ where
     /// Transport used to spawn listeners.
     transport: TTrans,
     /// All the active listeners.
-    listeners: VecDeque<Listener<TTrans>>,
+    /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// can be resized, the only way is to use a `Pin<Box<>>`.
+    listeners: VecDeque<Pin<Box<Listener<TTrans>>>>,
     /// The next listener ID to assign.
     next_id: ListenerId
 }
@@ -97,6 +99,7 @@ where
 pub struct ListenerId(u64);
 
 /// A single active listener.
+#[pin_project::pin_project]
 #[derive(Debug)]
 struct Listener<TTrans>
 where
@@ -105,6 +108,7 @@ where
     /// The ID of this listener.
     id: ListenerId,
     /// The object that actually listens.
+    #[pin]
     listener: TTrans::Listener,
     /// Addresses it is listening on.
     addresses: SmallVec<[Multiaddr; 4]>
@@ -144,8 +148,6 @@ where
     Closed {
         /// The ID of the listener that closed.
         listener_id: ListenerId,
-        /// The listener that closed.
-        listener: TTrans::Listener,
     },
     /// A listener errored.
     ///
@@ -190,22 +192,25 @@ where
         TTrans: Clone,
     {
         let listener = self.transport.clone().listen_on(addr)?;
-        self.listeners.push_back(Listener {
+        self.listeners.push_back(Box::pin(Listener {
             id: self.next_id,
             listener,
             addresses: SmallVec::new()
-        });
+        }));
         let id = self.next_id;
         self.next_id = ListenerId(self.next_id.0 + 1);
         Ok(id)
     }
 
     /// Remove the listener matching the given `ListenerId`.
-    pub fn remove_listener(&mut self, id: ListenerId) -> Option<TTrans::Listener> {
+    ///
+    /// Return `Ok(())` if a listener with this ID was in the list.
+    pub fn remove_listener(&mut self, id: ListenerId) -> Result<(), ()> {
         if let Some(i) = self.listeners.iter().position(|l| l.id == id) {
-            self.listeners.remove(i).map(|l| l.listener)
+            self.listeners.remove(i);
+            Ok(())
         } else {
-            None
+            Err(())
         }
     }
 
@@ -220,21 +225,19 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot end.
-    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ListenersEvent<TTrans>>
-    where
-        TTrans::Listener: Unpin,
-    {
+    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ListenersEvent<TTrans>> {
         // We remove each element from `listeners` one by one and add them back.
         let mut remaining = self.listeners.len();
         while let Some(mut listener) = self.listeners.pop_back() {
-            match TryStream::try_poll_next(Pin::new(&mut listener.listener), cx) {
+            let mut listener_project = listener.as_mut().project();
+            match TryStream::try_poll_next(listener_project.listener.as_mut(), cx) {
                 Poll::Pending => {
                     self.listeners.push_front(listener);
                     remaining -= 1;
                     if remaining == 0 { break }
                 }
                 Poll::Ready(Some(Ok(ListenerEvent::Upgrade { upgrade, local_addr, remote_addr }))) => {
-                    let id = listener.id;
+                    let id = *listener_project.id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(ListenersEvent::Incoming {
                         listener_id: id,
@@ -244,13 +247,13 @@ where
                     })
                 }
                 Poll::Ready(Some(Ok(ListenerEvent::NewAddress(a)))) => {
-                    if listener.addresses.contains(&a) {
+                    if listener_project.addresses.contains(&a) {
                         debug!("Transport has reported address {} multiple times", a)
                     }
-                    if !listener.addresses.contains(&a) {
-                        listener.addresses.push(a.clone());
+                    if !listener_project.addresses.contains(&a) {
+                        listener_project.addresses.push(a.clone());
                     }
-                    let id = listener.id;
+                    let id = *listener_project.id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(ListenersEvent::NewAddress {
                         listener_id: id,
@@ -258,8 +261,8 @@ where
                     })
                 }
                 Poll::Ready(Some(Ok(ListenerEvent::AddressExpired(a)))) => {
-                    listener.addresses.retain(|x| x != &a);
-                    let id = listener.id;
+                    listener_project.addresses.retain(|x| x != &a);
+                    let id = *listener_project.id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(ListenersEvent::AddressExpired {
                         listener_id: id,
@@ -268,13 +271,12 @@ where
                 }
                 Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
-                        listener_id: listener.id,
-                        listener: listener.listener
+                        listener_id: *listener_project.id,
                     })
                 }
                 Poll::Ready(Some(Err(err))) => {
                     return Poll::Ready(ListenersEvent::Error {
-                        listener_id: listener.id,
+                        listener_id: *listener_project.id,
                         error: err
                     })
                 }
@@ -289,7 +291,6 @@ where
 impl<TTrans> Stream for ListenersStream<TTrans>
 where
     TTrans: Transport,
-    TTrans::Listener: Unpin,
 {
     type Item = ListenersEvent<TTrans>;
 
@@ -338,7 +339,7 @@ where
                 .field("listener_id", listener_id)
                 .field("local_addr", local_addr)
                 .finish(),
-            ListenersEvent::Closed { listener_id, .. } => f
+            ListenersEvent::Closed { listener_id } => f
                 .debug_struct("ListenersEvent::Closed")
                 .field("listener_id", listener_id)
                 .finish(),

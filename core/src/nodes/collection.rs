@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Executor,
     PeerId,
     muxing::StreamMuxer,
     nodes::{
@@ -306,11 +307,11 @@ where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash,
 {
-    /// Creates a new empty collection.
-    #[inline]
-    pub fn new() -> Self {
+    /// Creates a new empty collection. If `executor` is `Some`, uses the given executor to spawn
+    /// tasks. Otherwise, runs tasks locally.
+    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
         CollectionStream {
-            inner: tasks::Manager::new(),
+            inner: tasks::Manager::new(executor),
             nodes: Default::default(),
         }
     }
@@ -322,7 +323,7 @@ where
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Output = Result<(TConnInfo, TMuxer), TReachErr>> + Unpin + Send + 'static,
+        TFut: Future<Output = Result<(TConnInfo, TMuxer), TReachErr>> + Send + 'static,
         THandler: IntoNodeHandler<TConnInfo> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,

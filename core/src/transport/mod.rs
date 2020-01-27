@@ -208,7 +208,8 @@ pub trait Transport {
         timeout::TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 
-    /// Begins a series of protocol upgrades via an [`upgrade::Builder`].
+    /// Begins a series of protocol upgrades via an
+    /// [`upgrade::Builder`](core::transport::upgrade::Builder).
     fn upgrade(self, version: upgrade::Version) -> upgrade::Builder<Self>
     where
         Self: Sized,

@@ -27,7 +27,7 @@ use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{PublicKey, PeerId};
 use log::{debug, trace};
-use protobuf::Message;
+use prost::Message;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use unsigned_varint::codec::UviBytes;
 
@@ -52,15 +52,17 @@ pub struct Remote {
 
 impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Result<Self, PlainTextError> {
-        let mut exchange = Exchange::new();
-        exchange.set_id(config.local_public_key.clone().into_peer_id().into_bytes());
-        exchange.set_pubkey(config.local_public_key.clone().into_protobuf_encoding());
-        let exchange_bytes = exchange.write_to_bytes()?;
+        let exchange = Exchange {
+            id: Some(config.local_public_key.clone().into_peer_id().into_bytes()),
+            pubkey: Some(config.local_public_key.clone().into_protobuf_encoding())
+        };
+        let mut buf = Vec::with_capacity(exchange.encoded_len());
+        exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
 
         Ok(Self {
             config,
             state: Local {
-                exchange_bytes
+                exchange_bytes: buf
             }
         })
     }
@@ -68,7 +70,7 @@ impl HandshakeContext<Local> {
     fn with_remote(self, exchange_bytes: BytesMut)
         -> Result<HandshakeContext<Remote>, PlainTextError>
     {
-        let mut prop = match protobuf::parse_from_bytes::<Exchange>(&exchange_bytes) {
+        let prop = match Exchange::decode(exchange_bytes) {
             Ok(prop) => prop,
             Err(e) => {
                 debug!("failed to parse remote's exchange protobuf message");
@@ -76,7 +78,7 @@ impl HandshakeContext<Local> {
             },
         };
 
-        let pb_pubkey = prop.take_pubkey();
+        let pb_pubkey = prop.pubkey.unwrap_or_default();
         let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.as_slice()) {
             Ok(p) => p,
             Err(_) => {
@@ -84,7 +86,7 @@ impl HandshakeContext<Local> {
                 return Err(PlainTextError::InvalidPayload(None));
             },
         };
-        let peer_id = match PeerId::from_bytes(prop.take_id()) {
+        let peer_id = match PeerId::from_bytes(prop.id.unwrap_or_default()) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's exchange's id protobuf");

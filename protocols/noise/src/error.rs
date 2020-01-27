@@ -35,7 +35,7 @@ pub enum NoiseError {
     /// upgrade failed.
     AuthenticationFailed,
     /// A handshake payload is invalid.
-    InvalidPayload(protobuf::ProtobufError),
+    InvalidPayload(prost::DecodeError),
     /// A signature was required and could not be created.
     SigningError(identity::error::SigningError),
     #[doc(hidden)]
@@ -82,8 +82,8 @@ impl From<SnowError> for NoiseError {
     }
 }
 
-impl From<protobuf::ProtobufError> for NoiseError {
-    fn from(e: protobuf::ProtobufError) -> Self {
+impl From<prost::DecodeError> for NoiseError {
+    fn from(e: prost::DecodeError) -> Self {
         NoiseError::InvalidPayload(e)
     }
 }

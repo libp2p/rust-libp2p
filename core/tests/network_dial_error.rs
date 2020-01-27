@@ -91,14 +91,14 @@ where
 fn deny_incoming_connec() {
     // Checks whether refusing an incoming connection on a swarm triggers the correct events.
 
-    let mut swarm1: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
+    let mut swarm1: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _, _> = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        Network::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into(), None)
     };
 
     let mut swarm2 = {
@@ -108,7 +108,7 @@ fn deny_incoming_connec() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        Network::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into(), None)
     };
 
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -177,7 +177,7 @@ fn dial_self() {
                 // negotiation to complete.
                 util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
             });
-        Network::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into(), None)
     };
 
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -241,14 +241,14 @@ fn dial_self_by_id() {
     // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
     // place.
 
-    let mut swarm: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
+    let mut swarm: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _, _> = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        Network::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into(), None)
     };
 
     let peer_id = swarm.local_peer_id().clone();
@@ -266,7 +266,7 @@ fn multiple_addresses_err() {
             .upgrade(upgrade::Version::V1)
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new());
-        Network::new(transport, local_public_key.into())
+        Network::new(transport, local_public_key.into(), None)
     };
 
     let mut addresses = Vec::new();

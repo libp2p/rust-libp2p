@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::debug;
 use rand::{distributions, prelude::*};
 use std::{io, iter, time::Duration};
@@ -61,7 +61,7 @@ where
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<(), io::Error>>;
 
-    fn upgrade_inbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         async move {
             let mut payload = [0u8; 32];
             socket.read_exact(&mut payload).await?;
@@ -80,7 +80,7 @@ where
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Duration, io::Error>>;
 
-    fn upgrade_outbound(self, mut socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
         debug!("Preparing ping payload {:?}", payload);
         async move {

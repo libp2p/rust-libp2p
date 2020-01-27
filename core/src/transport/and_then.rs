@@ -25,7 +25,7 @@ use crate::{
 };
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
-use std::{error, pin::Pin, task::Context, task::Poll};
+use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
 
 /// See the `Transport::and_then` method.
 #[derive(Debug, Clone)]
@@ -40,11 +40,8 @@ impl<T, C> AndThen<T, C> {
 impl<T, C, F, O> Transport for AndThen<T, C>
 where
     T: Transport,
-    T::Dial: Unpin,
-    T::Listener: Unpin,
-    T::ListenerUpgrade: Unpin,
     C: FnOnce(T::Output, ConnectedPoint) -> F + Clone,
-    F: TryFuture<Ok = O> + Unpin,
+    F: TryFuture<Ok = O>,
     F::Error: error::Error,
 {
     type Output = O;
@@ -66,8 +63,9 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self.transport.dial(addr.clone()).map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
-            inner: Either::Left(dialed_fut),
-            args: Some((self.fun, ConnectedPoint::Dialer { address: addr }))
+            inner: Either::Left(Box::pin(dialed_fut)),
+            args: Some((self.fun, ConnectedPoint::Dialer { address: addr })),
+            marker: PhantomPinned,
         };
         Ok(future)
     }
@@ -76,18 +74,17 @@ where
 /// Custom `Stream` to avoid boxing.
 ///
 /// Applies a function to every stream item.
+#[pin_project::pin_project]
 #[derive(Debug, Clone)]
 pub struct AndThenStream<TListener, TMap> {
+    #[pin]
     stream: TListener,
     fun: TMap
 }
 
-impl<TListener, TMap> Unpin for AndThenStream<TListener, TMap> {
-}
-
 impl<TListener, TMap, TTransOut, TMapOut, TListUpgr, TTransErr> Stream for AndThenStream<TListener, TMap>
 where
-    TListener: TryStream<Ok = ListenerEvent<TListUpgr>, Error = TTransErr> + Unpin,
+    TListener: TryStream<Ok = ListenerEvent<TListUpgr>, Error = TTransErr>,
     TListUpgr: TryFuture<Ok = TTransOut, Error = TTransErr>,
     TMap: FnOnce(TTransOut, ConnectedPoint) -> TMapOut + Clone,
     TMapOut: TryFuture
@@ -97,8 +94,9 @@ where
         EitherError<TTransErr, TMapOut::Error>
     >;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match TryStream::try_poll_next(Pin::new(&mut self.stream), cx) {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        match TryStream::try_poll_next(this.stream, cx) {
             Poll::Ready(Some(Ok(event))) => {
                 let event = match event {
                     ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
@@ -108,8 +106,9 @@ where
                         };
                         ListenerEvent::Upgrade {
                             upgrade: AndThenFuture {
-                                inner: Either::Left(upgrade),
-                                args: Some((self.fun.clone(), point))
+                                inner: Either::Left(Box::pin(upgrade)),
+                                args: Some((this.fun.clone(), point)),
+                                marker: PhantomPinned,
                             },
                             local_addr,
                             remote_addr
@@ -132,26 +131,24 @@ where
 /// Applies a function to the result of the inner future.
 #[derive(Debug)]
 pub struct AndThenFuture<TFut, TMap, TMapOut> {
-    inner: Either<TFut, TMapOut>,
-    args: Option<(TMap, ConnectedPoint)>
-}
-
-impl<TFut, TMap, TMapOut> Unpin for AndThenFuture<TFut, TMap, TMapOut> {
+    inner: Either<Pin<Box<TFut>>, Pin<Box<TMapOut>>>,
+    args: Option<(TMap, ConnectedPoint)>,
+    marker: PhantomPinned,
 }
 
 impl<TFut, TMap, TMapOut> Future for AndThenFuture<TFut, TMap, TMapOut>
 where
-    TFut: TryFuture + Unpin,
+    TFut: TryFuture,
     TMap: FnOnce(TFut::Ok, ConnectedPoint) -> TMapOut,
-    TMapOut: TryFuture + Unpin
+    TMapOut: TryFuture,
 {
     type Output = Result<TMapOut::Ok, EitherError<TFut::Error, TMapOut::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
-            let future = match (*self).inner {
-                Either::Left(ref mut future) => {
-                    let item = match TryFuture::try_poll(Pin::new(future), cx) {
+            let future = match &mut self.inner {
+                Either::Left(future) => {
+                    let item = match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => v,
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::A(err))),
                         Poll::Pending => return Poll::Pending,
@@ -159,8 +156,8 @@ where
                     let (f, a) = self.args.take().expect("AndThenFuture has already finished.");
                     f(item, a)
                 }
-                Either::Right(ref mut future) => {
-                    return match TryFuture::try_poll(Pin::new(future), cx) {
+                Either::Right(future) => {
+                    return match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => Poll::Ready(Ok(v)),
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::B(err))),
                         Poll::Pending => Poll::Pending,
@@ -168,7 +165,10 @@ where
                 }
             };
 
-            (*self).inner = Either::Right(future);
+            self.inner = Either::Right(Box::pin(future));
         }
     }
+}
+
+impl<TFut, TMap, TMapOut> Unpin for AndThenFuture<TFut, TMap, TMapOut> {
 }

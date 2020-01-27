@@ -23,7 +23,7 @@ mod util;
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{Transport, MemoryTransport};
-use libp2p_core::upgrade::{self, UpgradeInfo, Negotiated, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
 use multiaddr::{Multiaddr, Protocol};
@@ -46,11 +46,11 @@ impl<C> InboundUpgrade<C> for HelloUpgrade
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Output = Negotiated<C>;
+    type Output = C;
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, mut socket: C, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let mut buf = [0u8; 5];
             socket.read_exact(&mut buf).await.unwrap();
@@ -64,11 +64,11 @@ impl<C> OutboundUpgrade<C> for HelloUpgrade
 where
     C: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
-    type Output = Negotiated<C>;
+    type Output = C;
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: Negotiated<C>, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: C, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             socket.write_all(b"hello").await.unwrap();
             socket.flush().await.unwrap();

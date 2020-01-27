@@ -24,8 +24,11 @@
 pub mod protocol;
 
 mod layer;
-mod rpc_proto;
 mod topic;
+
+mod rpc_proto {
+    include!(concat!(env!("OUT_DIR"), "/floodsub.pb.rs"));
+}
 
 pub use self::layer::{Floodsub, FloodsubEvent};
 pub use self::protocol::{FloodsubMessage, FloodsubRpc};

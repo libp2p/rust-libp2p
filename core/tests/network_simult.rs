@@ -110,7 +110,7 @@ fn raw_swarm_simultaneous_connect() {
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
                 .multiplex(libp2p_mplex::MplexConfig::new());
-            Network::new(transport, local_public_key.into_peer_id())
+            Network::new(transport, local_public_key.into_peer_id(), None)
         };
 
         let mut swarm2 = {
@@ -120,7 +120,7 @@ fn raw_swarm_simultaneous_connect() {
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
                 .multiplex(libp2p_mplex::MplexConfig::new());
-            Network::new(transport, local_public_key.into_peer_id())
+            Network::new(transport, local_public_key.into_peer_id(), None)
         };
 
         swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();

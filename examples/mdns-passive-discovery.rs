@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // This example provides passive discovery of the libp2p nodes on the
     // network that send mDNS queries and answers.
     task::block_on(async move {
-        let mut service = MdnsService::new().await?;
+        let mut service = MdnsService::new()?;
         loop {
             let (srv, packet) = service.next().await;
             match packet {

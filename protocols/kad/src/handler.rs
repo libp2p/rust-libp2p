@@ -59,7 +59,7 @@ where
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active substreams with the state they are in.
-    substreams: Vec<SubstreamState<Negotiated<TSubstream>, TUserData>>,
+    substreams: Vec<SubstreamState<TSubstream, TUserData>>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
@@ -75,29 +75,29 @@ where
     OutPendingOpen(KadRequestMsg, Option<TUserData>),
     /// Waiting to send a message to the remote.
     OutPendingSend(
-        KadOutStreamSink<TSubstream>,
+        KadOutStreamSink<Negotiated<TSubstream>>,
         KadRequestMsg,
         Option<TUserData>,
     ),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    OutPendingFlush(KadOutStreamSink<TSubstream>, Option<TUserData>),
+    OutPendingFlush(KadOutStreamSink<Negotiated<TSubstream>>, Option<TUserData>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    OutWaitingAnswer(KadOutStreamSink<TSubstream>, TUserData),
+    OutWaitingAnswer(KadOutStreamSink<Negotiated<TSubstream>>, TUserData),
     /// An error happened on the substream and we should report the error to the user.
     OutReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
-    OutClosing(KadOutStreamSink<TSubstream>),
+    OutClosing(KadOutStreamSink<Negotiated<TSubstream>>),
     /// Waiting for a request from the remote.
-    InWaitingMessage(UniqueConnecId, KadInStreamSink<TSubstream>),
+    InWaitingMessage(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>),
     /// Waiting for the user to send a `KademliaHandlerIn` event containing the response.
-    InWaitingUser(UniqueConnecId, KadInStreamSink<TSubstream>),
+    InWaitingUser(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>),
     /// Waiting to send an answer back to the remote.
-    InPendingSend(UniqueConnecId, KadInStreamSink<TSubstream>, KadResponseMsg),
+    InPendingSend(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>, KadResponseMsg),
     /// Waiting to flush an answer back to the remote.
-    InPendingFlush(UniqueConnecId, KadInStreamSink<TSubstream>),
+    InPendingFlush(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>),
     /// The substream is being closed.
-    InClosing(KadInStreamSink<TSubstream>),
+    InClosing(KadInStreamSink<Negotiated<TSubstream>>),
 }
 
 impl<TSubstream, TUserData> SubstreamState<TSubstream, TUserData>
@@ -403,7 +403,7 @@ where
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(10)),
         }
     }
 
@@ -450,7 +450,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<TSubstream>>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
         self.substreams
@@ -459,7 +459,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::InboundProtocol as InboundUpgrade<Negotiated<TSubstream>>>::Output,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
@@ -645,6 +645,10 @@ where
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
+        if self.substreams.is_empty() {
+            return Poll::Pending;
+        }
+
         // We remove each element from `substreams` one by one and add them back.
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
@@ -656,6 +660,9 @@ where
                         return Poll::Ready(event);
                     }
                     (None, Some(event), _) => {
+                        if self.substreams.is_empty() {
+                            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                        }
                         return Poll::Ready(event);
                     }
                     (Some(new_state), None, false) => {
@@ -674,6 +681,7 @@ where
         }
 
         if self.substreams.is_empty() {
+            // We destroyed all substreams in this function.
             self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
         } else {
             self.keep_alive = KeepAlive::Yes;

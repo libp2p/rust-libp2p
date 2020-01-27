@@ -92,7 +92,7 @@ where
             id: i,
             sender: s,
             receiver: r.fuse(),
-            state: State::Future { future: f, handler: h, events_buffer: Vec::new() },
+            state: State::Future { future: Box::pin(f), handler: h, events_buffer: Vec::new() },
             taken_over: SmallVec::new()
         }
     }
@@ -124,7 +124,8 @@ where
     /// Future to resolve to connect to the node.
     Future {
         /// The future that will attempt to reach the node.
-        future: F,
+        // TODO: don't pin this Future; this requires deeper changes though
+        future: Pin<Box<F>>,
         /// The handler that will be used to build the `HandledNode`.
         handler: H,
         /// While we are dialing the future, we need to buffer the events received on
@@ -163,7 +164,7 @@ where
 impl<F, M, H, I, O, E, C> Future for Task<F, M, H, I, O, E, C>
 where
     M: StreamMuxer,
-    F: Future<Output = Result<(C, M), E>> + Unpin,
+    F: Future<Output = Result<(C, M), E>>,
     H: IntoNodeHandler<C>,
     H::Handler: NodeHandler<Substream = Substream<M>, InEvent = I, OutEvent = O>
 {

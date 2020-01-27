@@ -26,7 +26,8 @@ use quote::quote;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Data, DataStruct, Ident};
 
-/// The interface that satisfies Rust.
+/// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
+/// the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -90,8 +91,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>},
                     quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler: #protocols_handler<Substream = #substream_generic>},
                     // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
-                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic>},
+                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<::libp2p::core::Negotiated<#substream_generic>>},
+                    quote!{<<<#ty as #trait_to_impl>::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<::libp2p::core::Negotiated<#substream_generic>>},
                 ]
             })
             .collect::<Vec<_>>();
