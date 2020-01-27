@@ -133,7 +133,7 @@ impl<T: UpgradeInfoSend> upgrade::UpgradeInfo for SendWrapper<T> {
     type InfoIter = T::InfoIter;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        UpgradeInfoSend::protocol_info(self)
+        UpgradeInfoSend::protocol_info(&self.0)
     }
 }
 
@@ -143,7 +143,7 @@ impl<T: OutboundUpgradeSend> upgrade::OutboundUpgrade<NegotiatedBoxSubstream> fo
     type Future = T::Future;
 
     fn upgrade_outbound(self, socket: NegotiatedBoxSubstream, info: T::Info) -> Self::Future {
-        OutboundUpgradeSend::upgrade_outbound(self, socket, info)
+        OutboundUpgradeSend::upgrade_outbound(self.0, socket, info)
     }
 }
 
@@ -153,6 +153,6 @@ impl<T: InboundUpgradeSend> upgrade::InboundUpgrade<NegotiatedBoxSubstream> for 
     type Future = T::Future;
 
     fn upgrade_inbound(self, socket: NegotiatedBoxSubstream, info: T::Info) -> Self::Future {
-        InboundUpgradeSend::upgrade_inbound(self, socket, info)
+        InboundUpgradeSend::upgrade_inbound(self.0, socket, info)
     }
 }
