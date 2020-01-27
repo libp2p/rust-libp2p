@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::build_development_transport(local_key)?;
 
     // Create a Floodsub topic
-    let floodsub_topic = floodsub::TopicBuilder::new("chat").build();
+    let floodsub_topic = floodsub::Topic::new("chat");
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm.floodsub.publish(floodsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break
             }
