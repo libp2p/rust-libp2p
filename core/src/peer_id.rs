@@ -22,7 +22,7 @@ use crate::PublicKey;
 use bs58;
 use thiserror::Error;
 use multihash;
-use std::{convert::TryFrom, fmt, str::FromStr};
+use std::{convert::TryFrom, fmt, hash, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -32,7 +32,7 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 ///
 /// The data is a multihash of the public key of the peer.
 // TODO: maybe keep things in decoded version?
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq)]
 pub struct PeerId {
     multihash: multihash::Multihash,
 }
@@ -156,6 +156,25 @@ impl PeerId {
     }
 }
 
+impl hash::Hash for PeerId {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: hash::Hasher
+    {
+        match self.multihash.algorithm() {
+            multihash::Hash::Identity => {
+                let sha256 = multihash::encode(multihash::Hash::SHA2256, self.multihash.digest())
+                    .expect("encoding a SHA2256 multihash never fails; qed");
+                hash::Hash::hash(sha256.digest(), state)
+            },
+            multihash::Hash::SHA2256 => {
+                hash::Hash::hash(self.multihash.digest(), state)
+            },
+            _ => unreachable!("PeerId can only be built from Identity or SHA2256; qed")
+        }
+    }
+}
+
 impl From<PublicKey> for PeerId {
     #[inline]
     fn from(key: PublicKey) -> PeerId {
@@ -179,27 +198,31 @@ impl TryFrom<multihash::Multihash> for PeerId {
     }
 }
 
-impl PartialEq<multihash::Multihash> for PeerId {
-    #[inline]
-    fn eq(&self, other: &multihash::Multihash) -> bool {
-        &self.multihash == other
-    }
-}
-
-impl PartialEq<PeerId> for multihash::Multihash {
-    #[inline]
+impl PartialEq<PeerId> for PeerId {
     fn eq(&self, other: &PeerId) -> bool {
-        self == &other.multihash
+        match (self.multihash.algorithm(), other.multihash.algorithm()) {
+            (multihash::Hash::SHA2256, multihash::Hash::SHA2256) => {
+                self.multihash.digest() == other.multihash.digest()
+            },
+            (multihash::Hash::Identity, multihash::Hash::Identity) => {
+                self.multihash.digest() == other.multihash.digest()
+            },
+            (multihash::Hash::SHA2256, multihash::Hash::Identity) => {
+                multihash::encode(multihash::Hash::SHA2256, other.multihash.digest())
+                    .map(|mh| mh == self.multihash)
+                    .unwrap_or(false)
+            },
+            (multihash::Hash::Identity, multihash::Hash::SHA2256) => {
+                multihash::encode(multihash::Hash::SHA2256, self.multihash.digest())
+                    .map(|mh| mh == other.multihash)
+                    .unwrap_or(false)
+            },
+            _ => false
+        }
     }
 }
 
-impl AsRef<multihash::Multihash> for PeerId {
-    #[inline]
-    fn as_ref(&self) -> &multihash::Multihash {
-        &self.multihash
-    }
-}
-
+// TODO: remove
 impl AsRef<[u8]> for PeerId {
     #[inline]
     fn as_ref(&self) -> &[u8] {
@@ -207,6 +230,7 @@ impl AsRef<[u8]> for PeerId {
     }
 }
 
+// TODO: From instead
 impl Into<multihash::Multihash> for PeerId {
     #[inline]
     fn into(self) -> multihash::Multihash {
@@ -235,6 +259,7 @@ impl FromStr for PeerId {
 #[cfg(test)]
 mod tests {
     use crate::{PeerId, identity};
+    use std::{convert::TryFrom as _, hash::{self, Hasher as _}};
 
     #[test]
     fn peer_id_is_public_key() {
@@ -263,5 +288,32 @@ mod tests {
             let peer_id = PeerId::random();
             assert_eq!(peer_id, PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap());
         }
+    }
+
+    #[test]
+    fn peer_id_identity_equal_to_sha2256() {
+        let random_bytes = (0..64).map(|_| rand::random::<u8>()).collect::<Vec<u8>>();
+        let mh1 = multihash::encode(multihash::Hash::SHA2256, &random_bytes).unwrap();
+        let mh2 = multihash::encode(multihash::Hash::Identity, &random_bytes).unwrap();
+        let peer_id1 = PeerId::try_from(mh1).unwrap();
+        let peer_id2 = PeerId::try_from(mh2).unwrap();
+        assert_eq!(peer_id1, peer_id2);
+        assert_eq!(peer_id2, peer_id1);
+    }
+
+    #[test]
+    fn peer_id_identity_hashes_equal_to_sha2256() {
+        let random_bytes = (0..64).map(|_| rand::random::<u8>()).collect::<Vec<u8>>();
+        let mh1 = multihash::encode(multihash::Hash::SHA2256, &random_bytes).unwrap();
+        let mh2 = multihash::encode(multihash::Hash::Identity, &random_bytes).unwrap();
+        let peer_id1 = PeerId::try_from(mh1).unwrap();
+        let peer_id2 = PeerId::try_from(mh2).unwrap();
+
+        let mut hasher1 = fnv::FnvHasher::with_key(0);
+        hash::Hash::hash(&peer_id1, &mut hasher1);
+        let mut hasher2 = fnv::FnvHasher::with_key(0);
+        hash::Hash::hash(&peer_id2, &mut hasher2);
+
+        assert_eq!(hasher1.finish(), hasher2.finish());
     }
 }
