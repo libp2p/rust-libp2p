@@ -59,7 +59,7 @@ impl<W: AsyncWrite> CryptWriter<W> {
 ///
 /// The handling 0 byte progress and the Interrupted error was taken from BufWriter in async_std.
 ///
-/// If this fn returns Ready(Ok(())), the buffer will be completely flushed.
+/// If this fn returns Ready(Ok(())), the buffer has been completely flushed.
 fn poll_flush_buf<W: AsyncWrite>(
     inner: &mut Pin<&mut W>,
     buf: &mut Vec<u8>,
@@ -91,7 +91,10 @@ fn poll_flush_buf<W: AsyncWrite>(
                     break;
                 }
             }
-            Poll::Pending => break,
+            Poll::Pending => {
+                ret = Poll::Pending;
+                break;
+            }
         }
     }
     if written > 0 {
