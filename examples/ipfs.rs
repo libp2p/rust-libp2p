@@ -52,11 +52,11 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::core::transport::upgrade::Version;
+use libp2p::identify::{Identify, IdentifyEvent};
 use libp2p::mplex::MplexConfig;
 use libp2p::pnet::PnetConfig;
 use libp2p::secio::SecioConfig;
 use libp2p::tcp::TcpConfig;
-use libp2p::identify::{Identify, IdentifyEvent};
 use libp2p::yamux::Config as YamuxConfig;
 use libp2p::Transport;
 use libp2p::{
@@ -64,9 +64,9 @@ use libp2p::{
     gossipsub::{self, Gossipsub, GossipsubEvent},
     identity,
     mdns::{Mdns, MdnsEvent},
-    pnet::PreSharedKey,
     ping::{self, Ping, PingConfig, PingEvent},
-    swarm::NetworkBehaviourEventProcess,    
+    pnet::PreSharedKey,
+    swarm::NetworkBehaviourEventProcess,
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
 use libp2p_core::StreamMuxer;
@@ -102,7 +102,7 @@ pub fn build_transport(
 > {
     let secio_config = SecioConfig::new(key_pair);
     let yamux_config = YamuxConfig::default();
-    let mplex_config = MplexConfig::new();    
+    let mplex_config = MplexConfig::new();
 
     Ok(TcpConfig::new()
         .nodelay(true)
@@ -116,13 +116,30 @@ pub fn build_transport(
         .timeout(Duration::from_secs(20)))
 }
 
+use std::{env, fs, path::{Path, PathBuf}};
+
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
+
+    let ipfs_path: Box<Path> = env::var("IPFS_PATH")        
+        .map(|ipfs_path| Path::new(&ipfs_path).into())
+        .unwrap_or_else(|_| {
+            env::var("HOME")
+                .map(|home| Path::new(&home).join(".ipfs"))
+                .expect("could not determine home directory")
+                .into()
+        });
+    println!("using IPFS_PATH {:?}", ipfs_path);
+    let swarm_key_file = ipfs_path.join("swarm.key");
+    println!("{:?}", swarm_key_file);
+    let swarm_key_text = fs::read_to_string(swarm_key_file)?;
+    println!("{:?}", swarm_key_text);
+    let psk = PreSharedKey::from_str(&swarm_key_text)?;
 
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    let psk = PreSharedKey::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
+    // let psk = PreSharedKey::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
     println!("Local peer id: {:?}", local_peer_id);
     println!("Swarm key: {}", psk);
     println!("Swarm key fingerprint: {}", psk.fingerprint());
@@ -224,18 +241,34 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         // Called when `ping` produces an event.
         fn inject_event(&mut self, event: PingEvent) {
-            use ping::handler::{PingSuccess, PingFailure};
+            use ping::handler::{PingFailure, PingSuccess};
             match event {
-                PingEvent { peer, result: Result::Ok(PingSuccess::Ping { rtt }) } => {
-                    println!("ping: rtt to {} is {} ms", peer.to_base58(), rtt.as_millis());
-                },
-                PingEvent { peer, result: Result::Ok(PingSuccess::Pong) } => {
+                PingEvent {
+                    peer,
+                    result: Result::Ok(PingSuccess::Ping { rtt }),
+                } => {
+                    println!(
+                        "ping: rtt to {} is {} ms",
+                        peer.to_base58(),
+                        rtt.as_millis()
+                    );
+                }
+                PingEvent {
+                    peer,
+                    result: Result::Ok(PingSuccess::Pong),
+                } => {
                     println!("ping: pong from {}", peer.to_base58());
-                },
-                PingEvent { peer, result: Result::Err(PingFailure::Timeout) } => {
+                }
+                PingEvent {
+                    peer,
+                    result: Result::Err(PingFailure::Timeout),
+                } => {
                     println!("ping: timeout to {}", peer.to_base58());
-                },
-                PingEvent { peer, result: Result::Err(PingFailure::Other { error }) } => {
+                }
+                PingEvent {
+                    peer,
+                    result: Result::Err(PingFailure::Other { error }),
+                } => {
                     println!("ping: failure with {}: {}", peer.to_base58(), error);
                 }
             }
@@ -249,11 +282,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id.clone()),
             gossipsub: gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config),
-            identify: Identify::new(
-                "/ipfs/0.1.0".into(),
-                "rust-ipfs".into(),
-                local_key.public(),
-            ),
+            identify: Identify::new("/ipfs/0.1.0".into(), "rust-ipfs".into(), local_key.public()),
             ping: Ping::new(PingConfig::new()),
             mdns,
             ignored_member: false,
@@ -282,9 +311,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => {
-                    swarm.floodsub.publish(floodsub_topic.clone(), line.as_bytes());
+                    swarm
+                        .floodsub
+                        .publish(floodsub_topic.clone(), line.as_bytes());
                     swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes());
-                },
+                }
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
             }

@@ -161,6 +161,22 @@ pub enum KeyParseError {
     InvalidKeyChar(ParseIntError),
 }
 
+impl fmt::Display for KeyParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl error::Error for KeyParseError {
+
+    fn cause(&self) -> Option<&dyn error::Error> {
+        match *self {
+            KeyParseError::InvalidKeyChar(ref err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
 /// Private network configuration
 #[derive(Debug, Copy, Clone)]
 pub struct PnetConfig {
