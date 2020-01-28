@@ -59,7 +59,7 @@ impl<W: AsyncWrite> CryptWriter<W> {
 ///
 /// The handling 0 byte progress and the Interrupted error was taken from BufWriter in async_std.
 ///
-/// If this fn returns Ready(Ok(())), the buffer has been completely flushed.
+/// If this fn returns Ready(Ok(())), the buffer has been completely flushed and is empty.
 fn poll_flush_buf<W: AsyncWrite>(
     inner: &mut Pin<&mut W>,
     buf: &mut Vec<u8>,
@@ -100,6 +100,7 @@ fn poll_flush_buf<W: AsyncWrite>(
     if written > 0 {
         buf.drain(..written);
     }
+    if let Poll::Ready(Ok(())) = ret { debug_assert!(buf.is_empty()); }
     ret
 }
 
@@ -113,10 +114,13 @@ impl<W: AsyncWrite> AsyncWrite for CryptWriter<W> {
         // completely flush the buffer, returning pending if not possible
         ready!(poll_flush_buf(&mut this.inner, this.buf, cx))?;
         // if we get here, the buffer is empty
+        debug_assert!(this.buf.is_empty());
         let res = Pin::new(&mut *this.buf).poll_write(cx, buf);
         if let Poll::Ready(Ok(count)) = res {
             this.cipher.apply_keystream(&mut this.buf[0..count]);
             trace!("encrypted {} bytes", count);
+        } else {
+            debug_assert!(false);
         };
         // flush immediately afterwards, but if we get a pending we don't care
         if let Poll::Ready(Err(e)) = poll_flush_buf(&mut this.inner, this.buf, cx) {
