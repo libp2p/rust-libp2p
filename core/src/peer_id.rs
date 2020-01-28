@@ -305,4 +305,35 @@ mod tests {
 
         assert_eq!(hasher1.finish(), hasher2.finish());
     }
+
+    #[test]
+    fn peer_id_equal_across_algorithms() {
+        use multihash::Hash;
+        use quickcheck::{Arbitrary, Gen};
+
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        struct HashAlgo(Hash);
+
+        impl Arbitrary for HashAlgo {
+            fn arbitrary<G: Gen>(g: &mut G) -> Self {
+                match g.next_u32() % 4 { // make Hash::Identity more likely
+                    0 => HashAlgo(Hash::SHA2256),
+                    _ => HashAlgo(Hash::Identity)
+                }
+            }
+        }
+
+        fn property(data: Vec<u8>, algo1: HashAlgo, algo2: HashAlgo) -> bool {
+            let a = PeerId::try_from(multihash::encode(algo1.0, &data).unwrap()).unwrap();
+            let b = PeerId::try_from(multihash::encode(algo2.0, &data).unwrap()).unwrap();
+
+            if algo1 == algo2 || algo1.0 == Hash::Identity || algo2.0 == Hash::Identity {
+                a == b
+            } else {
+                a != b
+            }
+        }
+
+        quickcheck::quickcheck(property as fn(Vec<u8>, HashAlgo, HashAlgo) -> bool)
+    }
 }
