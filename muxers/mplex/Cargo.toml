@@ -20,5 +20,5 @@ parking_lot = "0.10"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 
 [dev-dependencies]
-async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
+async-std = "1.4.0"
 libp2p-tcp = { version = "0.14.0-alpha.1", path = "../../transports/tcp" }

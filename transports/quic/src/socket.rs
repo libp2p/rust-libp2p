@@ -25,7 +25,7 @@
 use async_std::net::UdpSocket;
 use log::{trace, warn};
 use quinn_proto::Transmit;
-use std::{io::Result, task::Context, task::Poll};
+use std::{future::Future, io::Result, task::Context, task::Poll};
 
 /// A pending packet for libp2p-quic
 #[derive(Debug, Default)]
@@ -42,10 +42,11 @@ pub(crate) struct Socket {
 impl Socket {
     /// Transmit a packet if possible, with appropriate logging.
     pub fn poll_send_to(&self, cx: &mut Context, packet: &Transmit) -> Poll<Result<()>> {
-        match self
-            .socket
-            .poll_send_to(cx, &packet.contents, &packet.destination)
-        {
+        match {
+            let fut = self.socket.send_to(&packet.contents, &packet.destination);
+            futures::pin_mut!(fut);
+            fut.poll(cx)
+        } {
             Poll::Pending => {
                 trace!("not able to send packet right away");
                 return Poll::Pending;
@@ -68,7 +69,11 @@ impl Socket {
         buf: &mut [u8],
     ) -> Poll<Result<(usize, std::net::SocketAddr)>> {
         loop {
-            match self.socket.poll_recv_from(cx, buf) {
+            match {
+                let fut = self.socket.recv_from(buf);
+                futures::pin_mut!(fut);
+                fut.poll(cx)
+            } {
                 Poll::Pending => {
                     trace!("no packets available yet");
                     break Poll::Pending;

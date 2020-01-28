@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [target.'cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))'.dependencies]
-async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
+async-std = "1.4.0"
 libp2p-core = { version = "0.14.0-alpha.1", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"

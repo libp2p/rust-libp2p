@@ -46,7 +46,7 @@ secp256k1 = []
 aes-all = ["aesni"]
 
 [dev-dependencies]
-async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
+async-std = "1.4.0"
 criterion = "0.3"
 libp2p-mplex = { version = "0.14.0-alpha.1", path = "../../muxers/mplex" }
 libp2p-tcp = { version = "0.14.0-alpha.1", path = "../../transports/tcp" }

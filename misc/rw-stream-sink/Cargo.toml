@@ -15,4 +15,4 @@ pin-project = "0.4.6"
 static_assertions = "1"
 
 [dev-dependencies]
-async-std = { git = "https://github.com/paritytech/async-std", branch = "poll-recv-send-udp" }
+async-std = "1.4.0"
