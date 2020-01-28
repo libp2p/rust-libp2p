@@ -152,6 +152,7 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
+use libp2p_pnet::{PnetConfig, PreSharedKey};
 pub use bytes;
 pub use futures;
 #[doc(inline)]
@@ -203,6 +204,8 @@ pub use libp2p_wasm_ext as wasm_ext;
 pub use libp2p_websocket as websocket;
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[doc(inline)]
+pub use libp2p_pnet as pnet;
 
 mod transport_ext;
 
@@ -244,6 +247,24 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     Ok(CommonTransport::new()?
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(secio::SecioConfig::new(keypair))
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
+        .timeout(Duration::from_secs(20)))
+}
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// and mplex or yamux as the multiplexing layer.
+///
+/// > **Note**: If you ever need to express the type of this `Transport`.
+pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
+    -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+{
+    Ok(CommonTransport::new()?
+        .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
         .upgrade(core::upgrade::Version::V1)
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
