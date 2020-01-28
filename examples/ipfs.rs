@@ -53,7 +53,6 @@ use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::core::transport::upgrade::Version;
 use libp2p::identify::{Identify, IdentifyEvent};
-use libp2p::mplex::MplexConfig;
 use libp2p::pnet::PnetConfig;
 use libp2p::secio::SecioConfig;
 use libp2p::tcp::TcpConfig;
@@ -61,9 +60,7 @@ use libp2p::yamux::Config as YamuxConfig;
 use libp2p::Transport;
 use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
-    gossipsub::{self, Gossipsub, GossipsubEvent},
     identity,
-    mdns::{Mdns, MdnsEvent},
     ping::{self, Ping, PingConfig, PingEvent},
     pnet::PreSharedKey,
     swarm::NetworkBehaviourEventProcess,
@@ -144,7 +141,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = build_transport(local_key.clone(), psk)?;
 
     // Create a Floodsub topic
-    let floodsub_topic = floodsub::Topic::new("hello");
+    let floodsub_topic = floodsub::Topic::new("chat");
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
@@ -153,14 +150,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
         floodsub: Floodsub<TSubstream>,
-        mdns: Mdns<TSubstream>,
         identify: Identify<TSubstream>,
         ping: Ping<TSubstream>,
-
-        // Struct fields which do not implement NetworkBehaviour need to be ignored
-        #[behaviour(ignore)]
-        #[allow(dead_code)]
-        ignored_member: bool,
     }
 
     impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<IdentifyEvent>
@@ -183,30 +174,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     String::from_utf8_lossy(&message.data),
                     message.source
                 );
-            }
-        }
-    }
-
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent>
-        for MyBehaviour<TSubstream>
-    {
-        // Called when `mdns` produces an event.
-        fn inject_event(&mut self, event: MdnsEvent) {
-            match event {
-                MdnsEvent::Discovered(list) => {
-                    for (peer, addr) in list {
-                        println!("Discovered: {}/ipfs/{}", addr, peer);
-                        self.floodsub.add_node_to_partial_view(peer);
-                    }
-                }
-                MdnsEvent::Expired(list) => {
-                    for (peer, addr) in list {
-                        println!("Expired: {}/ipfs/{}", addr, peer);
-                        if !self.mdns.has_node(&peer) {
-                            self.floodsub.remove_node_from_partial_view(&peer);
-                        }
-                    }
-                }
             }
         }
     }
@@ -252,14 +219,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = Mdns::new()?;
-        let gossipsub_config = gossipsub::GossipsubConfig::default();
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id.clone()),
             identify: Identify::new("/ipfs/0.1.0".into(), "rust-ipfs".into(), local_key.public()),
             ping: Ping::new(PingConfig::new()),
-            mdns,
-            ignored_member: false,
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
