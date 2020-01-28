@@ -102,21 +102,17 @@ pub fn build_transport(
 > {
     let secio_config = SecioConfig::new(key_pair);
     let yamux_config = YamuxConfig::default();
-    let mplex_config = MplexConfig::new();
 
     Ok(TcpConfig::new()
         .nodelay(true)
         .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
         .upgrade(Version::V1)
         .authenticate(secio_config)
-        .multiplex(libp2p::core::upgrade::SelectUpgrade::new(
-            yamux_config,
-            mplex_config,
-        ))
+        .multiplex(yamux_config)
         .timeout(Duration::from_secs(20)))
 }
 
-use std::{env, fs, path::{Path, PathBuf}};
+use std::{env, fs, path::Path};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -150,9 +146,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("hello");
 
-    // Create a Gossipsub topic
-    let gossipsub_topic = gossipsub::Topic::new("hello".into());
-
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
     // Use the derive to generate delegating NetworkBehaviour impl and require the
@@ -162,7 +155,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         floodsub: Floodsub<TSubstream>,
         mdns: Mdns<TSubstream>,
         identify: Identify<TSubstream>,
-        gossipsub: Gossipsub<TSubstream>,
         ping: Ping<TSubstream>,
 
         // Struct fields which do not implement NetworkBehaviour need to be ignored
@@ -219,23 +211,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<GossipsubEvent>
-        for MyBehaviour<TSubstream>
-    {
-        // Called when `mdns` produces an event.
-        fn inject_event(&mut self, event: GossipsubEvent) {
-            match event {
-                GossipsubEvent::Message(peer_id, id, message) => println!(
-                    "Got message: {} with id: {} from peer: {:?}",
-                    String::from_utf8_lossy(&message.data),
-                    id,
-                    peer_id
-                ),
-                _ => {}
-            }
-        }
-    }
-
     impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<PingEvent>
         for MyBehaviour<TSubstream>
     {
@@ -281,7 +256,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let gossipsub_config = gossipsub::GossipsubConfig::default();
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id.clone()),
-            gossipsub: gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config),
             identify: Identify::new("/ipfs/0.1.0".into(), "rust-ipfs".into(), local_key.public()),
             ping: Ping::new(PingConfig::new()),
             mdns,
@@ -314,7 +288,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     swarm
                         .floodsub
                         .publish(floodsub_topic.clone(), line.as_bytes());
-                    swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes());
                 }
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
