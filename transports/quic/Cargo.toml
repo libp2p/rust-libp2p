@@ -30,7 +30,7 @@ rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
 libp2p-core = { path = "../../core", version = "0.14.0-alpha.1" }
 log = "0.4.8"
 ipnet = "2.1.0"
-err-derive = "0.2.1"
+err-derive = "0.2.2"
 futures = { version = "0.3.1", package = "futures", features = ["compat"] }
 futures-core = "0.3.1"
 quinn-proto = { git = "https://github.com/djc/quinn" }

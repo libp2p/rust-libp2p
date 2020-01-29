@@ -51,6 +51,7 @@ impl AsyncWrite for QuicStream {
         inner
             .muxer
             .write_substream(cx, inner.id.as_mut().unwrap(), buf)
+            .map_err(From::from)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
@@ -79,6 +80,7 @@ impl AsyncRead for QuicStream {
         inner
             .muxer
             .read_substream(cx, inner.id.as_mut().unwrap(), buf)
+            .map_err(From::from)
     }
 }
 
@@ -112,7 +114,7 @@ pub(crate) fn init() {
 }
 
 impl Future for Muxer {
-    type Output = Result<(), io::Error>;
+    type Output = Result<(), crate::error::Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         self.get_mut().close(cx)
     }
@@ -221,10 +223,6 @@ fn communicating_between_dialer_and_listener() {
             }
         }
     });
-    #[cfg(any())]
-    let _join = BlockJoin {
-        handle: Some(_handle),
-    };
 
     let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();

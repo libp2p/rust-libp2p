@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-use crate::{connection::EndpointMessage, socket, Config, Upgrade};
+use crate::{connection::EndpointMessage, error::Error, socket, Config, Upgrade};
 use async_macros::ready;
 use async_std::net::SocketAddr;
 use futures::{channel::mpsc, prelude::*};
@@ -32,7 +32,6 @@ use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionHandle};
 use std::{
     collections::HashMap,
-    io,
     pin::Pin,
     sync::{Arc, Weak},
     task::{Context, Poll},
@@ -43,7 +42,7 @@ use std::{
 pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
     muxers: HashMap<ConnectionHandle, Weak<Mutex<super::connection::Muxer>>>,
-    driver: Option<async_std::task::JoinHandle<Result<(), io::Error>>>,
+    driver: Option<async_std::task::JoinHandle<Result<(), Error>>>,
     pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
@@ -57,9 +56,7 @@ impl EndpointInner {
     ) -> Option<quinn_proto::ConnectionEvent> {
         if event.is_drained() {
             let res = self.inner.handle_event(handle, event);
-            self.muxers
-                .remove_entry(&handle)
-                .expect("cannot close a connection that did not exist");
+            self.muxers.remove(&handle);
             res
         } else {
             self.inner.handle_event(handle, event)
@@ -91,7 +88,7 @@ impl EndpointInner {
         &mut self,
         socket: &socket::Socket,
         cx: &mut Context,
-    ) -> Poll<Result<(ConnectionHandle, Connection), io::Error>> {
+    ) -> Poll<Result<(ConnectionHandle, Connection), Error>> {
         use quinn_proto::DatagramEvent;
         let mut buf = vec![0; 65535];
         loop {
@@ -132,9 +129,11 @@ impl EndpointInner {
         &mut self,
         socket: &socket::Socket,
         cx: &mut Context,
-    ) -> Poll<Result<(), io::Error>> {
+    ) -> Poll<Result<(), Error>> {
         let Self { inner, pending, .. } = self;
-        pending.send_packet(cx, socket, &mut || inner.poll_transmit())
+        pending
+            .send_packet(cx, socket, &mut || inner.poll_transmit())
+            .map_err(Error::IO)
     }
 }
 
@@ -146,10 +145,10 @@ pub(super) struct EndpointData {
     inner: Mutex<EndpointInner>,
     /// The channel on which new connections are sent.  This is bounded in practice by the accept
     /// backlog.
-    new_connections: mpsc::UnboundedSender<Result<ListenerEvent<Upgrade>, io::Error>>,
+    new_connections: mpsc::UnboundedSender<Result<ListenerEvent<Upgrade>, Error>>,
     /// The channel used to receive new connections.
     receive_connections:
-        Mutex<Option<mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, io::Error>>>>,
+        Mutex<Option<mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, Error>>>>,
     /// Connections send their events to this
     event_channel: mpsc::Sender<EndpointMessage>,
     /// The `Multiaddr`
@@ -206,7 +205,9 @@ impl Endpoint {
             return Err(TransportError::MultiaddrNotSupported(address));
         };
         // NOT blocking, as per man:bind(2), as we pass an IP address.
-        let socket = std::net::UdpSocket::bind(&socket_addr)?.into();
+        let socket = std::net::UdpSocket::bind(&socket_addr)
+            .map_err(Error::IO)?
+            .into();
         let (new_connections, receive_connections) = mpsc::unbounded();
         let (event_channel, event_receiver) = mpsc::channel(0);
         let return_value = Self(Arc::new(EndpointData {
@@ -275,8 +276,8 @@ impl EndpointDriver {
 }
 
 impl Future for EndpointDriver {
-    type Output = Result<(), io::Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    type Output = Result<(), Error>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         let this = self.get_mut();
         loop {
             let mut inner = this.0.inner.lock();
@@ -310,13 +311,13 @@ impl Future for EndpointDriver {
 #[derive(Debug)]
 pub struct Listener {
     reference: Arc<EndpointData>,
-    channel: mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, io::Error>>,
+    channel: mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, Error>>,
 }
 
 impl Unpin for Listener {}
 
 impl Stream for Listener {
-    type Item = Result<ListenerEvent<Upgrade>, io::Error>;
+    type Item = Result<ListenerEvent<Upgrade>, Error>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         self.get_mut().channel.poll_next_unpin(cx)
     }
@@ -324,7 +325,7 @@ impl Stream for Listener {
 
 impl Transport for &Endpoint {
     type Output = (libp2p_core::PeerId, super::Muxer);
-    type Error = io::Error;
+    type Error = Error;
     type Listener = Listener;
     type ListenerUpgrade = Upgrade;
     type Dial = Upgrade;
@@ -337,7 +338,7 @@ impl Transport for &Endpoint {
             .receive_connections
             .lock()
             .take()
-            .ok_or_else(|| TransportError::Other(io::ErrorKind::AlreadyExists.into()))?;
+            .ok_or_else(|| TransportError::Other(Error::AlreadyListening))?;
         let mut inner = self.inner();
         let reference = self.0.clone();
         if inner.driver.is_none() {
@@ -350,9 +351,7 @@ impl Transport for &Endpoint {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                return Err(TransportError::Other(
-                    io::ErrorKind::ConnectionRefused.into(),
-                ));
+                return Err(TransportError::MultiaddrNotSupported(addr));
             }
             socket_addr
         } else {
@@ -372,7 +371,7 @@ impl Transport for &Endpoint {
             )
             .map_err(|e| {
                 warn!("Connection error: {:?}", e);
-                TransportError::Other(io::ErrorKind::InvalidInput.into())
+                TransportError::Other(Error::CannotConnect(e))
             });
         let (handle, conn) = s?;
         Ok(create_muxer(self.0.clone(), conn, handle, &mut inner))
