@@ -174,6 +174,8 @@ pub use libp2p_kad as kad;
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
 #[doc(inline)]
+pub use libp2p_gossipsub as gossipsub;
+#[doc(inline)]
 pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]

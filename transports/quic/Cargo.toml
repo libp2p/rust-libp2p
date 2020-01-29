@@ -19,7 +19,7 @@
 # DEALINGS IN THE SOFTWARE.
 [package]
 name = "libp2p-quic"
-version = "0.14.0-alpha.1"
+version = "0.15.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
 
@@ -27,12 +27,11 @@ edition = "2018"
 
 [dependencies]
 rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
-libp2p-core = { path = "../../core", version = "0.14.0-alpha.1" }
+libp2p-core = { path = "../../core", version = "0.15.0" }
 log = "0.4.8"
 ipnet = "2.1.0"
 err-derive = "0.2.2"
-futures = { version = "0.3.1", package = "futures", features = ["compat"] }
-futures-core = "0.3.1"
+futures = "0.3.1"
 quinn-proto = { git = "https://github.com/djc/quinn" }
 async-std = "1.4.0"
 async-macros = "2.0.0"

@@ -395,7 +395,7 @@ impl AsyncRead for Connection {
                         Poll::Ready(Err(err)) => break Poll::Ready(Err(io::Error::from(JsErr::from(err)))),
                         Poll::Pending => {
                             self.read_state = ConnectionReadState::Waiting(promise);
-                            break Poll::Ready(Err(io::ErrorKind::WouldBlock.into()));
+                            break Poll::Pending;
                         }
                     };
 
