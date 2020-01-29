@@ -105,20 +105,14 @@ fn read_algid(reader: &mut yasna::BERReaderSeq) -> Result<AlgorithmIdentifier, y
 
 #[derive(PartialEq, Eq, Debug)]
 struct AlgorithmIdentifier {
-    #[cfg_attr(test, allow(dead_code))]
     algorithm: yasna::models::ObjectIdentifier,
-    #[cfg_attr(test, allow(dead_code))]
     parameters: Option<Vec<u8>>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug)]
 pub struct X509Certificate {
-    #[cfg_attr(test, allow(dead_code))]
     tbs_certificate: Vec<u8>,
-    #[cfg_attr(test, allow(dead_code))]
     algorithm: AlgorithmIdentifier,
-    #[cfg_attr(test, allow(dead_code))]
     signature_value: Vec<u8>,
 }
 
@@ -211,7 +205,6 @@ fn compute_signature_algorithm(
     key: &[u8],
     alg: &AlgorithmIdentifier,
 ) -> yasna::ASN1Result<&'static dyn ring::signature::VerificationAlgorithm> {
-    #![cfg_attr(not(test), allow(dead_code))]
     Ok(match (key.len(), &**alg.algorithm.components()) {
         (32, &[1, 3, 101, 111]) => &ring::signature::ED25519,
         (33, &[1, 2, 840, 10045, 4, 3, 2]) => &ring::signature::ECDSA_P256_SHA256_ASN1,
@@ -259,7 +252,6 @@ fn compute_signature_algorithm(
     })
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 fn parse_certificate(
     certificate: &[u8],
 ) -> yasna::ASN1Result<(X509Certificate, Vec<u8>, identity::PublicKey)> {
@@ -324,7 +316,6 @@ fn parse_certificate(
 pub fn verify_libp2p_certificate(
     certificate: &[u8],
 ) -> Result<libp2p_core::PeerId, ring::error::Unspecified> {
-    #![cfg_attr(not(test), allow(dead_code))]
     let (raw_certificate, certificate_key, identity_key): (_, Vec<u8>, _) =
         parse_certificate(certificate).map_err(|e| {
             log::debug!("error in parsing: {:?}", e);
