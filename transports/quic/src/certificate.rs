@@ -26,23 +26,6 @@
 //! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
 //! library) are logged at `debug` level.
 use log::{debug, trace, warn};
-use quinn_proto::Side;
-static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &'static [&'static webpki::SignatureAlgorithm] = {
-    &[
-        &webpki::ECDSA_P256_SHA256,
-        &webpki::ECDSA_P256_SHA384,
-        &webpki::ECDSA_P384_SHA256,
-        &webpki::ECDSA_P384_SHA384,
-        &webpki::ED25519,
-        &webpki::RSA_PKCS1_2048_8192_SHA256,
-        &webpki::RSA_PKCS1_2048_8192_SHA384,
-        &webpki::RSA_PKCS1_2048_8192_SHA512,
-        &webpki::RSA_PKCS1_3072_8192_SHA384,
-        &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-        &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-        &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-    ]
-};
 const BASIC_CONSTRAINTS_OID: &[u64] = &[2, 5, 29, 19];
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
@@ -275,32 +258,7 @@ fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKe
 
 /// The name is a misnomer. We don’t bother checking if the certificate is actually well-formed.
 /// We just check that its self-signature is valid, and that its public key is suitably signed.
-pub fn verify_libp2p_certificate(
-    certificate: &[u8],
-    side: Side,
-) -> Result<libp2p_core::PeerId, webpki::Error> {
-    let trust_anchor = webpki::trust_anchor_util::cert_der_as_trust_anchor(certificate)?;
-    let cert = webpki::EndEntityCert::from(certificate)?;
-    let time = webpki::Time::try_from(std::time::SystemTime::now()).expect(
-        "we assume the system clock is not set to before the UNIX epoch; \
-         if it is not, then the system is hopelessly misconfigured, and many \
-         other things will break; if this is not set to before the UNIX epoch, \
-         this will succeed; qed",
-    );
-    match side {
-        Side::Server => cert.verify_is_valid_tls_server_cert(
-            ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
-            &webpki::TLSServerTrustAnchors(&[trust_anchor]),
-            &[],
-            time,
-        ),
-        Side::Client => cert.verify_is_valid_tls_client_cert(
-            ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
-            &webpki::TLSClientTrustAnchors(&[trust_anchor]),
-            &[],
-            time,
-        ),
-    }?;
+pub fn verify_libp2p_certificate(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
     parse_certificate(certificate)
         .map_err(|e| {
             log::debug!("error in parsing: {:?}", e);
@@ -314,16 +272,12 @@ mod test {
     use super::*;
     #[test]
     fn can_make_a_certificate() {
-        use Side::{Client, Server};
         drop(env_logger::try_init());
         let keypair = identity::Keypair::generate_ed25519();
-        for side in &[Client, Server] {
-            assert_eq!(
-                verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap(), *side)
-                    .unwrap(),
-                libp2p_core::PeerId::from_public_key(keypair.public())
-            );
-        }
+        assert_eq!(
+            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            libp2p_core::PeerId::from_public_key(keypair.public())
+        );
         log::trace!("trying secp256k1!");
         let keypair = identity::Keypair::generate_secp256k1();
         log::trace!("have a key!");
@@ -331,12 +285,9 @@ mod test {
         log::trace!("have a public key!");
         assert_eq!(public, public, "key is not equal to itself?");
         log::debug!("have a valid key!");
-        for side in &[Client, Server] {
-            assert_eq!(
-                verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap(), *side)
-                    .unwrap(),
-                libp2p_core::PeerId::from_public_key(keypair.public())
-            );
-        }
+        assert_eq!(
+            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            libp2p_core::PeerId::from_public_key(keypair.public())
+        );
     }
 }

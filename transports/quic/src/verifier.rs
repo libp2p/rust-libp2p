@@ -18,27 +18,43 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// A ServerCertVerifier that considers any certificate to be valid, and does no checking
-/// whatsoever.
+static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &'static [&'static webpki::SignatureAlgorithm] = {
+    &[
+        &webpki::ECDSA_P256_SHA256,
+        &webpki::ECDSA_P256_SHA384,
+        &webpki::ECDSA_P384_SHA256,
+        &webpki::ECDSA_P384_SHA384,
+        &webpki::ED25519,
+        &webpki::RSA_PKCS1_2048_8192_SHA256,
+        &webpki::RSA_PKCS1_2048_8192_SHA384,
+        &webpki::RSA_PKCS1_2048_8192_SHA512,
+        &webpki::RSA_PKCS1_3072_8192_SHA384,
+        &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+        &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+        &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    ]
+};
+
+/// A ServerCertVerifier that considers any self-signed certificate to be valid.
+///
+/// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
+/// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any self-signed
+/// certificate with a valid libp2p extension **by design**.  Instead, it is the application’s job
+/// to check the peer ID that libp2p-quic provides.  libp2p-quic does guarantee that the connection
+/// is to a peer with the secret key corresponing to its `PeerId`, unless that endpoint has done
+/// something insecure.
+pub struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
+
+/// A ClientCertVerifier that requires client authentication, and requires the certificate to be self-signed.
 ///
 /// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
 /// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any certificate
 /// **by design**.  Instead, it is the application’s job to check the peer ID that libp2p-quic
 /// provides.  libp2p-quic does guarantee that the connection is to a peer with the secret key
 /// corresponing to its `PeerId`, unless that endpoint has done something insecure.
-pub struct VeryInsecureRequireExactlyOneServerCertificateButDoNotCheckIt;
+pub struct VeryInsecureRequireExactlyOneSelfSignedClientCertificate;
 
-/// A ClientCertVerifier that requires client authentication, but considers any certificate to be
-/// valid, and does no checking whatsoever.
-///
-/// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
-/// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any certificate
-/// **by design**.  Instead, it is the application’s job to check the peer ID that libp2p-quic
-/// provides.  libp2p-quic does guarantee that the connection is to a peer with the secret key
-/// corresponing to its `PeerId`, unless that endpoint has done something insecure.
-pub struct VeryInsecureRequireExactlyOneClientCertificateButDoNotCheckIt;
-
-impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneServerCertificateButDoNotCheckIt {
+impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServerCertificate {
     fn verify_server_cert(
         &self,
         _roots: &rustls::RootCertStore,
@@ -46,15 +62,36 @@ impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneServerCertifica
         _dns_name: webpki::DNSNameRef,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        if presented_certs.len() == 1 {
-            Ok(rustls::ServerCertVerified::assertion())
-        } else {
-            Err(rustls::TLSError::NoCertificatesPresented)
-        }
+        let (time, cert, trust_anchor) = verify_presented_certs(presented_certs)?;
+        cert.verify_is_valid_tls_server_cert(
+            ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
+            &webpki::TLSServerTrustAnchors(&[trust_anchor]),
+            &[],
+            time,
+        )
+        .map(|()| rustls::ServerCertVerified::assertion())
+        .map_err(rustls::TLSError::WebPKIError)
     }
 }
 
-impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneClientCertificateButDoNotCheckIt {
+fn verify_presented_certs(
+    presented_certs: &[rustls::Certificate],
+) -> Result<(webpki::Time, webpki::EndEntityCert, webpki::TrustAnchor), rustls::TLSError> {
+    if presented_certs.len() != 1 {
+        Err(rustls::TLSError::NoCertificatesPresented)?
+    }
+    let time = webpki::Time::try_from(std::time::SystemTime::now())
+        .map_err(|ring::error::Unspecified| rustls::TLSError::FailedToGetCurrentTime)?;
+    let raw_certificate = presented_certs[0].as_ref();
+    Ok((
+        time,
+        webpki::EndEntityCert::from(raw_certificate).map_err(rustls::TLSError::WebPKIError)?,
+        webpki::trust_anchor_util::cert_der_as_trust_anchor(raw_certificate)
+            .map_err(rustls::TLSError::WebPKIError)?,
+    ))
+}
+
+impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClientCertificate {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -67,10 +104,14 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneClientCertifica
         &self,
         presented_certs: &[rustls::Certificate],
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-        if presented_certs.len() == 1 {
-            Ok(rustls::ClientCertVerified::assertion())
-        } else {
-            Err(rustls::TLSError::NoCertificatesPresented)
-        }
+        let (time, cert, trust_anchor) = verify_presented_certs(presented_certs)?;
+        cert.verify_is_valid_tls_client_cert(
+            ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
+            &webpki::TLSClientTrustAnchors(&[trust_anchor]),
+            &[],
+            time,
+        )
+        .map(|()| rustls::ClientCertVerified::assertion())
+        .map_err(rustls::TLSError::WebPKIError)
     }
 }

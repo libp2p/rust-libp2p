@@ -95,7 +95,7 @@ fn make_client_config(
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.enable_early_data = true;
     crypto.set_single_client_cert(vec![certificate], key);
-    let verifier = verifier::VeryInsecureRequireExactlyOneServerCertificateButDoNotCheckIt;
+    let verifier = verifier::VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
     crypto
         .dangerous()
         .set_certificate_verifier(Arc::new(verifier));
@@ -113,7 +113,7 @@ fn make_server_config(
     transport.stream_window_uni(0);
     transport.datagram_receive_buffer_size(None);
     let mut crypto = rustls::ServerConfig::new(Arc::new(
-        verifier::VeryInsecureRequireExactlyOneClientCertificateButDoNotCheckIt,
+        verifier::VeryInsecureRequireExactlyOneSelfSignedClientCertificate,
     ));
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto
@@ -529,7 +529,6 @@ impl Future for QuicUpgrade {
                          chain would already have been rejected; qed",
                     )
                     .as_ref(),
-                inner.connection.side(),
             )
         };
         let muxer = muxer.take().expect("polled after yielding Ready");
