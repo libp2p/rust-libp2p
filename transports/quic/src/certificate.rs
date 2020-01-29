@@ -26,8 +26,9 @@
 //! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
 //! library) are logged at `debug` level.
 use log::{debug, trace, warn};
-pub const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
-pub const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
+const BASIC_CONSTRAINTS_OID: &[u64] = &[2, 5, 29, 19];
+const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
+const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 pub const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &'static rcgen::SignatureAlgorithm =
@@ -139,6 +140,7 @@ fn parse_x509_extension(
     certificate_key: &[u8],
     oids_seen: &mut std::collections::HashSet<yasna::models::ObjectIdentifier>,
 ) -> Result<Option<identity::PublicKey>, yasna::ASN1Error> {
+    enum Void {}
     reader.read_sequence(|reader| {
         let oid = reader.next().read_oid()?;
         trace!("read extensions with oid {:?}", oid);
@@ -159,15 +161,27 @@ fn parse_x509_extension(
         })?;
         trace!("certificate critical? {}", is_critical);
         let contents = reader.next().read_bytes()?;
-        if *oid.components() != LIBP2P_OID {
-            if is_critical {
-                // unknown critical extension
-                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
-            } else {
-                Ok(None)
+        match &**oid.components() {
+            LIBP2P_OID => Ok(Some(verify_libp2p_extension(&contents, certificate_key)?)),
+            BASIC_CONSTRAINTS_OID => yasna::parse_der(&contents, |reader| {
+                reader.read_sequence(|reader| {
+                    reader.read_optional(|_| {
+                        Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+                    })
+                })
+            })
+            .map(|e: Option<Void>| match e {
+                Some(bad) => match bad {},
+                None => None,
+            }),
+            _ => {
+                if is_critical {
+                    // unknown critical extension
+                    Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+                } else {
+                    Ok(None)
+                }
             }
-        } else {
-            Ok(Some(verify_libp2p_extension(&contents, certificate_key)?))
         }
     })
 }
