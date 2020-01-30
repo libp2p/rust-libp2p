@@ -25,8 +25,7 @@
 //! This crate uses the `log` crate to emit log output.  Events that will occur normally are output
 //! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
 //! library) are logged at `debug` level.
-use log::{debug, trace, warn};
-const BASIC_CONSTRAINTS_OID: &[u64] = &[2, 5, 29, 19];
+use log::{trace, warn};
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 pub const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
@@ -92,31 +91,6 @@ fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1E
     }
 }
 
-/// Read an X.509 Algorithm Identifier
-fn read_algid(reader: &mut yasna::BERReaderSeq) -> Result<AlgorithmIdentifier, yasna::ASN1Error> {
-    reader.next().read_sequence(|reader| {
-        let algorithm = reader.next().read_oid()?;
-        let parameters = reader.read_optional(|reader| reader.read_der())?;
-        Ok(AlgorithmIdentifier {
-            algorithm,
-            parameters,
-        })
-    })
-}
-
-#[derive(PartialEq, Eq, Debug)]
-struct AlgorithmIdentifier {
-    algorithm: yasna::models::ObjectIdentifier,
-    parameters: Option<Vec<u8>>,
-}
-
-#[derive(Debug)]
-pub struct X509Certificate {
-    tbs_certificate: Vec<u8>,
-    algorithm: AlgorithmIdentifier,
-    signature_value: Vec<u8>,
-}
-
 fn parse_x509_extensions(
     reader: &mut yasna::BERReaderSeq,
     certificate_key: &[u8],
@@ -150,30 +124,11 @@ fn parse_x509_extension(
             );
             return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid));
         }
-        let mut is_critical = false;
-        reader.read_optional(|reader| {
-            if reader.read_bool()? {
-                Ok(is_critical = true)
-            } else {
-                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
-            }
-        })?;
-        trace!("certificate critical? {}", is_critical);
+        reader.read_optional(|reader| reader.read_bool().map(drop))?;
         let contents = reader.next().read_bytes()?;
         match &**oid.components() {
-            LIBP2P_OID => Ok(Some(verify_libp2p_extension(&contents, certificate_key)?)),
-            BASIC_CONSTRAINTS_OID => yasna::parse_der(&contents, |reader| {
-                reader.read_sequence(|reader| reader.read_optional(|reader| reader.read_bool()))
-            })
-            .map(|_| None),
-            _ => {
-                if is_critical {
-                    // unknown critical extension
-                    Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
-                } else {
-                    Ok(None)
-                }
-            }
+            LIBP2P_OID => verify_libp2p_extension(&contents, certificate_key).map(Some),
+            _ => Ok(None),
         }
     })
 }
@@ -202,57 +157,42 @@ fn verify_libp2p_extension(
 
 fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKey> {
     trace!("parsing certificate");
-    let raw_certificate = yasna::parse_der(certificate, |reader| {
-        reader.read_sequence(|mut reader| {
-            let tbs_certificate = reader.next().read_der()?;
-            let algorithm = read_algid(&mut reader)?;
-            let signature_value = read_bitvec(&mut reader)?;
-            Ok(X509Certificate {
-                tbs_certificate,
-                algorithm,
-                signature_value,
-            })
+    yasna::parse_der(certificate, |reader| {
+        reader.read_sequence(|reader| {
+            let key = parse_tbscertificate(reader.next())?;
+            // skip algorithm
+            reader.next().read_der()?;
+            // skip signature
+            reader.next().read_der()?;
+            Ok(key)
         })
-    })?;
-    yasna::parse_der(&raw_certificate.tbs_certificate, |reader| {
-        trace!("parsing TBScertificate");
-        reader.read_sequence(|mut reader| {
-            trace!("getting X509 version");
-            let version = reader.next().read_der()?;
-            // this is the encoding of 2 with context 0
-            if version != [160, 3, 2, 1, 2] {
-                warn!("got invalid version {:?}", version);
-                return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?;
-            }
-            // Skip the serial number
+    })
+}
+
+fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity::PublicKey> {
+    trace!("parsing TBScertificate");
+    reader.read_sequence(|reader| {
+        // Skip the X.509 version
+        reader.next().read_der()?;
+        // Skip the serial number
+        reader.next().read_der()?;
+        // Skip the signature algorithm
+        reader.next().read_der()?;
+        // Skip the issuer
+        reader.next().read_der()?;
+        // Skip validity
+        reader.next().read_der()?;
+        // Skip subject
+        reader.next().read_der()?;
+        trace!("reading subjectPublicKeyInfo");
+        let key = reader.next().read_sequence(|mut reader| {
+            // Skip the subject key algorithm
             reader.next().read_der()?;
-            if read_algid(&mut reader)? != raw_certificate.algorithm {
-                debug!(
-                    "expected algid to be {:?}, but it is not",
-                    raw_certificate.algorithm
-                );
-                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?
-            }
-            // Skip the issuer
-            reader.next().read_der()?;
-            // Skip validity
-            reader.next().read_der()?;
-            // Skip subject
-            reader.next().read_der()?;
-            trace!("reading subjectPublicKeyInfo");
-            let key = reader.next().read_sequence(|mut reader| {
-                trace!("reading subject key algorithm");
-                reader.next().read_der()?;
-                trace!("reading subject key");
-                read_bitvec(&mut reader)
-            })?;
-            // skip issuerUniqueId
-            reader.read_optional(|reader| reader.read_bitvec_bytes())?;
-            // skip subjectUniqueId
-            reader.read_optional(|reader| reader.read_bitvec_bytes())?;
-            trace!("reading extensions");
-            parse_x509_extensions(reader, &key)
-        })
+            trace!("reading subject key");
+            read_bitvec(&mut reader)
+        })?;
+        trace!("reading extensions");
+        parse_x509_extensions(reader, &key)
     })
 }
 
