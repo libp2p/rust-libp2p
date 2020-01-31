@@ -199,12 +199,10 @@ fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity:
 /// The name is a misnomer. We don’t bother checking if the certificate is actually well-formed.
 /// We just check that its self-signature is valid, and that its public key is suitably signed.
 pub fn verify_libp2p_certificate(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
-    parse_certificate(certificate)
-        .map_err(|e| {
-            log::debug!("error in parsing: {:?}", e);
-            webpki::Error::InvalidSignatureForPublicKey
-        })
-        .map(From::from)
+    parse_certificate(certificate).map_err(|e| {
+        log::debug!("error in parsing: {:?}", e);
+        webpki::Error::InvalidSignatureForPublicKey
+    }).map(libp2p_core::PeerId::from_public_key)
 }
 
 #[cfg(test)]

@@ -48,10 +48,11 @@ pub struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
 /// A ClientCertVerifier that requires client authentication, and requires the certificate to be self-signed.
 ///
 /// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
-/// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any certificate
-/// **by design**.  Instead, it is the application’s job to check the peer ID that libp2p-quic
-/// provides.  libp2p-quic does guarantee that the connection is to a peer with the secret key
-/// corresponing to its `PeerId`, unless that endpoint has done something insecure.
+/// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any self-signed
+/// certificate with a valid libp2p extension **by design**.  Instead, it is the application’s job
+/// to check the peer ID that libp2p-quic provides.  libp2p-quic does guarantee that the connection
+/// is to a peer with the secret key corresponing to its `PeerId`, unless that endpoint has done
+/// something insecure.
 pub struct VeryInsecureRequireExactlyOneSelfSignedClientCertificate;
 
 impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServerCertificate {
@@ -62,33 +63,38 @@ impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServe
         _dns_name: webpki::DNSNameRef,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        let (time, cert, trust_anchor) = verify_presented_certs(presented_certs)?;
-        cert.verify_is_valid_tls_server_cert(
-            ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
-            &webpki::TLSServerTrustAnchors(&[trust_anchor]),
-            &[],
-            time,
-        )
+        verify_presented_certs(presented_certs, &|time, end_entity_cert, trust_anchor| {
+            end_entity_cert.verify_is_valid_tls_server_cert(
+                ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
+                &webpki::TLSServerTrustAnchors(&[trust_anchor]),
+                &[],
+                time,
+            )
+        })
         .map(|()| rustls::ServerCertVerified::assertion())
-        .map_err(rustls::TLSError::WebPKIError)
     }
 }
 
 fn verify_presented_certs(
     presented_certs: &[rustls::Certificate],
-) -> Result<(webpki::Time, webpki::EndEntityCert, webpki::TrustAnchor), rustls::TLSError> {
+    cb: &dyn Fn(
+        webpki::Time,
+        webpki::EndEntityCert,
+        webpki::TrustAnchor,
+    ) -> Result<(), webpki::Error>,
+) -> Result<(), rustls::TLSError> {
     if presented_certs.len() != 1 {
         Err(rustls::TLSError::NoCertificatesPresented)?
     }
     let time = webpki::Time::try_from(std::time::SystemTime::now())
         .map_err(|ring::error::Unspecified| rustls::TLSError::FailedToGetCurrentTime)?;
     let raw_certificate = presented_certs[0].as_ref();
-    Ok((
-        time,
-        webpki::EndEntityCert::from(raw_certificate).map_err(rustls::TLSError::WebPKIError)?,
-        webpki::trust_anchor_util::cert_der_as_trust_anchor(raw_certificate)
-            .map_err(rustls::TLSError::WebPKIError)?,
-    ))
+    let inner_func = || {
+        let parsed_cert = webpki::EndEntityCert::from(raw_certificate)?;
+        let trust_anchor = webpki::trust_anchor_util::cert_der_as_trust_anchor(raw_certificate)?;
+        cb(time, parsed_cert, trust_anchor)
+    };
+    inner_func().map_err(rustls::TLSError::WebPKIError)
 }
 
 impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClientCertificate {
@@ -104,14 +110,14 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClien
         &self,
         presented_certs: &[rustls::Certificate],
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-        let (time, cert, trust_anchor) = verify_presented_certs(presented_certs)?;
-        cert.verify_is_valid_tls_client_cert(
-            ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
-            &webpki::TLSClientTrustAnchors(&[trust_anchor]),
-            &[],
-            time,
-        )
+        verify_presented_certs(presented_certs, &|time, end_entity_cert, trust_anchor| {
+            end_entity_cert.verify_is_valid_tls_client_cert(
+                ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
+                &webpki::TLSClientTrustAnchors(&[trust_anchor]),
+                &[],
+                time,
+            )
+        })
         .map(|()| rustls::ClientCertVerified::assertion())
-        .map_err(rustls::TLSError::WebPKIError)
     }
 }
