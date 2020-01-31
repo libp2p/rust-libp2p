@@ -20,10 +20,7 @@
 
 use crate::{PeerId, muxing::StreamMuxer};
 use crate::nodes::node::{NodeEvent, NodeStream, Substream, Close};
-use futures::prelude::*;
-use std::{error, fmt, io};
-
-mod tests;
+use std::{error, fmt, io, pin::Pin, task::Context, task::Poll};
 
 /// Handler for the substreams of a node.
 // TODO: right now it is possible for a node handler to be built, then shut down right after if we
@@ -59,7 +56,8 @@ pub trait NodeHandler {
     /// Should behave like `Stream::poll()`.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self) -> Poll<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
+    fn poll(&mut self, cx: &mut Context)
+        -> Poll<Result<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>;
 }
 
 /// Prototype for a `NodeHandler`.
@@ -172,6 +170,13 @@ where
     }
 }
 
+impl<TMuxer, THandler> Unpin for HandledNode<TMuxer, THandler>
+where
+    TMuxer: StreamMuxer,
+    THandler: NodeHandler<Substream = Substream<TMuxer>>,
+{
+}
+
 impl<TMuxer, THandler> HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
@@ -214,37 +219,41 @@ where
     }
 
     /// API similar to `Future::poll` that polls the node for events.
-    pub fn poll(&mut self) -> Poll<THandler::OutEvent, HandledNodeError<THandler::Error>> {
+    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context)
+        -> Poll<Result<THandler::OutEvent, HandledNodeError<THandler::Error>>>
+    {
         loop {
             let mut node_not_ready = false;
 
-            match self.node.poll().map_err(HandledNodeError::Node)? {
-                Async::NotReady => node_not_ready = true,
-                Async::Ready(NodeEvent::InboundSubstream { substream }) => {
+            match self.node.poll(cx) {
+                Poll::Pending => node_not_ready = true,
+                Poll::Ready(Ok(NodeEvent::InboundSubstream { substream })) => {
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
                 }
-                Async::Ready(NodeEvent::OutboundSubstream { user_data, substream }) => {
+                Poll::Ready(Ok(NodeEvent::OutboundSubstream { user_data, substream })) => {
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(HandledNodeError::Node(err))),
             }
 
-            match self.handler.poll().map_err(HandledNodeError::Handler)? {
-                Async::NotReady => {
+            match self.handler.poll(cx) {
+                Poll::Pending => {
                     if node_not_ready {
                         break
                     }
                 }
-                Async::Ready(NodeHandlerEvent::OutboundSubstreamRequest(user_data)) => {
+                Poll::Ready(Ok(NodeHandlerEvent::OutboundSubstreamRequest(user_data))) => {
                     self.node.open_substream(user_data);
                 }
-                Async::Ready(NodeHandlerEvent::Custom(event)) => {
-                    return Ok(Async::Ready(event));
+                Poll::Ready(Ok(NodeHandlerEvent::Custom(event))) => {
+                    return Poll::Ready(Ok(event));
                 }
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(HandledNodeError::Handler(err))),
             }
         }
 
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
 

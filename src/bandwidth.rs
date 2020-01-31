@@ -19,11 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
-use futures::{prelude::*, try_ready};
+use futures::{prelude::*, io::{IoSlice, IoSliceMut}, ready};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use smallvec::{smallvec, SmallVec};
-use std::{cmp, io, io::Read, io::Write, sync::Arc, time::Duration};
+use std::{cmp, io, pin::Pin, sync::Arc, task::{Context, Poll}, time::Duration};
 use wasm_timer::Instant;
 
 /// Wraps around a `Transport` and logs the bandwidth that goes through all the opened connections.
@@ -35,7 +35,6 @@ pub struct BandwidthLogging<TInner> {
 
 impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new `BandwidthLogging` around the transport.
-    #[inline]
     pub fn new(inner: TInner, period: Duration) -> (Self, Arc<BandwidthSinks>) {
         let mut period_seconds = cmp::min(period.as_secs(), 86400) as u32;
         if period.subsec_nanos() > 0 {
@@ -83,51 +82,55 @@ where
 
 /// Wraps around a `Stream` that produces connections. Wraps each connection around a bandwidth
 /// counter.
+#[pin_project::pin_project]
 pub struct BandwidthListener<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
 impl<TInner, TConn> Stream for BandwidthListener<TInner>
 where
-    TInner: Stream<Item = ListenerEvent<TConn>>,
+    TInner: TryStream<Ok = ListenerEvent<TConn>>
 {
-    type Item = ListenerEvent<BandwidthFuture<TConn>>;
-    type Error = TInner::Error;
+    type Item = Result<ListenerEvent<BandwidthFuture<TConn>>, TInner::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let event = match try_ready!(self.inner.poll()) {
-            Some(v) => v,
-            None => return Ok(Async::Ready(None))
-        };
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
 
-        let event = event.map(|inner| {
-            BandwidthFuture { inner, sinks: self.sinks.clone() }
+        let event =
+            if let Some(event) = ready!(this.inner.try_poll_next(cx)?) {
+                event
+            } else {
+                return Poll::Ready(None)
+            };
+
+        let event = event.map({
+            let sinks = this.sinks.clone();
+            |inner| BandwidthFuture { inner, sinks }
         });
 
-        Ok(Async::Ready(Some(event)))
+        Poll::Ready(Some(Ok(event)))
     }
 }
 
 /// Wraps around a `Future` that produces a connection. Wraps the connection around a bandwidth
 /// counter.
+#[pin_project::pin_project]
 pub struct BandwidthFuture<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner> Future for BandwidthFuture<TInner>
-    where TInner: Future,
-{
-    type Item = BandwidthConnecLogging<TInner::Item>;
-    type Error = TInner::Error;
+impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
+    type Output = Result<BandwidthConnecLogging<TInner::Ok>, TInner::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let inner = try_ready!(self.inner.poll());
-        Ok(Async::Ready(BandwidthConnecLogging {
-            inner,
-            sinks: self.sinks.clone(),
-        }))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let inner = ready!(this.inner.try_poll(cx)?);
+        let logged = BandwidthConnecLogging { inner, sinks: this.sinks.clone() };
+        Poll::Ready(Ok(logged))
     }
 }
 
@@ -139,74 +142,67 @@ pub struct BandwidthSinks {
 
 impl BandwidthSinks {
     /// Returns the average number of bytes that have been downloaded in the period.
-    #[inline]
     pub fn average_download_per_sec(&self) -> u64 {
         self.download.lock().get()
     }
 
     /// Returns the average number of bytes that have been uploaded in the period.
-    #[inline]
     pub fn average_upload_per_sec(&self) -> u64 {
         self.upload.lock().get()
     }
 }
 
 /// Wraps around an `AsyncRead + AsyncWrite` and logs the bandwidth that goes through it.
+#[pin_project::pin_project]
 pub struct BandwidthConnecLogging<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner> Read for BandwidthConnecLogging<TInner>
-    where TInner: Read
-{
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let num_bytes = self.inner.read(buf)?;
-        self.sinks.download.lock().inject(num_bytes);
-        Ok(num_bytes)
+impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
+        this.sinks.download.lock().inject(num_bytes);
+        Poll::Ready(Ok(num_bytes))
+    }
+
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
+        this.sinks.download.lock().inject(num_bytes);
+        Poll::Ready(Ok(num_bytes))
     }
 }
 
-impl<TInner> tokio_io::AsyncRead for BandwidthConnecLogging<TInner>
-    where TInner: tokio_io::AsyncRead
-{
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        self.inner.prepare_uninitialized_buffer(buf)
+impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
+        this.sinks.upload.lock().inject(num_bytes);
+        Poll::Ready(Ok(num_bytes))
     }
 
-    fn read_buf<B: bytes::BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        self.inner.read_buf(buf)
-    }
-}
-
-impl<TInner> Write for BandwidthConnecLogging<TInner>
-    where TInner: Write
-{
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let num_bytes = self.inner.write(buf)?;
-        self.sinks.upload.lock().inject(num_bytes);
-        Ok(num_bytes)
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
+        this.sinks.upload.lock().inject(num_bytes);
+        Poll::Ready(Ok(num_bytes))
     }
 
-    #[inline]
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_flush(cx)
     }
-}
 
-impl<TInner> tokio_io::AsyncWrite for BandwidthConnecLogging<TInner>
-    where TInner: tokio_io::AsyncWrite
-{
-    #[inline]
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.inner.shutdown()
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_close(cx)
     }
 }
 
 /// Returns the number of seconds that have elapsed between an arbitrary EPOCH and now.
-#[inline]
 fn current_second() -> u32 {
     lazy_static! {
         static ref EPOCH: Instant = Instant::now();
@@ -267,7 +263,6 @@ impl BandwidthSink {
             self.bytes.remove(0);
             self.bytes.push(0);
         }
-
         self.latest_update = current_second;
     }
 }

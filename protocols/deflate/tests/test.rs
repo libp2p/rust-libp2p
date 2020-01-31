@@ -18,82 +18,77 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use libp2p_core::transport::{ListenerEvent, Transport};
-use libp2p_core::upgrade::{self, Negotiated};
-use libp2p_deflate::{DeflateConfig, DeflateOutput};
-use libp2p_tcp::{TcpConfig, TcpTransStream};
-use log::info;
-use quickcheck::QuickCheck;
-use tokio::{self, io};
+use futures::{future, prelude::*};
+use libp2p_core::{transport::Transport, upgrade};
+use libp2p_deflate::DeflateConfig;
+use libp2p_tcp::TcpConfig;
+use quickcheck::{QuickCheck, RngCore, TestResult};
 
 #[test]
 fn deflate() {
-    let _ = env_logger::try_init();
-
-    fn prop(message: Vec<u8>) -> bool {
-        let client = TcpConfig::new().and_then(|c, e|
-            upgrade::apply(c, DeflateConfig {}, e, upgrade::Version::V1));
-        let server = client.clone();
-        run(server, client, message);
-        true
+    fn prop(message: Vec<u8>) -> TestResult {
+        if message.is_empty() {
+            return TestResult::discard()
+        }
+        async_std::task::block_on(run(message));
+        TestResult::passed()
     }
-
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new().quickcheck(prop as fn(Vec<u8>) -> TestResult)
 }
 
-type Output = DeflateOutput<Negotiated<TcpTransStream>>;
+#[test]
+fn lot_of_data() {
+    let mut v = vec![0; 2 * 1024 * 1024];
+    rand::thread_rng().fill_bytes(&mut v);
+    async_std::task::block_on(run(v))
+}
 
-fn run<T>(server_transport: T, client_transport: T, message1: Vec<u8>)
-where
-    T: Transport<Output = Output>,
-    T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
-    T::ListenerUpgrade: Send + 'static,
-{
-    let message2 = message1.clone();
+async fn run(message1: Vec<u8>) {
+    let transport = TcpConfig::new()
+        .and_then(|conn, endpoint| {
+            upgrade::apply(conn, DeflateConfig::default(), endpoint, upgrade::Version::V1)
+        });
 
-    let mut server = server_transport
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
-    let server_address = server
-        .by_ref()
-        .wait()
-        .next()
+    let mut listener = transport.clone()
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
+        .expect("listener");
+
+    let listen_addr = listener.by_ref().next().await
         .expect("some event")
         .expect("no error")
         .into_new_address()
-        .expect("listen address");
-    let server = server
-        .take(1)
-        .filter_map(ListenerEvent::into_upgrade)
-        .and_then(|(client, _)| client)
-        .map_err(|e| panic!("server error: {}", e))
-        .and_then(|client| {
-            info!("server: reading message");
-            io::read_to_end(client, Vec::new())
-        })
-        .for_each(move |(_, msg)| {
-            info!("server: read message: {:?}", msg);
-            assert_eq!(msg, message1);
-            Ok(())
-        });
+        .expect("new address");
 
-    let client = client_transport
-        .dial(server_address.clone())
-        .unwrap()
-        .map_err(|e| panic!("client error: {}", e))
-        .and_then(move |server| {
-            io::write_all(server, message2).and_then(|(client, _)| io::shutdown(client))
-        })
-        .map(|_| ());
+    let message2 = message1.clone();
 
-    let future = client
-        .join(server)
-        .map_err(|e| panic!("{:?}", e))
-        .map(|_| ());
+    let listener_task = async_std::task::spawn(async move {
+        let mut conn = listener
+            .filter(|e| future::ready(e.as_ref().map(|e| e.is_upgrade()).unwrap_or(false)))
+            .next()
+            .await
+            .expect("some event")
+            .expect("no error")
+            .into_upgrade()
+            .expect("upgrade")
+            .0
+            .await
+            .expect("connection");
 
-    tokio::run(future)
+        let mut buf = vec![0; message2.len()];
+        conn.read_exact(&mut buf).await.expect("read_exact");
+        assert_eq!(&buf[..], &message2[..]);
+
+        conn.write_all(&message2).await.expect("write_all");
+        conn.close().await.expect("close")
+    });
+
+    let mut conn = transport.dial(listen_addr).expect("dialer").await.expect("connection");
+    conn.write_all(&message1).await.expect("write_all");
+    conn.close().await.expect("close");
+
+    let mut buf = Vec::new();
+    conn.read_to_end(&mut buf).await.expect("read_to_end");
+    assert_eq!(&buf[..], &message1[..]);
+
+    listener_task.await
 }

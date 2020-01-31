@@ -42,7 +42,7 @@ pub type AgreementPrivateKey = ring_agreement::EphemeralPrivateKey;
 /// Generates a new key pair as part of the exchange.
 ///
 /// Returns the opaque private key and the corresponding public key.
-pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (AgreementPrivateKey, Vec<u8>), Error = SecioError> {
+pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Output = Result<(AgreementPrivateKey, Vec<u8>), SecioError>> {
     let rng = ring_rand::SystemRandom::new();
 
     match ring_agreement::EphemeralPrivateKey::generate(algorithm.into(), &rng) {
@@ -50,22 +50,22 @@ pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (Agreem
             let r = tmp_priv_key.compute_public_key()
                 .map_err(|_| SecioError::EphemeralKeyGenerationFailed)
                 .map(move |tmp_pub_key| (tmp_priv_key, tmp_pub_key.as_ref().to_vec()));
-            future::result(r)
+            future::ready(r)
         },
         Err(_) => {
             debug!("failed to generate ECDH key");
-            future::err(SecioError::EphemeralKeyGenerationFailed)
+            future::ready(Err(SecioError::EphemeralKeyGenerationFailed))
         },
     }
 }
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
 pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8], _out_size: usize)
-    -> impl Future<Item = Vec<u8>, Error = SecioError>
+    -> impl Future<Output = Result<Vec<u8>, SecioError>>
 {
-    ring_agreement::agree_ephemeral(my_private_key,
-                                    &ring_agreement::UnparsedPublicKey::new(algorithm.into(), other_public_key),
-                                    SecioError::SecretGenerationFailed,
-                                    |key_material| Ok(key_material.to_vec()))
-        .into_future()
+    let ret = ring_agreement::agree_ephemeral(my_private_key,
+                                              &ring_agreement::UnparsedPublicKey::new(algorithm.into(), other_public_key),
+                                              SecioError::SecretGenerationFailed,
+                                              |key_material| Ok(key_material.to_vec()));
+    future::ready(ret)
 }

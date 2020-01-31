@@ -247,7 +247,7 @@ impl<'a> MultihashRef<'a> {
     /// This operation allocates.
     pub fn into_owned(self) -> Multihash {
         Multihash {
-            bytes: Bytes::from(self.bytes)
+            bytes: Bytes::copy_from_slice(self.bytes)
         }
     }
 

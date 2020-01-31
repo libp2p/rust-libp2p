@@ -26,7 +26,6 @@ use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, Noi
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
-use tokio::{self, io};
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -113,9 +112,9 @@ fn ik_xx() {
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
-                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
+                    Either::Left(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
                 } else {
-                    Either::B(apply_outbound(output, NoiseConfig::xx(server_dh),
+                    Either::Right(apply_outbound(output, NoiseConfig::xx(server_dh),
                         upgrade::Version::V1))
                 }
             })
@@ -126,11 +125,11 @@ fn ik_xx() {
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
-                    Either::A(apply_outbound(output,
+                    Either::Left(apply_outbound(output,
                         NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public),
                         upgrade::Version::V1))
                 } else {
-                    Either::B(apply_inbound(output, NoiseConfig::xx(client_dh)))
+                    Either::Right(apply_inbound(output, NoiseConfig::xx(client_dh)))
                 }
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public2));
@@ -147,55 +146,63 @@ fn run<T, U>(server_transport: T, client_transport: U, message1: Vec<u8>)
 where
     T: Transport<Output = Output>,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
+    T::Listener: Send + Unpin + futures::stream::TryStream + 'static,
     T::ListenerUpgrade: Send + 'static,
     U: Transport<Output = Output>,
     U::Dial: Send + 'static,
     U::Listener: Send + 'static,
     U::ListenerUpgrade: Send + 'static,
 {
-    let message2 = message1.clone();
+    futures::executor::block_on(async {
+        let mut message2 = message1.clone();
 
-    let mut server = server_transport
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
+        let mut server: T::Listener = server_transport
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
 
-    let server_address = server.by_ref().wait()
-        .next()
-        .expect("some event")
-        .expect("no error")
-        .into_new_address()
-        .expect("listen address");
+        let server_address = server.try_next()
+            .await
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
 
-    let server = server.take(1)
-        .filter_map(ListenerEvent::into_upgrade)
-        .and_then(|client| client.0)
-        .map_err(|e| panic!("server error: {}", e))
-        .and_then(|(_, client)| {
+        let client_fut = async {
+            let mut client_session = client_transport.dial(server_address.clone())
+                .unwrap()
+                .await
+                .map(|(_, session)| session)
+                .expect("no error");
+
+            client_session.write_all(&mut message2).await.expect("no error");
+            client_session.flush().await.expect("no error");
+        };
+
+        let server_fut = async {
+            let mut server_session = server.try_next()
+                .await
+                .expect("some event")
+                .map(ListenerEvent::into_upgrade)
+                .expect("no error")
+                .map(|client| client.0)
+                .expect("listener upgrade")
+                .await
+                .map(|(_, session)| session)
+                .expect("no error");
+
+            let mut server_buffer = vec![];
             info!("server: reading message");
-            io::read_to_end(client, Vec::new())
-        })
-        .for_each(move |msg| {
-            assert_eq!(msg.1, message1);
-            Ok(())
-        });
+            server_session.read_to_end(&mut server_buffer).await.expect("no error");
 
-    let client = client_transport.dial(server_address.clone()).unwrap()
-        .map_err(|e| panic!("client error: {}", e))
-        .and_then(move |(_, server)| {
-            io::write_all(server, message2).and_then(|(client, _)| io::flush(client))
-        })
-        .map(|_| ());
+            assert_eq!(server_buffer, message1);
+        };
 
-    let future = client.join(server)
-        .map_err(|e| panic!("{:?}", e))
-        .map(|_| ());
-
-    tokio::run(future)
+        futures::future::join(server_fut, client_fut).await;
+    })
 }
 
 fn expect_identity(output: Output, pk: &identity::PublicKey)
-    -> impl Future<Item = Output, Error = NoiseError>
+    -> impl Future<Output = Result<Output, NoiseError>>
 {
     match output.0 {
         RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),

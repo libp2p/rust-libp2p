@@ -50,9 +50,7 @@ use handler::PingHandler;
 use futures::prelude::*;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use std::collections::VecDeque;
-use std::marker::PhantomData;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{collections::VecDeque, marker::PhantomData, task::Context, task::Poll};
 use void::Void;
 
 /// `Ping` is a [`NetworkBehaviour`] that responds to inbound pings and
@@ -95,7 +93,7 @@ impl<TSubstream> Default for Ping<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for Ping<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite,
+    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type ProtocolsHandler = PingHandler<TSubstream>;
     type OutEvent = PingEvent;
@@ -116,12 +114,13 @@ where
         self.events.push_front(PingEvent { peer, result })
     }
 
-    fn poll(&mut self, _: &mut impl PollParameters) -> Async<NetworkBehaviourAction<Void, PingEvent>>
+    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters)
+        -> Poll<NetworkBehaviourAction<Void, PingEvent>>
     {
         if let Some(e) = self.events.pop_back() {
-            Async::Ready(NetworkBehaviourAction::GenerateEvent(e))
+            Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
-            Async::NotReady
+            Poll::Pending
         }
     }
 }

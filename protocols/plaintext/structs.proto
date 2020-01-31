@@ -1,6 +1,0 @@
-syntax = "proto2";
-
-message Exchange {
-  optional bytes id = 1;
-  optional bytes pubkey = 2;
-}

@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::Endpoint;
+use futures_codec::{Decoder, Encoder};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use bytes::{BufMut, Bytes, BytesMut};
-use tokio_io::codec::{Decoder, Encoder};
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.

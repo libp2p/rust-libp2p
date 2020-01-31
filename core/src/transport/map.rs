@@ -22,8 +22,9 @@ use crate::{
     ConnectedPoint,
     transport::{Transport, TransportError, ListenerEvent}
 };
-use futures::{prelude::*, try_ready};
+use futures::prelude::*;
 use multiaddr::Multiaddr;
+use std::{pin::Pin, task::Context, task::Poll};
 
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
@@ -61,21 +62,22 @@ where
 /// Custom `Stream` implementation to avoid boxing.
 ///
 /// Maps a function over every stream item.
+#[pin_project::pin_project]
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> { stream: T, fun: F }
+pub struct MapStream<T, F> { #[pin] stream: T, fun: F }
 
 impl<T, F, A, B, X> Stream for MapStream<T, F>
 where
-    T: Stream<Item = ListenerEvent<X>>,
-    X: Future<Item = A>,
+    T: TryStream<Ok = ListenerEvent<X>>,
+    X: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B + Clone
 {
-    type Item = ListenerEvent<MapFuture<X, F>>;
-    type Error = T::Error;
+    type Item = Result<ListenerEvent<MapFuture<X, F>>, T::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.stream.poll()? {
-            Async::Ready(Some(event)) => {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        match TryStream::try_poll_next(this.stream, cx) {
+            Poll::Ready(Some(Ok(event))) => {
                 let event = match event {
                     ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
                         let point = ConnectedPoint::Listener {
@@ -85,7 +87,7 @@ where
                         ListenerEvent::Upgrade {
                             upgrade: MapFuture {
                                 inner: upgrade,
-                                args: Some((self.fun.clone(), point))
+                                args: Some((this.fun.clone(), point))
                             },
                             local_addr,
                             remote_addr
@@ -94,10 +96,11 @@ where
                     ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
                     ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
                 };
-                Ok(Async::Ready(Some(event)))
+                Poll::Ready(Some(Ok(event)))
             }
-            Async::Ready(None) => Ok(Async::Ready(None)),
-            Async::NotReady => Ok(Async::NotReady)
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending
         }
     }
 }
@@ -105,24 +108,29 @@ where
 /// Custom `Future` to avoid boxing.
 ///
 /// Applies a function to the inner future's result.
+#[pin_project::pin_project]
 #[derive(Clone, Debug)]
 pub struct MapFuture<T, F> {
+    #[pin]
     inner: T,
     args: Option<(F, ConnectedPoint)>
 }
 
 impl<T, A, F, B> Future for MapFuture<T, F>
 where
-    T: Future<Item = A>,
+    T: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B
 {
-    type Item = B;
-    type Error = T::Error;
+    type Output = Result<B, T::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let item = try_ready!(self.inner.poll());
-        let (f, a) = self.args.take().expect("MapFuture has already finished.");
-        Ok(Async::Ready(f(item, a)))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let item = match TryFuture::try_poll(this.inner, cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(v)) => v,
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+        };
+        let (f, a) = this.args.take().expect("MapFuture has already finished.");
+        Poll::Ready(Ok(f(item, a)))
     }
 }
-

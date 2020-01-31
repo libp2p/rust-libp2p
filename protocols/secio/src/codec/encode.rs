@@ -20,9 +20,9 @@
 
 //! Individual messages encoding.
 
-use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
 use futures::prelude::*;
+use std::{pin::Pin, task::Context, task::Poll};
 
 /// Wraps around a `Sink`. Encodes the buffers passed to it and passes it to the underlying sink.
 ///
@@ -31,11 +31,12 @@ use futures::prelude::*;
 /// prefix is not covered by this module.
 ///
 /// Also implements `Stream` for convenience.
+#[pin_project::pin_project]
 pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,
+    #[pin]
     raw_sink: S,
-    pending: Option<BytesMut> // buffer encrypted data which can not be sent right away
 }
 
 impl<S> EncoderMiddleware<S> {
@@ -44,56 +45,38 @@ impl<S> EncoderMiddleware<S> {
             cipher_state: cipher,
             hmac,
             raw_sink: raw,
-            pending: None
         }
     }
 }
 
-impl<S> Sink for EncoderMiddleware<S>
+impl<S> Sink<Vec<u8>> for EncoderMiddleware<S>
 where
-    S: Sink<SinkItem = BytesMut>,
+    S: Sink<Vec<u8>>,
 {
-    type SinkItem = BytesMut;
-    type SinkError = S::SinkError;
+    type Error = S::Error;
 
-    fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
-                return Ok(AsyncSink::NotReady(data_buf))
-            }
-        }
-        debug_assert!(self.pending.is_none());
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        Sink::poll_ready(this.raw_sink, cx)
+    }
+
+    fn start_send(self: Pin<&mut Self>, mut data_buf: Vec<u8>) -> Result<(), Self::Error> {
+        let this = self.project();
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
-        self.cipher_state.encrypt(&mut data_buf[..]);
-        let signature = self.hmac.sign(&data_buf[..]);
+        this.cipher_state.encrypt(&mut data_buf[..]);
+        let signature = this.hmac.sign(&data_buf[..]);
         data_buf.extend_from_slice(signature.as_ref());
-        if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf)? {
-            self.pending = Some(data)
-        }
-        Ok(AsyncSink::Ready)
+        Sink::start_send(this.raw_sink, data_buf)
     }
 
-    #[inline]
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
-                return Ok(Async::NotReady)
-            }
-        }
-        self.raw_sink.poll_complete()
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        Sink::poll_flush(this.raw_sink, cx)
     }
 
-    #[inline]
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
-                return Ok(Async::NotReady)
-            }
-        }
-        self.raw_sink.close()
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        Sink::poll_close(this.raw_sink, cx)
     }
 }
 
@@ -102,10 +85,9 @@ where
     S: Stream,
 {
     type Item = S::Item;
-    type Error = S::Error;
 
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.raw_sink.poll()
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        Stream::poll_next(this.raw_sink, cx)
     }
 }

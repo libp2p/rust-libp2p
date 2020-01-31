@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{Bytes, BytesMut, BufMut};
+use bytes::{Bytes, BytesMut, Buf, BufMut};
 use futures::{try_ready, Async, Poll, Sink, StartSend, Stream, AsyncSink};
 use std::{io, u16};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -136,7 +136,7 @@ impl<R> LengthDelimited<R> {
                     "Failed to write buffered frame."))
             }
 
-            self.write_buffer.split_to(n);
+            self.write_buffer.advance(n);
         }
 
         Ok(Async::Ready(()))

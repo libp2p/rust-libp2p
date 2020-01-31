@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use futures::{prelude::*, try_ready};
-use multistream_select::Negotiated;
+use futures::prelude::*;
+use std::{pin::Pin, task::Context, task::Poll};
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ where
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
             inner: self.upgrade.upgrade_inbound(sock, info),
             map: Some(self.fun)
@@ -63,13 +63,13 @@ where
 
 impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
 {
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_outbound(sock, info)
     }
 }
@@ -98,13 +98,13 @@ where
 
 impl<C, U, F> InboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
-    U: InboundUpgrade<C>
+    U: InboundUpgrade<C>,
 {
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_inbound(sock, info)
     }
 }
@@ -118,7 +118,7 @@ where
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
             inner: self.upgrade.upgrade_outbound(sock, info),
             map: Some(self.fun)
@@ -157,7 +157,7 @@ where
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
             fut: self.upgrade.upgrade_inbound(sock, info),
             fun: Some(self.fun)
@@ -167,13 +167,13 @@ where
 
 impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<C>,
 {
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_outbound(sock, info)
     }
 }
@@ -209,7 +209,7 @@ where
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
 
-    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
             fut: self.upgrade.upgrade_outbound(sock, info),
             fun: Some(self.fun)
@@ -225,51 +225,60 @@ where
     type Error = U::Error;
     type Future = U::Future;
 
-    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_inbound(sock, info)
     }
 }
 
+#[pin_project::pin_project]
 pub struct MapFuture<TInnerFut, TMap> {
+    #[pin]
     inner: TInnerFut,
     map: Option<TMap>,
 }
 
 impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
 where
-    TInnerFut: Future<Item = TIn>,
+    TInnerFut: TryFuture<Ok = TIn>,
     TMap: FnOnce(TIn) -> TOut,
 {
-    type Item = TOut;
-    type Error = TInnerFut::Error;
+    type Output = Result<TOut, TInnerFut::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let item = try_ready!(self.inner.poll());
-        let map = self.map.take().expect("Future has already finished");
-        Ok(Async::Ready(map(item)))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let item = match TryFuture::try_poll(this.inner, cx) {
+            Poll::Ready(Ok(v)) => v,
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        };
+
+        let map = this.map.take().expect("Future has already finished");
+        Poll::Ready(Ok(map(item)))
     }
 }
 
+#[pin_project::pin_project]
 pub struct MapErrFuture<T, F> {
+    #[pin]
     fut: T,
     fun: Option<F>,
 }
 
 impl<T, E, F, A> Future for MapErrFuture<T, F>
 where
-    T: Future<Error = E>,
+    T: TryFuture<Error = E>,
     F: FnOnce(E) -> A,
 {
-    type Item = T::Item;
-    type Error = A;
+    type Output = Result<T::Ok, A>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.fut.poll() {
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
-            Err(e) => {
-                let f = self.fun.take().expect("Future has not resolved yet");
-                Err(f(e))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        match TryFuture::try_poll(this.fut, cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(x)) => Poll::Ready(Ok(x)),
+            Poll::Ready(Err(e)) => {
+                let f = this.fun.take().expect("Future has not resolved yet");
+                Poll::Ready(Err(f(e)))
             }
         }
     }
