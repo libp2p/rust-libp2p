@@ -19,6 +19,8 @@ serde = "1.0.70"
 static_assertions = "1.1"
 unsigned-varint = "0.3"
 url = { version = "2.1.0", default-features = false }
+
+[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 get_if_addrs = "0.5.3"
 ipnet = "2.1.0"
 

@@ -6,8 +6,6 @@ mod protocol;
 mod errors;
 mod from_url;
 
-use get_if_addrs::{get_if_addrs, IfAddr};
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{
     Deserialize,
     Deserializer,
@@ -314,7 +312,10 @@ pub fn ip_to_multiaddr(ip: IpAddr, suffix: &[Protocol]) -> Multiaddr {
 }
 
 /// Collect all local host addresses and use the provided port number as listen port.
-pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, ipnet::IpNet, Multiaddr)>> {
+    use get_if_addrs::{get_if_addrs, IfAddr};
+    use ipnet::{IpNet, Ipv4Net, Ipv6Net};
     let mut addrs = Vec::new();
     for iface in get_if_addrs()? {
         let ip = iface.ip();
