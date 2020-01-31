@@ -26,6 +26,7 @@ libp2p-floodsub = { version = "0.15.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.15.0", path = "./protocols/gossipsub" }
 libp2p-ping = { version = "0.15.0", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.15.0", path = "protocols/plaintext" }
+libp2p-pnet = { version = "0.15.0", path = "protocols/pnet" }
 libp2p-core = { version = "0.15.0", path = "core" }
 libp2p-core-derive = { version = "0.15.0", path = "misc/core-derive" }
 libp2p-secio = { version = "0.15.0", path = "protocols/secio", default-features = false }
