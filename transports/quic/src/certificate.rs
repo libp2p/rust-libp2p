@@ -172,8 +172,10 @@ fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKe
 fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity::PublicKey> {
     trace!("parsing TBScertificate");
     reader.read_sequence(|reader| {
-        // Skip the X.509 version
-        reader.next().read_der()?;
+        // Check the X.509 version
+        if reader.next().read_der()? != [160, 3, 2, 1, 2] {
+            Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?
+        }
         // Skip the serial number
         reader.next().read_der()?;
         // Skip the signature algorithm
@@ -197,12 +199,14 @@ fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity:
 }
 
 /// The name is a misnomer. We don’t bother checking if the certificate is actually well-formed.
-/// We just check that its self-signature is valid, and that its public key is suitably signed.
+/// We just check that its public key is suitably signed.
 pub fn verify_libp2p_certificate(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
-    parse_certificate(certificate).map_err(|e| {
-        log::debug!("error in parsing: {:?}", e);
-        webpki::Error::InvalidSignatureForPublicKey
-    }).map(libp2p_core::PeerId::from_public_key)
+    parse_certificate(certificate)
+        .map_err(|e| {
+            log::debug!("error in parsing: {:?}", e);
+            webpki::Error::InvalidSignatureForPublicKey
+        })
+        .map(libp2p_core::PeerId::from_public_key)
 }
 
 #[cfg(test)]

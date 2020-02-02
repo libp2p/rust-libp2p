@@ -45,7 +45,8 @@ static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &'static [&'static webpki::SignatureA
 /// something insecure.
 pub struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
 
-/// A ClientCertVerifier that requires client authentication, and requires the certificate to be self-signed.
+/// A ClientCertVerifier that requires client authentication, and requires the certificate to be
+/// self-signed.
 ///
 /// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
 /// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any self-signed

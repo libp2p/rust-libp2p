@@ -39,10 +39,10 @@ futures-timer = "2.0.2"
 env_logger = "0.7.1"
 parking_lot = "0.10.0"
 rcgen = "0.7.0"
-protobuf = "2.8.1"
+protobuf = "2.10.1"
 yasna = { version = "0.3.1", features = ["num-bigint"] }
-ring = "0.16.9"
-webpki = "0.21.0"
+ring = "0.16.10"
+webpki = "0.21.2"
 
 [dev-dependencies]
 tracing-subscriber = "0.1.6"

@@ -348,30 +348,6 @@ impl StreamMuxer for QuicMuxer {
                     }
                     Poll::Pending
                 }
-                // KLUDGE: this is a workaround for https://github.com/djc/quinn/issues/604.
-                Some(quinn_proto::ConnectionError::ApplicationClosed(
-                    quinn_proto::ApplicationClose { error_code, reason },
-                )) if error_code.into_inner() == 0 && reason.is_empty() => {
-                    let error_code = *error_code;
-                    warn!("This should not happen, but a quinn-proto bug causes it to happen for side {:?}", inner.connection.side());
-
-                    Poll::Ready(if !cfg!(test) {
-                        if let Some(w) = inner.readers.remove(&substream.id) {
-                            w.wake()
-                        }
-                        (Ok(0))
-                    } else {
-                        let reason = reason.clone();
-                        if let Some(w) = inner.readers.remove(&substream.id) {
-                            w.wake()
-                        }
-                        Err(Error::ConnectionError(
-                            quinn_proto::ConnectionError::ApplicationClosed(
-                                quinn_proto::ApplicationClose { error_code, reason },
-                            ),
-                        ))
-                    })
-                }
                 Some(error) => Poll::Ready(Err(Error::ConnectionError(error.clone()))),
             },
             Err(ReadError::UnknownStream) => {
