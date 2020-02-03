@@ -23,7 +23,7 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::debug;
 use rand::{distributions, prelude::*};
 use std::{io, iter, time::Duration};
-use wasm_timer::{Instant, ext::TryFutureExt};
+use wasm_timer::Instant;
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
 ///
@@ -44,7 +44,6 @@ use wasm_timer::{Instant, ext::TryFutureExt};
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Ping;
 
-const PING_TIMEOUT: Duration = Duration::from_secs(60);
 const PING_SIZE: usize = 32;
 
 impl UpgradeInfo for Ping {
@@ -67,7 +66,7 @@ where
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         async move {
             let mut payload = [0u8; PING_SIZE];
-            while let Ok(_) = socket.read_exact(&mut payload).timeout(PING_TIMEOUT).await {
+            while let Ok(_) = socket.read_exact(&mut payload).await {
                 socket.write_all(&payload).await?;
             }
             Ok(())
