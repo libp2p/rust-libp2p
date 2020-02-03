@@ -59,7 +59,7 @@ use libp2p::tcp::TcpConfig;
 use libp2p::yamux::Config as YamuxConfig;
 use libp2p::Transport;
 use libp2p::{
-    floodsub::{self, Floodsub, FloodsubEvent},
+    gossipsub::{self, Gossipsub, GossipsubEvent, GossipsubConfig},
     identity,
     ping::{self, Ping, PingConfig, PingEvent},
     pnet::PreSharedKey,
@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = build_transport(local_key.clone(), psk)?;
 
     // Create a Floodsub topic
-    let floodsub_topic = floodsub::Topic::new("chat");
+    let gossipsub_topic = gossipsub::Topic::new("chat".into());
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
@@ -149,7 +149,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
-        floodsub: Floodsub<TSubstream>,
+        gossipsub: Gossipsub<TSubstream>,
         identify: Identify<TSubstream>,
         ping: Ping<TSubstream>,
     }
@@ -163,17 +163,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent>
+    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<GossipsubEvent>
         for MyBehaviour<TSubstream>
     {
-        // Called when `floodsub` produces an event.
-        fn inject_event(&mut self, message: FloodsubEvent) {
-            if let FloodsubEvent::Message(message) = message {
-                println!(
-                    "Received: '{:?}' from {:?}",
+        // Called when `mdns` produces an event.
+        fn inject_event(&mut self, event: GossipsubEvent) {
+            match event {
+                GossipsubEvent::Message(peer_id, id, message) => println!(
+                    "Got message: {} with id: {} from peer: {:?}",
                     String::from_utf8_lossy(&message.data),
-                    message.source
-                );
+                    id,
+                    peer_id
+                ),
+                _ => {}
             }
         }
     }
@@ -219,13 +221,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
+        let gossipsub_config = GossipsubConfig::default();
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(local_peer_id.clone()),
+            gossipsub: Gossipsub::new(local_peer_id.clone(), gossipsub_config),
             identify: Identify::new("/ipfs/0.1.0".into(), "rust-ipfs".into(), local_key.public()),
             ping: Ping::new(PingConfig::new()),
         };
 
-        behaviour.floodsub.subscribe(floodsub_topic.clone());
+        behaviour.gossipsub.subscribe(gossipsub_topic.clone());
         Swarm::new(transport, behaviour, local_peer_id.clone())
     };
 
@@ -249,8 +252,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => {
                     swarm
-                        .floodsub
-                        .publish(floodsub_topic.clone(), line.as_bytes());
+                        .gossipsub
+                        .publish(&gossipsub_topic, line.as_bytes());
                 }
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
