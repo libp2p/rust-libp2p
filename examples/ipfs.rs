@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,37 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic chat application demonstrating libp2p and the mDNS and floodsub protocols.
+//! A minimal node that can interact with ipfs
 //!
-//! Using two terminal windows, start two instances. If you local network allows mDNS,
-//! they will automatically connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. Close with Ctrl-c.
+//! This node implements the gossipsub, ping and identify protocols. It supports
+//! the ipfs private swarms feature by reading the pre shared key file `swarm.key`
+//! from IPFS_PATH or from the default location.
 //!
-//! You can of course open more terminal windows and add more participants.
-//! Dialing any of the other peers will propagate the new participant to all
-//! chat members and everyone will receive all messages.
+//! You can pass any number of nodes to be dialed.
 //!
-//! # If they don't automatically connect
+//! On startup, this example will show a list of addresses that you can dial
+//! from a go-ipfs or js-ipfs node.
 //!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
-//!
-//! ```sh
-//! cargo run --example chat
-//! ```
-//!
-//! It will print the PeerId and the listening address, e.g. `Listening on
-//! "/ip4/0.0.0.0/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//!
-//! ```sh
-//! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//!
-//! The two nodes then connect.
-
+//! You can ping this node, or use pubsub (gossipsub) on the topic "chat". For this
+//! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::core::transport::upgrade::Version;
@@ -69,14 +51,18 @@ use libp2p::{
 };
 use libp2p_core::either::{EitherError, EitherFuture, EitherListenStream, EitherOutput};
 use libp2p_core::StreamMuxer;
+use multiaddr::Protocol;
 use std::str::FromStr;
 use std::time::Duration;
+use std::{env, fs, path::Path};
 use std::{
     error::Error,
     task::{Context, Poll},
 };
 
-/// an XOR combination of two transports
+/// an Either combination of two transports
+///
+/// this is useful if you have a different transport depending on configuration.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherTransport<A, B> {
     Left(A),
@@ -95,45 +81,35 @@ where
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let addr = match self {
+        use TransportError::*;
+        match self {
             EitherTransport::Left(a) => match a.listen_on(addr) {
-                Ok(listener) => return Ok(EitherListenStream::First(listener)),
-                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-                Err(TransportError::Other(err)) => {
-                    return Err(TransportError::Other(EitherError::A(err)))
-                }
+                Ok(listener) => Ok(EitherListenStream::First(listener)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::A(err))),
             },
             EitherTransport::Right(b) => match b.listen_on(addr) {
-                Ok(listener) => return Ok(EitherListenStream::Second(listener)),
-                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-                Err(TransportError::Other(err)) => {
-                    return Err(TransportError::Other(EitherError::B(err)))
-                }
+                Ok(listener) => Ok(EitherListenStream::Second(listener)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::B(err))),
             },
-        };
-
-        Err(TransportError::MultiaddrNotSupported(addr))
+        }
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = match self {
+        use TransportError::*;
+        match self {
             EitherTransport::Left(a) => match a.dial(addr) {
-                Ok(connec) => return Ok(EitherFuture::First(connec)),
-                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-                Err(TransportError::Other(err)) => {
-                    return Err(TransportError::Other(EitherError::A(err)))
-                }
+                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::A(err))),
             },
             EitherTransport::Right(b) => match b.dial(addr) {
-                Ok(connec) => return Ok(EitherFuture::Second(connec)),
-                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-                Err(TransportError::Other(err)) => {
-                    return Err(TransportError::Other(EitherError::B(err)))
-                }
+                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::B(err))),
             },
-        };
-
-        Err(TransportError::MultiaddrNotSupported(addr))
+        }
     }
 }
 
@@ -173,6 +149,8 @@ pub fn build_transport(
         .timeout(Duration::from_secs(20))
 }
 
+/// Get the current ipfs repo path, either from the IPFS_PATH environment variable or
+/// from the default $HOME/.ipfs
 fn get_ipfs_path() -> Box<Path> {
     env::var("IPFS_PATH")
         .map(|ipfs_path| Path::new(&ipfs_path).into())
@@ -184,6 +162,7 @@ fn get_ipfs_path() -> Box<Path> {
         })
 }
 
+/// Read the pre shared key file from the given ipfs directory
 fn get_psk(path: Box<Path>) -> std::io::Result<Option<String>> {
     let swarm_key_file = path.join("swarm.key");
     match fs::read_to_string(swarm_key_file) {
@@ -193,14 +172,32 @@ fn get_psk(path: Box<Path>) -> std::io::Result<Option<String>> {
     }
 }
 
-use std::{env, fs, path::Path};
+/// for a multiaddr that ends with a peer id, this strips this suffix. Rust-libp2p
+/// only supports dialing to an address without providing the peer id.
+fn strip_peer_id(addr: &mut Multiaddr) {
+    let last = addr.pop();
+    match last {
+        Some(Protocol::P2p(peer_id)) => {
+            let mut addr = Multiaddr::empty();
+            addr.push(Protocol::P2p(peer_id));
+            println!(
+                "removing peer id {} so this address can be dialed by rust-libp2p",
+                addr
+            );
+        }
+        Some(other) => addr.push(other),
+        _ => {}
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let ipfs_path: Box<Path> = get_ipfs_path();
     println!("using IPFS_PATH {:?}", ipfs_path);
-    let psk: Option<PreSharedKey> = get_psk(ipfs_path)?.map(|text| PreSharedKey::from_str(&text)).transpose()?;
+    let psk: Option<PreSharedKey> = get_psk(ipfs_path)?
+        .map(|text| PreSharedKey::from_str(&text))
+        .transpose()?;
 
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
@@ -211,16 +208,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("using swarm key with fingerprint: {}", psk.fingerprint());
     }
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
+    // Set up a an encrypted DNS-enabled TCP Transport over and Yamux protocol
     let transport = build_transport(local_key.clone(), psk);
 
-    // Create a Floodsub topic
+    // Create a Gosspipsub topic
     let gossipsub_topic = gossipsub::Topic::new("chat".into());
 
-    // We create a custom network behaviour that combines floodsub and mDNS.
-    // In the future, we want to improve libp2p to make this easier to do.
-    // Use the derive to generate delegating NetworkBehaviour impl and require the
-    // NetworkBehaviourEventProcess implementations below.
+    // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
         gossipsub: Gossipsub<TSubstream>,
@@ -300,7 +294,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             .build();
         let mut behaviour = MyBehaviour {
             gossipsub: Gossipsub::new(local_peer_id.clone(), gossipsub_config),
-            identify: Identify::new("/ipfs/0.1.0".into(), "rust-ipfs".into(), local_key.public()),
+            identify: Identify::new(
+                "/ipfs/0.1.0".into(),
+                "rust-ipfs-example".into(),
+                local_key.public(),
+            ),
             ping: Ping::new(PingConfig::new()),
         };
 
@@ -309,9 +307,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         Swarm::new(transport, behaviour, local_peer_id.clone())
     };
 
-    // Reach out to another node if specified
-    if let Some(to_dial) = std::env::args().nth(1) {
-        let addr: Multiaddr = to_dial.parse()?;
+    // Reach out to other nodes if specified
+    for to_dial in std::env::args().skip(1) {
+        let mut addr: Multiaddr = to_dial.parse()?;
+        strip_peer_id(&mut addr);
         Swarm::dial_addr(&mut swarm, addr)?;
         println!("Dialed {:?}", to_dial)
     }
@@ -341,7 +340,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Poll::Pending => {
                     if !listening {
                         for addr in Swarm::listeners(&swarm) {
-                            println!("Identity {}/ipfs/{}", addr, local_peer_id);
+                            println!("Address {}/ipfs/{}", addr, local_peer_id);
                             listening = true;
                         }
                     }
