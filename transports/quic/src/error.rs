@@ -39,12 +39,19 @@ pub enum Error {
     ConnectionLost,
     #[error(display = "Cannot listen on the same endpoint more than once")]
     AlreadyListening,
+    /// The stream was reset by the peer.
     #[error(display = "Peer reset stream: code {}", _0)]
     Reset(quinn_proto::VarInt),
-    #[error(
-        display = "Use of a stream that is no longer valid. This is a bug in the application."
-    )]
+    /// Either an attempt was made to write to a stream that was already shut down,
+    /// or a previous operation on this stream failed.
+    #[error(display = "Use of a stream that has is no longer valid. This is a \
+                       bug in the application.")]
     ExpiredStream,
+    #[error(display = "Trying to ready from a stream that the peer has not been \
+    notified of.  For performance and complexity reasons, libp2p-quic does not \
+    notify the peer that a stream is opened until at least one byte is sent.  \
+    Therefore, this read would deadlock.")]
+    CannotReadFromUnwrittenStream,
 }
 
 impl From<Error> for io::Error {
@@ -57,8 +64,9 @@ impl From<Error> for io::Error {
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }
-            e @ Error::ExpiredStream => io::Error::new(ErrorKind::Other, e),
+            e @ Error::ExpiredStream => io::Error::new(ErrorKind::BrokenPipe, e),
             e @ Error::AlreadyListening => io::Error::new(ErrorKind::AddrInUse, e),
+            e @ Error::CannotReadFromUnwrittenStream => io::Error::new(ErrorKind::NotConnected, e),
         }
     }
 }

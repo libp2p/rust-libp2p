@@ -42,19 +42,20 @@ use std::{
     time::Instant,
 };
 #[derive(Debug)]
-pub struct QuicSubstream {
+pub struct Substream {
     id: StreamId,
     status: SubstreamStatus,
 }
 
 #[derive(Debug)]
 enum SubstreamStatus {
+    Unwritten,
     Live,
     Finishing(oneshot::Receiver<()>),
     Finished,
 }
 
-impl QuicSubstream {
+impl Substream {
     fn new(id: StreamId) -> Self {
         let status = SubstreamStatus::Live;
         Self { id, status }
@@ -62,7 +63,7 @@ impl QuicSubstream {
 
     fn is_live(&self) -> bool {
         match self.status {
-            SubstreamStatus::Live => true,
+            SubstreamStatus::Live | SubstreamStatus::Unwritten => true,
             SubstreamStatus::Finishing(_) | SubstreamStatus::Finished => false,
         }
     }
@@ -73,7 +74,7 @@ impl QuicSubstream {
 /// The QUIC endpoints created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone)]
-pub struct QuicConfig {
+pub struct Config {
     /// The client configuration.  Quinn provides functions for making one.
     pub client_config: quinn_proto::ClientConfig,
     /// The server configuration.  Quinn provides functions for making one.
@@ -125,7 +126,7 @@ fn make_server_config(
     config
 }
 
-impl QuicConfig {
+impl Config {
     /// Creates a new configuration object for TCP/IP.
     pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
         let cert = super::make_cert(&keypair);
@@ -172,17 +173,17 @@ enum OutboundInner {
 pub struct Outbound(OutboundInner);
 
 impl Future for Outbound {
-    type Output = Result<QuicSubstream, Error>;
+    type Output = Result<Substream, Error>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = &mut *self;
         match this.0 {
             OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
-                OutboundInner::Complete(e) => Poll::Ready(e.map(QuicSubstream::new)),
+                OutboundInner::Complete(e) => Poll::Ready(e.map(Substream::new)),
                 _ => unreachable!(),
             },
             OutboundInner::Pending(ref mut receiver) => {
                 let result = ready!(receiver.poll_unpin(cx))
-                    .map(QuicSubstream::new)
+                    .map(Substream::new)
                     .map_err(|oneshot::Canceled| Error::ConnectionLost);
                 this.0 = OutboundInner::Done;
                 Poll::Ready(result)
@@ -194,7 +195,7 @@ impl Future for Outbound {
 
 impl StreamMuxer for QuicMuxer {
     type OutboundSubstream = Outbound;
-    type Substream = QuicSubstream;
+    type Substream = Substream;
     type Error = crate::error::Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
@@ -225,11 +226,9 @@ impl StreamMuxer for QuicMuxer {
                 warn!("Error closing stream: {}", e);
             }
         }
-        drop(
-            inner
-                .connection
-                .stop_sending(substream.id, Default::default()),
-        )
+        let _ = inner
+            .connection
+            .stop_sending(substream.id, Default::default());
     }
     fn is_remote_acknowledged(&self) -> bool {
         true
@@ -249,14 +248,17 @@ impl StreamMuxer for QuicMuxer {
         inner.wake_driver();
         match inner.connection.accept(quinn_proto::Dir::Bi) {
             None => {
-                if let Some(waker) = replace(&mut inner.accept_waker, Some(cx.waker().clone())) {
+                if let Some(waker) = replace(
+                    &mut inner.handshake_or_accept_waker,
+                    Some(cx.waker().clone()),
+                ) {
                     waker.wake()
                 }
                 Poll::Pending
             }
             Some(id) => {
                 inner.finishers.insert(id, None);
-                Poll::Ready(Ok(QuicSubstream::new(id)))
+                Poll::Ready(Ok(Substream::new(id)))
             }
         }
     }
@@ -284,10 +286,6 @@ impl StreamMuxer for QuicMuxer {
         if let Some(ref e) = inner.close_reason {
             return Poll::Ready(Err(Error::ConnectionError(e.clone())));
         }
-        assert!(
-            !inner.connection.is_drained(),
-            "attempting to write to a drained connection"
-        );
         match inner.connection.write(substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
@@ -300,10 +298,19 @@ impl StreamMuxer for QuicMuxer {
                 Poll::Pending
             }
             Err(WriteError::UnknownStream) => {
-                error!(
-                    "The application used a stream that has already been closed. This is a bug."
-                );
-                Poll::Ready(Err(Error::ExpiredStream))
+                if let Some(e) = &inner.close_reason {
+                    error!(
+                        "The application used a connection that is already being \
+                        closed. This is a bug in the application or in libp2p."
+                    );
+                    Poll::Ready(Err(Error::ConnectionError(e.clone())))
+                } else {
+                    error!(
+                        "The application used a stream that has already been \
+                        closed. This is a bug in the application or in libp2p."
+                    );
+                    Poll::Ready(Err(Error::ExpiredStream))
+                }
             }
             Err(WriteError::Stopped(e)) => {
                 inner.finishers.remove(&substream.id);
@@ -336,8 +343,12 @@ impl StreamMuxer for QuicMuxer {
         match inner.connection.read(substream.id, buf) {
             Ok(Some(bytes)) => Poll::Ready(Ok(bytes)),
             Ok(None) => Poll::Ready(Ok(0)),
-            Err(ReadError::Blocked) => match &inner.close_reason {
-                None => {
+            Err(ReadError::Blocked) => {
+                if let Some(error) = &inner.close_reason {
+                    Poll::Ready(Err(Error::ConnectionError(error.clone())))
+                } else if let SubstreamStatus::Unwritten = substream.status {
+                    Poll::Ready(Err(Error::CannotReadFromUnwrittenStream))
+                } else {
                     trace!(
                         "Blocked on reading stream {:?} with side {:?}",
                         substream.id,
@@ -348,8 +359,7 @@ impl StreamMuxer for QuicMuxer {
                     }
                     Poll::Pending
                 }
-                Some(error) => Poll::Ready(Err(Error::ConnectionError(error.clone()))),
-            },
+            }
             Err(ReadError::UnknownStream) => {
                 error!(
                     "The application used a stream that has already been closed. This is a bug."
@@ -378,7 +388,7 @@ impl StreamMuxer for QuicMuxer {
                     Error::IO(io::Error::new(io::ErrorKind::ConnectionAborted, e.clone()))
                 });
             }
-            SubstreamStatus::Live => {}
+            SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
         }
         let mut inner = self.inner();
         inner.wake_driver();
@@ -449,12 +459,12 @@ impl StreamMuxer for QuicMuxer {
 }
 
 #[derive(Debug)]
-pub struct QuicUpgrade {
+pub struct Upgrade {
     muxer: Option<QuicMuxer>,
 }
 
 #[cfg(test)]
-impl Drop for QuicUpgrade {
+impl Drop for Upgrade {
     fn drop(&mut self) {
         debug!("dropping upgrade!");
         assert!(
@@ -464,14 +474,14 @@ impl Drop for QuicUpgrade {
     }
 }
 
-impl Future for QuicUpgrade {
+impl Future for Upgrade {
     type Output = Result<(libp2p_core::PeerId, QuicMuxer), Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let muxer = &mut self.get_mut().muxer;
         trace!("outbound polling!");
         let res = {
             let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
-            if inner.connection.is_closed() {
+            if inner.connection.is_drained() {
                 return Poll::Ready(Err(Error::ConnectionError(
                     inner
                         .close_reason
@@ -479,8 +489,11 @@ impl Future for QuicUpgrade {
                         .expect("closed connections always have a reason; qed"),
                 )));
             } else if inner.connection.is_handshaking() {
-                assert!(!inner.connection.is_closed(), "deadlock");
-                inner.handshake_waker = Some(cx.waker().clone());
+                assert!(
+                    !inner.connection.is_closed(),
+                    "a closed connection cannot be handshaking; qed"
+                );
+                inner.handshake_or_accept_waker = Some(cx.waker().clone());
                 return Poll::Pending;
             } else if inner.connection.side().is_server() {
                 ready!(inner.endpoint_channel.poll_ready(cx))
@@ -533,10 +546,8 @@ pub(crate) struct Muxer {
     readers: HashMap<StreamId, std::task::Waker>,
     /// Tasks blocked on finishing
     finishers: HashMap<StreamId, Option<oneshot::Sender<()>>>,
-    /// Task waiting for new connections
-    handshake_waker: Option<std::task::Waker>,
-    /// Task waiting for new connections
-    accept_waker: Option<std::task::Waker>,
+    /// Task waiting for new connections, or for the connection to finish handshaking.
+    handshake_or_accept_waker: Option<std::task::Waker>,
     /// Tasks waiting to make a connection
     connectors: StreamSenderQueue,
     /// Pending transmit
@@ -564,6 +575,7 @@ const RESET: u32 = 1;
 impl Drop for Muxer {
     fn drop(&mut self) {
         if self.close_reason.is_none() {
+            warn!("connection uncleanly closed!");
             self.shutdown(RESET)
         }
     }
@@ -638,8 +650,7 @@ impl Muxer {
             writers: HashMap::new(),
             readers: HashMap::new(),
             finishers: HashMap::new(),
-            accept_waker: None,
-            handshake_waker: None,
+            handshake_or_accept_waker: None,
             connectors: Default::default(),
             endpoint_channel: endpoint.event_channel(),
             endpoint: endpoint,
@@ -723,10 +734,7 @@ impl Muxer {
 
     fn shutdown(&mut self, error_code: u32) {
         debug!("shutting connection down!");
-        if let Some(w) = self.accept_waker.take() {
-            w.wake()
-        }
-        if let Some(w) = self.handshake_waker.take() {
+        if let Some(w) = self.handshake_or_accept_waker.take() {
             w.wake()
         }
         for (_, v) in self.writers.drain() {
@@ -841,7 +849,10 @@ impl Muxer {
                 }
                 Event::ConnectionLost { reason } => {
                     debug!("lost connection due to {:?}", reason);
-                    assert!(self.connection.is_closed());
+                    debug_assert!(
+                        self.connection.is_closed(),
+                        "connection lost without being closed"
+                    );
                     self.close_reason = Some(reason);
                     self.connection_lost = true;
                     self.close_waker.take().map(|e| e.wake());
@@ -874,13 +885,13 @@ impl Muxer {
                 Event::Connected => {
                     debug!("connected!");
                     assert!(!self.connection.is_handshaking(), "quinn-proto bug");
-                    if let Some(w) = self.handshake_waker.take() {
+                    if let Some(w) = self.handshake_or_accept_waker.take() {
                         w.wake()
                     }
                 }
                 Event::StreamOpened { dir: Dir::Bi } => {
                     debug!("stream opened for side {:?}", self.connection.side());
-                    if let Some(w) = self.accept_waker.take() {
+                    if let Some(w) = self.handshake_or_accept_waker.take() {
                         w.wake()
                     }
                 }
@@ -902,7 +913,7 @@ impl ConnectionDriver {
         connection: Connection,
         handle: ConnectionHandle,
         cb: T,
-    ) -> QuicUpgrade {
+    ) -> Upgrade {
         let inner = Arc::new(Mutex::new(Muxer::new(endpoint, connection, handle)));
         cb(Arc::downgrade(&inner));
         let handle = async_std::task::spawn(Self {
@@ -910,7 +921,7 @@ impl ConnectionDriver {
             outgoing_packet: None,
         });
         inner.lock().driver = Some(handle);
-        QuicUpgrade {
+        Upgrade {
             muxer: Some(QuicMuxer(inner)),
         }
     }

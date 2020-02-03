@@ -67,8 +67,5 @@ mod tests;
 pub use error::Error;
 mod verifier;
 pub use certificate::make_cert;
-pub use connection::{
-    Outbound, QuicConfig as Config, QuicMuxer as Muxer, QuicSubstream as Substream,
-    QuicUpgrade as Upgrade,
-};
+pub use connection::{Config, Outbound, QuicMuxer as Muxer, Substream, Upgrade};
 pub use endpoint::{Endpoint, Listener};
