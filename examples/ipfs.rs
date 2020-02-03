@@ -58,14 +58,16 @@ use libp2p::secio::SecioConfig;
 use libp2p::tcp::TcpConfig;
 use libp2p::yamux::Config as YamuxConfig;
 use libp2p::Transport;
+use libp2p::TransportError;
 use libp2p::{
-    gossipsub::{self, Gossipsub, GossipsubEvent, GossipsubConfig},
+    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
     identity,
     ping::{self, Ping, PingConfig, PingEvent},
     pnet::PreSharedKey,
     swarm::NetworkBehaviourEventProcess,
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
+use libp2p_core::either::{EitherError, EitherFuture, EitherListenStream, EitherOutput};
 use libp2p_core::StreamMuxer;
 use std::str::FromStr;
 use std::time::Duration;
@@ -74,39 +76,121 @@ use std::{
     task::{Context, Poll},
 };
 
+/// an XOR combination of two transports
+#[derive(Debug, Copy, Clone)]
+pub enum EitherTransport<A, B> {
+    Left(A),
+    Right(B),
+}
+
+impl<A, B> Transport for EitherTransport<A, B>
+where
+    B: Transport,
+    A: Transport,
+{
+    type Output = EitherOutput<A::Output, B::Output>;
+    type Error = EitherError<A::Error, B::Error>;
+    type Listener = EitherListenStream<A::Listener, B::Listener>;
+    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let addr = match self {
+            EitherTransport::Left(a) => match a.listen_on(addr) {
+                Ok(listener) => return Ok(EitherListenStream::First(listener)),
+                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+                Err(TransportError::Other(err)) => {
+                    return Err(TransportError::Other(EitherError::A(err)))
+                }
+            },
+            EitherTransport::Right(b) => match b.listen_on(addr) {
+                Ok(listener) => return Ok(EitherListenStream::Second(listener)),
+                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+                Err(TransportError::Other(err)) => {
+                    return Err(TransportError::Other(EitherError::B(err)))
+                }
+            },
+        };
+
+        Err(TransportError::MultiaddrNotSupported(addr))
+    }
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let addr = match self {
+            EitherTransport::Left(a) => match a.dial(addr) {
+                Ok(connec) => return Ok(EitherFuture::First(connec)),
+                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+                Err(TransportError::Other(err)) => {
+                    return Err(TransportError::Other(EitherError::A(err)))
+                }
+            },
+            EitherTransport::Right(b) => match b.dial(addr) {
+                Ok(connec) => return Ok(EitherFuture::Second(connec)),
+                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+                Err(TransportError::Other(err)) => {
+                    return Err(TransportError::Other(EitherError::B(err)))
+                }
+            },
+        };
+
+        Err(TransportError::MultiaddrNotSupported(addr))
+    }
+}
+
 /// Builds the transport that serves as a common ground for all connections.
-///
-/// Set up an encrypted TCP transport over the Mplex protocol.
 pub fn build_transport(
     key_pair: identity::Keypair,
-    psk: PreSharedKey,
-) -> io::Result<
-    impl Transport<
-            Output = (
-                PeerId,
-                impl StreamMuxer<
-                        OutboundSubstream = impl Send,
-                        Substream = impl Send,
-                        Error = impl Into<io::Error>,
-                    > + Send
-                    + Sync,
-            ),
-            Error = impl Error + Send,
-            Listener = impl Send,
-            Dial = impl Send,
-            ListenerUpgrade = impl Send,
-        > + Clone,
-> {
+    psk: Option<PreSharedKey>,
+) -> impl Transport<
+    Output = (
+        PeerId,
+        impl StreamMuxer<
+                OutboundSubstream = impl Send,
+                Substream = impl Send,
+                Error = impl Into<io::Error>,
+            > + Send
+            + Sync,
+    ),
+    Error = impl Error + Send,
+    Listener = impl Send,
+    Dial = impl Send,
+    ListenerUpgrade = impl Send,
+> + Clone {
     let secio_config = SecioConfig::new(key_pair);
     let yamux_config = YamuxConfig::default();
 
-    Ok(TcpConfig::new()
-        .nodelay(true)
-        .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
+    let base_transport = TcpConfig::new().nodelay(true);
+    let maybe_encrypted = match psk {
+        Some(psk) => EitherTransport::Left(
+            base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
+        ),
+        None => EitherTransport::Right(base_transport),
+    };
+    maybe_encrypted
         .upgrade(Version::V1)
         .authenticate(secio_config)
         .multiplex(yamux_config)
-        .timeout(Duration::from_secs(20)))
+        .timeout(Duration::from_secs(20))
+}
+
+fn get_ipfs_path() -> Box<Path> {
+    env::var("IPFS_PATH")
+        .map(|ipfs_path| Path::new(&ipfs_path).into())
+        .unwrap_or_else(|_| {
+            env::var("HOME")
+                .map(|home| Path::new(&home).join(".ipfs"))
+                .expect("could not determine home directory")
+                .into()
+        })
+}
+
+fn get_psk(path: Box<Path>) -> std::io::Result<Option<String>> {
+    let swarm_key_file = path.join("swarm.key");
+    match fs::read_to_string(swarm_key_file) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 use std::{env, fs, path::Path};
@@ -114,31 +198,21 @@ use std::{env, fs, path::Path};
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let ipfs_path: Box<Path> = env::var("IPFS_PATH")        
-        .map(|ipfs_path| Path::new(&ipfs_path).into())
-        .unwrap_or_else(|_| {
-            env::var("HOME")
-                .map(|home| Path::new(&home).join(".ipfs"))
-                .expect("could not determine home directory")
-                .into()
-        });
+    let ipfs_path: Box<Path> = get_ipfs_path();
     println!("using IPFS_PATH {:?}", ipfs_path);
-    let swarm_key_file = ipfs_path.join("swarm.key");
-    println!("{:?}", swarm_key_file);
-    let swarm_key_text = fs::read_to_string(swarm_key_file)?;
-    println!("{:?}", swarm_key_text);
-    let psk = PreSharedKey::from_str(&swarm_key_text)?;
+    let psk: Option<PreSharedKey> = get_psk(ipfs_path)?.map(|text| PreSharedKey::from_str(&text)).transpose()?;
 
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     // let psk = PreSharedKey::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
-    println!("Local peer id: {:?}", local_peer_id);
-    println!("Swarm key: {}", psk);
-    println!("Swarm key fingerprint: {}", psk.fingerprint());
+    println!("using random peer id: {:?}", local_peer_id);
+    for psk in psk {
+        println!("using swarm key with fingerprint: {}", psk.fingerprint());
+    }
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = build_transport(local_key.clone(), psk)?;
+    let transport = build_transport(local_key.clone(), psk);
 
     // Create a Floodsub topic
     let gossipsub_topic = gossipsub::Topic::new("chat".into());
@@ -221,13 +295,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let gossipsub_config = GossipsubConfig::default();
+        let gossipsub_config = GossipsubConfigBuilder::default()
+            .max_transmit_size(32768)
+            .build();
         let mut behaviour = MyBehaviour {
             gossipsub: Gossipsub::new(local_peer_id.clone(), gossipsub_config),
             identify: Identify::new("/ipfs/0.1.0".into(), "rust-ipfs".into(), local_key.public()),
             ping: Ping::new(PingConfig::new()),
         };
 
+        println!("Subscribing to {:?}", gossipsub_topic);
         behaviour.gossipsub.subscribe(gossipsub_topic.clone());
         Swarm::new(transport, behaviour, local_peer_id.clone())
     };
@@ -251,9 +328,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => {
-                    swarm
-                        .gossipsub
-                        .publish(&gossipsub_topic, line.as_bytes());
+                    swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes());
                 }
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
