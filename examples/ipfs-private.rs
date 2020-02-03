@@ -22,7 +22,7 @@
 //!
 //! This node implements the gossipsub, ping and identify protocols. It supports
 //! the ipfs private swarms feature by reading the pre shared key file `swarm.key`
-//! from IPFS_PATH or from the default location.
+//! from the IPFS_PATH environment variable or from the default location.
 //!
 //! You can pass any number of nodes to be dialed.
 //!
@@ -60,9 +60,11 @@ use std::{
     task::{Context, Poll},
 };
 
-/// an Either combination of two transports
+/// An Either combination of two transports
 ///
 /// this is useful if you have a different transport depending on configuration.
+/// In this example we have a different transport type depending on whether private swarms
+/// are enabled or not.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherTransport<A, B> {
     Left(A),
@@ -202,7 +204,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    // let psk = PreSharedKey::from_str("/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683").unwrap();
     println!("using random peer id: {:?}", local_peer_id);
     for psk in psk {
         println!("using swarm key with fingerprint: {}", psk.fingerprint());
@@ -234,7 +235,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<GossipsubEvent>
         for MyBehaviour<TSubstream>
     {
-        // Called when `mdns` produces an event.
+        // Called when `gossipsub` produces an event.
         fn inject_event(&mut self, event: GossipsubEvent) {
             match event {
                 GossipsubEvent::Message(peer_id, id, message) => println!(
@@ -290,7 +291,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let gossipsub_config = GossipsubConfigBuilder::default()
-            .max_transmit_size(32768)
+            .max_transmit_size(262144)
             .build();
         let mut behaviour = MyBehaviour {
             gossipsub: Gossipsub::new(local_peer_id.clone(), gossipsub_config),
