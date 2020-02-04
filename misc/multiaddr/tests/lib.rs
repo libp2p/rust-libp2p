@@ -76,7 +76,7 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 23) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 24) { // TODO: Add Protocol::Quic
              0 => Proto(Dccp(g.gen())),
              1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
              2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
@@ -104,7 +104,12 @@ impl Arbitrary for Proto {
                 let mut a = [0; 10];
                 g.fill(&mut a);
                 Proto(Onion(Cow::Owned(a), g.gen()))
-            }
+            },
+            23 => {
+                let mut a = [0; 35];
+                g.fill_bytes(&mut a);
+                Proto(Onion3((a, g.gen()).into()))
+            },
              _ => panic!("outside range")
         }
     }
@@ -208,35 +213,54 @@ fn construct_success() {
     ma_valid("/ip4/127.0.0.1/tcp/9090/p2p-circuit/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "047F000001062382A202A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
              vec![Ip4(local.clone()), Tcp(9090), P2pCircuit, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
+
+    ma_valid(
+        "/onion/aaimaq4ygg2iegci:80",
+        "BC030010C0439831B48218480050",
+        vec![Onion(Cow::Owned([0, 16, 192, 67, 152, 49, 180, 130, 24, 72]), 80)],
+    );
+    ma_valid(
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234",
+        "BD03ADADEC040BE047F9658668B11A504F3155001F231A37F54C4476C07FB4CC139ED7E30304D2",
+        vec![Onion3(([173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3], 1234).into())],
+    );
 }
 
 #[test]
 fn construct_fail() {
-    let addresses = ["/ip4",
-                     "/ip4/::1",
-                     "/ip4/fdpsofodsajfdoisa",
-                     "/ip6",
-                     "/udp",
-                     "/tcp",
-                     "/sctp",
-                     "/udp/65536",
-                     "/tcp/65536",
-                     // "/onion/9imaq4ygg2iegci7:80",
-                     // "/onion/aaimaq4ygg2iegci7:80",
-                     // "/onion/timaq4ygg2iegci7:0",
-                     // "/onion/timaq4ygg2iegci7:-1",
-                     // "/onion/timaq4ygg2iegci7",
-                     // "/onion/timaq4ygg2iegci@:666",
-                     "/udp/1234/sctp",
-                     "/udp/1234/udt/1234",
-                     "/udp/1234/utp/1234",
-                     "/ip4/127.0.0.1/udp/jfodsajfidosajfoidsa",
-                     "/ip4/127.0.0.1/udp",
-                     "/ip4/127.0.0.1/tcp/jfodsajfidosajfoidsa",
-                     "/ip4/127.0.0.1/tcp",
-                     "/ip4/127.0.0.1/p2p",
-                     "/ip4/127.0.0.1/p2p/tcp",
-                     "/p2p-circuit/50"];
+    let addresses = [
+        "/ip4",
+        "/ip4/::1",
+        "/ip4/fdpsofodsajfdoisa",
+        "/ip6",
+        "/udp",
+        "/tcp",
+        "/sctp",
+        "/udp/65536",
+        "/tcp/65536",
+        "/onion/9imaq4ygg2iegci7:80",
+        "/onion/aaimaq4ygg2iegci7:80",
+        "/onion/timaq4ygg2iegci7:0",
+        "/onion/timaq4ygg2iegci7:-1",
+        "/onion/timaq4ygg2iegci7",
+        "/onion/timaq4ygg2iegci@:666",
+        "/onion3/9ww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:80",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd7:80",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:0",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:-1",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyy@:666",
+        "/udp/1234/sctp",
+        "/udp/1234/udt/1234",
+        "/udp/1234/utp/1234",
+        "/ip4/127.0.0.1/udp/jfodsajfidosajfoidsa",
+        "/ip4/127.0.0.1/udp",
+        "/ip4/127.0.0.1/tcp/jfodsajfidosajfoidsa",
+        "/ip4/127.0.0.1/tcp",
+        "/ip4/127.0.0.1/p2p",
+        "/ip4/127.0.0.1/p2p/tcp",
+        "/p2p-circuit/50"
+    ];
 
     for address in &addresses {
         assert!(address.parse::<Multiaddr>().is_err(), address.to_string());

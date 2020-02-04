@@ -14,6 +14,7 @@ use std::{
     str::{self, FromStr}
 };
 use unsigned_varint::{encode, decode};
+use crate::onion_addr::Onion3Addr;
 
 const DCCP: u32 = 33;
 const DNS4: u32 = 54;
@@ -27,6 +28,7 @@ const P2P_WEBRTC_STAR: u32 = 275;
 const P2P_WEBSOCKET_STAR: u32 = 479;
 const MEMORY: u32 = 777;
 const ONION: u32 = 444;
+const ONION3: u32 = 445;
 const P2P: u32 = 421;
 const P2P_CIRCUIT: u32 = 290;
 const QUIC: u32 = 460;
@@ -75,6 +77,7 @@ pub enum Protocol<'a> {
     /// Contains the "port" to contact. Similar to TCP or UDP, 0 means "assign me a port".
     Memory(u64),
     Onion(Cow<'a, [u8; 10]>, u16),
+    Onion3(Onion3Addr<'a>),
     P2p(Multihash),
     P2pCircuit,
     Quic,
@@ -150,6 +153,11 @@ impl<'a> Protocol<'a> {
                     .ok_or(Error::InvalidProtocolString)
                     .and_then(|s| read_onion(&s.to_uppercase()))
                     .map(|(a, p)| Protocol::Onion(Cow::Owned(a), p)),
+            "onion3" =>
+                iter.next()
+                    .ok_or(Error::InvalidProtocolString)
+                    .and_then(|s| read_onion3(&s.to_uppercase()))
+                    .map(|(a, p)| Protocol::Onion3((a, p).into())),
             "quic" => Ok(Protocol::Quic),
             "ws" => Ok(Protocol::Ws(Cow::Borrowed("/"))),
             "wss" => Ok(Protocol::Wss(Cow::Borrowed("/"))),
@@ -241,6 +249,11 @@ impl<'a> Protocol<'a> {
                 let (data, rest) = split_at(12, input)?;
                 let port = BigEndian::read_u16(&data[10 ..]);
                 Ok((Protocol::Onion(Cow::Borrowed(array_ref!(data, 0, 10)), port), rest))
+            }
+            ONION3 => {
+                let (data, rest) = split_at(37, input)?;
+                let port = BigEndian::read_u16(&data[35 ..]);
+                Ok((Protocol::Onion3((array_ref!(data, 0, 35), port).into()), rest))
             }
             P2P => {
                 let (n, input) = decode::usize(input)?;
@@ -350,6 +363,11 @@ impl<'a> Protocol<'a> {
                 w.write_all(addr.as_ref())?;
                 w.write_u16::<BigEndian>(*port)?
             }
+            Protocol::Onion3(addr) => {
+                w.write_all(encode::u32(ONION3, &mut buf))?;
+                w.write_all(addr.hash().as_ref())?;
+                w.write_u16::<BigEndian>(addr.port())?
+            }
             Protocol::Quic => w.write_all(encode::u32(QUIC, &mut buf))?,
             Protocol::Utp => w.write_all(encode::u32(UTP, &mut buf))?,
             Protocol::Udt => w.write_all(encode::u32(UDT, &mut buf))?,
@@ -397,6 +415,7 @@ impl<'a> Protocol<'a> {
             P2pWebSocketStar => P2pWebSocketStar,
             Memory(a) => Memory(a),
             Onion(addr, port) => Onion(Cow::Owned(addr.into_owned()), port),
+            Onion3(addr) => Onion3(addr.acquire()),
             P2p(a) => P2p(a),
             P2pCircuit => P2pCircuit,
             Quic => Quic,
@@ -430,6 +449,10 @@ impl<'a> fmt::Display for Protocol<'a> {
             Onion(addr, port) => {
                 let s = BASE32.encode(addr.as_ref());
                 write!(f, "/onion/{}:{}", s.to_lowercase(), port)
+            }
+            Onion3(addr ) => {
+                let s = BASE32.encode(addr.hash());
+                write!(f, "/onion3/{}:{}", s.to_lowercase(), addr.port())
             }
             P2p(c) => write!(f, "/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
             P2pCircuit => f.write_str("/p2p-circuit"),
@@ -478,34 +501,49 @@ impl<'a> From<Ipv6Addr> for Protocol<'a> {
     }
 }
 
+macro_rules! read_onion_impl {
+    ($name:ident, $len:expr, $encoded_len:expr) => {
+        fn $name(s: &str) -> Result<([u8; $len], u16)> {
+            let mut parts = s.split(':');
+
+            // address part (without ".onion")
+            let b32 = parts.next().ok_or(Error::InvalidMultiaddr)?;
+            if b32.len() != $encoded_len {
+                return Err(Error::InvalidMultiaddr)
+            }
+
+            // port number
+            let port = parts.next()
+                .ok_or(Error::InvalidMultiaddr)
+                .and_then(|p| str::parse(p).map_err(From::from))?;
+
+            // port == 0 is not valid for onion
+            if port == 0 {
+                return Err(Error::InvalidMultiaddr);
+            }
+
+            // nothing else expected
+            if parts.next().is_some() {
+                return Err(Error::InvalidMultiaddr)
+            }
+
+            if $len != BASE32.decode_len(b32.len()).map_err(|_| Error::InvalidMultiaddr)? {
+                return Err(Error::InvalidMultiaddr)
+            }
+
+            let mut buf = [0u8; $len];
+            BASE32.decode_mut(b32.as_bytes(), &mut buf).map_err(|_| Error::InvalidMultiaddr)?;
+
+            Ok((buf, port))
+        }
+    }
+}
+
 // Parse a version 2 onion address and return its binary representation.
 //
 // Format: <base-32 address> ":" <port number>
-fn read_onion(s: &str) -> Result<([u8; 10], u16)> {
-    let mut parts = s.split(':');
-
-    // address part (without ".onion")
-    let b32 = parts.next().ok_or(Error::InvalidMultiaddr)?;
-    if b32.len() != 16 {
-        return Err(Error::InvalidMultiaddr)
-    }
-
-    // port number
-    let port = parts.next()
-        .ok_or(Error::InvalidMultiaddr)
-        .and_then(|p| str::parse(p).map_err(From::from))?;
-
-    // nothing else expected
-    if parts.next().is_some() {
-        return Err(Error::InvalidMultiaddr)
-    }
-
-    if 10 != BASE32.decode_len(b32.len()).map_err(|_| Error::InvalidMultiaddr)? {
-        return Err(Error::InvalidMultiaddr)
-    }
-
-    let mut buf = [0u8; 10];
-    BASE32.decode_mut(b32.as_bytes(), &mut buf).map_err(|_| Error::InvalidMultiaddr)?;
-
-    Ok((buf, port))
-}
+read_onion_impl!(read_onion, 10, 16);
+// Parse a version 3 onion address and return its binary representation.
+//
+// Format: <base-32 address> ":" <port number>
+read_onion_impl!(read_onion3, 35, 56);
