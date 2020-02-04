@@ -71,14 +71,14 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// Communication with a remote over a set of protocols is initiated in one of two ways:
 ///
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
-///      [`ProtocolsHandler::poll()`] must return an [`OutboundSubstreamRequest`], providing an
-///      instance of [`ProtocolsHandler::OutboundUpgrade`] that is used to negotiate the
+///      [`ProtocolsHandler::poll()`] must return an [`ProtocolsHandlerEvent::OutboundSubstreamRequest`],
+///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
 ///      protocol(s). Upon success, [`ProtocolsHandler::inject_fully_negotiated_outbound`]
 ///      is called with the final output of the upgrade.
 ///
 ///   2. Listening by accepting a new inbound substream. When a new inbound substream
 ///      is created on a connection, [`ProtocolsHandler::listen_protocol`] is called
-///      to obtain an instance of [`ProtocolsHandler::InboundUpgrade`] that is used to
+///      to obtain an instance of [`libp2p_core::upgrade::InboundUpgrade`] that is used to
 ///      negotiate the protocol(s). Upon success,
 ///      [`ProtocolsHandler::inject_fully_negotiated_inbound`] is called with the final
 ///      output of the upgrade.

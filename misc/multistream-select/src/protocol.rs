@@ -62,8 +62,8 @@ const MSG_LS: &[u8] = b"ls\n";
 pub enum Version {
     /// Version 1 of the multistream-select protocol. See [1] and [2].
     ///
-    /// [1] https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
-    /// [2] https://github.com/multiformats/multistream-select
+    /// [1]: https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
+    /// [2]: https://github.com/multiformats/multistream-select
     V1,
     /// A lazy variant of version 1 that is identical on the wire but delays
     /// sending of protocol negotiation data as much as possible.

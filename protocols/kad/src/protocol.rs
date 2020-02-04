@@ -25,10 +25,6 @@
 //! The upgrade's output is a `Sink + Stream` of messages. The `Stream` component is used
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
-//!
-//! [`KademliaProtocolConfig`]: protocol::KademliaProtocolConfig
-//! [`KadRequestMsg`]: protocol::KadRequestMsg
-//! [`KadResponseMsg`]: protocol::KadResponseMsg
 
 use bytes::BytesMut;
 use codec::UviBytes;

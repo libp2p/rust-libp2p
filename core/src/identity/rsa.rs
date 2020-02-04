@@ -84,7 +84,7 @@ impl PublicKey {
     /// Encode the RSA public key in DER as a X.509 SubjectPublicKeyInfo structure,
     /// as defined in [RFC5280].
     ///
-    /// [RFC5280] https://tools.ietf.org/html/rfc5280#section-4.1
+    /// [RFC5280]: https://tools.ietf.org/html/rfc5280#section-4.1
     pub fn encode_x509(&self) -> Vec<u8> {
         let spki = Asn1SubjectPublicKeyInfo {
             algorithmIdentifier: Asn1RsaEncryption {

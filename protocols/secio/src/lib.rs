@@ -25,7 +25,7 @@
 //!
 //! The `SecioConfig` implements [`InboundUpgrade`] and [`OutboundUpgrade`] and thus
 //! serves as a connection upgrade for authentication of a transport.
-//! See [`authenticate`](libp2p_core::transport::upgrade::builder::Builder::authenticate).
+//! See [`authenticate`](libp2p_core::transport::upgrade::Builder::authenticate).
 //!
 //! ```no_run
 //! # fn main() {
