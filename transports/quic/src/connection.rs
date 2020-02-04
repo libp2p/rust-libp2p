@@ -21,6 +21,7 @@ use super::{
     certificate,
     endpoint::{EndpointData, EndpointInner},
     error::Error,
+    socket::Pending,
     verifier,
 };
 use async_macros::ready;
@@ -559,7 +560,7 @@ pub(crate) struct Muxer {
     /// Tasks waiting to make a connection
     connectors: StreamSenderQueue,
     /// Pending transmit
-    pending: Option<quinn_proto::Transmit>,
+    pending: super::socket::Pending,
     /// The timer being used by this connection
     timer: Option<futures_timer::Delay>,
     /// The close reason, if this connection has been lost
@@ -616,35 +617,25 @@ impl Muxer {
     }
 
     fn drive_timer(&mut self, cx: &mut Context, now: Instant) -> bool {
-        let mut keep_going = false;
-        loop {
-            match self.connection.poll_timeout() {
-                None => {
-                    self.timer = None;
-                    self.last_timeout = None
-                }
-                Some(t) if t <= now => {
-                    self.connection.handle_timeout(now);
-                    keep_going = true;
-                    continue;
-                }
-                t if t == self.last_timeout => {}
-                t => {
-                    let delay = t.expect("already checked to be Some; qed") - now;
-                    self.timer = Some(futures_timer::Delay::new(delay))
-                }
+        match self.connection.poll_timeout() {
+            None => {
+                self.timer = None;
+                self.last_timeout = None
             }
-            if let Some(ref mut timer) = self.timer {
-                if timer.poll_unpin(cx).is_ready() {
-                    self.connection.handle_timeout(now);
-                    keep_going = true;
-                    continue;
-                }
+            Some(t) if t <= now => {
+                self.connection.handle_timeout(now);
+                return true;
             }
-            break;
+            t if t == self.last_timeout => {}
+            Some(t) => self.timer = Some(futures_timer::Delay::new(t - now)),
         }
-
-        keep_going
+        if let Some(ref mut timer) = self.timer {
+            if timer.poll_unpin(cx).is_ready() {
+                self.connection.handle_timeout(now);
+                return true;
+            }
+        }
+        false
     }
 
     fn new(endpoint: Arc<EndpointData>, connection: Connection, handle: ConnectionHandle) -> Self {
@@ -662,7 +653,7 @@ impl Muxer {
             connectors: Default::default(),
             endpoint_channel: endpoint.event_channel(),
             endpoint: endpoint,
-            pending: None,
+            pending: Pending::default(),
             timer: None,
             close_reason: None,
             waker: None,
@@ -682,16 +673,14 @@ impl Muxer {
 
     /// Send endpoint events.  Returns true if and only if there are endpoint events remaining to
     /// be sent.
-    fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) -> bool {
-        let mut keep_going = false;
+    fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) {
         loop {
             match self.endpoint_channel.poll_ready(cx) {
-                Poll::Pending => break keep_going,
+                Poll::Pending => break,
                 Poll::Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
                 Poll::Ready(Ok(())) => {}
             }
             if let Some(event) = self.connection.poll_endpoint_events() {
-                keep_going = true;
                 self.endpoint_channel
                     .start_send(EndpointMessage::EndpointEvent {
                         handle: self.handle,
@@ -699,45 +688,21 @@ impl Muxer {
                     })
                     .expect("we just checked that we have capacity; qed");
             } else {
-                break keep_going;
-            }
-        }
-    }
-
-    fn pre_application_io(&mut self, now: Instant, cx: &mut Context<'_>) -> Result<bool, Error> {
-        let mut needs_timer_update = false;
-        if let Some(transmit) = self.pending.take() {
-            trace!("trying to send packet!");
-            if self.poll_transmit(cx, transmit)? {
-                return Ok(false);
-            }
-            trace!("packet sent!");
-        }
-        while let Some(transmit) = self.connection.poll_transmit(now) {
-            trace!("trying to send packet!");
-            needs_timer_update = true;
-            if self.poll_transmit(cx, transmit)? {
                 break;
             }
-            trace!("packet sent!");
         }
-        Ok(needs_timer_update)
     }
 
-    fn poll_transmit(
-        &mut self,
-        cx: &mut Context<'_>,
-        transmit: quinn_proto::Transmit,
-    ) -> Result<bool, Error> {
-        let res = self.endpoint.socket().poll_send_to(cx, &transmit);
-        match res {
-            Poll::Pending => {
-                self.pending = Some(transmit);
-                Ok(true)
-            }
-            Poll::Ready(Ok(_)) => Ok(false),
-            Poll::Ready(Err(e)) => Err(e.into()),
-        }
+    fn transmit_pending(&mut self, now: Instant, cx: &mut Context<'_>) -> Result<(), Error> {
+        let Self {
+            pending,
+            endpoint,
+            connection,
+            ..
+        } = self;
+        let _ =
+            pending.send_packet(cx, endpoint.socket(), &mut || connection.poll_transmit(now))?;
+        Ok(())
     }
 
     fn shutdown(&mut self, error_code: u32) {
@@ -781,8 +746,6 @@ impl Muxer {
         self.send_to_endpoint(endpoint);
         self.process_app_events();
         self.wake_driver();
-        assert!(self.connection.poll_endpoint_events().is_none());
-        assert!(self.connection.poll().is_none());
     }
 
     fn get_pending_stream(&mut self) -> Option<StreamId> {
@@ -798,7 +761,7 @@ impl Muxer {
         })
     }
 
-    pub fn process_app_events(&mut self) -> bool {
+    fn process_app_events(&mut self) -> bool {
         use quinn_proto::Event;
         let mut keep_going = false;
         'a: while let Some(event) = self.connection.poll() {
@@ -845,8 +808,11 @@ impl Muxer {
                         self.pending_stream.is_none(),
                         "we cannot have both pending tasks and a pending stream; qed"
                     );
-                    let stream = self.connection.open(Dir::Bi)
-                            .expect("we just were told that there is a stream available; there is a mutex that prevents other threads from calling open() in the meantime; qed");
+                    let stream = self.connection.open(Dir::Bi).expect(
+                        "we just were told that there is a stream available; there is \
+                        a mutex that prevents other threads from calling open() in the \
+                        meantime; qed",
+                    );
                     while let Some(oneshot) = self.connectors.pop_front() {
                         match oneshot.send(stream) {
                             Ok(()) => continue 'a,
@@ -938,40 +904,30 @@ impl ConnectionDriver {
 impl Future for ConnectionDriver {
     type Output = Result<(), Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        // cx.waker().wake_by_ref();
         let this = self.get_mut();
         debug!("being polled for timer!");
         let mut inner = this.inner.lock();
         inner.waker = Some(cx.waker().clone());
-        let now = Instant::now();
         loop {
-            let mut needs_timer_update = false;
-            needs_timer_update |= inner.drive_timer(cx, now);
-            needs_timer_update |= inner.pre_application_io(now, cx)?;
-            needs_timer_update |= inner.process_app_events();
-            needs_timer_update |= inner.poll_endpoint_events(cx);
-            if inner.connection.is_drained() {
-                break Poll::Ready(
-                    match inner
-                        .close_reason
-                        .clone()
-                        .expect("we never have a closed connection with no reason; qed")
-                    {
-                        quinn_proto::ConnectionError::LocallyClosed => {
-                            if needs_timer_update {
-                                debug!("continuing until all events are finished");
-                                continue;
-                            } else {
-                                debug!("exiting driver");
-                                Ok(())
-                            }
-                        }
-                        e => Err(e.into()),
-                    },
-                );
-            } else if !needs_timer_update {
+            let now = Instant::now();
+            inner.transmit_pending(now, cx)?;
+            inner.process_app_events();
+            inner.poll_endpoint_events(cx);
+            if inner.drive_timer(cx, now) {
+                continue;
+            }
+            if !inner.connection.is_drained() {
                 break Poll::Pending;
             }
+            debug!("exiting driver");
+            let close_reason = inner
+                .close_reason
+                .clone()
+                .expect("we never have a closed connection with no reason; qed");
+            break Poll::Ready(match close_reason {
+                quinn_proto::ConnectionError::LocallyClosed => Ok(()),
+                e => Err(e.into()),
+            });
         }
     }
 }
