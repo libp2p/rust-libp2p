@@ -27,7 +27,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionHandle};
 use std::{
@@ -42,7 +42,6 @@ use std::{
 pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
     muxers: HashMap<ConnectionHandle, Weak<Mutex<super::connection::Muxer>>>,
-    driver: Option<async_std::task::JoinHandle<Result<(), Error>>>,
     pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
@@ -136,7 +135,7 @@ impl EndpointInner {
             .map_err(Error::IO)
     }
 }
-
+type ListenerResult = Result<ListenerEvent<Upgrade>, Error>;
 #[derive(Debug)]
 pub(super) struct EndpointData {
     /// The single UDP socket used for I/O
@@ -145,10 +144,9 @@ pub(super) struct EndpointData {
     inner: Mutex<EndpointInner>,
     /// The channel on which new connections are sent.  This is bounded in practice by the accept
     /// backlog.
-    new_connections: mpsc::UnboundedSender<Result<ListenerEvent<Upgrade>, Error>>,
+    new_connections: mpsc::UnboundedSender<ListenerResult>,
     /// The channel used to receive new connections.
-    receive_connections:
-        Mutex<Option<mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, Error>>>>,
+    receive_connections: Mutex<Option<mpsc::UnboundedReceiver<ListenerResult>>>,
     /// Connections send their events to this
     event_channel: mpsc::Sender<EndpointMessage>,
     /// The `Multiaddr`
@@ -181,15 +179,18 @@ impl EndpointData {
 /// The **only** valid `Multiaddr` to pass to `listen_on` or `dial` is the one used to create the
 /// `QuicEndpoint`.  You can obtain this via the `addr` method.  If you pass a different one, you
 /// will get `TransportError::MultiaddrNotSuppported`.
-#[derive(Debug, Clone)]
-pub struct Endpoint(Arc<EndpointData>);
+#[derive(Debug)]
+pub struct Endpoint {
+    data: Arc<EndpointData>,
+    join_handle: async_std::task::JoinHandle<Result<(), Error>>,
+}
 
-struct EndpointDriver(Arc<EndpointData>);
+struct EndpointDriver(Option<Arc<EndpointData>>);
 
 impl Endpoint {
     fn inner(&self) -> MutexGuard<'_, EndpointInner> {
         trace!("acquiring lock!");
-        let q = self.0.inner.lock();
+        let q = self.data.inner.lock();
         trace!("lock acquired!");
         q
     }
@@ -210,7 +211,7 @@ impl Endpoint {
             .into();
         let (new_connections, receive_connections) = mpsc::unbounded();
         let (event_channel, event_receiver) = mpsc::channel(0);
-        let return_value = Self(Arc::new(EndpointData {
+        let data = Arc::new(EndpointData {
             socket: socket::Socket::new(socket),
             inner: Mutex::new(EndpointInner {
                 inner: quinn_proto::Endpoint::new(
@@ -218,7 +219,6 @@ impl Endpoint {
                     Some(config.server_config.clone()),
                 ),
                 muxers: HashMap::new(),
-                driver: None,
                 event_receiver,
                 pending: Default::default(),
             }),
@@ -227,16 +227,20 @@ impl Endpoint {
             new_connections,
             event_channel,
             config,
-        }));
-        return_value.inner().driver = Some(async_std::task::spawn(EndpointDriver(
-            return_value.0.clone(),
-        )));
-        return_value
-            .0
-            .new_connections
+        });
+        let join_handle = async_std::task::spawn(EndpointDriver(Some(data.clone())));
+        data.new_connections
             .unbounded_send(Ok(ListenerEvent::NewAddress(address)))
             .expect("we have a reference to the peer, so this will not fail; qed");
-        Ok(return_value)
+        Ok(Self { data, join_handle })
+    }
+
+    /// Consume this `Endpoint`, and wait for it to close.
+    ///
+    /// No more connections will be accepted.  The returned future will resolve when all existing
+    /// connections are complete or a fatal error occurs.
+    pub fn close(self) -> impl Future<Output = Result<(), Error>> {
+        self.join_handle
     }
 }
 
@@ -251,21 +255,20 @@ fn create_muxer(
     })
 }
 
-impl EndpointDriver {
+impl EndpointData {
     fn accept_muxer(
-        &self,
+        self: &Arc<Self>,
         connection: Connection,
         handle: ConnectionHandle,
         inner: &mut EndpointInner,
     ) {
-        let upgrade = create_muxer(self.0.clone(), connection, handle, &mut *inner);
+        let upgrade = create_muxer(self.clone(), connection, handle, &mut *inner);
         if self
-            .0
             .new_connections
             .unbounded_send(Ok(ListenerEvent::Upgrade {
                 upgrade,
-                local_addr: self.0.address.clone(),
-                remote_addr: self.0.address.clone(),
+                local_addr: self.address.clone(),
+                remote_addr: self.address.clone(),
             }))
             .is_err()
         {
@@ -278,29 +281,35 @@ impl EndpointDriver {
 impl Future for EndpointDriver {
     type Output = Result<(), Error>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
-        let this = self.get_mut();
-        loop {
-            let mut inner = this.0.inner.lock();
-            trace!("driving events");
-            inner.drive_events(cx);
-            trace!("driving incoming packets");
-            match inner.drive_receive(&this.0.socket, cx)? {
-                Poll::Pending => {
-                    drop(inner.poll_transmit_pending(&this.0.socket, cx)?);
-                    trace!("returning Pending");
-                    break Poll::Pending;
-                }
-                Poll::Ready((handle, connection)) => {
-                    trace!("have a new connection");
-                    this.accept_muxer(connection, handle, &mut *inner);
-                    trace!("connection accepted");
-                    match inner.poll_transmit_pending(&this.0.socket, cx)? {
-                        Poll::Pending => break Poll::Pending,
-                        Poll::Ready(()) if Arc::strong_count(&this.0) == 1 => {
-                            break Poll::Ready(Ok(()))
-                        }
-                        Poll::Ready(()) => break Poll::Pending,
-                    }
+        let outer_this = &mut self.get_mut().0;
+        let this = outer_this.as_ref().expect("polled after yielding Ready");
+        let mut inner = this.inner.lock();
+        trace!("driving events");
+        inner.drive_events(cx);
+        trace!("driving incoming packets");
+        match inner.drive_receive(&this.socket, cx)? {
+            Poll::Pending => {}
+            Poll::Ready((handle, connection)) => {
+                trace!("have a new connection");
+                this.accept_muxer(connection, handle, &mut *inner);
+                trace!("connection accepted");
+            }
+        }
+        match inner.poll_transmit_pending(&this.socket, cx)? {
+            Poll::Pending | Poll::Ready(()) => {
+                let refcount = Arc::strong_count(&this);
+                trace!(
+                    "Strong reference count is {}.  Address is {:?}",
+                    refcount,
+                    this.address
+                );
+                if refcount == 1 {
+                    info!("All connections have closed.  Exiting.");
+                    drop(inner);
+                    *outer_this = None;
+                    Poll::Ready(Ok(()))
+                } else {
+                    Poll::Pending
                 }
             }
         }
@@ -331,19 +340,15 @@ impl Transport for &Endpoint {
     type Dial = Upgrade;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if addr != self.0.address {
+        let reference = self.data.clone();
+        if addr != reference.address {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
-        let channel = (self.0)
+        let channel = reference
             .receive_connections
             .lock()
             .take()
             .ok_or_else(|| TransportError::Other(Error::AlreadyListening))?;
-        let mut inner = self.inner();
-        let reference = self.0.clone();
-        if inner.driver.is_none() {
-            inner.driver = Some(async_std::task::spawn(EndpointDriver(reference.clone())));
-        }
         Ok(Listener { channel, reference })
     }
 
@@ -357,24 +362,17 @@ impl Transport for &Endpoint {
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
+        let data = self.data.clone();
         let mut inner = self.inner();
-        if inner.driver.is_none() {
-            inner.driver = Some(async_std::task::spawn(EndpointDriver(self.0.clone())))
-        }
-
         let s: Result<(_, Connection), _> = inner
             .inner
-            .connect(
-                self.0.config.client_config.clone(),
-                socket_addr,
-                "localhost",
-            )
+            .connect(data.config.client_config.clone(), socket_addr, "localhost")
             .map_err(|e| {
                 warn!("Connection error: {:?}", e);
                 TransportError::Other(Error::CannotConnect(e))
             });
         let (handle, conn) = s?;
-        Ok(create_muxer(self.0.clone(), conn, handle, &mut inner))
+        Ok(create_muxer(data, conn, handle, &mut inner))
     }
 }
 

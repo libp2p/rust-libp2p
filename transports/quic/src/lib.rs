@@ -28,7 +28,6 @@
 //! use libp2p_quic::{Config, Endpoint};
 //! use libp2p_core::Multiaddr;
 //!
-//! # fn main() {
 //! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
 //! let quic_config = Config::new(&keypair);
 //! let quic_endpoint = Endpoint::new(
@@ -36,7 +35,6 @@
 //!     "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?"),
 //! )
 //! .expect("I/O error");
-//! # }
 //! ```
 //!
 //! The `Config` structs implements the `Transport` trait of the `swarm` library. See the

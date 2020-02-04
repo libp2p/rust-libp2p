@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &'static [&'static webpki::SignatureAlgorithm] = {
+static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
     &[
         &webpki::ECDSA_P256_SHA256,
         &webpki::ECDSA_P256_SHA384,
@@ -85,7 +85,7 @@ fn verify_presented_certs(
     ) -> Result<(), webpki::Error>,
 ) -> Result<(), rustls::TLSError> {
     if presented_certs.len() != 1 {
-        Err(rustls::TLSError::NoCertificatesPresented)?
+        return Err(rustls::TLSError::NoCertificatesPresented);
     }
     let time = webpki::Time::try_from(std::time::SystemTime::now())
         .map_err(|ring::error::Unspecified| rustls::TLSError::FailedToGetCurrentTime)?;

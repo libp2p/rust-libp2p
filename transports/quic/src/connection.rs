@@ -30,7 +30,7 @@ use futures::{
     prelude::*,
 };
 use libp2p_core::StreamMuxer;
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
 use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
 use std::{
@@ -164,7 +164,7 @@ pub(super) enum EndpointMessage {
 pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
 impl QuicMuxer {
-    fn inner<'a>(&'a self) -> MutexGuard<'a, Muxer> {
+    fn inner(&self) -> MutexGuard<Muxer> {
         self.0.lock()
     }
 }
@@ -393,9 +393,9 @@ impl StreamMuxer for QuicMuxer {
             SubstreamStatus::Finished => return Poll::Ready(Ok(())),
             SubstreamStatus::Finishing(ref mut channel) => {
                 self.inner().wake_driver();
-                return channel.poll_unpin(cx).map_err(|e| {
-                    Error::IO(io::Error::new(io::ErrorKind::ConnectionAborted, e.clone()))
-                });
+                return channel
+                    .poll_unpin(cx)
+                    .map_err(|e| Error::IO(io::Error::new(io::ErrorKind::ConnectionAborted, e)));
             }
             SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
         }
@@ -435,20 +435,17 @@ impl StreamMuxer for QuicMuxer {
     fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         trace!("close() called");
         let mut inner = self.inner();
-        if inner.connection.is_closed() {
-            return Poll::Ready(Ok(()));
-        } else if inner.close_reason.is_some() {
+        if inner.connection.is_closed() || inner.close_reason.is_some() {
             return Poll::Ready(Ok(()));
         } else if inner.finishers.is_empty() {
             inner.shutdown(0);
             inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
             drop(inner.driver().poll_unpin(cx));
             return Poll::Ready(Ok(()));
-        } else if inner.close_waker.is_some() {
-            inner.close_waker = Some(cx.waker().clone());
+        }
+        if let Some(waker) = replace(&mut inner.close_waker, Some(cx.waker().clone())) {
+            waker.wake();
             return Poll::Pending;
-        } else {
-            inner.close_waker = Some(cx.waker().clone())
         }
         let Muxer {
             finishers,
@@ -610,6 +607,12 @@ impl Muxer {
         }
     }
 
+    fn wake_incoming(&mut self) {
+        if let Some(waker) = self.handshake_or_accept_waker.take() {
+            waker.wake()
+        }
+    }
+
     fn driver(&mut self) -> &mut async_std::task::JoinHandle<Result<(), Error>> {
         self.driver
             .as_mut()
@@ -652,7 +655,7 @@ impl Muxer {
             handshake_or_accept_waker: None,
             connectors: Default::default(),
             endpoint_channel: endpoint.event_channel(),
-            endpoint: endpoint,
+            endpoint,
             pending: Pending::default(),
             timer: None,
             close_reason: None,
@@ -707,9 +710,7 @@ impl Muxer {
 
     fn shutdown(&mut self, error_code: u32) {
         debug!("shutting connection down!");
-        if let Some(w) = self.handshake_or_accept_waker.take() {
-            w.wake()
-        }
+        self.wake_incoming();
         for (_, v) in self.writers.drain() {
             v.wake();
         }
@@ -717,7 +718,7 @@ impl Muxer {
             v.wake();
         }
         for sender in self.finishers.drain().filter_map(|x| x.1) {
-            drop(sender.send(()))
+            let _ = sender.send(());
         }
         self.connectors.truncate(0);
         if !self.connection.is_closed() {
@@ -814,9 +815,8 @@ impl Muxer {
                         meantime; qed",
                     );
                     while let Some(oneshot) = self.connectors.pop_front() {
-                        match oneshot.send(stream) {
-                            Ok(()) => continue 'a,
-                            Err(_) => {}
+                        if let Ok(()) = oneshot.send(stream) {
+                            continue 'a;
                         }
                     }
                     self.pending_stream = Some(stream)
@@ -829,7 +829,9 @@ impl Muxer {
                     );
                     self.close_reason = Some(reason);
                     self.connection_lost = true;
-                    self.close_waker.take().map(|e| e.wake());
+                    if let Some(e) = self.close_waker.take() {
+                        e.wake()
+                    }
                     self.shutdown(0);
                 }
                 Event::StreamFinished {
@@ -850,24 +852,21 @@ impl Muxer {
                         "every write stream is placed in this map, and entries are removed \
                          exactly once; qed",
                     ) {
-                        drop(sender.send(()))
+                        let _ = sender.send(());
                     }
                     if self.finishers.is_empty() {
-                        self.close_waker.take().map(|e| e.wake());
+                        if let Some(e) = self.close_waker.take() {
+                            e.wake()
+                        }
                     }
                 }
                 Event::Connected => {
                     debug!("connected!");
-                    assert!(!self.connection.is_handshaking(), "quinn-proto bug");
-                    if let Some(w) = self.handshake_or_accept_waker.take() {
-                        w.wake()
-                    }
+                    self.wake_incoming();
                 }
                 Event::StreamOpened { dir: Dir::Bi } => {
                     debug!("stream opened for side {:?}", self.connection.side());
-                    if let Some(w) = self.handshake_or_accept_waker.take() {
-                        w.wake()
-                    }
+                    self.wake_incoming()
                 }
             }
         }
@@ -919,7 +918,7 @@ impl Future for ConnectionDriver {
             if !inner.connection.is_drained() {
                 break Poll::Pending;
             }
-            debug!("exiting driver");
+            info!("exiting driver");
             let close_reason = inner
                 .close_reason
                 .clone()

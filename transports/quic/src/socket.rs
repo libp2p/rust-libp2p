@@ -41,6 +41,11 @@ pub(crate) struct Socket {
 
 impl Socket {
     /// Transmit a packet if possible, with appropriate logging.
+	///
+	/// We ignore I/O errors.  If a packet cannot be sent, we assume it is a transient condition
+	/// and drop it.  If it is not, the connection will eventually time out.  This provides a very
+	/// high degree of robustness.  Connections will transparently resume after a transient network
+	/// outage, and problems that are specific to one peer will not effect other peers.
     pub fn poll_send_to(&self, cx: &mut Context, packet: &Transmit) -> Poll<Result<()>> {
         match {
             let fut = self.socket.send_to(&packet.contents, &packet.destination);
@@ -49,15 +54,15 @@ impl Socket {
         } {
             Poll::Pending => {
                 trace!("not able to send packet right away");
-                return Poll::Pending;
+                Poll::Pending
             }
             Poll::Ready(Ok(e)) => {
                 trace!("sent packet of length {} to {}", e, packet.destination);
-                return Poll::Ready(Ok(()));
+                Poll::Ready(Ok(()))
             }
             Poll::Ready(Err(e)) => {
-                warn!("Fatal I/O error: {:?}", e);
-                return Poll::Ready(Err(e));
+                warn!("Ignoring I/O error on transmit: {:?}", e);
+                Poll::Ready(Ok(()))
             }
         }
     }

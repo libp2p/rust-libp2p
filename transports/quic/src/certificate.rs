@@ -30,8 +30,7 @@ const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 pub const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
-static LIBP2P_SIGNATURE_ALGORITHM: &'static rcgen::SignatureAlgorithm =
-    &rcgen::PKCS_ECDSA_P256_SHA256;
+static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 use libp2p_core::identity;
 
 fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen::CustomExtension {
@@ -83,7 +82,7 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
 fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1Error> {
     let (value, bits) = reader.next().read_bitvec_bytes()?;
     // be extra careful regarding overflow
-    if (bits & 7) == 0 && value.len() == (bits >> 3) {
+    if bits.trailing_zeros() >= 3 {
         Ok(value)
     } else {
         warn!("value was of wrong length, sorry!");
@@ -100,7 +99,8 @@ fn parse_x509_extensions(
         let mut oids_seen = std::collections::HashSet::new();
         reader.read_sequence_of(|reader| {
             trace!("reading an extension");
-            Ok(public_key = parse_x509_extension(reader, &certificate_key, &mut oids_seen)?)
+            public_key = parse_x509_extension(reader, &certificate_key, &mut oids_seen)?;
+            Ok(())
         })?;
         match public_key {
             Some(e) => Ok(e),
@@ -174,7 +174,7 @@ fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity:
     reader.read_sequence(|reader| {
         // Check the X.509 version
         if reader.next().read_der()? != [160, 3, 2, 1, 2] {
-            Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?
+            return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid));
         }
         // Skip the serial number
         reader.next().read_der()?;

@@ -26,7 +26,7 @@ use libp2p_core::{
     StreamMuxer, Transport,
 };
 use libp2p_quic::{Config, Endpoint, Muxer, Substream};
-use log::{debug, trace};
+use log::{debug, info, trace};
 use std::{
     io::Result,
     pin::Pin,
@@ -151,31 +151,31 @@ fn communicating_between_dialer_and_listener() {
     let mut ready_tx = Some(ready_tx);
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
     let keypair2 = keypair.clone();
-    let handle = async_std::task::spawn(async move {
-        let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
-            .parse()
-            .expect("bad address?");
-        let quic_config = Config::new(&keypair2);
-        let quic_endpoint = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
-        let mut listener = quic_endpoint.listen_on(addr).unwrap();
+    let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
+        .parse()
+        .expect("bad address?");
+    let quic_config = Config::new(&keypair2);
+    let quic_endpoint = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
+    let mut listener = quic_endpoint.listen_on(addr).unwrap();
 
-        loop {
+    let handle = async_std::task::spawn(async move {
+        let key = loop {
             trace!("awaiting connection");
             match listener.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(listen_addr) => {
                     ready_tx.take().unwrap().send(listen_addr).unwrap();
                 }
                 ListenerEvent::Upgrade { upgrade, .. } => {
-                    log::debug!("got a connection upgrade!");
+                    debug!("got a connection upgrade!");
                     let (id, mut muxer): (_, Muxer) = upgrade.await.expect("upgrade failed");
-                    log::debug!("got a new muxer!");
+                    debug!("got a new muxer!");
                     let mut socket: QuicStream = Inbound(&mut muxer)
                         .next()
                         .await
                         .expect("no incoming stream");
 
                     let mut buf = [0u8; 3];
-                    log::debug!("reading data from accepted stream!");
+                    debug!("reading data from accepted stream!");
                     {
                         let mut count = 0;
                         while count < buf.len() {
@@ -183,21 +183,24 @@ fn communicating_between_dialer_and_listener() {
                         }
                     }
                     assert_eq!(buf, [4, 5, 6]);
-                    log::debug!("writing data!");
+                    debug!("writing data!");
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
-                    log::debug!("data written!");
+                    debug!("data written!");
                     socket.close().await.unwrap();
-                    log::debug!("socket closed!");
+                    debug!("socket closed!");
                     assert_eq!(socket.read(&mut buf).await.unwrap(), 0);
-                    log::debug!("end of stream");
+                    debug!("end of stream");
                     drop(socket);
                     Closer(muxer).await.unwrap();
-                    log::debug!("finished!");
+                    debug!("finished!");
                     break id;
                 }
                 _ => unreachable!(),
             }
-        }
+        };
+        drop(listener);
+        quic_endpoint.close().await.unwrap();
+        key
     });
 
     let second_handle = async_std::task::spawn(async move {
@@ -216,7 +219,7 @@ fn communicating_between_dialer_and_listener() {
             muxer: connection.1.clone(),
             shutdown: false,
         };
-        log::debug!("opened a stream: id {:?}", stream.id);
+        debug!("opened a stream: id {:?}", stream.id);
         let result = stream.read(&mut [][..]).await;
         let result = result.expect_err("reading from an unwritten stream cannot succeed");
         assert_eq!(result.kind(), std::io::ErrorKind::NotConnected);
@@ -229,7 +232,7 @@ fn communicating_between_dialer_and_listener() {
         stream.write_all(&[4u8, 5, 6]).await.unwrap();
         stream.close().await.unwrap();
         let mut buf = [0u8; 3];
-        log::debug!("reading data!");
+        debug!("reading data!");
         {
             let mut count = 0;
             while count < buf.len() {
@@ -239,13 +242,14 @@ fn communicating_between_dialer_and_listener() {
             }
         }
         assert_eq!(buf, [1u8, 2, 3]);
-        log::debug!("data read!");
-        log::debug!("checking for EOF!");
+        debug!("data read ― checking for EOF");
         assert_eq!(stream.read(&mut buf).await.unwrap(), 0);
         drop(stream);
-        log::debug!("have EOF!");
+        debug!("have EOF");
         Closer(connection.1).await.expect("closed successfully");
-        log::debug!("awaiting handle!");
+        debug!("awaiting handle");
+        quic_endpoint.close().await.unwrap();
+        info!("endpoint is finished");
         connection.0
     });
     assert_eq!(
