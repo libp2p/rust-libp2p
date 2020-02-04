@@ -400,10 +400,14 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 }
 
+#[cfg(test)]
 #[test]
 fn multiaddr_to_udp_conversion() {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    crate::tests::init();
+    use tracing_subscriber::{fmt::Subscriber, EnvFilter};
+    let _ = Subscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     assert!(
         multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err()
     );

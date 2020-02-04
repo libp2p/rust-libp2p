@@ -56,7 +56,12 @@ enum SubstreamStatus {
 }
 
 impl Substream {
-    fn new(id: StreamId) -> Self {
+    fn unwritten(id: StreamId) -> Self {
+        let status = SubstreamStatus::Unwritten;
+        Self { id, status }
+    }
+
+    fn live(id: StreamId) -> Self {
         let status = SubstreamStatus::Live;
         Self { id, status }
     }
@@ -72,7 +77,7 @@ impl Substream {
 /// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
 ///
 /// The QUIC endpoints created by libp2p will need to be progressed by running the futures and streams
-/// obtained by libp2p through the tokio reactor.
+/// obtained by libp2p through a reactor.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The client configuration.  Quinn provides functions for making one.
@@ -178,12 +183,12 @@ impl Future for Outbound {
         let this = &mut *self;
         match this.0 {
             OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
-                OutboundInner::Complete(e) => Poll::Ready(e.map(Substream::new)),
+                OutboundInner::Complete(e) => Poll::Ready(e.map(Substream::unwritten)),
                 _ => unreachable!(),
             },
             OutboundInner::Pending(ref mut receiver) => {
                 let result = ready!(receiver.poll_unpin(cx))
-                    .map(Substream::new)
+                    .map(Substream::unwritten)
                     .map_err(|oneshot::Canceled| Error::ConnectionLost);
                 this.0 = OutboundInner::Done;
                 Poll::Ready(result)
@@ -258,7 +263,7 @@ impl StreamMuxer for QuicMuxer {
             }
             Some(id) => {
                 inner.finishers.insert(id, None);
-                Poll::Ready(Ok(Substream::new(id)))
+                Poll::Ready(Ok(Substream::live(id)))
             }
         }
     }
@@ -276,6 +281,9 @@ impl StreamMuxer for QuicMuxer {
                 substream.id
             );
             return Poll::Ready(Err(Error::ExpiredStream));
+        }
+        if buf.is_empty() {
+            return Poll::Ready(Ok(0));
         }
         let mut inner = self.inner();
         debug_assert!(

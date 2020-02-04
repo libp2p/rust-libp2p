@@ -62,8 +62,6 @@ mod connection;
 mod endpoint;
 mod error;
 mod socket;
-#[cfg(test)]
-mod tests;
 pub use error::Error;
 mod verifier;
 pub use certificate::make_cert;

@@ -57,7 +57,7 @@ pub enum Error {
 impl From<Error> for io::Error {
     fn from(e: Error) -> Self {
         match e {
-            Error::IO(e) => e,
+            Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
             e @ Error::BadCertificate(Unspecified) => io::Error::new(ErrorKind::InvalidData, e),
             Error::ConnectionError(e) => e.into(),
             e @ Error::CannotConnect(_) => io::Error::new(ErrorKind::Other, e),

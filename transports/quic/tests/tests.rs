@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
 use async_macros::ready;
 use futures::prelude::*;
 use libp2p_core::{
@@ -26,60 +25,49 @@ use libp2p_core::{
     transport::ListenerEvent,
     StreamMuxer, Transport,
 };
+use libp2p_quic::{Config, Endpoint, Muxer, Substream};
 use log::{debug, trace};
 use std::{
-    io,
+    io::Result,
     pin::Pin,
     task::{Context, Poll},
 };
 
 #[derive(Debug)]
-pub struct QuicStream {
+struct QuicStream {
     id: Option<Substream>,
     muxer: Muxer,
     shutdown: bool,
 }
 
 impl AsyncWrite for QuicStream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         assert!(!self.shutdown, "written after close");
-        let inner = self.get_mut();
-        inner
-            .muxer
-            .write_substream(cx, inner.id.as_mut().unwrap(), buf)
+        let Self { muxer, id, .. } = self.get_mut();
+        muxer
+            .write_substream(cx, id.as_mut().unwrap(), buf)
             .map_err(From::from)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
         self.shutdown = true;
-        let inner = self.get_mut();
-        debug!("trying to close {:?}", inner.id);
-        ready!(inner
-            .muxer
-            .shutdown_substream(cx, inner.id.as_mut().unwrap()))?;
-        debug!("closed {:?}", inner.id);
+        let Self { muxer, id, .. } = self.get_mut();
+        debug!("trying to close {:?}", id);
+        ready!(muxer.shutdown_substream(cx, id.as_mut().unwrap()))?;
+        debug!("closed {:?}", id);
         Poll::Ready(Ok(()))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
 
 impl AsyncRead for QuicStream {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        let inner = self.get_mut();
-        inner
-            .muxer
-            .read_substream(cx, inner.id.as_mut().unwrap(), buf)
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize>> {
+        let Self { id, muxer, .. } = self.get_mut();
+        muxer
+            .read_substream(cx, id.as_mut().unwrap(), buf)
             .map_err(From::from)
     }
 }
@@ -93,30 +81,32 @@ impl Drop for QuicStream {
     }
 }
 
-impl futures::Stream for Muxer {
+#[derive(Debug)]
+struct Inbound<'a>(&'a mut Muxer);
+impl<'a> futures::Stream for Inbound<'a> {
     type Item = QuicStream;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         Poll::Ready(Some(QuicStream {
-            id: Some(ready!(self.poll_inbound(cx)).expect("bug")),
-            muxer: self.get_mut().clone(),
+            id: Some(ready!(self.0.poll_inbound(cx)).expect("bug")),
+            muxer: self.get_mut().0.clone(),
             shutdown: false,
         }))
     }
 }
 
-pub(crate) fn init() {
+fn init() {
     use tracing_subscriber::{fmt::Subscriber, EnvFilter};
-    drop(
-        Subscriber::builder()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init(),
-    )
+    let _ = Subscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 }
 
-impl Future for Muxer {
-    type Output = Result<(), crate::error::Error>;
+struct Closer(Muxer);
+
+impl Future for Closer {
+    type Output = Result<()>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        self.get_mut().close(cx)
+        self.get_mut().0.close(cx).map_err(From::from)
     }
 }
 
@@ -155,27 +145,10 @@ fn wildcard_expansion() {
 
 #[test]
 fn communicating_between_dialer_and_listener() {
+    use std::error::Error as _;
     init();
     let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
     let mut ready_tx = Some(ready_tx);
-
-    #[cfg(any())]
-    async fn create_slowdown() {
-        futures_timer::Delay::new(std::time::Duration::new(1, 0)).await
-    }
-
-    #[cfg(any())]
-    struct BlockJoin<T> {
-        handle: Option<async_std::task::JoinHandle<T>>,
-    }
-
-    #[cfg(any())]
-    impl<T> Drop for BlockJoin<T> {
-        fn drop(&mut self) {
-            drop(async_std::task::block_on(self.handle.take().unwrap()))
-        }
-    }
-
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
     let keypair2 = keypair.clone();
     let handle = async_std::task::spawn(async move {
@@ -196,7 +169,10 @@ fn communicating_between_dialer_and_listener() {
                     log::debug!("got a connection upgrade!");
                     let (id, mut muxer): (_, Muxer) = upgrade.await.expect("upgrade failed");
                     log::debug!("got a new muxer!");
-                    let mut socket: QuicStream = muxer.next().await.expect("no incoming stream");
+                    let mut socket: QuicStream = Inbound(&mut muxer)
+                        .next()
+                        .await
+                        .expect("no incoming stream");
 
                     let mut buf = [0u8; 3];
                     log::debug!("reading data from accepted stream!");
@@ -215,7 +191,7 @@ fn communicating_between_dialer_and_listener() {
                     assert_eq!(socket.read(&mut buf).await.unwrap(), 0);
                     log::debug!("end of stream");
                     drop(socket);
-                    muxer.await.unwrap();
+                    Closer(muxer).await.unwrap();
                     log::debug!("finished!");
                     break id;
                 }
@@ -240,7 +216,16 @@ fn communicating_between_dialer_and_listener() {
             muxer: connection.1.clone(),
             shutdown: false,
         };
-        log::debug!("have a new stream!");
+        log::debug!("opened a stream: id {:?}", stream.id);
+        let result = stream.read(&mut [][..]).await;
+        let result = result.expect_err("reading from an unwritten stream cannot succeed");
+        assert_eq!(result.kind(), std::io::ErrorKind::NotConnected);
+        assert!(result.source().is_none());
+        let wrapped = result.get_ref().unwrap().downcast_ref().unwrap();
+        match wrapped {
+            libp2p_quic::Error::CannotReadFromUnwrittenStream => {}
+            e => panic!("Wrong error from reading unwritten stream: {}", e),
+        }
         stream.write_all(&[4u8, 5, 6]).await.unwrap();
         stream.close().await.unwrap();
         let mut buf = [0u8; 3];
@@ -259,7 +244,7 @@ fn communicating_between_dialer_and_listener() {
         assert_eq!(stream.read(&mut buf).await.unwrap(), 0);
         drop(stream);
         log::debug!("have EOF!");
-        connection.1.await.expect("closed successfully");
+        Closer(connection.1).await.expect("closed successfully");
         log::debug!("awaiting handle!");
         connection.0
     });
