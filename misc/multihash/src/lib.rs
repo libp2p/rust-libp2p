@@ -8,17 +8,18 @@
 mod errors;
 mod hashes;
 
+use std::{convert::TryFrom, fmt::Write};
+
 use bytes::{BufMut, Bytes, BytesMut};
 use rand::RngCore;
-use sha2::Digest;
-use std::{convert::TryFrom, fmt::Write};
+use sha2::digest::{self, VariableOutput};
 use unsigned_varint::{decode, encode};
 
 pub use self::errors::{DecodeError, DecodeOwnedError, EncodeError};
 pub use self::hashes::Hash;
 
 /// Helper function for encoding input into output using given `Digest`
-fn digest_encode<D: Digest>(input: &[u8], output: &mut [u8]) {
+fn digest_encode<D: digest::Digest>(input: &[u8], output: &mut [u8]) {
     output.copy_from_slice(&D::digest(input))
 }
 
@@ -91,7 +92,9 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
             Keccak384 => sha3::Keccak384,
             Keccak512 => sha3::Keccak512,
             Blake2b512 => blake2::Blake2b,
+            Blake2b256 => Blake2b256,
             Blake2s256 => blake2::Blake2s,
+            Blake2s128 => Blake2s128,
         });
         Ok(Multihash {
             bytes: output.freeze(),
@@ -113,6 +116,76 @@ fn encode_hash(hash: Hash) -> (usize, BytesMut) {
     output.resize(len, 0);
 
     (code.len() + 1, output)
+}
+
+/// BLAKE2b-256 (32-byte hash size)
+#[derive(Debug, Clone)]
+struct Blake2b256(blake2::VarBlake2b);
+
+impl Default for Blake2b256 {
+    fn default() -> Self {
+        Blake2b256(blake2::VarBlake2b::new(32).unwrap())
+    }
+}
+
+impl digest::Input for Blake2b256 {
+    fn input<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.0.input(data)
+    }
+}
+
+impl digest::FixedOutput for Blake2b256 {
+    type OutputSize = digest::generic_array::typenum::U32;
+
+    fn fixed_result(self) -> digest::generic_array::GenericArray<u8, Self::OutputSize> {
+        let mut out = digest::generic_array::GenericArray::default();
+        self.0.variable_result(|slice| {
+            assert_eq!(slice.len(), 32);
+            out.copy_from_slice(slice)
+        });
+        out
+    }
+}
+
+impl digest::Reset for Blake2b256 {
+    fn reset(&mut self) {
+        self.0.reset()
+    }
+}
+
+/// BLAKE2s-128 (16-byte hash size)
+#[derive(Debug, Clone)]
+struct Blake2s128(blake2::VarBlake2s);
+
+impl Default for Blake2s128 {
+    fn default() -> Self {
+        Blake2s128(blake2::VarBlake2s::new(16).unwrap())
+    }
+}
+
+impl digest::Input for Blake2s128 {
+    fn input<B: AsRef<[u8]>>(&mut self, data: B) {
+        self.0.input(data)
+    }
+}
+
+impl digest::FixedOutput for Blake2s128 {
+    type OutputSize = digest::generic_array::typenum::U16;
+
+    fn fixed_result(self) -> digest::generic_array::GenericArray<u8, Self::OutputSize> {
+        let mut out = digest::generic_array::GenericArray::default();
+        self.0.variable_result(|slice| {
+            assert_eq!(slice.len(), 16);
+            out.copy_from_slice(slice)
+        });
+        out
+    }
+}
+
+impl digest::Reset for Blake2s128 {
+    fn reset(&mut self) {
+        self.0.reset()
+    }
 }
 
 /// Represents a valid multihash.
@@ -194,7 +267,7 @@ impl<'a> MultihashRef<'a> {
     /// Creates a `MultihashRef` from the given `input`.
     pub fn from_slice(input: &'a [u8]) -> Result<Self, DecodeError> {
         if input.is_empty() {
-            return Err(DecodeError::BadInputLength)
+            return Err(DecodeError::BadInputLength);
         }
 
         // Ensure `Hash::code` returns a `u16` so that our `decode::u16` here is correct.

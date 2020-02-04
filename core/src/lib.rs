@@ -43,6 +43,8 @@ mod keys_proto {
 pub use multiaddr;
 pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
+use std::{future::Future, pin::Pin};
+
 mod peer_id;
 mod translation;
 
@@ -156,3 +158,32 @@ impl ConnectedPoint {
     }
 }
 
+/// Implemented on objects that can run a `Future` in the background.
+///
+/// > **Note**: While it may be tempting to implement this trait on types such as
+/// >           [`futures::stream::FuturesUnordered`], please note that passing an `Executor` is
+/// >           optional, and that `FuturesUnordered` (or a similar struct) will automatically
+/// >           be used as fallback by libp2p. The `Executor` trait should therefore only be
+/// >           about running `Future`s in the background.
+pub trait Executor {
+    /// Run the given future in the background until it ends.
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>);
+}
+
+impl<'a, T: ?Sized + Executor> Executor for &'a T {
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        T::exec(&**self, f)
+    }
+}
+
+impl<'a, T: ?Sized + Executor> Executor for &'a mut T {
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        T::exec(&**self, f)
+    }
+}
+
+impl<T: ?Sized + Executor> Executor for Box<T> {
+    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        T::exec(&**self, f)
+    }
+}
