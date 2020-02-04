@@ -44,6 +44,8 @@ use wasm_timer::Instant;
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Ping;
 
+const PING_SIZE: usize = 32;
+
 impl UpgradeInfo for Ping {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
@@ -63,10 +65,10 @@ where
 
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         async move {
-            let mut payload = [0u8; 32];
-            socket.read_exact(&mut payload).await?;
-            socket.write_all(&payload).await?;
-            socket.close().await?;
+            let mut payload = [0u8; PING_SIZE];
+            while let Ok(_) = socket.read_exact(&mut payload).await {
+                socket.write_all(&payload).await?;
+            }
             Ok(())
         }.boxed()
     }
