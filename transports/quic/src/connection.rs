@@ -153,6 +153,7 @@ impl Config {
 
 #[derive(Debug)]
 pub(super) enum EndpointMessage {
+    Dummy,
     ConnectionAccepted,
     EndpointEvent {
         handle: ConnectionHandle,
