@@ -155,8 +155,8 @@ where
 
 impl<A, B, I> Sink<I> for EitherOutput<A, B>
 where
-    A: Sink<I> + Unpin,
-    B: Sink<I> + Unpin,
+    A: Sink<I>,
+    B: Sink<I>,
 {
     type Error = EitherError<A::Error, B::Error>;
 
@@ -414,8 +414,8 @@ pub enum EitherFuture2<A, B> { A(#[pin] A), B(#[pin] B) }
 
 impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
 where
-    AFut: TryFuture<Ok = AItem, Error = AError> + Unpin,
-    BFut: TryFuture<Ok = BItem, Error = BError> + Unpin,
+    AFut: TryFuture<Ok = AItem, Error = AError>,
+    BFut: TryFuture<Ok = BItem, Error = BError>,
 {
     type Output = Result<EitherOutput<AItem, BItem>, EitherError<AError, BError>>;
 

@@ -57,10 +57,7 @@ impl<TInner> BandwidthLogging<TInner> {
 
 impl<TInner> Transport for BandwidthLogging<TInner>
 where
-    TInner: Transport + Unpin,
-    TInner::Dial: Unpin,
-    TInner::Listener: Unpin,
-    TInner::ListenerUpgrade: Unpin
+    TInner: Transport,
 {
     type Output = BandwidthConnecLogging<TInner::Output>;
     type Error = TInner::Error;
@@ -85,27 +82,32 @@ where
 
 /// Wraps around a `Stream` that produces connections. Wraps each connection around a bandwidth
 /// counter.
+#[pin_project::pin_project]
 pub struct BandwidthListener<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
 impl<TInner, TConn> Stream for BandwidthListener<TInner>
 where
-    TInner: TryStream<Ok = ListenerEvent<TConn>> + Unpin
+    TInner: TryStream<Ok = ListenerEvent<TConn>>
 {
     type Item = Result<ListenerEvent<BandwidthFuture<TConn>>, TInner::Error>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+
         let event =
-            if let Some(event) = ready!(self.inner.try_poll_next_unpin(cx)?) {
+            if let Some(event) = ready!(this.inner.try_poll_next(cx)?) {
                 event
             } else {
                 return Poll::Ready(None)
             };
 
-        let event = event.map(|inner| {
-            BandwidthFuture { inner, sinks: self.sinks.clone() }
+        let event = event.map({
+            let sinks = this.sinks.clone();
+            |inner| BandwidthFuture { inner, sinks }
         });
 
         Poll::Ready(Some(Ok(event)))
@@ -114,17 +116,20 @@ where
 
 /// Wraps around a `Future` that produces a connection. Wraps the connection around a bandwidth
 /// counter.
+#[pin_project::pin_project]
 pub struct BandwidthFuture<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner: TryFuture + Unpin> Future for BandwidthFuture<TInner> {
+impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
     type Output = Result<BandwidthConnecLogging<TInner::Ok>, TInner::Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let inner = ready!(self.inner.try_poll_unpin(cx)?);
-        let logged = BandwidthConnecLogging { inner, sinks: self.sinks.clone() };
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let this = self.project();
+        let inner = ready!(this.inner.try_poll(cx)?);
+        let logged = BandwidthConnecLogging { inner, sinks: this.sinks.clone() };
         Poll::Ready(Ok(logged))
     }
 }
@@ -148,44 +153,52 @@ impl BandwidthSinks {
 }
 
 /// Wraps around an `AsyncRead + AsyncWrite` and logs the bandwidth that goes through it.
+#[pin_project::pin_project]
 pub struct BandwidthConnecLogging<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner: AsyncRead + Unpin> AsyncRead for BandwidthConnecLogging<TInner> {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let num_bytes = ready!(Pin::new(&mut self.inner).poll_read(cx, buf))?;
-        self.sinks.download.lock().inject(num_bytes);
+impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
+        this.sinks.download.lock().inject(num_bytes);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_read_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
-        let num_bytes = ready!(Pin::new(&mut self.inner).poll_read_vectored(cx, bufs))?;
-        self.sinks.download.lock().inject(num_bytes);
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
+        this.sinks.download.lock().inject(num_bytes);
         Poll::Ready(Ok(num_bytes))
     }
 }
 
-impl<TInner: AsyncWrite + Unpin> AsyncWrite for BandwidthConnecLogging<TInner> {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let num_bytes = ready!(Pin::new(&mut self.inner).poll_write(cx, buf))?;
-        self.sinks.upload.lock().inject(num_bytes);
+impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
+        this.sinks.upload.lock().inject(num_bytes);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_write_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<io::Result<usize>> {
-        let num_bytes = ready!(Pin::new(&mut self.inner).poll_write_vectored(cx, bufs))?;
-        self.sinks.upload.lock().inject(num_bytes);
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+        let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
+        this.sinks.upload.lock().inject(num_bytes);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_close(cx)
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.project();
+        this.inner.poll_close(cx)
     }
 }
 

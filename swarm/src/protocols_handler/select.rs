@@ -29,6 +29,7 @@ use crate::protocols_handler::{
 use futures::prelude::*;
 use libp2p_core::{
     ConnectedPoint,
+    Negotiated,
     PeerId,
     either::{EitherError, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, EitherUpgrade, SelectUpgrade, UpgradeError}
@@ -62,10 +63,10 @@ where
     TProto1::Handler: ProtocolsHandler<Substream = TSubstream>,
     TProto2::Handler: ProtocolsHandler<Substream = TSubstream>,
     TSubstream: AsyncRead + AsyncWrite + Unpin,
-    <TProto1::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
-    <TProto2::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
-    <TProto1::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>,
-    <TProto2::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>
+    <TProto1::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<TSubstream>>,
+    <TProto2::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Negotiated<TSubstream>>,
+    <TProto1::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<TSubstream>>,
+    <TProto2::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Negotiated<TSubstream>>
 {
     type Handler = ProtocolsHandlerSelect<TProto1::Handler, TProto2::Handler>;
 
@@ -107,10 +108,10 @@ where
     TProto1: ProtocolsHandler<Substream = TSubstream>,
     TProto2: ProtocolsHandler<Substream = TSubstream>,
     TSubstream: AsyncRead + AsyncWrite + Unpin,
-    TProto1::InboundProtocol: InboundUpgrade<TSubstream>,
-    TProto2::InboundProtocol: InboundUpgrade<TSubstream>,
-    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream>,
-    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream>
+    TProto1::InboundProtocol: InboundUpgrade<Negotiated<TSubstream>>,
+    TProto2::InboundProtocol: InboundUpgrade<Negotiated<TSubstream>>,
+    TProto1::OutboundProtocol: OutboundUpgrade<Negotiated<TSubstream>>,
+    TProto2::OutboundProtocol: OutboundUpgrade<Negotiated<TSubstream>>
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
@@ -129,7 +130,7 @@ where
         SubstreamProtocol::new(choice).with_timeout(timeout)
     }
 
-    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
+    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<TSubstream>>>::Output, endpoint: Self::OutboundOpenInfo) {
         match (protocol, endpoint) {
             (EitherOutput::First(protocol), EitherOutput::First(info)) =>
                 self.proto1.inject_fully_negotiated_outbound(protocol, info),
@@ -142,7 +143,7 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output) {
+    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as InboundUpgrade<Negotiated<TSubstream>>>::Output) {
         match protocol {
             EitherOutput::First(protocol) =>
                 self.proto1.inject_fully_negotiated_inbound(protocol),
@@ -160,7 +161,7 @@ where
     }
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error>) {
         match (info, error) {
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timer) => {
                 self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)

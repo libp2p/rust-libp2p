@@ -433,7 +433,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 ///
 /// Panics if `off >= 2`.
 ///
-/// When [`io::ErrorKind::WouldBlock`] is returned, the given buffer and offset
+/// When [`Poll::Pending`] is returned, the given buffer and offset
 /// may have been updated (i.e. a byte may have been read) and must be preserved
 /// for the next invocation.
 ///
@@ -466,7 +466,7 @@ fn read_frame_len<R: AsyncRead + Unpin>(
 ///
 /// Panics if `off >= 2`.
 ///
-/// When [`io::ErrorKind::WouldBlock`] is returned, the given offset
+/// When [`Poll::Pending`] is returned, the given offset
 /// may have been updated (i.e. a byte may have been written) and must
 /// be preserved for the next invocation.
 ///

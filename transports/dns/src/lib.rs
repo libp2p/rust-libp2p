@@ -147,7 +147,9 @@ where
                         });
                     });
 
-                    async {
+                    let is_dns4 = if let Protocol::Dns4(_) = cmp { true } else { false };
+
+                    async move {
                         let list = rx.await
                             .map_err(|_| {
                                 error!("DNS resolver crashed");
@@ -158,8 +160,15 @@ where
                                 error: err,
                             })?;
 
-                        list.into_iter().next()
-                            .map(|n| Protocol::from(n))      // TODO: doesn't take dns4/dns6 into account
+                        list.into_iter()
+                            .filter_map(|addr| {
+                                if (is_dns4 && addr.is_ipv4()) || (!is_dns4 && addr.is_ipv6()) {
+                                    Some(Protocol::from(addr))
+                                } else {
+                                    None
+                                }
+                            })
+                            .next()
                             .ok_or_else(|| DnsErr::ResolveFail(name))
                     }.left_future()
                 },

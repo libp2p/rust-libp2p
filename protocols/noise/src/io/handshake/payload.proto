@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package payload.proto;
+
 // Payloads for Noise handshake messages.
 
 message Identity {

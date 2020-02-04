@@ -23,9 +23,8 @@ use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, PeerId};
-use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
+use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
+use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -69,7 +68,7 @@ lazy_static! {
 /// # let my_peer_id = PeerId::from(identity::Keypair::generate_ed25519().public());
 /// # let my_listened_addrs: Vec<Multiaddr> = vec![];
 /// # block_on(async {
-/// let mut service = MdnsService::new().await.expect("Error while creating mDNS service");
+/// let mut service = MdnsService::new().expect("Error while creating mDNS service");
 /// let _future_to_poll = async {
 ///     let (mut service, packet) = service.next().await;
 ///
@@ -124,19 +123,17 @@ pub struct MdnsService {
 
 impl MdnsService {
     /// Starts a new mDNS service.
-    #[inline]
-    pub async fn new() -> io::Result<MdnsService> {
-        Self::new_inner(false).await
+    pub fn new() -> io::Result<MdnsService> {
+        Self::new_inner(false)
     }
 
     /// Same as `new`, but we don't send automatically send queries on the network.
-    #[inline]
-    pub async fn silent() -> io::Result<MdnsService> {
-        Self::new_inner(true).await
+    pub fn silent() -> io::Result<MdnsService> {
+        Self::new_inner(true)
     }
 
     /// Starts a new mDNS service.
-    async fn new_inner(silent: bool) -> io::Result<MdnsService> {
+    fn new_inner(silent: bool) -> io::Result<MdnsService> {
         let socket = {
             #[cfg(unix)]
             fn platform_specific(s: &net2::UdpBuilder) -> io::Result<()> {
@@ -159,7 +156,9 @@ impl MdnsService {
 
         Ok(MdnsService {
             socket,
-            query_socket: UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16)).await?,
+            // Given that we pass an IP address to bind, which does not need to be resolved, we can
+            // use std::net::UdpSocket::bind, instead of its async counterpart from async-std.
+            query_socket: std::net::UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16))?.into(),
             query_interval: Interval::new_at(Instant::now(), Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 2048],
@@ -506,7 +505,15 @@ impl MdnsPeer {
                     Err(_) => return None,
                 };
                 match addr.pop() {
-                    Some(Protocol::P2p(ref peer_id)) if peer_id == &my_peer_id => (),
+                    Some(Protocol::P2p(peer_id)) => {
+                        if let Ok(peer_id) = PeerId::try_from(peer_id) {
+                            if peer_id != my_peer_id {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    },
                     _ => return None,
                 };
                 Some(addr)
@@ -550,15 +557,14 @@ impl fmt::Debug for MdnsPeer {
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;
-    use libp2p_core::PeerId;
+    use libp2p_core::{PeerId, multiaddr::multihash::*};
     use std::{io::{Error, ErrorKind}, time::Duration};
     use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
-    use multiaddr::multihash::*;
 
     fn discover(peer_id: PeerId) {
         block_on(async {
-            let mut service = MdnsService::new().await.unwrap();
+            let mut service = MdnsService::new().unwrap();
             loop {
                 let next = service.next().await;
                 service = next.0;
@@ -596,7 +602,7 @@ mod tests {
             .collect();
 
         let fut = async {
-            let mut service = MdnsService::new().await.unwrap();
+            let mut service = MdnsService::new().unwrap();
             let mut sent_queries = vec![];
 
             loop {

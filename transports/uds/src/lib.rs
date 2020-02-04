@@ -28,23 +28,12 @@
 //!
 //! The `UdsConfig` transport supports multiaddresses of the form `/unix//tmp/foo`.
 //!
-//! Example:
-//!
-//! ```
-//! extern crate libp2p_uds;
-//! use libp2p_uds::UdsConfig;
-//!
-//! # fn main() {
-//! let uds = UdsConfig::new();
-//! # }
-//! ```
-//!
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
 #![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
+#![cfg_attr(docsrs, doc(cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))))]
 
-use async_std::os::unix::net::{UnixListener, UnixStream};
 use futures::{prelude::*, future::{BoxFuture, Ready}};
 use futures::stream::BoxStream;
 use libp2p_core::{
@@ -55,20 +44,24 @@ use libp2p_core::{
 use log::debug;
 use std::{io, path::PathBuf};
 
+macro_rules! codegen {
+    ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
+
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
 #[derive(Debug, Clone)]
-pub struct UdsConfig {
+pub struct $uds_config {
 }
 
-impl UdsConfig {
+impl $uds_config {
     /// Creates a new configuration object for Unix domain sockets.
-    pub fn new() -> UdsConfig {
-        UdsConfig {}
+    pub fn new() -> $uds_config {
+        $uds_config {}
     }
 }
 
-impl Transport for UdsConfig {
-    type Output = UnixStream;
+impl Transport for $uds_config {
+    type Output = $unix_stream;
     type Error = io::Error;
     type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
@@ -76,7 +69,7 @@ impl Transport for UdsConfig {
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
-            Ok(async move { UnixListener::bind(&path).await }
+            Ok(async move { $build_listener(&path).await }
                 .map_ok(move |listener| {
                     stream::once({
                         let addr = addr.clone();
@@ -84,7 +77,7 @@ impl Transport for UdsConfig {
                             debug!("Now listening on {}", addr);
                             Ok(ListenerEvent::NewAddress(addr))
                         }
-                    }).chain(stream::unfold(listener, move |listener| {
+                    }).chain(stream::unfold(listener, move |$($mut_or_not)* listener| {
                         let addr = addr.clone();
                         async move {
                             let (stream, _) = match listener.accept().await {
@@ -111,12 +104,31 @@ impl Transport for UdsConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            Ok(async move { UnixStream::connect(&path).await }.boxed())
+            Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 }
+
+};
+}
+
+#[cfg(feature = "async-std")]
+codegen!(
+    "async-std",
+    UdsConfig,
+    |addr| async move { async_std::os::unix::net::UnixListener::bind(addr).await },
+    async_std::os::unix::net::UnixStream,
+);
+#[cfg(feature = "tokio")]
+codegen!(
+    "tokio",
+    TokioUdsConfig,
+    |addr| async move { tokio::net::UnixListener::bind(addr) },
+    tokio::net::UnixStream,
+    mut
+);
 
 /// Turns a `Multiaddr` containing a single `Unix` component into a path.
 ///
@@ -143,7 +155,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     Ok(out)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "async-std"))]
 mod tests {
     use super::{multiaddr_to_path, UdsConfig};
     use futures::{channel::oneshot, prelude::*};

@@ -23,10 +23,10 @@
 use futures::prelude::*;
 use crate::SecioError;
 
-#[path = "impl_ring.rs"]
+#[path = "exchange/impl_ring.rs"]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 mod platform;
-#[path = "impl_webcrypto.rs"]
+#[path = "exchange/impl_webcrypto.rs"]
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 mod platform;
 
