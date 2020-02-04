@@ -22,6 +22,10 @@ name = "libp2p-quic"
 version = "0.15.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
+license = "MIT"
+description = "A libp2p transport using QUIC"
+keywords = ["peer-to-peer", "libp2p", "quic", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
