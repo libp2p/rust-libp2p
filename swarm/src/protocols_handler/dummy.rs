@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::NegotiatedBoxSubstream;
+use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -57,14 +57,14 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output
+        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output
     ) {
     }
 
     #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo
     ) {
     }
@@ -73,7 +73,7 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error>) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error>) {}
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }

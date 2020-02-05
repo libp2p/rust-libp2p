@@ -29,7 +29,7 @@ use libp2p_core::{
     upgrade::{ReadOneError, UpgradeError}
 };
 use libp2p_swarm::{
-    NegotiatedBoxSubstream,
+    NegotiatedSubstream,
     NetworkBehaviour,
     NetworkBehaviourAction,
     PollParameters,
@@ -60,7 +60,7 @@ enum Reply {
     /// The reply is queued for sending.
     Queued {
         peer: PeerId,
-        io: ReplySubstream<NegotiatedBoxSubstream>,
+        io: ReplySubstream<NegotiatedSubstream>,
         observed: Multiaddr
     },
     /// The reply is being sent.

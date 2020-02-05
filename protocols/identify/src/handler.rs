@@ -26,7 +26,7 @@ use libp2p_core::upgrade::{
     ReadOneError
 };
 use libp2p_swarm::{
-    NegotiatedBoxSubstream,
+    NegotiatedSubstream,
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandler,
@@ -69,7 +69,7 @@ pub enum IdentifyHandlerEvent {
     /// We obtained identification information from the remote
     Identified(RemoteInfo),
     /// We received a request for identification.
-    Identify(ReplySubstream<NegotiatedBoxSubstream>),
+    Identify(ReplySubstream<NegotiatedSubstream>),
     /// Failed to identify the remote.
     IdentificationError(ProtocolsHandlerUpgrErr<ReadOneError>),
 }
@@ -100,14 +100,14 @@ impl ProtocolsHandler for IdentifyHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output
     ) {
         self.events.push(IdentifyHandlerEvent::Identify(protocol))
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
         self.events.push(IdentifyHandlerEvent::Identified(protocol));
@@ -120,7 +120,7 @@ impl ProtocolsHandler for IdentifyHandler {
         &mut self,
         _info: Self::OutboundOpenInfo,
         err: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error
+            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error
         >
     ) {
         self.events.push(IdentifyHandlerEvent::IdentificationError(err));

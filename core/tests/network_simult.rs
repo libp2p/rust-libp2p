@@ -23,7 +23,7 @@ use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
 use libp2p_core::nodes::network::IncomingError;
 use libp2p_swarm::{
-    NegotiatedBoxSubstream,
+    NegotiatedSubstream,
     ProtocolsHandler,
     KeepAlive,
     SubstreamProtocol,
@@ -50,12 +50,12 @@ impl ProtocolsHandler for TestHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedBoxSubstream>>::Output
+        _: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output
     ) { panic!() }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo
     ) { panic!() }
 
@@ -63,7 +63,7 @@ impl ProtocolsHandler for TestHandler {
         panic!()
     }
 
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedBoxSubstream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Error>) {
 
     }
 

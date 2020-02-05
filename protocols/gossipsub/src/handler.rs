@@ -26,7 +26,7 @@ use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use libp2p_swarm::NegotiatedBoxSubstream;
+use libp2p_swarm::NegotiatedSubstream;
 use log::{debug, trace, warn};
 use smallvec::SmallVec;
 use std::{
@@ -57,9 +57,9 @@ pub struct GossipsubHandler {
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {
     /// Waiting for a message from the remote. The idle state for an inbound substream.
-    WaitingInput(Framed<NegotiatedBoxSubstream, GossipsubCodec>),
+    WaitingInput(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// The substream is being closed.
-    Closing(Framed<NegotiatedBoxSubstream, GossipsubCodec>),
+    Closing(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -67,13 +67,13 @@ enum InboundSubstreamState {
 /// State of the outbound substream, opened either by us or by the remote.
 enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
-    WaitingOutput(Framed<NegotiatedBoxSubstream, GossipsubCodec>),
+    WaitingOutput(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<NegotiatedBoxSubstream, GossipsubCodec>, GossipsubRpc),
+    PendingSend(Framed<NegotiatedSubstream, GossipsubCodec>, GossipsubRpc),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(Framed<NegotiatedBoxSubstream, GossipsubCodec>),
+    PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// The substream is being closed. Used by either substream.
-    _Closing(Framed<NegotiatedBoxSubstream, GossipsubCodec>),
+    _Closing(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -120,7 +120,7 @@ impl ProtocolsHandler for GossipsubHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        substream: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        substream: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
     ) {
         // new inbound substream. Replace the current one, if it exists.
         trace!("New inbound substream request");
@@ -129,7 +129,7 @@ impl ProtocolsHandler for GossipsubHandler {
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         message: Self::OutboundOpenInfo,
     ) {
         // Should never establish a new outbound substream if one already exists.
@@ -151,7 +151,7 @@ impl ProtocolsHandler for GossipsubHandler {
         &mut self,
         _: Self::OutboundOpenInfo,
         _: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Error,
+            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
         // Ignore upgrade errors for now.

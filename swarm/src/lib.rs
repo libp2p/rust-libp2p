@@ -82,7 +82,7 @@ pub use protocols_handler::{
 ///
 /// Implements the [`AsyncRead`](futures::io::AsyncRead) and
 /// [`AsyncWrite`](futures::io::AsyncWrite) traits.
-pub type NegotiatedBoxSubstream = Negotiated<Substream<StreamMuxerBox>>;
+pub type NegotiatedSubstream = Negotiated<Substream<StreamMuxerBox>>;
 
 use protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
 use futures::{prelude::*, executor::{ThreadPool, ThreadPoolBuilder}};
@@ -229,7 +229,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     ///
     /// Returns an error if the address is not supported.
     pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        Network::listen_on(&mut me.network, addr) //me.network.listen_on(addr)
+        me.network.listen_on(addr)
     }
 
     /// Remove some listener.
@@ -639,6 +639,7 @@ where TBehaviour: NetworkBehaviour,
     }
 }
 
+/// Dummy implementation of [`NetworkBehaviour`] that doesn't do anything.
 #[derive(Clone, Default)]
 pub struct DummyBehaviour {
 }
@@ -673,51 +674,14 @@ impl NetworkBehaviour for DummyBehaviour {
 
 #[cfg(test)]
 mod tests {
-    use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-    use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmBuilder};
+    use crate::{DummyBehaviour, SwarmBuilder};
     use libp2p_core::{
-        ConnectedPoint,
         identity,
-        Multiaddr,
         PeerId,
         PublicKey,
         transport::dummy::{DummyStream, DummyTransport}
     };
     use libp2p_mplex::Multiplex;
-    use std::task::{Context, Poll};
-    use void::Void;
-
-    #[derive(Clone)]
-    struct DummyBehaviour {
-    }
-
-    impl NetworkBehaviour for DummyBehaviour {
-        type ProtocolsHandler = DummyProtocolsHandler;
-        type OutEvent = Void;
-
-        fn new_handler(&mut self) -> Self::ProtocolsHandler {
-            DummyProtocolsHandler::default()
-        }
-
-        fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
-            Vec::new()
-        }
-
-        fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
-
-        fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
-
-        fn inject_node_event(&mut self, _: PeerId,
-            _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
-
-        fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
-            Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as
-            ProtocolsHandler>::InEvent, Self::OutEvent>>
-        {
-            Poll::Pending
-        }
-
-    }
 
     fn get_random_id() -> PublicKey {
         identity::Keypair::generate_ed25519().public()
