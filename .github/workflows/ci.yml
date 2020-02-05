@@ -1,0 +1,67 @@
+name: Continuous integration
+
+on:
+  pull_request:
+  push:
+    branches:    
+      - master
+
+jobs:
+  test-desktop:
+    name: Build and test
+    runs-on: ubuntu-latest
+    container:
+      image: rust
+    steps:
+    - uses: actions/checkout@v1
+    - name: Cache cargo registry
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo/registry
+        key: cargo-registry-${{ hashFiles('Cargo.toml') }}
+    - name: Cache cargo index
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo/git
+        key: cargo-index-${{ hashFiles('Cargo.toml') }}
+    - name: Cache cargo build
+      uses: actions/cache@v1
+      with:
+        path: target
+        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - name: Run tests, with no feature
+      run: cargo test --workspace --no-default-features
+    - name: Run tests, with all features
+      run: cargo test --workspace --all-features
+
+  test-wasm:
+    name: Build and test
+    runs-on: ubuntu-latest
+    container:
+      image: rust
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: wasm32-unknown-unknown
+        override: true
+    - name: Cache cargo registry
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo/registry
+        key: wasm-cargo-registry-${{ hashFiles('Cargo.toml') }}
+    - name: Cache cargo index
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo/git
+        key: wasm-cargo-index-${{ hashFiles('Cargo.toml') }}
+    - name: Cache cargo build
+      uses: actions/cache@v1
+      with:
+        path: target
+        key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - name: Build on WASM
+      # TODO: also run with `cargo test`
+      run: cargo build --workspace --target=wasm32-unknown-unknown
