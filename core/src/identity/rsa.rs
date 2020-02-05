@@ -26,7 +26,7 @@ use super::error::*;
 use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
-use std::sync::Arc;
+use std::{fmt::{self, Write}, sync::Arc};
 use zeroize::Zeroize;
 
 /// An RSA keypair.
@@ -62,7 +62,7 @@ impl Keypair {
 }
 
 /// An RSA public key.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PublicKey(Vec<u8>);
 
 impl PublicKey {
@@ -104,6 +104,21 @@ impl PublicKey {
         Asn1SubjectPublicKeyInfo::deserialize(pk.iter())
             .map_err(|e| DecodingError::new("RSA X.509").source(e))
             .map(|spki| spki.subjectPublicKey.0)
+    }
+}
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bytes = &self.0;
+        let mut hex = String::with_capacity(bytes.len() * 2);
+
+        for byte in bytes {
+            write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+        }
+
+        f.debug_struct("PublicKey")
+            .field("pkcs1", &hex)
+            .finish()
     }
 }
 
