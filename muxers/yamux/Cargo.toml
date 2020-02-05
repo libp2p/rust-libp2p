@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures = "0.3.1"
 libp2p-core = { version = "0.15.0", path = "../../core" }
-log = "0.4.8"
 parking_lot = "0.10"
 thiserror = "1.0"
 yamux = "0.4.1"
