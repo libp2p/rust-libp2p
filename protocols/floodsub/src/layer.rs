@@ -37,8 +37,7 @@ use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::task::{Context, Poll};
 
-/// Network behaviour that automatically identifies nodes periodically, and returns information
-/// about them.
+/// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,

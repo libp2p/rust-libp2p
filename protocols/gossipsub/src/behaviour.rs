@@ -46,8 +46,7 @@ use wasm_timer::{Instant, Interval};
 
 mod tests;
 
-/// Network behaviour that automatically identifies nodes periodically, and returns information
-/// about them.
+/// Network behaviour that handles the gossipsub protocol.
 pub struct Gossipsub<TSubstream> {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
