@@ -25,7 +25,7 @@ use crate::protocol::{
 use crate::record::{self, Record};
 use futures::prelude::*;
 use libp2p_swarm::{
-    NegotiatedBoxSubstream,
+    NegotiatedSubstream,
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandler,
@@ -70,29 +70,29 @@ enum SubstreamState<TUserData> {
     OutPendingOpen(KadRequestMsg, Option<TUserData>),
     /// Waiting to send a message to the remote.
     OutPendingSend(
-        KadOutStreamSink<NegotiatedBoxSubstream>,
+        KadOutStreamSink<NegotiatedSubstream>,
         KadRequestMsg,
         Option<TUserData>,
     ),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    OutPendingFlush(KadOutStreamSink<NegotiatedBoxSubstream>, Option<TUserData>),
+    OutPendingFlush(KadOutStreamSink<NegotiatedSubstream>, Option<TUserData>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    OutWaitingAnswer(KadOutStreamSink<NegotiatedBoxSubstream>, TUserData),
+    OutWaitingAnswer(KadOutStreamSink<NegotiatedSubstream>, TUserData),
     /// An error happened on the substream and we should report the error to the user.
     OutReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
-    OutClosing(KadOutStreamSink<NegotiatedBoxSubstream>),
+    OutClosing(KadOutStreamSink<NegotiatedSubstream>),
     /// Waiting for a request from the remote.
-    InWaitingMessage(UniqueConnecId, KadInStreamSink<NegotiatedBoxSubstream>),
+    InWaitingMessage(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// Waiting for the user to send a `KademliaHandlerIn` event containing the response.
-    InWaitingUser(UniqueConnecId, KadInStreamSink<NegotiatedBoxSubstream>),
+    InWaitingUser(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// Waiting to send an answer back to the remote.
-    InPendingSend(UniqueConnecId, KadInStreamSink<NegotiatedBoxSubstream>, KadResponseMsg),
+    InPendingSend(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>, KadResponseMsg),
     /// Waiting to flush an answer back to the remote.
-    InPendingFlush(UniqueConnecId, KadInStreamSink<NegotiatedBoxSubstream>),
+    InPendingFlush(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// The substream is being closed.
-    InClosing(KadInStreamSink<NegotiatedBoxSubstream>),
+    InClosing(KadInStreamSink<NegotiatedSubstream>),
 }
 
 impl<TUserData> SubstreamState<TUserData> {
@@ -434,7 +434,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
         self.substreams
@@ -443,7 +443,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedBoxSubstream>>::Output,
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
