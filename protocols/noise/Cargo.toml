@@ -17,6 +17,7 @@ prost = "0.6.1"
 rand = "0.7.2"
 ring = { version = "0.16.9", features = ["alloc"], default-features = false }
 snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
+static_assertions = "1"
 x25519-dalek = "0.5"
 zeroize = "1"
 
