@@ -107,18 +107,17 @@ impl PublicKey {
     }
 }
 
-fn to_hex(bytes: &[u8]) -> String {
-    let mut hex = String::with_capacity(bytes.len() * 2);
-
-    for byte in bytes {
-        write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
-    }
-
-    hex
-}
-
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn to_hex(bytes: &[u8]) -> String {
+            let mut hex = String::with_capacity(bytes.len() * 2);
+
+            for byte in bytes {
+                write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+            }
+
+            hex
+        }
         f.debug_struct("PublicKey")
             .field("pkcs1", &to_hex(&self.0))
             .finish()
