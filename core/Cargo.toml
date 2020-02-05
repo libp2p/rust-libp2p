@@ -15,7 +15,7 @@ bs58 = "0.3.0"
 ed25519-dalek = "1.0.0-pre.3"
 fnv = "1.0"
 futures = { version = "0.3.1", features = ["compat", "io-compat", "executor", "thread-pool"] }
-futures-timer = "2"
+futures-timer = "3"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
