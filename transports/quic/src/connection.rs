@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 use super::{
     certificate,
-    endpoint::{ConnectionEndpoint as Endpoint, EndpointInner},
+    endpoint::{ConnectionEndpoint as Endpoint, EndpointInner, EndpointMessage},
     error::Error,
     socket::Pending,
     verifier,
@@ -146,16 +146,6 @@ impl Config {
             endpoint_config: Default::default(),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum EndpointMessage {
-    Dummy,
-    ConnectionAccepted,
-    EndpointEvent {
-        handle: ConnectionHandle,
-        event: quinn_proto::EndpointEvent,
-    },
 }
 
 #[derive(Debug, Clone)]

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-use crate::{connection::EndpointMessage, error::Error, socket, Config, Upgrade};
+use crate::{error::Error, socket, Config, Upgrade};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
 use futures::{channel::mpsc, prelude::*};
@@ -37,6 +37,16 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
+
+#[derive(Debug)]
+pub enum EndpointMessage {
+    Dummy,
+    ConnectionAccepted,
+    EndpointEvent {
+        handle: ConnectionHandle,
+        event: quinn_proto::EndpointEvent,
+    },
+}
 
 #[derive(Debug)]
 pub(super) struct EndpointInner {
