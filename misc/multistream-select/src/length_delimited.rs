@@ -284,10 +284,10 @@ impl<R> LengthDelimitedReader<R> {
     /// # Panic
     ///
     /// Will panic if called while there is data in the read or write buffer.
-    /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
+    /// The read buffer is guaranteed to be empty whenever [`Stream::poll`] yields
     /// a new `Message`. The write buffer is guaranteed to be empty whenever
-    /// [`poll_write_buffer`] yields `Async::Ready` or after the `Sink` has been
-    /// completely flushed via [`Sink::poll_complete`].
+    /// [`LengthDelimited::poll_write_buffer`] yields [`Async::Ready`] or after
+    /// the [`Sink`] has been completely flushed via [`Sink::poll_complete`].
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
     }

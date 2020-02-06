@@ -389,7 +389,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
-    /// Gossipsub LEAVE(topic) - Notifies mesh[topic] peers with PRUNE messages.
+    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
 
@@ -886,7 +886,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Helper function which forwards a message to mesh[topic] peers.
+    /// Helper function which forwards a message to mesh\[topic\] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
         let msg_id = (self.config.message_id_fn)(&message);
         debug!("Forwarding message: {:?}", msg_id);

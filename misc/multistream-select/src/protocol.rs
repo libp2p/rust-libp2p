@@ -302,7 +302,7 @@ impl<R> MessageIO<R> {
     ///
     /// Panics if the read buffer is not empty, meaning that an incoming
     /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever [`MessageIO::poll`] returned
+    /// is guaranteed to be empty whenever `MessageIO::poll` returned
     /// a message.
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
@@ -368,7 +368,7 @@ impl<R> MessageReader<R> {
     ///
     /// Panics if the read buffer is not empty, meaning that an incoming
     /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever [`MessageReader::poll`] returned
+    /// is guaranteed to be empty whenever `MessageReader::poll` returned
     /// a message.
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
