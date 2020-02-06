@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-use crate::{error::Error, socket, Config, Upgrade};
+use crate::{error::Error, socket, Upgrade, verifier};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
 use futures::{channel::mpsc, prelude::*};
@@ -37,6 +37,82 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
+
+/// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
+///
+/// The QUIC endpoints created by libp2p will need to be progressed by running the futures and streams
+/// obtained by libp2p through a reactor.
+#[derive(Debug, Clone)]
+pub struct Config {
+    /// The client configuration.  Quinn provides functions for making one.
+    pub client_config: quinn_proto::ClientConfig,
+    /// The server configuration.  Quinn provides functions for making one.
+    pub server_config: Arc<quinn_proto::ServerConfig>,
+    /// The endpoint configuration
+    pub endpoint_config: Arc<quinn_proto::EndpointConfig>,
+}
+
+fn make_client_config(
+    certificate: rustls::Certificate,
+    key: rustls::PrivateKey,
+) -> quinn_proto::ClientConfig {
+    let mut transport = quinn_proto::TransportConfig::default();
+    transport.stream_window_uni(0);
+    transport.datagram_receive_buffer_size(None);
+    use std::time::Duration;
+    transport.keep_alive_interval(Some(Duration::from_millis(1000)));
+    let mut crypto = rustls::ClientConfig::new();
+    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
+    crypto.enable_early_data = true;
+    crypto.set_single_client_cert(vec![certificate], key);
+    let verifier = verifier::VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
+    crypto
+        .dangerous()
+        .set_certificate_verifier(Arc::new(verifier));
+    quinn_proto::ClientConfig {
+        transport: Arc::new(transport),
+        crypto: Arc::new(crypto),
+    }
+}
+
+fn make_server_config(
+    certificate: rustls::Certificate,
+    key: rustls::PrivateKey,
+) -> quinn_proto::ServerConfig {
+    let mut transport = quinn_proto::TransportConfig::default();
+    transport.stream_window_uni(0);
+    transport.datagram_receive_buffer_size(None);
+    let mut crypto = rustls::ServerConfig::new(Arc::new(
+        verifier::VeryInsecureRequireExactlyOneSelfSignedClientCertificate,
+    ));
+    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
+    crypto
+        .set_single_cert(vec![certificate], key)
+        .expect("we are given a valid cert; qed");
+    let mut config = quinn_proto::ServerConfig::default();
+    config.transport = Arc::new(transport);
+    config.crypto = Arc::new(crypto);
+    config
+}
+
+impl Config {
+    /// Creates a new configuration object for TCP/IP.
+    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
+        let cert = super::make_cert(&keypair);
+        let (cert, key) = (
+            rustls::Certificate(
+                cert.serialize_der()
+                    .expect("serialization of a valid cert will succeed; qed"),
+            ),
+            rustls::PrivateKey(cert.serialize_private_key_der()),
+        );
+        Self {
+            client_config: make_client_config(cert.clone(), key.clone()),
+            server_config: Arc::new(make_server_config(cert, key)),
+            endpoint_config: Default::default(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum EndpointMessage {
