@@ -28,6 +28,7 @@ prost = "0.6.1"
 rand = "0.7"
 rw-stream-sink = { version = "0.2.0", path = "../misc/rw-stream-sink" }
 sha2 = "0.8.0"
+slab = "0.4.2"
 smallvec = "1.0"
 thiserror = "1.0"
 unsigned-varint = "0.3"
