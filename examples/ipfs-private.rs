@@ -33,87 +33,27 @@
 //! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::{io, task};
 use futures::{future, prelude::*};
-use libp2p::core::transport::upgrade::Version;
-use libp2p::identify::{Identify, IdentifyEvent};
-use libp2p::pnet::PnetConfig;
-use libp2p::secio::SecioConfig;
-use libp2p::tcp::TcpConfig;
-use libp2p::yamux::Config as YamuxConfig;
-use libp2p::Transport;
-use libp2p::TransportError;
 use libp2p::{
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
+    Transport, Multiaddr, NetworkBehaviour, PeerId, Swarm,
     identity,
-    ping::{self, Ping, PingConfig, PingEvent},
-    pnet::PreSharedKey,
+    multiaddr::Protocol,
     swarm::NetworkBehaviourEventProcess,
-    Multiaddr, NetworkBehaviour, PeerId, Swarm,
+    core::{StreamMuxer, either::EitherTransport, transport::upgrade::Version},
+    yamux::Config as YamuxConfig,
+    tcp::TcpConfig,
+    secio::SecioConfig,
+    pnet::{PnetConfig, PreSharedKey},
+    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
+    ping::{self, Ping, PingConfig, PingEvent},
+    identify::{Identify, IdentifyEvent},
 };
-use libp2p_core::either::{EitherError, EitherFuture, EitherListenStream, EitherOutput};
-use libp2p_core::StreamMuxer;
-use multiaddr::Protocol;
-use std::str::FromStr;
-use std::time::Duration;
-use std::{env, fs, path::Path};
 use std::{
+    str::FromStr,
+    time::Duration,
+    env, fs, path::Path,
     error::Error,
     task::{Context, Poll},
 };
-
-/// An Either combination of two transports
-///
-/// this is useful if you have a different transport depending on configuration.
-/// In this example we have a different transport type depending on whether private swarms
-/// are enabled or not.
-#[derive(Debug, Copy, Clone)]
-pub enum EitherTransport<A, B> {
-    Left(A),
-    Right(B),
-}
-
-impl<A, B> Transport for EitherTransport<A, B>
-where
-    B: Transport,
-    A: Transport,
-{
-    type Output = EitherOutput<A::Output, B::Output>;
-    type Error = EitherError<A::Error, B::Error>;
-    type Listener = EitherListenStream<A::Listener, B::Listener>;
-    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type Dial = EitherFuture<A::Dial, B::Dial>;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        use TransportError::*;
-        match self {
-            EitherTransport::Left(a) => match a.listen_on(addr) {
-                Ok(listener) => Ok(EitherListenStream::First(listener)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::A(err))),
-            },
-            EitherTransport::Right(b) => match b.listen_on(addr) {
-                Ok(listener) => Ok(EitherListenStream::Second(listener)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::B(err))),
-            },
-        }
-    }
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        use TransportError::*;
-        match self {
-            EitherTransport::Left(a) => match a.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::A(err))),
-            },
-            EitherTransport::Right(b) => match b.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::B(err))),
-            },
-        }
-    }
-}
 
 /// Builds the transport that serves as a common ground for all connections.
 pub fn build_transport(
