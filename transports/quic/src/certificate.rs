@@ -82,7 +82,7 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
 fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1Error> {
     let (value, bits) = reader.next().read_bitvec_bytes()?;
     // be extra careful regarding overflow
-    if bits.trailing_zeros() >= 3 {
+    if bits % 8 == 0 {
         Ok(value)
     } else {
         warn!("value was of wrong length, sorry!");
@@ -200,7 +200,7 @@ fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity:
 
 /// The name is a misnomer. We don’t bother checking if the certificate is actually well-formed.
 /// We just check that its public key is suitably signed.
-pub fn verify_libp2p_certificate(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
+pub fn extract_libp2p_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
     parse_certificate(certificate)
         .map_err(|e| {
             log::debug!("error in parsing: {:?}", e);
@@ -217,7 +217,7 @@ mod test {
         drop(env_logger::try_init());
         let keypair = identity::Keypair::generate_ed25519();
         assert_eq!(
-            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
             libp2p_core::PeerId::from_public_key(keypair.public())
         );
         log::trace!("trying secp256k1!");
@@ -228,7 +228,7 @@ mod test {
         assert_eq!(public, public, "key is not equal to itself?");
         log::debug!("have a valid key!");
         assert_eq!(
-            verify_libp2p_certificate(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
             libp2p_core::PeerId::from_public_key(keypair.public())
         );
     }

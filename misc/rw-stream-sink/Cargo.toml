@@ -15,4 +15,4 @@ pin-project = "0.4.6"
 static_assertions = "1"
 
 [dev-dependencies]
-async-std = "1.4.0"
+async-std = "1.0"

@@ -74,10 +74,10 @@ members = [
     "protocols/secio",
     "swarm",
     "transports/dns",
+    "transports/quic",
     "transports/tcp",
     "transports/uds",
-    "transports/websocket",
     "transports/wasm-ext",
-    "transports/quic",
+    "transports/websocket",
 ]
 

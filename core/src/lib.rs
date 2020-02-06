@@ -34,15 +34,6 @@
 //! - The [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] traits
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
-//!
-//! [`PeerId`]: <struct.PeerId.html>
-//! [`UpgradeInfo`]: <upgrade/trait.UpgradeInfo.html>
-//! [`InboundUpgrade`]: <upgrade/trait.InboundUpgrade.html>
-//! [`OutboundUpgrade`]: <upgrade/trait.OutboundUpgrade.html>
-//! [`Transport`]: <transport/trait.Transport.html>
-//! [`transport`]: <transport/index.html>
-//! [`StreamMuxer`]: <muxing/trait.StreamMuxer.html>
-//! [`muxing`]: <muxing/index.html>
 
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));

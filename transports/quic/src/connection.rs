@@ -19,16 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 use super::{
     certificate,
-    endpoint::{EndpointData, EndpointInner},
+    endpoint::{ConnectionEndpoint as Endpoint, EndpointInner},
     error::Error,
     socket::Pending,
     verifier,
 };
 use async_macros::ready;
-use futures::{
-    channel::{mpsc, oneshot},
-    prelude::*,
-};
+use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
 use log::{debug, error, info, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
@@ -152,7 +149,7 @@ impl Config {
 }
 
 #[derive(Debug)]
-pub(super) enum EndpointMessage {
+pub enum EndpointMessage {
     Dummy,
     ConnectionAccepted,
     EndpointEvent {
@@ -503,12 +500,9 @@ impl Future for Upgrade {
                 inner.handshake_or_accept_waker = Some(cx.waker().clone());
                 return Poll::Pending;
             } else if inner.connection.side().is_server() {
-                ready!(inner.endpoint_channel.poll_ready(cx))
-                    .expect("we have a reference to the peer; qed");
-                inner
-                    .endpoint_channel
-                    .start_send(EndpointMessage::ConnectionAccepted)
-                    .expect("we just checked that we have capacity to send this; qed")
+                let endpoint = &mut inner.endpoint;
+                let token = ready!(endpoint.poll_ready(cx));
+                endpoint.send_message(EndpointMessage::ConnectionAccepted, token)
             }
 
             let peer_certificates: Vec<rustls::Certificate> = inner
@@ -516,7 +510,7 @@ impl Future for Upgrade {
                 .crypto_session()
                 .get_peer_certificates()
                 .expect("we have finished handshaking, so we have exactly one certificate; qed");
-            certificate::verify_libp2p_certificate(
+            certificate::extract_libp2p_peerid(
                 peer_certificates
                     .get(0)
                     .expect(
@@ -542,7 +536,7 @@ pub(crate) struct Muxer {
     /// The pending stream, if any.
     pending_stream: Option<StreamId>,
     /// The associated endpoint
-    endpoint: Arc<EndpointData>,
+    endpoint: Endpoint,
     /// The `quinn_proto::Connection` struct.
     connection: Connection,
     /// Connection handle
@@ -565,8 +559,6 @@ pub(crate) struct Muxer {
     close_reason: Option<quinn_proto::ConnectionError>,
     /// Waker to wake up the driver
     waker: Option<std::task::Waker>,
-    /// Channel for endpoint events
-    endpoint_channel: mpsc::Sender<EndpointMessage>,
     /// Last timeout
     last_timeout: Option<Instant>,
     /// Join handle for the driver
@@ -642,7 +634,7 @@ impl Muxer {
         false
     }
 
-    fn new(endpoint: Arc<EndpointData>, connection: Connection, handle: ConnectionHandle) -> Self {
+    fn new(endpoint: Endpoint, connection: Connection, handle: ConnectionHandle) -> Self {
         Muxer {
             connection_lost: false,
             close_waker: None,
@@ -655,7 +647,6 @@ impl Muxer {
             finishers: HashMap::new(),
             handshake_or_accept_waker: None,
             connectors: Default::default(),
-            endpoint_channel: endpoint.event_channel(),
             endpoint,
             pending: Pending::default(),
             timer: None,
@@ -679,18 +670,18 @@ impl Muxer {
     /// be sent.
     fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) {
         loop {
-            match self.endpoint_channel.poll_ready(cx) {
+            let token = match self.endpoint.poll_ready(cx) {
                 Poll::Pending => break,
-                Poll::Ready(Err(_)) => unreachable!("we have a reference to the peer; qed"),
-                Poll::Ready(Ok(())) => {}
-            }
+                Poll::Ready(token) => token,
+            };
             if let Some(event) = self.connection.poll_endpoint_events() {
-                self.endpoint_channel
-                    .start_send(EndpointMessage::EndpointEvent {
+                self.endpoint.send_message(
+                    EndpointMessage::EndpointEvent {
                         handle: self.handle,
                         event,
-                    })
-                    .expect("we just checked that we have capacity; qed");
+                    },
+                    token,
+                )
             } else {
                 break;
             }
@@ -883,7 +874,7 @@ pub(super) struct ConnectionDriver {
 
 impl ConnectionDriver {
     pub(crate) fn spawn<T: FnOnce(Weak<Mutex<Muxer>>)>(
-        endpoint: Arc<EndpointData>,
+        endpoint: Endpoint,
         connection: Connection,
         handle: ConnectionHandle,
         cb: T,

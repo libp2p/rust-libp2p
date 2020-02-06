@@ -115,32 +115,36 @@ fn wildcard_expansion() {
     init();
     let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let mut listener = Endpoint::new(Config::new(&keypair), addr.clone())
-        .expect("endpoint")
-        .listen_on(addr)
-        .expect("listener");
+    let (listener, join) = Endpoint::new(Config::new(&keypair), addr.clone()).unwrap();
+    let mut incoming = listener.listen_on(addr).unwrap();
+    drop(listener);
 
     // Process all initial `NewAddress` events and make sure they
     // do not contain wildcard address or port.
-    match futures::executor::block_on(listener.next())
-        .unwrap()
-        .unwrap()
-    {
-        ListenerEvent::NewAddress(a) => {
-            let mut iter = a.iter();
-            match iter.next().expect("ip address") {
-                Protocol::Ip4(_ip) => {} // assert!(!ip.is_unspecified()),
-                Protocol::Ip6(_ip) => {} // assert!(!ip.is_unspecified()),
-                other => panic!("Unexpected protocol: {}", other),
+    futures::executor::block_on(async move {
+        while let Some(event) = incoming.next().await.map(|e| e.unwrap()) {
+            match event {
+                ListenerEvent::NewAddress(a) => {
+                    let mut iter = a.iter();
+                    match iter.next().expect("ip address") {
+                        Protocol::Ip4(_ip) => {} // assert!(!ip.is_unspecified()),
+                        Protocol::Ip6(_ip) => {} // assert!(!ip.is_unspecified()),
+                        other => panic!("Unexpected protocol: {}", other),
+                    }
+                    if let Protocol::Udp(port) = iter.next().expect("port") {
+                        assert_ne!(0, port)
+                    } else {
+                        panic!("No UDP port in address: {}", a)
+                    }
+                }
+                ListenerEvent::Upgrade { .. } => panic!(),
+                ListenerEvent::AddressExpired { .. } => panic!(),
             }
-            if let Protocol::Udp(port) = iter.next().expect("port") {
-                assert_ne!(0, port)
-            } else {
-                panic!("No UDP port in address: {}", a)
-            }
+            break;
         }
-        _ => panic!("NewAddress is the first event"),
-    }
+        drop(incoming);
+        join.await.unwrap()
+    });
 }
 
 #[test]
@@ -155,7 +159,7 @@ fn communicating_between_dialer_and_listener() {
         .parse()
         .expect("bad address?");
     let quic_config = Config::new(&keypair2);
-    let quic_endpoint = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
+    let (quic_endpoint, join) = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
     let mut listener = quic_endpoint.listen_on(addr).unwrap();
 
     let handle = async_std::task::spawn(async move {
@@ -199,14 +203,15 @@ fn communicating_between_dialer_and_listener() {
             }
         };
         drop(listener);
-        quic_endpoint.close().await.unwrap();
+        drop(quic_endpoint);
+        join.await.unwrap();
         key
     });
 
     let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();
         let quic_config = Config::new(&keypair);
-        let quic_endpoint = Endpoint::new(
+        let (quic_endpoint, join) = Endpoint::new(
             quic_config,
             "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
         )
@@ -248,7 +253,8 @@ fn communicating_between_dialer_and_listener() {
         debug!("have EOF");
         Closer(connection.1).await.expect("closed successfully");
         debug!("awaiting handle");
-        quic_endpoint.close().await.unwrap();
+        drop(quic_endpoint);
+        join.await.unwrap();
         info!("endpoint is finished");
         connection.0
     });
@@ -267,7 +273,7 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
     let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
     assert!(addr.to_string().ends_with("udp/0/quic"));
 
-    let quic = Endpoint::new(config, addr.clone()).expect("no error");
+    let (quic, join) = Endpoint::new(config, addr.clone()).expect("no error");
 
     let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
         .next()
@@ -276,7 +282,11 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
         .into_new_address()
         .expect("listen address");
 
-    assert!(!new_addr.to_string().contains("tcp/0"));
+    if new_addr.to_string().contains("udp/0") {
+        panic!("failed to expand address ― got {}", new_addr);
+    }
+    drop(quic);
+    futures::executor::block_on(join).unwrap()
 }
 
 #[test]
@@ -287,7 +297,7 @@ fn replace_port_0_in_returned_multiaddr_ipv6() {
 
     let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
     assert!(addr.to_string().contains("udp/0/quic"));
-    let quic = Endpoint::new(config, addr.clone()).expect("no error");
+    let (quic, join) = Endpoint::new(config, addr.clone()).expect("no error");
 
     let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
         .next()
@@ -296,7 +306,9 @@ fn replace_port_0_in_returned_multiaddr_ipv6() {
         .into_new_address()
         .expect("listen address");
 
-    assert!(!new_addr.to_string().contains("tcp/0"));
+    assert!(!new_addr.to_string().contains("udp/0"));
+    drop(quic);
+    futures::executor::block_on(join).unwrap()
 }
 
 #[test]

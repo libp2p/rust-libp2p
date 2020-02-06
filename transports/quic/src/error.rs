@@ -22,8 +22,9 @@ use err_derive::Error;
 use io::ErrorKind;
 use ring::error::Unspecified;
 use std::io;
-#[derive(Error, Debug)]
+
 /// An error that can be returned by libp2p-quic.
+#[derive(Error, Debug)]
 pub enum Error {
     #[error(display = "Fatal I/O error {}", _0)]
     IO(#[error(source)] std::io::Error),

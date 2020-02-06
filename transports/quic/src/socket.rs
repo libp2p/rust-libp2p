@@ -53,7 +53,6 @@ impl Socket {
             fut.poll(cx)
         } {
             Poll::Pending => {
-                trace!("not able to send packet right away");
                 Poll::Pending
             }
             Poll::Ready(Ok(e)) => {
@@ -80,7 +79,6 @@ impl Socket {
                 fut.poll(cx)
             } {
                 Poll::Pending => {
-                    trace!("no packets available yet");
                     break Poll::Pending;
                 }
                 Poll::Ready(Ok(e)) => {
