@@ -34,25 +34,27 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    Transport, Multiaddr, NetworkBehaviour, PeerId, Swarm,
+    core::{either::EitherTransport, transport::upgrade::Version, StreamMuxer},
+    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
+    identify::{Identify, IdentifyEvent},
     identity,
     multiaddr::Protocol,
-    swarm::NetworkBehaviourEventProcess,
-    core::{StreamMuxer, either::EitherTransport, transport::upgrade::Version},
-    yamux::Config as YamuxConfig,
-    tcp::TcpConfig,
-    secio::SecioConfig,
-    pnet::{PnetConfig, PreSharedKey},
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
     ping::{self, Ping, PingConfig, PingEvent},
-    identify::{Identify, IdentifyEvent},
+    pnet::{PnetConfig, PreSharedKey},
+    secio::SecioConfig,
+    swarm::NetworkBehaviourEventProcess,
+    tcp::TcpConfig,
+    yamux::Config as YamuxConfig,
+    Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
 use std::{
-    str::FromStr,
-    time::Duration,
-    env, fs, path::Path,
+    env,
     error::Error,
+    fs,
+    path::Path,
+    str::FromStr,
     task::{Context, Poll},
+    time::Duration,
 };
 
 /// Builds the transport that serves as a common ground for all connections.
@@ -130,6 +132,19 @@ fn strip_peer_id(addr: &mut Multiaddr) {
         Some(other) => addr.push(other),
         _ => {}
     }
+}
+
+/// parse a legacy multiaddr (replace ipfs with p2p), and strip the peer id
+/// so it can be dialed by rust-libp2p
+fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
+    let sanitized = text
+        .split('/')
+        .map(|part| if part == "ipfs" { "p2p" } else { part })
+        .collect::<Vec<_>>()
+        .join("/");
+    let mut res = Multiaddr::from_str(&sanitized)?;
+    strip_peer_id(&mut res);
+    Ok(res)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -250,8 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Reach out to other nodes if specified
     for to_dial in std::env::args().skip(1) {
-        let mut addr: Multiaddr = to_dial.parse()?;
-        strip_peer_id(&mut addr);
+        let addr: Multiaddr = parse_legacy_multiaddr(&to_dial)?;
         Swarm::dial_addr(&mut swarm, addr)?;
         println!("Dialed {:?}", to_dial)
     }

@@ -147,7 +147,7 @@ impl<'a> Protocol<'a> {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Unix(Cow::Borrowed(s)))
             }
-            "p2p" | "ipfs" => {
+            "p2p" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 let decoded = bs58::decode(s).into_vec()?;
                 Ok(Protocol::P2p(Multihash::from_bytes(decoded)?))
