@@ -19,6 +19,7 @@ use crate::onion_addr::Onion3Addr;
 const DCCP: u32 = 33;
 const DNS4: u32 = 54;
 const DNS6: u32 = 55;
+const DNSADDR: u32 = 56;
 const HTTP: u32 = 480;
 const HTTPS: u32 = 443;
 const IP4: u32 = 4;
@@ -67,6 +68,7 @@ pub enum Protocol<'a> {
     Dccp(u16),
     Dns4(Cow<'a, str>),
     Dns6(Cow<'a, str>),
+    Dnsaddr(Cow<'a, str>),
     Http,
     Https,
     Ip4(Ipv4Addr),
@@ -130,6 +132,10 @@ impl<'a> Protocol<'a> {
             "dns6" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Dns6(Cow::Borrowed(s)))
+            }
+            "dnsaddr" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                Ok(Protocol::Dnsaddr(Cow::Borrowed(s)))
             }
             "sctp" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
@@ -209,6 +215,11 @@ impl<'a> Protocol<'a> {
                 let (n, input) = decode::usize(input)?;
                 let (data, rest) = split_at(n, input)?;
                 Ok((Protocol::Dns6(Cow::Borrowed(str::from_utf8(data)?)), rest))
+            }
+            DNSADDR => {
+                let (n, input) = decode::usize(input)?;
+                let (data, rest) = split_at(n, input)?;
+                Ok((Protocol::Dnsaddr(Cow::Borrowed(str::from_utf8(data)?)), rest))
             }
             HTTP => Ok((Protocol::Http, input)),
             HTTPS => Ok((Protocol::Https, input)),
@@ -346,6 +357,12 @@ impl<'a> Protocol<'a> {
                 w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 w.write_all(&bytes)?
             }
+            Protocol::Dnsaddr(s) => {
+                w.write_all(encode::u32(DNSADDR, &mut buf))?;
+                let bytes = s.as_bytes();
+                w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
+                w.write_all(&bytes)?
+            }
             Protocol::Unix(s) => {
                 w.write_all(encode::u32(UNIX, &mut buf))?;
                 let bytes = s.as_bytes();
@@ -406,6 +423,7 @@ impl<'a> Protocol<'a> {
             Dccp(a) => Dccp(a),
             Dns4(cow) => Dns4(Cow::Owned(cow.into_owned())),
             Dns6(cow) => Dns6(Cow::Owned(cow.into_owned())),
+            Dnsaddr(cow) => Dnsaddr(Cow::Owned(cow.into_owned())),
             Http => Http,
             Https => Https,
             Ip4(a) => Ip4(a),
@@ -438,6 +456,7 @@ impl<'a> fmt::Display for Protocol<'a> {
             Dccp(port) => write!(f, "/dccp/{}", port),
             Dns4(s) => write!(f, "/dns4/{}", s),
             Dns6(s) => write!(f, "/dns6/{}", s),
+            Dnsaddr(s) => write!(f, "/dnsaddr/{}", s),
             Http => f.write_str("/http"),
             Https => f.write_str("/https"),
             Ip4(addr) => write!(f, "/ip4/{}", addr),
