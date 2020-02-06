@@ -59,7 +59,7 @@ jobs:
             rustc --version
       - run:
           name: Check Rustdoc links
-          command: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo doc --verbose --workspace --no-deps --document-private-items
+          command: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo +nightly doc --verbose --workspace --no-deps --document-private-items
       - save_cache:
           key: test-rustdoc-cache-{{ epoch }}
           paths:
