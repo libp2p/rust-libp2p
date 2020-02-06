@@ -36,10 +36,8 @@ zeroize = "1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false }
-untrusted = "0.7.0"
 
 [dev-dependencies]
-assert_matches = "1.3"
 async-std = "1.0"
 libp2p-mplex = { version = "0.15.0", path = "../muxers/mplex" }
 libp2p-secio = { version = "0.15.0", path = "../protocols/secio" }
