@@ -220,11 +220,11 @@ impl snow::resolvers::CryptoResolver for Resolver {
     }
 
     fn resolve_hash(&self, choice: &snow::params::HashChoice) -> Option<Box<dyn snow::types::Hash>> {
-        snow::resolvers::RingResolver.resolve_hash(choice)
+        snow::resolvers::DefaultResolver.resolve_hash(choice)
     }
 
     fn resolve_cipher(&self, choice: &snow::params::CipherChoice) -> Option<Box<dyn snow::types::Cipher>> {
-        snow::resolvers::RingResolver.resolve_cipher(choice)
+        snow::resolvers::DefaultResolver.resolve_cipher(choice)
     }
 }
 
