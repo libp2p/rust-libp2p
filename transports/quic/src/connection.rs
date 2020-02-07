@@ -579,8 +579,7 @@ impl Muxer {
         }
     }
 
-    /// Send endpoint events.  Returns true if and only if there are endpoint events remaining to
-    /// be sent.
+    /// Send endpoint events.
     fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) {
         loop {
             let token = match self.endpoint.poll_ready(cx) {
