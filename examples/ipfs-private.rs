@@ -172,14 +172,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
-    struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
-        gossipsub: Gossipsub<TSubstream>,
-        identify: Identify<TSubstream>,
-        ping: Ping<TSubstream>,
+    struct MyBehaviour {
+        gossipsub: Gossipsub,
+        identify: Identify,
+        ping: Ping,
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<IdentifyEvent>
-        for MyBehaviour<TSubstream>
+    impl NetworkBehaviourEventProcess<IdentifyEvent>
+        for MyBehaviour
     {
         // Called when `identify` produces an event.
         fn inject_event(&mut self, event: IdentifyEvent) {
@@ -187,8 +187,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<GossipsubEvent>
-        for MyBehaviour<TSubstream>
+    impl NetworkBehaviourEventProcess<GossipsubEvent>
+        for MyBehaviour
     {
         // Called when `gossipsub` produces an event.
         fn inject_event(&mut self, event: GossipsubEvent) {
@@ -204,8 +204,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<PingEvent>
-        for MyBehaviour<TSubstream>
+    impl NetworkBehaviourEventProcess<PingEvent>
+        for MyBehaviour
     {
         // Called when `ping` produces an event.
         fn inject_event(&mut self, event: PingEvent) {
