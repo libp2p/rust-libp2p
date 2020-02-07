@@ -224,6 +224,16 @@ fn construct_success() {
         "BD03ADADEC040BE047F9658668B11A504F3155001F231A37F54C4476C07FB4CC139ED7E30304D2",
         vec![Onion3(([173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3], 1234).into())],
     );
+    ma_valid(
+        "/dnsaddr/sjc-1.bootstrap.libp2p.io",
+        "3819736A632D312E626F6F7473747261702E6C69627032702E696F",
+        vec![Dnsaddr(Cow::Borrowed("sjc-1.bootstrap.libp2p.io"))]
+    );
+    ma_valid(
+        "/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/1234/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+        "3819736A632D312E626F6F7473747261702E6C69627032702E696F0604D2A50322122006B3608AA000274049EB28AD8E793A26FF6FAB281A7D3BD77CD18EB745DFAABB",
+        vec![Dnsaddr(Cow::Borrowed("sjc-1.bootstrap.libp2p.io")), Tcp(1234), P2p(multihash("QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"))]
+    );
 }
 
 #[test]
