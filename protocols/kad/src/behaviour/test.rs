@@ -34,8 +34,7 @@ use libp2p_core::{
     PeerId,
     Transport,
     identity,
-    transport::{MemoryTransport, boxed::Boxed},
-    nodes::Substream,
+    transport::MemoryTransport,
     multiaddr::{Protocol, multiaddr},
     muxing::StreamMuxerBox,
     upgrade
@@ -48,10 +47,7 @@ use rand::{Rng, random, thread_rng};
 use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
 use multihash::{Multihash, Hash::SHA2256};
 
-type TestSwarm = Swarm<
-    Boxed<(PeerId, StreamMuxerBox), io::Error>,
-    Kademlia<Substream<StreamMuxerBox>, MemoryStore>
->;
+type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
 fn build_nodes(num: usize) -> (u64, Vec<TestSwarm>) {
@@ -71,7 +67,7 @@ fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<TestSwa
             .authenticate(SecioConfig::new(local_key))
             .multiplex(yamux::Config::default())
             .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-            .map_err(|e| panic!("Failed to create transport: {:?}", e))
+            .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })
             .boxed();
 
         let local_id = local_public_key.clone().into_peer_id();
