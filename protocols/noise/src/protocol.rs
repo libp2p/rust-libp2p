@@ -198,12 +198,9 @@ impl<T: AsRef<[u8]>> AsRef<[u8]> for PublicKey<T> {
     }
 }
 
-/// Custom `snow::CryptoResolver` which delegates to the `RingResolver`
+/// Custom `snow::CryptoResolver` which delegates to the `DefaultResolver`
 /// for hash functions and symmetric ciphers, while using x25519-dalek
-/// for Curve25519 DH. We do not use the default resolver for any of
-/// the choices, because it comes with unwanted additional dependencies,
-/// notably rust-crypto, and to avoid being affected by changes to
-/// the defaults.
+/// for Curve25519 DH.
 struct Resolver;
 
 impl snow::resolvers::CryptoResolver for Resolver {
