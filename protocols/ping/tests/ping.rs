@@ -26,11 +26,10 @@ use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{Transport, boxed::Boxed},
-    either::EitherError,
-    upgrade::{self, UpgradeError}
+    upgrade
 };
 use libp2p_ping::*;
-use libp2p_secio::{SecioConfig, SecioError};
+use libp2p_secio::SecioConfig;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc};
@@ -93,7 +92,7 @@ fn mk_transport() -> (
     PeerId,
     Boxed<
         (PeerId, StreamMuxerBox),
-        EitherError<EitherError<io::Error, UpgradeError<SecioError>>, UpgradeError<io::Error>>
+        io::Error
     >
 ) {
     let id_keys = identity::Keypair::generate_ed25519();
@@ -104,6 +103,7 @@ fn mk_transport() -> (
         .authenticate(SecioConfig::new(id_keys))
         .multiplex(libp2p_yamux::Config::default())
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
         .boxed();
     (peer_id, transport)
 }

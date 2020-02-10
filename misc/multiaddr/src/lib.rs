@@ -105,7 +105,7 @@ impl Multiaddr {
         Some(protocol)
     }
 
-    /// Like [`push`] but consumes `self`.
+    /// Like [`Multiaddr::push`] but consumes `self`.
     pub fn with(mut self, p: Protocol<'_>) -> Self {
         let mut w = io::Cursor::<&mut Vec<u8>>::new(Arc::make_mut(&mut self.bytes));
         w.set_position(w.get_ref().len() as u64);

@@ -22,7 +22,6 @@ use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubs
 use crate::topic::Topic;
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
-use futures::prelude::*;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     NetworkBehaviour,
@@ -33,12 +32,12 @@ use libp2p_swarm::{
 };
 use rand;
 use smallvec::SmallVec;
-use std::{collections::VecDeque, iter, marker::PhantomData};
+use std::{collections::VecDeque, iter};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::task::{Context, Poll};
 
 /// Network behaviour that handles the floodsub protocol.
-pub struct Floodsub<TSubstream> {
+pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
 
@@ -60,12 +59,9 @@ pub struct Floodsub<TSubstream> {
     // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
     received: CuckooFilter<DefaultHasher>,
-
-    /// Marker to pin the generics.
-    marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> Floodsub<TSubstream> {
+impl Floodsub {
     /// Creates a `Floodsub`.
     pub fn new(local_peer_id: PeerId) -> Self {
         Floodsub {
@@ -75,7 +71,6 @@ impl<TSubstream> Floodsub<TSubstream> {
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
             received: CuckooFilter::new(),
-            marker: PhantomData,
         }
     }
 
@@ -108,9 +103,7 @@ impl<TSubstream> Floodsub<TSubstream> {
     pub fn remove_node_from_partial_view(&mut self, peer_id: &PeerId) {
         self.target_peers.remove(&peer_id);
     }
-}
 
-impl<TSubstream> Floodsub<TSubstream> {
     /// Subscribes to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
@@ -226,11 +219,8 @@ impl<TSubstream> Floodsub<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for Floodsub<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubConfig, FloodsubRpc, InnerMessage>;
+impl NetworkBehaviour for Floodsub {
+    type ProtocolsHandler = OneShotHandler<FloodsubConfig, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
