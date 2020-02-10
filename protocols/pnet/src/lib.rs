@@ -168,8 +168,7 @@ impl fmt::Display for KeyParseError {
 }
 
 impl error::Error for KeyParseError {
-
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             KeyParseError::InvalidKeyChar(ref err) => Some(err),
             _ => None,
