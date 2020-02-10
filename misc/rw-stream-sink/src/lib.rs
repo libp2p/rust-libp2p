@@ -23,7 +23,7 @@
 //! [`AsyncRead`] and [`AsyncWrite`].
 //!
 //! Each call to [`AsyncWrite::poll_write`] will send one packet to the sink.
-//! Calls to [`AsyncRead::read`] will read from the stream's incoming packets.
+//! Calls to [`AsyncRead::poll_read`] will read from the stream's incoming packets.
 
 use futures::{prelude::*, ready};
 use std::{io::{self, Read}, pin::Pin, task::{Context, Poll}};

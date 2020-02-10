@@ -6,6 +6,7 @@ workflows:
     jobs:
       - test
       - test-wasm
+      - check-rustdoc-links
       - integration-test
 
 jobs:
@@ -39,6 +40,31 @@ jobs:
           key: test-cache
           paths:
             - "/cache"
+
+  check-rustdoc-links:
+    docker:
+      - image: rust:latest
+    steps:
+      - checkout
+      - restore_cache:
+          key: test-rustdoc-cache-{{ epoch }}
+      - run:
+          name: Install nightly Rust
+          # TODO: intra-doc links are available on nightly only
+          # see https://doc.rust-lang.org/nightly/rustdoc/lints.html#intra_doc_link_resolution_failure
+          command: rustup default nightly
+      - run:
+          name: Print Rust version
+          command: |
+            rustc --version
+      - run:
+          name: Check Rustdoc links
+          command: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo +nightly doc --verbose --workspace --no-deps --document-private-items
+      - save_cache:
+          key: test-rustdoc-cache-{{ epoch }}
+          paths:
+            - ./target
+            - /usr/local/cargo
 
   test-wasm:
     docker:

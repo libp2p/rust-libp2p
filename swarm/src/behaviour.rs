@@ -155,11 +155,11 @@ pub trait NetworkBehaviour: Send + 'static {
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 pub trait PollParameters {
-    /// Iterator returned by [`supported_protocols`].
+    /// Iterator returned by [`supported_protocols`](PollParameters::supported_protocols).
     type SupportedProtocolsIter: ExactSizeIterator<Item = Vec<u8>>;
-    /// Iterator returned by [`listened_addresses`].
+    /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
     type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
-    /// Iterator returned by [`external_addresses`].
+    /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
     type ExternalAddressesIter: ExactSizeIterator<Item = Multiaddr>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
@@ -190,6 +190,8 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 
 /// An action that a [`NetworkBehaviour`] can trigger in the [`Swarm`]
 /// in whose context it is executing.
+///
+/// [`Swarm`]: super::Swarm
 #[derive(Debug, Clone)]
 pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.

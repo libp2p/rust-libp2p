@@ -38,7 +38,7 @@
 //! > it only adds an additional condition for terminating the connection, namely
 //! > a certain number of failed ping requests.
 //!
-//! [`Swarm`]: libp2p_core::Swarm
+//! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
 pub mod protocol;

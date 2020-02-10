@@ -239,7 +239,7 @@ type EitherUpgrade<C, U> = future::Either<InboundUpgradeApply<C, U>, OutboundUpg
 
 /// An upgrade on an authenticated, non-multiplexed [`Transport`].
 ///
-/// See [`Builder::upgrade`](Builder::upgrade).
+/// See [`Transport::upgrade`]
 #[derive(Debug, Copy, Clone)]
 pub struct Upgrade<T, U> { inner: T, upgrade: U }
 

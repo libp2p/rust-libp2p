@@ -32,12 +32,11 @@
 //! an [`AppliedPending`] result which must be consumed by calling [`take_applied_pending`]
 //! regularly and / or after performing lookup operations like [`entry`] and [`closest`].
 //!
-//! [`entry`]: kbucket::KBucketsTable::entry
-//! [`closest`]: kbucket::KBucketsTable::closest
-//! [`AppliedPending`]: kbucket::AppliedPending
-//! [`KBucketsTable`]: kbucket::KBucketsTable
-//! [`take_applied_pending`]: kbucket::KBucketsTable::take_applied_pending
-//! [`PendingEntry`]: kbucket::PendingEntry
+//! [`entry`]: KBucketsTable::entry
+//! [`closest`]: KBucketsTable::closest
+//! [`AppliedPending`]: bucket::AppliedPending
+//! [`take_applied_pending`]: KBucketsTable::take_applied_pending
+//! [`PendingEntry`]: entry::PendingEntry
 
 // [Implementation Notes]
 //
@@ -469,7 +468,7 @@ where
     /// Together with a known key `a` (e.g. the local key), a random distance `d` for
     /// this bucket w.r.t `k` gives rise to the corresponding (random) key `b` s.t.
     /// the XOR distance between `a` and `b` is `d`. In other words, it gives
-    /// rise to a random key falling into this bucket. See [`Key::from_distance`].
+    /// rise to a random key falling into this bucket. See [`key::Key::for_distance`].
     pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         self.index.rand_distance(rng)
     }
