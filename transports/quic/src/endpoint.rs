@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-use crate::{error::Error, socket, Upgrade, verifier};
+use crate::{error::Error, socket, verifier, Upgrade};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
 use futures::{channel::mpsc, prelude::*};
@@ -319,11 +319,12 @@ pub(crate) use channel_ref::{Channel, EndpointRef};
 ///
 /// `Endpoint` wraps the underlying data structure in an [`Arc`], so cloning it just bumps the
 /// reference count.  All state is shared between the clones.  For example, you can pass different
-/// clones to [`listen_on`].  Each incoming connection will be received by exactly one of them.
+/// clones to [`Transport::listen_on`].  Each incoming connection will be received by exactly one of
+/// them.
 ///
 /// The **only** valid [`Multiaddr`] to pass to `listen_on` is the one used to create the
 /// `QuicEndpoint`.  You can obtain this via the `addr` method.  If you pass a different one, you
-/// will get [`TransportError::MultiaddrNotSuppported`].
+/// will get [`TransportError::MultiaddrNotSupported`].
 #[derive(Debug, Clone)]
 pub struct Endpoint(EndpointRef);
 
