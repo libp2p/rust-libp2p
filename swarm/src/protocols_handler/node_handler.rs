@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::upgrade::SendWrapper;
 use crate::protocols_handler::{
     KeepAlive,
     ProtocolsHandler,
@@ -25,10 +26,13 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
+
 use futures::prelude::*;
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
+    muxing::StreamMuxerBox,
+    nodes::Substream,
     nodes::collection::ConnectionInfo,
     nodes::handled_node::{IntoNodeHandler, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply}
@@ -102,17 +106,17 @@ where
     handler: TProtoHandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in:
-        Vec<(InboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::InboundProtocol>, Delay)>,
+        Vec<(InboundUpgradeApply<Substream<StreamMuxerBox>, SendWrapper<TProtoHandler::InboundProtocol>>, Delay)>,
     /// Futures that upgrade outgoing substreams. The first element of the tuple is the userdata
     /// to pass back once successfully opened.
     negotiating_out: Vec<(
         TProtoHandler::OutboundOpenInfo,
-        OutboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::OutboundProtocol>,
+        OutboundUpgradeApply<Substream<StreamMuxerBox>, SendWrapper<TProtoHandler::OutboundProtocol>>,
         Delay,
     )>,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, (upgrade::Version, TProtoHandler::OutboundProtocol))>,
+    queued_dial_upgrades: Vec<(u64, (upgrade::Version, SendWrapper<TProtoHandler::OutboundProtocol>))>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
@@ -184,7 +188,7 @@ where
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
     type Error = NodeHandlerWrapperError<TProtoHandler::Error>;
-    type Substream = TProtoHandler::Substream;
+    type Substream = Substream<StreamMuxerBox>;
     // The first element of the tuple is the unique upgrade identifier
     // (see `unique_dial_upgrade_id`).
     type OutboundOpenInfo = (u64, TProtoHandler::OutboundOpenInfo, Duration);
@@ -198,7 +202,7 @@ where
             NodeHandlerEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
                 let timeout = protocol.timeout().clone();
-                let upgrade = upgrade::apply_inbound(substream, protocol.into_upgrade().1);
+                let upgrade = upgrade::apply_inbound(substream, SendWrapper(protocol.into_upgrade().1));
                 let timeout = Delay::new(timeout);
                 self.negotiating_in.push((upgrade, timeout));
             }
@@ -305,7 +309,8 @@ where
                 let id = self.unique_dial_upgrade_id;
                 let timeout = protocol.timeout().clone();
                 self.unique_dial_upgrade_id += 1;
-                self.queued_dial_upgrades.push((id, protocol.into_upgrade()));
+                let (version, upgrade) = protocol.into_upgrade();
+                self.queued_dial_upgrades.push((id, (version, SendWrapper(upgrade))));
                 return Poll::Ready(Ok(
                     NodeHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));

@@ -31,19 +31,18 @@ use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::prelude::*;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
 use log::{info, debug, warn};
 use smallvec::SmallVec;
-use std::{borrow::Cow, error, iter, marker::PhantomData, time::Duration};
+use std::{borrow::Cow, error, iter, time::Duration};
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
 
 /// Network behaviour that handles Kademlia.
-pub struct Kademlia<TSubstream, TStore> {
+pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
@@ -74,9 +73,6 @@ pub struct Kademlia<TSubstream, TStore> {
 
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
-
-    /// Marker to pin the generics.
-    marker: PhantomData<TSubstream>,
 
     /// The record storage.
     store: TStore,
@@ -217,7 +213,7 @@ impl KademliaConfig {
     }
 }
 
-impl<TSubstream, TStore> Kademlia<TSubstream, TStore>
+impl<TStore> Kademlia<TStore>
 where
     for<'a> TStore: RecordStore<'a>
 {
@@ -255,7 +251,6 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
-            marker: PhantomData,
         }
     }
 
@@ -1008,12 +1003,12 @@ where
     }
 }
 
-impl<TSubstream, TStore> NetworkBehaviour for Kademlia<TSubstream, TStore>
+impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
     for<'a> TStore: RecordStore<'a>,
+    TStore: Send + 'static,
 {
-    type ProtocolsHandler = KademliaHandler<TSubstream, QueryId>;
+    type ProtocolsHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {

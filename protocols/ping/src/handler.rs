@@ -157,7 +157,7 @@ impl Error for PingFailure {
 /// and answering ping queries.
 ///
 /// If the remote doesn't respond, produces an error that closes the connection.
-pub struct PingHandler<TSubstream> {
+pub struct PingHandler {
     /// Configuration options.
     config: PingConfig,
     /// The timer for when to send the next ping.
@@ -167,10 +167,9 @@ pub struct PingHandler<TSubstream> {
     pending_results: VecDeque<PingResult>,
     /// The number of consecutive ping failures that occurred.
     failures: u32,
-    _marker: std::marker::PhantomData<TSubstream>
 }
 
-impl<TSubstream> PingHandler<TSubstream> {
+impl PingHandler {
     /// Builds a new `PingHandler` with the given configuration.
     pub fn new(config: PingConfig) -> Self {
         PingHandler {
@@ -178,19 +177,14 @@ impl<TSubstream> PingHandler<TSubstream> {
             next_ping: Delay::new(Duration::new(0, 0)),
             pending_results: VecDeque::with_capacity(2),
             failures: 0,
-            _marker: std::marker::PhantomData
         }
     }
 }
 
-impl<TSubstream> ProtocolsHandler for PingHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
+impl ProtocolsHandler for PingHandler {
     type InEvent = Void;
     type OutEvent = PingResult;
     type Error = PingFailure;
-    type Substream = TSubstream;
     type InboundProtocol = protocol::Ping;
     type OutboundProtocol = protocol::Ping;
     type OutboundOpenInfo = ();
@@ -265,7 +259,6 @@ where
 mod tests {
     use super::*;
 
-    use async_std::net::TcpStream;
     use futures::future;
     use quickcheck::*;
     use rand::Rng;
@@ -279,7 +272,7 @@ mod tests {
         }
     }
 
-    fn tick(h: &mut PingHandler<TcpStream>)
+    fn tick(h: &mut PingHandler)
         -> ProtocolsHandlerEvent<protocol::Ping, (), PingResult, PingFailure>
     {
         async_std::task::block_on(future::poll_fn(|cx| h.poll(cx) ))
@@ -288,7 +281,7 @@ mod tests {
     #[test]
     fn ping_interval() {
         fn prop(cfg: PingConfig, ping_rtt: Duration) -> bool {
-            let mut h = PingHandler::<TcpStream>::new(cfg);
+            let mut h = PingHandler::new(cfg);
 
             // Send ping
             match tick(&mut h) {
@@ -318,7 +311,7 @@ mod tests {
     #[test]
     fn max_failures() {
         let cfg = PingConfig::arbitrary(&mut StdGen::new(rand::thread_rng(), 100));
-        let mut h = PingHandler::<TcpStream>::new(cfg);
+        let mut h = PingHandler::new(cfg);
         for _ in 0 .. h.config.max_failures.get() - 1 {
             h.inject_dial_upgrade_error((), ProtocolsHandlerUpgrErr::Timeout);
             match tick(&mut h) {

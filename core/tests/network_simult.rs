@@ -19,10 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::{identity, upgrade, Transport};
+use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_core::nodes::{Network, NetworkEvent, Peer};
 use libp2p_core::nodes::network::IncomingError;
 use libp2p_swarm::{
+    NegotiatedSubstream,
     ProtocolsHandler,
     KeepAlive,
     SubstreamProtocol,
@@ -32,22 +33,13 @@ use libp2p_swarm::{
 use std::{io, task::Context, task::Poll, time::Duration};
 use wasm_timer::Delay;
 
-struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>);
+#[derive(Default)]
+struct TestHandler;
 
-impl<TSubstream> Default for TestHandler<TSubstream> {
-    fn default() -> Self {
-        TestHandler(std::marker::PhantomData)
-    }
-}
-
-impl<TSubstream> ProtocolsHandler for TestHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static
-{
+impl ProtocolsHandler for TestHandler {
     type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
     type Error = io::Error;
-    type Substream = TSubstream;
     type InboundProtocol = upgrade::DeniedUpgrade;
     type OutboundProtocol = upgrade::DeniedUpgrade;
     type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
@@ -58,12 +50,12 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as upgrade::InboundUpgrade<Self::Substream>>::Output
+        _: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output
     ) { panic!() }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Output,
+        _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::OutboundOpenInfo
     ) { panic!() }
 
@@ -71,7 +63,7 @@ where
         panic!()
     }
 
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Error>) {
 
     }
 
@@ -109,7 +101,8 @@ fn raw_swarm_simultaneous_connect() {
             let transport = libp2p_tcp::TcpConfig::new()
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
-                .multiplex(libp2p_mplex::MplexConfig::new());
+                .multiplex(libp2p_mplex::MplexConfig::new())
+                .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
             Network::new(transport, local_public_key.into_peer_id(), None)
         };
 
@@ -119,7 +112,8 @@ fn raw_swarm_simultaneous_connect() {
             let transport = libp2p_tcp::TcpConfig::new()
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(libp2p_secio::SecioConfig::new(local_key))
-                .multiplex(libp2p_mplex::MplexConfig::new());
+                .multiplex(libp2p_mplex::MplexConfig::new())
+                .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
             Network::new(transport, local_public_key.into_peer_id(), None)
         };
 
