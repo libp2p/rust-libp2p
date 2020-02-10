@@ -471,7 +471,7 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// delivered in [`KademliaEvent::AddProviderResult`].
+    /// delivered in [`AddProviderResult`].
     pub fn start_providing(&mut self, key: record::Key) {
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         if let Err(err) = self.store.add_provider(record) {
@@ -1435,7 +1435,7 @@ impl Quorum {
 
 /// The events produced by the `Kademlia` behaviour.
 ///
-/// See [`Kademlia::poll`].
+/// See [`NetworkBehaviour::poll`].
 #[derive(Debug)]
 pub enum KademliaEvent {
     /// The result of [`Kademlia::bootstrap`].

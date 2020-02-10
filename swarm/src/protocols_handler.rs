@@ -75,14 +75,14 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// Communication with a remote over a set of protocols is initiated in one of two ways:
 ///
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
-///      [`ProtocolsHandler::poll()`] must return an [`OutboundSubstreamRequest`], providing an
-///      instance of [`ProtocolsHandler::OutboundUpgrade`] that is used to negotiate the
+///      [`ProtocolsHandler::poll()`] must return an [`ProtocolsHandlerEvent::OutboundSubstreamRequest`],
+///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
 ///      protocol(s). Upon success, [`ProtocolsHandler::inject_fully_negotiated_outbound`]
 ///      is called with the final output of the upgrade.
 ///
 ///   2. Listening by accepting a new inbound substream. When a new inbound substream
 ///      is created on a connection, [`ProtocolsHandler::listen_protocol`] is called
-///      to obtain an instance of [`ProtocolsHandler::InboundUpgrade`] that is used to
+///      to obtain an instance of [`libp2p_core::upgrade::InboundUpgrade`] that is used to
 ///      negotiate the protocol(s). Upon success,
 ///      [`ProtocolsHandler::inject_fully_negotiated_inbound`] is called with the final
 ///      output of the upgrade.
@@ -111,8 +111,8 @@ pub trait ProtocolsHandler: Send + 'static {
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
     type OutboundOpenInfo: Send + 'static;
 
-    /// The [`InboundUpgrade`] to apply on inbound substreams to negotiate the
-    /// desired protocols.
+    /// The [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) to apply on inbound
+    /// substreams to negotiate the desired protocols.
     ///
     /// > **Note**: The returned `InboundUpgrade` should always accept all the generally
     /// >           supported protocols, even if in a specific context a particular one is
