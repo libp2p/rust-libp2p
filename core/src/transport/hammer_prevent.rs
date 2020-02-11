@@ -38,7 +38,10 @@ const MAX_BACKOFF: Duration = Duration::from_secs(300);
 pub struct HammerPrevention<TInner> {
     /// The underlying transport.
     inner: TInner,
+
     /// For each address, when we can dial it again.
+    /// Every address in this map has been dialed in the past with the underlying transport
+    /// supporting it.
     addresses: Arc<Mutex<FnvHashMap<Multiaddr, AddrInfo>>>,
 }
 
@@ -83,13 +86,23 @@ where
 
         let inner = match addresses.entry(addr.clone()) {
             Entry::Vacant(entry) => {
+                // We don't know anything about that address. Start dialing immediately.
+                // We filter out `MultiaddrNotSupported` so that we don't insert an entry about
+                // the address if its address is not supported.
+                let future = match self.inner.dial(addr.clone()) {
+                    Ok(f) => Ok(f),
+                    Err(TransportError::MultiaddrNotSupported(err))
+                        => return Err(TransportError::MultiaddrNotSupported(err)),
+                    Err(err) => Err(err),
+                };
+
                 entry.insert(AddrInfo {
                     next_dial_backoff: FIRST_BACKOFF,
                     expiration: Delay::new(FIRST_BACKOFF * 2),
                 });
 
                 // Dial immediately.
-                HammerPreventionDialInner::Dialing(self.inner.dial(addr.clone())?)
+                HammerPreventionDialInner::Dialing(future?)
             }
 
             Entry::Occupied(entry) => {
@@ -158,7 +171,7 @@ where
                                 .expect("future called after being finished");
                             match transport.dial(this.local_addr.clone()) {
                                 Ok(f) => this.inner.set(HammerPreventionDialInner::Dialing(f)),
-                                Err(TransportError::MultiaddrNotSupported(_)) => panic!(),
+                                Err(TransportError::MultiaddrNotSupported(_)) => panic!(), // TODO:
                                 Err(TransportError::Other(err)) => return Poll::Ready(Err(err)),
                             }
                         },
