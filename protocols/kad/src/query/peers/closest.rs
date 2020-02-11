@@ -325,7 +325,7 @@ impl ClosestPeersIter {
                         *cnt += 1;
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
-                        if *cnt > self.config.num_results {
+                        if *cnt >= self.config.num_results {
                             self.state = State::Finished;
                             return PeersIterState::Finished
                         }
