@@ -39,6 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: rust
+      env:
+        CC: clang-9
     steps:
     - uses: actions/checkout@v1
     - name: Install Rust
@@ -47,6 +49,14 @@ jobs:
         toolchain: stable
         target: wasm32-unknown-unknown
         override: true
+    - name: Install a recent version of clang
+      run: |
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" >> /etc/apt/sources.list
+        apt-get update
+        apt-get install -y clang-9
+    - name: Install CMake
+      run: apt-get install -y cmake
     - name: Cache cargo registry
       uses: actions/cache@v1
       with:
