@@ -350,7 +350,7 @@ mod tests {
                                 let mut n = 0;
                                 future::poll_fn(|cx| {
                                     n += 1;
-                                    if n >= 3 {
+                                    if n >= 50 {
                                         Poll::Ready(())
                                     } else {
                                         cx.waker().wake_by_ref();
