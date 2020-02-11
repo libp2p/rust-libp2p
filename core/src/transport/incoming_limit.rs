@@ -144,7 +144,7 @@ struct NumApproxGuard<'a> {
 
 impl<'a> NumApproxGuard<'a> {
     fn acquire(limit: &'a IncomingLimit) -> (Self, usize) {
-        let current_num = limit.current_num_approx.fetch_add(1, Ordering::SeqCst);
+        let current_num = limit.current_num_approx.fetch_add(1, Ordering::Acquire);
         debug_assert_ne!(current_num, usize::max_value()); // Check for overflows.
         let guard = NumApproxGuard { limit };
         (guard, current_num)
@@ -153,7 +153,7 @@ impl<'a> NumApproxGuard<'a> {
 
 impl<'a> Drop for NumApproxGuard<'a> {
     fn drop(&mut self) {
-        self.limit.current_num_approx.fetch_sub(1, Ordering::SeqCst);
+        self.limit.current_num_approx.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -309,7 +309,7 @@ impl<TInner> IncomingLimitUpgrade<TInner> {
             }
         }
 
-        let old_val = this.limit.current_num_approx.fetch_sub(1, Ordering::SeqCst);
+        let old_val = this.limit.current_num_approx.fetch_sub(1, Ordering::Release);
         debug_assert!(old_val > inner.current_num);
         debug_assert_ne!(old_val, 0);
     }
