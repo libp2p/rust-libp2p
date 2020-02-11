@@ -226,6 +226,7 @@ where
         Poll::Ready(Some(Ok(ListenerEvent::Upgrade {
             upgrade: IncomingLimitUpgrade {
                 inner: upgrade,
+                cleaned_up: false,
                 limit: this.limit.clone(),
             },
             local_addr,
@@ -252,7 +253,10 @@ pub struct IncomingLimitUpgrade<TInner> {
     #[pin]
     inner: TInner,
 
-    /// This struct implicitely holds an slot in both `current_num` and `current_num_approx`.
+    /// True if we already free'd a slot in `limit`.
+    cleaned_up: bool,
+
+    /// This struct implicitely holds a slot in both `current_num` and `current_num_approx`.
     /// Dropping this struct must decrease these two values by one.
     limit: Arc<IncomingLimit>,
 }
@@ -263,16 +267,32 @@ where
 { 
     type Output = TInner::Output;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let this = self.project();
-        this.inner.poll(cx)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match self.as_mut().project().inner.poll(cx) {
+            Poll::Ready(v) => {
+                IncomingLimitUpgrade::cleanup(self);
+                Poll::Ready(v)
+            },
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
 #[pin_project::pinned_drop]
 impl<TInner> PinnedDrop for IncomingLimitUpgrade<TInner> {
     fn drop(self: Pin<&mut Self>) {
+        self.cleanup();
+    }
+}
+
+impl<TInner> IncomingLimitUpgrade<TInner> {
+    fn cleanup(self: Pin<&mut Self>) {
         let this = self.project();
+        if *this.cleaned_up {
+            return;
+        }
+        *this.cleaned_up = true;
+
         let mut inner = this.limit.inner.lock();
         debug_assert_ne!(inner.current_num, 0);
 
@@ -281,9 +301,9 @@ impl<TInner> PinnedDrop for IncomingLimitUpgrade<TInner> {
 
         // If decreasing `current_num` makes us drop below the limit, we wake up all the wakers so
         // that other listeners can start their work.
-        if inner.current_num < this.limit.limit {
-            for waker in inner.wakers.drain() {
-                if let Some(waker) = waker {
+        if inner.current_num == this.limit.limit.saturating_sub(1) {
+            for (_, waker) in &mut inner.wakers {
+                if let Some(waker) = waker.take() {
                     waker.wake();
                 }
             }
@@ -301,11 +321,13 @@ mod tests {
     use crate::{Multiaddr, transport::{ListenerEvent, Transport, TransportError}};
     use futures::prelude::*;
     use futures_timer::Delay;
-    use std::{pin::Pin, sync::{atomic, Arc}, time::Duration};
+    use std::{pin::Pin, sync::{atomic, Arc}, task::Poll, time::Duration};
 
     #[test]
     fn incoming_limit_working() {
-        const LIMIT: usize = 25;
+        const LIMIT: usize = 5;
+        const PARALLELISM: usize = 20;
+        const MAX_POSSIBLE_VALUE: usize = LIMIT + PARALLELISM;
 
         struct DummyTansport(Arc<atomic::AtomicUsize>);
         impl Transport for DummyTansport {
@@ -323,12 +345,19 @@ mod tests {
                         let num = num.clone();
                         let ret = Ok(ListenerEvent::Upgrade {
                             upgrade: Box::pin(async move {
-                                assert!(num.fetch_add(1, atomic::Ordering::Acquire) + 1 <= LIMIT);
+                                assert!(num.fetch_add(1, atomic::Ordering::Acquire) + 1 <= MAX_POSSIBLE_VALUE);
                                 // Yield a couple times.
-                                for _ in 0..3 {
-                                    futures::pending!();
-                                }
-                                assert!(num.fetch_sub(1, atomic::Ordering::Release) <= LIMIT);
+                                let mut n = 0;
+                                future::poll_fn(|cx| {
+                                    n += 1;
+                                    if n >= 3 {
+                                        Poll::Ready(())
+                                    } else {
+                                        cx.waker().wake_by_ref();
+                                        Poll::Pending
+                                    }
+                                });
+                                assert!(num.fetch_sub(1, atomic::Ordering::Release) <= MAX_POSSIBLE_VALUE);
                                 Ok(())
                             }) as Pin<Box<dyn Future<Output = _> + Send>>,
                             local_addr: "/memory/1234".parse().unwrap(),
@@ -345,7 +374,7 @@ mod tests {
             }
         }
 
-        let limit = IncomingLimit::new(LIMIT - 20);
+        let limit = IncomingLimit::new(LIMIT);
         let num = Arc::new(atomic::AtomicUsize::new(0));
 
         // We spawn many tasks and listen in parallel as fast as possible.
@@ -353,7 +382,7 @@ mod tests {
         // limit.
 
         let mut handles = Vec::new();
-        for _ in 0..20 {
+        for _ in 0..PARALLELISM {
             let transport = incoming_limit(DummyTansport(num.clone()), limit.clone());
             handles.push(async_std::task::spawn(async move {
                 let mut listener = transport.listen_on("/memory/1234".parse().unwrap()).unwrap();
