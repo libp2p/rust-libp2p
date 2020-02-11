@@ -356,7 +356,7 @@ mod tests {
                                         cx.waker().wake_by_ref();
                                         Poll::Pending
                                     }
-                                });
+                                }).await;
                                 assert!(num.fetch_sub(1, atomic::Ordering::Release) <= MAX_POSSIBLE_VALUE);
                                 Ok(())
                             }) as Pin<Box<dyn Future<Output = _> + Send>>,
