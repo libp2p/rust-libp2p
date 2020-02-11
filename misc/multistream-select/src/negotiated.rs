@@ -62,7 +62,7 @@ impl<TInner: AsyncRead + AsyncWrite> Future for NegotiatedComplete<TInner> {
 }
 
 impl<TInner> Negotiated<TInner> {
-    /// Creates a `Negotiated` in state [`State::Complete`], possibly
+    /// Creates a `Negotiated` in state [`State::Completed`], possibly
     /// with `remaining` data to be sent.
     pub(crate) fn completed(io: TInner, remaining: BytesMut) -> Self {
         Negotiated { state: State::Completed { io, remaining } }

@@ -18,13 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-
 // collection of tests for the gossipsub network behaviour
 
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use async_std::net::TcpStream;
 
     // helper functions for testing
 
@@ -34,15 +32,11 @@ mod tests {
         peer_no: usize,
         topics: Vec<String>,
         to_subscribe: bool,
-    ) -> (
-        Gossipsub<TcpStream>,
-        Vec<PeerId>,
-        Vec<TopicHash>,
-    ) {
+    ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub<TcpStream> = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -62,7 +56,7 @@ mod tests {
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
-            <Gossipsub<TcpStream> as NetworkBehaviour>::inject_connected(
+            <Gossipsub as NetworkBehaviour>::inject_connected(
                 &mut gs,
                 peer.clone(),
                 dummy_connected_point.clone(),
@@ -572,7 +566,7 @@ mod tests {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub<usize> = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test".into()).no_hash().clone();
@@ -584,25 +578,25 @@ mod tests {
         gs.topic_peers.insert(topic_hash.clone(), peers.clone());
 
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| true });
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 30, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 30, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 20, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 20, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 0, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 0, { |_| true });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         // test the filter
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
                 |peer| peers.contains(peer)
             });
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");

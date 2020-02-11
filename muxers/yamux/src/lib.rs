@@ -37,7 +37,7 @@ impl<S> fmt::Debug for Yamux<S> {
 }
 
 struct Inner<S> {
-    /// The `futures::stream::Stream` of incoming substreams.
+    /// The [`futures::stream::Stream`] of incoming substreams.
     incoming: S,
     /// Handle to control the connection.
     control: yamux::Control,
@@ -171,7 +171,7 @@ impl Config {
         Config(cfg)
     }
 
-    /// Turn this into a `LocalConfig` for use with upgrades of !Send resources.
+    /// Turn this into a [`LocalConfig`] for use with upgrades of ![`Send`] resources.
     pub fn local(self) -> LocalConfig {
         LocalConfig(self)
     }
@@ -253,7 +253,7 @@ where
     }
 }
 
-/// The Yamux [`StreamMuxer`] error type.
+/// The Yamux [`libp2p_core::StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error("yamux error: {0}")]
 pub struct YamuxError(#[from] pub yamux::ConnectionError);
