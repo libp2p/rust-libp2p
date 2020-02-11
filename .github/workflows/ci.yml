@@ -10,8 +10,6 @@ jobs:
   test-desktop:
     name: Build and test
     runs-on: ubuntu-latest
-    container:
-      image: rust
     steps:
     - uses: actions/checkout@v1
     - name: Cache cargo registry
