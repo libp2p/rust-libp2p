@@ -940,4 +940,81 @@ mod tests {
             closest_peers_iter.next(Instant::now()),
         );
     }
+
+    #[test]
+    /// Kademlia's iterative query should proceed until the k closest nodes were queried
+    /// successfully, or there are no further nodes to query that have not succeeded, failed or
+    /// timed out.
+    fn continue_until_k_closest_peers_succeed() {
+        let now = Instant::now();
+        let target: KeyBytes = Key::from(PeerId::random()).into();
+        let default_num_results = ClosestPeersIterConfig::default().num_results;
+
+        let mut pool = (0..default_num_results + 1).into_iter()
+            .map(|_| Key::from(PeerId::random()))
+            .collect::<Vec<_>>();
+
+        pool.sort_unstable_by(|a, b| {
+            target.distance(a).cmp(&target.distance(b))
+        });
+
+        let closest_peer = pool.remove(0);
+
+        // Instantiate iterator with all but closest-peer.
+        let mut closest_peers_iter = ClosestPeersIter::new(
+            target,
+            pool,
+        );
+
+        // Make all peers in iterator return successfully, with the last one returning the not yet
+        // discovered closest-peer.
+        for i in (0..default_num_results).into_iter() {
+            match closest_peers_iter.next(now) {
+                PeersIterState::Waiting(Some(peer_id)) => {
+                    let peer_id = peer_id.into_owned();
+                    closest_peers_iter.on_success(
+                        &peer_id,
+                        if i != default_num_results - 1 {
+                            vec![]
+                        } else {
+                            vec![closest_peer.preimage().clone()]
+                        }
+                    );
+                },
+                PeersIterState::Waiting(None) => {
+                    panic!("Expect iterator to have more peers to query.")
+                }
+                PeersIterState::WaitingAtCapacity => {
+                    panic!("Expect iterator not to be at capacity.");
+                },
+                PeersIterState::Finished => {
+                    panic!(
+                        "Expect iterator not to finish before querying available closest peer or \
+                         reaching the timeout.",
+                    );
+                }
+            }
+        }
+
+        assert_eq!(
+            PeersIterState::Waiting(Some(Cow::Borrowed(closest_peer.preimage()))),
+            closest_peers_iter.next(now),
+            "Expect iterator to return closest-peer. The iterator has {:?} succeeded peers, but \
+             closest-peer is closer than any of them.",
+            default_num_results,
+        );
+
+        assert_eq!(
+            PeersIterState::Waiting(None),
+            closest_peers_iter.next(now),
+            "Expect iterator to wait for response from closest-peer."
+        );
+
+        assert_eq!(
+            PeersIterState::Finished,
+            closest_peers_iter.next(now + closest_peers_iter.config.peer_timeout),
+            "Expect iterator to finish once query for closest-peer timed out and no other peers are \
+             available."
+        );
+    }
 }
