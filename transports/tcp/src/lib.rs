@@ -20,187 +20,338 @@
 
 //! Implementation of the libp2p `Transport` trait for TCP/IP.
 //!
-//! Uses [the *tokio* library](https://tokio.rs).
-//!
 //! # Usage
 //!
-//! Example:
+//! This crate provides two structs, `TcpConfig` and `TokioTcpConfig`, depending on which
+//! features are enabled.
 //!
-//! ```
-//! extern crate libp2p_tcp;
-//! use libp2p_tcp::TcpConfig;
-//!
-//! # fn main() {
-//! let tcp = TcpConfig::new();
-//! # }
-//! ```
-//!
-//! The `TcpConfig` structs implements the `Transport` trait of the `swarm` library. See the
-//! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
+//! Both the `TcpConfig` and `TokioTcpConfig` structs implement the `Transport` trait of the
+//! `core` library. See the documentation of `core` and of libp2p in general to learn how to
+//! use the `Transport` trait.
 
-use futures::{future, future::FutureResult, prelude::*, Async, Poll};
-use libp2p_core as swarm;
-use log::{debug, error};
-use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
-use std::fmt;
-use std::io::{self, Read, Write};
-use std::net::SocketAddr;
-use std::time::Duration;
-use swarm::{Transport, transport::TransportError};
-use tk_listen::{ListenExt, SleepOnError};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
+use futures::{future::{self, Ready}, prelude::*};
+use futures_timer::Delay;
+use get_if_addrs::{IfAddr, get_if_addrs};
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use libp2p_core::{
+    Transport,
+    multiaddr::{Protocol, Multiaddr},
+    transport::{ListenerEvent, TransportError}
+};
+use log::{debug, trace};
+use std::{
+    collections::VecDeque,
+    io,
+    iter::{self, FromIterator},
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration
+};
+
+macro_rules! codegen {
+    ($feature_name:expr, $tcp_config:ident, $tcp_trans_stream:ident, $tcp_listen_stream:ident, $apply_config:ident, $tcp_stream:ty, $tcp_listener:ty) => {
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
 /// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
 #[derive(Debug, Clone, Default)]
-pub struct TcpConfig {
+pub struct $tcp_config {
     /// How long a listener should sleep after receiving an error, before trying again.
     sleep_on_error: Duration,
-    /// Size of the recv buffer size to set for opened sockets, or `None` to keep default.
-    recv_buffer_size: Option<usize>,
-    /// Size of the send buffer size to set for opened sockets, or `None` to keep default.
-    send_buffer_size: Option<usize>,
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
-    /// Keep alive duration to set for opened sockets, or `None` to keep default.
-    keepalive: Option<Option<Duration>>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
     nodelay: Option<bool>,
 }
 
-impl TcpConfig {
+impl $tcp_config {
     /// Creates a new configuration object for TCP/IP.
-    #[inline]
-    pub fn new() -> TcpConfig {
-        TcpConfig {
+    pub fn new() -> $tcp_config {
+        $tcp_config {
             sleep_on_error: Duration::from_millis(100),
-            recv_buffer_size: None,
-            send_buffer_size: None,
             ttl: None,
-            keepalive: None,
             nodelay: None,
         }
     }
 
-    /// Sets the size of the recv buffer size to set for opened sockets.
-    #[inline]
-    pub fn recv_buffer_size(mut self, value: usize) -> Self {
-        self.recv_buffer_size = Some(value);
-        self
-    }
-
-    /// Sets the size of the send buffer size to set for opened sockets.
-    #[inline]
-    pub fn send_buffer_size(mut self, value: usize) -> Self {
-        self.send_buffer_size = Some(value);
-        self
-    }
-
     /// Sets the TTL to set for opened sockets.
-    #[inline]
     pub fn ttl(mut self, value: u32) -> Self {
         self.ttl = Some(value);
         self
     }
 
-    /// Sets the keep alive pinging duration to set for opened sockets.
-    #[inline]
-    pub fn keepalive(mut self, value: Option<Duration>) -> Self {
-        self.keepalive = Some(value);
-        self
-    }
-
     /// Sets the `TCP_NODELAY` to set for opened sockets.
-    #[inline]
     pub fn nodelay(mut self, value: bool) -> Self {
         self.nodelay = Some(value);
         self
     }
 }
 
-impl Transport for TcpConfig {
-    type Output = TcpTransStream;
+impl Transport for $tcp_config {
+    type Output = $tcp_trans_stream;
     type Error = io::Error;
-    type Listener = TcpListenStream;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = TcpDialFut;
+    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade>, io::Error>> + Send>>;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<$tcp_trans_stream, io::Error>> + Send>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            let listener = TcpListener::bind(&socket_addr);
-            // We need to build the `Multiaddr` to return from this function. If an error happened,
-            // just return the original multiaddr.
-            let new_addr = match listener {
-                Ok(ref l) => if let Ok(new_s_addr) = l.local_addr() {
-                    new_s_addr.to_multiaddr().expect(
-                        "multiaddr generated from socket addr is \
-                         always valid",
-                    )
-                } else {
-                    addr
-                },
-                Err(_) => addr,
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let socket_addr =
+            if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
+                sa
+            } else {
+                return Err(TransportError::MultiaddrNotSupported(addr))
             };
 
-            debug!("Now listening on {}", new_addr);
-            let sleep_on_error = self.sleep_on_error;
-            let inner = listener
-                .map_err(TransportError::Other)?
-                .incoming()
-                .sleep_on_error(sleep_on_error);
+        async fn do_listen(cfg: $tcp_config, socket_addr: SocketAddr)
+            -> Result<impl Stream<Item = Result<ListenerEvent<Ready<Result<$tcp_trans_stream, io::Error>>>, io::Error>>, io::Error>
+        {
+            let listener = <$tcp_listener>::bind(&socket_addr).await?;
+            let local_addr = listener.local_addr()?;
+            let port = local_addr.port();
 
-            Ok((
-                TcpListenStream {
-                    inner: Ok(inner),
-                    config: self,
-                },
-                new_addr,
-            ))
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
+            // Determine all our listen addresses which is either a single local IP address
+            // or (if a wildcard IP address was used) the addresses of all our interfaces,
+            // as reported by `get_if_addrs`.
+            let addrs =
+                if socket_addr.ip().is_unspecified() {
+                    let addrs = host_addresses(port)?;
+                    debug!("Listening on {:?}", addrs.iter().map(|(_, _, ma)| ma).collect::<Vec<_>>());
+                    Addresses::Many(addrs)
+                } else {
+                    let ma = ip_to_multiaddr(local_addr.ip(), port);
+                    debug!("Listening on {:?}", ma);
+                    Addresses::One(ma)
+                };
+
+            // Generate `NewAddress` events for each new `Multiaddr`.
+            let pending = match addrs {
+                Addresses::One(ref ma) => {
+                    let event = ListenerEvent::NewAddress(ma.clone());
+                    let mut list = VecDeque::new();
+                    list.push_back(Ok(event));
+                    list
+                }
+                Addresses::Many(ref aa) => {
+                    aa.iter()
+                        .map(|(_, _, ma)| ma)
+                        .cloned()
+                        .map(ListenerEvent::NewAddress)
+                        .map(Result::Ok)
+                        .collect::<VecDeque<_>>()
+                }
+            };
+
+            let listen_stream = $tcp_listen_stream {
+                stream: listener,
+                pause: None,
+                pause_duration: cfg.sleep_on_error,
+                port,
+                addrs,
+                pending,
+                config: cfg
+            };
+
+            Ok(stream::unfold(listen_stream, |s| s.next().map(Some)))
         }
+
+        Ok(Box::pin(do_listen(self, socket_addr).try_flatten_stream()))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            // As an optimization, we check that the address is not of the form `0.0.0.0`.
-            // If so, we instantly refuse dialing instead of going through the kernel.
-            if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
-                debug!("Dialing {}", addr);
-                Ok(TcpDialFut {
-                    inner: TcpStream::connect(&socket_addr),
-                    config: self,
-                })
+        let socket_addr =
+            if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
+                if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+                    debug!("Instantly refusing dialing {}, as it is invalid", addr);
+                    return Err(TransportError::Other(io::ErrorKind::ConnectionRefused.into()))
+                }
+                socket_addr
             } else {
-                debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                Err(TransportError::Other(io::ErrorKind::ConnectionRefused.into()))
+                return Err(TransportError::MultiaddrNotSupported(addr))
+            };
+
+        debug!("Dialing {}", addr);
+
+        async fn do_dial(cfg: $tcp_config, socket_addr: SocketAddr) -> Result<$tcp_trans_stream, io::Error> {
+            let stream = <$tcp_stream>::connect(&socket_addr).await?;
+            $apply_config(&cfg, &stream)?;
+            Ok($tcp_trans_stream { inner: stream })
+        }
+
+        Ok(Box::pin(do_dial(self, socket_addr)))
+    }
+}
+
+/// Stream that listens on an TCP/IP address.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+pub struct $tcp_listen_stream {
+    /// The incoming connections.
+    stream: $tcp_listener,
+    /// The current pause if any.
+    pause: Option<Delay>,
+    /// How long to pause after an error.
+    pause_duration: Duration,
+    /// The port which we use as our listen port in listener event addresses.
+    port: u16,
+    /// The set of known addresses.
+    addrs: Addresses,
+    /// Temporary buffer of listener events.
+    pending: Buffer<$tcp_trans_stream>,
+    /// Original configuration.
+    config: $tcp_config
+}
+
+impl $tcp_listen_stream {
+    /// Takes ownership of the listener, and returns the next incoming event and the listener.
+    async fn next(mut self) -> (Result<ListenerEvent<Ready<Result<$tcp_trans_stream, io::Error>>>, io::Error>, Self) {
+        loop {
+            if let Some(event) = self.pending.pop_front() {
+                return (event, self);
             }
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
+
+            if let Some(pause) = self.pause.take() {
+                let _ = pause.await;
+            }
+
+            // TODO: do we get the peer_addr at the same time?
+            let (sock, _) = match self.stream.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    debug!("error accepting incoming connection: {}", e);
+                    self.pause = Some(Delay::new(self.pause_duration));
+                    return (Err(e), self);
+                }
+            };
+
+            let sock_addr = match sock.peer_addr() {
+                Ok(addr) => addr,
+                Err(err) => {
+                    debug!("Failed to get peer address: {:?}", err);
+                    continue
+                }
+            };
+
+            let local_addr = match sock.local_addr() {
+                Ok(sock_addr) => {
+                    if let Addresses::Many(ref mut addrs) = self.addrs {
+                        if let Err(err) = check_for_interface_changes(&sock_addr, self.port, addrs, &mut self.pending) {
+                            return (Err(err), self);
+                        }
+                    }
+                    ip_to_multiaddr(sock_addr.ip(), sock_addr.port())
+                }
+                Err(err) => {
+                    debug!("Failed to get local address of incoming socket: {:?}", err);
+                    continue
+                }
+            };
+
+            let remote_addr = ip_to_multiaddr(sock_addr.ip(), sock_addr.port());
+
+            match $apply_config(&self.config, &sock) {
+                Ok(()) => {
+                    trace!("Incoming connection from {} at {}", remote_addr, local_addr);
+                    self.pending.push_back(Ok(ListenerEvent::Upgrade {
+                        upgrade: future::ok($tcp_trans_stream { inner: sock }),
+                        local_addr,
+                        remote_addr
+                    }))
+                }
+                Err(err) => {
+                    debug!("Error upgrading incoming connection from {}: {:?}", remote_addr, err);
+                    self.pending.push_back(Ok(ListenerEvent::Upgrade {
+                        upgrade: future::err(err),
+                        local_addr,
+                        remote_addr
+                    }))
+                }
+            }
         }
     }
+}
 
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut address = Multiaddr::empty();
+/// Wraps around a `TcpStream` and adds logging for important events.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+#[derive(Debug)]
+pub struct $tcp_trans_stream {
+    inner: $tcp_stream,
+}
 
-        // Use the observed IP address.
-        match server.iter().zip(observed.iter()).next() {
-            Some((Protocol::Ip4(_), x @ Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip4(_), x @ Protocol::Ip6(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip6(_))) => address.append(x),
-            _ => return None
+impl Drop for $tcp_trans_stream {
+    fn drop(&mut self) {
+        if let Ok(addr) = self.inner.peer_addr() {
+            debug!("Dropped TCP connection to {:?}", addr);
+        } else {
+            debug!("Dropped TCP connection to undeterminate peer");
         }
+    }
+}
 
-        // Carry over everything else from the server address.
-        for proto in server.iter().skip(1) {
-            address.append(proto)
-        }
+/// Applies the socket configuration parameters to a socket.
+fn $apply_config(config: &$tcp_config, socket: &$tcp_stream) -> Result<(), io::Error> {
+    if let Some(ttl) = config.ttl {
+        socket.set_ttl(ttl)?;
+    }
 
-        Some(address)
+    if let Some(nodelay) = config.nodelay {
+        socket.set_nodelay(nodelay)?;
+    }
+
+    Ok(())
+}
+
+};
+}
+
+#[cfg(feature = "async-std")]
+codegen!("async-std", TcpConfig, TcpTransStream, TcpListenStream, apply_config_async_std, async_std::net::TcpStream, async_std::net::TcpListener);
+
+#[cfg(feature = "tokio")]
+codegen!("tokio", TokioTcpConfig, TokioTcpTransStream, TokioTcpListenStream, apply_config_tokio, tokio::net::TcpStream, tokio::net::TcpListener);
+
+#[cfg(feature = "async-std")]
+impl AsyncRead for TcpTransStream {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
+    }
+}
+
+#[cfg(feature = "async-std")]
+impl AsyncWrite for TcpTransStream {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        AsyncWrite::poll_flush(Pin::new(&mut self.inner), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        AsyncWrite::poll_close(Pin::new(&mut self.inner), cx)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl AsyncRead for TokioTcpTransStream {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl AsyncWrite for TokioTcpTransStream {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.inner), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.inner), cx)
     }
 }
 
@@ -221,183 +372,156 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 }
 
-/// Applies the socket configuration parameters to a socket.
-fn apply_config(config: &TcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
-    if let Some(recv_buffer_size) = config.recv_buffer_size {
-        socket.set_recv_buffer_size(recv_buffer_size)?;
+// Create a [`Multiaddr`] from the given IP address and port number.
+fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
+    let proto = match ip {
+        IpAddr::V4(ip) => Protocol::Ip4(ip),
+        IpAddr::V6(ip) => Protocol::Ip6(ip)
+    };
+    let it = iter::once(proto).chain(iter::once(Protocol::Tcp(port)));
+    Multiaddr::from_iter(it)
+}
+
+// Collect all local host addresses and use the provided port number as listen port.
+fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
+    let mut addrs = Vec::new();
+    for iface in get_if_addrs()? {
+        let ip = iface.ip();
+        let ma = ip_to_multiaddr(ip, port);
+        let ipn = match iface.addr {
+            IfAddr::V4(ip4) => {
+                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
+                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
+                IpNet::V4(ipnet)
+            }
+            IfAddr::V6(ip6) => {
+                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
+                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
+                IpNet::V6(ipnet)
+            }
+        };
+        addrs.push((ip, ipn, ma))
+    }
+    Ok(addrs)
+}
+
+/// Listen address information.
+#[derive(Debug)]
+enum Addresses {
+    /// A specific address is used to listen.
+    One(Multiaddr),
+    /// A set of addresses is used to listen.
+    Many(Vec<(IpAddr, IpNet, Multiaddr)>)
+}
+
+type Buffer<T> = VecDeque<Result<ListenerEvent<Ready<Result<T, io::Error>>>, io::Error>>;
+
+// If we listen on all interfaces, find out to which interface the given
+// socket address belongs. In case we think the address is new, check
+// all host interfaces again and report new and expired listen addresses.
+fn check_for_interface_changes<T>(
+    socket_addr: &SocketAddr,
+    listen_port: u16,
+    listen_addrs: &mut Vec<(IpAddr, IpNet, Multiaddr)>,
+    pending: &mut Buffer<T>
+) -> Result<(), io::Error> {
+    // Check for exact match:
+    if listen_addrs.iter().find(|(ip, ..)| ip == &socket_addr.ip()).is_some() {
+        return Ok(())
     }
 
-    if let Some(send_buffer_size) = config.send_buffer_size {
-        socket.set_send_buffer_size(send_buffer_size)?;
+    // No exact match => check netmask
+    if listen_addrs.iter().find(|(_, net, _)| net.contains(&socket_addr.ip())).is_some() {
+        return Ok(())
     }
 
-    if let Some(ttl) = config.ttl {
-        socket.set_ttl(ttl)?;
+    // The local IP address of this socket is new to us.
+    // We check for changes in the set of host addresses and report new
+    // and expired addresses.
+    //
+    // TODO: We do not detect expired addresses unless there is a new address.
+    let old_listen_addrs = std::mem::replace(listen_addrs, host_addresses(listen_port)?);
+
+    // Check for addresses no longer in use.
+    for (ip, _, ma) in old_listen_addrs.iter() {
+        if listen_addrs.iter().find(|(i, ..)| i == ip).is_none() {
+            debug!("Expired listen address: {}", ma);
+            pending.push_back(Ok(ListenerEvent::AddressExpired(ma.clone())));
+        }
     }
 
-    if let Some(keepalive) = config.keepalive {
-        socket.set_keepalive(keepalive)?;
+    // Check for new addresses.
+    for (ip, _, ma) in listen_addrs.iter() {
+        if old_listen_addrs.iter().find(|(i, ..)| i == ip).is_none() {
+            debug!("New listen address: {}", ma);
+            pending.push_back(Ok(ListenerEvent::NewAddress(ma.clone())));
+        }
     }
 
-    if let Some(nodelay) = config.nodelay {
-        socket.set_nodelay(nodelay)?;
+    // We should now be able to find the local address, if not something
+    // is seriously wrong and we report an error.
+    if listen_addrs.iter()
+        .find(|(ip, net, _)| ip == &socket_addr.ip() || net.contains(&socket_addr.ip()))
+        .is_none()
+    {
+        let msg = format!("{} does not match any listen address", socket_addr.ip());
+        return Err(io::Error::new(io::ErrorKind::Other, msg))
     }
 
     Ok(())
 }
 
-/// Future that dials a TCP/IP address.
-#[derive(Debug)]
-#[must_use = "futures do nothing unless polled"]
-pub struct TcpDialFut {
-    inner: ConnectFuture,
-    /// Original configuration.
-    config: TcpConfig,
-}
-
-impl Future for TcpDialFut {
-    type Item = TcpTransStream;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<TcpTransStream, io::Error> {
-        match self.inner.poll() {
-            Ok(Async::Ready(stream)) => {
-                apply_config(&self.config, &stream)?;
-                Ok(Async::Ready(TcpTransStream { inner: stream }))
-            }
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => {
-                debug!("Error while dialing => {:?}", err);
-                Err(err)
-            }
-        }
-    }
-}
-
-/// Stream that listens on an TCP/IP address.
-pub struct TcpListenStream {
-    inner: Result<SleepOnError<Incoming>, Option<io::Error>>,
-    /// Original configuration.
-    config: TcpConfig,
-}
-
-impl Stream for TcpListenStream {
-    type Item = (FutureResult<TcpTransStream, io::Error>, Multiaddr);
-    type Error = io::Error;
-
-    fn poll(
-        &mut self,
-    ) -> Poll<
-        Option<(FutureResult<TcpTransStream, io::Error>, Multiaddr)>,
-        io::Error,
-    > {
-        let inner = match self.inner {
-            Ok(ref mut inc) => inc,
-            Err(ref mut err) => {
-                return Err(err.take().expect("poll called again after error"));
-            }
-        };
-
-        loop {
-            match inner.poll() {
-                Ok(Async::Ready(Some(sock))) => {
-                    let addr = match sock.peer_addr() {
-                        // TODO: remove this expect()
-                        Ok(addr) => addr
-                            .to_multiaddr()
-                            .expect("generating a multiaddr from a socket addr never fails"),
-                        Err(err) => {
-                            // If we can't get the address of the newly-opened socket, there's
-                            // nothing we can do except ignore this connection attempt.
-                            error!("Ignored incoming because could't determine its \
-                                    address: {:?}", err);
-                            continue
-                        },
-                    };
-
-                    match apply_config(&self.config, &sock) {
-                        Ok(()) => (),
-                        Err(err) => return Ok(Async::Ready(Some((future::err(err), addr)))),
-                    };
-
-                    debug!("Incoming connection from {}", addr);
-                    let ret = future::ok(TcpTransStream { inner: sock });
-                    break Ok(Async::Ready(Some((ret, addr))))
-                }
-                Ok(Async::Ready(None)) => break Ok(Async::Ready(None)),
-                Ok(Async::NotReady) => break Ok(Async::NotReady),
-                Err(()) => unreachable!("sleep_on_error never produces an error"),
-            }
-        }
-    }
-}
-
-impl fmt::Debug for TcpListenStream {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.inner {
-            Ok(_) => write!(f, "TcpListenStream"),
-            Err(None) => write!(f, "TcpListenStream(Errored)"),
-            Err(Some(ref err)) => write!(f, "TcpListenStream({:?})", err),
-        }
-    }
-}
-
-/// Wraps around a `TcpStream` and adds logging for important events.
-#[derive(Debug)]
-pub struct TcpTransStream {
-    inner: TcpStream,
-}
-
-impl Read for TcpTransStream {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
-        self.inner.read(buf)
-    }
-}
-
-impl AsyncRead for TcpTransStream {}
-
-impl Write for TcpTransStream {
-    #[inline]
-    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
-        self.inner.write(buf)
-    }
-
-    #[inline]
-    fn flush(&mut self) -> Result<(), io::Error> {
-        self.inner.flush()
-    }
-}
-
-impl AsyncWrite for TcpTransStream {
-    #[inline]
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        AsyncWrite::shutdown(&mut self.inner)
-    }
-}
-
-impl Drop for TcpTransStream {
-    #[inline]
-    fn drop(&mut self) {
-        if let Ok(addr) = self.inner.peer_addr() {
-            debug!("Dropped TCP connection to {:?}", addr);
-        } else {
-            debug!("Dropped TCP connection to undeterminate peer");
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread::Runtime;
-    use super::{multiaddr_to_socketaddr, TcpConfig};
-    use futures::stream::Stream;
-    use futures::Future;
-    use multiaddr::Multiaddr;
-    use std;
+    use futures::prelude::*;
+    use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use super::swarm::Transport;
-    use tokio_io;
+    use super::multiaddr_to_socketaddr;
+    #[cfg(feature = "async-std")]
+    use super::TcpConfig;
+
+    #[test]
+    #[cfg(feature = "async-std")]
+    fn wildcard_expansion() {
+        let mut listener = TcpConfig::new()
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .expect("listener");
+
+        // Get the first address.
+        let addr = futures::executor::block_on_stream(listener.by_ref())
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
+        // Process all initial `NewAddress` events and make sure they
+        // do not contain wildcard address or port.
+        let server = listener
+            .take_while(|event| match event.as_ref().unwrap() {
+                ListenerEvent::NewAddress(a) => {
+                    let mut iter = a.iter();
+                    match iter.next().expect("ip address") {
+                        Protocol::Ip4(ip) => assert!(!ip.is_unspecified()),
+                        Protocol::Ip6(ip) => assert!(!ip.is_unspecified()),
+                        other => panic!("Unexpected protocol: {}", other)
+                    }
+                    if let Protocol::Tcp(port) = iter.next().expect("port") {
+                        assert_ne!(0, port)
+                    } else {
+                        panic!("No TCP port in address: {}", a)
+                    }
+                    futures::future::ready(true)
+                }
+                _ => futures::future::ready(false)
+            })
+            .for_each(|_| futures::future::ready(()));
+
+        let client = TcpConfig::new().dial(addr).expect("dialer");
+        async_std::task::block_on(futures::future::join(server, client)).1.unwrap();
+    }
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -449,70 +573,85 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "async-std")]
     fn communicating_between_dialer_and_listener() {
-        use std::io::Write;
+        let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
+        let mut ready_tx = Some(ready_tx);
 
-        std::thread::spawn(move || {
-            let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
+        async_std::task::spawn(async move {
+            let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new();
-            let mut rt = Runtime::new().unwrap();
-            let handle = rt.handle();
-            let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
-                sock.and_then(|sock| {
-                    // Define what to do with the socket that just connected to us
-                    // Which in this case is read 3 bytes
-                    let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
-                        .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
-                        .map_err(|err| panic!("IO error {:?}", err));
+            let mut listener = tcp.listen_on(addr).unwrap();
 
-                    // Spawn the future as a concurrent task
-                    handle.spawn(handle_conn).unwrap();
-
-                    Ok(())
-                })
-            });
-
-            rt.block_on(listener).unwrap();
-            rt.run().unwrap();
+            loop {
+                match listener.next().await.unwrap().unwrap() {
+                    ListenerEvent::NewAddress(listen_addr) => {
+                        ready_tx.take().unwrap().send(listen_addr).unwrap();
+                    },
+                    ListenerEvent::Upgrade { upgrade, .. } => {
+                        let mut upgrade = upgrade.await.unwrap();
+                        let mut buf = [0u8; 3];
+                        upgrade.read_exact(&mut buf).await.unwrap();
+                        assert_eq!(buf, [1, 2, 3]);
+                        upgrade.write_all(&[4, 5, 6]).await.unwrap();
+                    },
+                    _ => unreachable!()
+                }
+            }
         });
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-        let tcp = TcpConfig::new();
-        // Obtain a future socket through dialing
-        let socket = tcp.dial(addr.clone()).unwrap();
-        // Define what to do with the socket once it's obtained
-        let action = socket.then(|sock| -> Result<(), ()> {
-            sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
-            Ok(())
+
+        async_std::task::block_on(async move {
+            let addr = ready_rx.await.unwrap();
+            let tcp = TcpConfig::new();
+
+            // Obtain a future socket through dialing
+            let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
+            socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
+
+            let mut buf = [0u8; 3];
+            socket.read_exact(&mut buf).await.unwrap();
+            assert_eq!(buf, [4, 5, 6]);
         });
-        // Execute the future in our event loop
-        let mut rt = Runtime::new().unwrap();
-        let _ = rt.block_on(action).unwrap();
     }
 
     #[test]
+    #[cfg(feature = "async-std")]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
         let tcp = TcpConfig::new();
 
         let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
-        let (_, new_addr) = tcp.listen_on(addr).unwrap();
+        let new_addr = futures::executor::block_on_stream(tcp.listen_on(addr).unwrap())
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 
     #[test]
+    #[cfg(feature = "async-std")]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
         let tcp = TcpConfig::new();
 
         let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
-        let (_, new_addr) = tcp.listen_on(addr).unwrap();
+        let new_addr = futures::executor::block_on_stream(tcp.listen_on(addr).unwrap())
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 
     #[test]
+    #[cfg(feature = "async-std")]
     fn larger_addr_denied() {
         let tcp = TcpConfig::new();
 
@@ -520,47 +659,5 @@ mod tests {
             .parse::<Multiaddr>()
             .unwrap();
         assert!(tcp.listen_on(addr).is_err());
-    }
-
-    #[test]
-    fn nat_traversal() {
-        let tcp = TcpConfig::new();
-
-        let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
-        let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
-
-        let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(
-            out.unwrap(),
-            "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap()
-        );
-    }
-
-    #[test]
-    fn nat_traversal_ipv6_to_ipv4() {
-        let tcp = TcpConfig::new();
-
-        let server = "/ip6/::1/tcp/10000".parse::<Multiaddr>().unwrap();
-        let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
-
-        let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(
-            out.unwrap(),
-            "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap()
-        );
-    }
-
-    #[test]
-    fn nat_traversal_ipv4_to_ipv6() {
-        let tcp = TcpConfig::new();
-
-        let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
-        let observed = "/ip6/2001:db8::1/tcp/25000".parse::<Multiaddr>().unwrap();
-
-        let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(
-            out.unwrap(),
-            "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap()
-        );
     }
 }

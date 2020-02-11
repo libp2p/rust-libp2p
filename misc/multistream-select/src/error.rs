@@ -20,63 +20,8 @@
 
 //! Main `ProtocolChoiceError` error.
 
-use crate::protocol::MultistreamSelectError;
-use std::error;
-use std::fmt;
-use std::io::Error as IoError;
+pub use crate::protocol::ProtocolError;
 
-/// Error that can happen when negotiating a protocol with the remote.
-#[derive(Debug)]
-pub enum ProtocolChoiceError {
-    /// Error in the protocol.
-    MultistreamSelectError(MultistreamSelectError),
+use std::error::Error;
+use std::{fmt, io};
 
-    /// Received a message from the remote that makes no sense in the current context.
-    UnexpectedMessage,
-
-    /// We don't support any protocol in common with the remote.
-    NoProtocolFound,
-}
-
-impl From<MultistreamSelectError> for ProtocolChoiceError {
-    #[inline]
-    fn from(err: MultistreamSelectError) -> ProtocolChoiceError {
-        ProtocolChoiceError::MultistreamSelectError(err)
-    }
-}
-
-impl From<IoError> for ProtocolChoiceError {
-    #[inline]
-    fn from(err: IoError) -> ProtocolChoiceError {
-        MultistreamSelectError::from(err).into()
-    }
-}
-
-impl error::Error for ProtocolChoiceError {
-    #[inline]
-    fn description(&self) -> &str {
-        match *self {
-            ProtocolChoiceError::MultistreamSelectError(_) => "error in the protocol",
-            ProtocolChoiceError::UnexpectedMessage => {
-                "received a message from the remote that makes no sense in the current context"
-            }
-            ProtocolChoiceError::NoProtocolFound => {
-                "we don't support any protocol in common with the remote"
-            }
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn error::Error> {
-        match *self {
-            ProtocolChoiceError::MultistreamSelectError(ref err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for ProtocolChoiceError {
-    #[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(fmt, "{}", error::Error::description(self))
-    }
-}

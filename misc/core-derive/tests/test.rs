@@ -22,7 +22,7 @@ use libp2p_core_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
-fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour>() {}
+fn require_net_behaviour<T: libp2p::swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
 /*#[test]
@@ -40,13 +40,13 @@ fn one_field() {
         ping: libp2p::ping::Ping<TSubstream>,
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
         }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -60,18 +60,18 @@ fn two_fields() {
         identify: libp2p::identify::Identify<TSubstream>,
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
         }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -83,28 +83,28 @@ fn three_fields() {
     struct Foo<TSubstream> {
         ping: libp2p::ping::Ping<TSubstream>,
         identify: libp2p::identify::Identify<TSubstream>,
-        kad: libp2p::kad::Kademlia<TSubstream>,
+        kad: libp2p::kad::Kademlia<TSubstream, libp2p::kad::record::store::MemoryStore>,
         #[behaviour(ignore)]
         foo: String,
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaOut> for Foo<TSubstream> {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaOut) {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo<TSubstream> {
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {
         }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -119,22 +119,22 @@ fn custom_polling() {
         identify: libp2p::identify::Identify<TSubstream>,
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
         }
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, ()>> { libp2p::futures::Async::NotReady }
+        fn foo<T>(&mut self, _: &mut std::task::Context) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, ()>> { std::task::Poll::Pending }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -149,18 +149,18 @@ fn custom_event_no_polling() {
         identify: libp2p::identify::Identify<TSubstream>,
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
         }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -175,22 +175,22 @@ fn custom_event_and_polling() {
         identify: libp2p::identify::Identify<TSubstream>,
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
         }
     }
 
-    impl<TSubstream> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
+    impl<TSubstream> libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo<TSubstream> {
         fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {
         }
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, String>> { libp2p::futures::Async::NotReady }
+        fn foo<T>(&mut self, _: &mut std::task::Context) -> std::task::Poll<libp2p::swarm::NetworkBehaviourAction<T, String>> { std::task::Poll::Pending }
     }
 
     #[allow(dead_code)]
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Send + Unpin + 'static>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }

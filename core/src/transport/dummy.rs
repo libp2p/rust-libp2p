@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
-use multiaddr::Multiaddr;
-use std::{fmt, io, marker::PhantomData};
+use crate::transport::{Transport, TransportError, ListenerEvent};
+use crate::Multiaddr;
+use futures::{prelude::*, task::Context, task::Poll};
+use std::{fmt, io, marker::PhantomData, pin::Pin};
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
 ///
@@ -55,27 +56,20 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type Listener = futures::stream::Empty<(Self::ListenerUpgrade, Multiaddr), io::Error>;
-    type ListenerUpgrade = futures::future::Empty<Self::Output, io::Error>;
-    type Dial = futures::future::Empty<Self::Output, io::Error>;
+    type Listener = futures::stream::Pending<Result<ListenerEvent<Self::ListenerUpgrade>, io::Error>>;
+    type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
+    type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
-
-    #[inline]
-    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
 }
 
-/// Implementation of `Read` and `Write`. Not meant to be instanciated.
+/// Implementation of `AsyncRead` and `AsyncWrite`. Not meant to be instanciated.
 pub struct DummyStream(());
 
 impl fmt::Debug for DummyStream {
@@ -84,27 +78,30 @@ impl fmt::Debug for DummyStream {
     }
 }
 
-impl io::Read for DummyStream {
-    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
-        Err(io::ErrorKind::Other.into())
+impl AsyncRead for DummyStream {
+    fn poll_read(self: Pin<&mut Self>, _: &mut Context, _: &mut [u8])
+        -> Poll<Result<usize, io::Error>>
+    {
+        Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 }
 
-impl io::Write for DummyStream {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::ErrorKind::Other.into())
+impl AsyncWrite for DummyStream {
+    fn poll_write(self: Pin<&mut Self>, _: &mut Context, _: &[u8])
+        -> Poll<Result<usize, io::Error>>
+    {
+        Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        Err(io::ErrorKind::Other.into())
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context)
+        -> Poll<Result<(), io::Error>>
+    {
+        Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
-}
 
-impl tokio_io::AsyncRead for DummyStream {
-}
-
-impl tokio_io::AsyncWrite for DummyStream {
-    fn shutdown(&mut self) -> futures::Poll<(), io::Error> {
-        Err(io::ErrorKind::Other.into())
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context)
+        -> Poll<Result<(), io::Error>>
+    {
+        Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 }

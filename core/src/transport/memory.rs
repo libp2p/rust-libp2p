@@ -18,32 +18,61 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Transport, transport::TransportError};
-use bytes::{Bytes, IntoBuf};
+use crate::{Transport, transport::{TransportError, ListenerEvent}};
 use fnv::FnvHashMap;
-use futures::{future::{self, FutureResult}, prelude::*, sync::mpsc, try_ready};
+use futures::{future::{self, Ready}, prelude::*, channel::mpsc, task::Context, task::Poll};
 use lazy_static::lazy_static;
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64};
+use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64, pin::Pin};
 
 lazy_static! {
-    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::UnboundedSender<Channel<Bytes>>>> = Mutex::new(FnvHashMap::default());
+    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Vec<u8>>>>> =
+        Mutex::new(FnvHashMap::default());
 }
 
 /// Transport that supports `/memory/N` multiaddresses.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct MemoryTransport;
 
+/// Connection to a `MemoryTransport` currently being opened.
+pub struct DialFuture {
+    sender: mpsc::Sender<Channel<Vec<u8>>>,
+    channel_to_send: Option<Channel<Vec<u8>>>,
+    channel_to_return: Option<Channel<Vec<u8>>>,
+}
+
+impl Future for DialFuture {
+    type Output = Result<Channel<Vec<u8>>, MemoryTransportError>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match self.sender.poll_ready(cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(())) => {},
+            Poll::Ready(Err(_)) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
+        }
+
+        let channel_to_send = self.channel_to_send.take()
+            .expect("Future should not be polled again once complete");
+        match self.sender.start_send(channel_to_send) {
+            Err(_) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
+            Ok(()) => {}
+        }
+
+        Poll::Ready(Ok(self.channel_to_return.take()
+                .expect("Future should not be polled again once complete")))
+    }
+}
+
 impl Transport for MemoryTransport {
-    type Output = Channel<Bytes>;
+    type Output = Channel<Vec<u8>>;
     type Error = MemoryTransportError;
     type Listener = Listener;
-    type ListenerUpgrade = FutureResult<Self::Output, Self::Error>;
-    type Dial = FutureResult<Self::Output, Self::Error>;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+    type Dial = DialFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -66,23 +95,25 @@ impl Transport for MemoryTransport {
             }
         };
 
-        let actual_addr = Protocol::Memory(port.get()).into();
 
-        let (tx, rx) = mpsc::unbounded();
+        let (tx, rx) = mpsc::channel(2);
         match hub.entry(port) {
-            Entry::Occupied(_) => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
-            Entry::Vacant(e) => e.insert(tx),
+            Entry::Occupied(_) =>
+                return Err(TransportError::Other(MemoryTransportError::Unreachable)),
+            Entry::Vacant(e) => e.insert(tx)
         };
 
         let listener = Listener {
             port,
+            addr: Protocol::Memory(port.get()).into(),
             receiver: rx,
+            tell_listen_addr: true
         };
 
-        Ok((listener, actual_addr))
+        Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -94,28 +125,17 @@ impl Transport for MemoryTransport {
         };
 
         let hub = HUB.lock();
-        let chan = if let Some(tx) = hub.get(&port) {
-            let (a_tx, a_rx) = mpsc::unbounded();
-            let (b_tx, b_rx) = mpsc::unbounded();
-            let a = RwStreamSink::new(Chan { incoming: a_rx, outgoing: b_tx });
-            let b = RwStreamSink::new(Chan { incoming: b_rx, outgoing: a_tx });
-            if tx.unbounded_send(b).is_err() {
-                return Err(TransportError::Other(MemoryTransportError::Unreachable));
-            }
-            a
-        } else {
-            return Err(TransportError::Other(MemoryTransportError::Unreachable));
-        };
+        if let Some(sender) = hub.get(&port) {
+            let (a_tx, a_rx) = mpsc::channel(4096);
+            let (b_tx, b_rx) = mpsc::channel(4096);
+            Ok(DialFuture {
+                sender: sender.clone(),
+                channel_to_send: Some(RwStreamSink::new(Chan { incoming: a_rx, outgoing: b_tx })),
+                channel_to_return: Some(RwStreamSink::new(Chan { incoming: b_rx, outgoing: a_tx })),
 
-        Ok(future::ok(chan))
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // TODO: NAT traversal for `/memory` addresses? how does that make sense?
-        if server == observed {
-            Some(server.clone())
+            })
         } else {
-            None
+            Err(TransportError::Other(MemoryTransportError::Unreachable))
         }
     }
 }
@@ -144,23 +164,36 @@ impl error::Error for MemoryTransportError {}
 pub struct Listener {
     /// Port we're listening on.
     port: NonZeroU64,
+    /// The address we are listening on.
+    addr: Multiaddr,
     /// Receives incoming connections.
-    receiver: mpsc::UnboundedReceiver<Channel<Bytes>>,
+    receiver: mpsc::Receiver<Channel<Vec<u8>>>,
+    /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
+    tell_listen_addr: bool
 }
 
 impl Stream for Listener {
-    type Item = (FutureResult<Channel<Bytes>, MemoryTransportError>, Multiaddr);
-    type Error = MemoryTransportError;
+    type Item = Result<ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>>, MemoryTransportError>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let channel = try_ready!(Ok(self.receiver.poll()
-            .expect("An unbounded receiver never panics; QED")));
-        let channel = match channel {
-            Some(c) => c,
-            None => return Ok(Async::Ready(None)),
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        if self.tell_listen_addr {
+            self.tell_listen_addr = false;
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))))
+        }
+
+        let channel = match Stream::poll_next(Pin::new(&mut self.receiver), cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(None) => panic!("Alive listeners always have a sender."),
+            Poll::Ready(Some(v)) => v,
         };
-        let dialed_addr = Protocol::Memory(self.port.get()).into();
-        Ok(Async::Ready(Some((future::ok(channel), dialed_addr))))
+
+        let event = ListenerEvent::Upgrade {
+            upgrade: future::ready(Ok(channel)),
+            local_addr: self.addr.clone(),
+            remote_addr: Protocol::Memory(self.port.get()).into()
+        };
+
+        Poll::Ready(Some(Ok(event)))
     }
 }
 
@@ -196,43 +229,48 @@ pub type Channel<T> = RwStreamSink<Chan<T>>;
 /// A channel represents an established, in-memory, logical connection between two endpoints.
 ///
 /// Implements `Sink` and `Stream`.
-pub struct Chan<T = Bytes> {
-    incoming: mpsc::UnboundedReceiver<T>,
-    outgoing: mpsc::UnboundedSender<T>,
+pub struct Chan<T = Vec<u8>> {
+    incoming: mpsc::Receiver<T>,
+    outgoing: mpsc::Sender<T>,
+}
+
+impl<T> Unpin for Chan<T> {
 }
 
 impl<T> Stream for Chan<T> {
-    type Item = T;
-    type Error = io::Error;
+    type Item = Result<T, io::Error>;
 
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.incoming.poll().map_err(|()| io::ErrorKind::BrokenPipe.into())
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match Stream::poll_next(Pin::new(&mut self.incoming), cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(Some(Err(io::ErrorKind::BrokenPipe.into()))),
+            Poll::Ready(Some(v)) => Poll::Ready(Some(Ok(v))),
+        }
     }
 }
 
-impl<T> Sink for Chan<T> {
-    type SinkItem = T;
-    type SinkError = io::Error;
+impl<T> Sink<T> for Chan<T> {
+    type Error = io::Error;
 
-    #[inline]
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        self.outgoing.poll_ready(cx)
+            .map(|v| v.map_err(|_| io::ErrorKind::BrokenPipe.into()))
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
         self.outgoing.start_send(item).map_err(|_| io::ErrorKind::BrokenPipe.into())
     }
 
-    #[inline]
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.poll_complete().map_err(|_| io::ErrorKind::BrokenPipe.into())
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
-    #[inline]
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.close().map_err(|_| io::ErrorKind::BrokenPipe.into())
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 }
 
-impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
-    #[inline]
+impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
     fn into(self) -> RwStreamSink<Chan<T>> {
         RwStreamSink::new(self)
     }
@@ -241,6 +279,8 @@ impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
+    use std::io::Write;
 
     #[test]
     fn parse_memory_addr_works() {
@@ -273,5 +313,43 @@ mod tests {
         assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_ok());
     }
 
-    // TODO: test that is actually works
+    #[test]
+    fn communicating_between_dialer_and_listener() {
+        let msg = [1, 2, 3];
+
+        // Setup listener.
+
+        let rand_port = rand::random::<u64>().saturating_add(1);
+        let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+        let cloned_t1_addr = t1_addr.clone();
+
+        let t1 = MemoryTransport::default();
+
+        let listener = async move {
+            let listener = t1.listen_on(t1_addr.clone()).unwrap();
+
+            let upgrade = listener.filter_map(|ev| futures::future::ready(
+                ListenerEvent::into_upgrade(ev.unwrap())
+            )).next().await.unwrap();
+
+            let mut socket = upgrade.0.await.unwrap();
+
+            let mut buf = [0; 3];
+            socket.read_exact(&mut buf).await.unwrap();
+
+            assert_eq!(buf, msg);
+        };
+
+        // Setup dialer.
+
+        let t2 = MemoryTransport::default();
+        let dialer = async move {
+            let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
+            socket.write_all(&msg).await.unwrap();
+        };
+
+        // Wait for both to finish.
+
+        futures::executor::block_on(futures::future::join(listener, dialer));
+    }
 }

@@ -6,8 +6,9 @@ use quickcheck::{Arbitrary, Gen, QuickCheck};
 use rand::Rng;
 use std::{
     borrow::Cow,
+    convert::TryFrom,
     iter::FromIterator,
-    net::{SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr},
     str::FromStr
 };
 
@@ -16,8 +17,8 @@ use std::{
 #[test]
 fn to_from_bytes_identity() {
     fn prop(a: Ma) -> bool {
-        let b = a.0.to_bytes();
-        Some(a) == Multiaddr::from_bytes(b).ok().map(Ma)
+        let b = a.0.to_vec();
+        Some(a) == Multiaddr::try_from(b).ok().map(Ma)
     }
     QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
 }
@@ -29,6 +30,30 @@ fn to_from_str_identity() {
         Some(a) == Multiaddr::from_str(&b).ok().map(Ma)
     }
     QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
+}
+
+#[test]
+fn byteswriter() {
+    fn prop(a: Ma, b: Ma) -> bool {
+        let mut x = a.0.clone();
+        for p in b.0.iter() {
+            x = x.with(p)
+        }
+        x.iter().zip(a.0.iter().chain(b.0.iter())).all(|(x, y)| x == y)
+    }
+    QuickCheck::new().quickcheck(prop as fn(Ma, Ma) -> bool)
+}
+
+#[test]
+fn push_pop_identity() {
+    fn prop(a: Ma, p: Proto) -> bool {
+        let mut b = a.clone();
+        let q = p.clone();
+        b.0.push(q.0);
+        assert_ne!(a.0, b.0);
+        Some(p.0) == b.0.pop() && a.0 == b.0
+    }
+    QuickCheck::new().quickcheck(prop as fn(Ma, Proto) -> bool)
 }
 
 
@@ -51,7 +76,7 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 23) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 24) { // TODO: Add Protocol::Quic
              0 => Proto(Dccp(g.gen())),
              1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
              2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
@@ -73,13 +98,18 @@ impl Arbitrary for Proto {
             17 => Proto(Udt),
             18 => Proto(Unix(Cow::Owned(SubString::arbitrary(g).0))),
             19 => Proto(Utp),
-            20 => Proto(Ws),
-            21 => Proto(Wss),
+            20 => Proto(Ws("/".into())),
+            21 => Proto(Wss("/".into())),
             22 => {
                 let mut a = [0; 10];
                 g.fill(&mut a);
                 Proto(Onion(Cow::Owned(a), g.gen()))
-            }
+            },
+            23 => {
+                let mut a = [0; 35];
+                g.fill_bytes(&mut a);
+                Proto(Onion3((a, g.gen()).into()))
+            },
              _ => panic!("outside range")
         }
     }
@@ -102,10 +132,10 @@ impl Arbitrary for SubString {
 
 fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol<'_>>) {
     let parsed = source.parse::<Multiaddr>().unwrap();
-    assert_eq!(HEXUPPER.encode(&parsed.to_bytes()[..]), target);
+    assert_eq!(HEXUPPER.encode(&parsed.to_vec()[..]), target);
     assert_eq!(parsed.iter().collect::<Vec<_>>(), protocols);
     assert_eq!(source.parse::<Multiaddr>().unwrap().to_string(), source);
-    assert_eq!(Multiaddr::from_bytes(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
+    assert_eq!(Multiaddr::try_from(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
 }
 
 fn multihash(s: &str) -> Multihash {
@@ -171,47 +201,76 @@ fn construct_success() {
     // /ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234/unix/stdio
     ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "29200108A07AC542013AC986FFFE317095061F40DD03A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![Ip6(addr6.clone()), Tcp(8000), Ws, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))
+             vec![Ip6(addr6.clone()), Tcp(8000), Ws("/".into()), P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))
              ]);
     ma_valid("/p2p-webrtc-star/ip4/127.0.0.1/tcp/9090/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "9302047F000001062382DD03A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![P2pWebRtcStar, Ip4(local.clone()), Tcp(9090), Ws, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))
+             vec![P2pWebRtcStar, Ip4(local.clone()), Tcp(9090), Ws("/".into()), P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))
              ]);
     ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "29200108A07AC542013AC986FFFE317095061F40DE03A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![Ip6(addr6.clone()), Tcp(8000), Wss, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
+             vec![Ip6(addr6.clone()), Tcp(8000), Wss("/".into()), P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
     ma_valid("/ip4/127.0.0.1/tcp/9090/p2p-circuit/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "047F000001062382A202A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
              vec![Ip4(local.clone()), Tcp(9090), P2pCircuit, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
+
+    ma_valid(
+        "/onion/aaimaq4ygg2iegci:80",
+        "BC030010C0439831B48218480050",
+        vec![Onion(Cow::Owned([0, 16, 192, 67, 152, 49, 180, 130, 24, 72]), 80)],
+    );
+    ma_valid(
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234",
+        "BD03ADADEC040BE047F9658668B11A504F3155001F231A37F54C4476C07FB4CC139ED7E30304D2",
+        vec![Onion3(([173, 173, 236, 4, 11, 224, 71, 249, 101, 134, 104, 177, 26, 80, 79, 49, 85, 0, 31, 35, 26, 55, 245, 76, 68, 118, 192, 127, 180, 204, 19, 158, 215, 227, 3], 1234).into())],
+    );
+    ma_valid(
+        "/dnsaddr/sjc-1.bootstrap.libp2p.io",
+        "3819736A632D312E626F6F7473747261702E6C69627032702E696F",
+        vec![Dnsaddr(Cow::Borrowed("sjc-1.bootstrap.libp2p.io"))]
+    );
+    ma_valid(
+        "/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/1234/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+        "3819736A632D312E626F6F7473747261702E6C69627032702E696F0604D2A50322122006B3608AA000274049EB28AD8E793A26FF6FAB281A7D3BD77CD18EB745DFAABB",
+        vec![Dnsaddr(Cow::Borrowed("sjc-1.bootstrap.libp2p.io")), Tcp(1234), P2p(multihash("QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"))]
+    );
 }
 
 #[test]
 fn construct_fail() {
-    let addresses = ["/ip4",
-                     "/ip4/::1",
-                     "/ip4/fdpsofodsajfdoisa",
-                     "/ip6",
-                     "/udp",
-                     "/tcp",
-                     "/sctp",
-                     "/udp/65536",
-                     "/tcp/65536",
-                     // "/onion/9imaq4ygg2iegci7:80",
-                     // "/onion/aaimaq4ygg2iegci7:80",
-                     // "/onion/timaq4ygg2iegci7:0",
-                     // "/onion/timaq4ygg2iegci7:-1",
-                     // "/onion/timaq4ygg2iegci7",
-                     // "/onion/timaq4ygg2iegci@:666",
-                     "/udp/1234/sctp",
-                     "/udp/1234/udt/1234",
-                     "/udp/1234/utp/1234",
-                     "/ip4/127.0.0.1/udp/jfodsajfidosajfoidsa",
-                     "/ip4/127.0.0.1/udp",
-                     "/ip4/127.0.0.1/tcp/jfodsajfidosajfoidsa",
-                     "/ip4/127.0.0.1/tcp",
-                     "/ip4/127.0.0.1/p2p",
-                     "/ip4/127.0.0.1/p2p/tcp",
-                     "/p2p-circuit/50"];
+    let addresses = [
+        "/ip4",
+        "/ip4/::1",
+        "/ip4/fdpsofodsajfdoisa",
+        "/ip6",
+        "/udp",
+        "/tcp",
+        "/sctp",
+        "/udp/65536",
+        "/tcp/65536",
+        "/onion/9imaq4ygg2iegci7:80",
+        "/onion/aaimaq4ygg2iegci7:80",
+        "/onion/timaq4ygg2iegci7:0",
+        "/onion/timaq4ygg2iegci7:-1",
+        "/onion/timaq4ygg2iegci7",
+        "/onion/timaq4ygg2iegci@:666",
+        "/onion3/9ww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:80",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd7:80",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:0",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:-1",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd",
+        "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyy@:666",
+        "/udp/1234/sctp",
+        "/udp/1234/udt/1234",
+        "/udp/1234/utp/1234",
+        "/ip4/127.0.0.1/udp/jfodsajfidosajfoidsa",
+        "/ip4/127.0.0.1/udp",
+        "/ip4/127.0.0.1/tcp/jfodsajfidosajfoidsa",
+        "/ip4/127.0.0.1/tcp",
+        "/ip4/127.0.0.1/p2p",
+        "/ip4/127.0.0.1/p2p/tcp",
+        "/p2p-circuit/50"
+    ];
 
     for address in &addresses {
         assert!(address.parse::<Multiaddr>().is_err(), address.to_string());
@@ -221,38 +280,24 @@ fn construct_fail() {
 
 #[test]
 fn to_multiaddr() {
-    assert_eq!(Ipv4Addr::new(127, 0, 0, 1).to_multiaddr().unwrap(),
-               "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap());
-    assert_eq!(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21)
-                   .to_multiaddr()
-                   .unwrap(),
-               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse::<Multiaddr>().unwrap());
-    assert_eq!("/ip4/127.0.0.1/tcp/1234".to_string().to_multiaddr().unwrap(),
+    assert_eq!(Multiaddr::from(Ipv4Addr::new(127, 0, 0, 1)), "/ip4/127.0.0.1".parse().unwrap());
+    assert_eq!(Multiaddr::from(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21)),
+               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse().unwrap());
+    assert_eq!(Multiaddr::try_from("/ip4/127.0.0.1/tcp/1234".to_string()).unwrap(),
                "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap());
-    assert_eq!("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".to_multiaddr().unwrap(),
+    assert_eq!(Multiaddr::try_from("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21").unwrap(),
                "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse::<Multiaddr>().unwrap());
-    assert_eq!(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 1234).to_multiaddr().unwrap(),
+    assert_eq!(Multiaddr::from(Ipv4Addr::new(127, 0, 0, 1)).with(Protocol::Tcp(1234)),
                "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap());
-    assert_eq!(SocketAddrV6::new(Ipv6Addr::new(0x2601,
-                                               0x9,
-                                               0x4f81,
-                                               0x9700,
-                                               0x803e,
-                                               0xca65,
-                                               0x66e8,
-                                               0xc21),
-                                 1234,
-                                 0,
-                                 0)
-                   .to_multiaddr()
-                   .unwrap(),
+    assert_eq!(Multiaddr::from(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21))
+                   .with(Protocol::Tcp(1234)),
                "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21/tcp/1234".parse::<Multiaddr>().unwrap());
 }
 
 #[test]
 fn from_bytes_fail() {
     let bytes = vec![1, 2, 3, 4];
-    assert!(Multiaddr::from_bytes(bytes).is_err());
+    assert!(Multiaddr::try_from(bytes).is_err());
 }
 
 
@@ -279,12 +324,53 @@ fn ser_and_deser_bincode() {
 #[test]
 fn append() {
     let mut a: Multiaddr = Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4)).into();
-    a.append(Protocol::Tcp(80));
-    a.append(Protocol::Http);
+    a.push(Protocol::Tcp(80));
+    a.push(Protocol::Http);
 
     let mut i = a.iter();
     assert_eq!(Some(Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4))), i.next());
     assert_eq!(Some(Protocol::Tcp(80)), i.next());
     assert_eq!(Some(Protocol::Http), i.next());
     assert_eq!(None, i.next())
+}
+
+fn replace_ip_addr(a: &Multiaddr, p: Protocol) -> Option<Multiaddr> {
+    a.replace(0, move |x| match x {
+        Protocol::Ip4(_) | Protocol::Ip6(_) => Some(p),
+        _ => None
+    })
+}
+
+#[test]
+fn replace_ip4_with_ip4() {
+    let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
+    let result = replace_ip_addr(&server, Protocol::Ip4([80, 81, 82, 83].into())).unwrap();
+    assert_eq!(result, multiaddr!(Ip4([80, 81, 82, 83]), Tcp(10000u16)))
+}
+
+#[test]
+fn replace_ip6_with_ip4() {
+    let server = multiaddr!(Ip6(Ipv6Addr::LOCALHOST), Tcp(10000u16));
+    let result = replace_ip_addr(&server, Protocol::Ip4([80, 81, 82, 83].into())).unwrap();
+    assert_eq!(result, multiaddr!(Ip4([80, 81, 82, 83]), Tcp(10000u16)))
+}
+
+#[test]
+fn replace_ip4_with_ip6() {
+    let server = multiaddr!(Ip4(Ipv4Addr::LOCALHOST), Tcp(10000u16));
+    let result = replace_ip_addr(&server, "2001:db8::1".parse::<Ipv6Addr>().unwrap().into());
+    assert_eq!(result.unwrap(), "/ip6/2001:db8::1/tcp/10000".parse::<Multiaddr>().unwrap())
+}
+
+#[test]
+fn unknown_protocol_string() {
+    match "/unknown/1.2.3.4".parse::<Multiaddr>() {
+        Ok(_) => assert!(false, "The UnknownProtocolString error should be caused"),
+        Err(e) => match e {
+            crate::Error::UnknownProtocolString(protocol) => {
+                assert_eq!(protocol, "unknown")
+            },
+            _ => assert!(false, "The UnknownProtocolString error should be caused")
+        }
+    }
 }

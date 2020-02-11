@@ -18,587 +18,647 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Key-value storage, with a refresh and a time-to-live system.
+//! Implementation of a Kademlia routing table as used by a single peer
+//! participating in a Kademlia DHT.
 //!
-//! A k-buckets table allows one to store a value identified by keys, ordered by their distance
-//! to a reference key passed to the constructor.
+//! The entry point for the API of this module is a [`KBucketsTable`].
 //!
-//! If the local ID has `N` bits, then the k-buckets table contains `N` *buckets* each containing
-//! a constant number of entries. Storing a key in the k-buckets table adds it to the bucket
-//! corresponding to its distance with the reference key.
+//! ## Pending Insertions
+//!
+//! When the bucket associated with the `Key` of an inserted entry is full
+//! but contains disconnected nodes, it accepts a [`PendingEntry`].
+//! Pending entries are inserted lazily when their timeout is found to be expired
+//! upon querying the `KBucketsTable`. When that happens, the `KBucketsTable` records
+//! an [`AppliedPending`] result which must be consumed by calling [`take_applied_pending`]
+//! regularly and / or after performing lookup operations like [`entry`] and [`closest`].
+//!
+//! [`entry`]: kbucket::KBucketsTable::entry
+//! [`closest`]: kbucket::KBucketsTable::closest
+//! [`AppliedPending`]: kbucket::AppliedPending
+//! [`KBucketsTable`]: kbucket::KBucketsTable
+//! [`take_applied_pending`]: kbucket::KBucketsTable::take_applied_pending
+//! [`PendingEntry`]: kbucket::PendingEntry
 
-use arrayvec::ArrayVec;
-use bigint::U512;
-use libp2p_core::PeerId;
-use multihash::Multihash;
-use std::slice::IterMut as SliceIterMut;
+// [Implementation Notes]
+//
+// 1. Routing Table Layout
+//
+// The routing table is currently implemented as a fixed-size "array" of
+// buckets, ordered by increasing distance relative to a local key
+// that identifies the local peer. This is an often-used, simplified
+// implementation that approximates the properties of the b-tree (or prefix tree)
+// implementation described in the full paper [0], whereby buckets are split on-demand.
+// This should be treated as an implementation detail, however, so that the
+// implementation may change in the future without breaking the API.
+//
+// 2. Replacement Cache
+//
+// In this implementation, the "replacement cache" for unresponsive peers
+// consists of a single entry per bucket. Furthermore, this implementation is
+// currently tailored to connection-oriented transports, meaning that the
+// "LRU"-based ordering of entries in a bucket is actually based on the last reported
+// connection status of the corresponding peers, from least-recently (dis)connected to
+// most-recently (dis)connected, and controlled through the `Entry` API. As a result,
+// the nodes in the buckets are not reordered as a result of RPC activity, but only as a
+// result of nodes being marked as connected or disconnected. In particular,
+// if a bucket is full and contains only entries for peers that are considered
+// connected, no pending entry is accepted. See the `bucket` submodule for
+// further details.
+//
+// [0]: https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
+
+mod bucket;
+mod entry;
+mod key;
+
+pub use entry::*;
+
+use arrayvec::{self, ArrayVec};
+use bucket::KBucket;
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
-use std::vec::IntoIter as VecIntoIter;
 
-/// Maximum number of nodes in a bucket.
-pub const MAX_NODES_PER_BUCKET: usize = 20;
+/// Maximum number of k-buckets.
+const NUM_BUCKETS: usize = 256;
 
-/// Table of k-buckets.
+/// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
-pub struct KBucketsTable<TPeerId, TVal> {
-    /// Peer ID of the local node.
-    my_id: TPeerId,
-    /// The actual tables that store peers or values.
-    tables: Vec<KBucket<TPeerId, TVal>>,
-    /// The timeout when trying to reach the first node after which we consider it unresponsive.
-    unresponsive_timeout: Duration,
+pub struct KBucketsTable<TKey, TVal> {
+    /// The key identifying the local peer that owns the routing table.
+    local_key: TKey,
+    /// The buckets comprising the routing table.
+    buckets: Vec<KBucket<TKey, TVal>>,
+    /// The list of evicted entries that have been replaced with pending
+    /// entries since the last call to [`KBucketsTable::take_applied_pending`].
+    applied_pending: VecDeque<AppliedPending<TKey, TVal>>
 }
 
-/// An individual table that stores peers or values.
-#[derive(Debug, Clone)]
-struct KBucket<TPeerId, TVal> {
-    /// Nodes are always ordered from oldest to newest. The nodes we are connected to are always
-    /// all on top of the nodes we are not connected to.
-    nodes: ArrayVec<[Node<TPeerId, TVal>; MAX_NODES_PER_BUCKET]>,
+/// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in the
+/// interval `[0, NUM_BUCKETS)`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct BucketIndex(usize);
 
-    /// Index in `nodes` over which all nodes are connected. Must always be <= to the length
-    /// of `nodes`.
-    first_connected_pos: usize,
-
-    /// Node received when the bucket was full. Will be added to the list if the first node doesn't
-    /// respond in time to our reach attempt. The second element is the time when the pending node
-    /// was added. If it is too old we drop the first node and add the pending node to the end of
-    /// the list.
-    pending_node: Option<(Node<TPeerId, TVal>, Instant)>,
-
-    /// Last time this bucket was updated.
-    latest_update: Instant,
-}
-
-/// A single node in a k-bucket.
-#[derive(Debug, Clone)]
-struct Node<TPeerId, TVal> {
-    /// Id of the node.
-    id: TPeerId,
-    /// Value associated to it.
-    value: TVal,
-}
-
-impl<TPeerId, TVal> KBucket<TPeerId, TVal> {
-    /// Puts the kbucket into a coherent state.
-    /// If a node is pending and the timeout has expired, removes the first element of `nodes`
-     /// and puts the node back in `pending_node`.
-    fn flush(&mut self, timeout: Duration) {
-        if let Some((pending_node, instant)) = self.pending_node.take() {
-            if instant.elapsed() >= timeout {
-                let _ = self.nodes.remove(0);
-                self.nodes.push(pending_node);
-            } else {
-                self.pending_node = Some((pending_node, instant));
-            }
-        }
-    }
-}
-
-/// Trait that must be implemented on types that can be used as an identifier in a k-bucket.
-pub trait KBucketsPeerId<TOther = Self>: PartialEq<TOther> + Clone {
-    /// Computes the XOR of this value and another one. The lower the closer.
-    fn distance_with(&self, other: &TOther) -> u32;
-
-    /// Returns then number of bits that are necessary to store the distance between peer IDs.
-    /// Used for pre-allocations.
+impl BucketIndex {
+    /// Creates a new `BucketIndex` for a `Distance`.
     ///
-    /// > **Note**: Returning 0 would lead to a panic.
-    fn max_distance() -> usize;
-}
-
-impl KBucketsPeerId for PeerId {
-    #[inline]
-    fn distance_with(&self, other: &Self) -> u32 {
-        Multihash::distance_with(self.as_ref(), other.as_ref())
+    /// The given distance is interpreted as the distance from a `local_key` of
+    /// a `KBucketsTable`. If the distance is zero, `None` is returned, in
+    /// recognition of the fact that the only key with distance `0` to a
+    /// `local_key` is the `local_key` itself, which does not belong in any
+    /// bucket.
+    fn new(d: &Distance) -> Option<BucketIndex> {
+        (NUM_BUCKETS - d.0.leading_zeros() as usize)
+            .checked_sub(1)
+            .map(BucketIndex)
     }
 
-    #[inline]
-    fn max_distance() -> usize {
-        <Multihash as KBucketsPeerId>::max_distance()
-    }
-}
-
-impl KBucketsPeerId<Multihash> for PeerId {
-    #[inline]
-    fn distance_with(&self, other: &Multihash) -> u32 {
-        Multihash::distance_with(self.as_ref(), other)
+    /// Gets the index value as an unsigned integer.
+    fn get(&self) -> usize {
+        self.0
     }
 
-    #[inline]
-    fn max_distance() -> usize {
-        <Multihash as KBucketsPeerId>::max_distance()
-    }
-}
-
-impl KBucketsPeerId for Multihash {
-    #[inline]
-    fn distance_with(&self, other: &Self) -> u32 {
-        // Note that we don't compare the hash functions because there's no chance of collision
-        // of the same value hashed with two different hash functions.
-        let my_hash = U512::from(self.digest());
-        let other_hash = U512::from(other.digest());
-        let xor = my_hash ^ other_hash;
-        512 - xor.leading_zeros()
-    }
-
-    #[inline]
-    fn max_distance() -> usize {
-        512
+    /// Generates a random distance that falls into the bucket for this index.
+    fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
+        let mut bytes = [0u8; 32];
+        let quot = self.0 / 8;
+        for i in 0 .. quot {
+            bytes[31 - i] = rng.gen();
+        }
+        let rem = (self.0 % 8) as u32;
+        let lower = usize::pow(2, rem);
+        let upper = usize::pow(2, rem + 1);
+        bytes[31 - quot] = rng.gen_range(lower, upper) as u8;
+        Distance(U256::from(bytes))
     }
 }
 
-impl<TPeerId, TVal> KBucketsTable<TPeerId, TVal>
+impl<TKey, TVal> KBucketsTable<TKey, TVal>
 where
-    TPeerId: KBucketsPeerId,
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone
 {
-    /// Builds a new routing table.
-    pub fn new(my_id: TPeerId, unresponsive_timeout: Duration) -> Self {
+    /// Creates a new, empty Kademlia routing table with entries partitioned
+    /// into buckets as per the Kademlia protocol.
+    ///
+    /// The given `pending_timeout` specifies the duration after creation of
+    /// a [`PendingEntry`] after which it becomes eligible for insertion into
+    /// a full bucket, replacing the least-recently (dis)connected node.
+    pub fn new(local_key: TKey, pending_timeout: Duration) -> Self {
         KBucketsTable {
-            my_id,
-            tables: (0..TPeerId::max_distance())
-                .map(|_| KBucket {
-                    nodes: ArrayVec::new(),
-                    first_connected_pos: 0,
-                    pending_node: None,
-                    latest_update: Instant::now(),
-                })
-                .collect(),
-            unresponsive_timeout,
+            local_key,
+            buckets: (0 .. NUM_BUCKETS).map(|_| KBucket::new(pending_timeout)).collect(),
+            applied_pending: VecDeque::new()
         }
     }
 
-    // Returns the id of the bucket that should contain the peer with the given ID.
-    //
-    // Returns `None` if out of range, which happens if `id` is the same as the local peer id.
-    #[inline]
-    fn bucket_num(&self, id: &TPeerId) -> Option<usize> {
-        (self.my_id.distance_with(id) as usize).checked_sub(1)
+    /// Returns the local key.
+    pub fn local_key(&self) -> &TKey {
+        &self.local_key
     }
 
-    /// Returns an iterator to all the buckets of this table.
-    ///
-    /// Ordered by proximity to the local node. Closest bucket (with max. one node in it) comes
-    /// first.
-    #[inline]
-    pub fn buckets(&mut self) -> BucketsIter<'_, TPeerId, TVal> {
-        BucketsIter(self.tables.iter_mut(), self.unresponsive_timeout)
-    }
-
-    /// Returns the ID of the local node.
-    #[inline]
-    pub fn my_id(&self) -> &TPeerId {
-        &self.my_id
-    }
-
-    /// Returns the value associated to a node, if any is present.
-    ///
-    /// Does **not** include pending nodes.
-    pub fn get(&self, id: &TPeerId) -> Option<&TVal> {
-        let table = match self.bucket_num(&id) {
-            Some(n) => &self.tables[n],
-            None => return None,
-        };
-
-        for elem in &table.nodes {
-            if elem.id == *id {
-                return Some(&elem.value);
+    /// Returns an `Entry` for the given key, representing the state of the entry
+    /// in the routing table.
+    pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
+        let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
+        if let Some(i) = index {
+            let bucket = &mut self.buckets[i.get()];
+            if let Some(applied) = bucket.apply_pending() {
+                self.applied_pending.push_back(applied)
             }
-        }
-
-        None
-    }
-
-    /// Returns the value associated to a node, if any is present.
-    ///
-    /// Does **not** include pending nodes.
-    pub fn get_mut(&mut self, id: &TPeerId) -> Option<&mut TVal> {
-        let table = match self.bucket_num(&id) {
-            Some(n) => &mut self.tables[n],
-            None => return None,
-        };
-
-        table.flush(self.unresponsive_timeout);
-
-        for elem in &mut table.nodes {
-            if elem.id == *id {
-                return Some(&mut elem.value);
-            }
-        }
-
-        None
-    }
-
-    /// Returns the value associated to a node if any is present. Otherwise, tries to add the
-    /// node to the table in a disconnected state and return its value. Returns `None` if `id` is
-    /// the local peer, or if the table is full.
-    pub fn entry_mut(&mut self, id: &TPeerId) -> Option<&mut TVal>
-    where
-        TVal: Default,
-    {
-        if let Some((bucket, entry)) = self.entry_mut_inner(id) {
-            Some(&mut self.tables[bucket].nodes[entry].value)
+            Entry::new(bucket, key)
         } else {
-            None
+            Entry::SelfEntry
         }
     }
 
-    /// Apparently non-lexical lifetimes still aren't working properly in some situations, so we
-    /// delegate `entry_mut` to this method that returns an index within `self.tables` and the
-    /// node index within that table.
-    fn entry_mut_inner(&mut self, id: &TPeerId) -> Option<(usize, usize)>
-    where
-        TVal: Default,
-    {
-        let (bucket_num, table) = match self.bucket_num(&id) {
-            Some(n) => (n, &mut self.tables[n]),
-            None => return None,
-        };
-
-        table.flush(self.unresponsive_timeout);
-
-        if let Some(pos) = table.nodes.iter().position(|elem| elem.id == *id) {
-            return Some((bucket_num, pos));
-        }
-
-        if !table.nodes.is_full() {
-            table.nodes.insert(table.first_connected_pos, Node {
-                id: id.clone(),
-                value: Default::default(),
-            });
-            table.first_connected_pos += 1;
-            table.latest_update = Instant::now();
-            return Some((bucket_num, table.first_connected_pos - 1));
-        }
-
-        None
-    }
-
-    /// Reports that we are connected to the given node.
-    ///
-    /// This inserts the node in the k-buckets, if possible. If it is already in a k-bucket, puts
-    /// it above the disconnected nodes. If it is not already in a k-bucket, then the value will
-    /// be built with the `Default` trait.
-    pub fn set_connected(&mut self, id: &TPeerId) -> Update<'_, TPeerId>
-    where
-        TVal: Default,
-    {
-        let table = match self.bucket_num(&id) {
-            Some(n) => &mut self.tables[n],
-            None => return Update::FailSelfUpdate,
-        };
-
-        table.flush(self.unresponsive_timeout);
-
-        if let Some(pos) = table.nodes.iter().position(|elem| elem.id == *id) {
-            // Node is already in the table; move it over `first_connected_pos` if necessary.
-            // We do a `saturating_sub(1)`, because if `first_connected_pos` is 0 then
-            // `pos < first_connected_pos` can never be true anyway.
-            if pos < table.first_connected_pos.saturating_sub(1) {
-                let elem = table.nodes.remove(pos);
-                table.first_connected_pos -= 1;
-                table.nodes.insert(table.first_connected_pos, elem);
+    /// Returns an iterator over all the entries in the routing table.
+    pub fn iter<'a>(&'a mut self) -> impl Iterator<Item = EntryRefView<'a, TKey, TVal>> {
+        let applied_pending = &mut self.applied_pending;
+        self.buckets.iter_mut().flat_map(move |table| {
+            if let Some(applied) = table.apply_pending() {
+                applied_pending.push_back(applied)
             }
-            table.latest_update = Instant::now();
-            Update::Updated
-
-        } else if !table.nodes.is_full() {
-            // Node is not in the table yet, but there's plenty of space for it.
-            table.nodes.insert(table.first_connected_pos, Node {
-                id: id.clone(),
-                value: Default::default(),
-            });
-            table.latest_update = Instant::now();
-            Update::Added
-
-        } else if table.first_connected_pos > 0 && table.pending_node.is_none() {
-            // Node is not in the table yet, but there could be room for it if we drop the first
-            // element. However we first add the node to add to `pending_node` and try to reconnect
-            // to the oldest node.
-            let pending_node = Node {
-                id: id.clone(),
-                value: Default::default(),
-            };
-            table.pending_node = Some((pending_node, Instant::now()));
-            Update::Pending(&table.nodes[0].id)
-
-        } else {
-            debug_assert!(table.first_connected_pos == 0 || table.pending_node.is_some());
-            Update::Discarded
-        }
-    }
-
-    /// Reports that we are now disconnected from the given node.
-    ///
-    /// This does *not* remove the node from the k-buckets, but moves it underneath the nodes we
-    /// are still connected to.
-    pub fn set_disconnected(&mut self, id: &TPeerId) {
-        let table = match self.bucket_num(&id) {
-            Some(n) => &mut self.tables[n],
-            None => return,
-        };
-
-        table.flush(self.unresponsive_timeout);
-
-        let pos = match table.nodes.iter().position(|elem| elem.id == *id) {
-            Some(pos) => pos,
-            None => return,
-        };
-
-        if pos > table.first_connected_pos {
-            let elem = table.nodes.remove(pos);
-            table.nodes.insert(table.first_connected_pos, elem);
-            table.first_connected_pos += 1;
-        } else if pos == table.first_connected_pos {
-            table.first_connected_pos += 1;
-        }
-    }
-
-    /// Finds the `num` nodes closest to `id`, ordered by distance.
-    pub fn find_closest<TOther>(&mut self, id: &TOther) -> VecIntoIter<TPeerId>
-    where
-        TPeerId: Clone + KBucketsPeerId<TOther>,
-    {
-        // TODO: optimize
-        let mut out = Vec::new();
-        for table in self.tables.iter_mut() {
-            table.flush(self.unresponsive_timeout);
-            if table.latest_update.elapsed() > self.unresponsive_timeout {
-                continue; // ignore bucket with expired nodes
-            }
-            for node in table.nodes.iter() {
-                out.push(node.id.clone());
-            }
-        }
-        out.sort_by(|a, b| b.distance_with(id).cmp(&a.distance_with(id)));
-        out.into_iter()
-    }
-
-    /// Same as `find_closest`, but includes the local peer as well.
-    pub fn find_closest_with_self<TOther>(&mut self, id: &TOther) -> VecIntoIter<TPeerId>
-    where
-        TPeerId: Clone + KBucketsPeerId<TOther>,
-    {
-        // TODO: optimize
-        let mut intermediate: Vec<_> = self.find_closest(id).collect();
-        if let Some(pos) = intermediate
-            .iter()
-            .position(|e| e.distance_with(id) >= self.my_id.distance_with(id))
-        {
-            if intermediate[pos] != self.my_id {
-                intermediate.insert(pos, self.my_id.clone());
-            }
-        } else {
-            intermediate.push(self.my_id.clone());
-        }
-        intermediate.into_iter()
-    }
-}
-
-/// Return value of the `set_connected()` method.
-#[derive(Debug)]
-#[must_use]
-pub enum Update<'a, TPeerId> {
-    /// The node has been added to the bucket.
-    Added,
-    /// The node was already in the bucket and has been updated.
-    Updated,
-    /// The node has been added as pending. We need to try connect to the node passed as parameter.
-    Pending(&'a TPeerId),
-    /// The node wasn't added at all because a node was already pending.
-    Discarded,
-    /// Tried to update the local peer ID. This is an invalid operation.
-    FailSelfUpdate,
-}
-
-/// Iterator giving access to a bucket.
-pub struct BucketsIter<'a, TPeerId, TVal>(SliceIterMut<'a, KBucket<TPeerId, TVal>>, Duration);
-
-impl<'a, TPeerId, TVal> Iterator for BucketsIter<'a, TPeerId, TVal> {
-    type Item = Bucket<'a, TPeerId, TVal>;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|bucket| {
-            bucket.flush(self.1);
-            Bucket(bucket)
+            let table = &*table;
+            table.iter().map(move |(n, status)| {
+                EntryRefView {
+                    node: NodeRefView {
+                        key: &n.key,
+                        value: &n.value
+                    },
+                    status
+                }
+            })
         })
     }
 
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
+    /// Returns a by-reference iterator over all buckets.
+    ///
+    /// The buckets are ordered by proximity to the `local_key`, i.e. the first
+    /// bucket is the closest bucket (containing at most one key).
+    pub fn buckets<'a>(&'a mut self) -> impl Iterator<Item = KBucketRef<'a, TKey, TVal>> + 'a {
+        let applied_pending = &mut self.applied_pending;
+        self.buckets.iter_mut().enumerate().map(move |(i, b)| {
+            if let Some(applied) = b.apply_pending() {
+                applied_pending.push_back(applied)
+            }
+            KBucketRef {
+                index: BucketIndex(i),
+                bucket: b
+            }
+        })
+    }
+
+    /// Consumes the next applied pending entry, if any.
+    ///
+    /// When an entry is attempted to be inserted and the respective bucket is full,
+    /// it may be recorded as pending insertion after a timeout, see [`InsertResult::Pending`].
+    ///
+    /// If the oldest currently disconnected entry in the respective bucket does not change
+    /// its status until the timeout of pending entry expires, it is evicted and
+    /// the pending entry inserted instead. These insertions of pending entries
+    /// happens lazily, whenever the `KBucketsTable` is accessed, and the corresponding
+    /// buckets are updated accordingly. The fact that a pending entry was applied is
+    /// recorded in the `KBucketsTable` in the form of `AppliedPending` results, which must be
+    /// consumed by calling this function.
+    pub fn take_applied_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
+        self.applied_pending.pop_front()
+    }
+
+    /// Returns an iterator over the keys closest to `target`, ordered by
+    /// increasing distance.
+    pub fn closest_keys<'a, T>(&'a mut self, target: &'a T)
+        -> impl Iterator<Item = TKey> + 'a
+    where
+        T: Clone + AsRef<KeyBytes>
+    {
+        let distance = self.local_key.as_ref().distance(target);
+        ClosestIter {
+            target,
+            iter: None,
+            table: self,
+            buckets_iter: ClosestBucketsIter::new(distance),
+            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_> {
+                b.iter().map(|(n,_)| n.key.clone()).collect()
+            }
+        }
+    }
+
+    /// Returns an iterator over the nodes closest to the `target` key, ordered by
+    /// increasing distance.
+    pub fn closest<'a, T>(&'a mut self, target: &'a T)
+        -> impl Iterator<Item = EntryView<TKey, TVal>> + 'a
+    where
+        T: Clone + AsRef<KeyBytes>,
+        TVal: Clone
+    {
+        let distance = self.local_key.as_ref().distance(target);
+        ClosestIter {
+            target,
+            iter: None,
+            table: self,
+            buckets_iter: ClosestBucketsIter::new(distance),
+            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_> {
+                b.iter().map(|(n, status)| EntryView {
+                    node: n.clone(),
+                    status
+                }).collect()
+            }
+        }
+    }
+
+    /// Counts the number of nodes between the local node and the node
+    /// closest to `target`.
+    ///
+    /// The number of nodes between the local node and the target are
+    /// calculated by backtracking from the target towards the local key.
+    pub fn count_nodes_between<T>(&mut self, target: &T) -> usize
+    where
+        T: AsRef<KeyBytes>
+    {
+        let local_key = self.local_key.clone();
+        let distance = target.as_ref().distance(&local_key);
+        let mut iter = ClosestBucketsIter::new(distance).take_while(|i| i.get() != 0);
+        if let Some(i) = iter.next() {
+            let num_first = self.buckets[i.get()].iter()
+                .filter(|(n,_)| n.key.as_ref().distance(&local_key) <= distance)
+                .count();
+            let num_rest: usize = iter.map(|i| self.buckets[i.get()].num_entries()).sum();
+            num_first + num_rest
+        } else {
+            0
+        }
     }
 }
 
-impl<'a, TPeerId, TVal> ExactSizeIterator for BucketsIter<'a, TPeerId, TVal> {}
+/// An iterator over (some projection of) the closest entries in a
+/// `KBucketsTable` w.r.t. some target `Key`.
+struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
+    /// A reference to the target key whose distance to the local key determines
+    /// the order in which the buckets are traversed. The resulting
+    /// array from projecting the entries of each bucket using `fmap` is
+    /// sorted according to the distance to the target.
+    target: &'a TTarget,
+    /// A reference to all buckets of the `KBucketsTable`.
+    table: &'a mut KBucketsTable<TKey, TVal>,
+    /// The iterator over the bucket indices in the order determined by the
+    /// distance of the local key to the target.
+    buckets_iter: ClosestBucketsIter,
+    /// The iterator over the entries in the currently traversed bucket.
+    iter: Option<arrayvec::IntoIter<[TOut; K_VALUE.get()]>>,
+    /// The projection function / mapping applied on each bucket as
+    /// it is encountered, producing the next `iter`ator.
+    fmap: TMap
+}
 
-/// Access to a bucket.
-pub struct Bucket<'a, TPeerId, TVal>(&'a mut KBucket<TPeerId, TVal>);
+/// An iterator over the bucket indices, in the order determined by the `Distance` of
+/// a target from the `local_key`, such that the entries in the buckets are incrementally
+/// further away from the target, starting with the bucket covering the target.
+struct ClosestBucketsIter {
+    /// The distance to the `local_key`.
+    distance: Distance,
+    /// The current state of the iterator.
+    state: ClosestBucketsIterState
+}
 
-impl<'a, TPeerId, TVal> Bucket<'a, TPeerId, TVal> {
-    /// Returns the number of entries in that bucket.
-    ///
-    /// > **Note**: Keep in mind that this operation can be racy. If `update()` is called on the
-    /// >           table while this function is running, the `update()` may or may not be taken
-    /// >           into account.
-    #[inline]
+/// Operating states of a `ClosestBucketsIter`.
+enum ClosestBucketsIterState {
+    /// The starting state of the iterator yields the first bucket index and
+    /// then transitions to `ZoomIn`.
+    Start(BucketIndex),
+    /// The iterator "zooms in" to to yield the next bucket cotaining nodes that
+    /// are incrementally closer to the local node but further from the `target`.
+    /// These buckets are identified by a `1` in the corresponding bit position
+    /// of the distance bit string. When bucket `0` is reached, the iterator
+    /// transitions to `ZoomOut`.
+    ZoomIn(BucketIndex),
+    /// Once bucket `0` has been reached, the iterator starts "zooming out"
+    /// to buckets containing nodes that are incrementally further away from
+    /// both the local key and the target. These are identified by a `0` in
+    /// the corresponding bit position of the distance bit string. When bucket
+    /// `255` is reached, the iterator transitions to state `Done`.
+    ZoomOut(BucketIndex),
+    /// The iterator is in this state once it has visited all buckets.
+    Done
+}
+
+impl ClosestBucketsIter {
+    fn new(distance: Distance) -> Self {
+        let state = match BucketIndex::new(&distance) {
+            Some(i) => ClosestBucketsIterState::Start(i),
+            None => ClosestBucketsIterState::Start(BucketIndex(0))
+        };
+        Self { distance, state }
+    }
+
+    fn next_in(&self, i: BucketIndex) -> Option<BucketIndex> {
+        (0 .. i.get()).rev().find_map(|i|
+            if self.distance.0.bit(i) {
+                Some(BucketIndex(i))
+            } else {
+                None
+            })
+    }
+
+    fn next_out(&self, i: BucketIndex) -> Option<BucketIndex> {
+        (i.get() + 1 .. NUM_BUCKETS).find_map(|i|
+            if !self.distance.0.bit(i) {
+                Some(BucketIndex(i))
+            } else {
+                None
+            })
+    }
+}
+
+impl Iterator for ClosestBucketsIter {
+    type Item = BucketIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.state {
+            ClosestBucketsIterState::Start(i) => {
+                self.state = ClosestBucketsIterState::ZoomIn(i);
+                Some(i)
+            }
+            ClosestBucketsIterState::ZoomIn(i) =>
+                if let Some(i) = self.next_in(i) {
+                    self.state = ClosestBucketsIterState::ZoomIn(i);
+                    Some(i)
+                } else {
+                    let i = BucketIndex(0);
+                    self.state = ClosestBucketsIterState::ZoomOut(i);
+                    Some(i)
+                }
+            ClosestBucketsIterState::ZoomOut(i) =>
+                if let Some(i) = self.next_out(i) {
+                    self.state = ClosestBucketsIterState::ZoomOut(i);
+                    Some(i)
+                } else {
+                    self.state = ClosestBucketsIterState::Done;
+                    None
+                }
+            ClosestBucketsIterState::Done => None
+        }
+    }
+}
+
+impl<TTarget, TKey, TVal, TMap, TOut> Iterator
+for ClosestIter<'_, TTarget, TKey, TVal, TMap, TOut>
+where
+    TTarget: AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone,
+    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<[TOut; K_VALUE.get()]>,
+    TOut: AsRef<KeyBytes>
+{
+    type Item = TOut;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match &mut self.iter {
+                Some(iter) => match iter.next() {
+                    Some(k) => return Some(k),
+                    None => self.iter = None
+                }
+                None => {
+                    if let Some(i) = self.buckets_iter.next() {
+                        let bucket = &mut self.table.buckets[i.get()];
+                        if let Some(applied) = bucket.apply_pending() {
+                            self.table.applied_pending.push_back(applied)
+                        }
+                        let mut v = (self.fmap)(bucket);
+                        v.sort_by(|a, b|
+                            self.target.as_ref().distance(a.as_ref())
+                                .cmp(&self.target.as_ref().distance(b.as_ref())));
+                        self.iter = Some(v.into_iter());
+                    } else {
+                        return None
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A reference to a bucket in a `KBucketsTable`.
+pub struct KBucketRef<'a, TPeerId, TVal> {
+    index: BucketIndex,
+    bucket: &'a mut KBucket<TPeerId, TVal>
+}
+
+impl<TKey, TVal> KBucketRef<'_, TKey, TVal>
+where
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone
+{
+    /// Returns the number of entries in the bucket.
     pub fn num_entries(&self) -> usize {
-        self.0.nodes.len()
+        self.bucket.num_entries()
     }
 
-    /// Returns true if this bucket has a pending node.
-    #[inline]
+    /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.0.pending_node.is_some()
+        self.bucket.pending().map_or(false, |n| !n.is_ready())
     }
 
-    /// Returns the time when any of the values in this bucket was last updated.
+    /// Tests whether the given distance falls into this bucket.
+    pub fn contains(&self, d: &Distance) -> bool {
+        BucketIndex::new(d).map_or(false, |i| i == self.index)
+    }
+
+    /// Generates a random distance that falls into this bucket.
     ///
-    /// If the bucket is empty, this returns the time when the whole table was created.
-    #[inline]
-    pub fn latest_update(&self) -> Instant {
-        self.0.latest_update
+    /// Together with a known key `a` (e.g. the local key), a random distance `d` for
+    /// this bucket w.r.t `k` gives rise to the corresponding (random) key `b` s.t.
+    /// the XOR distance between `a` and `b` is `d`. In other words, it gives
+    /// rise to a random key falling into this bucket. See [`Key::from_distance`].
+    pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
+        self.index.rand_distance(rng)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use rand::random;
-    use crate::kbucket::{KBucketsPeerId, KBucketsTable, Update, MAX_NODES_PER_BUCKET};
-    use multihash::{Multihash, Hash};
-    use std::thread;
-    use std::time::Duration;
+    use super::*;
+    use libp2p_core::PeerId;
+    use quickcheck::*;
+    use rand::Rng;
+
+    type TestTable = KBucketsTable<KeyBytes, ()>;
+
+    impl Arbitrary for TestTable {
+        fn arbitrary<G: Gen>(g: &mut G) -> TestTable {
+            let local_key = Key::from(PeerId::random());
+            let timeout = Duration::from_secs(g.gen_range(1, 360));
+            let mut table = TestTable::new(local_key.clone().into(), timeout);
+            let mut num_total = g.gen_range(0, 100);
+            for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
+                let ix = BucketIndex(i);
+                let num = g.gen_range(0, usize::min(K_VALUE.get(), num_total) + 1);
+                num_total -= num;
+                for _ in 0 .. num {
+                    let distance = ix.rand_distance(g);
+                    let key = local_key.for_distance(distance);
+                    let node = Node { key: key.clone(), value: () };
+                    let status = NodeStatus::arbitrary(g);
+                    match b.insert(node, status) {
+                        InsertResult::Inserted => {}
+                        _ => panic!()
+                    }
+                }
+            }
+            table
+        }
+    }
 
     #[test]
-    fn basic_closest() {
-        let my_id = Multihash::random(Hash::SHA2256);
-        let other_id = Multihash::random(Hash::SHA2256);
+    fn rand_distance() {
+        fn prop(ix: u8) -> bool {
+            let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
+            let n = U256::from(<[u8; 32]>::from(d.0));
+            let b = U256::from(2);
+            let e = U256::from(ix);
+            let lower = b.pow(e);
+            let upper = b.pow(e + U256::from(1)) - U256::from(1);
+            lower <= n && n <= upper
+        }
+        quickcheck(prop as fn(_) -> _);
+    }
 
-        let mut table = KBucketsTable::<_, ()>::new(my_id, Duration::from_secs(5));
-        table.entry_mut(&other_id);
+    #[test]
+    fn entry_inserted() {
+        let local_key = Key::from(PeerId::random());
+        let other_id = Key::from(PeerId::random());
 
-        let res = table.find_closest(&other_id).collect::<Vec<_>>();
+        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        if let Entry::Absent(entry) = table.entry(&other_id) {
+            match entry.insert((), NodeStatus::Connected) {
+                InsertResult::Inserted => (),
+                _ => panic!()
+            }
+        } else {
+            panic!()
+        }
+
+        let res = table.closest_keys(&other_id).collect::<Vec<_>>();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], other_id);
     }
 
     #[test]
-    fn update_local_id_fails() {
-        let my_id = Multihash::random(Hash::SHA2256);
-
-        let mut table = KBucketsTable::<_, ()>::new(my_id.clone(), Duration::from_secs(5));
-        assert!(table.entry_mut(&my_id).is_none());
-        match table.set_connected(&my_id) {
-            Update::FailSelfUpdate => (),
+    fn entry_self() {
+        let local_key = Key::from(PeerId::random());
+        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
+        match table.entry(&local_key) {
+            Entry::SelfEntry => (),
             _ => panic!(),
         }
     }
 
     #[test]
-    fn update_time_last_refresh() {
-        let my_id = Multihash::random(Hash::SHA2256);
-
-        // Generate some other IDs varying by just one bit.
-        let other_ids = (0..random::<usize>() % 20)
-            .map(|_| {
-                let bit_num = random::<usize>() % 256;
-                let mut id = my_id.as_bytes().to_vec().clone();
-                id[33 - (bit_num / 8)] ^= 1 << (bit_num % 8);
-                (Multihash::from_bytes(id).unwrap(), bit_num)
-            })
-            .collect::<Vec<_>>();
-
-        let mut table = KBucketsTable::<_, ()>::new(my_id, Duration::from_secs(5));
-        let before_update = table.buckets().map(|b| b.latest_update()).collect::<Vec<_>>();
-
-        thread::sleep(Duration::from_secs(2));
-        for &(ref id, _) in &other_ids {
-            table.entry_mut(&id);
-        }
-
-        let after_update = table.buckets().map(|b| b.latest_update()).collect::<Vec<_>>();
-
-        for (offset, (bef, aft)) in before_update.iter().zip(after_update.iter()).enumerate() {
-            if other_ids.iter().any(|&(_, bucket)| bucket == offset) {
-                assert_ne!(bef, aft);
+    fn closest() {
+        let local_key = Key::from(PeerId::random());
+        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut count = 0;
+        loop {
+            if count == 100 { break; }
+            let key = Key::from(PeerId::random());
+            if let Entry::Absent(e) = table.entry(&key) {
+                match e.insert((), NodeStatus::Connected) {
+                    InsertResult::Inserted => count += 1,
+                    _ => continue,
+                }
             } else {
-                assert_eq!(bef, aft);
+                panic!("entry exists")
             }
+        }
+
+        let mut expected_keys: Vec<_> = table.buckets
+            .iter()
+            .flat_map(|t| t.iter().map(|(n,_)| n.key.clone()))
+            .collect();
+
+        for _ in 0 .. 10 {
+            let target_key = Key::from(PeerId::random());
+            let keys = table.closest_keys(&target_key).collect::<Vec<_>>();
+            // The list of keys is expected to match the result of a full-table scan.
+            expected_keys.sort_by_key(|k| k.distance(&target_key));
+            assert_eq!(keys, expected_keys);
         }
     }
 
     #[test]
-    fn full_kbucket() {
-        let my_id = Multihash::random(Hash::SHA2256);
+    fn applied_pending() {
+        let local_key = Key::from(PeerId::random());
+        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_millis(1));
+        let expected_applied;
+        let full_bucket_index;
+        loop {
+            let key = Key::from(PeerId::random());
+            if let Entry::Absent(e) = table.entry(&key) {
+                match e.insert((), NodeStatus::Disconnected) {
+                    InsertResult::Full => {
+                        if let Entry::Absent(e) = table.entry(&key) {
+                            match e.insert((), NodeStatus::Connected) {
+                                InsertResult::Pending { disconnected } => {
+                                    expected_applied = AppliedPending {
+                                        inserted: Node { key: key.clone(), value: () },
+                                        evicted: Some(Node { key: disconnected, value: () })
+                                    };
+                                    full_bucket_index = BucketIndex::new(&key.distance(&local_key));
+                                    break
+                                },
+                                _ => panic!()
+                            }
+                        } else {
+                            panic!()
+                        }
+                    },
+                    _ => continue,
+                }
+            } else {
+                panic!("entry exists")
+            }
+        }
 
-        assert!(MAX_NODES_PER_BUCKET <= 251); // Test doesn't work otherwise.
-        let mut fill_ids = (0..MAX_NODES_PER_BUCKET + 3)
-            .map(|n| {
-                let mut id = my_id.clone().into_bytes();
-                id[2] ^= 0x80; // Flip the first bit so that we get in the most distant bucket.
-                id[33] = id[33].wrapping_add(n as u8);
-                Multihash::from_bytes(id).unwrap()
+        // Expire the timeout for the pending entry on the full bucket.`
+        let full_bucket = &mut table.buckets[full_bucket_index.unwrap().get()];
+        let elapsed = Instant::now() - Duration::from_secs(1);
+        full_bucket.pending_mut().unwrap().set_ready_at(elapsed);
+
+        match table.entry(&expected_applied.inserted.key) {
+            Entry::Present(_, NodeStatus::Connected) => {}
+            x => panic!("Unexpected entry: {:?}", x)
+        }
+
+        match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
+            Entry::Absent(_) => {}
+            x => panic!("Unexpected entry: {:?}", x)
+        }
+
+        assert_eq!(Some(expected_applied), table.take_applied_pending());
+        assert_eq!(None, table.take_applied_pending());
+    }
+
+    #[test]
+    fn count_nodes_between() {
+        fn prop(mut table: TestTable, target: Key<PeerId>) -> bool {
+            let num_to_target = table.count_nodes_between(&target);
+            let distance = table.local_key.distance(&target);
+            let base2 = U256::from(2);
+            let mut iter = ClosestBucketsIter::new(distance);
+            iter.all(|i| {
+                // Flip the distance bit related to the bucket.
+                let d = Distance(distance.0 ^ (base2.pow(U256::from(i.get()))));
+                let k = table.local_key.for_distance(d);
+                if distance.0.bit(i.get()) {
+                    // Bit flip `1` -> `0`, the key must be closer than `target`.
+                    d < distance && table.count_nodes_between(&k) <= num_to_target
+                } else {
+                    // Bit flip `0` -> `1`, the key must be farther than `target`.
+                    d > distance && table.count_nodes_between(&k) >= num_to_target
+                }
             })
-            .collect::<Vec<_>>();
-
-        let first_node = fill_ids[0].clone();
-        let second_node = fill_ids[1].clone();
-
-        let mut table = KBucketsTable::<_, ()>::new(my_id.clone(), Duration::from_secs(1));
-
-        for (num, id) in fill_ids.drain(..MAX_NODES_PER_BUCKET).enumerate() {
-            match table.set_connected(&id) {
-                Update::Added => (),
-                _ => panic!()
-            }
-            table.set_disconnected(&id);
-            assert_eq!(table.buckets().nth(255).unwrap().num_entries(), num + 1);
         }
 
-        assert_eq!(
-            table.buckets().nth(255).unwrap().num_entries(),
-            MAX_NODES_PER_BUCKET
-        );
-        assert!(!table.buckets().nth(255).unwrap().has_pending());
-        match table.set_connected(&fill_ids.remove(0)) {
-            Update::Pending(to_ping) => {
-                assert_eq!(*to_ping, first_node);
-            },
-            _ => panic!()
-        }
-
-        assert_eq!(
-            table.buckets().nth(255).unwrap().num_entries(),
-            MAX_NODES_PER_BUCKET
-        );
-        assert!(table.buckets().nth(255).unwrap().has_pending());
-        match table.set_connected(&fill_ids.remove(0)) {
-            Update::Discarded => (),
-            _ => panic!()
-        }
-
-        thread::sleep(Duration::from_secs(2));
-        assert!(!table.buckets().nth(255).unwrap().has_pending());
-        match table.set_connected(&fill_ids.remove(0)) {
-            Update::Pending(to_ping) => {
-                assert_eq!(*to_ping, second_node);
-            },
-            _ => panic!()
-        }
-    }
-
-    #[test]
-    fn self_distance_zero() {
-        let a = Multihash::random(Hash::SHA2256);
-        assert_eq!(a.distance_with(&a), 0);
-    }
-
-    #[test]
-    fn distance_correct_order() {
-        let a = Multihash::random(Hash::SHA2256);
-        let b = Multihash::random(Hash::SHA2256);
-        assert!(a.distance_with(&a) < b.distance_with(&a));
-        assert!(a.distance_with(&b) > b.distance_with(&b));
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_,_) -> _)
     }
 }

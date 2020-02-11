@@ -26,8 +26,7 @@ use super::error::*;
 use ring::rand::SystemRandom;
 use ring::signature::{self, RsaKeyPair, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
 use ring::signature::KeyPair;
-use std::sync::Arc;
-use untrusted::Input;
+use std::{fmt::{self, Write}, sync::Arc};
 use zeroize::Zeroize;
 
 /// An RSA keypair.
@@ -40,8 +39,8 @@ impl Keypair {
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        let kp = RsaKeyPair::from_pkcs8(Input::from(&der[..]))
-            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo", e))?;
+        let kp = RsaKeyPair::from_pkcs8(&der)
+            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo").source(e))?;
         der.zeroize();
         Ok(Keypair(Arc::new(kp)))
     }
@@ -57,22 +56,20 @@ impl Keypair {
         let rng = SystemRandom::new();
         match self.0.sign(&RSA_PKCS1_SHA256, &rng, &data, &mut signature) {
             Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA", e))
+            Err(e) => Err(SigningError::new("RSA").source(e))
         }
     }
 }
 
 /// An RSA public key.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PublicKey(Vec<u8>);
 
 impl PublicKey {
     /// Verify an RSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        signature::verify(&RSA_PKCS1_2048_8192_SHA256,
-                          Input::from(&self.0),
-                          Input::from(msg),
-                          Input::from(sig)).is_ok()
+        let key = signature::UnparsedPublicKey::new(&RSA_PKCS1_2048_8192_SHA256, &self.0);
+        key.verify(msg, sig).is_ok()
     }
 
     /// Encode the RSA public key in DER as a PKCS#1 RSAPublicKey structure,
@@ -105,8 +102,23 @@ impl PublicKey {
     /// structure. See also `encode_x509`.
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::deserialize(pk.iter())
-            .map_err(|e| DecodingError::new("RSA X.509", e))
+            .map_err(|e| DecodingError::new("RSA X.509").source(e))
             .map(|spki| spki.subjectPublicKey.0)
+    }
+}
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bytes = &self.0;
+        let mut hex = String::with_capacity(bytes.len() * 2);
+
+        for byte in bytes {
+            write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+        }
+
+        f.debug_struct("PublicKey")
+            .field("pkcs1", &hex)
+            .finish()
     }
 }
 

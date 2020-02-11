@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use snow::SnowError;
+use libp2p_core::identity;
+use snow::error::Error as SnowError;
 use std::{error::Error, fmt, io};
 
 /// libp2p_noise error type.
@@ -30,6 +31,13 @@ pub enum NoiseError {
     Noise(SnowError),
     /// A public key is invalid.
     InvalidKey,
+    /// Authentication in a [`NoiseAuthenticated`](crate::NoiseAuthenticated)
+    /// upgrade failed.
+    AuthenticationFailed,
+    /// A handshake payload is invalid.
+    InvalidPayload(prost::DecodeError),
+    /// A signature was required and could not be created.
+    SigningError(identity::error::SigningError),
     #[doc(hidden)]
     __Nonexhaustive
 }
@@ -40,6 +48,9 @@ impl fmt::Display for NoiseError {
             NoiseError::Io(e) => write!(f, "{}", e),
             NoiseError::Noise(e) => write!(f, "{}", e),
             NoiseError::InvalidKey => f.write_str("invalid public key"),
+            NoiseError::InvalidPayload(e) => write!(f, "{}", e),
+            NoiseError::AuthenticationFailed => f.write_str("Authentication failed"),
+            NoiseError::SigningError(e) => write!(f, "{}", e),
             NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }
@@ -51,6 +62,9 @@ impl Error for NoiseError {
             NoiseError::Io(e) => Some(e),
             NoiseError::Noise(_) => None, // TODO: `SnowError` should implement `Error`.
             NoiseError::InvalidKey => None,
+            NoiseError::AuthenticationFailed => None,
+            NoiseError::InvalidPayload(e) => Some(e),
+            NoiseError::SigningError(e) => Some(e),
             NoiseError::__Nonexhaustive => None
         }
     }
@@ -67,3 +81,16 @@ impl From<SnowError> for NoiseError {
         NoiseError::Noise(e)
     }
 }
+
+impl From<prost::DecodeError> for NoiseError {
+    fn from(e: prost::DecodeError) -> Self {
+        NoiseError::InvalidPayload(e)
+    }
+}
+
+impl From<identity::error::SigningError> for NoiseError {
+    fn from(e: identity::error::SigningError) -> Self {
+        NoiseError::SigningError(e)
+    }
+}
+

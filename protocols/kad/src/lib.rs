@@ -18,53 +18,81 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Kademlia protocol. Allows peer discovery, records store and records fetch.
-//!
-//! # Usage
-//!
-//! Usage is done in the following steps:
-//!
-//! - Build a `KadSystemConfig` and a `KadConnecConfig` object that contain the way you want the
-//!   Kademlia protocol to behave.
-//!
-//! - Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
-//!
-//! - Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
-//!   the Kademlia controller of a peer.
-//!
-//! - You can perform queries using the `KadSystem`.
-//!
+//! Implementation of the libp2p-specific Kademlia protocol.
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
 //       be useful later for record store
 #![allow(dead_code)]
 
-// # Crate organization
-//
-// The crate contains three levels of abstractions over the Kademlia protocol.
-//
-// - The first level of abstraction is in `protocol`. The API of this module lets you turn a raw
-//   bytes stream (`AsyncRead + AsyncWrite`) into a `Sink + Stream` of raw but strongly-typed
-//   Kademlia messages.
-//
-// - The second level of abstraction is in `kad_server`. Its API lets you upgrade a connection and
-//   obtain a future (that must be driven to completion), plus a controller. Processing the future
-//   will automatically respond to Kad requests received by the remote. The controller lets you
-//   send your own requests to this remote and obtain strongly-typed responses.
-//
-// - The third level of abstraction is in `high_level`. This module only provides the
-//   `KademliaSystem`.
-//
-
-pub use self::behaviour::{Kademlia, KademliaOut};
-pub use self::kbucket::KBucketsPeerId;
-pub use self::protocol::KadConnectionType;
-
 pub mod handler;
 pub mod kbucket;
 pub mod protocol;
+pub mod record;
 
 mod addresses;
 mod behaviour;
-mod protobuf_structs;
+mod jobs;
 mod query;
+
+mod dht_proto {
+    include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));
+}
+
+pub use addresses::Addresses;
+pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
+pub use behaviour::{
+    BootstrapResult,
+    BootstrapOk,
+    BootstrapError,
+
+    GetRecordResult,
+    GetRecordOk,
+    GetRecordError,
+
+    PutRecordResult,
+    PutRecordOk,
+    PutRecordError,
+
+    GetClosestPeersResult,
+    GetClosestPeersOk,
+    GetClosestPeersError,
+
+    AddProviderResult,
+    AddProviderOk,
+    AddProviderError,
+
+    GetProvidersResult,
+    GetProvidersOk,
+    GetProvidersError,
+};
+pub use protocol::KadConnectionType;
+pub use record::{store, Record, ProviderRecord};
+
+use std::num::NonZeroUsize;
+
+/// The `k` parameter of the Kademlia specification.
+///
+/// This parameter determines:
+///
+///   1) The (fixed) maximum number of nodes in a bucket.
+///   2) The (default) replication factor, which in turn determines:
+///       a) The number of closer peers returned in response to a request.
+///       b) The number of closest peers to a key to search for in an iterative query.
+///
+/// The choice of (1) is fixed to this constant. The replication factor is configurable
+/// but should generally be no greater than `K_VALUE`. All nodes in a Kademlia
+/// DHT should agree on the choices made for (1) and (2).
+///
+/// The current value is `20`.
+pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
+
+/// The `α` parameter of the Kademlia specification.
+///
+/// This parameter determines the default parallelism for iterative queries,
+/// i.e. the allowed number of in-flight requests that an iterative query is
+/// waiting for at a particular time while it continues to make progress towards
+/// locating the closest peers to a key.
+///
+/// The current value is `3`.
+pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
+

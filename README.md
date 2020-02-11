@@ -2,6 +2,8 @@
 
 <a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
 <a href="http://webchat.freenode.net/?channels=%23libp2p"><img src="https://img.shields.io/badge/freenode-%23libp2p-yellow.svg?style=flat-square" /></a>
+<a href="https://riot.permaweb.io/#/room/#libp2p:permaweb.io"><img src="https://img.shields.io/badge/matrix-%23libp2p%3Apermaweb.io-blue.svg?style=flat-square" /> </a>
+  <a href="https://discord.gg/66KBrm2"><img src="https://img.shields.io/discord/475789330380488707?color=blueviolet&label=discord&style=flat-square" /></a>
 [![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg?style=flat-square)](https://deps.rs/repo/github/libp2p/rust-libp2p)
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
@@ -11,15 +13,15 @@ cannot guarantee that this is the case considering the lack of a precise libp2p 
 
 ## Documentation
 
-This repository includes a façade crate named `libp2p`, which reexports the rest of the repository.
+How to use the library?
 
-For documentation, you are encouraged to clone this repository or add `libp2p` as a dependency in
-your Cargo.toml and run `cargo doc`.
+- Main documentation: https://docs.rs/libp2p
 
-```toml
-[dependencies]
-libp2p = "0.2.2"
-```
+Where to ask questions?
+
+- In the Rust section of https://discuss.libp2p.io.
+- In the #libp2p IRC channel on freenode.
+- By opening an issue in this repository.
 
 ## Notable users
 
@@ -27,3 +29,6 @@ libp2p = "0.2.2"
 
 - https://github.com/paritytech/polkadot
 - https://github.com/paritytech/substrate
+- https://github.com/sigp/lighthouse
+- https://github.com/golemfactory/golem-libp2p
+- https://github.com/comit-network/comit-rs

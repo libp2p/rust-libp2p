@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2017-2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,66 +18,218 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![recursion_limit = "512"]
-
 //! Implementation of the libp2p `Transport` trait for Websockets.
-//!
-//! See the documentation of `swarm` and of libp2p in general to learn how to use the `Transport`
-//! trait.
-//!
-//! This library is used in a different way depending on whether you are compiling for emscripten
-//! or for a different operating system.
-//!
-//! # Emscripten
-//!
-//! On emscripten, you can create a `BrowserWsConfig` object with `BrowserWsConfig::new()`. It can
-//! then be used as a transport.
-//!
-//! Listening on a websockets multiaddress isn't supported on emscripten. Dialing a multiaddress
-//! which uses `ws` on top of TCP/IP will automatically use the `XMLHttpRequest` Javascript object.
-//!
-//! ```ignore
-//! use libp2p_websocket::BrowserWsConfig;
-//!
-//! let ws_config = BrowserWsConfig::new();
-//! // let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
-//! ```
-//!
-//! # Other operating systems
-//!
-//! On other operating systems, this library doesn't open any socket by itself. Instead it must be
-//! plugged on top of another implementation of `Transport` such as TCP/IP.
-//!
-//! This underlying transport must be put inside a `WsConfig` object through the
-//! `WsConfig::new()` function.
-//!
-//! ```
-//! extern crate libp2p_core;
-//! extern crate libp2p_tcp;
-//! extern crate libp2p_websocket;
-//!
-//! use libp2p_core::{Multiaddr, Transport};
-//! use libp2p_tcp::TcpConfig;
-//! use libp2p_websocket::WsConfig;
-//!
-//! # fn main() {
-//! let ws_config = WsConfig::new(TcpConfig::new());
-//! # return;
-//! let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
-//! # }
-//! ```
-//!
 
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-#[macro_use]
-extern crate stdweb;
+pub mod error;
+pub mod framed;
+pub mod tls;
 
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-mod browser;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-mod desktop;
+use bytes::BytesMut;
+use error::Error;
+use framed::Connection;
+use futures::{future::BoxFuture, prelude::*, stream::BoxStream, ready};
+use libp2p_core::{
+    ConnectedPoint,
+    Transport,
+    multiaddr::Multiaddr,
+    transport::{map::{MapFuture, MapStream}, ListenerEvent, TransportError}
+};
+use rw_stream_sink::RwStreamSink;
+use std::{io, pin::Pin, task::{Context, Poll}};
 
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-pub use self::browser::{BrowserWsConfig, BrowserWsConn};
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub use self::desktop::WsConfig;
+/// A Websocket transport.
+#[derive(Debug, Clone)]
+pub struct WsConfig<T> {
+    transport: framed::WsConfig<T>
+}
+
+impl<T> WsConfig<T> {
+    /// Create a new websocket transport based on the given transport.
+    pub fn new(transport: T) -> Self {
+        framed::WsConfig::new(transport).into()
+    }
+
+    /// Return the configured maximum number of redirects.
+    pub fn max_redirects(&self) -> u8 {
+        self.transport.max_redirects()
+    }
+
+    /// Set max. number of redirects to follow.
+    pub fn set_max_redirects(&mut self, max: u8) -> &mut Self {
+        self.transport.set_max_redirects(max);
+        self
+    }
+
+    /// Get the max. frame data size we support.
+    pub fn max_data_size(&self) -> usize {
+        self.transport.max_data_size()
+    }
+
+    /// Set the max. frame data size we support.
+    pub fn set_max_data_size(&mut self, size: usize) -> &mut Self {
+        self.transport.set_max_data_size(size);
+        self
+    }
+
+    /// Set the TLS configuration if TLS support is desired.
+    pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
+        self.transport.set_tls_config(c);
+        self
+    }
+
+    /// Should the deflate extension (RFC 7692) be used if supported?
+    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
+        self.transport.use_deflate(flag);
+        self
+    }
+}
+
+impl<T> From<framed::WsConfig<T>> for WsConfig<T> {
+    fn from(framed: framed::WsConfig<T>) -> Self {
+        WsConfig {
+            transport: framed
+        }
+    }
+}
+
+impl<T> Transport for WsConfig<T>
+where
+    T: Transport + Send + Clone + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    type Output = RwStreamSink<BytesConnection<T::Output>>;
+    type Error = Error<T::Error>;
+    type Listener = MapStream<InnerStream<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        self.transport.map(wrap_connection as WrapperFn<T::Output>).listen_on(addr)
+    }
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport.map(wrap_connection as WrapperFn<T::Output>).dial(addr)
+    }
+}
+
+/// Type alias corresponding to `framed::WsConfig::Listener`.
+pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>>;
+
+/// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
+pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
+
+/// Function type that wraps a websocket connection (see. `wrap_connection`).
+pub type WrapperFn<T> = fn(Connection<T>, ConnectedPoint) -> RwStreamSink<BytesConnection<T>>;
+
+/// Wrap a websocket connection producing data frames into a `RwStreamSink`
+/// implementing `AsyncRead` + `AsyncWrite`.
+fn wrap_connection<T>(c: Connection<T>, _: ConnectedPoint) -> RwStreamSink<BytesConnection<T>>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    RwStreamSink::new(BytesConnection(c))
+}
+
+/// The websocket connection.
+#[derive(Debug)]
+pub struct BytesConnection<T>(Connection<T>);
+
+impl<T> Stream for BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Item = io::Result<BytesMut>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        loop {
+            if let Some(item) = ready!(self.0.try_poll_next_unpin(cx)?) {
+                if item.is_data() {
+                    return Poll::Ready(Some(Ok(BytesMut::from(item.as_ref()))))
+                }
+            } else {
+                return Poll::Ready(None)
+            }
+        }
+    }
+}
+
+impl<T> Sink<BytesMut> for BytesConnection<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+    type Error = io::Error;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_ready(cx)
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> io::Result<()> {
+        Pin::new(&mut self.0).start_send(framed::OutgoingData::Binary(item))
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_close(cx)
+    }
+}
+
+// Tests //////////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(test)]
+mod tests {
+    use libp2p_core::Multiaddr;
+    use libp2p_tcp as tcp;
+    use futures::prelude::*;
+    use libp2p_core::{Transport, multiaddr::Protocol};
+    use super::WsConfig;
+
+    #[test]
+    fn dialer_connects_to_listener_ipv4() {
+        let a = "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap();
+        futures::executor::block_on(connect(a))
+    }
+
+    #[test]
+    fn dialer_connects_to_listener_ipv6() {
+        let a = "/ip6/::1/tcp/0/ws".parse().unwrap();
+        futures::executor::block_on(connect(a))
+    }
+
+    async fn connect(listen_addr: Multiaddr) {
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+
+        let mut listener = ws_config.clone()
+            .listen_on(listen_addr)
+            .expect("listener");
+
+        let addr = listener.try_next().await
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
+        assert_eq!(Some(Protocol::Ws("/".into())), addr.iter().nth(2));
+        assert_ne!(Some(Protocol::Tcp(0)), addr.iter().nth(1));
+
+        let inbound = async move {
+            let (conn, _addr) = listener.try_filter_map(|e| future::ready(Ok(e.into_upgrade())))
+                .try_next()
+                .await
+                .unwrap()
+                .unwrap();
+            conn.await
+        };
+
+        let outbound = ws_config.dial(addr).unwrap();
+
+        let (a, b) = futures::join!(inbound, outbound);
+        a.and(b).unwrap();
+    }
+}

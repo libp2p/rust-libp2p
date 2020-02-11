@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, future, try_ready};
+use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::debug;
-use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
-use std::{io, iter, time::Duration, time::Instant};
-use tokio_io::{AsyncRead, AsyncWrite};
+use rand::{distributions, prelude::*};
+use std::{io, iter, time::Duration};
+use wasm_timer::Instant;
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
 ///
@@ -33,10 +33,18 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// - Listener receives the data and sends it back.
 /// - Dialer receives the data and verifies that it matches what it sent.
 ///
-/// The dialer produces a `Duration`, which corresponds to the time between when we flushed the
-/// substream and when we received back the payload.
+/// The dialer produces a `Duration`, which corresponds to the round-trip time
+/// of the payload.
+///
+/// > **Note**: The round-trip time of a ping may be subject to delays induced
+/// >           by the underlying transport, e.g. in the case of TCP there is
+/// >           Nagle's algorithm, delayed acks and similar configuration options
+/// >           which can affect latencies especially on otherwise low-volume
+/// >           connections.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Ping;
+
+const PING_SIZE: usize = 32;
 
 impl UpgradeInfo for Ping {
     type Info = &'static [u8];
@@ -49,169 +57,89 @@ impl UpgradeInfo for Ping {
 
 impl<TSocket> InboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = ();
     type Error = io::Error;
-    type Future = future::Map<future::AndThen<future::AndThen<future::AndThen<tokio_io::io::ReadExact<TSocket, [u8; 32]>, tokio_io::io::WriteAll<TSocket, [u8; 32]>, fn((TSocket, [u8; 32])) -> tokio_io::io::WriteAll<TSocket, [u8; 32]>>, tokio_io::io::Flush<TSocket>, fn((TSocket, [u8; 32])) -> tokio_io::io::Flush<TSocket>>, tokio_io::io::Shutdown<TSocket>, fn(TSocket) -> tokio_io::io::Shutdown<TSocket>>, fn(TSocket) -> ()>;
+    type Future = BoxFuture<'static, Result<(), io::Error>>;
 
-    #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        tokio_io::io::read_exact(socket, [0; 32])
-            .and_then::<fn(_) -> _, _>(|(socket, buffer)| tokio_io::io::write_all(socket, buffer))
-            .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::flush(socket))
-            .and_then::<fn(_) -> _, _>(|socket| tokio_io::io::shutdown(socket))
-            .map(|_| ())
+    fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+        async move {
+            let mut payload = [0u8; PING_SIZE];
+            while let Ok(_) = socket.read_exact(&mut payload).await {
+                socket.write_all(&payload).await?;
+            }
+            Ok(())
+        }.boxed()
     }
 }
 
 impl<TSocket> OutboundUpgrade<TSocket> for Ping
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = Duration;
     type Error = io::Error;
-    type Future = PingDialer<TSocket>;
+    type Future = BoxFuture<'static, Result<Duration, io::Error>>;
 
-    #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        let payload: [u8; 32] = EntropyRng::default().sample(Standard);
-        debug!("Preparing for ping with payload {:?}", payload);
+    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+        let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
+        debug!("Preparing ping payload {:?}", payload);
+        async move {
+            socket.write_all(&payload).await?;
+            socket.close().await?;
+            let started = Instant::now();
 
-        PingDialer {
-            inner: PingDialerInner::Write {
-                inner: tokio_io::io::write_all(socket, payload),
-            },
-        }
-    }
-}
-
-/// Sends a ping and receives a pong.
-///
-/// Implements `Future`. Finishes when the pong has arrived and has been verified.
-pub struct PingDialer<TSocket> {
-    inner: PingDialerInner<TSocket>,
-}
-
-enum PingDialerInner<TSocket> {
-    Write {
-        inner: tokio_io::io::WriteAll<TSocket, [u8; 32]>,
-    },
-    Flush {
-        inner: tokio_io::io::Flush<TSocket>,
-        ping_payload: [u8; 32],
-    },
-    Read {
-        inner: tokio_io::io::ReadExact<TSocket, [u8; 32]>,
-        ping_payload: [u8; 32],
-        started: Instant,
-    },
-    Shutdown {
-        inner: tokio_io::io::Shutdown<TSocket>,
-        ping_time: Duration,
-    },
-}
-
-impl<TSocket> Future for PingDialer<TSocket>
-where TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = Duration;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            let new_state = match self.inner {
-                PingDialerInner::Write { ref mut inner } => {
-                    let (socket, ping_payload) = try_ready!(inner.poll());
-                    PingDialerInner::Flush {
-                        inner: tokio_io::io::flush(socket),
-                        ping_payload,
-                    }
-                },
-                PingDialerInner::Flush { ref mut inner, ping_payload } => {
-                    let socket = try_ready!(inner.poll());
-                    let started = Instant::now();
-                    PingDialerInner::Read {
-                        inner: tokio_io::io::read_exact(socket, [0; 32]),
-                        ping_payload,
-                        started,
-                    }
-                },
-                PingDialerInner::Read { ref mut inner, ping_payload, started } => {
-                    let (socket, obtained) = try_ready!(inner.poll());
-                    let ping_time = started.elapsed();
-                    if obtained != ping_payload {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData,
-                            "Received ping payload doesn't match expected"));
-                    }
-                    PingDialerInner::Shutdown {
-                        inner: tokio_io::io::shutdown(socket),
-                        ping_time,
-                    }
-                },
-                PingDialerInner::Shutdown { ref mut inner, ping_time } => {
-                    let _ = try_ready!(inner.poll());
-                    return Ok(Async::Ready(ping_time));
-                },
-            };
-
-            self.inner = new_state;
-        }
-    }
-}
-
-/// Enum to merge the output of `Ping` for the dialer and listener.
-#[derive(Debug, Copy, Clone)]
-pub enum PingOutput {
-    /// Received a ping and sent back a pong.
-    Pong,
-    /// Sent a ping and received back a pong. Contains the ping time.
-    Ping(Duration),
-}
-
-impl From<Duration> for PingOutput {
-    #[inline]
-    fn from(duration: Duration) -> PingOutput {
-        PingOutput::Ping(duration)
-    }
-}
-
-impl From<()> for PingOutput {
-    #[inline]
-    fn from(_: ()) -> PingOutput {
-        PingOutput::Pong
+            let mut recv_payload = [0u8; 32];
+            socket.read_exact(&mut recv_payload).await?;
+            if recv_payload == payload {
+                Ok(started.elapsed())
+            } else {
+                Err(io::Error::new(io::ErrorKind::InvalidData, "Ping payload mismatch"))
+            }
+        }.boxed()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio_tcp::{TcpListener, TcpStream};
     use super::Ping;
-    use futures::{Future, Stream};
-    use libp2p_core::upgrade;
-
-    // TODO: rewrite tests with the MemoryTransport
+    use futures::prelude::*;
+    use libp2p_core::{
+        upgrade,
+        multiaddr::multiaddr,
+        transport::{
+            Transport,
+            ListenerEvent,
+            memory::MemoryTransport
+        }
+    };
+    use rand::{thread_rng, Rng};
+    use std::time::Duration;
 
     #[test]
     fn ping_pong() {
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-        let listener_addr = listener.local_addr().unwrap();
+        let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
+        let mut listener = MemoryTransport.listen_on(mem_addr).unwrap();
 
-        let server = listener
-            .incoming()
-            .into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(c, _)| {
-                upgrade::apply_inbound(c.unwrap(), Ping::default()).map_err(|_| panic!())
-            });
+        let listener_addr =
+            if let Some(Some(Ok(ListenerEvent::NewAddress(a)))) = listener.next().now_or_never() {
+                a
+            } else {
+                panic!("MemoryTransport not listening on an address!");
+            };
+        
+        async_std::task::spawn(async move {
+            let listener_event = listener.next().await.unwrap();
+            let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
+            let conn = listener_upgrade.await.unwrap();
+            upgrade::apply_inbound(conn, Ping::default()).await.unwrap();
+        });
 
-        let client = TcpStream::connect(&listener_addr)
-            .and_then(|c| {
-                upgrade::apply_outbound(c, Ping::default()).map_err(|_| panic!())
-            })
-            .map(|_| ());
-
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(server.select(client).map_err(|_| panic!())).unwrap();
+        async_std::task::block_on(async move {
+            let c = MemoryTransport.dial(listener_addr).unwrap().await.unwrap();
+            let rtt = upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1).await.unwrap();
+            assert!(rtt > Duration::from_secs(0));
+        });
     }
 }
