@@ -65,3 +65,17 @@ jobs:
     - name: Build on WASM
       # TODO: also run with `cargo test`
       run: cargo build --workspace --target=wasm32-unknown-unknown
+
+  check-rustdoc-links:
+    name: Check rustdoc intra-doc links
+    runs-on: ubuntu-latest
+    container:
+      image: rust
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install nightly Rust
+      # TODO: intra-doc links are available on nightly only
+      # see https://doc.rust-lang.org/nightly/rustdoc/lints.html#intra_doc_link_resolution_failure
+      run: rustup default nightly
+    - name: Check rustdoc links
+      run: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo +nightly doc --verbose --workspace --no-deps --document-private-items
