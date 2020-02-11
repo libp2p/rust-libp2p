@@ -10,8 +10,6 @@ jobs:
   test-desktop:
     name: Build and test
     runs-on: ubuntu-latest
-    container:
-      image: rust
     steps:
     - uses: actions/checkout@v1
     - name: Cache cargo registry
@@ -35,10 +33,12 @@ jobs:
       run: cargo test --workspace --all-features
 
   test-wasm:
-    name: Build and test
+    name: Build on WASM
     runs-on: ubuntu-latest
     container:
       image: rust
+      env:
+        CC: clang-9
     steps:
     - uses: actions/checkout@v1
     - name: Install Rust
@@ -47,6 +47,14 @@ jobs:
         toolchain: stable
         target: wasm32-unknown-unknown
         override: true
+    - name: Install a recent version of clang
+      run: |
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" >> /etc/apt/sources.list
+        apt-get update
+        apt-get install -y clang-9
+    - name: Install CMake
+      run: apt-get install -y cmake
     - name: Cache cargo registry
       uses: actions/cache@v1
       with:
@@ -63,5 +71,20 @@ jobs:
         path: target
         key: wasm-cargo-build-target-${{ hashFiles('Cargo.toml') }}
     - name: Build on WASM
-      # TODO: also run with `cargo test`
-      run: cargo build --workspace --target=wasm32-unknown-unknown
+      # TODO: also run `cargo test`
+      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
+      run: cargo build --target=wasm32-unknown-unknown
+
+  check-rustdoc-links:
+    name: Check rustdoc intra-doc links
+    runs-on: ubuntu-latest
+    container:
+      image: rust
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install nightly Rust
+      # TODO: intra-doc links are available on nightly only
+      # see https://doc.rust-lang.org/nightly/rustdoc/lints.html#intra_doc_link_resolution_failure
+      run: rustup default nightly
+    - name: Check rustdoc links
+      run: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo +nightly doc --verbose --workspace --no-deps --document-private-items
