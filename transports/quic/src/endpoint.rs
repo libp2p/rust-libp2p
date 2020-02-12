@@ -35,21 +35,18 @@ use std::{
     pin::Pin,
     sync::{Arc, Weak},
     task::{Context, Poll},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 /// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
-///
-/// The QUIC endpoints created by libp2p will need to be progressed by running the futures and streams
-/// obtained by libp2p through a reactor.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The client configuration.  Quinn provides functions for making one.
-    pub client_config: quinn_proto::ClientConfig,
+    client_config: quinn_proto::ClientConfig,
     /// The server configuration.  Quinn provides functions for making one.
-    pub server_config: Arc<quinn_proto::ServerConfig>,
+    server_config: Arc<quinn_proto::ServerConfig>,
     /// The endpoint configuration
-    pub endpoint_config: Arc<quinn_proto::EndpointConfig>,
+    endpoint_config: Arc<quinn_proto::EndpointConfig>,
 }
 
 fn make_client_config(
@@ -59,7 +56,6 @@ fn make_client_config(
     let mut transport = quinn_proto::TransportConfig::default();
     transport.stream_window_uni(0);
     transport.datagram_receive_buffer_size(None);
-    use std::time::Duration;
     transport.keep_alive_interval(Some(Duration::from_millis(1000)));
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
@@ -98,7 +94,7 @@ fn make_server_config(
 impl Config {
     /// Creates a new configuration object for TCP/IP.
     pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
-        let cert = super::make_cert(&keypair);
+        let cert = super::certificate::make_cert(&keypair);
         let (cert, key) = (
             rustls::Certificate(
                 cert.serialize_der()
@@ -362,6 +358,23 @@ impl Endpoint {
         }
         let (new_connections, receive_connections) = mpsc::unbounded();
         let (event_sender, event_receiver) = mpsc::channel(0);
+        if socket_addr.ip().is_unspecified() {
+            info!("returning all local IPs for unspecified address");
+            let suffixes = [Protocol::Udp(socket_addr.port()), Protocol::Quic];
+            let local_addresses =
+                host_addresses(&suffixes).map_err(|e| TransportError::Other(Error::IO(e)))?;
+            for (_, _, address) in local_addresses {
+                info!("sending address {:?}", address);
+                new_connections
+                    .unbounded_send(Ok(ListenerEvent::NewAddress(address)))
+                    .expect("we have a reference to the peer, so this will not fail; qed")
+            }
+        } else {
+            info!("sending address {:?}", address);
+            new_connections
+                .unbounded_send(Ok(ListenerEvent::NewAddress(address.clone())))
+                .expect("we have a reference to the peer, so this will not fail; qed");
+        }
         let reference = Arc::new(EndpointData {
             socket: socket::Socket::new(socket.into()),
             inner: Mutex::new(EndpointInner {

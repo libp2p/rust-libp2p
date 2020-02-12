@@ -34,7 +34,7 @@ use futures_timer::Delay;
 use ipnet::IpNet;
 use libp2p_core::{
     Transport,
-    multiaddr::{Protocol, Multiaddr, host_addresses, ip_to_multiaddr},
+    multiaddr::{Protocol, Multiaddr, host_addresses},
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
@@ -119,7 +119,7 @@ impl Transport for $tcp_config {
                     debug!("Listening on {:?}", addrs.iter().map(|(_, _, ma)| ma).collect::<Vec<_>>());
                     Addresses::Many(addrs)
                 } else {
-                    let ma = ip_to_multiaddr(local_addr.ip(), &[Protocol::Tcp(port)]);
+                    let ma = Multiaddr::from(local_addr.ip()).with(Protocol::Tcp(port));
                     debug!("Listening on {:?}", ma);
                     Addresses::One(ma)
                 };
@@ -238,7 +238,7 @@ impl $tcp_listen_stream {
                             return (Err(err), self);
                         }
                     }
-                    ip_to_multiaddr(sock_addr.ip(), &[Protocol::Tcp(sock_addr.port())])
+                    Multiaddr::from(sock_addr.ip()).with(Protocol::Tcp(sock_addr.port()))
                 }
                 Err(err) => {
                     debug!("Failed to get local address of incoming socket: {:?}", err);
@@ -246,7 +246,7 @@ impl $tcp_listen_stream {
                 }
             };
 
-            let remote_addr = ip_to_multiaddr(sock_addr.ip(), &[Protocol::Tcp(sock_addr.port())]);
+            let remote_addr = Multiaddr::from(sock_addr.ip()).with(Protocol::Tcp(sock_addr.port()));
 
             match $apply_config(&self.config, &sock) {
                 Ok(()) => {

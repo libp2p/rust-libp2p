@@ -155,7 +155,7 @@ fn communicating_between_dialer_and_listener() {
     let mut ready_tx = Some(ready_tx);
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
     let keypair2 = keypair.clone();
-    let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic"
+    let addr: Multiaddr = "/ip4/0.0.0.0/udp/12345/quic"
         .parse()
         .expect("bad address?");
     let quic_config = Config::new(&keypair2);
@@ -167,7 +167,9 @@ fn communicating_between_dialer_and_listener() {
             trace!("awaiting connection");
             match listener.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(listen_addr) => {
-                    ready_tx.take().unwrap().send(listen_addr).unwrap();
+                    if let Some(channel) = ready_tx.take() {
+                        channel.send(listen_addr).unwrap();
+                    }
                 }
                 ListenerEvent::Upgrade { upgrade, .. } => {
                     debug!("got a connection upgrade!");

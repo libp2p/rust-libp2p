@@ -303,16 +303,6 @@ impl TryFrom<Vec<u8>> for Multiaddr {
     }
 }
 
-/// Create a [`Multiaddr`] from the given IP address and suffix.
-pub fn ip_to_multiaddr(ip: IpAddr, suffix: &[Protocol]) -> Multiaddr {
-    let proto = match ip {
-        IpAddr::V4(ip) => Protocol::Ip4(ip),
-        IpAddr::V6(ip) => Protocol::Ip6(ip),
-    };
-    let it = std::iter::once(proto).chain(suffix.into_iter().cloned());
-    Multiaddr::from_iter(it)
-}
-
 /// Collect all local host addresses and use the provided port number as listen port.
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, ipnet::IpNet, Multiaddr)>> {
@@ -321,7 +311,10 @@ pub fn host_addresses(suffix: &[Protocol]) -> io::Result<Vec<(IpAddr, ipnet::IpN
     let mut addrs = Vec::new();
     for iface in get_if_addrs()? {
         let ip = iface.ip();
-        let ma = ip_to_multiaddr(ip, suffix);
+        let mut ma = Multiaddr::from(ip);
+        for proto in suffix {
+            ma = ma.with(proto.clone())
+        }
         let ipn = match iface.addr {
             IfAddr::V4(ip4) => {
                 let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();

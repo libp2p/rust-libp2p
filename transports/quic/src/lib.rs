@@ -64,7 +64,6 @@ mod endpoint;
 mod error;
 mod socket;
 mod verifier;
-pub use certificate::make_cert;
 pub use connection::{Outbound, QuicMuxer as Muxer, Substream, Upgrade};
 pub use endpoint::{Config, Endpoint, Listener};
 pub use error::Error;
