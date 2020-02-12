@@ -89,11 +89,11 @@ pub struct BandwidthListener<TInner> {
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner, TConn> Stream for BandwidthListener<TInner>
+impl<TInner, TConn, TErr> Stream for BandwidthListener<TInner>
 where
-    TInner: TryStream<Ok = ListenerEvent<TConn>>
+    TInner: TryStream<Ok = ListenerEvent<TConn, TErr>, Error = TErr>
 {
-    type Item = Result<ListenerEvent<BandwidthFuture<TConn>>, TInner::Error>;
+    type Item = Result<ListenerEvent<BandwidthFuture<TConn>, TErr>, TErr>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
