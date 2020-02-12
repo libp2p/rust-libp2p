@@ -181,7 +181,6 @@ pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_noise as noise;
 #[doc(inline)]

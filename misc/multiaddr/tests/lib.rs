@@ -103,12 +103,12 @@ impl Arbitrary for Proto {
             22 => {
                 let mut a = [0; 10];
                 g.fill(&mut a);
-                Proto(Onion(Cow::Owned(a), g.gen()))
+                Proto(Onion(Cow::Owned(a), g.gen_range(1, std::u16::MAX)))
             },
             23 => {
                 let mut a = [0; 35];
                 g.fill_bytes(&mut a);
-                Proto(Onion3((a, g.gen()).into()))
+                Proto(Onion3((a, g.gen_range(1, std::u16::MAX)).into()))
             },
              _ => panic!("outside range")
         }
