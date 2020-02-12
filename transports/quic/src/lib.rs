@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the libp2p `Transport` and `StreamMuxer` traits for QUIC/UDP/IP.
+//! Implementation of the libp2p `Transport` and `StreamMuxer` traits for QUIC.
 //!
 //! # Usage
 //!
@@ -57,6 +57,7 @@
 #![cfg_attr(test, forbid(warnings, clippy::all))]
 #![deny(missing_copy_implementations)]
 #![deny(trivial_casts)]
+
 mod certificate;
 mod connection;
 mod endpoint;

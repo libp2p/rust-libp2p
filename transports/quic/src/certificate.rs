@@ -25,6 +25,7 @@
 //! This crate uses the `log` crate to emit log output.  Events that will occur normally are output
 //! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
 //! library) are logged at `debug` level.
+
 use log::{trace, warn};
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
@@ -68,6 +69,8 @@ fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::Cu
     )
 }
 
+/// Generates a self-signed TLS certificate that includes a libp2p-specific certificate extension
+/// containing the public key of the given keypair.
 pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     let mut params = rcgen::CertificateParams::new(vec![]);
     let (cert_keypair, libp2p_extension) = gen_signed_keypair(keypair);
