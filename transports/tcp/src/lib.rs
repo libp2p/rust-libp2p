@@ -93,7 +93,7 @@ impl $tcp_config {
 impl Transport for $tcp_config {
     type Output = $tcp_trans_stream;
     type Error = io::Error;
-    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, io::Error>> + Send>>;
+    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>> + Send>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Pin<Box<dyn Future<Output = Result<$tcp_trans_stream, io::Error>> + Send>>;
 
