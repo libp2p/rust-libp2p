@@ -93,7 +93,7 @@ pub trait Transport {
     /// have been applied.
     ///
     /// If this stream produces an error, it is considered fatal and the listener is killed. It
-    /// is possible to report non-fatal errors by producing a [`ListenerUpgrade::Error`].
+    /// is possible to report non-fatal errors by producing a [`ListenerEvent::Error`].
     type Listener: Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
 
     /// A pending [`Output`](Transport::Output) for an inbound connection,
