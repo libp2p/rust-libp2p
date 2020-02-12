@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 use super::{
     certificate,
-    endpoint::{ConnectionEndpoint as Endpoint, EndpointInner, EndpointMessage},
+    endpoint::{ConnectionEndpoint as Endpoint, EndpointMessage},
     error::Error,
     socket::Pending,
 };
@@ -28,13 +28,13 @@ use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
 use log::{debug, error, info, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
-use quinn_proto::{Connection, ConnectionEvent, ConnectionHandle, Dir, StreamId};
+use quinn_proto::{Connection, ConnectionHandle, Dir, StreamId};
 use std::{
     collections::HashMap,
     io,
     mem::replace,
     pin::Pin,
-    sync::{Arc, Weak},
+    sync::Arc,
     task::{Context, Poll},
     time::Instant,
 };
@@ -414,8 +414,8 @@ impl Future for Upgrade {
                 return Poll::Pending;
             } else if inner.connection.side().is_server() {
                 let endpoint = &mut inner.endpoint;
-                let token = ready!(endpoint.poll_ready(cx));
-                endpoint.send_message(EndpointMessage::ConnectionAccepted, token)
+                let token = ready!(endpoint.poll_ready(cx))?;
+                endpoint.send_message(EndpointMessage::ConnectionAccepted, token)?
             }
 
             let peer_certificates: Vec<rustls::Certificate> = inner
@@ -446,7 +446,8 @@ type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
 
 #[derive(Debug)]
 pub(crate) struct Muxer {
-    /// The pending stream, if any.
+    /// If this is `Some`, it is a stream that has been opened by the peer,
+    /// but not yet accepted by the application.  Otherwise, this is `None`.
     pending_stream: Option<StreamId>,
     /// The associated endpoint
     endpoint: Endpoint,
@@ -506,7 +507,7 @@ impl Drop for QuicMuxer {
 }
 
 impl Muxer {
-    fn wake_driver(&mut self) {
+    pub(crate) fn wake_driver(&mut self) {
         if let Some(waker) = self.waker.take() {
             debug!("driver awoken!");
             waker.wake();
@@ -569,22 +570,16 @@ impl Muxer {
         }
     }
 
-    /// Process all endpoint-facing events for this connection.  This is synchronous and will not
-    /// fail.
-    fn send_to_endpoint(&mut self, endpoint: &mut EndpointInner) {
-        while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
-            if let Some(connection_event) = endpoint.handle_event(self.handle, endpoint_event) {
-                self.connection.handle_event(connection_event)
-            }
-        }
+    pub(crate) fn poll_endpoint_events(&mut self) -> Option<quinn_proto::EndpointEvent> {
+        self.connection.poll_endpoint_events()
     }
 
-    /// Send endpoint events.
-    fn poll_endpoint_events(&mut self, cx: &mut Context<'_>) {
+    /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.
+    fn send_endpoint_events(&mut self, cx: &mut Context<'_>) -> Result<(), Error> {
         loop {
             let token = match self.endpoint.poll_ready(cx) {
-                Poll::Pending => break,
-                Poll::Ready(token) => token,
+                Poll::Pending => break Ok(()),
+                Poll::Ready(token) => token?,
             };
             if let Some(event) = self.connection.poll_endpoint_events() {
                 self.endpoint.send_message(
@@ -593,9 +588,9 @@ impl Muxer {
                         event,
                     },
                     token,
-                )
+                )?
             } else {
-                break;
+                break Ok(());
             }
         }
     }
@@ -636,21 +631,8 @@ impl Muxer {
         self.wake_driver();
     }
 
-    /// Process application events
-    pub(crate) fn process_connection_events(
-        &mut self,
-        endpoint: &mut EndpointInner,
-        event: Option<ConnectionEvent>,
-    ) {
-        if let Some(event) = event {
-            self.connection.handle_event(event);
-        }
-        if self.connection.is_drained() {
-            return;
-        }
-        self.send_to_endpoint(endpoint);
-        self.process_app_events();
-        self.wake_driver();
+    pub(crate) fn handle_event(&mut self, event: quinn_proto::ConnectionEvent) {
+        self.connection.handle_event(event)
     }
 
     fn get_pending_stream(&mut self) -> Option<StreamId> {
@@ -666,7 +648,7 @@ impl Muxer {
         })
     }
 
-    fn process_app_events(&mut self) -> bool {
+    pub(crate) fn process_app_events(&mut self) -> bool {
         use quinn_proto::Event;
         let mut keep_going = false;
         'a: while let Some(event) = self.connection.poll() {
@@ -785,14 +767,14 @@ pub(super) struct ConnectionDriver {
 }
 
 impl ConnectionDriver {
-    pub(crate) fn spawn<T: FnOnce(Weak<Mutex<Muxer>>)>(
+    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Muxer>>)>(
         endpoint: Endpoint,
         connection: Connection,
         handle: ConnectionHandle,
         cb: T,
     ) -> Upgrade {
         let inner = Arc::new(Mutex::new(Muxer::new(endpoint, connection, handle)));
-        cb(Arc::downgrade(&inner));
+        cb(inner.clone());
         let handle = async_std::task::spawn(Self {
             inner: inner.clone(),
             outgoing_packet: None,
@@ -815,7 +797,7 @@ impl Future for ConnectionDriver {
             let now = Instant::now();
             inner.transmit_pending(now, cx)?;
             inner.process_app_events();
-            inner.poll_endpoint_events(cx);
+            inner.send_endpoint_events(cx)?;
             if inner.drive_timer(cx, now) {
                 continue;
             }

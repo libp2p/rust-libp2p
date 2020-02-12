@@ -65,5 +65,5 @@ mod error;
 mod socket;
 mod verifier;
 pub use connection::{Outbound, QuicMuxer as Muxer, Substream, Upgrade};
-pub use endpoint::{Config, Endpoint, Listener};
+pub use endpoint::{Config, Endpoint, Listener, JoinHandle};
 pub use error::Error;

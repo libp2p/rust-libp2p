@@ -31,9 +31,9 @@ use log::{debug, info, trace, warn};
 use parking_lot::Mutex;
 use quinn_proto::{Connection, ConnectionHandle};
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     pin::Pin,
-    sync::{Arc, Weak},
+    sync::Arc,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
@@ -123,7 +123,7 @@ pub enum EndpointMessage {
 #[derive(Debug)]
 pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
-    muxers: HashMap<ConnectionHandle, Weak<Mutex<super::connection::Muxer>>>,
+    muxers: HashMap<ConnectionHandle, Arc<Mutex<super::connection::Muxer>>>,
     pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
@@ -153,17 +153,42 @@ impl EndpointInner {
                     self.inner.accept();
                 }
                 EndpointMessage::EndpointEvent { handle, event } => {
-                    debug!("we have an event from connection {:?}", handle);
-                    match self.muxers.get(&handle).and_then(|e| e.upgrade()) {
-                        None => drop(self.muxers.remove(&handle)),
-                        Some(connection) => {
-                            let event = self.inner.handle_event(handle, event);
-                            connection.lock().process_connection_events(self, event)
-                        }
+                    debug!("we have event {:?} from connection {:?}", event, handle);
+                    if let Some(event) = self.handle_event(handle, event) {
+                        self.send_connection_event(handle, event)
                     }
                 }
                 EndpointMessage::Dummy => {}
             }
+        }
+    }
+
+    /// Send the given `ConnectionEvent` to the appropriate connection,
+    /// and process any events it sends back.
+    fn send_connection_event(
+        &mut self,
+        handle: quinn_proto::ConnectionHandle,
+        event: quinn_proto::ConnectionEvent,
+    ) {
+        let Self { inner, muxers, .. } = self;
+        let entry = match muxers.entry(handle) {
+            Entry::Vacant(_) => return,
+            Entry::Occupied(occupied) => occupied,
+        };
+        let mut connection = entry.get().lock();
+        connection.handle_event(event);
+        let mut is_drained = false;
+        while let Some(event) = connection.poll_endpoint_events() {
+            is_drained |= event.is_drained();
+            if let Some(event) = inner.handle_event(handle, event) {
+                connection.handle_event(event)
+            }
+        }
+        connection.process_app_events();
+        connection.wake_driver();
+        if is_drained {
+            drop(connection);
+            entry.remove();
         }
     }
 
@@ -185,25 +210,15 @@ impl EndpointInner {
                 };
             trace!("have an event!");
             match event {
-                DatagramEvent::ConnectionEvent(connection_event) => {
-                    match self.muxers.get(&handle).and_then(|e| e.upgrade()) {
-                        Some(connection) => connection
-                            .lock()
-                            .process_connection_events(self, Some(connection_event)),
-                        None => {
-                            debug!("lost our connection!");
-                            assert!(self
-                                .handle_event(handle, quinn_proto::EndpointEvent::drained())
-                                .is_none())
-                        }
-                    }
+                DatagramEvent::ConnectionEvent(event) => {
+                    self.send_connection_event(handle, event);
+                    continue;
                 }
                 DatagramEvent::NewConnection(connection) => {
                     debug!("new connection detected!");
                     break Poll::Ready(Ok((handle, connection)));
                 }
             }
-            trace!("event processed!")
         }
     }
 
@@ -224,7 +239,7 @@ type ListenerResult = Result<ListenerEvent<Upgrade>, Error>;
 #[derive(Debug)]
 pub(super) struct EndpointData {
     /// The single UDP socket used for I/O
-    socket: socket::Socket,
+    socket: Arc<socket::Socket>,
     /// A `Mutex` protecting the QUIC state machine.
     inner: Mutex<EndpointInner>,
     /// The channel on which new connections are sent.  This is bounded in practice by the accept
@@ -242,26 +257,19 @@ type Sender = mpsc::Sender<EndpointMessage>;
 
 impl ConnectionEndpoint {
     pub fn socket(&self) -> &socket::Socket {
-        &self.0.reference.socket
+        &self.socket
     }
 
-    pub fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<SendToken> {
-        match self.0.channel.poll_ready(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(_)) => unreachable!(
-                "We have a reference to the peer; polling a \
-                channel only fails when the peer has been dropped, so this will \
-                not fail; qed"
-            ),
-            Poll::Ready(Ok(())) => Poll::Ready(SendToken(())),
-        }
+    pub fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<SendToken, mpsc::SendError>> {
+        self.channel.poll_ready(cx).map_ok(SendToken)
     }
 
-    pub fn send_message(&mut self, event: EndpointMessage, SendToken(()): SendToken) {
-        self.0.channel.start_send(event).expect(
-            "you must check that you have capacity to get a SendToken; you cannot \
-            call this method without a SendToken, so this will not fail; qed",
-        )
+    pub fn send_message(
+        &mut self,
+        event: EndpointMessage,
+        SendToken(()): SendToken,
+    ) -> Result<(), mpsc::SendError> {
+        self.channel.start_send(event)
     }
 }
 
@@ -325,9 +333,12 @@ pub(crate) use channel_ref::{Channel, EndpointRef};
 pub struct Endpoint(EndpointRef);
 
 #[derive(Debug)]
-pub(crate) struct ConnectionEndpoint(EndpointRef);
+pub(crate) struct ConnectionEndpoint {
+    channel: Channel,
+    socket: Arc<socket::Socket>,
+}
 
-type JoinHandle = async_std::task::JoinHandle<Result<(), Error>>;
+pub type JoinHandle = async_std::task::JoinHandle<Result<(), Error>>;
 
 #[derive(Debug)]
 pub(crate) struct SendToken(());
@@ -376,7 +387,7 @@ impl Endpoint {
                 .expect("we have a reference to the peer, so this will not fail; qed");
         }
         let reference = Arc::new(EndpointData {
-            socket: socket::Socket::new(socket.into()),
+            socket: Arc::new(socket::Socket::new(socket.into())),
             inner: Mutex::new(EndpointInner {
                 inner: quinn_proto::Endpoint::new(
                     config.endpoint_config.clone(),
@@ -436,10 +447,10 @@ fn accept_muxer(
     inner: &mut EndpointInner,
     channel: Channel,
 ) {
-    let connection_endpoint = ConnectionEndpoint(EndpointRef {
-        reference: endpoint.clone(),
+    let connection_endpoint = ConnectionEndpoint {
+        socket: endpoint.socket.clone(),
         channel,
-    });
+    };
     let upgrade = create_muxer(connection_endpoint, connection, handle, &mut *inner);
     if endpoint
         .new_connections
@@ -472,17 +483,16 @@ impl Future for EndpointRef {
             }
         }
         match inner.poll_transmit_pending(&reference.socket, cx)? {
-            Poll::Pending | Poll::Ready(()) => {
-                let refcount = Arc::strong_count(&reference);
-                trace!("Strong reference count is {}", refcount);
-                if refcount == 1 {
-                    debug!("All connections have closed. Closing QUIC endpoint driver.");
-                    drop(inner);
-                    Poll::Ready(Ok(()))
-                } else {
-                    Poll::Pending
-                }
-            }
+            Poll::Pending | Poll::Ready(()) => {}
+        }
+
+        if !inner.muxers.is_empty() {
+            Poll::Pending
+        } else if Arc::strong_count(&reference) == 1 {
+            debug!("All connections have closed. Closing QUIC endpoint driver.");
+            Poll::Ready(Ok(()))
+        } else {
+            Poll::Pending
         }
     }
 }
@@ -563,11 +573,18 @@ impl Transport for Endpoint {
                 TransportError::Other(Error::CannotConnect(e))
             });
         let (handle, conn) = s?;
-        Ok(create_muxer(
-            ConnectionEndpoint(endpoint.clone()),
+        let socket = endpoint.reference.socket.clone();
+        let endpoint = ConnectionEndpoint {
+            socket,
+            channel: endpoint.channel,
+        };
+        Ok(super::connection::ConnectionDriver::spawn(
+            endpoint,
             conn,
             handle,
-            &mut inner,
+            |weak| {
+                inner.muxers.insert(handle, weak);
+            },
         ))
     }
 }

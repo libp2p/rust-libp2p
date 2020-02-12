@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use err_derive::Error;
+use futures::channel::mpsc::SendError;
 use io::ErrorKind;
 use ring::error::Unspecified;
 use std::io;
@@ -53,6 +54,14 @@ pub enum Error {
     notify the peer that a stream is opened until at least one byte is sent.  \
     Therefore, this read would deadlock.")]
     CannotReadFromUnwrittenStream,
+    #[error(display = "Fatal internal error or network failure")]
+    NetworkFailure,
+}
+
+impl From<SendError> for Error {
+    fn from(_: SendError) -> Error {
+        Error::NetworkFailure
+    }
 }
 
 impl From<Error> for io::Error {
@@ -61,7 +70,9 @@ impl From<Error> for io::Error {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
             e @ Error::BadCertificate(Unspecified) => io::Error::new(ErrorKind::InvalidData, e),
             Error::ConnectionError(e) => e.into(),
-            e @ Error::CannotConnect(_) => io::Error::new(ErrorKind::Other, e),
+            e @ Error::CannotConnect(_) | e @ Error::NetworkFailure => {
+                io::Error::new(ErrorKind::Other, e)
+            }
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }
