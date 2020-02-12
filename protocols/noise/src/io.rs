@@ -244,7 +244,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
                     this.write_state = WriteState::BufferData { off: 0 }
                 }
                 WriteState::BufferData { ref mut off } => {
-                    let n = min(MAX_WRITE_BUF_LEN, this.write_buffer.len().saturating_add(buf.len()));
+                    let n = min(MAX_WRITE_BUF_LEN, off.saturating_add(buf.len()));
                     this.write_buffer.resize(n, 0u8);
                     let n = min(MAX_WRITE_BUF_LEN - *off, buf.len());
                     this.write_buffer[*off .. *off + n].copy_from_slice(&buf[.. n]);
