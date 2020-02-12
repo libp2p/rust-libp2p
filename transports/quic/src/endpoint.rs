@@ -337,7 +337,7 @@ impl Endpoint {
     pub fn new(
         config: Config,
         mut address: Multiaddr,
-    ) -> Result<(Self, JoinHandle), TransportError<<&'static Self as Transport>::Error>> {
+    ) -> Result<(Self, JoinHandle), TransportError<<Self as Transport>::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&address) {
             sa
         } else {
@@ -505,7 +505,7 @@ impl Stream for Listener {
     }
 }
 
-impl Transport for &Endpoint {
+impl Transport for Endpoint {
     type Output = (libp2p_core::PeerId, super::Muxer);
     type Error = super::error::Error;
     type Listener = Listener;
@@ -535,8 +535,8 @@ impl Transport for &Endpoint {
             .take()
             .ok_or_else(|| TransportError::Other(Error::AlreadyListening))?;
         Ok(Listener {
-            reference: reference.clone(),
-            drop_notifier: drop_notifier.clone(),
+            reference,
+            drop_notifier,
             channel,
         })
     }
@@ -551,18 +551,22 @@ impl Transport for &Endpoint {
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
-        let Endpoint(EndpointRef { reference, .. }) = self;
-        let mut inner = reference.inner.lock();
+        let Endpoint(endpoint) = self;
+        let mut inner = endpoint.reference.inner.lock();
         let s: Result<(_, Connection), _> = inner
             .inner
-            .connect(reference.config.client_config.clone(), socket_addr, "l")
+            .connect(
+                endpoint.reference.config.client_config.clone(),
+                socket_addr,
+                "l",
+            )
             .map_err(|e| {
                 warn!("Connection error: {:?}", e);
                 TransportError::Other(Error::CannotConnect(e))
             });
         let (handle, conn) = s?;
         Ok(create_muxer(
-            ConnectionEndpoint(self.clone().0),
+            ConnectionEndpoint(endpoint.clone()),
             conn,
             handle,
             &mut inner,

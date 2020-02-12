@@ -117,8 +117,6 @@ fn wildcard_expansion() {
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
     let (listener, join) = Endpoint::new(Config::new(&keypair), addr.clone()).unwrap();
     let mut incoming = listener.listen_on(addr).unwrap();
-    drop(listener);
-
     // Process all initial `NewAddress` events and make sure they
     // do not contain wildcard address or port.
     futures::executor::block_on(async move {
@@ -160,7 +158,7 @@ fn communicating_between_dialer_and_listener() {
         .expect("bad address?");
     let quic_config = Config::new(&keypair2);
     let (quic_endpoint, join) = Endpoint::new(quic_config, addr.clone()).expect("I/O error");
-    let mut listener = quic_endpoint.listen_on(addr).unwrap();
+    let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
 
     let handle = async_std::task::spawn(async move {
         let key = loop {
@@ -255,7 +253,6 @@ fn communicating_between_dialer_and_listener() {
         debug!("have EOF");
         Closer(connection.1).await.expect("closed successfully");
         debug!("awaiting handle");
-        drop(quic_endpoint);
         join.await.unwrap();
         info!("endpoint is finished");
         connection.0
@@ -287,7 +284,6 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
     if new_addr.to_string().contains("udp/0") {
         panic!("failed to expand address ― got {}", new_addr);
     }
-    drop(quic);
     futures::executor::block_on(join).unwrap()
 }
 
@@ -309,7 +305,6 @@ fn replace_port_0_in_returned_multiaddr_ipv6() {
         .expect("listen address");
 
     assert!(!new_addr.to_string().contains("udp/0"));
-    drop(quic);
     futures::executor::block_on(join).unwrap()
 }
 
