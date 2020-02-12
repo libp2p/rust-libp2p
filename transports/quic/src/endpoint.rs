@@ -38,7 +38,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Represents the configuration for a QUIC/UDP/IP transport capability for libp2p.
+/// Represents the configuration for a QUIC transport capability for libp2p.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The client configuration.  Quinn provides functions for making one.
