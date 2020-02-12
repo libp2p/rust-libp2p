@@ -26,7 +26,7 @@ use std::{convert::TryFrom, fmt, hash, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
-const MAX_INLINE_KEY_LENGTH: usize = 42;
+const _MAX_INLINE_KEY_LENGTH: usize = 42;
 
 /// Identifier of a peer of the network.
 ///
@@ -58,15 +58,17 @@ impl PeerId {
 
         // Note: before 0.12, this was incorrectly implemented and `SHA2256` was always used.
         // Starting from version 0.13, rust-libp2p accepts both hashed and non-hashed keys as
-        // input (see `from_bytes`). Starting from version 0.16, rust-libp2p will switch to
-        // not hashing the key (a.k.a. the correct behaviour).
-        // In other words, rust-libp2p 0.13 is compatible with all versions of rust-libp2p.
-        // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.16 and above.
-        let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+        // input (see `from_bytes`). Starting from version 0.16 rust-libp2p will compare
+        // `PeerId`s of different hashes equal, which makes it possible to connect through
+        // secio or noise to nodes with an identity hash. Starting from version 0.17, rust-libp2p
+        // will switch to not hashing the key (i.e. the correct behaviour).
+        // In other words, rust-libp2p 0.16 is compatible with all versions of rust-libp2p.
+        // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.17 and above.
+        let hash_algorithm = /*if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             multihash::Hash::Identity
-        } else {
-            multihash::Hash::SHA2256
-        };
+        } else {*/
+            multihash::Hash::SHA2256;
+        //};
 
         let multihash = multihash::encode(hash_algorithm, &key_enc)
             .expect("identity and sha2-256 are always supported by known public key types");
