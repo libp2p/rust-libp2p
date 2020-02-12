@@ -218,17 +218,23 @@ impl snow::resolvers::CryptoResolver for Resolver {
     }
 
     fn resolve_hash(&self, choice: &snow::params::HashChoice) -> Option<Box<dyn snow::types::Hash>> {
-        if cfg!(target_os = "unknown") {
+        #[cfg(target_os = "unknown")]
+        {
             snow::resolvers::DefaultResolver.resolve_hash(choice)
-        } else {
+        }
+        #[cfg(not(target_os = "unknown"))]
+        {
             snow::resolvers::RingResolver.resolve_hash(choice)
         }
     }
 
     fn resolve_cipher(&self, choice: &snow::params::CipherChoice) -> Option<Box<dyn snow::types::Cipher>> {
-        if cfg!(target_os = "unknown") {
+        #[cfg(target_os = "unknown")]
+        {
             snow::resolvers::DefaultResolver.resolve_cipher(choice)
-        } else {
+        }
+        #[cfg(not(target_os = "unknown"))]
+        {
             snow::resolvers::RingResolver.resolve_cipher(choice)
         }
     }
