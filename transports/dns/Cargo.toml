@@ -13,3 +13,5 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { version = "0.15.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
+trust-dns-client = "0.19.2"
+trust-dns-proto = "0.19.2"

@@ -33,7 +33,7 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use futures::{prelude::*, channel::oneshot, future::BoxFuture};
+use futures::{prelude::*, channel::oneshot, future::BoxFuture, FutureExt};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
@@ -41,6 +41,11 @@ use libp2p_core::{
 };
 use log::{error, debug, trace};
 use std::{error, fmt, io, net::ToSocketAddrs};
+use std::str::FromStr;
+use trust_dns_client::rr::{DNSClass, RecordType};
+use trust_dns_client::udp::UdpClientConnection;
+use trust_dns_client::client::{SyncClient, Client};
+use trust_dns_proto::rr::domain::Name;
 
 /// Represents the configuration for a DNS transport capability of libp2p.
 ///
@@ -122,6 +127,7 @@ where
         let contains_dns = addr.iter().any(|cmp| match cmp {
             Protocol::Dns4(_) => true,
             Protocol::Dns6(_) => true,
+            Protocol::Dnsaddr(_) => true,
             _ => false,
         });
 
@@ -170,6 +176,55 @@ where
                             })
                             .next()
                             .ok_or_else(|| DnsErr::ResolveFail(name))
+                    }.left_future()
+                },
+                Protocol::Dnsaddr(ref name) => {
+                    let conn = UdpClientConnection::new("8.8.8.8:53".parse().unwrap()).unwrap(); // TODO: error handling
+                    let client = SyncClient::new(conn); // TODO: should use async client?
+
+                    let name = Name::from_str(&format!("_dnsaddr.{}", name)).unwrap(); // TODO: error handling
+                    let response = client.query(&name, DNSClass::IN, RecordType::TXT).unwrap(); // TODO: error handling
+                    let resolved_addrs = response.answers().iter()
+                        .filter_map(|record| {
+                            if let trust_dns_client::proto::rr::RData::TXT(ref txt) = record.rdata() {
+                                Some(txt.iter())
+                            } else {
+                                None
+                            }
+                        })
+                        .flatten()
+                        .filter_map(|bytes| {
+                            let str = std::str::from_utf8(bytes).unwrap(); // TODO: error handling
+                            let addr = Multiaddr::from_str(str.trim_start_matches("dnsaddr=")).unwrap(); // TODO: error handling
+
+                            // TODO: suffix matching
+                            // https://github.com/multiformats/multiaddr/blob/master/protocols/DNSADDR.md#suffix-matching
+
+                            match addr.iter().next() {
+                                Some(Protocol::Ip4(ipv4addr)) => {
+                                    Some(Protocol::from(ipv4addr))
+                                }
+                                Some(Protocol::Ip6(ipv6addr)) => {
+                                    Some(Protocol::from(ipv6addr))
+                                }
+                                Some(Protocol::Dnsaddr(ref name)) => {
+                                    // TODO: recursive resolution
+                                    error!("Resolved to the dnsaddr {:?} but recursive resolution is not supported for now.", name);
+                                    None
+                                }
+                                protocol => {
+                                    // TODO: error handling
+                                    error!("{:?}", protocol);
+                                    None
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    // if resolved_addrs.len() == 0 {} // TODO
+
+                    async move {
+                        Ok(resolved_addrs[0].clone())
                     }.left_future()
                 },
                 cmp => future::ready(Ok(cmp.acquire())).right_future()
@@ -300,6 +355,13 @@ mod tests {
 
             let _ = transport
                 .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
+                .unwrap()
+                .await
+                .unwrap();
+
+            let _ = transport
+                .clone()
+                .dial("/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/4001".parse().unwrap())
                 .unwrap()
                 .await
                 .unwrap();
