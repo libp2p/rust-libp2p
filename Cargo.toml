@@ -60,7 +60,6 @@ members = [
     "misc/multihash",
     "misc/multistream-select",
     "misc/peer-id-generator",
-    "misc/rw-stream-sink",
     "muxers/mplex",
     "muxers/yamux",
     "protocols/floodsub",
