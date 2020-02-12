@@ -60,7 +60,7 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///             ListenersEvent::AddressExpired { listener_id, listen_addr } => {
 ///                 println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
 ///             },
-///             ListenersEvent::Closed { listener_id } => {
+///             ListenersEvent::Closed { listener_id, .. } => {
 ///                 println!("Listener {:?} has been closed", listener_id);
 ///             },
 ///             ListenersEvent::Error { listener_id, error } => {
@@ -148,6 +148,9 @@ where
     Closed {
         /// The ID of the listener that closed.
         listener_id: ListenerId,
+        /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
+        /// if the stream produced an error.
+        reason: Result<(), TTrans::Error>,
     },
     /// A listener errored.
     ///
@@ -157,7 +160,7 @@ where
         /// The ID of the listener that errored.
         listener_id: ListenerId,
         /// The error value.
-        error: <TTrans::Listener as TryStream>::Error
+        error: TTrans::Error,
     }
 }
 
@@ -277,9 +280,16 @@ where
                         error,
                     })
                 }
-                Poll::Ready(None) | Poll::Ready(Some(Err(_))) => {
+                Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
+                        reason: Ok(()),
+                    })
+                }
+                Poll::Ready(Some(Err(err))) => {
+                    return Poll::Ready(ListenersEvent::Closed {
+                        listener_id: *listener_project.id,
+                        reason: Err(err),
                     })
                 }
             }
@@ -322,7 +332,7 @@ where
 impl<TTrans> fmt::Debug for ListenersEvent<TTrans>
 where
     TTrans: Transport,
-    <TTrans::Listener as TryStream>::Error: fmt::Debug,
+    TTrans::Error: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -341,9 +351,10 @@ where
                 .field("listener_id", listener_id)
                 .field("local_addr", local_addr)
                 .finish(),
-            ListenersEvent::Closed { listener_id } => f
+            ListenersEvent::Closed { listener_id, reason } => f
                 .debug_struct("ListenersEvent::Closed")
                 .field("listener_id", listener_id)
+                .field("reason", reason)
                 .finish(),
             ListenersEvent::Error { listener_id, error } => f
                 .debug_struct("ListenersEvent::Error")
