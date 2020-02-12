@@ -345,7 +345,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     }
 
     /// Returns `true` if this is an `Error` listener event.
-    pub fn is_non_fatal_error(&self) -> bool {
+    pub fn is_error(&self) -> bool {
         if let ListenerEvent::Error(_) = self {
             true
         } else {
@@ -357,7 +357,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     ///
     /// Returns `None` if the event is not actually a `Error`,
     /// otherwise the error.
-    pub fn into_non_fatal_error(self) -> Option<TErr> {
+    pub fn into_error(self) -> Option<TErr> {
         if let ListenerEvent::Error(err) = self {
             Some(err)
         } else {
