@@ -429,31 +429,29 @@ fn create_muxer(
     })
 }
 
-impl EndpointData {
-    fn accept_muxer(
-        self: &Arc<Self>,
-        connection: Connection,
-        handle: ConnectionHandle,
-        inner: &mut EndpointInner,
-        channel: Channel,
-    ) {
-        let connection_endpoint = ConnectionEndpoint(EndpointRef {
-            reference: self.clone(),
-            channel,
-        });
-        let upgrade = create_muxer(connection_endpoint, connection, handle, &mut *inner);
-        if self
-            .new_connections
-            .unbounded_send(Ok(ListenerEvent::Upgrade {
-                upgrade,
-                local_addr: self.address.clone(),
-                remote_addr: self.address.clone(),
-            }))
-            .is_err()
-        {
-            inner.inner.accept();
-            inner.inner.reject_new_connections();
-        }
+fn accept_muxer(
+    endpoint: &Arc<EndpointData>,
+    connection: Connection,
+    handle: ConnectionHandle,
+    inner: &mut EndpointInner,
+    channel: Channel,
+) {
+    let connection_endpoint = ConnectionEndpoint(EndpointRef {
+        reference: endpoint.clone(),
+        channel,
+    });
+    let upgrade = create_muxer(connection_endpoint, connection, handle, &mut *inner);
+    if endpoint
+        .new_connections
+        .unbounded_send(Ok(ListenerEvent::Upgrade {
+            upgrade,
+            local_addr: endpoint.address.clone(),
+            remote_addr: endpoint.address.clone(),
+        }))
+        .is_err()
+    {
+        inner.inner.accept();
+        inner.inner.reject_new_connections();
     }
 }
 
@@ -469,7 +467,7 @@ impl Future for EndpointRef {
             Poll::Pending => {}
             Poll::Ready((handle, connection)) => {
                 trace!("have a new connection");
-                reference.accept_muxer(connection, handle, &mut *inner, channel.clone());
+                accept_muxer(reference, connection, handle, &mut *inner, channel.clone());
                 trace!("connection accepted");
             }
         }
