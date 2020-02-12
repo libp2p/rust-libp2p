@@ -169,7 +169,7 @@ impl hash::Hash for PeerId {
     where
         H: hash::Hasher
     {
-        let digest = self.canonical.as_ref().map_or(self.multihash.digest(), |c| c.digest());
+        let digest = self.borrow() as &[u8];
         hash::Hash::hash(digest, state)
     }
 }
@@ -199,8 +199,8 @@ impl TryFrom<multihash::Multihash> for PeerId {
 
 impl PartialEq<PeerId> for PeerId {
     fn eq(&self, other: &PeerId) -> bool {
-        let self_digest = self.canonical.as_ref().map_or(self.multihash.digest(), |c| c.digest());
-        let other_digest = other.canonical.as_ref().map_or(other.multihash.digest(), |c| c.digest());
+        let self_digest = self.borrow() as &[u8];
+        let other_digest = other.borrow() as &[u8];
         self_digest == other_digest
     }
 }
