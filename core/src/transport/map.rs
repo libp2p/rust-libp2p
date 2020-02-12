@@ -68,11 +68,11 @@ pub struct MapStream<T, F> { #[pin] stream: T, fun: F }
 
 impl<T, F, A, B, X, E> Stream for MapStream<T, F>
 where
-    T: TryStream<Ok = ListenerEvent<X, E>>,
+    T: TryStream<Ok = ListenerEvent<X, E>, Error = E>,
     X: TryFuture<Ok = A>,
     F: FnOnce(A, ConnectedPoint) -> B + Clone
 {
-    type Item = Result<ListenerEvent<MapFuture<X, F>, E>, T::Error>;
+    type Item = Result<ListenerEvent<MapFuture<X, F>, E>, E>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();

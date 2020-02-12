@@ -114,9 +114,9 @@ pub struct TimeoutListener<InnerStream> {
 
 impl<InnerStream, O, E> Stream for TimeoutListener<InnerStream>
 where
-    InnerStream: TryStream<Ok = ListenerEvent<O, E>>,
+    InnerStream: TryStream<Ok = ListenerEvent<O, E>, Error = E>,
 {
-    type Item = Result<ListenerEvent<Timeout<O>, TransportTimeoutError<E>>, TransportTimeoutError<InnerStream::Error>>;
+    type Item = Result<ListenerEvent<Timeout<O>, TransportTimeoutError<E>>, TransportTimeoutError<E>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();

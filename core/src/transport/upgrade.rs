@@ -380,12 +380,12 @@ pub struct ListenerStream<S, U> {
 
 impl<S, U, F, I, C, D, E> Stream for ListenerStream<S, U>
 where
-    S: TryStream<Ok = ListenerEvent<F, E>>,
+    S: TryStream<Ok = ListenerEvent<F, E>, Error = E>,
     F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D> + Clone
 {
-    type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>, TransportUpgradeError<E, U::Error>>, TransportUpgradeError<S::Error, U::Error>>;
+    type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>, TransportUpgradeError<E, U::Error>>, TransportUpgradeError<E, U::Error>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match ready!(TryStream::try_poll_next(self.stream.as_mut(), cx)) {
