@@ -278,24 +278,23 @@ impl ClosestPeersIter {
         self.waiting().any(|p| peer == p)
     }
 
-
     /// Advances the state of the iterator, potentially getting a new peer to contact.
     pub fn next(&mut self, now: Instant) -> PeersIterState {
         if let State::Finished = self.state {
             return PeersIterState::Finished
         }
 
-        // Count the number of peers that returned a result. If there is a
-        // request in progress to one of the `num_results` closest peers, the
-        // counter is set to `None` as the iterator can only finish once
-        // `num_results` closest peers have responded (or there are no more
-        // peers to contact, see `num_waiting`).
+        // Count the number of peers that returned a result. If there is a request in progress to
+        // one of the `num_results` closest peers, or there is a close peer from a different path,
+        // the counter is set to `None` as the iterator can only finish once `num_results` closest
+        // peers have responded (or there are no more peers to contact, see `num_waiting`).
         let mut result_counter = Some(0);
 
         // Check if the iterator is at capacity w.r.t. the allowed parallelism.
         let at_capacity = self.at_capacity();
 
-        // Check for timed-out peers, being at capacity or overall success.
+        let mut fallback_different_path_peer = None;
+
         for peer in self.closest_peers.values_mut() {
             match peer.state {
                 PeerState::Waiting((timeout, disjoint_path_id)) => {
@@ -330,63 +329,54 @@ impl ClosestPeersIter {
                             return PeersIterState::Finished
                         }
                     }
-                _ => {},
-            }
-        }
-
-        let mut ignore_paths = u8::from(self.config.disjoint_paths) == 1;
-
-        // Find a peer worth querying next.
-        loop {
-            for peer in self.closest_peers.values_mut() {
-                if let PeerState::NotContacted(peer_path_id) = peer.state {
+                PeerState::NotContacted(peer_path_id) => {
                     if at_capacity {
                         return PeersIterState::WaitingAtCapacity
                     }
 
                     let timeout = now + self.config.peer_timeout;
 
-                    // If we care about disjoint paths, the given peer has a path and that path is
-                    // not the one we are looking for, ignore the peer.
-                    if let Some(path) = peer_path_id  {
-                        if !ignore_paths && self.next_disjoint_path != path {
-                            continue;
-                        }
+                    // If the node has no path or has the path we are looking for, return it.
+                    if peer_path_id.is_none() || peer_path_id == Some(self.next_disjoint_path) {
+                        peer.state = PeerState::Waiting((timeout, self.next_disjoint_path));
+                        self.next_disjoint_path = PathId(
+                            (self.next_disjoint_path.0 + 1) % (u8::from(self.config.disjoint_paths)),
+                        );
+
+                        self.num_waiting += 1;
+                        return PeersIterState::Waiting(Some(Cow::Owned(peer.key.preimage().clone())))
                     }
 
-                    // Getting this far implies that we found a peer to query next, given that
-                    // either:
-                    //
-                    // - Using disjoint paths is disabled, thereby ignoring paths.
-                    //
-                    // - The peer_path_id is None thereby the peer is from the initial set and thus
-                    //   not part of a path yet.
-                    //
-                    // - The peer_path_id is equal to self.next_disjoint_path, thus exactly what we
-                    //   are looking for.
-
-                    peer.state = PeerState::Waiting((timeout, self.next_disjoint_path));
-                    self.next_disjoint_path = PathId(
-                        (self.next_disjoint_path.0 + 1) % (u8::from(self.config.disjoint_paths)),
-                    );
-
-                    self.num_waiting += 1;
-
-                    // TODO: Shouldn't need to clone here. Compiler complaining about borrow
-                    // from previous iteration.
-                    return PeersIterState::Waiting(Some(Cow::Owned(peer.key.preimage().clone())))
+                    // Keep looking for a node with `self.next_disjoint_path`, but fall back to this
+                    // peer in case we find none within the for-loop.
+                    if fallback_different_path_peer.is_none() {
+                        fallback_different_path_peer = Some(peer);
+                        // Invalidate result counter to ensure we fall back to
+                        // `not_contacted_different_path_peer` instead of returning successfully.
+                        result_counter = None;
+                    }
+                },
+                PeerState::Unresponsive(_) | PeerState::Failed => {
+                    // Skip over unresponsive or failed peers.
                 }
             }
-
-            // We haven't found a peer worth querying next.
-            if !ignore_paths {
-                // Let's try again, ignoring usage of disjoint paths this time.
-                ignore_paths = true;
-            } else {
-                // Let's give up for now.
-                break;
-            }
         }
+
+        // The iterator has not found a peer with next_path_id, but maybe a peer from a different
+        // path.
+        if let Some(peer) = fallback_different_path_peer {
+            let timeout = now + self.config.peer_timeout;
+            // TODO: Should this peer carry the path id we are looking for, or the path id it
+            // originated from?
+            peer.state = PeerState::Waiting((timeout, self.next_disjoint_path));
+            self.next_disjoint_path = PathId(
+                (self.next_disjoint_path.0 + 1) % (u8::from(self.config.disjoint_paths)),
+            );
+
+            self.num_waiting += 1;
+            return PeersIterState::Waiting(Some(Cow::Owned(peer.key.preimage().clone())))
+        }
+
 
         if self.num_waiting > 0 {
             // The iterator is still waiting for results and not at capacity w.r.t.
