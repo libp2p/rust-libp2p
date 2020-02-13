@@ -578,7 +578,7 @@ impl Gossipsub {
             "Handling subscriptions: {:?}, from source: {:?}",
             subscriptions, propagation_source
         );
-        let subscribed_topics = match self.peer_topics.get_mut(&propagation_source) {
+        let subscribed_topics = match self.peer_topics.get_mut(propagation_source) {
             Some(topics) => topics,
             None => {
                 error!("Subscription by unknown peer: {:?}", &propagation_source);
@@ -841,7 +841,7 @@ impl Gossipsub {
                 })
                 .collect();
             let mut prunes: Vec<GossipsubControlAction> = to_prune
-                .remove(&peer)
+                .remove(peer)
                 .unwrap_or_else(|| vec![])
                 .iter()
                 .map(|topic_hash| GossipsubControlAction::Prune {
@@ -1028,7 +1028,7 @@ impl NetworkBehaviour for Gossipsub {
         // remove from mesh, topic_peers, peer_topic and fanout
         debug!("Peer disconnected: {:?}", id);
         {
-            let topics = match self.peer_topics.get(&id) {
+            let topics = match self.peer_topics.get(id) {
                 Some(topics) => (topics),
                 None => {
                     warn!("Disconnected node, not in connected nodes");
