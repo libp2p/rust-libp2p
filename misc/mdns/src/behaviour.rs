@@ -30,14 +30,14 @@ use libp2p_swarm::{
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, marker::PhantomData, mem, pin::Pin, time::Duration, task::Context, task::Poll};
+use std::{cmp, fmt, io, iter, mem, pin::Pin, time::Duration, task::Context, task::Poll};
 use wasm_timer::{Delay, Instant};
 
 const MDNS_RESPONSE_TTL: std::time::Duration = Duration::from_secs(5 * 60);
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
-pub struct Mdns<TSubstream> {
+pub struct Mdns {
     /// The inner service.
     service: MaybeBusyMdnsService,
 
@@ -51,9 +51,6 @@ pub struct Mdns<TSubstream> {
     ///
     /// `None` if `discovered_nodes` is empty.
     closest_expiration: Option<Delay>,
-
-    /// Marker to pin the generic.
-    marker: PhantomData<TSubstream>,
 }
 
 /// `MdnsService::next` takes ownership of `self`, returning a future that resolves with both itself
@@ -86,14 +83,13 @@ impl fmt::Debug for MaybeBusyMdnsService {
     }
 }
 
-impl<TSubstream> Mdns<TSubstream> {
+impl Mdns {
     /// Builds a new `Mdns` behaviour.
-    pub fn new() -> io::Result<Mdns<TSubstream>> {
+    pub fn new() -> io::Result<Mdns> {
         Ok(Mdns {
             service: MaybeBusyMdnsService::Free(MdnsService::new()?),
             discovered_nodes: SmallVec::new(),
             closest_expiration: None,
-            marker: PhantomData,
         })
     }
 
@@ -174,11 +170,8 @@ impl fmt::Debug for ExpiredAddrsIter {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for Mdns<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-{
-    type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
+impl NetworkBehaviour for Mdns {
+    type ProtocolsHandler = DummyProtocolsHandler;
     type OutEvent = MdnsEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -344,7 +337,7 @@ where
     }
 }
 
-impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
+impl fmt::Debug for Mdns {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Mdns")
             .field("service", &self.service)

@@ -22,7 +22,7 @@
 //!
 //! The core type is a [`task::Task`], which implements [`futures::Future`]
 //! and connects and handles a node. A task receives and sends messages
-//! ([`tasks::FromTaskMessage`], [`tasks::ToTaskMessage`]) to the outside.
+//! ([`task::FromTaskMessage`], [`task::ToTaskMessage`]) to the outside.
 //!
 //! A set of tasks is managed by a [`Manager`] which creates tasks when a
 //! node should be connected to (cf. [`Manager::add_reach_attempt`]) or

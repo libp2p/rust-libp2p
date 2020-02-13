@@ -38,7 +38,6 @@ use std::{
     collections::HashSet,
     collections::VecDeque,
     iter,
-    marker::PhantomData,
     sync::Arc,
     task::{Context, Poll},
 };
@@ -47,7 +46,7 @@ use wasm_timer::{Instant, Interval};
 mod tests;
 
 /// Network behaviour that handles the gossipsub protocol.
-pub struct Gossipsub<TSubstream> {
+pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
@@ -84,12 +83,9 @@ pub struct Gossipsub<TSubstream> {
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
-
-    /// Marker to pin the generics.
-    marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> Gossipsub<TSubstream> {
+impl Gossipsub {
     /// Creates a `Gossipsub` struct given a set of parameters specified by `gs_config`.
     pub fn new(local_peer_id: PeerId, gs_config: GossipsubConfig) -> Self {
         let local_peer_id = if gs_config.no_source_id {
@@ -118,7 +114,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 Instant::now() + gs_config.heartbeat_initial_delay,
                 gs_config.heartbeat_interval,
             ),
-            marker: PhantomData,
         }
     }
 
@@ -388,7 +383,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
-    /// Gossipsub LEAVE(topic) - Notifies mesh[topic] peers with PRUNE messages.
+    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
 
@@ -583,7 +578,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             "Handling subscriptions: {:?}, from source: {:?}",
             subscriptions, propagation_source
         );
-        let subscribed_topics = match self.peer_topics.get_mut(&propagation_source) {
+        let subscribed_topics = match self.peer_topics.get_mut(propagation_source) {
             Some(topics) => topics,
             None => {
                 error!("Subscription by unknown peer: {:?}", &propagation_source);
@@ -846,7 +841,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 })
                 .collect();
             let mut prunes: Vec<GossipsubControlAction> = to_prune
-                .remove(&peer)
+                .remove(peer)
                 .unwrap_or_else(|| vec![])
                 .iter()
                 .map(|topic_hash| GossipsubControlAction::Prune {
@@ -885,7 +880,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Helper function which forwards a message to mesh[topic] peers.
+    /// Helper function which forwards a message to mesh\[topic\] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
         let msg_id = (self.config.message_id_fn)(&message);
         debug!("Forwarding message: {:?}", msg_id);
@@ -987,11 +982,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for Gossipsub<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type ProtocolsHandler = GossipsubHandler<TSubstream>;
+impl NetworkBehaviour for Gossipsub {
+    type ProtocolsHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -1036,7 +1028,7 @@ where
         // remove from mesh, topic_peers, peer_topic and fanout
         debug!("Peer disconnected: {:?}", id);
         {
-            let topics = match self.peer_topics.get(&id) {
+            let topics = match self.peer_topics.get(id) {
                 Some(topics) => (topics),
                 None => {
                     warn!("Disconnected node, not in connected nodes");
