@@ -52,11 +52,30 @@
 //! `Endpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![forbid(unstable_features, unsafe_code)]
 // Forbid warnings when testing, but don’t break other people’s code
-#![cfg_attr(test, forbid(warnings, clippy::all))]
-#![deny(missing_copy_implementations)]
-#![deny(trivial_casts)]
+#![cfg_attr(
+    test,
+    forbid(
+        elided_lifetimes_in_paths,
+        future_incompatible,
+        missing_debug_implementations,
+        missing_docs,
+        rust_2018_idioms,
+        trivial_casts,
+        trivial_numeric_casts,
+        unsafe_code,
+        unstable_features,
+        unused_import_braces,
+        warnings,
+        clippy::all
+    )
+)]
+#![deny(
+    missing_copy_implementations,
+    unused,
+    nonstandard_style,
+    unused_qualifications
+)]
 
 mod certificate;
 mod connection;
@@ -65,5 +84,5 @@ mod error;
 mod socket;
 mod verifier;
 pub use connection::{Outbound, QuicMuxer as Muxer, Substream, Upgrade};
-pub use endpoint::{Config, Endpoint, Listener, JoinHandle};
+pub use endpoint::{Config, Endpoint, JoinHandle, Listener};
 pub use error::Error;

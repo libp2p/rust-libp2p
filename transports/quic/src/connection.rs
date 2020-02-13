@@ -38,31 +38,46 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
+
+/// A QUIC substream
 #[derive(Debug)]
 pub struct Substream {
     id: StreamId,
     status: SubstreamStatus,
 }
 
+/// The status of a QUIC substream
 #[derive(Debug)]
 enum SubstreamStatus {
+    /// The stream has not been written to yet.  Reading from such a stream will
+    /// return an error.
     Unwritten,
+    /// The stream is live, and can be read from or written to.
     Live,
+    /// The stream is being shut down.  It can be read from, but not written to.
+    /// The `oneshot::Receiver` is used to wait for the peer to acknowledge the
+    /// shutdown.
     Finishing(oneshot::Receiver<()>),
+    /// The stream has been shut down.  Reads are still permissible.  Writes
+    /// will return an error.
     Finished,
 }
 
 impl Substream {
+    /// Construct an unwritten stream. Such a stream must be written to before
+    /// it can be read from.
     fn unwritten(id: StreamId) -> Self {
         let status = SubstreamStatus::Unwritten;
         Self { id, status }
     }
 
+    /// Construct a live stream, which can be read from or written to.
     fn live(id: StreamId) -> Self {
         let status = SubstreamStatus::Live;
         Self { id, status }
     }
 
+    /// Test if data can be sent on a stream.
     fn is_live(&self) -> bool {
         match self.status {
             SubstreamStatus::Live | SubstreamStatus::Unwritten => true,
@@ -71,10 +86,20 @@ impl Substream {
     }
 }
 
+/// A QUIC connection, either client or server.
+/// 
+/// QUIC opens streams lazily, so the peer is not notified that a stream has
+/// been opened until data is written (either on this stream, or a
+/// higher-numbered one). Therefore, reading on a stream that has not been
+/// written to will deadlock, unless another stream is opened and written to
+/// before the first read returns. Because this is not needed in practice, and
+/// to ease debugging, [`QuicMuxer::read_substream`] returns an error in this
+/// case.
 #[derive(Debug, Clone)]
 pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
 impl QuicMuxer {
+    /// Returns the underlying data structure, including all state.
     fn inner(&self) -> MutexGuard<'_, Muxer> {
         self.0.lock()
     }
@@ -82,11 +107,17 @@ impl QuicMuxer {
 
 #[derive(Debug)]
 enum OutboundInner {
+    /// The substream is fully set up
     Complete(Result<StreamId, Error>),
+    /// We are waiting on a stream to become available
     Pending(oneshot::Receiver<StreamId>),
+    /// We have already returned our substream
     Done,
 }
 
+/// An outbound QUIC substream. This will eventually resolve to either a
+/// [`Substream`] or an [`Error`].
+#[derive(Debug)]
 pub struct Outbound(OutboundInner);
 
 impl Future for Outbound {
@@ -96,7 +127,7 @@ impl Future for Outbound {
         match this.0 {
             OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
                 OutboundInner::Complete(e) => Poll::Ready(e.map(Substream::unwritten)),
-                _ => unreachable!(),
+                _ => unreachable!("we just checked that we have a `Complete`; qed"),
             },
             OutboundInner::Pending(ref mut receiver) => {
                 let result = ready!(receiver.poll_unpin(cx))
@@ -113,7 +144,7 @@ impl Future for Outbound {
 impl StreamMuxer for QuicMuxer {
     type OutboundSubstream = Outbound;
     type Substream = Substream;
-    type Error = crate::error::Error;
+    type Error = Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
         if let Some(ref e) = inner.close_reason {
@@ -313,7 +344,7 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         inner.wake_driver();
         inner.connection.finish(substream.id).map_err(|e| match e {
-            quinn_proto::FinishError::UnknownStream => unreachable!("we checked for this above!"),
+            quinn_proto::FinishError::UnknownStream => Error::ConnectionClosing,
             quinn_proto::FinishError::Stopped(e) => Error::Stopped(e),
         })?;
         let (sender, mut receiver) = oneshot::channel();
@@ -331,6 +362,8 @@ impl StreamMuxer for QuicMuxer {
         Poll::Pending
     }
 
+    /// Flush pending data on this stream. libp2p-quic sends out data as soon as
+    /// possible, so this method does nothing.
     fn flush_substream(
         &self,
         _cx: &mut Context<'_>,
@@ -339,10 +372,14 @@ impl StreamMuxer for QuicMuxer {
         Poll::Ready(Ok(()))
     }
 
+    /// Flush all pending data to the peer. libp2p-quic sends out data as soon
+    /// as possible, so this method does nothing.
     fn flush_all(&self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
+    /// Close the connection. Once this function is called, it is a logic error
+    /// to call other methods on this object. 
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         trace!("close() called");
         let mut inner = self.inner();
@@ -375,6 +412,7 @@ impl StreamMuxer for QuicMuxer {
     }
 }
 
+/// A QUIC connection that is
 #[derive(Debug)]
 pub struct Upgrade {
     muxer: Option<QuicMuxer>,
@@ -444,14 +482,15 @@ impl Future for Upgrade {
 
 type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
 
+/// A QUIC connection and its associated data.
 #[derive(Debug)]
 pub(crate) struct Muxer {
     /// If this is `Some`, it is a stream that has been opened by the peer,
     /// but not yet accepted by the application.  Otherwise, this is `None`.
     pending_stream: Option<StreamId>,
-    /// The associated endpoint
+    /// A channel to communicate with the endpoint.
     endpoint: Endpoint,
-    /// The `quinn_proto::Connection` struct.
+    /// The QUIC state machine.
     connection: Connection,
     /// Connection handle
     handle: ConnectionHandle,
@@ -459,28 +498,26 @@ pub(crate) struct Muxer {
     writers: HashMap<StreamId, std::task::Waker>,
     /// Tasks blocked on reading
     readers: HashMap<StreamId, std::task::Waker>,
-    /// Tasks blocked on finishing
+    /// Tasks that are waiting for their streams to close.
     finishers: HashMap<StreamId, Option<oneshot::Sender<()>>>,
     /// Task waiting for new connections, or for the connection to finish handshaking.
     handshake_or_accept_waker: Option<std::task::Waker>,
-    /// Tasks waiting to make a connection
+    /// Tasks waiting to make a connection.
     connectors: StreamSenderQueue,
-    /// Pending transmit
-    pending: super::socket::Pending,
+    /// A container for a packet that is waiting to be transmitted
+    pending: Pending,
     /// The timer being used by this connection
     timer: Option<futures_timer::Delay>,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
     /// Waker to wake up the driver
     waker: Option<std::task::Waker>,
-    /// Last timeout
+    /// The last timeout returned by `quinn_proto::poll_timeout`.
     last_timeout: Option<Instant>,
-    /// Join handle for the driver
+    /// A handle to wait on the driver to exit.
     driver: Option<async_std::task::JoinHandle<Result<(), Error>>>,
     /// Close waker
     close_waker: Option<std::task::Waker>,
-    /// Have we gotten a connection lost event?
-    connection_lost: bool,
 }
 
 const RESET: u32 = 1;
@@ -550,7 +587,6 @@ impl Muxer {
 
     fn new(endpoint: Endpoint, connection: Connection, handle: ConnectionHandle) -> Self {
         Muxer {
-            connection_lost: false,
             close_waker: None,
             last_timeout: None,
             pending_stream: None,
@@ -714,7 +750,6 @@ impl Muxer {
                         "connection lost without being closed"
                     );
                     self.close_reason = Some(reason);
-                    self.connection_lost = true;
                     if let Some(e) = self.close_waker.take() {
                         e.wake()
                     }

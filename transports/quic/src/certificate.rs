@@ -173,7 +173,7 @@ fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKe
 }
 
 fn parse_tbscertificate(reader: yasna::BERReader<'_, '_>) -> yasna::ASN1Result<identity::PublicKey> {
-    trace!("parsing TBScertificate");
+    // trace!("parsing TBScertificate");
     reader.read_sequence(|reader| {
         // Check the X.509 version
         if reader.next().read_der()? != [160, 3, 2, 1, 2] {
@@ -189,11 +189,11 @@ fn parse_tbscertificate(reader: yasna::BERReader<'_, '_>) -> yasna::ASN1Result<i
         reader.next().read_der()?;
         // Skip subject
         reader.next().read_der()?;
-        trace!("reading subjectPublicKeyInfo");
+        // trace!("reading subjectPublicKeyInfo");
         let key = reader.next().read_sequence(|mut reader| {
             // Skip the subject key algorithm
             reader.next().read_der()?;
-            trace!("reading subject key");
+            // trace!("reading subject key");
             read_bitvec(&mut reader)
         })?;
         trace!("reading extensions");

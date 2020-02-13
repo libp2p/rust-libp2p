@@ -133,7 +133,7 @@ pub(super) struct EndpointInner {
 impl EndpointInner {
     pub(super) fn handle_event(
         &mut self,
-        handle: quinn_proto::ConnectionHandle,
+        handle: ConnectionHandle,
         event: quinn_proto::EndpointEvent,
     ) -> Option<quinn_proto::ConnectionEvent> {
         if event.is_drained() {
@@ -167,7 +167,7 @@ impl EndpointInner {
     /// and process any events it sends back.
     fn send_connection_event(
         &mut self,
-        handle: quinn_proto::ConnectionHandle,
+        handle: ConnectionHandle,
         event: quinn_proto::ConnectionEvent,
     ) {
         let Self { inner, muxers, .. } = self;
@@ -338,6 +338,7 @@ pub(crate) struct ConnectionEndpoint {
     socket: Arc<socket::Socket>,
 }
 
+/// A handle that can be used to wait for the endpoint driver to finish.
 pub type JoinHandle = async_std::task::JoinHandle<Result<(), Error>>;
 
 #[derive(Debug)]
@@ -515,7 +516,7 @@ impl Stream for Listener {
 
 impl Transport for Endpoint {
     type Output = (libp2p_core::PeerId, super::Muxer);
-    type Error = super::error::Error;
+    type Error = Error;
     type Listener = Listener;
     type ListenerUpgrade = Upgrade;
     type Dial = Upgrade;

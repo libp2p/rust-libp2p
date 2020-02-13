@@ -27,18 +27,25 @@ use std::io;
 /// An error that can be returned by libp2p-quic.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// Fatal I/O error
     #[error(display = "Fatal I/O error {}", _0)]
     IO(#[error(source)] std::io::Error),
+    /// Peer sent a malformed certificate
     #[error(display = "Peer sent a malformed certificate")]
-    BadCertificate(#[error(source)] ring::error::Unspecified),
+    BadCertificate(#[error(source)] Unspecified),
+    /// QUIC protocol error
     #[error(display = "QUIC protocol error: {}", _0)]
     ConnectionError(#[error(source)] quinn_proto::ConnectionError),
+    /// Cannot establish connection
     #[error(display = "Cannot establish connection: {}", _0)]
     CannotConnect(#[error(source)] quinn_proto::ConnectError),
+    /// Peer stopped receiving data
     #[error(display = "Peer stopped receiving data: code {}", _0)]
     Stopped(quinn_proto::VarInt),
+    /// Connection was prematurely closed
     #[error(display = "Connection was prematurely closed")]
     ConnectionLost,
+    /// Cannot listen on the same endpoint more than once
     #[error(display = "Cannot listen on the same endpoint more than once")]
     AlreadyListening,
     /// The stream was reset by the peer.
@@ -49,13 +56,15 @@ pub enum Error {
     #[error(display = "Use of a stream that has is no longer valid. This is a \
                        bug in the application.")]
     ExpiredStream,
-    #[error(display = "Trying to ready from a stream that the peer has not been \
-    notified of.  For performance and complexity reasons, libp2p-quic does not \
-    notify the peer that a stream is opened until at least one byte is sent.  \
-    Therefore, this read would deadlock.")]
+    /// Reading from a stream that has not been written to.
+    #[error(display = "Reading from a stream that has not been written to.")]
     CannotReadFromUnwrittenStream,
+    /// Fatal internal error or network failure
     #[error(display = "Fatal internal error or network failure")]
     NetworkFailure,
+    /// Connection already being closed
+    #[error(display = "Connection already being closed")]
+    ConnectionClosing,
 }
 
 impl From<SendError> for Error {
@@ -70,9 +79,9 @@ impl From<Error> for io::Error {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
             e @ Error::BadCertificate(Unspecified) => io::Error::new(ErrorKind::InvalidData, e),
             Error::ConnectionError(e) => e.into(),
-            e @ Error::CannotConnect(_) | e @ Error::NetworkFailure => {
-                io::Error::new(ErrorKind::Other, e)
-            }
+            e @ Error::CannotConnect(_)
+            | e @ Error::NetworkFailure
+            | e @ Error::ConnectionClosing => io::Error::new(ErrorKind::Other, e),
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }
