@@ -211,12 +211,6 @@ impl Borrow<[u8]> for PeerId {
     }
 }
 
-impl Borrow<[u8]> for &PeerId {
-    fn borrow(&self) -> &[u8] {
-        self.canonical.as_ref().map_or(self.multihash.as_bytes(), |c| c.as_bytes())
-    }
-}
-
 /// **NOTE:** This byte representation is not necessarily consistent with
 /// equality of peer IDs. That is, two peer IDs may be considered equal
 /// while having a different byte representation as per `AsRef<[u8]>`.

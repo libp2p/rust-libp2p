@@ -252,12 +252,6 @@ impl Borrow<[u8]> for Multihash {
     }
 }
 
-impl Borrow<[u8]> for &Multihash {
-    fn borrow(&self) -> &[u8] {
-        self.as_bytes()
-    }
-}
-
 impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
     fn eq(&self, other: &MultihashRef<'a>) -> bool {
         &*self.bytes == other.bytes
