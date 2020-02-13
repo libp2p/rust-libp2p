@@ -191,7 +191,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
     }
 
     fn providers(&'a self, key: &Key) -> Vec<ProviderRecord> {
-        self.providers.get(&key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
+        self.providers.get(key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
     fn provided(&'a self) -> Self::ProvidedIter {

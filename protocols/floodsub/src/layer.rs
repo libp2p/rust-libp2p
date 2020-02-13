@@ -101,7 +101,7 @@ impl Floodsub {
     /// Remove a node from the list of nodes to propagate messages to.
     #[inline]
     pub fn remove_node_from_partial_view(&mut self, peer_id: &PeerId) {
-        self.target_peers.remove(&peer_id);
+        self.target_peers.remove(peer_id);
     }
 
     /// Subscribes to a topic.

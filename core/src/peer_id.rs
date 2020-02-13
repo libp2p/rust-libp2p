@@ -22,7 +22,7 @@ use crate::PublicKey;
 use bs58;
 use thiserror::Error;
 use multihash;
-use std::{convert::TryFrom, fmt, hash, str::FromStr};
+use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -35,6 +35,11 @@ const _MAX_INLINE_KEY_LENGTH: usize = 42;
 #[derive(Clone, Eq)]
 pub struct PeerId {
     multihash: multihash::Multihash,
+    /// A (temporary) "canonical" multihash if `multihash` is of type
+    /// multihash::Hash::Identity, so that `Borrow<[u8]>` semantics
+    /// can be given, i.e. a view of a byte representation whose
+    /// equality is consistent with `PartialEq`.
+    canonical: Option<multihash::Multihash>,
 }
 
 impl fmt::Debug for PeerId {
@@ -64,15 +69,19 @@ impl PeerId {
         // will switch to not hashing the key (i.e. the correct behaviour).
         // In other words, rust-libp2p 0.16 is compatible with all versions of rust-libp2p.
         // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.17 and above.
-        let hash_algorithm = /*if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
-            multihash::Hash::Identity
+        let (hash_algorithm, canonical_algorithm) = /*if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+            (multihash::Hash::Identity, Some(multihash::Hash::SHA2256))
         } else {*/
-            multihash::Hash::SHA2256;
+            (multihash::Hash::SHA2256, None);
         //};
+
+        let canonical = canonical_algorithm.map(|alg|
+            multihash::encode(alg, &key_enc).expect("SHA2256 is always supported"));
 
         let multihash = multihash::encode(hash_algorithm, &key_enc)
             .expect("identity and sha2-256 are always supported by known public key types");
-        PeerId { multihash }
+
+        PeerId { multihash, canonical }
     }
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
@@ -80,10 +89,13 @@ impl PeerId {
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
-                if multihash.algorithm() == multihash::Hash::SHA2256
-                    || multihash.algorithm() == multihash::Hash::Identity
-                {
-                    Ok(PeerId { multihash })
+                if multihash.algorithm() == multihash::Hash::SHA2256 {
+                    Ok(PeerId { multihash, canonical: None })
+                }
+                else if multihash.algorithm() == multihash::Hash::Identity {
+                    let canonical = multihash::encode(multihash::Hash::SHA2256, multihash.digest())
+                        .expect("SHA2256 is always supported");
+                    Ok(PeerId { multihash, canonical: Some(canonical) })
                 } else {
                     Err(multihash.into_bytes())
                 }
@@ -95,8 +107,12 @@ impl PeerId {
     /// Turns a `Multihash` into a `PeerId`. If the multihash doesn't use the correct algorithm,
     /// returns back the data as an error.
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
-        if data.algorithm() == multihash::Hash::SHA2256 || data.algorithm() == multihash::Hash::Identity {
-            Ok(PeerId { multihash: data })
+        if data.algorithm() == multihash::Hash::SHA2256 {
+            Ok(PeerId { multihash: data, canonical: None })
+        } else if data.algorithm() == multihash::Hash::Identity {
+            let canonical = multihash::encode(multihash::Hash::SHA2256, data.digest())
+                .expect("SHA2256 is always supported");
+            Ok(PeerId { multihash: data, canonical: Some(canonical) })
         } else {
             Err(data)
         }
@@ -107,27 +123,32 @@ impl PeerId {
     /// This is useful for randomly walking on a DHT, or for testing purposes.
     pub fn random() -> PeerId {
         PeerId {
-            multihash: multihash::Multihash::random(multihash::Hash::SHA2256)
+            multihash: multihash::Multihash::random(multihash::Hash::SHA2256),
+            canonical: None,
         }
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
     ///
-    /// Note that this is not the same as the public key of the peer.
+    /// **NOTE:** This byte representation is not necessarily consistent with
+    /// equality of peer IDs. That is, two peer IDs may be considered equal
+    /// while having a different byte representation as per `into_bytes`.
     pub fn into_bytes(self) -> Vec<u8> {
         self.multihash.into_bytes()
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
     ///
-    /// Note that this is not the same as the public key of the peer.
+    /// **NOTE:** This byte representation is not necessarily consistent with
+    /// equality of peer IDs. That is, two peer IDs may be considered equal
+    /// while having a different byte representation as per `as_bytes`.
     pub fn as_bytes(&self) -> &[u8] {
         self.multihash.as_bytes()
     }
 
     /// Returns a base-58 encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
-        bs58::encode(self.multihash.as_bytes()).into_string()
+        bs58::encode(self.borrow() as &[u8]).into_string()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
@@ -150,17 +171,8 @@ impl hash::Hash for PeerId {
     where
         H: hash::Hasher
     {
-        match self.multihash.algorithm() {
-            multihash::Hash::Identity => {
-                let sha256 = multihash::encode(multihash::Hash::SHA2256, self.multihash.digest())
-                    .expect("encoding a SHA2256 multihash never fails; qed");
-                hash::Hash::hash(sha256.digest(), state)
-            },
-            multihash::Hash::SHA2256 => {
-                hash::Hash::hash(self.multihash.digest(), state)
-            },
-            _ => unreachable!("PeerId can only be built from Identity or SHA2256; qed")
-        }
+        let digest = self.borrow() as &[u8];
+        hash::Hash::hash(digest, state)
     }
 }
 
@@ -189,34 +201,21 @@ impl TryFrom<multihash::Multihash> for PeerId {
 
 impl PartialEq<PeerId> for PeerId {
     fn eq(&self, other: &PeerId) -> bool {
-        match (self.multihash.algorithm(), other.multihash.algorithm()) {
-            (multihash::Hash::SHA2256, multihash::Hash::SHA2256) => {
-                self.multihash.digest() == other.multihash.digest()
-            },
-            (multihash::Hash::Identity, multihash::Hash::Identity) => {
-                self.multihash.digest() == other.multihash.digest()
-            },
-            (multihash::Hash::SHA2256, multihash::Hash::Identity) => {
-                multihash::encode(multihash::Hash::SHA2256, other.multihash.digest())
-                    .map(|mh| mh == self.multihash)
-                    .unwrap_or(false)
-            },
-            (multihash::Hash::Identity, multihash::Hash::SHA2256) => {
-                multihash::encode(multihash::Hash::SHA2256, self.multihash.digest())
-                    .map(|mh| mh == other.multihash)
-                    .unwrap_or(false)
-            },
-            _ => false
-        }
+        let self_digest = self.borrow() as &[u8];
+        let other_digest = other.borrow() as &[u8];
+        self_digest == other_digest
     }
 }
 
-// TODO: The semantics of that function aren't very precise. It is possible for two `PeerId`s to
-//       compare equal while their bytes representation are not. Right now, this `AsRef`
-//       implementation is only used to define precedence over two `PeerId`s in case of a
-//       simultaneous connection between two nodes. Since the simultaneous connection system
-//       is planned to be removed (https://github.com/libp2p/rust-libp2p/issues/912), we went for
-//       we keeping that function with the intent of removing it as soon as possible.
+impl Borrow<[u8]> for PeerId {
+    fn borrow(&self) -> &[u8] {
+        self.canonical.as_ref().map_or(self.multihash.as_bytes(), |c| c.as_bytes())
+    }
+}
+
+/// **NOTE:** This byte representation is not necessarily consistent with
+/// equality of peer IDs. That is, two peer IDs may be considered equal
+/// while having a different byte representation as per `AsRef<[u8]>`.
 impl AsRef<[u8]> for PeerId {
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
