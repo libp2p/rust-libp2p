@@ -61,6 +61,11 @@ use task::{Task, TaskId};
 //
 // A `Manager` is unaware of any association between connections and peers
 // / peer identities (i.e. the type parameter `C` is completely opaque).
+//
+// There is a 1-1 correspondence between (internal) task IDs and (public)
+// connection IDs, i.e. the task IDs are "re-exported" as connection IDs
+// by the manager. The notion of a (background) task is internal to the
+// manager.
 
 /// The result of a pending connection attempt.
 type ConnectResult<C, M, HE, TE> = Result<(Connected<C>, M), ConnectionError<HE, TE>>;
@@ -318,7 +323,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         }
     }
 
-    /// Provides an API similar to `Stream`, except that it cannot produce an error.
+    /// Polls the manager for events relating to the managed connections.
     pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<Event<'a, I, O, H, TE, HE, C>> {
         // Advance the content of `local_spawns`.
         while let Poll::Ready(Some(_)) = Stream::poll_next(Pin::new(&mut self.local_spawns), cx) {}
@@ -394,36 +399,17 @@ pub struct EstablishedEntry<'a, I, C> {
     task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I, C>>,
 }
 
-/// An entry for a managed connection that is currently being established
-/// (i.e. pending).
-#[derive(Debug)]
-pub struct PendingEntry<'a, I, C> {
-    task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I, C>>
-}
-
-impl<'a, I, C> PendingEntry<'a, I, C> {
-    /// Returns the connection id.
-    pub fn id(&self) -> ConnectionId {
-        ConnectionId(*self.task.key())
-    }
-
-    /// Aborts the pending connection attempt.
-    pub fn abort(self)  {
-        self.task.remove();
-    }
-}
-
 impl<'a, I, C> EstablishedEntry<'a, I, C> {
     /// (Asynchronously) sends an event to the connection handler.
     ///
-    /// **Note:** Must only be called after [`poll_ready_notify_handler`]
+    /// **Note:** Must only be called after `poll_ready_notify_handler`
     /// was successful and without interference by another thread.
     pub fn notify_handler(&mut self, event: I) {
         let cmd = task::Command::NotifyHandler(event);
         self.notify_task(cmd);
     }
 
-    /// Checks if [`notify_handler`] is ready to accept an event.
+    /// Checks if `notify_handler` is ready to accept an event.
     pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<()> {
         self.poll_ready_notify_task(cx)
     }
@@ -452,7 +438,7 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
 
     /// Sends a command to the task.
     ///
-    /// Must be called only after a successful call to [`poll_ready_notify_task`].
+    /// Must be called only after a successful call to `poll_ready_notify_task`.
     fn notify_task(&mut self, cmd: task::Command<I>) {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
@@ -477,3 +463,22 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
         self.task.get_mut().sender.poll_ready(cx).map(|_| ())
     }
 }
+/// An entry for a managed connection that is currently being established
+/// (i.e. pending).
+#[derive(Debug)]
+pub struct PendingEntry<'a, I, C> {
+    task: hash_map::OccupiedEntry<'a, TaskId, TaskInfo<I, C>>
+}
+
+impl<'a, I, C> PendingEntry<'a, I, C> {
+    /// Returns the connection id.
+    pub fn id(&self) -> ConnectionId {
+        ConnectionId(*self.task.key())
+    }
+
+    /// Aborts the pending connection attempt.
+    pub fn abort(self)  {
+        self.task.remove();
+    }
+}
+
