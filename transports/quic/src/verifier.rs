@@ -61,7 +61,7 @@ impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServe
         &self,
         _roots: &rustls::RootCertStore,
         presented_certs: &[rustls::Certificate],
-        _dns_name: webpki::DNSNameRef,
+        _dns_name: webpki::DNSNameRef<'_>,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         verify_presented_certs(presented_certs, &|time, end_entity_cert, trust_anchor| {
@@ -80,8 +80,8 @@ fn verify_presented_certs(
     presented_certs: &[rustls::Certificate],
     cb: &dyn Fn(
         webpki::Time,
-        webpki::EndEntityCert,
-        webpki::TrustAnchor,
+        webpki::EndEntityCert<'_>,
+        webpki::TrustAnchor<'_>,
     ) -> Result<(), webpki::Error>,
 ) -> Result<(), rustls::TLSError> {
     if presented_certs.len() != 1 {

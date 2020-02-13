@@ -41,7 +41,7 @@ struct QuicStream {
 }
 
 impl AsyncWrite for QuicStream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
         assert!(!self.shutdown, "written after close");
         let Self { muxer, id, .. } = self.get_mut();
         muxer
@@ -49,7 +49,7 @@ impl AsyncWrite for QuicStream {
             .map_err(From::from)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         self.shutdown = true;
         let Self { muxer, id, .. } = self.get_mut();
         debug!("trying to close {:?}", id);
@@ -58,13 +58,13 @@ impl AsyncWrite for QuicStream {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
 
 impl AsyncRead for QuicStream {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize>> {
         let Self { id, muxer, .. } = self.get_mut();
         muxer
             .read_substream(cx, id.as_mut().unwrap(), buf)
@@ -85,7 +85,7 @@ impl Drop for QuicStream {
 struct Inbound<'a>(&'a mut Muxer);
 impl<'a> futures::Stream for Inbound<'a> {
     type Item = QuicStream;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Poll::Ready(Some(QuicStream {
             id: Some(ready!(self.0.poll_inbound(cx)).expect("bug")),
             muxer: self.get_mut().0.clone(),
@@ -105,7 +105,7 @@ struct Closer(Muxer);
 
 impl Future for Closer {
     type Output = Result<()>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.get_mut().0.close(cx).map_err(From::from)
     }
 }

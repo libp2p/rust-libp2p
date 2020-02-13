@@ -46,7 +46,7 @@ impl Socket {
     /// and drop it.  If it is not, the connection will eventually time out.  This provides a very
     /// high degree of robustness.  Connections will transparently resume after a transient network
     /// outage, and problems that are specific to one peer will not effect other peers.
-    pub fn poll_send_to(&self, cx: &mut Context, packet: &Transmit) -> Poll<Result<()>> {
+    pub fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
         match {
             let fut = self.socket.send_to(&packet.contents, &packet.destination);
             futures::pin_mut!(fut);
@@ -67,7 +67,7 @@ impl Socket {
     /// A wrapper around `recv_from` that handles ECONNRESET and logging
     pub fn recv_from(
         &self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<(usize, std::net::SocketAddr)>> {
         loop {
@@ -105,7 +105,7 @@ impl Socket {
 impl Pending {
     pub fn send_packet(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         socket: &Socket,
         source: &mut dyn FnMut() -> Option<Transmit>,
     ) -> Poll<Result<()>> {

@@ -75,7 +75,7 @@ impl Substream {
 pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
 impl QuicMuxer {
-    fn inner(&self) -> MutexGuard<Muxer> {
+    fn inner(&self) -> MutexGuard<'_, Muxer> {
         self.0.lock()
     }
 }
@@ -91,7 +91,7 @@ pub struct Outbound(OutboundInner);
 
 impl Future for Outbound {
     type Output = Result<Substream, Error>;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = &mut *self;
         match this.0 {
             OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
@@ -151,7 +151,7 @@ impl StreamMuxer for QuicMuxer {
         true
     }
 
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         debug!("being polled for inbound connections!");
         let mut inner = self.inner();
         if inner.connection.is_drained() {
@@ -182,7 +182,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn write_substream(
         &self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         substream: &mut Self::Substream,
         buf: &[u8],
     ) -> Poll<Result<usize, Self::Error>> {
@@ -245,7 +245,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn poll_outbound(
         &self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         substream.poll_unpin(cx)
@@ -253,7 +253,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn read_substream(
         &self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         substream: &mut Self::Substream,
         buf: &mut [u8],
     ) -> Poll<Result<usize, Self::Error>> {
@@ -297,7 +297,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn shutdown_substream(
         &self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
         match substream.status {
@@ -333,17 +333,17 @@ impl StreamMuxer for QuicMuxer {
 
     fn flush_substream(
         &self,
-        _cx: &mut Context,
+        _cx: &mut Context<'_>,
         _substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
-    fn flush_all(&self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn flush_all(&self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
-    fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         trace!("close() called");
         let mut inner = self.inner();
         if inner.connection.is_closed() || inner.close_reason.is_some() {
@@ -393,7 +393,7 @@ impl Drop for Upgrade {
 
 impl Future for Upgrade {
     type Output = Result<(libp2p_core::PeerId, QuicMuxer), Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let muxer = &mut self.get_mut().muxer;
         trace!("outbound polling!");
         let res = {
@@ -526,7 +526,7 @@ impl Muxer {
             .expect("we don’t call this until the driver is spawned; qed")
     }
 
-    fn drive_timer(&mut self, cx: &mut Context, now: Instant) -> bool {
+    fn drive_timer(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
         match self.connection.poll_timeout() {
             None => {
                 self.timer = None;
@@ -788,7 +788,7 @@ impl ConnectionDriver {
 
 impl Future for ConnectionDriver {
     type Output = Result<(), Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         debug!("being polled for timer!");
         let mut inner = this.inner.lock();

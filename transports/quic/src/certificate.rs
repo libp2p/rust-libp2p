@@ -82,7 +82,7 @@ pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
 }
 
 /// Read a bitvec into a vector of bytes.  Requires the bitvec to be a whole number of bytes.
-fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1Error> {
+fn read_bitvec(reader: &mut yasna::BERReaderSeq<'_, '_>) -> Result<Vec<u8>, yasna::ASN1Error> {
     let (value, bits) = reader.next().read_bitvec_bytes()?;
     // be extra careful regarding overflow
     if bits % 8 == 0 {
@@ -94,7 +94,7 @@ fn read_bitvec(reader: &mut yasna::BERReaderSeq) -> Result<Vec<u8>, yasna::ASN1E
 }
 
 fn parse_x509_extensions(
-    reader: &mut yasna::BERReaderSeq,
+    reader: &mut yasna::BERReaderSeq<'_, '_>,
     certificate_key: &[u8],
 ) -> Result<identity::PublicKey, yasna::ASN1Error> {
     reader.next().read_tagged(yasna::Tag::context(3), |reader| {
@@ -113,7 +113,7 @@ fn parse_x509_extensions(
 }
 
 fn parse_x509_extension(
-    reader: yasna::BERReader,
+    reader: yasna::BERReader<'_, '_>,
     certificate_key: &[u8],
     oids_seen: &mut std::collections::HashSet<yasna::models::ObjectIdentifier>,
 ) -> Result<Option<identity::PublicKey>, yasna::ASN1Error> {
@@ -172,7 +172,7 @@ fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKe
     })
 }
 
-fn parse_tbscertificate(reader: yasna::BERReader) -> yasna::ASN1Result<identity::PublicKey> {
+fn parse_tbscertificate(reader: yasna::BERReader<'_, '_>) -> yasna::ASN1Result<identity::PublicKey> {
     trace!("parsing TBScertificate");
     reader.read_sequence(|reader| {
         // Check the X.509 version

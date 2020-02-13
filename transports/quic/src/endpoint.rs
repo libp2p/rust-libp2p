@@ -145,7 +145,7 @@ impl EndpointInner {
         }
     }
 
-    fn drive_events(&mut self, cx: &mut Context) {
+    fn drive_events(&mut self, cx: &mut Context<'_>) {
         while let Poll::Ready(e) = self.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
             match e {
                 EndpointMessage::ConnectionAccepted => {
@@ -195,7 +195,7 @@ impl EndpointInner {
     fn drive_receive(
         &mut self,
         socket: &socket::Socket,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<(ConnectionHandle, Connection), Error>> {
         use quinn_proto::DatagramEvent;
         loop {
@@ -225,7 +225,7 @@ impl EndpointInner {
     fn poll_transmit_pending(
         &mut self,
         socket: &socket::Socket,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<(), Error>> {
         let Self { inner, pending, .. } = self;
         pending
@@ -468,7 +468,7 @@ fn accept_muxer(
 
 impl Future for EndpointRef {
     type Output = Result<(), Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         let Self { reference, channel } = self.get_mut();
         let mut inner = reference.inner.lock();
         trace!("driving events");
@@ -508,7 +508,7 @@ pub struct Listener {
 
 impl Stream for Listener {
     type Item = Result<ListenerEvent<Upgrade>, Error>;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.get_mut().channel.poll_next_unpin(cx)
     }
 }
