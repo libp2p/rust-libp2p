@@ -43,7 +43,7 @@ use wasm_bindgen_futures::JsFuture;
 pub mod ffi {
     use wasm_bindgen::prelude::*;
 
-    #[wasm_bindgen]
+    #[wasm_bindgen(module = "/src/implementation.js")]
     extern "C" {
         /// Type of the object that allows opening connections.
         pub type Transport;
@@ -53,6 +53,9 @@ pub mod ffi {
         pub type ListenEvent;
         /// Type of the object that represents an event containing a new connection with a remote.
         pub type ConnectionEvent;
+
+        /// Returns a `Transport`.
+        pub fn transport() -> Transport;
 
         /// Start attempting to dial the given multiaddress.
         ///
@@ -72,7 +75,7 @@ pub mod ffi {
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
-        /// Returns a `Readable​Stream​` that .
+        /// Returns a `Readable​Stream​`.
         #[wasm_bindgen(method, getter)]
         pub fn read(this: &Connection) -> js_sys::Iterator;
 
@@ -128,6 +131,12 @@ pub mod ffi {
 /// Implementation of `Transport` whose implementation is handled by some FFI.
 pub struct ExtTransport {
     inner: SendWrapper<ffi::Transport>,
+}
+
+impl Default for ExtTransport {
+    fn default() -> Self {
+        Self::new(ffi::transport())
+    }
 }
 
 impl ExtTransport {
