@@ -93,8 +93,8 @@ impl Substream {
 /// higher-numbered one). Therefore, reading on a stream that has not been
 /// written to will deadlock, unless another stream is opened and written to
 /// before the first read returns. Because this is not needed in practice, and
-/// to ease debugging, [`QuicMuxer::read_substream`] returns an error in this
-/// case.
+/// to ease debugging, [`<QuicMuxer as StreamMuxer>::read_substream`] returns an
+/// error in this case.
 #[derive(Debug, Clone)]
 pub struct QuicMuxer(Arc<Mutex<Muxer>>);
 
@@ -282,6 +282,8 @@ impl StreamMuxer for QuicMuxer {
         substream.poll_unpin(cx)
     }
 
+    /// Try to from a substream. This will return an error if the substream has
+    /// not yet been written to.
     fn read_substream(
         &self,
         cx: &mut Context<'_>,
