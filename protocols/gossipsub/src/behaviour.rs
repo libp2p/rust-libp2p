@@ -383,7 +383,7 @@ impl Gossipsub {
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
-    /// Gossipsub LEAVE(topic) - Notifies mesh[topic] peers with PRUNE messages.
+    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
 
@@ -578,7 +578,7 @@ impl Gossipsub {
             "Handling subscriptions: {:?}, from source: {:?}",
             subscriptions, propagation_source
         );
-        let subscribed_topics = match self.peer_topics.get_mut(&propagation_source) {
+        let subscribed_topics = match self.peer_topics.get_mut(propagation_source) {
             Some(topics) => topics,
             None => {
                 error!("Subscription by unknown peer: {:?}", &propagation_source);
@@ -841,7 +841,7 @@ impl Gossipsub {
                 })
                 .collect();
             let mut prunes: Vec<GossipsubControlAction> = to_prune
-                .remove(&peer)
+                .remove(peer)
                 .unwrap_or_else(|| vec![])
                 .iter()
                 .map(|topic_hash| GossipsubControlAction::Prune {
@@ -880,7 +880,7 @@ impl Gossipsub {
         }
     }
 
-    /// Helper function which forwards a message to mesh[topic] peers.
+    /// Helper function which forwards a message to mesh\[topic\] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
         let msg_id = (self.config.message_id_fn)(&message);
         debug!("Forwarding message: {:?}", msg_id);
@@ -1028,7 +1028,7 @@ impl NetworkBehaviour for Gossipsub {
         // remove from mesh, topic_peers, peer_topic and fanout
         debug!("Peer disconnected: {:?}", id);
         {
-            let topics = match self.peer_topics.get(&id) {
+            let topics = match self.peer_topics.get(id) {
                 Some(topics) => (topics),
                 None => {
                     warn!("Disconnected node, not in connected nodes");

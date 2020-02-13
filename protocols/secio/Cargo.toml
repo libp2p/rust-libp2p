@@ -22,7 +22,7 @@ prost = "0.6.1"
 pin-project = "0.4.6"
 quicksink = "0.1"
 rand = "0.7"
-rw-stream-sink = { version = "0.2.0", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = "0.2.0"
 sha2 = "0.8.0"
 static_assertions = "1"
 twofish = "0.2.0"

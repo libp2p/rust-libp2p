@@ -36,7 +36,7 @@
 //!
 //! A peer iterator can be finished prematurely at any time through `finish`.
 //!
-//! [`Finished`]: peers::PeersIterState::Finished
+//! [`Finished`]: PeersIterState::Finished
 
 pub mod closest;
 pub mod fixed;

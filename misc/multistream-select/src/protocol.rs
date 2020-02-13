@@ -62,8 +62,8 @@ const MSG_LS: &[u8] = b"ls\n";
 pub enum Version {
     /// Version 1 of the multistream-select protocol. See [1] and [2].
     ///
-    /// [1] https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
-    /// [2] https://github.com/multiformats/multistream-select
+    /// [1]: https://github.com/libp2p/specs/blob/master/connections/README.md#protocol-negotiation
+    /// [2]: https://github.com/multiformats/multistream-select
     V1,
     /// A lazy variant of version 1 that is identical on the wire but delays
     /// sending of protocol negotiation data as much as possible.
@@ -302,7 +302,7 @@ impl<R> MessageIO<R> {
     ///
     /// Panics if the read buffer is not empty, meaning that an incoming
     /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever [`MessageIO::poll`] returned
+    /// is guaranteed to be empty whenever `MessageIO::poll` returned
     /// a message.
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
@@ -368,7 +368,7 @@ impl<R> MessageReader<R> {
     ///
     /// Panics if the read buffer is not empty, meaning that an incoming
     /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever [`MessageReader::poll`] returned
+    /// is guaranteed to be empty whenever `MessageReader::poll` returned
     /// a message.
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()

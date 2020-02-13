@@ -198,12 +198,10 @@ impl<T: AsRef<[u8]>> AsRef<[u8]> for PublicKey<T> {
     }
 }
 
-/// Custom `snow::CryptoResolver` which delegates to the `RingResolver`
+/// Custom `snow::CryptoResolver` which delegates to either the
+/// `RingResolver` on native or the `DefaultResolver` on wasm
 /// for hash functions and symmetric ciphers, while using x25519-dalek
-/// for Curve25519 DH. We do not use the default resolver for any of
-/// the choices, because it comes with unwanted additional dependencies,
-/// notably rust-crypto, and to avoid being affected by changes to
-/// the defaults.
+/// for Curve25519 DH.
 struct Resolver;
 
 impl snow::resolvers::CryptoResolver for Resolver {
@@ -220,11 +218,25 @@ impl snow::resolvers::CryptoResolver for Resolver {
     }
 
     fn resolve_hash(&self, choice: &snow::params::HashChoice) -> Option<Box<dyn snow::types::Hash>> {
-        snow::resolvers::RingResolver.resolve_hash(choice)
+        #[cfg(target_os = "unknown")]
+        {
+            snow::resolvers::DefaultResolver.resolve_hash(choice)
+        }
+        #[cfg(not(target_os = "unknown"))]
+        {
+            snow::resolvers::RingResolver.resolve_hash(choice)
+        }
     }
 
     fn resolve_cipher(&self, choice: &snow::params::CipherChoice) -> Option<Box<dyn snow::types::Cipher>> {
-        snow::resolvers::RingResolver.resolve_cipher(choice)
+        #[cfg(target_os = "unknown")]
+        {
+            snow::resolvers::DefaultResolver.resolve_cipher(choice)
+        }
+        #[cfg(not(target_os = "unknown"))]
+        {
+            snow::resolvers::RingResolver.resolve_cipher(choice)
+        }
     }
 }
 

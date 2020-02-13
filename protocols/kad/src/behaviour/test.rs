@@ -409,8 +409,8 @@ fn put_record() {
                     let key = kbucket::Key::new(r.key.clone());
                     let mut expected = swarm_ids.clone().split_off(1);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1).distance(&key).cmp(
-                            &kbucket::Key::new(id2).distance(&key)));
+                        kbucket::Key::new(id1.clone()).distance(&key).cmp(
+                            &kbucket::Key::new(id2.clone()).distance(&key)));
 
                     let expected = expected
                         .into_iter()
@@ -608,8 +608,8 @@ fn add_provider() {
                     let mut expected = swarm_ids.clone().split_off(1);
                     let kbucket_key = kbucket::Key::new(key);
                     expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1).distance(&kbucket_key).cmp(
-                            &kbucket::Key::new(id2).distance(&kbucket_key)));
+                        kbucket::Key::new(id1.clone()).distance(&kbucket_key).cmp(
+                            &kbucket::Key::new(id2.clone()).distance(&kbucket_key)));
 
                     let expected = expected
                         .into_iter()

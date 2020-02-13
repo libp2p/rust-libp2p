@@ -18,7 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{muxing::StreamMuxer, ProtocolName, transport::ListenerEvent};
+use crate::{
+    muxing::StreamMuxer,
+    ProtocolName,
+    transport::{Transport, ListenerEvent, TransportError},
+    Multiaddr
+};
 use futures::{prelude::*, io::{IoSlice, IoSliceMut}};
 use pin_project::{pin_project, project};
 use std::{fmt, io::{Error as IoError}, pin::Pin, task::Context, task::Poll};
@@ -439,6 +444,56 @@ impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
         match self {
             EitherName::A(a) => a.protocol_name(),
             EitherName::B(b) => b.protocol_name()
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum EitherTransport<A, B> {
+    Left(A),
+    Right(B),
+}
+
+impl<A, B> Transport for EitherTransport<A, B>
+where
+    B: Transport,
+    A: Transport,
+{
+    type Output = EitherOutput<A::Output, B::Output>;
+    type Error = EitherError<A::Error, B::Error>;
+    type Listener = EitherListenStream<A::Listener, B::Listener>;
+    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        use TransportError::*;
+        match self {
+            EitherTransport::Left(a) => match a.listen_on(addr) {
+                Ok(listener) => Ok(EitherListenStream::First(listener)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::A(err))),
+            },
+            EitherTransport::Right(b) => match b.listen_on(addr) {
+                Ok(listener) => Ok(EitherListenStream::Second(listener)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::B(err))),
+            },
+        }
+    }
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        use TransportError::*;
+        match self {
+            EitherTransport::Left(a) => match a.dial(addr) {
+                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::A(err))),
+            },
+            EitherTransport::Right(b) => match b.dial(addr) {
+                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::B(err))),
+            },
         }
     }
 }

@@ -102,8 +102,8 @@ impl PingConfig {
     /// at any time, i.e. in the absence of ping failures the connection lifetime
     /// is determined by other protocol handlers.
     ///
-    /// If the maximum  number of allowed ping failures is reached, the
-    /// connection is always terminated as a result of [`PingHandler::poll`]
+    /// If the maximum number of allowed ping failures is reached, the
+    /// connection is always terminated as a result of [`ProtocolsHandler::poll`]
     /// returning an error, regardless of the keep-alive setting.
     pub fn with_keep_alive(mut self, b: bool) -> Self {
         self.keep_alive = b;
