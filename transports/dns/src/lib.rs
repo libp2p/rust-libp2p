@@ -176,7 +176,7 @@ where
                             })
                             .next()
                             .ok_or_else(|| DnsErr::ResolveFail(name))
-                    }.left_future()
+                    }.boxed().left_future()
                 },
                 Protocol::Dnsaddr(ref name) => {
                     let conn = UdpClientConnection::new("8.8.8.8:53".parse().unwrap()).unwrap(); // TODO: error handling
@@ -225,7 +225,7 @@ where
 
                     async move {
                         Ok(resolved_addrs[0].clone())
-                    }.left_future()
+                    }.boxed().left_future()
                 },
                 cmp => future::ready(Ok(cmp.acquire())).right_future()
             })
@@ -354,6 +354,7 @@ mod tests {
                 .unwrap();
 
             let _ = transport
+                .clone()
                 .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
