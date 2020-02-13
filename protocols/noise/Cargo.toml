@@ -15,10 +15,16 @@ libp2p-core = { version = "0.15.0", path = "../../core" }
 log = "0.4"
 prost = "0.6.1"
 rand = "0.7.2"
-ring = { version = "0.16.9", features = ["alloc"], default-features = false }
-snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
+sha2 = "0.8.0"
 x25519-dalek = "0.5"
 zeroize = "1"
+
+[target.'cfg(not(target_os = "unknown"))'.dependencies]
+snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
+
+[target.'cfg(target_os = "unknown")'.dependencies]
+snow = { version = "0.6.1", features = ["default-resolver"], default-features = false }
+
 
 [dev-dependencies]
 env_logger = "0.7.1"
