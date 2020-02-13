@@ -208,8 +208,9 @@ where
 
     /// Dials a multiaddress without expecting a particular remote peer ID.
     ///
-    /// The given `handler` will be used to create the [`Connection`] upon
-    /// success and the connection ID returned.
+    /// The given `handler` will be used to create the
+    /// [`Connection`](crate::connection::Connection) upon success and the
+    /// connection ID is returned.
     pub fn dial(&mut self, address: &Multiaddr, handler: THandler)
         -> Result<ConnectionId, DialError<TTrans::Error>>
     where

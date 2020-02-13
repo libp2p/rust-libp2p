@@ -26,7 +26,7 @@ use futures::{prelude::*, channel::mpsc, stream};
 use std::{pin::Pin, task::Context, task::Poll};
 use super::{Connection, ConnectionHandler, ConnectResult, IntoConnectionHandler, Substream};
 
-/// Identifier of a [`Task`] in a [`Manager`].
+/// Identifier of a [`Task`] in a [`Manager`](super::Manager).
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskId(pub(super) usize);
 

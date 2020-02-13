@@ -822,14 +822,14 @@ where
 
     /// (Asynchronously) notifies the connection handler of an event.
     ///
-    /// Must be called only after a successful call to [`poll_ready_notify_handler`],
+    /// Must be called only after a successful call to `poll_ready_notify_handler()`,
     /// without iterruption by another thread.
     pub fn notify_handler(&mut self, event: TInEvent) {
         self.entry.notify_handler(event)
     }
 
     /// Checks if the connection is ready to receive an event for the
-    /// connection handler via [`notify_handler`].
+    /// connection handler via `notify_handler`.
     pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<()> {
         self.entry.poll_ready_notify_handler(cx)
     }
