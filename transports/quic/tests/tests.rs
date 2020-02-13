@@ -64,7 +64,11 @@ impl AsyncWrite for QuicStream {
 }
 
 impl AsyncRead for QuicStream {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize>> {
         let Self { id, muxer, .. } = self.get_mut();
         muxer
             .read_substream(cx, id.as_mut().unwrap(), buf)
@@ -125,8 +129,8 @@ fn wildcard_expansion() {
                 ListenerEvent::NewAddress(a) => {
                     let mut iter = a.iter();
                     match iter.next().expect("ip address") {
-                        Protocol::Ip4(_ip) => {} // assert!(!ip.is_unspecified()),
-                        Protocol::Ip6(_ip) => {} // assert!(!ip.is_unspecified()),
+                        Protocol::Ip4(ip) => assert!(!ip.is_unspecified()),
+                        Protocol::Ip6(ip) => assert!(!ip.is_unspecified()),
                         other => panic!("Unexpected protocol: {}", other),
                     }
                     if let Protocol::Udp(port) = iter.next().expect("port") {
@@ -134,9 +138,12 @@ fn wildcard_expansion() {
                     } else {
                         panic!("No UDP port in address: {}", a)
                     }
+                    assert_eq!(iter.next(), Some(Protocol::Quic));
+                    assert_eq!(iter.next(), None);
                 }
                 ListenerEvent::Upgrade { .. } => panic!(),
                 ListenerEvent::AddressExpired { .. } => panic!(),
+                ListenerEvent::Error { .. } => panic!(),
             }
             break;
         }

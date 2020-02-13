@@ -13,6 +13,7 @@ use std::{convert::TryFrom, fmt::Write};
 use bytes::{BufMut, Bytes, BytesMut};
 use rand::RngCore;
 use sha2::digest::{self, VariableOutput};
+use std::borrow::Borrow;
 use unsigned_varint::{decode, encode};
 
 pub use self::errors::{DecodeError, DecodeOwnedError, EncodeError};
@@ -241,6 +242,12 @@ impl Multihash {
 
 impl AsRef<[u8]> for Multihash {
     fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl Borrow<[u8]> for Multihash {
+    fn borrow(&self) -> &[u8] {
         self.as_bytes()
     }
 }

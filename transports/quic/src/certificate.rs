@@ -172,7 +172,9 @@ fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKe
     })
 }
 
-fn parse_tbscertificate(reader: yasna::BERReader<'_, '_>) -> yasna::ASN1Result<identity::PublicKey> {
+fn parse_tbscertificate(
+    reader: yasna::BERReader<'_, '_>,
+) -> yasna::ASN1Result<identity::PublicKey> {
     // trace!("parsing TBScertificate");
     reader.read_sequence(|reader| {
         // Check the X.509 version

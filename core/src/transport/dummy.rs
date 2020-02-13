@@ -56,7 +56,7 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type Listener = futures::stream::Pending<Result<ListenerEvent<Self::ListenerUpgrade>, io::Error>>;
+    type Listener = futures::stream::Pending<Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
     type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
     type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
 

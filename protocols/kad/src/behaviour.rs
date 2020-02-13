@@ -1100,7 +1100,7 @@ where
             }
 
             for query in self.queries.iter_mut() {
-                if let Some(addrs) = query.inner.addresses.get_mut(&peer_id) {
+                if let Some(addrs) = query.inner.addresses.get_mut(peer_id) {
                     addrs.retain(|a| a != addr);
                 }
             }

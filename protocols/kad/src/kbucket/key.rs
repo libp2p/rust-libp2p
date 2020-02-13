@@ -23,6 +23,7 @@ use libp2p_core::PeerId;
 use multihash::Multihash;
 use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::{GenericArray, typenum::U32};
+use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 
 construct_uint! {
@@ -51,9 +52,9 @@ impl<T> Key<T> {
     /// [`Key::into_preimage`].
     pub fn new(preimage: T) -> Key<T>
     where
-        T: AsRef<[u8]>
+        T: Borrow<[u8]>
     {
-        let bytes = KeyBytes::new(&preimage);
+        let bytes = KeyBytes::new(preimage.borrow());
         Key { preimage, bytes }
     }
 

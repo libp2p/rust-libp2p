@@ -87,7 +87,7 @@ impl Substream {
 }
 
 /// A QUIC connection, either client or server.
-/// 
+///
 /// QUIC opens streams lazily, so the peer is not notified that a stream has
 /// been opened until data is written (either on this stream, or a
 /// higher-numbered one). Therefore, reading on a stream that has not been
@@ -381,7 +381,7 @@ impl StreamMuxer for QuicMuxer {
     }
 
     /// Close the connection. Once this function is called, it is a logic error
-    /// to call other methods on this object. 
+    /// to call other methods on this object.
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         trace!("close() called");
         let mut inner = self.inner();

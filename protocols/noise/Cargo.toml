@@ -16,6 +16,7 @@ log = "0.4"
 prost = "0.6.1"
 rand = "0.7.2"
 sha2 = "0.8.0"
+static_assertions = "1"
 x25519-dalek = "0.5"
 zeroize = "1"
 
@@ -24,7 +25,6 @@ snow = { version = "0.6.1", features = ["ring-resolver"], default-features = fal
 
 [target.'cfg(target_os = "unknown")'.dependencies]
 snow = { version = "0.6.1", features = ["default-resolver"], default-features = false }
-
 
 [dev-dependencies]
 env_logger = "0.7.1"

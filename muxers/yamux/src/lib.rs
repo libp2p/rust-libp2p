@@ -24,8 +24,10 @@
 use futures::{future, prelude::*, ready, stream::{BoxStream, LocalBoxStream}};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
-use std::{fmt, io, iter, pin::Pin, task::Context};
+use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
 use thiserror::Error;
+
+pub use yamux::WindowUpdateMode;
 
 /// A Yamux connection.
 pub struct Yamux<S>(Mutex<Inner<S>>);
@@ -180,6 +182,20 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config(yamux::Config::default())
+    }
+}
+
+impl Deref for Config {
+    type Target = yamux::Config;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Config {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

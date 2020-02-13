@@ -234,7 +234,7 @@ impl EndpointInner {
     }
 }
 
-type ListenerResult = Result<ListenerEvent<Upgrade>, Error>;
+type ListenerResult = ListenerEvent<Upgrade, Error>;
 
 #[derive(Debug)]
 pub(super) struct EndpointData {
@@ -378,13 +378,13 @@ impl Endpoint {
             for (_, _, address) in local_addresses {
                 info!("sending address {:?}", address);
                 new_connections
-                    .unbounded_send(Ok(ListenerEvent::NewAddress(address)))
+                    .unbounded_send(ListenerEvent::NewAddress(address))
                     .expect("we have a reference to the peer, so this will not fail; qed")
             }
         } else {
             info!("sending address {:?}", address);
             new_connections
-                .unbounded_send(Ok(ListenerEvent::NewAddress(address.clone())))
+                .unbounded_send(ListenerEvent::NewAddress(address.clone()))
                 .expect("we have a reference to the peer, so this will not fail; qed");
         }
         let reference = Arc::new(EndpointData {
@@ -414,14 +414,14 @@ impl Endpoint {
                 info!("sending address {:?}", i.2);
                 reference
                     .new_connections
-                    .unbounded_send(Ok(ListenerEvent::NewAddress(i.2)))
+                    .unbounded_send(ListenerEvent::NewAddress(i.2))
                     .expect("we have a reference to the peer, so this will not fail; qed")
             }
         } else {
             info!("sending address {:?}", address);
             reference
                 .new_connections
-                .unbounded_send(Ok(ListenerEvent::NewAddress(address)))
+                .unbounded_send(ListenerEvent::NewAddress(address))
                 .expect("we have a reference to the peer, so this will not fail; qed");
         }
         let endpoint = EndpointRef { reference, channel };
@@ -455,11 +455,11 @@ fn accept_muxer(
     let upgrade = create_muxer(connection_endpoint, connection, handle, &mut *inner);
     if endpoint
         .new_connections
-        .unbounded_send(Ok(ListenerEvent::Upgrade {
+        .unbounded_send(ListenerEvent::Upgrade {
             upgrade,
             local_addr: endpoint.address.clone(),
             remote_addr: endpoint.address.clone(),
-        }))
+        })
         .is_err()
     {
         inner.inner.accept();
@@ -475,12 +475,21 @@ impl Future for EndpointRef {
         trace!("driving events");
         inner.drive_events(cx);
         trace!("driving incoming packets");
-        match inner.drive_receive(&reference.socket, cx)? {
+        match inner.drive_receive(&reference.socket, cx) {
             Poll::Pending => {}
-            Poll::Ready((handle, connection)) => {
+            Poll::Ready(Ok((handle, connection))) => {
                 trace!("have a new connection");
                 accept_muxer(reference, connection, handle, &mut *inner, channel.clone());
                 trace!("connection accepted");
+            }
+            Poll::Ready(Err(e)) => {
+                if reference
+                    .new_connections
+                    .unbounded_send(ListenerEvent::Error(e))
+                    .is_err()
+                {
+                    inner.inner.reject_new_connections()
+                }
             }
         }
         match inner.poll_transmit_pending(&reference.socket, cx)? {
@@ -504,13 +513,16 @@ pub struct Listener {
     reference: Arc<EndpointData>,
     /// MUST COME AFTER `reference`!
     drop_notifier: Channel,
-    channel: mpsc::UnboundedReceiver<Result<ListenerEvent<Upgrade>, Error>>,
+    channel: mpsc::UnboundedReceiver<ListenerResult>,
 }
 
 impl Stream for Listener {
-    type Item = Result<ListenerEvent<Upgrade>, Error>;
+    type Item = Result<ListenerResult, Error>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.get_mut().channel.poll_next_unpin(cx)
+        self.get_mut()
+            .channel
+            .poll_next_unpin(cx)
+            .map(|e| e.map(Ok))
     }
 }
 
