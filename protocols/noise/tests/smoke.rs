@@ -26,6 +26,7 @@ use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, Noi
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
+use std::{convert::TryInto, io};
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -40,7 +41,8 @@ fn core_upgrade_compat() {
 #[test]
 fn xx() {
     let _ = env_logger::try_init();
-    fn prop(message: Vec<u8>) -> bool {
+    fn prop(mut messages: Vec<Message>) -> bool {
+        messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
         let client_id = identity::Keypair::generate_ed25519();
 
@@ -61,16 +63,17 @@ fn xx() {
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
-        run(server_transport, client_transport, message);
+        run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[test]
 fn ix() {
     let _ = env_logger::try_init();
-    fn prop(message: Vec<u8>) -> bool {
+    fn prop(mut messages: Vec<Message>) -> bool {
+        messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
         let client_id = identity::Keypair::generate_ed25519();
 
@@ -91,16 +94,17 @@ fn ix() {
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
-        run(server_transport, client_transport, message);
+        run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[test]
 fn ik_xx() {
     let _ = env_logger::try_init();
-    fn prop(message: Vec<u8>) -> bool {
+    fn prop(mut messages: Vec<Message>) -> bool {
+        messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
         let server_id_public = server_id.public();
 
@@ -134,15 +138,15 @@ fn ik_xx() {
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public2));
 
-        run(server_transport, client_transport, message);
+        run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 type Output = (RemoteIdentity<X25519>, NoiseOutput<Negotiated<TcpTransStream>>);
 
-fn run<T, U>(server_transport: T, client_transport: U, message1: Vec<u8>)
+fn run<T, U, I>(server_transport: T, client_transport: U, messages: I)
 where
     T: Transport<Output = Output>,
     T::Dial: Send + 'static,
@@ -152,10 +156,9 @@ where
     U::Dial: Send + 'static,
     U::Listener: Send + 'static,
     U::ListenerUpgrade: Send + 'static,
+    I: IntoIterator<Item = Message> + Clone
 {
     futures::executor::block_on(async {
-        let mut message2 = message1.clone();
-
         let mut server: T::Listener = server_transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
@@ -167,6 +170,7 @@ where
             .into_new_address()
             .expect("listen address");
 
+        let outbound_msgs = messages.clone();
         let client_fut = async {
             let mut client_session = client_transport.dial(server_address.clone())
                 .unwrap()
@@ -174,7 +178,11 @@ where
                 .map(|(_, session)| session)
                 .expect("no error");
 
-            client_session.write_all(&mut message2).await.expect("no error");
+            for m in outbound_msgs {
+                let n = (m.0.len() as u64).to_be_bytes();
+                client_session.write_all(&n[..]).await.expect("len written");
+                client_session.write_all(&m.0).await.expect("no error")
+            }
             client_session.flush().await.expect("no error");
         };
 
@@ -190,11 +198,20 @@ where
                 .map(|(_, session)| session)
                 .expect("no error");
 
-            let mut server_buffer = vec![];
-            info!("server: reading message");
-            server_session.read_to_end(&mut server_buffer).await.expect("no error");
-
-            assert_eq!(server_buffer, message1);
+            for m in messages {
+                let len = {
+                    let mut n = [0; 8];
+                    match server_session.read_exact(&mut n).await {
+                        Ok(()) => u64::from_be_bytes(n),
+                        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => 0,
+                        Err(e) => panic!("error reading len: {}", e)
+                    }
+                };
+                info!("server: reading message ({} bytes)", len);
+                let mut server_buffer = vec![0; len.try_into().unwrap()];
+                server_session.read_exact(&mut server_buffer).await.expect("no error");
+                assert_eq!(server_buffer, m.0)
+            }
         };
 
         futures::future::join(server_fut, client_fut).await;
@@ -207,5 +224,17 @@ fn expect_identity(output: Output, pk: &identity::PublicKey)
     match output.0 {
         RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),
         _ => panic!("Unexpected remote identity")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Message(Vec<u8>);
+
+impl quickcheck::Arbitrary for Message {
+    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+        let s = 1 + g.next_u32() % (128 * 1024);
+        let mut v = vec![0; s.try_into().unwrap()];
+        g.fill_bytes(&mut v);
+        Message(v)
     }
 }
