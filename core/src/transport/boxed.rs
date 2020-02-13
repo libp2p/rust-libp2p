@@ -38,7 +38,7 @@ where
 }
 
 pub type Dial<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
-pub type Listener<O, E> = Pin<Box<dyn Stream<Item = Result<ListenerEvent<ListenerUpgrade<O, E>>, E>> + Send>>;
+pub type Listener<O, E> = Pin<Box<dyn Stream<Item = Result<ListenerEvent<ListenerUpgrade<O, E>, E>, E>> + Send>>;
 pub type ListenerUpgrade<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
 
 trait Abstract<O, E> {

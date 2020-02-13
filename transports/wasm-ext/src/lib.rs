@@ -230,7 +230,7 @@ pub struct Listen {
     /// Promise that will yield the next `ListenEvent`.
     next_event: Option<SendWrapper<JsFuture>>,
     /// List of events that we are waiting to propagate.
-    pending_events: VecDeque<ListenerEvent<Ready<Result<Connection, JsErr>>>>,
+    pending_events: VecDeque<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>>,
 }
 
 impl fmt::Debug for Listen {
@@ -240,7 +240,7 @@ impl fmt::Debug for Listen {
 }
 
 impl Stream for Listen {
-    type Item = Result<ListenerEvent<Ready<Result<Connection, JsErr>>>, JsErr>;
+    type Item = Result<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>, JsErr>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
@@ -248,11 +248,14 @@ impl Stream for Listen {
                 return Poll::Ready(Some(Ok(ev)));
             }
 
+            // Try to fill `self.next_event` if necessary and possible. If we fail, then
+            // `Ready(None)` is returned below.
             if self.next_event.is_none() {
-                let ev = self.iterator.next()?;
-                if !ev.done() {
-                    let promise: js_sys::Promise = ev.value().into();
-                    self.next_event = Some(SendWrapper::new(promise.into()));
+                if let Ok(ev) = self.iterator.next() {
+                    if !ev.done() {
+                        let promise: js_sys::Promise = ev.value().into();
+                        self.next_event = Some(SendWrapper::new(promise.into()));
+                    }
                 }
             }
 
@@ -296,9 +299,10 @@ impl Stream for Listen {
                 .into_iter()
                 .flat_map(|e| e.to_vec().into_iter())
             {
-                let addr = js_value_to_addr(&addr)?;
-                self.pending_events
-                    .push_back(ListenerEvent::AddressExpired(addr));
+                match js_value_to_addr(&addr) {
+                    Ok(addr) => self.pending_events.push_back(ListenerEvent::NewAddress(addr)),
+                    Err(err) => self.pending_events.push_back(ListenerEvent::Error(err)),
+                }
             }
         }
     }

@@ -150,7 +150,7 @@ fn run<T, U, I>(server_transport: T, client_transport: U, messages: I)
 where
     T: Transport<Output = Output>,
     T::Dial: Send + 'static,
-    T::Listener: Send + Unpin + futures::stream::TryStream + 'static,
+    T::Listener: Send + Unpin + 'static,
     T::ListenerUpgrade: Send + 'static,
     U: Transport<Output = Output>,
     U::Dial: Send + 'static,
