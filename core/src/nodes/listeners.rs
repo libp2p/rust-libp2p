@@ -60,7 +60,7 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 ///             ListenersEvent::AddressExpired { listener_id, listen_addr } => {
 ///                 println!("Listener {:?} is no longer listening at address {}", listener_id, listen_addr);
 ///             },
-///             ListenersEvent::Closed { listener_id } => {
+///             ListenersEvent::Closed { listener_id, .. } => {
 ///                 println!("Listener {:?} has been closed", listener_id);
 ///             },
 ///             ListenersEvent::Error { listener_id, error } => {
@@ -148,6 +148,9 @@ where
     Closed {
         /// The ID of the listener that closed.
         listener_id: ListenerId,
+        /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
+        /// if the stream produced an error.
+        reason: Result<(), TTrans::Error>,
     },
     /// A listener errored.
     ///
@@ -157,7 +160,7 @@ where
         /// The ID of the listener that errored.
         listener_id: ListenerId,
         /// The error value.
-        error: <TTrans::Listener as TryStream>::Error
+        error: TTrans::Error,
     }
 }
 
@@ -269,15 +272,24 @@ where
                         listen_addr: a
                     })
                 }
+                Poll::Ready(Some(Ok(ListenerEvent::Error(error)))) => {
+                    let id = *listener_project.id;
+                    self.listeners.push_front(listener);
+                    return Poll::Ready(ListenersEvent::Error {
+                        listener_id: id,
+                        error,
+                    })
+                }
                 Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
+                        reason: Ok(()),
                     })
                 }
                 Poll::Ready(Some(Err(err))) => {
-                    return Poll::Ready(ListenersEvent::Error {
+                    return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        error: err
+                        reason: Err(err),
                     })
                 }
             }
@@ -320,7 +332,7 @@ where
 impl<TTrans> fmt::Debug for ListenersEvent<TTrans>
 where
     TTrans: Transport,
-    <TTrans::Listener as TryStream>::Error: fmt::Debug,
+    TTrans::Error: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
@@ -339,9 +351,10 @@ where
                 .field("listener_id", listener_id)
                 .field("local_addr", local_addr)
                 .finish(),
-            ListenersEvent::Closed { listener_id } => f
+            ListenersEvent::Closed { listener_id, reason } => f
                 .debug_struct("ListenersEvent::Closed")
                 .field("listener_id", listener_id)
+                .field("reason", reason)
                 .finish(),
             ListenersEvent::Error { listener_id, error } => f
                 .debug_struct("ListenersEvent::Error")
@@ -356,6 +369,7 @@ where
 mod tests {
     use super::*;
     use crate::transport;
+    use futures::prelude::*;
 
     #[test]
     fn incoming_event() {
@@ -384,6 +398,81 @@ mod tests {
                     assert_eq!(local_addr, address);
                     assert_eq!(send_back_addr, address);
                 },
+                _ => panic!()
+            }
+        });
+    }
+
+    #[test]
+    fn listener_event_error_isnt_fatal() {
+        // Tests that a listener continues to be polled even after producing
+        // a `ListenerEvent::Error`.
+
+        #[derive(Clone)]
+        struct DummyTrans;
+        impl transport::Transport for DummyTrans {
+            type Output = ();
+            type Error = std::io::Error;
+            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>>>>;
+            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+
+            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
+                Ok(Box::pin(stream::unfold((), |()| async move {
+                    Some((Ok(ListenerEvent::Error(std::io::Error::from(std::io::ErrorKind::Other))), ()))
+                })))
+            }
+
+            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+                panic!()
+            }
+        }
+
+        async_std::task::block_on(async move {
+            let transport = DummyTrans;
+            let mut listeners = ListenersStream::new(transport);
+            listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
+
+            for _ in 0..10 {
+                match listeners.next().await.unwrap() {
+                    ListenersEvent::Error { .. } => {},
+                    _ => panic!()
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn listener_error_is_fatal() {
+        // Tests that a listener stops after producing an error on the stream itself.
+
+        #[derive(Clone)]
+        struct DummyTrans;
+        impl transport::Transport for DummyTrans {
+            type Output = ();
+            type Error = std::io::Error;
+            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>>>>;
+            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+
+            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
+                Ok(Box::pin(stream::unfold((), |()| async move {
+                    Some((Err(std::io::Error::from(std::io::ErrorKind::Other)), ()))
+                })))
+            }
+
+            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+                panic!()
+            }
+        }
+
+        async_std::task::block_on(async move {
+            let transport = DummyTrans;
+            let mut listeners = ListenersStream::new(transport);
+            listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
+
+            match listeners.next().await.unwrap() {
+                ListenersEvent::Closed { .. } => {},
                 _ => panic!()
             }
         });

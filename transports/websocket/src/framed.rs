@@ -109,7 +109,7 @@ where
 {
     type Output = Connection<T::Output>;
     type Error = Error<T::Error>;
-    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -146,6 +146,9 @@ where
                 ListenerEvent::AddressExpired(mut a) => {
                     a = a.with(proto.clone());
                     ListenerEvent::AddressExpired(a)
+                }
+                ListenerEvent::Error(err) => {
+                    ListenerEvent::Error(Error::Transport(err))
                 }
                 ListenerEvent::Upgrade { upgrade, mut local_addr, mut remote_addr } => {
                     local_addr = local_addr.with(proto.clone());

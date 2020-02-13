@@ -357,12 +357,12 @@ pub enum EitherListenStream<A, B> {
     Second(#[pin] B),
 }
 
-impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
+impl<AStream, BStream, AInner, BInner, AError, BError> Stream for EitherListenStream<AStream, BStream>
 where
-    AStream: TryStream<Ok = ListenerEvent<AInner>>,
-    BStream: TryStream<Ok = ListenerEvent<BInner>>,
+    AStream: TryStream<Ok = ListenerEvent<AInner, AError>, Error = AError>,
+    BStream: TryStream<Ok = ListenerEvent<BInner, BError>, Error = BError>,
 {
-    type Item = Result<ListenerEvent<EitherFuture<AInner, BInner>>, EitherError<AStream::Error, BStream::Error>>;
+    type Item = Result<ListenerEvent<EitherFuture<AInner, BInner>, EitherError<AError, BError>>, EitherError<AError, BError>>;
 
     #[project]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
@@ -371,13 +371,13 @@ where
             EitherListenStream::First(a) => match TryStream::try_poll_next(a, cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(None) => Poll::Ready(None),
-                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::First)))),
+                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::First).map_err(EitherError::A)))),
                 Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::A(err)))),
             },
             EitherListenStream::Second(a) => match TryStream::try_poll_next(a, cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(None) => Poll::Ready(None),
-                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::Second)))),
+                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::Second).map_err(EitherError::B)))),
                 Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::B(err)))),
             },
         }

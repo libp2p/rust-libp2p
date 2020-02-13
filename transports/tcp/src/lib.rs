@@ -93,7 +93,7 @@ impl $tcp_config {
 impl Transport for $tcp_config {
     type Output = $tcp_trans_stream;
     type Error = io::Error;
-    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade>, io::Error>> + Send>>;
+    type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>> + Send>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Pin<Box<dyn Future<Output = Result<$tcp_trans_stream, io::Error>> + Send>>;
 
@@ -106,7 +106,7 @@ impl Transport for $tcp_config {
             };
 
         async fn do_listen(cfg: $tcp_config, socket_addr: SocketAddr)
-            -> Result<impl Stream<Item = Result<ListenerEvent<Ready<Result<$tcp_trans_stream, io::Error>>>, io::Error>>, io::Error>
+            -> Result<impl Stream<Item = Result<ListenerEvent<Ready<Result<$tcp_trans_stream, io::Error>>, io::Error>, io::Error>>, io::Error>
         {
             let listener = <$tcp_listener>::bind(&socket_addr).await?;
             let local_addr = listener.local_addr()?;
@@ -205,7 +205,7 @@ pub struct $tcp_listen_stream {
 
 impl $tcp_listen_stream {
     /// Takes ownership of the listener, and returns the next incoming event and the listener.
-    async fn next(mut self) -> (Result<ListenerEvent<Ready<Result<$tcp_trans_stream, io::Error>>>, io::Error>, Self) {
+    async fn next(mut self) -> (Result<ListenerEvent<Ready<Result<$tcp_trans_stream, io::Error>>, io::Error>, io::Error>, Self) {
         loop {
             if let Some(event) = self.pending.pop_front() {
                 return (event, self);
@@ -221,7 +221,7 @@ impl $tcp_listen_stream {
                 Err(e) => {
                     debug!("error accepting incoming connection: {}", e);
                     self.pause = Some(Delay::new(self.pause_duration));
-                    return (Err(e), self);
+                    return (Ok(ListenerEvent::Error(e)), self);
                 }
             };
 
@@ -237,7 +237,7 @@ impl $tcp_listen_stream {
                 Ok(sock_addr) => {
                     if let Addresses::Many(ref mut addrs) = self.addrs {
                         if let Err(err) = check_for_interface_changes(&sock_addr, self.port, addrs, &mut self.pending) {
-                            return (Err(err), self);
+                            return (Ok(ListenerEvent::Error(err)), self);
                         }
                     }
                     ip_to_multiaddr(sock_addr.ip(), sock_addr.port())
@@ -416,7 +416,7 @@ enum Addresses {
     Many(Vec<(IpAddr, IpNet, Multiaddr)>)
 }
 
-type Buffer<T> = VecDeque<Result<ListenerEvent<Ready<Result<T, io::Error>>>, io::Error>>;
+type Buffer<T> = VecDeque<Result<ListenerEvent<Ready<Result<T, io::Error>>, io::Error>, io::Error>>;
 
 // If we listen on all interfaces, find out to which interface the given
 // socket address belongs. In case we think the address is new, check

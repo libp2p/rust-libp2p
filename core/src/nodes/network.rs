@@ -171,14 +171,17 @@ where
     ListenerClosed {
         /// The listener ID that closed.
         listener_id: ListenerId,
+        /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
+        /// if the stream produced an error.
+        reason: Result<(), TTrans::Error>,
     },
 
-    /// One of the listeners errored.
+    /// One of the listeners reported a non-fatal errored.
     ListenerError {
         /// The listener that errored.
         listener_id: ListenerId,
         /// The listener error.
-        error: <TTrans::Listener as TryStream>::Error
+        error: TTrans::Error
     },
 
     /// One of the listeners is now listening on an additional address.
@@ -307,9 +310,10 @@ where
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ListenerClosed { listener_id } => {
+            NetworkEvent::ListenerClosed { listener_id, reason } => {
                 f.debug_struct("ListenerClosed")
                     .field("listener_id", listener_id)
+                    .field("reason", reason)
                     .finish()
             }
             NetworkEvent::ListenerError { listener_id, error } => {
@@ -1020,8 +1024,8 @@ where
                     Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
                         return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
                     }
-                    Poll::Ready(ListenersEvent::Closed { listener_id }) => {
-                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id })
+                    Poll::Ready(ListenersEvent::Closed { listener_id, reason }) => {
+                        return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, reason })
                     }
                     Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
                         return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })
