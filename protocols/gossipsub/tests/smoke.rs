@@ -31,9 +31,7 @@ use std::{
 
 use libp2p_core::{
     Multiaddr,
-    PeerId,
     Transport,
-    connection::Substream,
     identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,

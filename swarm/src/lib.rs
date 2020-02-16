@@ -89,7 +89,7 @@ use libp2p_core::{
     Multiaddr,
     Negotiated,
     PeerId,
-    connection::{ListenerId, ConnectionInfo, Substream},
+    connection::{ConnectionId, ListenerId, ConnectionInfo, Substream},
     transport::{TransportError, boxed::Boxed as BoxTransport},
     muxing::{StreamMuxer, StreamMuxerBox},
     network::{
@@ -184,7 +184,7 @@ where
     banned_peers: HashSet<PeerId>,
 
     /// Pending event message to be delivered.
-    send_event_to_complete: Option<(PeerId, TInEvent)>
+    send_event_to_complete: Option<(PeerId, Option<ConnectionId>, TInEvent)>
 }
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> Deref for
@@ -381,7 +381,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             match this.network.poll(cx) {
                 Poll::Pending => network_not_ready = true,
                 Poll::Ready(NetworkEvent::ConnectionEvent { connection, event }) => {
-                    this.behaviour.inject_node_event(connection.peer_id().clone(), event);
+                    let peer = connection.peer_id().clone();
+                    let connection = connection.id();
+                    this.behaviour.inject_event(peer, connection, event);
                 },
                 Poll::Ready(NetworkEvent::ConnectionLimitReached { connected, info }) => {
                     log::warn!("Connection limit reached: {:?}. Dropped {:?}", info, connected);
@@ -453,15 +455,30 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             }
 
             // Try to deliver pending event.
-            if let Some((id, pending)) = this.send_event_to_complete.take() {
-                if let Some(mut peer) = this.network.peer(id.clone()).into_connected() {
-                    let mut conn = peer.some_connection();
-                    match conn.poll_ready_notify_handler(cx) {
-                        Poll::Ready(()) => conn.notify_handler(pending),
-                        Poll::Pending => {
-                            this.send_event_to_complete = Some((id, pending));
+            if let Some((peer_id, connection_id, event)) = this.send_event_to_complete.take() {
+                if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
+                    if let Some(conn_id) = connection_id {
+                        if let Some(mut conn) = peer.connection(conn_id) {
+                            if conn.poll_ready_notify_handler(cx).is_ready() {
+                                conn.notify_handler(event);
+                            } else {
+                                this.send_event_to_complete = Some((peer_id, connection_id, event));
+                                return Poll::Pending
+                            }
+                        }
+                    } else {
+                        let mut connections = peer.connections();
+                        let mut event = Some(event); // (*)
+                        while let Some(mut conn) = connections.next() {
+                            if conn.poll_ready_notify_handler(cx).is_ready() {
+                                conn.notify_handler(event.take().expect("by (*)"));
+                                break
+                            }
+                        }
+                        if let Some(event) = event.take() {
+                            this.send_event_to_complete = Some((peer_id, connection_id, event));
                             return Poll::Pending
-                        },
+                        }
                     }
                 }
             }
@@ -493,17 +510,32 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         return Poll::Ready(SwarmEvent::StartConnect(peer_id))
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
+                Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, connection, event }) => {
                     if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
-                        let mut connections = peer.connections();
-                        while let Some(mut conn) = connections.next() {
-                            if conn.poll_ready_notify_handler(cx).is_ready() {
-                                conn.notify_handler(event);
+                        if let Some(conn_id) = connection {
+                            if let Some(mut conn) = peer.connection(conn_id) {
+                                if conn.poll_ready_notify_handler(cx).is_ready() {
+                                    conn.notify_handler(event);
+                                    continue 'poll
+                                }
+                            } else {
+                                // There is no connection with the given ID.
                                 continue 'poll
                             }
+                        } else {
+                            let mut connections = peer.connections();
+                            while let Some(mut conn) = connections.next() {
+                                if conn.poll_ready_notify_handler(cx).is_ready() {
+                                    conn.notify_handler(event);
+                                    continue 'poll
+                                }
+                            }
                         }
+
+                        // The / a connection exists but it is not yet ready to
+                        // receive another event.
                         debug_assert!(this.send_event_to_complete.is_none());
-                        this.send_event_to_complete = Some((peer_id, event));
+                        this.send_event_to_complete = Some((peer_id, connection, event));
                         return Poll::Pending;
                     }
                 },
@@ -701,7 +733,7 @@ impl NetworkBehaviour for DummyBehaviour {
 
     fn inject_disconnected(&mut self, _: &PeerId, _: libp2p_core::ConnectedPoint) {}
 
-    fn inject_node_event(&mut self, _: PeerId,
+    fn inject_event(&mut self, _: PeerId, _: ConnectionId,
         _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
     fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->

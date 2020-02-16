@@ -31,7 +31,7 @@ use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
 use log::{info, debug, warn};
 use smallvec::SmallVec;
@@ -905,13 +905,20 @@ where
     }
 
     /// Processes a record received from a peer.
-    fn record_received(&mut self, source: PeerId, request_id: KademliaRequestId, mut record: Record) {
+    fn record_received(
+        &mut self,
+        source: PeerId,
+        connection: ConnectionId,
+        request_id: KademliaRequestId,
+        mut record: Record
+    ) {
         if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
             // If the (alleged) publisher is the local node, do nothing. The record of
             // the original publisher should never change as a result of replication
             // and the publisher is always assumed to have the "right" value.
-            self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: source,
+                connection: Some(connection),
                 event: KademliaHandlerIn::PutRecordRes {
                     key: record.key,
                     value: record.value,
@@ -962,8 +969,9 @@ where
         match self.store.put(record.clone()) {
             Ok(()) => {
                 debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    connection: Some(connection),
                     event: KademliaHandlerIn::PutRecordRes {
                         key: record.key,
                         value: record.value,
@@ -973,8 +981,9 @@ where
             }
             Err(e) => {
                 info!("Record not stored: {:?}", e);
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    connection: Some(connection),
                     event: KademliaHandlerIn::Reset(request_id)
                 })
             }
@@ -1050,7 +1059,11 @@ where
                 .position(|(p, _)| p == &peer)
                 .map(|p| q.inner.pending_rpcs.remove(p)))
         {
-            self.queued_events.push_back(NetworkBehaviourAction::SendEvent { peer_id, event });
+            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                connection: None,
+                event
+            });
         }
 
         // The remote's address can only be put into the routing table,
@@ -1121,30 +1134,13 @@ where
         self.connected_peers.remove(id);
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, _old: ConnectedPoint, new_endpoint: ConnectedPoint) {
-        // We need to re-send the active queries.
-        for query in self.queries.iter() {
-            if query.is_waiting(&peer_id) {
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: peer_id.clone(),
-                    event: query.inner.info.to_request(query.id()),
-                });
-            }
-        }
-
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::new(peer_id)).value() {
-            if let ConnectedPoint::Dialer { address } = new_endpoint {
-                addrs.insert(address);
-            }
-        }
-    }
-
-    fn inject_node_event(&mut self, source: PeerId, event: KademliaHandlerEvent<QueryId>) {
+    fn inject_event(&mut self, source: PeerId, conn: ConnectionId, event: KademliaHandlerEvent<QueryId>) {
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    connection: Some(conn),
                     event: KademliaHandlerIn::FindNodeRes {
                         closer_peers,
                         request_id,
@@ -1162,8 +1158,9 @@ where
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    connection: Some(conn),
                     event: KademliaHandlerIn::GetProvidersRes {
                         closer_peers,
                         provider_peers,
@@ -1229,8 +1226,9 @@ where
                         Vec::new()
                     };
 
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    connection: Some(conn),
                     event: KademliaHandlerIn::GetRecordRes {
                         record,
                         closer_peers,
@@ -1278,7 +1276,7 @@ where
                 record,
                 request_id
             } => {
-                self.record_received(source, request_id, record);
+                self.record_received(source, conn, request_id, record);
             }
 
             KademliaHandlerEvent::PutRecordRes {
@@ -1383,8 +1381,8 @@ where
                             query.on_success(&peer_id, vec![])
                         }
                         if self.connected_peers.contains(&peer_id) {
-                            self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                                peer_id, event
+                            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id, connection: None, event
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id.clone(), event));

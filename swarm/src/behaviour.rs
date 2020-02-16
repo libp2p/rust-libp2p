@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocols_handler::{IntoProtocolsHandler, ProtocolsHandler};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ListenerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::{ConnectionId, ListenerId}};
 use std::{error, task::Context, task::Poll};
 
 /// A behaviour for the network. Allows customizing the swarm.
@@ -60,7 +60,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// The network behaviour (ie. the implementation of this trait) and the handlers it has
     /// spawned (ie. the objects returned by `new_handler`) can communicate by passing messages.
-    /// Messages sent from the handler to the behaviour are injected with `inject_node_event`, and
+    /// Messages sent from the handler to the behaviour are injected with `inject_event`, and
     /// the behaviour can send a message to the handler by making `poll` return `SendEvent`.
     fn new_handler(&mut self) -> Self::ProtocolsHandler;
 
@@ -107,9 +107,10 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// The `peer_id` is guaranteed to be in a connected state. In other words, `inject_connected`
     /// has previously been called with this `PeerId`.
-    fn inject_node_event(
+    fn inject_event(
         &mut self,
         peer_id: PeerId,
+        connection: ConnectionId,
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     );
 
@@ -222,18 +223,26 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         peer_id: PeerId,
     },
 
-    /// Instructs the `Swarm` to send a message to the handler dedicated to the connection with the peer.
+    /// Instructs the `Swarm` to send a message to the handler dedicated to a
+    /// connection with a peer.
     ///
-    /// If the `Swarm` is connected to the peer, the message is delivered to the remote's
-    /// protocol handler. If there is no connection to the peer, the message is ignored.
-    /// To ensure delivery, the `NetworkBehaviour` must keep track of connected peers.
+    /// If the `Swarm` is connected to the peer, the message is delivered to the
+    /// `ProtocolsHandler` instance identified by the peer ID and connection ID.
+    ///
+    /// If there is no connection to the peer, the event is silently dropped.
+    /// To ensure delivery, a `NetworkBehaviour` must keep track of connected peers.
     ///
     /// Note that even if the peer is currently connected, connections can get closed
-    /// at any time and thus the message may not reach its destination.
-    SendEvent {
-        /// The peer to which to send the message.
+    /// at any time and thus the event may not reach a handler.
+    NotifyHandler {
+        /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
-        /// The message to send.
+        /// The ID of the connection whose `ProtocolsHandler` to notify.
+        ///
+        /// If `None` and there exist multiple connections to the peer,
+        /// an unspecified choice is made.
+        connection: Option<ConnectionId>,
+        /// The event to send.
         event: TInEvent,
     },
 
