@@ -80,19 +80,21 @@ where
     F: FnOnce(T::Error) -> TErr + Clone,
     TErr: error::Error,
 {
-    type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>>, TErr>;
+    type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>, TErr>, TErr>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
         match TryStream::try_poll_next(this.inner, cx) {
             Poll::Ready(Some(Ok(event))) => {
                 let map = &*this.map;
-                let event = event.map(move |value| {
-                    MapErrListenerUpgrade {
-                        inner: value,
-                        map: Some(map.clone())
-                    }
-                });
+                let event = event
+                    .map(move |value| {
+                        MapErrListenerUpgrade {
+                            inner: value,
+                            map: Some(map.clone())
+                        }
+                    })
+                    .map_err(|err| (map.clone())(err));
                 Poll::Ready(Some(Ok(event)))
             }
             Poll::Ready(None) => Poll::Ready(None),

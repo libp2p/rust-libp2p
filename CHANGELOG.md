@@ -1,3 +1,19 @@
+# Version 0.16.0 (2020-02-13)
+
+- Removed the `Substream` associated type from the `ProtocolsHandler` trait. The type of the substream is now always `libp2p::swarm::NegotiatedSubstream`.
+- As a consequence of the previous change, most of the implementations of the `NetworkBehaviour` trait provided by libp2p (`Ping`, `Identify`, `Kademlia`, `Floodsub`, `Gossipsub`) have lost a generic parameter.
+- Removed the first generic parameter (the transport) from `Swarm` and `ExpandedSwarm`. The transport is now abstracted away in the internals of the swarm.
+- The `Send` and `'static` bounds are now enforced directly on the `ProtocolsHandler` trait and its associated `InboundUpgrade` and `OutboundUpgrade` implementations.
+- Modified `PeerId`s to compare equal across the identity and SHA256 hashes. As a consequence, the `Borrow` implementation of `PeerId` now always returns the bytes representation of a multihash with a SHA256 hash.
+- Modified libp2p-floodsub to no longer hash the topic. The new behaviour is now compatible with go-libp2p and js-libp2p, but is a breaking change with regards to rust-libp2p.
+- Added libp2p-pnet. It makes it possible to protect networks with a pre-shared key (PSK).
+- Modified the `poll_method` parameter of the `NetworkBehaviour` custom derive. The expected method now takes an additional parameter of type `impl PollParameters` to be consistent with the `NetworkBehaviour::poll` method.
+- libp2p-noise now compiles for WASM targets.
+- Changed libp2p-noise to grow its memory buffers dynamically. This should reduce the overall memory usage of connections that use the noise encryption.
+- Fixed libp2p-gossipsub to no longer close the connection if the inbound substream is closed by the remote.
+- All crates prefixed with `libp2p-` now use the same version number.
+- Added a new variant `ListenerEvent::Error` for listeners to report non-fatal errors. `libp2p-tcp` uses this variant to report errors that happen on remote sockets before they have been accepted and errors when trying to determine the local machine's IP address.
+
 # Version 0.15.0 (2020-01-24)
 
 - Added `libp2p-gossipsub`.

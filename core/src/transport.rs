@@ -91,7 +91,10 @@ pub trait Transport {
     /// transport stack. The item must be a [`ListenerUpgrade`](Transport::ListenerUpgrade) future
     /// that resolves to an [`Output`](Transport::Output) value once all protocol upgrades
     /// have been applied.
-    type Listener: TryStream<Ok = ListenerEvent<Self::ListenerUpgrade>, Error = Self::Error>;
+    ///
+    /// If this stream produces an error, it is considered fatal and the listener is killed. It
+    /// is possible to report non-fatal errors by producing a [`ListenerEvent::Error`].
+    type Listener: Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
 
     /// A pending [`Output`](Transport::Output) for an inbound connection,
     /// obtained from the [`Listener`](Transport::Listener) stream.
@@ -110,6 +113,9 @@ pub trait Transport {
 
     /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections
     /// and addresses this transport is listening on (cf. [`ListenerEvent`]).
+    ///
+    /// Returning an error from the stream is considered fatal. The listener can also report
+    /// non-fatal errors by producing a [`ListenerEvent::Error`].
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>>
     where
         Self: Sized;
@@ -226,33 +232,52 @@ pub trait Transport {
 /// a `NewAddress` event and which have not been invalidated by
 /// an `AddressExpired` event yet.
 #[derive(Clone, Debug, PartialEq)]
-pub enum ListenerEvent<T> {
+pub enum ListenerEvent<TUpgr, TErr> {
     /// The transport is listening on a new additional [`Multiaddr`].
     NewAddress(Multiaddr),
     /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
     Upgrade {
         /// The upgrade.
-        upgrade: T,
+        upgrade: TUpgr,
         /// The local address which produced this upgrade.
         local_addr: Multiaddr,
         /// The remote address which produced this upgrade.
         remote_addr: Multiaddr
     },
     /// A [`Multiaddr`] is no longer used for listening.
-    AddressExpired(Multiaddr)
+    AddressExpired(Multiaddr),
+    /// A non-fatal error has happened on the listener.
+    ///
+    /// This event should be generated in order to notify the user that something wrong has
+    /// happened. The listener, however, continues to run.
+    Error(TErr),
 }
 
-impl<T> ListenerEvent<T> {
+impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     /// In case this [`ListenerEvent`] is an upgrade, apply the given function
     /// to the upgrade and multiaddress and produce another listener event
     /// based the the function's result.
-    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> ListenerEvent<U> {
+    pub fn map<U>(self, f: impl FnOnce(TUpgr) -> U) -> ListenerEvent<U, TErr> {
         match self {
             ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } => {
                 ListenerEvent::Upgrade { upgrade: f(upgrade), local_addr, remote_addr }
             }
             ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
-            ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+            ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
+            ListenerEvent::Error(e) => ListenerEvent::Error(e),
+        }
+    }
+
+    /// In case this [`ListenerEvent`] is an [`Error`](ListenerEvent::Error),
+    /// apply the given function to the error and produce another listener event based on the
+    /// function's result.
+    pub fn map_err<U>(self, f: impl FnOnce(TErr) -> U) -> ListenerEvent<TUpgr, U> {
+        match self {
+            ListenerEvent::Upgrade { upgrade, local_addr, remote_addr } =>
+                ListenerEvent::Upgrade { upgrade, local_addr, remote_addr },
+            ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
+            ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
+            ListenerEvent::Error(e) => ListenerEvent::Error(f(e)),
         }
     }
 
@@ -269,7 +294,7 @@ impl<T> ListenerEvent<T> {
     ///
     /// Returns `None` if the event is not actually an upgrade,
     /// otherwise the upgrade and the remote address.
-    pub fn into_upgrade(self) -> Option<(T, Multiaddr)> {
+    pub fn into_upgrade(self) -> Option<(TUpgr, Multiaddr)> {
         if let ListenerEvent::Upgrade { upgrade, remote_addr, .. } = self {
             Some((upgrade, remote_addr))
         } else {
@@ -314,6 +339,27 @@ impl<T> ListenerEvent<T> {
     pub fn into_address_expired(self) -> Option<Multiaddr> {
         if let ListenerEvent::AddressExpired(a) = self {
             Some(a)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if this is an `Error` listener event.
+    pub fn is_error(&self) -> bool {
+        if let ListenerEvent::Error(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Try to turn this listener event into the `Error` part.
+    ///
+    /// Returns `None` if the event is not actually a `Error`,
+    /// otherwise the error.
+    pub fn into_error(self) -> Option<TErr> {
+        if let ListenerEvent::Error(err) = self {
+            Some(err)
         } else {
             None
         }

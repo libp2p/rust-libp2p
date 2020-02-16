@@ -117,7 +117,7 @@ where
 }
 
 /// Type alias corresponding to `framed::WsConfig::Listener`.
-pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>>, Error<E>>>;
+pub type InnerStream<T, E> = BoxStream<'static, Result<ListenerEvent<InnerFuture<T, E>, Error<E>>, Error<E>>>;
 
 /// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
 pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
