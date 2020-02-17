@@ -128,7 +128,7 @@ pub mod ffi {
     #[wasm_bindgen(module = "/src/websockets.js")]
     extern "C" {
         /// Returns a `Transport` implemented using websockets.
-        pub fn wasm_transport() -> Transport;
+        pub fn websocket_transport() -> Transport;
     }
 }
 
