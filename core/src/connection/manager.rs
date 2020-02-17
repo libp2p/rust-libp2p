@@ -74,7 +74,7 @@ type ConnectResult<C, M, HE, TE> = Result<(Connected<C>, M), ConnectionError<HE,
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConnectionId(TaskId);
 
-/// A connection `Manager` orchestrates the I/O of a set of connections,
+/// A connection `Manager` orchestrates the I/O of a set of connections.
 pub struct Manager<I, O, H, E, HE, C> {
     /// The tasks of the managed connections.
     ///
@@ -481,4 +481,3 @@ impl<'a, I, C> PendingEntry<'a, I, C> {
         self.task.remove();
     }
 }
-
