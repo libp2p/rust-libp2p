@@ -246,7 +246,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     }
 
     /// Returns information about the [`Network`] underlying the `Swarm`.
-    pub fn network_info(&self) -> NetworkInfo {
+    pub fn network_info(me: &Self) -> NetworkInfo {
         self.network.info()
     }
 
