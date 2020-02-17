@@ -55,7 +55,6 @@ env_logger = "0.7.1"
 members = [
     "core",
     "misc/core-derive",
-    "protocols/mdns",
     "misc/multiaddr",
     "misc/multihash",
     "misc/multistream-select",
@@ -66,6 +65,7 @@ members = [
     "protocols/gossipsub",
     "protocols/identify",
     "protocols/kad",
+    "protocols/mdns",
     "protocols/noise",
     "protocols/ping",
     "protocols/plaintext",
