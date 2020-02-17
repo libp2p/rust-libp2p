@@ -133,9 +133,9 @@ impl KeyBytes {
     /// value through a random oracle.
     pub fn new<T>(value: T) -> Self
     where
-        T: AsRef<[u8]>
+        T: Borrow<[u8]>
     {
-        KeyBytes(Sha256::digest(value.as_ref()))
+        KeyBytes(Sha256::digest(value.borrow()))
     }
 
     /// Computes the distance of the keys according to the XOR metric.

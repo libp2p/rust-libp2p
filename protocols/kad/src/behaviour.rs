@@ -35,7 +35,7 @@ use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
 use log::{info, debug, warn};
 use smallvec::SmallVec;
-use std::{borrow::Cow, error, iter, time::Duration};
+use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -331,10 +331,9 @@ where
     /// The result of this operation is delivered in [`KademliaEvent::GetClosestPeersResult`].
     pub fn get_closest_peers<K>(&mut self, key: K)
     where
-        K: AsRef<[u8]> + Clone
+        K: Borrow<[u8]> + Clone
     {
-        let key = key.as_ref().to_vec();
-        let info = QueryInfo::GetClosestPeers { key: key.clone() };
+        let info = QueryInfo::GetClosestPeers { key: key.borrow().to_vec() };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
@@ -531,9 +530,12 @@ where
         }
 
         if let Some(query) = self.queries.get_mut(query_id) {
+            log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
-                query.inner.addresses
-                    .insert(peer.node_id.clone(), peer.multiaddrs.iter().cloned().collect());
+                log::trace!("Peer {:?} reported by {:?} in query {:?}.",
+                            peer, source, query_id);
+                let addrs = peer.multiaddrs.iter().cloned().collect();
+                query.inner.addresses.insert(peer.node_id.clone(), addrs);
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
@@ -660,6 +662,7 @@ where
     fn query_finished(&mut self, q: Query<QueryInner>, params: &mut impl PollParameters)
         -> Option<KademliaEvent>
     {
+        log::trace!("Query {:?} finished.", q.id());
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap { peer } => {
@@ -812,6 +815,7 @@ where
 
     /// Handles a query that timed out.
     fn query_timeout(&self, query: Query<QueryInner>) -> Option<KademliaEvent> {
+        log::trace!("Query {:?} timed out.", query.id());
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap { peer } =>
@@ -838,12 +842,13 @@ where
                             AddProviderError::Timeout { key })),
                 }),
 
-            QueryInfo::GetClosestPeers { key } =>
+            QueryInfo::GetClosestPeers { key } => {
                 Some(KademliaEvent::GetClosestPeersResult(Err(
                     GetClosestPeersError::Timeout {
                         key,
                         peers: result.peers.collect()
-                    }))),
+                    })))
+            },
 
             QueryInfo::PreparePutRecord { record, quorum, context, .. } => {
                 let err = Err(PutRecordError::Timeout {
@@ -1190,9 +1195,11 @@ where
                 }
             }
 
-            KademliaHandlerEvent::QueryError { user_data, .. } => {
-                // It is possible that we obtain a response for a query that has finished, which is
-                // why we may not find an entry in `self.queries`.
+            KademliaHandlerEvent::QueryError { user_data, error } => {
+                log::debug!("Request to {:?} in query {:?} failed with {:?}",
+                            source, user_data, error);
+                // If the query to which the error relates is still active,
+                // signal the failure w.r.t. `source`.
                 if let Some(query) = self.queries.get_mut(&user_data) {
                     query.on_failure(&source)
                 }
