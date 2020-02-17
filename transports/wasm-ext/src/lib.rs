@@ -124,7 +124,7 @@ pub mod ffi {
         pub fn local_addr(this: &ConnectionEvent) -> String;
     }
 
-    #[cfg(feature = "websockets")]
+    #[cfg(feature = "websocket")]
     #[wasm_bindgen(module = "/src/websockets.js")]
     extern "C" {
         /// Returns a `Transport` implemented using websockets.
