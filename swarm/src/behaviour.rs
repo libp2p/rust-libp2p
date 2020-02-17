@@ -93,7 +93,7 @@ pub trait NetworkBehaviour: Send + 'static {
     /// The default implementation of this method calls `inject_disconnected` followed with
     /// `inject_connected`. This is a logically safe way to implement this behaviour. However, you
     /// may want to overwrite this method in the situations where this isn't appropriate.
-    #[deprecated(since = "0.6.0", note =
+    #[deprecated(since = "0.16.0", note =
         "Connections are no longer replaced and this function no longer called. \
         It will eventually be removed from the trait."
     )]
