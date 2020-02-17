@@ -56,7 +56,7 @@ pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo
     /// established and pending connections.
     ///
     /// For every established connection there is a corresponding entry in `established`.
-    manager: Manager<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo>, // tasks
+    manager: Manager<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo>,
 
     /// The managed connections of each peer that are currently considered
     /// established, as witnessed by the associated `ConnectedPoint`.
