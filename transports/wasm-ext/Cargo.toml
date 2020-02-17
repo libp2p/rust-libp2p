@@ -18,4 +18,4 @@ wasm-bindgen = "0.2.42"
 wasm-bindgen-futures = "0.4.4"
 
 [features]
-websockets = []
+websocket = []
