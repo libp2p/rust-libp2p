@@ -403,7 +403,7 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
     /// (Asynchronously) sends an event to the connection handler.
     ///
     /// **Note:** Must only be called after `poll_ready_notify_handler`
-    /// was successful and without interference by another thread.
+    /// was successful and without interference by another thread, otherwise the event is discarded.
     pub fn notify_handler(&mut self, event: I) {
         let cmd = task::Command::NotifyHandler(event);
         self.notify_task(cmd);
