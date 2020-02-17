@@ -128,7 +128,7 @@ struct TaskInfo<I, C> {
     state: TaskState<C>,
 }
 
-/// (Internal) state of a running task as seen by the `Manager`.
+/// Internal state of a running task as seen by the `Manager`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TaskState<C> {
     /// The connection is being established.
