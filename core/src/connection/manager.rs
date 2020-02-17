@@ -116,7 +116,7 @@ where
     }
 }
 
-/// (Internal) information about a running task.
+/// Internal information about a running task.
 ///
 /// Contains the sender to deliver event messages to the task, and
 /// the associated user data.
