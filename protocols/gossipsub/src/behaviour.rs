@@ -146,9 +146,8 @@ impl Gossipsub {
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+                self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                     peer_id: peer.clone(),
-                    connection: None,
                     event: event.clone(),
                 });
             }
@@ -192,9 +191,8 @@ impl Gossipsub {
 
             for peer in peer_list {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+                self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                     peer_id: peer.clone(),
-                    connection: None,
                     event: event.clone(),
                 });
             }
@@ -283,9 +281,8 @@ impl Gossipsub {
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: peer_id.clone(),
-                connection: None,
                 event: event.clone(),
             });
         }
@@ -464,9 +461,8 @@ impl Gossipsub {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
             let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: peer_id.clone(),
-                connection: None,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: message_list,
@@ -512,9 +508,8 @@ impl Gossipsub {
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer: {:?}",
                 peer_id
             );
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: peer_id.clone(),
-                connection: None,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -856,9 +851,8 @@ impl Gossipsub {
             grafts.append(&mut prunes);
 
             // send the control messages
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: peer.clone(),
-                connection: None,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -875,9 +869,8 @@ impl Gossipsub {
                     topic_hash: topic_hash.clone(),
                 })
                 .collect();
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: peer.clone(),
-                connection: None,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -915,9 +908,8 @@ impl Gossipsub {
 
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
-                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+                self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                     peer_id: peer.clone(),
-                    connection: None,
                     event: event.clone(),
                 });
             }
@@ -978,9 +970,8 @@ impl Gossipsub {
     /// Takes each control action mapping and turns it into a message
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain() {
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: peer,
-                connection: None,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -1019,9 +1010,8 @@ impl NetworkBehaviour for Gossipsub {
 
         if !subscriptions.is_empty() {
             // send our subscriptions to the peer
-            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
                 peer_id: id.clone(),
-                connection: None,
                 event: Arc::new(GossipsubRpc {
                     messages: Vec::new(),
                     subscriptions,
@@ -1138,23 +1128,31 @@ impl NetworkBehaviour for Gossipsub {
         if let Some(event) = self.events.pop_front() {
             // clone send event reference if others references are present
             match event {
+                NetworkBehaviourAction::NotifyAnyHandler {
+                    peer_id, event: send_event,
+                } => match Arc::try_unwrap(send_event) {
+                    Ok(event) => {
+                        return Poll::Ready(NetworkBehaviourAction::NotifyAnyHandler {
+                            peer_id, event
+                        });
+                    }
+                    Err(event) => {
+                        return Poll::Ready(NetworkBehaviourAction::NotifyAnyHandler {
+                            peer_id, event: (*event).clone()
+                        });
+                    }
+                },
                 NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    connection,
-                    event: send_event,
+                    peer_id, connection, event: send_event
                 } => match Arc::try_unwrap(send_event) {
                     Ok(event) => {
                         return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            connection,
-                            event
+                            peer_id, connection, event
                         });
                     }
                     Err(event) => {
                         return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            connection,
-                            event: (*event).clone(),
+                            peer_id, connection, event: (*event).clone()
                         });
                     }
                 },

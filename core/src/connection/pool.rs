@@ -83,10 +83,6 @@ for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeer
 /// Event that can happen on the `Pool`.
 pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId> {
     /// A new connection has been established.
-    ///
-    /// In order for the connection to remain in the pool, it must be accepted.
-    /// If the `NewConnection` is dropped without being accepted, the connection
-    /// is closed and removed from the pool.
     ConnectionEstablished {
         connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
         num_established: usize,

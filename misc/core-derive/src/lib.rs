@@ -393,6 +393,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             event: #wrapped_event,
                         });
                     }
+                    std::task::Poll::Ready(#network_behaviour_action::NotifyAnyHandler { peer_id, event }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::NotifyAnyHandler {
+                            peer_id,
+                            event: #wrapped_event,
+                        });
+                    }
                     std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address });
                     }

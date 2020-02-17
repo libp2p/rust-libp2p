@@ -221,14 +221,30 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         peer_id: PeerId,
     },
 
-    /// Instructs the `Swarm` to send a message to the handler dedicated to a
+    /// Like `NotifyHandler`, except that if multiple established connections
+    /// to the peer exist, an unspecified choice is made.
+    ///
+    /// If no connections exists to the peer, the event is silently dropped.
+    /// To ensure delivery, a `NetworkBehaviour` must keep track of connected peers.
+    NotifyAnyHandler {
+        /// The peer for whom a `ProtocolsHandler` should be notified.
+        peer_id: PeerId,
+        /// The event to send.
+        event: TInEvent,
+    },
+
+    /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
     ///
     /// If the `Swarm` is connected to the peer, the message is delivered to the
     /// `ProtocolsHandler` instance identified by the peer ID and connection ID.
     ///
-    /// If there is no connection to the peer, the event is silently dropped.
-    /// To ensure delivery, a `NetworkBehaviour` must keep track of connected peers.
+    /// If the specified connection no longer exists, the event is silently dropped.
+    ///
+    /// Typically the connection ID given is the same as the one passed to
+    /// [`NetworkBehaviour::inject_event`], i.e. whenever the behaviour wishes to
+    /// respond to a request on the same connection (and possibly the same
+    /// substream, as per the implementation of `ProtocolsHandler`).
     ///
     /// Note that even if the peer is currently connected, connections can get closed
     /// at any time and thus the event may not reach a handler.
@@ -236,10 +252,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
         /// The ID of the connection whose `ProtocolsHandler` to notify.
-        ///
-        /// If `None` and there exist multiple connections to the peer,
-        /// an unspecified choice is made.
-        connection: Option<ConnectionId>,
+        connection: ConnectionId,
         /// The event to send.
         event: TInEvent,
     },
