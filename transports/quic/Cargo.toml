@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.15.0"
+version = "0.16.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
 license = "MIT"
@@ -10,7 +10,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
-libp2p-core = { path = "../../core", version = "0.15.0" }
+libp2p-core = { path = "../../core", version = "0.16.0" }
 log = "0.4.8"
 ipnet = "2.1.0"
 err-derive = "0.2.2"
