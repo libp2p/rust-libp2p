@@ -28,8 +28,7 @@ use super::{Connected, SubstreamEndpoint};
 pub trait ConnectionHandler {
     /// The inbound type of events used to notify the handler through the `Network`.
     ///
-    /// See also [`ConnectedPeer::notify_handler`](crate::network::peer::ConnectedPeer::notify_handler),
-    /// [`EstablishedConnection::notify_handler`](super::EstablishedConnection::notify_handler)
+    /// See also [`EstablishedConnection::notify_handler`](super::EstablishedConnection::notify_handler)
     /// and [`ConnectionHandler::inject_event`].
     type InEvent;
     /// The outbound type of events that the handler emits to the `Network`
