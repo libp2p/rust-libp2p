@@ -399,75 +399,31 @@ where
         }
     }
 
-    /// Gets an established connection from the pool.
-    ///
-    /// If a connection ID is given and no established connection with that
-    /// ID is known to the pool, `None` is returned.
-    ///
-    /// If no connection ID is given and the pool contains at least one
-    /// established connection to the given peer, an unspecified selection
-    /// is made among these connections.
-    ///
-    /// If no connection ID is given and no established connection exists
-    /// for the given peer, `None` is returned.
-    pub fn get_established(&mut self, peer: &TPeerId, id: Option<ConnectionId>)
+    /// Gets an established connection from the pool by ID.
+    pub fn get_established(&mut self, id: ConnectionId)
         -> Option<EstablishedConnection<'_, TInEvent, TConnInfo, TPeerId>>
     {
-        match id {
-            Some(id) => match self.get(id) {
-                Some(PoolConnection::Established(c)) => Some(c),
-                _ => None
-            }
-            None => match self.established.get(peer) {
-                None => None,
-                Some(conns) => conns.keys().copied()
-                    .find(|id| self.manager.connected(id).is_some())
-                    .and_then(move |id| match self.manager.entry(id) {
-                        Some(manager::Entry::Established(entry)) =>
-                            Some(EstablishedConnection {
-                                established: &mut self.established,
-                                entry,
-                            }),
-                        _ => None
-                    })
-            }
+        match self.get(id) {
+            Some(PoolConnection::Established(c)) => Some(c),
+            _ => None
         }
     }
 
-    /// Gets an entry representing a pending, outgoing connection to a peer.
-    ///
-    /// If a connection ID is given and no pending outgoing connection with that
-    /// ID is known to the pool, `None` is returned.
-    ///
-    /// If no connection ID is given and the pool contains at least one
-    /// pending outgoing connection to the given peer, an unspecified selection
-    /// is made among these connections.
-    ///
-    /// If no connection ID is given and no pending outgoing connection exists
-    /// to the given peer, `None` is returned.
-    pub fn get_outgoing(&mut self, peer: &TPeerId, id: Option<ConnectionId>)
+    /// Gets a pending outgoing connection by ID.
+    pub fn get_outgoing(&mut self, id: ConnectionId)
         -> Option<PendingConnection<'_, TInEvent, TConnInfo, TPeerId>>
     {
-        match id {
-            Some(id) => match self.get(id) {
-                Some(PoolConnection::Pending(c)) => Some(c),
-                _ => None
-            }
-            None => self.pending.iter()
-                .find_map(|(id, (_endpoint, peer2))|
-                    if Some(peer) == peer2.as_ref() {
-                        Some(*id)
-                    } else {
-                        None
-                    })
-                .and_then(move |id| match self.manager.entry(id) {
+        match self.pending.get(&id) {
+            Some((ConnectedPoint::Dialer { .. }, _peer)) =>
+                match self.manager.entry(id) {
                     Some(manager::Entry::Pending(entry)) =>
                         Some(PendingConnection {
-                            pending: &mut self.pending,
                             entry,
+                            pending: &mut self.pending,
                         }),
-                    _ => None
-                })
+                    _ => unreachable!("by consistency of `self.pending` with `self.manager`")
+                }
+            _ => None
         }
     }
 
@@ -502,35 +458,6 @@ where
                     _ => {}
                 }
             }
-        }
-    }
-
-    /// Asynchronously notifies a connection handler for the given peer of an event.
-    ///
-    /// If multiple connections exist to the peer, it is unspecified which handler
-    /// receives the event.
-    pub fn notify_handler(&mut self, peer: &TPeerId, event: TInEvent)
-        -> Option<impl Future<Output = ()> + '_>
-    {
-        if let Some(conns) = self.established.get(peer) {
-            let conns = conns.keys().copied().collect::<SmallVec<[ConnectionId; 10]>>();
-            let mut event = Some(event);
-            Some(future::poll_fn(move |cx| {
-                for id in &conns {
-                    match self.manager.entry(*id) {
-                        Some(manager::Entry::Established(mut e)) => {
-                            if e.poll_ready_notify_handler(cx).is_ready() {
-                                e.notify_handler(event.take().expect("Polled after completion."));
-                                return Poll::Ready(())
-                            }
-                        },
-                        _ => {}
-                    }
-                }
-                return Poll::Pending;
-            }))
-        } else {
-            None
         }
     }
 
@@ -880,6 +807,20 @@ where
     /// Turns the iterator into an iterator over just the connection IDs.
     pub fn into_ids(self) -> impl Iterator<Item = ConnectionId> {
         self.ids
+    }
+
+    /// Returns the first connection, if any, consuming the iterator.
+    pub fn into_first<'b>(mut self)
+        -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>>
+    where 'a: 'b
+    {
+        if let Some(id) = self.ids.next() {
+            let established = &mut self.pool.established;
+            if let Some(manager::Entry::Established(entry)) = self.pool.manager.entry(id) {
+                return Some(EstablishedConnection { entry, established })
+            }
+        }
+        None
     }
 }
 

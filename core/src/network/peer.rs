@@ -36,7 +36,6 @@ use crate::{
         Substream,
     },
 };
-use futures::prelude::*;
 use std::{
     collections::hash_map,
     error,
@@ -294,7 +293,7 @@ where
     pub fn connection<'b>(&'b mut self, id: ConnectionId)
         -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>>
     {
-        self.network.pool.get_established(&self.peer_id, Some(id))
+        self.network.pool.get_established(id)
     }
 
     /// The number of established connections to the peer.
@@ -315,24 +314,26 @@ where
     }
 
     /// Gets an iterator over all established connections of the peer.
-    pub fn connections<'b>(&'b mut self) -> EstablishedConnectionIter<'b,
-        impl Iterator<Item = ConnectionId>,
-        TInEvent,
-        TOutEvent,
-        THandler,
-        TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error,
-        TConnInfo,
-        TPeerId>
+    pub fn connections<'b>(&'b mut self) ->
+        EstablishedConnectionIter<'b,
+            impl Iterator<Item = ConnectionId>,
+            TInEvent,
+            TOutEvent,
+            THandler,
+            TTrans::Error,
+            <THandler::Handler as ConnectionHandler>::Error,
+            TConnInfo,
+            TPeerId>
     {
         self.network.pool.iter_peer_established(&self.peer_id)
     }
 
-    /// Obtains some connection to the peer.
+    /// Obtains some established connection to the peer.
     pub fn some_connection<'b>(&'b mut self)
         -> EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>
     {
-        self.network.pool.get_established(&self.peer_id, None)
+        self.connections()
+            .into_first()
             .expect("By `Peer::new` and the definition of `ConnectedPeer`.")
     }
 
@@ -342,16 +343,6 @@ where
     {
         self.network.disconnect(&self.peer_id);
         DisconnectedPeer { network: self.network, peer_id: self.peer_id }
-    }
-
-    /// Asynchronosly notifies a connection handler of some connection
-    /// to this peer of an event.
-    ///
-    /// **Note:** If multiple connections exist to the peer, it is unspecified
-    /// which handler receives the event.
-    pub fn notify_handler(&mut self, event: TInEvent) -> impl Future<Output = ()> + '_ {
-        self.network.pool.notify_handler(&self.peer_id, event)
-            .expect("By `Peer::new` and the definition of `ConnectedPeer`.")
     }
 }
 
@@ -403,7 +394,7 @@ where
         };
 
         let inner = self.network.pool
-            .get_outgoing(&self.peer_id, Some(attempt.get().id))
+            .get_outgoing(attempt.get().id)
             .expect("By consistency of `network.pool` with `network.dialing`.");
 
         DialingConnection {
@@ -521,3 +512,4 @@ where
             })
     }
 }
+

@@ -311,18 +311,6 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         }
     }
 
-    /// Gets information about a connection, if it is established.
-    pub fn connected(&self, id: &ConnectionId) -> Option<&Connected<C>> {
-        if let Some(task) = self.tasks.get(&id.0) {
-            match &task.state {
-                TaskState::Pending => None,
-                TaskState::Established(c) => Some(c),
-            }
-        } else {
-            None
-        }
-    }
-
     /// Polls the manager for events relating to the managed connections.
     pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<Event<'a, I, O, H, TE, HE, C>> {
         // Advance the content of `local_spawns`.
