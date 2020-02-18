@@ -459,9 +459,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                     if let Some(conn_id) = connection_id {
                         if let Some(mut conn) = peer.connection(conn_id) {
-                            if conn.poll_ready_notify_handler(cx).is_ready() {
-                                conn.notify_handler(event);
-                            } else {
+                            if let Some(event) = conn.try_notify_handler(event, cx) {
                                 this.send_event_to_complete = Some((peer_id, connection_id, event));
                                 return Poll::Pending
                             }
@@ -513,19 +511,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, connection, event }) => {
                     if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                         if let Some(mut conn) = peer.connection(connection) {
-                            if conn.poll_ready_notify_handler(cx).is_ready() {
-                                conn.notify_handler(event);
-                                continue 'poll
+                            if let Some(event) = conn.try_notify_handler(event, cx) {
+                                debug_assert!(this.send_event_to_complete.is_none());
+                                this.send_event_to_complete = Some((peer_id, Some(connection), event));
+                                return Poll::Pending;
                             }
-                        } else {
-                            // There is no connection with the given ID.
-                            continue 'poll
                         }
-
-                        // The connection exists but it is not yet ready to receive another event.
-                        debug_assert!(this.send_event_to_complete.is_none());
-                        this.send_event_to_complete = Some((peer_id, Some(connection), event));
-                        return Poll::Pending;
                     }
                 },
                 Poll::Ready(NetworkBehaviourAction::NotifyAnyHandler { peer_id, event }) => {
@@ -538,7 +529,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             }
                         }
 
-                        // A connection exists but it is not yet ready to receive another event.
                         debug_assert!(this.send_event_to_complete.is_none());
                         this.send_event_to_complete = Some((peer_id, None, event));
                         return Poll::Pending;

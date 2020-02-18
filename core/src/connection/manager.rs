@@ -388,10 +388,22 @@ pub struct EstablishedEntry<'a, I, C> {
 }
 
 impl<'a, I, C> EstablishedEntry<'a, I, C> {
+    /// Attempts to send an event to the connection handler, returning the event
+    /// if the handler is currently not ready to receive another event.
+    pub fn try_notify_handler(&mut self, event: I, cx: &mut Context) -> Option<I> {
+        if self.poll_ready_notify_task(cx).is_pending() {
+            return Some(event)
+        }
+        let cmd = task::Command::NotifyHandler(event);
+        self.notify_task(cmd);
+        None
+    }
+
     /// (Asynchronously) sends an event to the connection handler.
     ///
     /// **Note:** Must only be called after `poll_ready_notify_handler`
-    /// was successful and without interference by another thread, otherwise the event is discarded.
+    /// was successful and without interference by another thread,
+    /// otherwise the event is discarded.
     pub fn notify_handler(&mut self, event: I) {
         let cmd = task::Command::NotifyHandler(event);
         self.notify_task(cmd);

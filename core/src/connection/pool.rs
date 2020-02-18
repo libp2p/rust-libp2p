@@ -743,6 +743,12 @@ where
         self.info().peer_id()
     }
 
+    /// Attempts to send an event to the connection handler, returning the event
+    /// if the handler is currently not ready to receive another event.
+    pub fn try_notify_handler(&mut self, event: TInEvent, cx: &mut Context) -> Option<TInEvent> {
+        self.entry.try_notify_handler(event, cx)
+    }
+
     /// (Asynchronously) notifies the connection handler of an event.
     ///
     /// Must be called only after a successful call to `poll_ready_notify_handler()`,
