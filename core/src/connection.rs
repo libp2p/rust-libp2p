@@ -37,7 +37,6 @@ use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
 use std::{fmt, pin::Pin, task::Context, task::Poll};
 use std::hash::Hash;
-use std::collections::hash_map;
 use substream::{Muxing, SubstreamEvent};
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
@@ -282,74 +281,6 @@ where
                 }
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
             }
-        }
-    }
-}
-
-/// Attempt to reach a peer.
-#[derive(Debug, Clone)]
-pub struct DialingAttempt {
-    /// Identifier for the reach attempt.
-    pub(crate) id: ConnectionId,
-    /// Multiaddr currently being attempted.
-    pub(crate) current: Multiaddr,
-    /// Multiaddresses to attempt if the current one fails.
-    pub(crate) next: Vec<Multiaddr>,
-}
-
-/// A `DialingConnection` is a [`PendingConnection`] where the local peer
-/// has the role of the dialer (i.e. initiator) and the (expected) remote
-/// peer ID is known.
-pub struct DialingConnection<'a, TInEvent, TConnInfo, TPeerId> {
-    pub(crate) peer_id: &'a TPeerId,
-    pub(crate) inner: PendingConnection<'a, TInEvent, TConnInfo, TPeerId>,
-    pub(crate) dialing: hash_map::OccupiedEntry<'a, TPeerId, DialingAttempt>,
-}
-
-impl<'a, TInEvent, TConnInfo, TPeerId>
-    DialingConnection<'a, TInEvent, TConnInfo, TPeerId>
-{
-    /// Returns the local connection ID.
-    pub fn id(&self) -> ConnectionId {
-        self.inner.id()
-    }
-
-    /// Returns the (expected) peer ID of the ongoing connection attempt.
-    pub fn peer_id(&self) -> &TPeerId {
-        self.peer_id
-    }
-
-    /// Returns information about this endpoint of the connection attempt.
-    pub fn endpoint(&self) -> &ConnectedPoint {
-        self.inner.endpoint()
-    }
-
-    /// Aborts the connection attempt.
-    pub fn abort(self)
-    where
-        TPeerId: Eq + Hash + Clone,
-    {
-        self.dialing.remove();
-        self.inner.abort();
-    }
-
-    /// Adds new candidate addresses to the end of the addresses used
-    /// in the ongoing dialing process.
-    ///
-    /// Duplicates are ignored.
-    pub fn add_addresses(&mut self, addrs: impl IntoIterator<Item = Multiaddr>) {
-        for addr in addrs {
-            self.add_address(addr);
-        }
-    }
-
-    /// Adds an address to the end of the addresses used in the ongoing
-    /// dialing process.
-    ///
-    /// Duplicates are ignored.
-    pub fn add_address(&mut self, addr: Multiaddr) {
-        if self.dialing.get().next.iter().all(|a| a != &addr) {
-            self.dialing.get_mut().next.push(addr);
         }
     }
 }

@@ -36,7 +36,6 @@ use crate::{
         ConnectionLimit,
         ConnectionHandler,
         ConnectionInfo,
-        DialingAttempt,
         IntoConnectionHandler,
         IncomingInfo,
         OutgoingInfo,
@@ -84,7 +83,7 @@ where
     /// However, a single dialing attempt operates on a list of addresses
     /// to connect to, which can be extended with new addresses while
     /// the connection attempt is still in progress.
-    dialing: FnvHashMap<TPeerId, DialingAttempt>,
+    dialing: FnvHashMap<TPeerId, peer::DialingAttempt>,
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
@@ -439,7 +438,7 @@ fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TTrans, TConnInfo, TPee
     transport: TTrans,
     pool: &mut Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
         <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
-    dialing: &mut FnvHashMap<TPeerId, DialingAttempt>,
+    dialing: &mut FnvHashMap<TPeerId, peer::DialingAttempt>,
     opts: DialingOpts<TPeerId, THandler>
 ) -> Result<ConnectionId, ConnectionLimit>
 where
@@ -476,7 +475,7 @@ where
 
     if let Ok(id) = &result {
         let former = dialing.insert(opts.peer,
-            DialingAttempt {
+            peer::DialingAttempt {
                 id: *id,
                 current: opts.address,
                 next: opts.remaining,
@@ -496,7 +495,7 @@ where
 fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
     pool: &Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
         <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
-    dialing: &mut FnvHashMap<TPeerId, DialingAttempt>,
+    dialing: &mut FnvHashMap<TPeerId, peer::DialingAttempt>,
     id: ConnectionId,
     endpoint: ConnectedPoint,
     error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error, TTrans::Error>,
