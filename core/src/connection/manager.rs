@@ -33,8 +33,7 @@ use std::{
     error,
     fmt,
     pin::Pin,
-    task::Context,
-    task::Poll
+    task::{Context, Poll},
 };
 use super::{
     Connected,
@@ -463,6 +462,7 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
         self.task.get_mut().sender.poll_ready(cx).map(|_| ())
     }
 }
+
 /// An entry for a managed connection that is currently being established
 /// (i.e. pending).
 #[derive(Debug)]

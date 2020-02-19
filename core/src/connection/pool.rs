@@ -476,11 +476,17 @@ where
         self.established.get(peer).map_or(0, |conns| conns.len())
     }
 
-    /// Returns an iterator over all connection IDs of established
-    /// connections of `peer` known to the pool.
-    pub fn iter_peer_established<'a>(&'a mut self, peer: &TPeerId) -> EstablishedConnectionIter<
-        'a, impl Iterator<Item = ConnectionId>, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr,
-        TConnInfo, TPeerId>
+    /// Returns an iterator over all established connections of `peer`.
+    pub fn iter_peer_established<'a>(&'a mut self, peer: &TPeerId)
+        -> EstablishedConnectionIter<'a,
+            impl Iterator<Item = ConnectionId>,
+            TInEvent,
+            TOutEvent,
+            THandler,
+            TTransErr,
+            THandlerErr,
+            TConnInfo,
+            TPeerId>
     {
         let ids = self.iter_peer_established_info(peer)
             .map(|(id, _endpoint)| *id)
@@ -503,7 +509,7 @@ where
             })
     }
 
-    /// Returns an iterator for information on all pending incoming connections.
+    /// Returns an iterator for information on all pending outgoing connections.
     pub fn iter_pending_outgoing(&self) -> impl Iterator<Item = OutgoingInfo<'_, TPeerId>> {
         self.iter_pending_info()
             .filter_map(|(_, ref endpoint, ref peer_id)| {
@@ -542,9 +548,8 @@ where
 
     /// Polls the connection pool for events.
     ///
-    /// > **Note**: We use a regular `poll` method instead of implementing `Stream` in order to
-    /// > remove the `Err` variant, but also because we want the `Pool` to stay
-    /// > borrowed if necessary.
+    /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
+    /// > because we want the `Pool` to stay borrowed if necessary.
     pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<
         PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
     > where

@@ -278,16 +278,16 @@ where
         self.pool.iter_connected()
     }
 
+    /// Returns a list of all the peers to whom a new outgoing connection
+    /// is currently being established.
+    pub fn dialing_peers(&self) -> impl Iterator<Item = &TPeerId> {
+        self.dialing.keys()
+    }
+
     /// Gets the configured limit on pending incoming connections,
     /// i.e. concurrent incoming connection attempts.
     pub fn incoming_limit(&self) -> Option<usize> {
         self.pool.limits().max_pending_incoming
-    }
-
-    /// Returns a list of all the peers to whom no established connection exists
-    /// but a dialing attempt is ongoing.
-    pub fn dialing_peers(&self) -> impl Iterator<Item = &TPeerId> {
-        self.dialing.keys().filter(move |p| !self.pool.is_connected(p))
     }
 
     /// The total number of established connections in the `Network`.
@@ -305,22 +305,6 @@ where
         -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
     {
         Peer::new(self, peer_id)
-    }
-
-    /// Initiates a connection attempt to a known peer.
-    fn dial_peer(&mut self, opts: DialingOpts<TPeerId, THandler>)
-        -> Result<ConnectionId, ConnectionLimit>
-    where
-        TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Dial: Send + 'static,
-        TTrans::Error: Send + 'static,
-        TMuxer: Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
-        TPeerId: Send + 'static,
-    {
-        dial_peer_impl(self.transport().clone(), &mut self.pool, &mut self.dialing, opts)
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
@@ -421,6 +405,22 @@ where
         };
 
         Poll::Ready(event)
+    }
+
+    /// Initiates a connection attempt to a known peer.
+    fn dial_peer(&mut self, opts: DialingOpts<TPeerId, THandler>)
+        -> Result<ConnectionId, ConnectionLimit>
+    where
+        TTrans: Transport<Output = (TConnInfo, TMuxer)>,
+        TTrans::Dial: Send + 'static,
+        TTrans::Error: Send + 'static,
+        TMuxer: Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send,
+        TInEvent: Send + 'static,
+        TOutEvent: Send + 'static,
+        TPeerId: Send + 'static,
+    {
+        dial_peer_impl(self.transport().clone(), &mut self.pool, &mut self.dialing, opts)
     }
 }
 
