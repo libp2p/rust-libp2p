@@ -16,3 +16,6 @@ libp2p-core = { version = "0.16.0", path = "../../core" }
 parity-send-wrapper = "0.1.0"
 wasm-bindgen = "0.2.42"
 wasm-bindgen-futures = "0.4.4"
+
+[features]
+websocket = []
