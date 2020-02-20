@@ -33,7 +33,7 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use futures::{prelude::*, channel::oneshot, future::BoxFuture, FutureExt};
+use futures::{prelude::*, future::BoxFuture, FutureExt};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
@@ -46,6 +46,7 @@ use trust_dns_client::rr::{DNSClass, RecordType};
 use trust_dns_client::udp::UdpClientConnection;
 use trust_dns_client::client::{SyncClient, Client};
 use trust_dns_proto::rr::domain::Name;
+use futures::stream::FuturesOrdered;
 
 /// Represents the configuration for a DNS transport capability of libp2p.
 ///
@@ -139,102 +140,33 @@ where
         }
 
         trace!("Dialing address with DNS: {}", addr);
-        let resolve_futs = addr.iter()
-            .map(|cmp| match cmp {
-                Protocol::Dns4(ref name) | Protocol::Dns6(ref name) => {
-                    let name = name.to_string();
-                    let to_resolve = format!("{}:0", name);
-                    let (tx, rx) = oneshot::channel();
-                    self.thread_pool.spawn_ok(async {
-                        let to_resolve = to_resolve;
-                        let _ = tx.send(match to_resolve[..].to_socket_addrs() {
-                            Ok(list) => Ok(list.map(|s| s.ip()).collect::<Vec<_>>()),
-                            Err(e) => Err(e),
-                        });
-                    });
+        let mut resolve_futs = FuturesOrdered::new();
+        let protocols = addr.iter().collect::<Vec<_>>();
 
-                    let is_dns4 = if let Protocol::Dns4(_) = cmp { true } else { false };
+        for (i, protocol) in addr.iter().enumerate() {
+            resolve_futs.push(match protocol {
+                Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_) => {
+                    let suffix = &protocols[(i + 1)..];
+                    resolve_dns::<T>(protocol.clone().acquire(), suffix.into()).left_future()
+                }
+                ref p => future::ready(Ok(p.clone().into())).right_future()
+            });
 
-                    async move {
-                        let list = rx.await
-                            .map_err(|_| {
-                                error!("DNS resolver crashed");
-                                DnsErr::ResolveFail(name.clone())
-                            })?
-                            .map_err(|err| DnsErr::ResolveError {
-                                domain_name: name.clone(),
-                                error: err,
-                            })?;
-
-                        list.into_iter()
-                            .filter_map(|addr| {
-                                if (is_dns4 && addr.is_ipv4()) || (!is_dns4 && addr.is_ipv6()) {
-                                    Some(Protocol::from(addr))
-                                } else {
-                                    None
-                                }
-                            })
-                            .next()
-                            .ok_or_else(|| DnsErr::ResolveFail(name))
-                    }.boxed().left_future()
-                },
-                Protocol::Dnsaddr(ref name) => {
-                    let conn = UdpClientConnection::new("8.8.8.8:53".parse().unwrap()).unwrap(); // TODO: error handling
-                    let client = SyncClient::new(conn); // TODO: should use async client?
-
-                    let name = Name::from_str(&format!("_dnsaddr.{}", name)).unwrap(); // TODO: error handling
-                    let response = client.query(&name, DNSClass::IN, RecordType::TXT).unwrap(); // TODO: error handling
-                    let resolved_addrs = response.answers().iter()
-                        .filter_map(|record| {
-                            if let trust_dns_client::proto::rr::RData::TXT(ref txt) = record.rdata() {
-                                Some(txt.iter())
-                            } else {
-                                None
-                            }
-                        })
-                        .flatten()
-                        .filter_map(|bytes| {
-                            let str = std::str::from_utf8(bytes).unwrap(); // TODO: error handling
-                            let addr = Multiaddr::from_str(str.trim_start_matches("dnsaddr=")).unwrap(); // TODO: error handling
-
-                            // TODO: suffix matching
-                            // https://github.com/multiformats/multiaddr/blob/master/protocols/DNSADDR.md#suffix-matching
-
-                            match addr.iter().next() {
-                                Some(Protocol::Ip4(ipv4addr)) => {
-                                    Some(Protocol::from(ipv4addr))
-                                }
-                                Some(Protocol::Ip6(ipv6addr)) => {
-                                    Some(Protocol::from(ipv6addr))
-                                }
-                                Some(Protocol::Dnsaddr(ref name)) => {
-                                    // TODO: recursive resolution
-                                    error!("Resolved to the dnsaddr {:?} but recursive resolution is not supported for now.", name);
-                                    None
-                                }
-                                protocol => {
-                                    // TODO: error handling
-                                    error!("{:?}", protocol);
-                                    None
-                                }
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    // if resolved_addrs.len() == 0 {} // TODO
-
-                    async move {
-                        Ok(resolved_addrs[0].clone())
-                    }.boxed().left_future()
-                },
-                cmp => future::ready(Ok(cmp.acquire())).right_future()
-            })
-            .collect::<stream::FuturesOrdered<_>>();
+            // dnsaddr consumes the rest of the components of the multiaddr
+            if let Protocol::Dnsaddr(_) = protocol {
+                break;
+            }
+        }
 
         let future = resolve_futs.collect::<Vec<_>>()
             .then(move |outcome| async move {
-                let outcome = outcome.into_iter().collect::<Result<Vec<_>, _>>()?;
-                let outcome = outcome.into_iter().collect::<Multiaddr>();
+                let outcome = outcome.into_iter()
+                    .collect::<Result<Vec<Multiaddr>, _>>()?
+                    .iter()
+                    .fold(Multiaddr::empty(), |mut m, next| {
+                        m.concat(next);
+                        m
+                    });
                 debug!("DNS resolution outcome: {} => {}", addr, outcome);
 
                 match self.inner.dial(outcome) {
@@ -290,6 +222,90 @@ where TErr: error::Error + 'static
             DnsErr::ResolveError { error, .. } => Some(error),
             DnsErr::MultiaddrNotSupported => None,
         }
+    }
+}
+
+async fn resolve_dns<T>(p: Protocol<'_>, suffix: Multiaddr) -> Result<Multiaddr, DnsErr<T::Error>>
+    where
+        T: Transport + Send + 'static,
+        T::Error: Send,
+        T::Dial: Send
+{
+    match p {
+        Protocol::Dns4(ref n) | Protocol::Dns6(ref n) => {
+            let name = n.to_string();
+            let to_resolve = format!("{}:0", name);
+            let list = match to_resolve[..].to_socket_addrs() {
+                Ok(list) => Ok(list.map(|s| s.ip()).collect::<Vec<_>>()),
+                Err(e) => Err(e)
+            }.map_err(|_| {
+                error!("DNS resolver crashed");
+                DnsErr::ResolveFail(name.clone())
+            })?;
+
+            let is_dns4 = if let Protocol::Dns4(_) = p { true } else { false };
+
+            list.into_iter()
+                .filter_map(|addr| {
+                    if (is_dns4 && addr.is_ipv4()) || (!is_dns4 && addr.is_ipv6()) {
+                        Some(Multiaddr::from(addr))
+                    } else {
+                        None
+                    }
+                })
+                .next()
+                .ok_or_else(|| DnsErr::ResolveFail(name))
+        }
+        Protocol::Dnsaddr(ref n) => {
+            let conn = UdpClientConnection::new("8.8.8.8:53".parse().unwrap()).unwrap(); // TODO: error handling
+            let client = SyncClient::new(conn); // TODO: should use async client?
+
+            let name = Name::from_str(&format!("_dnsaddr.{}", n)).unwrap(); // TODO: error handling
+            let response = client.query(&name, DNSClass::IN, RecordType::TXT).unwrap(); // TODO: error handling
+            let resolved_addrs = response.answers().iter()
+                .filter_map(|record| {
+                    if let trust_dns_client::proto::rr::RData::TXT(ref txt) = record.rdata() {
+                        Some(txt.iter())
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+                .filter_map(|bytes| {
+                    let str = std::str::from_utf8(bytes).unwrap(); // TODO: error handling
+                    let addr = Multiaddr::from_str(str.trim_start_matches("dnsaddr=")).unwrap(); // TODO: error handling
+
+                    match addr.iter().next() {
+                        Some(Protocol::Ip4(_)) | Some(Protocol::Ip6(_)) => {
+                            Some(addr)
+                        }
+                        Some(Protocol::Dnsaddr(ref name)) => {
+                            // TODO: recursive resolution
+                            error!("Resolved to the dnsaddr {:?} but recursive resolution is not supported for now.", name);
+                            None
+                        }
+                        protocol => {
+                            // TODO: error handling
+                            error!("{:?}", protocol);
+                            None
+                        }
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            // if resolved_addrs.len() == 0 {} // TODO
+
+            if suffix.len() == 0 {
+                Ok(resolved_addrs[0].clone())
+            } else {
+                // TODO: suffix matching
+                // https://github.com/multiformats/multiaddr/blob/master/protocols/DNSADDR.md#suffix-matching
+                println!("suffix: {:?}", suffix);
+                println!("resolved_addrs: {:?}", resolved_addrs);
+                Ok(resolved_addrs[0].clone())
+            }
+        }
+        _ => unreachable!()
     }
 }
 
@@ -359,7 +375,48 @@ mod tests {
                 .unwrap()
                 .await
                 .unwrap();
+        });
+    }
 
+    #[test]
+    fn dnsaddr() {
+        #[derive(Clone)]
+        struct CustomTransport;
+
+        impl Transport for CustomTransport {
+            type Output = ();
+            type Error = std::io::Error;
+            type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+                unreachable!()
+            }
+
+            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+                let addr = addr.iter().collect::<Vec<_>>();
+                assert_eq!(addr.len(), 3);
+                // TODO: ipfs
+//                match addr[2] {
+//                    Protocol::Ipfs(_) => (),
+//                    _ => panic!(),
+//                };
+                match addr[1] {
+                    Protocol::Tcp(_) => (),
+                    _ => panic!(),
+                };
+                match addr[0] {
+                    Protocol::Ip4(_) => (),
+                    Protocol::Ip6(_) => (),
+                    _ => panic!(),
+                };
+                Ok(Box::pin(future::ready(Ok(()))))
+            }
+        }
+
+        futures::executor::block_on(async move {
+            let transport = DnsConfig::new(CustomTransport).unwrap();
             let _ = transport
                 .clone()
                 .dial("/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/4001".parse().unwrap())

@@ -113,6 +113,10 @@ impl Multiaddr {
         self
     }
 
+    pub fn concat(&mut self, m: &Multiaddr) {
+        m.iter().for_each(|p| self.push(p));
+    }
+
     /// Returns the components of this multiaddress.
     ///
     /// # Example
@@ -265,6 +269,17 @@ impl<'a> From<Protocol<'a>> for Multiaddr {
         let mut w = Vec::new();
         p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
         Multiaddr { bytes: Arc::new(w) }
+    }
+}
+
+impl<'a> From<&[Protocol<'a>]> for Multiaddr {
+    fn from(protocols: &[Protocol<'a>]) -> Multiaddr {
+        protocols.iter()
+            .map(|p| p.clone().into())
+            .fold(Multiaddr::empty(), |mut addr, next| {
+                addr.concat(&next);
+                addr
+            })
     }
 }
 
