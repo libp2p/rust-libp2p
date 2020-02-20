@@ -43,7 +43,7 @@ static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
 /// to check the peer ID that libp2p-quic provides.  libp2p-quic does guarantee that the connection
 /// is to a peer with the secret key corresponing to its `PeerId`, unless that endpoint has done
 /// something insecure.
-pub struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
+pub(crate) struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
 
 /// A ClientCertVerifier that requires client authentication, and requires the certificate to be
 /// self-signed.
@@ -54,7 +54,7 @@ pub struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
 /// to check the peer ID that libp2p-quic provides.  libp2p-quic does guarantee that the connection
 /// is to a peer with the secret key corresponing to its `PeerId`, unless that endpoint has done
 /// something insecure.
-pub struct VeryInsecureRequireExactlyOneSelfSignedClientCertificate;
+pub(crate) struct VeryInsecureRequireExactlyOneSelfSignedClientCertificate;
 
 impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServerCertificate {
     fn verify_server_cert(

@@ -111,7 +111,7 @@ impl Config {
 }
 
 #[derive(Debug)]
-pub enum EndpointMessage {
+pub(crate) enum EndpointMessage {
     Dummy,
     ConnectionAccepted,
     EndpointEvent {
@@ -256,15 +256,18 @@ pub(super) struct EndpointData {
 type Sender = mpsc::Sender<EndpointMessage>;
 
 impl ConnectionEndpoint {
-    pub fn socket(&self) -> &socket::Socket {
+    pub(crate) fn socket(&self) -> &socket::Socket {
         &self.socket
     }
 
-    pub fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<SendToken, mpsc::SendError>> {
+    pub(crate) fn poll_ready(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<SendToken, mpsc::SendError>> {
         self.channel.poll_ready(cx).map_ok(SendToken)
     }
 
-    pub fn send_message(
+    pub(crate) fn send_message(
         &mut self,
         event: EndpointMessage,
         SendToken(()): SendToken,
@@ -276,10 +279,10 @@ impl ConnectionEndpoint {
 mod channel_ref {
     use super::{Arc, EndpointData, EndpointMessage::Dummy, Sender};
     #[derive(Debug, Clone)]
-    pub struct Channel(Sender);
+    pub(crate) struct Channel(Sender);
 
     impl Channel {
-        pub fn new(s: Sender) -> Self {
+        pub(crate) fn new(s: Sender) -> Self {
             Self(s)
         }
     }
@@ -304,7 +307,7 @@ mod channel_ref {
     }
 
     #[derive(Debug, Clone)]
-    pub struct EndpointRef {
+    pub(crate) struct EndpointRef {
         pub(super) reference: Arc<EndpointData>,
         // MUST COME LATER so that the endpoint driver gets notified *after* its reference count is
         // dropped.

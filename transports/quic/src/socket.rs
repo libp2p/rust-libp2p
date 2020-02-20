@@ -46,7 +46,7 @@ impl Socket {
     /// and drop it.  If it is not, the connection will eventually time out.  This provides a very
     /// high degree of robustness.  Connections will transparently resume after a transient network
     /// outage, and problems that are specific to one peer will not effect other peers.
-    pub fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
+    pub(crate) fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
         match {
             let fut = self.socket.send_to(&packet.contents, &packet.destination);
             futures::pin_mut!(fut);
@@ -65,7 +65,7 @@ impl Socket {
     }
 
     /// A wrapper around `recv_from` that handles ECONNRESET and logging
-    pub fn recv_from(
+    pub(crate) fn recv_from(
         &self,
         cx: &mut Context<'_>,
         buf: &mut [u8],
@@ -97,13 +97,13 @@ impl Socket {
 }
 
 impl Socket {
-    pub fn new(socket: UdpSocket) -> Self {
+    pub(crate) fn new(socket: UdpSocket) -> Self {
         Self { socket }
     }
 }
 
 impl Pending {
-    pub fn send_packet(
+    pub(crate) fn send_packet(
         &mut self,
         cx: &mut Context<'_>,
         socket: &Socket,

@@ -30,7 +30,7 @@ use libp2p_core::identity;
 use log::{trace, warn};
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
-pub const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
+pub(crate) const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
@@ -71,7 +71,7 @@ fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::Cu
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific certificate extension
 /// containing the public key of the given keypair.
-pub fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
+pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     let mut params = rcgen::CertificateParams::new(vec![]);
     let (cert_keypair, libp2p_extension) = gen_signed_keypair(keypair);
     params.custom_extensions.push(libp2p_extension);
@@ -205,7 +205,9 @@ fn parse_tbscertificate(
 
 /// Extract the peer’s public key from a libp2p certificate, and check that the certificate’s
 /// public key is signed by it.
-pub fn extract_libp2p_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
+pub(crate) fn extract_libp2p_peerid(
+    certificate: &[u8],
+) -> Result<libp2p_core::PeerId, webpki::Error> {
     parse_certificate(certificate)
         .map_err(|e| {
             log::debug!("error in parsing: {:?}", e);
