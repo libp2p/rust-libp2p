@@ -72,7 +72,7 @@ pub mod ffi {
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
-        /// Returns a `Readable​Stream​` that .
+        /// Returns a `Readable​Stream​`.
         #[wasm_bindgen(method, getter)]
         pub fn read(this: &Connection) -> js_sys::Iterator;
 
@@ -122,6 +122,13 @@ pub mod ffi {
         /// The address we are listening on, that received the remote connection.
         #[wasm_bindgen(method, getter)]
         pub fn local_addr(this: &ConnectionEvent) -> String;
+    }
+
+    #[cfg(feature = "websocket")]
+    #[wasm_bindgen(module = "/src/websockets.js")]
+    extern "C" {
+        /// Returns a `Transport` implemented using websockets.
+        pub fn websocket_transport() -> Transport;
     }
 }
 
