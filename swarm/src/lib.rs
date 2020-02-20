@@ -81,7 +81,8 @@ pub use protocols_handler::{
 use protocols_handler::NodeHandlerWrapperBuilder;
 use futures::{
     prelude::*,
-    executor::{ThreadPool, ThreadPoolBuilder}
+    executor::{ThreadPool, ThreadPoolBuilder},
+    stream::FusedStream,
 };
 use libp2p_core::{
     Executor,
@@ -565,6 +566,21 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 return Poll::Ready(Some(event));
             }
         }
+    }
+}
+
+/// the stream of behaviour events never terminates, so we can implement fused for it
+impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> FusedStream for
+    ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
+where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
+      THandler: IntoProtocolsHandler + Send + 'static,
+      TInEvent: Send + 'static,
+      TOutEvent: Send + 'static,
+      THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
+      TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
+{
+    fn is_terminated(&self) -> bool {
+        false
     }
 }
 
