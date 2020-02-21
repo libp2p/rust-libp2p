@@ -234,6 +234,23 @@ fn construct_success() {
         "3819736A632D312E626F6F7473747261702E6C69627032702E696F0604D2A50322122006B3608AA000274049EB28AD8E793A26FF6FAB281A7D3BD77CD18EB745DFAABB",
         vec![Dnsaddr(Cow::Borrowed("sjc-1.bootstrap.libp2p.io")), Tcp(1234), P2p(multihash("QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"))]
     );
+
+    {
+        let source = "/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/1234/ipfs/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN";
+        let target = "3819736A632D312E626F6F7473747261702E6C69627032702E696F0604D2A50322122006B3608AA000274049EB28AD8E793A26FF6FAB281A7D3BD77CD18EB745DFAABB";
+        let parsed = source.parse::<Multiaddr>().unwrap();
+        // ipfs is parsed as p2p
+        assert_eq!(HEXUPPER.encode(&parsed.to_vec()[..]), target);
+        assert_eq!(
+            parsed.iter().collect::<Vec<_>>(),
+            vec![Dnsaddr(Cow::Borrowed("sjc-1.bootstrap.libp2p.io")), Tcp(1234), P2p(multihash("QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"))]
+        );
+        assert_eq!(
+            source.parse::<Multiaddr>().unwrap().to_string(),
+            "/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/1234/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"
+        );
+        assert_eq!(Multiaddr::try_from(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
+    }
 }
 
 #[test]

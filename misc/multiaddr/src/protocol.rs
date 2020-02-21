@@ -125,6 +125,12 @@ impl<'a> Protocol<'a> {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Ip6(Ipv6Addr::from_str(s)?))
             }
+            "ipfs" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let decoded = bs58::decode(s).into_vec()?;
+                // ipfs is equivalent to p2p
+                Ok(Protocol::P2p(Multihash::from_bytes(decoded)?))
+            }
             "dns4" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Dns4(Cow::Borrowed(s)))
