@@ -28,10 +28,8 @@ use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
 use log::{debug, error, info, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
-use quinn_proto::{Connection, ConnectionHandle, Dir, StreamId};
+use quinn_proto::{Connection, ConnectionHandle, Dir};
 use std::{
-    collections::HashMap,
-    io,
     mem::replace,
     pin::Pin,
     sync::Arc,
@@ -39,10 +37,13 @@ use std::{
     time::Instant,
 };
 
+mod stream;
+mod stream_map;
+
 /// A QUIC substream
 #[derive(Debug)]
 pub struct Substream {
-    id: StreamId,
+    id: stream_map::StreamId,
     status: SubstreamStatus,
 }
 
@@ -66,13 +67,13 @@ enum SubstreamStatus {
 impl Substream {
     /// Construct an unwritten stream. Such a stream must be written to before
     /// it can be read from.
-    fn unwritten(id: StreamId) -> Self {
+    fn unwritten(id: stream_map::StreamId) -> Self {
         let status = SubstreamStatus::Unwritten;
         Self { id, status }
     }
 
     /// Construct a live stream, which can be read from or written to.
-    fn live(id: StreamId) -> Self {
+    fn live(id: stream_map::StreamId) -> Self {
         let status = SubstreamStatus::Live;
         Self { id, status }
     }
@@ -108,9 +109,9 @@ impl QuicMuxer {
 #[derive(Debug)]
 enum OutboundInner {
     /// The substream is fully set up
-    Complete(Result<StreamId, Error>),
+    Complete(Result<stream_map::StreamId, Error>),
     /// We are waiting on a stream to become available
-    Pending(oneshot::Receiver<StreamId>),
+    Pending(oneshot::Receiver<stream_map::StreamId>),
     /// We have already returned our substream
     Done,
 }
@@ -160,30 +161,49 @@ impl StreamMuxer for QuicMuxer {
             Outbound(OutboundInner::Pending(receiver))
         }
     }
-    fn destroy_outbound(&self, _: Outbound) {}
+
+    fn destroy_outbound(&self, outbound: Outbound) {
+        let mut inner = self.inner();
+        let id = *match outbound.0 {
+            OutboundInner::Complete(Err(_)) => return,
+            OutboundInner::Complete(Ok(id)) => id,
+            // try_recv is race-free, because the lock on `self` prevents
+            // other tasks from sending on the other end of the channel.
+            OutboundInner::Pending(mut channel) => match channel.try_recv() {
+                Ok(Some(id)) => id,
+                Err(oneshot::Canceled) | Ok(None) => return,
+            },
+            OutboundInner::Done => return,
+        };
+        // if either of these returns an error, there is nothing we can do, so
+        // just ignore it. That said, an error here should never happen unless
+        // the connection is closed.
+        let _ = inner.connection.finish(id);
+        let _ = inner.connection.stop_sending(id, Default::default());
+    }
+
     fn destroy_substream(&self, substream: Self::Substream) {
         let mut inner = self.inner();
-        if let Some(waker) = inner.writers.remove(&substream.id) {
-            waker.wake();
-        }
-        if let Some(waker) = inner.readers.remove(&substream.id) {
-            waker.wake();
-        }
         if substream.is_live() && inner.close_reason.is_none() {
-            if let Err(e) = inner.connection.finish(substream.id) {
+            if let Err(e) = inner.connection.finish(*substream.id) {
                 warn!("Error closing stream: {}", e);
             }
         }
         let _ = inner
             .connection
-            .stop_sending(substream.id, Default::default());
+            .stop_sending(*substream.id, Default::default());
+        trace!("Removing substream {:?} from map", substream.id);
+        inner.streams.remove(substream.id);
     }
+
     fn is_remote_acknowledged(&self) -> bool {
+        // we do not allow 0RTT traffic, for security reasons, so this is
+        // always true.
         true
     }
 
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        debug!("being polled for inbound connections!");
+        trace!("being polled for inbound connections!");
         let mut inner = self.inner();
         if inner.connection.is_drained() {
             return Poll::Ready(Err(Error::ConnectionError(
@@ -205,8 +225,8 @@ impl StreamMuxer for QuicMuxer {
                 Poll::Pending
             }
             Some(id) => {
-                inner.finishers.insert(id, None);
-                Poll::Ready(Ok(Substream::live(id)))
+                inner.outbound_streams += 1;
+                Poll::Ready(Ok(Substream::live(inner.streams.add_stream(id))))
             }
         }
     }
@@ -225,27 +245,18 @@ impl StreamMuxer for QuicMuxer {
             );
             return Poll::Ready(Err(Error::ExpiredStream));
         }
-        if buf.is_empty() {
-            return Poll::Ready(Ok(0));
-        }
         let mut inner = self.inner();
-        debug_assert!(
-            inner.finishers.get(&substream.id).is_some(),
-            "no entry in finishers map for write stream"
-        );
         inner.wake_driver();
         if let Some(ref e) = inner.close_reason {
             return Poll::Ready(Err(Error::ConnectionError(e.clone())));
         }
-        match inner.connection.write(substream.id, buf) {
+        match inner.connection.write(*substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
                 if let Some(ref e) = inner.close_reason {
                     return Poll::Ready(Err(Error::ConnectionError(e.clone())));
                 }
-                if let Some(w) = inner.writers.insert(substream.id, cx.waker().clone()) {
-                    w.wake();
-                }
+                inner.streams.set_writer(&substream.id, cx.waker().clone());
                 Poll::Pending
             }
             Err(WriteError::UnknownStream) => {
@@ -264,10 +275,7 @@ impl StreamMuxer for QuicMuxer {
                 }
             }
             Err(WriteError::Stopped(e)) => {
-                inner.finishers.remove(&substream.id);
-                if let Some(w) = inner.writers.remove(&substream.id) {
-                    w.wake()
-                }
+                inner.streams.wake_writer(*substream.id);
                 substream.status = SubstreamStatus::Finished;
                 Poll::Ready(Err(Error::Stopped(e)))
             }
@@ -293,7 +301,7 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
         inner.wake_driver();
-        match inner.connection.read(substream.id, buf) {
+        match inner.connection.read(*substream.id, buf) {
             Ok(Some(bytes)) => Poll::Ready(Ok(bytes)),
             Ok(None) => Poll::Ready(Ok(0)),
             Err(ReadError::Blocked) => {
@@ -307,9 +315,7 @@ impl StreamMuxer for QuicMuxer {
                         substream.id,
                         inner.connection.side()
                     );
-                    if let Some(w) = inner.readers.insert(substream.id, cx.waker().clone()) {
-                        w.wake()
-                    }
+                    inner.streams.set_reader(&substream.id, cx.waker().clone());
                     Poll::Pending
                 }
             }
@@ -320,9 +326,7 @@ impl StreamMuxer for QuicMuxer {
                 Poll::Ready(Err(Error::ExpiredStream))
             }
             Err(ReadError::Reset(e)) => {
-                if let Some(w) = inner.readers.remove(&substream.id) {
-                    w.wake()
-                }
+                inner.streams.wake_reader(*substream.id);
                 Poll::Ready(Err(Error::Reset(e)))
             }
         }
@@ -337,30 +341,29 @@ impl StreamMuxer for QuicMuxer {
             SubstreamStatus::Finished => return Poll::Ready(Ok(())),
             SubstreamStatus::Finishing(ref mut channel) => {
                 self.inner().wake_driver();
-                return channel
-                    .poll_unpin(cx)
-                    .map_err(|e| Error::IO(io::Error::new(io::ErrorKind::ConnectionAborted, e)));
+                match channel.poll_unpin(cx) {
+                    Poll::Ready(Ok(())) | Poll::Ready(Err(oneshot::Canceled)) => return Poll::Ready(Ok(())),
+                    Poll::Pending => {}
+                }
             }
             SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
         }
         let mut inner = self.inner();
         inner.wake_driver();
-        inner.connection.finish(substream.id).map_err(|e| match e {
-            quinn_proto::FinishError::UnknownStream => Error::ConnectionClosing,
-            quinn_proto::FinishError::Stopped(e) => Error::Stopped(e),
-        })?;
+        inner
+            .connection
+            .finish(*substream.id)
+            .map_err(|e| match e {
+                quinn_proto::FinishError::UnknownStream => Error::ConnectionClosing,
+                quinn_proto::FinishError::Stopped(e) => Error::Stopped(e),
+            })?;
         let (sender, mut receiver) = oneshot::channel();
         assert!(
             receiver.poll_unpin(cx).is_pending(),
             "we haven’t written to the peer yet"
         );
         substream.status = SubstreamStatus::Finishing(receiver);
-        match inner.finishers.insert(substream.id, Some(sender)) {
-            Some(None) => {}
-            _ => unreachable!(
-                "We inserted a None value earlier; and haven’t touched this entry since; qed"
-            ),
-        }
+        inner.streams.set_finisher(&substream.id, sender);
         Poll::Pending
     }
 
@@ -383,11 +386,15 @@ impl StreamMuxer for QuicMuxer {
     /// Close the connection. Once this function is called, it is a logic error
     /// to call other methods on this object.
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        trace!("close() called");
         let mut inner = self.inner();
+        trace!(
+            "close() called with {} outbound streams",
+            inner.outbound_streams
+        );
+        inner.outbound_streams -= 1;
         if inner.connection.is_closed() || inner.close_reason.is_some() {
             return Poll::Ready(Ok(()));
-        } else if inner.finishers.is_empty() {
+        } else if inner.outbound_streams == 0 {
             inner.shutdown(0);
             inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
             drop(inner.driver().poll_unpin(cx));
@@ -398,17 +405,12 @@ impl StreamMuxer for QuicMuxer {
             return Poll::Pending;
         }
         let Muxer {
-            finishers,
+            streams,
             connection,
             ..
         } = &mut *inner;
-        for (id, channel) in finishers {
-            if channel.is_none() {
-                match connection.finish(*id) {
-                    Ok(()) => {}
-                    Err(error) => warn!("Finishing stream {:?} failed: {}", id, error),
-                }
-            }
+        for id in streams.keys() {
+            let _ = connection.finish(*id);
         }
         Poll::Pending
     }
@@ -482,30 +484,28 @@ impl Future for Upgrade {
     }
 }
 
-type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
+type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<stream_map::StreamId>>;
 
 /// A QUIC connection and its associated data.
 #[derive(Debug)]
 pub(crate) struct Muxer {
     /// If this is `Some`, it is a stream that has been opened by the peer,
     /// but not yet accepted by the application.  Otherwise, this is `None`.
-    pending_stream: Option<StreamId>,
+    pending_stream: Option<stream_map::StreamId>,
     /// A channel to communicate with the endpoint.
     endpoint: Endpoint,
     /// The QUIC state machine.
     connection: Connection,
     /// Connection handle
     handle: ConnectionHandle,
-    /// Tasks blocked on writing
-    writers: HashMap<StreamId, std::task::Waker>,
-    /// Tasks blocked on reading
-    readers: HashMap<StreamId, std::task::Waker>,
-    /// Tasks that are waiting for their streams to close.
-    finishers: HashMap<StreamId, Option<oneshot::Sender<()>>>,
+    /// The stream statuses
+    streams: stream_map::Streams,
     /// Task waiting for new connections, or for the connection to finish handshaking.
     handshake_or_accept_waker: Option<std::task::Waker>,
     /// Tasks waiting to make a connection.
     connectors: StreamSenderQueue,
+    /// The number of outbound streams currently open.
+    outbound_streams: usize,
     /// A container for a packet that is waiting to be transmitted
     pending: Pending,
     /// The timer being used by this connection
@@ -591,12 +591,11 @@ impl Muxer {
         Muxer {
             close_waker: None,
             last_timeout: None,
+            outbound_streams: 1,
             pending_stream: None,
             connection,
             handle,
-            writers: HashMap::new(),
-            readers: HashMap::new(),
-            finishers: HashMap::new(),
+            streams: Default::default(),
             handshake_or_accept_waker: None,
             connectors: Default::default(),
             endpoint,
@@ -648,16 +647,8 @@ impl Muxer {
     fn shutdown(&mut self, error_code: u32) {
         debug!("shutting connection down!");
         self.wake_incoming();
-        for (_, v) in self.writers.drain() {
-            v.wake();
-        }
-        for (_, v) in self.readers.drain() {
-            v.wake();
-        }
-        for sender in self.finishers.drain().filter_map(|x| x.1) {
-            let _ = sender.send(());
-        }
-        self.connectors.truncate(0);
+        self.streams.wake_all();
+        self.connectors.clear();
         if !self.connection.is_closed() {
             self.connection.close(
                 Instant::now(),
@@ -673,17 +664,16 @@ impl Muxer {
         self.connection.handle_event(event)
     }
 
-    fn get_pending_stream(&mut self) -> Option<StreamId> {
+    fn get_pending_stream(&mut self) -> Option<stream_map::StreamId> {
         self.wake_driver();
         if let Some(id) = self.pending_stream.take() {
             Some(id)
         } else {
-            self.connection.open(Dir::Bi)
+            self.connection.open(Dir::Bi).map(|e| {
+                self.outbound_streams += 1;
+                self.streams.add_stream(e)
+            })
         }
-        .map(|id| {
-            self.finishers.insert(id, None);
-            id
-        })
     }
 
     pub(crate) fn process_app_events(&mut self) -> bool {
@@ -705,9 +695,7 @@ impl Muxer {
                         self.connection.side()
                     );
                     // Wake up the task waiting on us (if any)
-                    if let Some((_, waker)) = self.readers.remove_entry(&stream) {
-                        waker.wake()
-                    }
+                    self.streams.wake_reader(stream);
                 }
                 Event::StreamWritable { stream } => {
                     trace!(
@@ -716,9 +704,7 @@ impl Muxer {
                         self.connection.side()
                     );
                     // Wake up the task waiting on us (if any)
-                    if let Some((_, waker)) = self.writers.remove_entry(&stream) {
-                        waker.wake()
-                    }
+                    self.streams.wake_writer(stream)
                 }
                 Event::StreamAvailable { dir: Dir::Bi } => {
                     trace!(
@@ -738,9 +724,12 @@ impl Muxer {
                         a mutex that prevents other threads from calling open() in the \
                         meantime; qed",
                     );
+                    let mut stream = self.streams.add_stream(stream);
+                    self.outbound_streams += 1;
                     while let Some(oneshot) = self.connectors.pop_front() {
-                        if let Ok(()) = oneshot.send(stream) {
-                            continue 'a;
+                        stream = match oneshot.send(stream) {
+                            Ok(()) => continue 'a,
+                            Err(e) => e,
                         }
                     }
                     self.pending_stream = Some(stream)
@@ -768,20 +757,8 @@ impl Muxer {
                         self.connection.side(),
                         stop_reason
                     );
-                    if let Some(waker) = self.writers.remove(&stream) {
-                        waker.wake()
-                    }
-                    if let Some(sender) = self.finishers.remove(&stream).expect(
-                        "every write stream is placed in this map, and entries are removed \
-                         exactly once; qed",
-                    ) {
-                        let _ = sender.send(());
-                    }
-                    if self.finishers.is_empty() {
-                        if let Some(e) = self.close_waker.take() {
-                            e.wake()
-                        }
-                    }
+                    self.outbound_streams -= 1;
+                    self.streams.wake_writer(stream);
                 }
                 Event::Connected => {
                     debug!("connected!");

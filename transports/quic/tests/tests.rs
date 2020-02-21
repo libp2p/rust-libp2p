@@ -100,6 +100,7 @@ impl<'a> futures::Stream for Inbound<'a> {
 
 fn init() {
     use tracing_subscriber::{fmt::Subscriber, EnvFilter};
+    let _ = env_logger::try_init();
     let _ = Subscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
@@ -154,16 +155,9 @@ fn wildcard_expansion() {
 
 #[test]
 fn communicating_between_dialer_and_listener() {
-    use std::io::{stdout, Write as _};
     init();
-    let stdout = stdout();
     println!("");
-    for i in 0..10u32 {
-        {
-            let mut stdout = stdout.lock();
-            write!(&mut stdout, "\r{}", i).unwrap();
-            (&mut stdout).flush().unwrap();
-        }
+    for _ in 0..100u32 {
         do_test()
     }
 }
