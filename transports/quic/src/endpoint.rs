@@ -17,7 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-//
+
 use crate::{error::Error, socket, verifier, Upgrade};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
@@ -37,6 +37,8 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+
+use channel_ref::Channel;
 
 /// Represents the configuration for a QUIC transport capability for libp2p.
 #[derive(Debug, Clone)]
@@ -111,7 +113,7 @@ impl Config {
 }
 
 #[derive(Debug)]
-pub(crate) enum EndpointMessage {
+enum EndpointMessage {
     Dummy,
     ConnectionAccepted,
     EndpointEvent {
@@ -131,7 +133,7 @@ pub(super) struct EndpointInner {
 }
 
 impl EndpointInner {
-    pub(super) fn handle_event(
+    fn handle_event(
         &mut self,
         handle: ConnectionHandle,
         event: quinn_proto::EndpointEvent,
@@ -176,12 +178,15 @@ impl EndpointInner {
             Entry::Occupied(occupied) => occupied,
         };
         let mut connection = entry.get().lock();
-        connection.handle_event(event);
         let mut is_drained = false;
-        while let Some(event) = connection.poll_endpoint_events() {
-            is_drained |= event.is_drained();
-            if let Some(event) = inner.handle_event(handle, event) {
-                connection.handle_event(event)
+        {
+            let connection = &mut connection.connection().connection;
+            connection.handle_event(event);
+            while let Some(event) = connection.poll_endpoint_events() {
+                is_drained |= event.is_drained();
+                if let Some(event) = inner.handle_event(handle, event) {
+                    connection.handle_event(event)
+                }
             }
         }
         connection.process_app_events();
@@ -256,33 +261,159 @@ pub(super) struct EndpointData {
 type Sender = mpsc::Sender<EndpointMessage>;
 
 impl ConnectionEndpoint {
-    pub(crate) fn socket(&self) -> &socket::Socket {
-        &self.socket
+    #[inline]
+    pub(crate) fn is_handshaking(&mut self) -> bool {
+        self.connection.is_handshaking()
     }
 
-    pub(crate) fn poll_ready(
+    /// Notify the endpoint that the handshake has completed,
+    /// and get the certificates from it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the connection is still handshaking.
+    pub(crate) fn notify_handshake_complete(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<SendToken, mpsc::SendError>> {
-        self.channel.poll_ready(cx).map_ok(SendToken)
+    ) -> Poll<Result<Vec<rustls::Certificate>, mpsc::SendError>> {
+        assert!(!self.is_handshaking());
+        if self.connection.side().is_server() {
+            ready!(self.channel.poll_ready(cx))?;
+            self.channel
+                .start_send(EndpointMessage::ConnectionAccepted)?
+        }
+        Poll::Ready(Ok(self
+            .connection
+            .crypto_session()
+            .get_peer_certificates()
+            .expect(
+                "we have finished handshaking, so we have exactly one certificate; qed",
+            )))
     }
 
-    pub(crate) fn send_message(
+    /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.
+    pub(crate) fn send_endpoint_events(&mut self, cx: &mut Context<'_>) -> Result<(), Error> {
+        loop {
+            match self.channel.poll_ready(cx) {
+                Poll::Pending => break Ok(()),
+                Poll::Ready(token) => token?,
+            }
+            if let Some(event) = self.connection.poll_endpoint_events() {
+                self.channel.start_send(EndpointMessage::EndpointEvent {
+                    handle: self.handle,
+                    event,
+                })?
+            } else {
+                break Ok(());
+            }
+        }
+    }
+
+    /// Poll for the timeout
+    pub(crate) fn poll_timeout(&mut self) -> Option<Instant> {
+        self.connection.poll_timeout()
+    }
+
+    /// Handle a timeout
+    pub(crate) fn handle_timeout(&mut self, now: Instant) {
+        self.connection.handle_timeout(now)
+    }
+
+    /// Destroy a substream
+    pub(crate) fn destroy_stream(&mut self, id: quinn_proto::StreamId) {
+        // if either of these returns an error, there is nothing we can do, so
+        // just ignore it. That said, an error here should never happen unless
+        // the connection is closed.
+        let _ = self.connection.finish(id);
+        let _ = self.connection.stop_sending(id, Default::default());
+    }
+
+    pub(crate) fn poll_transmit_pending(
         &mut self,
-        event: EndpointMessage,
-        SendToken(()): SendToken,
-    ) -> Result<(), mpsc::SendError> {
-        self.channel.start_send(event)
+        now: Instant,
+        cx: &mut Context<'_>,
+    ) -> Result<(), Error> {
+        let connection = &mut self.connection;
+        match self
+            .pending
+            .send_packet(cx, &self.socket, &mut || connection.poll_transmit(now))
+        {
+            Poll::Ready(Ok(())) | Poll::Pending => Ok(()),
+            Poll::Ready(Err(e)) => Err(Error::IO(e)),
+        }
+    }
+
+    /// Check if this connection is drained.
+    pub(crate) fn is_drained(&self) -> bool {
+        self.connection.is_drained()
+    }
+
+    /// Accept an incoming stream, if possible.
+    pub(crate) fn accept(&mut self) -> Option<quinn_proto::StreamId> {
+        self.connection.accept(quinn_proto::Dir::Bi)
+    }
+
+    /// Open an outgoing stream if it is possible to do so.
+    pub(crate) fn open(&mut self) -> Option<quinn_proto::StreamId> {
+        self.connection.open(quinn_proto::Dir::Bi)
+    }
+
+    /// Write to a stream.
+    pub(crate) fn write(
+        &mut self,
+        id: quinn_proto::StreamId,
+        buffer: &[u8],
+    ) -> Result<usize, quinn_proto::WriteError> {
+        self.connection.write(id, buffer)
+    }
+
+    /// Shut down the writing side of a stream.
+    pub(crate) fn finish(
+        &mut self,
+        id: quinn_proto::StreamId,
+    ) -> Result<(), quinn_proto::FinishError> {
+        self.connection.finish(id)
+    }
+
+    /// Get application-facing events
+    pub(crate) fn poll(&mut self) -> Option<quinn_proto::Event> {
+        self.connection.poll()
+    }
+
+    /// Get the side of the stream
+    pub(crate) fn side(&self) -> quinn_proto::Side {
+        self.connection.side()
+    }
+
+    /// Read from a stream
+    pub(crate) fn read(
+        &mut self,
+        id: quinn_proto::StreamId,
+        buf: &mut [u8],
+    ) -> Result<usize, quinn_proto::ReadError> {
+        self.connection.read(id, buf).map(|size| size.unwrap_or(0))
+    }
+
+    /// Close the stream, if it is not closed already
+    pub(crate) fn close(&mut self, status: u32) {
+        if self.connection.is_closed() {
+            return;
+        }
+        self.connection.close(
+            std::time::Instant::now(),
+            quinn_proto::VarInt::from_u32(status),
+            Default::default(),
+        )
     }
 }
 
 mod channel_ref {
     use super::{Arc, EndpointData, EndpointMessage::Dummy, Sender};
     #[derive(Debug, Clone)]
-    pub(crate) struct Channel(Sender);
+    pub(super) struct Channel(Sender);
 
     impl Channel {
-        pub(crate) fn new(s: Sender) -> Self {
+        pub(super) fn new(s: Sender) -> Self {
             Self(s)
         }
     }
@@ -315,7 +446,7 @@ mod channel_ref {
     }
 }
 
-pub(crate) use channel_ref::{Channel, EndpointRef};
+pub(crate) use channel_ref::EndpointRef;
 
 /// A QUIC endpoint.  Each endpoint has its own configuration and listening socket.
 ///
@@ -337,6 +468,9 @@ pub struct Endpoint(EndpointRef);
 
 #[derive(Debug)]
 pub(crate) struct ConnectionEndpoint {
+    pending: socket::Pending,
+    connection: Connection,
+    handle: ConnectionHandle,
     channel: Channel,
     socket: Arc<socket::Socket>,
 }
@@ -433,13 +567,9 @@ impl Endpoint {
     }
 }
 
-fn create_muxer(
-    endpoint: ConnectionEndpoint,
-    connection: Connection,
-    handle: ConnectionHandle,
-    inner: &mut EndpointInner,
-) -> Upgrade {
-    super::connection::ConnectionDriver::spawn(endpoint, connection, handle, |weak| {
+fn create_muxer(endpoint: ConnectionEndpoint, inner: &mut EndpointInner) -> Upgrade {
+    let handle = endpoint.handle;
+    super::connection::ConnectionDriver::spawn(endpoint, |weak| {
         inner.muxers.insert(handle, weak);
     })
 }
@@ -452,10 +582,13 @@ fn accept_muxer(
     channel: Channel,
 ) {
     let connection_endpoint = ConnectionEndpoint {
+        pending: socket::Pending::default(),
+        connection,
+        handle,
         socket: endpoint.socket.clone(),
         channel,
     };
-    let upgrade = create_muxer(connection_endpoint, connection, handle, &mut *inner);
+    let upgrade = create_muxer(connection_endpoint, &mut *inner);
     if endpoint
         .new_connections
         .unbounded_send(ListenerEvent::Upgrade {
@@ -588,16 +721,17 @@ impl Transport for Endpoint {
                 warn!("Connection error: {:?}", e);
                 TransportError::Other(Error::CannotConnect(e))
             });
-        let (handle, conn) = s?;
+        let (handle, connection) = s?;
         let socket = endpoint.reference.socket.clone();
         let endpoint = ConnectionEndpoint {
+            pending: socket::Pending::default(),
+            connection,
+            handle,
             socket,
             channel: endpoint.channel,
         };
         Ok(super::connection::ConnectionDriver::spawn(
             endpoint,
-            conn,
-            handle,
             |weak| {
                 inner.muxers.insert(handle, weak);
             },

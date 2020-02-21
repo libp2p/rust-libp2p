@@ -17,18 +17,14 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use super::{
-    certificate,
-    endpoint::{ConnectionEndpoint as Endpoint, EndpointMessage},
-    error::Error,
-    socket::Pending,
-};
+
+use super::{certificate, endpoint::ConnectionEndpoint as Endpoint, error::Error};
 use async_macros::ready;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
 use log::{debug, error, info, trace, warn};
 use parking_lot::{Mutex, MutexGuard};
-use quinn_proto::{Connection, ConnectionHandle, Dir};
+use quinn_proto::Dir;
 use std::{
     mem::replace,
     pin::Pin,
@@ -175,23 +171,12 @@ impl StreamMuxer for QuicMuxer {
             },
             OutboundInner::Done => return,
         };
-        // if either of these returns an error, there is nothing we can do, so
-        // just ignore it. That said, an error here should never happen unless
-        // the connection is closed.
-        let _ = inner.connection.finish(id);
-        let _ = inner.connection.stop_sending(id, Default::default());
+        inner.connection.destroy_stream(id)
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {
         let mut inner = self.inner();
-        if substream.is_live() && inner.close_reason.is_none() {
-            if let Err(e) = inner.connection.finish(*substream.id) {
-                warn!("Error closing stream: {}", e);
-            }
-        }
-        let _ = inner
-            .connection
-            .stop_sending(*substream.id, Default::default());
+        inner.connection.destroy_stream(*substream.id);
         trace!("Removing substream {:?} from map", substream.id);
         inner.streams.remove(substream.id);
     }
@@ -214,7 +199,7 @@ impl StreamMuxer for QuicMuxer {
             )));
         }
         inner.wake_driver();
-        match inner.connection.accept(quinn_proto::Dir::Bi) {
+        match inner.connection.accept() {
             None => {
                 if let Some(waker) = replace(
                     &mut inner.handshake_or_accept_waker,
@@ -275,7 +260,6 @@ impl StreamMuxer for QuicMuxer {
                 }
             }
             Err(WriteError::Stopped(e)) => {
-                inner.streams.wake_writer(*substream.id);
                 substream.status = SubstreamStatus::Finished;
                 Poll::Ready(Err(Error::Stopped(e)))
             }
@@ -302,8 +286,7 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner();
         inner.wake_driver();
         match inner.connection.read(*substream.id, buf) {
-            Ok(Some(bytes)) => Poll::Ready(Ok(bytes)),
-            Ok(None) => Poll::Ready(Ok(0)),
+            Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(ReadError::Blocked) => {
                 if let Some(error) = &inner.close_reason {
                     Poll::Ready(Err(Error::ConnectionError(error.clone())))
@@ -325,10 +308,7 @@ impl StreamMuxer for QuicMuxer {
                 );
                 Poll::Ready(Err(Error::ExpiredStream))
             }
-            Err(ReadError::Reset(e)) => {
-                inner.streams.wake_reader(*substream.id);
-                Poll::Ready(Err(Error::Reset(e)))
-            }
+            Err(ReadError::Reset(e)) => Poll::Ready(Err(Error::Reset(e))),
         }
     }
 
@@ -342,7 +322,9 @@ impl StreamMuxer for QuicMuxer {
             SubstreamStatus::Finishing(ref mut channel) => {
                 self.inner().wake_driver();
                 match channel.poll_unpin(cx) {
-                    Poll::Ready(Ok(())) | Poll::Ready(Err(oneshot::Canceled)) => return Poll::Ready(Ok(())),
+                    Poll::Ready(Ok(())) | Poll::Ready(Err(oneshot::Canceled)) => {
+                        return Poll::Ready(Ok(()))
+                    }
                     Poll::Pending => {}
                 }
             }
@@ -392,12 +374,11 @@ impl StreamMuxer for QuicMuxer {
             inner.outbound_streams
         );
         inner.outbound_streams -= 1;
-        if inner.connection.is_closed() || inner.close_reason.is_some() {
+        if inner.close_reason.is_some() {
             return Poll::Ready(Ok(()));
         } else if inner.outbound_streams == 0 {
             inner.shutdown(0);
             inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
-            drop(inner.driver().poll_unpin(cx));
             return Poll::Ready(Ok(()));
         }
         if let Some(waker) = replace(&mut inner.close_waker, Some(cx.waker().clone())) {
@@ -440,7 +421,7 @@ impl Future for Upgrade {
         trace!("outbound polling!");
         let res = {
             let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
-            if inner.connection.is_drained() {
+            let peer_certificates = if inner.connection.is_drained() {
                 return Poll::Ready(Err(Error::ConnectionError(
                     inner
                         .close_reason
@@ -448,23 +429,12 @@ impl Future for Upgrade {
                         .expect("closed connections always have a reason; qed"),
                 )));
             } else if inner.connection.is_handshaking() {
-                assert!(
-                    !inner.connection.is_closed(),
-                    "a closed connection cannot be handshaking; qed"
-                );
                 inner.handshake_or_accept_waker = Some(cx.waker().clone());
                 return Poll::Pending;
-            } else if inner.connection.side().is_server() {
-                let endpoint = &mut inner.endpoint;
-                let token = ready!(endpoint.poll_ready(cx))?;
-                endpoint.send_message(EndpointMessage::ConnectionAccepted, token)?
-            }
+            } else {
+                ready!(inner.connection.notify_handshake_complete(cx))?
+            };
 
-            let peer_certificates: Vec<rustls::Certificate> = inner
-                .connection
-                .crypto_session()
-                .get_peer_certificates()
-                .expect("we have finished handshaking, so we have exactly one certificate; qed");
             certificate::extract_libp2p_peerid(
                 peer_certificates
                     .get(0)
@@ -492,12 +462,8 @@ pub(crate) struct Muxer {
     /// If this is `Some`, it is a stream that has been opened by the peer,
     /// but not yet accepted by the application.  Otherwise, this is `None`.
     pending_stream: Option<stream_map::StreamId>,
-    /// A channel to communicate with the endpoint.
-    endpoint: Endpoint,
-    /// The QUIC state machine.
-    connection: Connection,
-    /// Connection handle
-    handle: ConnectionHandle,
+    /// The QUIC state machine and endpoint messaging.
+    connection: Endpoint,
     /// The stream statuses
     streams: stream_map::Streams,
     /// Task waiting for new connections, or for the connection to finish handshaking.
@@ -506,8 +472,6 @@ pub(crate) struct Muxer {
     connectors: StreamSenderQueue,
     /// The number of outbound streams currently open.
     outbound_streams: usize,
-    /// A container for a packet that is waiting to be transmitted
-    pending: Pending,
     /// The timer being used by this connection
     timer: Option<futures_timer::Delay>,
     /// The close reason, if this connection has been lost
@@ -533,18 +497,6 @@ impl Drop for Muxer {
     }
 }
 
-impl Drop for QuicMuxer {
-    fn drop(&mut self) {
-        let inner = self.inner();
-        debug!("dropping muxer with side {:?}", inner.connection.side());
-        #[cfg(test)]
-        assert!(
-            !inner.connection.is_handshaking(),
-            "dropped a connection that was still handshaking"
-        );
-    }
-}
-
 impl Muxer {
     pub(crate) fn wake_driver(&mut self) {
         if let Some(waker) = self.waker.take() {
@@ -553,16 +505,14 @@ impl Muxer {
         }
     }
 
+    pub(crate) fn connection(&mut self) -> &mut Endpoint {
+        &mut self.connection
+    }
+
     fn wake_incoming(&mut self) {
         if let Some(waker) = self.handshake_or_accept_waker.take() {
             waker.wake()
         }
-    }
-
-    fn driver(&mut self) -> &mut async_std::task::JoinHandle<Result<(), Error>> {
-        self.driver
-            .as_mut()
-            .expect("we don’t call this until the driver is spawned; qed")
     }
 
     fn drive_timer(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
@@ -587,81 +537,29 @@ impl Muxer {
         false
     }
 
-    fn new(endpoint: Endpoint, connection: Connection, handle: ConnectionHandle) -> Self {
+    fn new(connection: Endpoint) -> Self {
         Muxer {
             close_waker: None,
             last_timeout: None,
             outbound_streams: 1,
             pending_stream: None,
-            connection,
-            handle,
             streams: Default::default(),
             handshake_or_accept_waker: None,
             connectors: Default::default(),
-            endpoint,
-            pending: Pending::default(),
+            connection,
             timer: None,
             close_reason: None,
             waker: None,
             driver: None,
         }
     }
-
-    pub(crate) fn poll_endpoint_events(&mut self) -> Option<quinn_proto::EndpointEvent> {
-        self.connection.poll_endpoint_events()
-    }
-
-    /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.
-    fn send_endpoint_events(&mut self, cx: &mut Context<'_>) -> Result<(), Error> {
-        loop {
-            let token = match self.endpoint.poll_ready(cx) {
-                Poll::Pending => break Ok(()),
-                Poll::Ready(token) => token?,
-            };
-            if let Some(event) = self.connection.poll_endpoint_events() {
-                self.endpoint.send_message(
-                    EndpointMessage::EndpointEvent {
-                        handle: self.handle,
-                        event,
-                    },
-                    token,
-                )?
-            } else {
-                break Ok(());
-            }
-        }
-    }
-
-    fn transmit_pending(&mut self, now: Instant, cx: &mut Context<'_>) -> Result<(), Error> {
-        let Self {
-            pending,
-            endpoint,
-            connection,
-            ..
-        } = self;
-        let _ =
-            pending.send_packet(cx, endpoint.socket(), &mut || connection.poll_transmit(now))?;
-        Ok(())
-    }
-
     fn shutdown(&mut self, error_code: u32) {
         debug!("shutting connection down!");
         self.wake_incoming();
         self.streams.wake_all();
         self.connectors.clear();
-        if !self.connection.is_closed() {
-            self.connection.close(
-                Instant::now(),
-                quinn_proto::VarInt::from_u32(error_code),
-                Default::default(),
-            );
-            self.process_app_events();
-        }
+        self.connection.close(error_code);
         self.wake_driver();
-    }
-
-    pub(crate) fn handle_event(&mut self, event: quinn_proto::ConnectionEvent) {
-        self.connection.handle_event(event)
     }
 
     fn get_pending_stream(&mut self) -> Option<stream_map::StreamId> {
@@ -669,18 +567,16 @@ impl Muxer {
         if let Some(id) = self.pending_stream.take() {
             Some(id)
         } else {
-            self.connection.open(Dir::Bi).map(|e| {
+            self.connection.open().map(|e| {
                 self.outbound_streams += 1;
                 self.streams.add_stream(e)
             })
         }
     }
 
-    pub(crate) fn process_app_events(&mut self) -> bool {
+    pub(crate) fn process_app_events(&mut self) {
         use quinn_proto::Event;
-        let mut keep_going = false;
         'a: while let Some(event) = self.connection.poll() {
-            keep_going = true;
             match event {
                 Event::StreamOpened { dir: Dir::Uni } | Event::DatagramReceived => {
                     panic!("we disabled incoming unidirectional streams and datagrams")
@@ -719,7 +615,7 @@ impl Muxer {
                         self.pending_stream.is_none(),
                         "we cannot have both pending tasks and a pending stream; qed"
                     );
-                    let stream = self.connection.open(Dir::Bi).expect(
+                    let stream = self.connection.open().expect(
                         "we just were told that there is a stream available; there is \
                         a mutex that prevents other threads from calling open() in the \
                         meantime; qed",
@@ -736,10 +632,6 @@ impl Muxer {
                 }
                 Event::ConnectionLost { reason } => {
                     debug!("lost connection due to {:?}", reason);
-                    debug_assert!(
-                        self.connection.is_closed(),
-                        "connection lost without being closed"
-                    );
                     self.close_reason = Some(reason);
                     if let Some(e) = self.close_waker.take() {
                         e.wake()
@@ -770,7 +662,6 @@ impl Muxer {
                 }
             }
         }
-        keep_going
     }
 }
 
@@ -781,13 +672,8 @@ pub(super) struct ConnectionDriver {
 }
 
 impl ConnectionDriver {
-    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Muxer>>)>(
-        endpoint: Endpoint,
-        connection: Connection,
-        handle: ConnectionHandle,
-        cb: T,
-    ) -> Upgrade {
-        let inner = Arc::new(Mutex::new(Muxer::new(endpoint, connection, handle)));
+    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Muxer>>)>(connection: Endpoint, cb: T) -> Upgrade {
+        let inner = Arc::new(Mutex::new(Muxer::new(connection)));
         cb(inner.clone());
         let handle = async_std::task::spawn(Self {
             inner: inner.clone(),
@@ -809,9 +695,9 @@ impl Future for ConnectionDriver {
         inner.waker = Some(cx.waker().clone());
         loop {
             let now = Instant::now();
-            inner.transmit_pending(now, cx)?;
+            inner.connection.poll_transmit_pending(now, cx)?;
             inner.process_app_events();
-            inner.send_endpoint_events(cx)?;
+            inner.connection.send_endpoint_events(cx)?;
             if inner.drive_timer(cx, now) {
                 continue;
             }
