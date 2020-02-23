@@ -274,7 +274,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         ConnectionId(task_id)
     }
 
-    /// Notifies all managed connections of an event.
+    /// Notifies the handlers of all managed connections of an event.
     ///
     /// This function is "atomic", in the sense that if `Poll::Pending` is
     /// returned then no event has been sent.
@@ -289,12 +289,19 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
             }
         }
 
-        for task in self.tasks.values_mut() {
+        for (id, task) in self.tasks.iter_mut() {
             let cmd = task::Command::NotifyHandler(event.clone());
             match task.sender.start_send(cmd) {
                 Ok(()) => {},
-                Err(ref err) if err.is_full() => unreachable!("by (*)"),
-                Err(_) => {},
+                Err(e) if e.is_full() => unreachable!("by (*)"),
+                Err(e) if e.is_disconnected() => {
+                    // The background task ended. The manager will eventually be
+                    // informed through an `Error` event from the task.
+                    log::trace!("Connection dropped: {:?}", id);
+                },
+                Err(e) => {
+                    log::error!("Unexpected error: {:?}", e);
+                }
             }
         }
 
@@ -307,6 +314,14 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
             Some(Entry::new(task))
         } else {
             None
+        }
+    }
+
+    /// Checks whether an established connection with the given ID is currently managed.
+    pub fn is_established(&self, id: &ConnectionId) -> bool {
+        match self.tasks.get(&id.0) {
+            Some(TaskInfo { state: TaskState::Established(..), .. }) => true,
+            _ => false
         }
     }
 
@@ -448,9 +463,14 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
                 // TODO: somehow report to user?
                 log::debug!("Notifying connection task failed: channel is full.");
             },
-            Err(e) => {
-                log::debug!("Notifying connection task failed: {:?}", e);
+            Err(ref e) if e.is_disconnected() => {
+                // The background task ended. The manager will eventually be
+                // informed through an `Error` event from the task.
+                log::trace!("Connection dropped: {:?}", self.task.key());
             },
+            Err(e) => {
+                log::error!("Unexpected error: {:?}", e)
+            }
         }
     }
 

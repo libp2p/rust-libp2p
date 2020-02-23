@@ -183,7 +183,6 @@ where
 impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
     Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
 where
-    TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash,
 {
     /// Creates a new empty `Pool`.
@@ -279,13 +278,8 @@ where
         TMuxer::OutboundSubstream: Send + 'static,
         TPeerId: Clone,
     {
+        self.limits.check_outgoing(|| self.iter_pending_outgoing().count())?;
         let endpoint = info.to_connected_point();
-        if let Some(limit) = self.limits.max_pending_outgoing {
-            let current = self.iter_pending_outgoing().count();
-            if current >= limit {
-                return Err(ConnectionLimit { limit, current })
-            }
-        }
         Ok(self.add_pending(future, handler, endpoint, info.peer_id.cloned()))
     }
 
@@ -366,6 +360,7 @@ where
         TMuxer::OutboundSubstream: Send + 'static,
         TConnInfo: Clone + Send + 'static,
         TPeerId: Clone,
+        TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     {
         if let Some(limit) = self.limits.max_established_per_peer {
             let current = self.num_peer_established(i.peer_id());
@@ -524,7 +519,7 @@ where
     /// Returns an iterator over all connection IDs and associated endpoints
     /// of established connections to `peer` known to the pool.
     pub fn iter_peer_established_info(&self, peer: &TPeerId)
-        -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint)> + '_
+        -> impl Iterator<Item = (&ConnectionId, &ConnectedPoint)> + fmt::Debug + '_
     {
         match self.established.get(peer) {
             Some(conns) => Either::Left(conns.iter()),
@@ -553,7 +548,7 @@ where
     pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<
         PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
     > where
-        TConnInfo: Clone,
+        TConnInfo: ConnectionInfo<PeerId = TPeerId> + Clone,
         TPeerId: Clone,
     {
         loop {
@@ -594,7 +589,8 @@ where
                     let id = entry.id();
                     if let Some((endpoint, peer)) = self.pending.remove(&id) {
                         if let Some(peer) = peer {
-                            let current = self.established.get(&peer).map_or(0, |conns| conns.len());
+                            let established = &self.established;
+                            let current = || established.get(&peer).map_or(0, |conns| conns.len());
                             if let Err(e) = self.limits.check_established(current) {
                                 let connected = entry.close();
                                 return Poll::Ready(PoolEvent::ConnectionLimitReached {
@@ -686,10 +682,7 @@ impl<TInEvent, TConnInfo, TPeerId>
     }
 
     /// Aborts the connection attempt, closing the connection.
-    pub fn abort(self)
-    where
-        TPeerId: Eq + Hash + Clone,
-    {
+    pub fn abort(self) {
         self.pending.remove(&self.entry.id());
         self.entry.abort();
     }
@@ -806,10 +799,15 @@ where
     /// Obtains the next connection, if any.
     pub fn next<'b>(&'b mut self) -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>>
     {
-        if let Some(id) = self.ids.next() {
-            let established = &mut self.pool.established;
-            if let Some(manager::Entry::Established(entry)) = self.pool.manager.entry(id) {
-                return Some(EstablishedConnection { entry, established })
+        while let Some(id) = self.ids.next() {
+            if self.pool.manager.is_established(&id) { // (*)
+                match self.pool.manager.entry(id) {
+                    Some(manager::Entry::Established(entry)) => {
+                        let established = &mut self.pool.established;
+                        return Some(EstablishedConnection { entry, established })
+                    }
+                    _ => unreachable!("by (*)")
+                }
             }
         }
         None
@@ -825,10 +823,15 @@ where
         -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>>
     where 'a: 'b
     {
-        if let Some(id) = self.ids.next() {
-            let established = &mut self.pool.established;
-            if let Some(manager::Entry::Established(entry)) = self.pool.manager.entry(id) {
-                return Some(EstablishedConnection { entry, established })
+        while let Some(id) = self.ids.next() {
+            if self.pool.manager.is_established(&id) { // (*)
+                match self.pool.manager.entry(id) {
+                    Some(manager::Entry::Established(entry)) => {
+                        let established = &mut self.pool.established;
+                        return Some(EstablishedConnection { entry, established })
+                    }
+                    _ => unreachable!("by (*)")
+                }
             }
         }
         None
@@ -844,8 +847,26 @@ pub struct PoolLimits {
 }
 
 impl PoolLimits {
-    fn check_established(&self, current: usize) -> Result<(), ConnectionLimit> {
-        if let Some(limit) = self.max_established_per_peer {
+    fn check_established<F>(&self, current: F) -> Result<(), ConnectionLimit>
+    where
+        F: FnOnce() -> usize
+    {
+        Self::check(current, self.max_established_per_peer)
+    }
+
+    fn check_outgoing<F>(&self, current: F) -> Result<(), ConnectionLimit>
+    where
+        F: FnOnce() -> usize
+    {
+        Self::check(current, self.max_pending_outgoing)
+    }
+
+    fn check<F>(current: F, limit: Option<usize>) -> Result<(), ConnectionLimit>
+    where
+        F: FnOnce() -> usize
+    {
+        if let Some(limit) = limit {
+            let current = current();
             if limit >= current {
                 return Err(ConnectionLimit { limit, current })
             }
