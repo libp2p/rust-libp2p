@@ -243,9 +243,14 @@ where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash + Clone,
 {
-    /// Attempts to establish a new connection to this peer using the given addresses.
+    /// Attempts to establish a new connection to this peer using the given addresses,
+    /// if there is currently no ongoing dialing attempt.
     ///
     /// Existing established connections are not affected.
+    ///
+    /// > **Note**: If there is an ongoing dialing attempt, a `DialingPeer`
+    /// > is returned with the given addresses and handler being ignored.
+    /// > You may want to check [`ConnectedPeer::is_dialing`] first.
     pub fn connect<I, TMuxer>(self, address: Multiaddr, remaining: I, handler: THandler)
         -> Result<DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
                   ConnectionLimit>
@@ -269,12 +274,10 @@ where
 
     {
         if self.network.dialing.contains_key(&self.peer_id) {
-            let mut peer = DialingPeer {
+            let peer = DialingPeer {
                 network: self.network,
                 peer_id: self.peer_id
             };
-            peer.connection().add_address(address);
-            peer.connection().add_addresses(remaining);
             Ok(peer)
         } else {
            self.network.dial_peer(DialingOpts {
@@ -300,6 +303,13 @@ where
     /// The number of established connections to the peer.
     pub fn num_connections(&self) -> usize {
         self.network.pool.num_peer_established(&self.peer_id)
+    }
+
+    /// Checks whether there is an ongoing dialing attempt to the peer.
+    ///
+    /// Returns `true` iff [`ConnectedPeer::into_dialing`] returns `Some`.
+    pub fn is_dialing(&self) -> bool {
+        self.network.dialing.contains_key(&self.peer_id)
     }
 
     /// Turns this peer into a [`DialingPeer`], if there is an ongoing
