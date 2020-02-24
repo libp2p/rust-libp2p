@@ -90,7 +90,13 @@ use libp2p_core::{
     Multiaddr,
     Negotiated,
     PeerId,
-    connection::{ConnectionId, ListenerId, ConnectionInfo, Substream},
+    connection::{
+        ConnectionId,
+        ConnectionInfo,
+        ConnectionError,
+        ListenerId,
+        Substream
+    },
     transport::{TransportError, boxed::Boxed as BoxTransport},
     muxing::{StreamMuxer, StreamMuxerBox},
     network::{
@@ -403,12 +409,20 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                 },
                 Poll::Ready(NetworkEvent::ConnectionError { connected, error, num_established }) => {
-                    log::trace!("Connection {:?} closed by {:?}", connected, error);
-                    if num_established == 0 {
-                        let peer = connected.peer_id().clone();
-                        let endpoint = connected.endpoint;
-                        this.behaviour.inject_disconnected(&peer, endpoint);
-                        return Poll::Ready(SwarmEvent::Disconnected(peer));
+                    log::error!("Connection {:?} closed by {:?}", connected, error);
+                    match error {
+                        ConnectionError::InvalidPeerId => {
+                            // No `ConnectionEstablished` event is emitted prior
+                            // to this error, hence `inject_disconnected` must
+                            // not be called, since `inject_connected` was not
+                            // called either.
+                        }
+                        _ => if num_established == 0 {
+                            let peer = connected.peer_id().clone();
+                            let endpoint = connected.endpoint;
+                            this.behaviour.inject_disconnected(&peer, endpoint);
+                            return Poll::Ready(SwarmEvent::Disconnected(peer));
+                        }
                     }
                 },
                 Poll::Ready(NetworkEvent::IncomingConnection(incoming)) => {
