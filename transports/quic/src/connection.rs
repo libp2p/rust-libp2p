@@ -463,14 +463,11 @@ pub(crate) struct Muxer {
     connectors: StreamSenderQueue,
     /// The number of outbound streams currently open.
     outbound_streams: usize,
-    /// The timer being used by this connection
-    timer: Option<futures_timer::Delay>,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
-    /// Waker to wake up the driver
+    /// Waker to wake up the driver. This is not a `MaybeWaker` because only the
+    /// driver task ever puts a waker here.
     waker: Option<std::task::Waker>,
-    /// The last timeout returned by `quinn_proto::poll_timeout`.
-    last_timeout: Option<Instant>,
     /// A handle to wait on the driver to exit.
     driver: Option<async_std::task::JoinHandle<Result<(), Error>>>,
     /// Close waker
@@ -506,39 +503,15 @@ impl Muxer {
         }
     }
 
-    fn drive_timer(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
-        match self.connection.poll_timeout() {
-            None => {
-                self.timer = None;
-                self.last_timeout = None
-            }
-            Some(t) if t <= now => {
-                self.connection.handle_timeout(now);
-                return true;
-            }
-            t if t == self.last_timeout => {}
-            Some(t) => self.timer = Some(futures_timer::Delay::new(t - now)),
-        }
-        if let Some(ref mut timer) = self.timer {
-            if timer.poll_unpin(cx).is_ready() {
-                self.connection.handle_timeout(now);
-                return true;
-            }
-        }
-        false
-    }
-
     fn new(connection: Endpoint) -> Self {
         Muxer {
             close_waker: None,
-            last_timeout: None,
             outbound_streams: 1,
             pending_stream: None,
             streams: Default::default(),
             handshake_or_accept_waker: None,
             connectors: Default::default(),
             connection,
-            timer: None,
             close_reason: None,
             waker: None,
             driver: None,
@@ -659,7 +632,12 @@ impl Muxer {
 #[derive(Debug)]
 pub(super) struct ConnectionDriver {
     inner: Arc<Mutex<Muxer>>,
+    /// The packet awaiting transmission, if any.
     outgoing_packet: Option<quinn_proto::Transmit>,
+    /// The timer being used by this connection
+    timer: Option<futures_timer::Delay>,
+    /// The last timeout returned by `quinn_proto::poll_timeout`.
+    last_timeout: Option<Instant>,
 }
 
 impl ConnectionDriver {
@@ -669,6 +647,8 @@ impl ConnectionDriver {
         let handle = async_std::task::spawn(Self {
             inner: inner.clone(),
             outgoing_packet: None,
+            timer: None,
+            last_timeout: None,
         });
         inner.lock().driver = Some(handle);
         Upgrade {
@@ -689,8 +669,23 @@ impl Future for ConnectionDriver {
             inner.connection.poll_transmit_pending(now, cx)?;
             inner.process_app_events();
             inner.connection.send_endpoint_events(cx)?;
-            if inner.drive_timer(cx, now) {
-                continue;
+            match inner.connection.poll_timeout() {
+                None => {
+                    this.timer = None;
+                    this.last_timeout = None
+                }
+                Some(t) if t <= now => {
+                    inner.connection.handle_timeout(now);
+                    continue;
+                }
+                t if t == this.last_timeout => {}
+                Some(t) => this.timer = Some(futures_timer::Delay::new(t - now)),
+            }
+            if let Some(ref mut timer) = this.timer {
+                if timer.poll_unpin(cx).is_ready() {
+                    inner.connection.handle_timeout(now);
+                    continue;
+                }
             }
             if !inner.connection.is_drained() {
                 break Poll::Pending;
