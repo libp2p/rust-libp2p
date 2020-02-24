@@ -352,7 +352,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             };
 
             match out_handler {
-                Some(h) => out_handler = Some(quote!{ #h.select(#builder) }),
+                Some(h) => out_handler = Some(quote!{ #into_protocols_handler::select(#h, #builder) }),
                 ref mut h @ None => *h = Some(builder),
             }
         }
