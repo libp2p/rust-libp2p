@@ -588,16 +588,19 @@ where
                 manager::Event::ConnectionEstablished { entry } => {
                     let id = entry.id();
                     if let Some((endpoint, peer)) = self.pending.remove(&id) {
+                        // Check connection limit.
+                        let established = &self.established;
+                        let current = || established.get(entry.connected().peer_id())
+                                            .map_or(0, |conns| conns.len());
+                        if let Err(e) = self.limits.check_established(current) {
+                            let connected = entry.close();
+                            return Poll::Ready(PoolEvent::ConnectionLimitReached {
+                                connected,
+                                info: e,
+                            })
+                        }
+                        // Check peer ID.
                         if let Some(peer) = peer {
-                            let established = &self.established;
-                            let current = || established.get(&peer).map_or(0, |conns| conns.len());
-                            if let Err(e) = self.limits.check_established(current) {
-                                let connected = entry.close();
-                                return Poll::Ready(PoolEvent::ConnectionLimitReached {
-                                    connected,
-                                    info: e,
-                                })
-                            }
                             if &peer != entry.connected().peer_id() {
                                 let connected = entry.close();
                                 let num_established = self.established.get(&peer)
@@ -621,6 +624,7 @@ where
                                 num_established: 0,
                             })
                         }
+                        // Add the connection to the pool.
                         let peer = entry.connected().peer_id().clone();
                         let conns = self.established.entry(peer).or_default();
                         let num_established = conns.len() + 1;
