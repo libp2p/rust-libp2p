@@ -1,3 +1,8 @@
+# Version 0.16.1 (2020-02-18)
+
+- Fixed wrong representation of `PeerId`s being used in `Kademlia::get_closest_peers`.
+- Implemented `FusedStream` for `Swarm`.
+
 # Version 0.16.0 (2020-02-13)
 
 - Removed the `Substream` associated type from the `ProtocolsHandler` trait. The type of the substream is now always `libp2p::swarm::NegotiatedSubstream`.
