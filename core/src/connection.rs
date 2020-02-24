@@ -26,7 +26,7 @@ mod substream;
 pub(crate) mod manager;
 pub(crate) mod pool;
 
-pub use error::ConnectionError;
+pub use error::{ConnectionError, PendingConnectionError};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
 pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
 pub use manager::ConnectionId;
@@ -246,8 +246,8 @@ where
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
-    pub fn poll<TTransErr>(mut self: Pin<&mut Self>, cx: &mut Context)
-        -> Poll<Result<THandler::OutEvent, ConnectionError<THandler::Error, TTransErr>>>
+    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context)
+        -> Poll<Result<THandler::OutEvent, ConnectionError<THandler::Error>>>
     {
         loop {
             let mut io_pending = false;
@@ -329,3 +329,8 @@ pub struct ConnectionLimit {
     pub current: usize,
 }
 
+impl fmt::Display for ConnectionLimit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.current, self.limit)
+    }
+}

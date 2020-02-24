@@ -24,11 +24,10 @@ use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::{
-    ConnectedPoint,
     Network,
     PeerId,
     Transport,
-    connection::ConnectionError,
+    connection::PendingConnectionError,
     muxing::StreamMuxerBox,
     network::{NetworkEvent, peer::PeerState},
     upgrade,
@@ -141,7 +140,7 @@ fn deny_incoming_connec() {
                 new_state: PeerState::Disconnected,
                 peer_id,
                 multiaddr,
-                error: ConnectionError::Transport(_)
+                error: PendingConnectionError::Transport(_)
             }) => {
                 assert_eq!(peer_id, *swarm1.local_peer_id());
                 assert_eq!(multiaddr, address);
@@ -203,28 +202,26 @@ fn dial_self() {
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
-                Poll::Ready(NetworkEvent::ConnectionError {
-                    connected,
-                    error: ConnectionError::InvalidPeerId { .. },
-                    num_established: 0,
+                Poll::Ready(NetworkEvent::UnknownPeerDialError {
+                    multiaddr,
+                    error: PendingConnectionError::InvalidPeerId { .. },
+                    ..
                 }) => {
-                    match connected.endpoint {
-                        ConnectedPoint::Dialer { address } => {
-                            assert!(!got_dial_err);
-                            assert_eq!(address, local_address);
-                            got_dial_err = true;
-                            if got_inc_err {
-                                return Poll::Ready(Ok(()))
-                            }
-                        },
-                        ConnectedPoint::Listener { local_addr, .. } => {
-                            assert!(!got_inc_err);
-                            assert_eq!(local_addr, local_address);
-                            got_inc_err = true;
-                            if got_dial_err {
-                                return Poll::Ready(Ok(()))
-                            }
-                        }
+                    assert!(!got_dial_err);
+                    assert_eq!(multiaddr, local_address);
+                    got_dial_err = true;
+                    if got_inc_err {
+                        return Poll::Ready(Ok(()))
+                    }
+                },
+                Poll::Ready(NetworkEvent::IncomingConnectionError {
+                    local_addr, ..
+                }) => {
+                    assert!(!got_inc_err);
+                    assert_eq!(local_addr, local_address);
+                    got_inc_err = true;
+                    if got_dial_err {
+                       return Poll::Ready(Ok(()))
                     }
                 },
                 Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
@@ -300,7 +297,7 @@ fn multiple_addresses_err() {
                     new_state,
                     peer_id,
                     multiaddr,
-                    error: ConnectionError::Transport(_)
+                    error: PendingConnectionError::Transport(_)
                 }) => {
                     assert_eq!(peer_id, target);
                     let expected = addresses.remove(0);

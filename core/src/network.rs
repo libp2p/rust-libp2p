@@ -32,7 +32,6 @@ use crate::{
     address_translation,
     connection::{
         ConnectionId,
-        ConnectionError,
         ConnectionLimit,
         ConnectionHandler,
         ConnectionInfo,
@@ -42,6 +41,7 @@ use crate::{
         ListenersEvent,
         ListenerId,
         ListenersStream,
+        PendingConnectionError,
         Substream,
         pool::{Pool, PoolEvent, PoolLimits},
     },
@@ -224,7 +224,7 @@ where
         TPeerId: Send + 'static,
     {
         let future = self.transport().clone().dial(address.clone())?
-            .map_err(|err| ConnectionError::Transport(TransportError::Other(err)));
+            .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
         let info = OutgoingInfo { address, peer_id: None };
         self.pool.add_outgoing(future, handler, info).map_err(DialError::MaxPending)
     }
@@ -372,12 +372,6 @@ where
                     num_established,
                 }
             }
-            Poll::Ready(PoolEvent::ConnectionLimitReached { connected, info }) => {
-                NetworkEvent::ConnectionLimitReached {
-                    connected,
-                    info,
-                }
-            }
             Poll::Ready(PoolEvent::PendingConnectionError { id, endpoint, error, handler, pool, .. }) => {
                 let dialing = &mut self.dialing;
                 let (next, event) = on_connection_failed(pool, dialing, id, endpoint, error, handler);
@@ -462,12 +456,12 @@ where
 {
     let result = match transport.dial(opts.address.clone()) {
         Ok(fut) => {
-            let fut = fut.map_err(|e| ConnectionError::Transport(TransportError::Other(e)));
+            let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
             let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
             pool.add_outgoing(fut, opts.handler, info)
         },
         Err(err) => {
-            let fut = future::err(ConnectionError::Transport(err));
+            let fut = future::err(PendingConnectionError::Transport(err));
             let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
             pool.add_outgoing(fut, opts.handler, info)
         },
@@ -498,8 +492,8 @@ fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TP
     dialing: &mut FnvHashMap<TPeerId, peer::DialingAttempt>,
     id: ConnectionId,
     endpoint: ConnectedPoint,
-    error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error, TTrans::Error>,
-    handler: THandler,
+    error: PendingConnectionError<TTrans::Error>,
+    handler: Option<THandler>,
 ) -> (Option<DialingOpts<TPeerId, THandler>>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>)
 where
     TTrans: Transport,
@@ -530,18 +524,23 @@ where
             }
         };
 
-        let opts = if !attempt.next.is_empty() {
-            let mut attempt = attempt;
-            let next_attempt = attempt.next.remove(0);
-            Some(DialingOpts {
-                peer: peer_id.clone(),
-                handler,
-                address: next_attempt,
-                remaining: attempt.next
-            })
-        } else {
-            None
-        };
+        let opts =
+            if let Some(handler) = handler {
+                if !attempt.next.is_empty() {
+                    let mut attempt = attempt;
+                    let next_attempt = attempt.next.remove(0);
+                    Some(DialingOpts {
+                        peer: peer_id.clone(),
+                        handler,
+                        address: next_attempt,
+                        remaining: attempt.next
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
         (opts, NetworkEvent::DialError {
             new_state,

@@ -24,17 +24,18 @@ use crate::{
     PeerId,
     connection::{
         self,
+        Connected,
+        Connection,
         ConnectionId,
         ConnectionLimit,
-        IncomingInfo,
-        OutgoingInfo,
-        Connection,
-        Substream,
-        Connected,
         ConnectionError,
         ConnectionHandler,
-        IntoConnectionHandler,
         ConnectionInfo,
+        IncomingInfo,
+        IntoConnectionHandler,
+        OutgoingInfo,
+        Substream,
+        PendingConnectionError,
         manager::{self, Manager},
     },
     muxing::StreamMuxer,
@@ -88,22 +89,13 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
         num_established: usize,
     },
 
-    /// A newly established connection has been dropped because of the configured
-    /// per-peer connection limit.
-    ConnectionLimitReached {
-        connected: Connected<TConnInfo>,
-        info: ConnectionLimit,
-    },
-
     /// An established connection has encountered an error.
-    ///
-    /// Can only happen after a node has been successfully reached.
     ConnectionError {
         id: ConnectionId,
         /// Information about the connection that errored.
         connected: Connected<TConnInfo>,
-        /// The error that happened.
-        error: ConnectionError<THandlerErr, TTransErr>,
+        /// The error that occurred.
+        error: ConnectionError<THandlerErr>,
         /// A reference to the pool that used to manage the connection.
         pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>,
         /// The remaining number of established connections to the same peer.
@@ -117,9 +109,10 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
         /// The local endpoint of the failed connection.
         endpoint: ConnectedPoint,
         /// The error that occurred.
-        error: ConnectionError<THandlerErr, TTransErr>,
-        /// The handler that was supposed to handle the connection.
-        handler: THandler,
+        error: PendingConnectionError<TTransErr>,
+        /// The handler that was supposed to handle the connection,
+        /// if the connection failed before the handler was consumed.
+        handler: Option<THandler>,
         /// The (expected) peer of the failed connection.
         peer: Option<TPeerId>,
         /// A reference to the pool that managed the connection.
@@ -170,12 +163,6 @@ where
                     .field("event", event)
                     .finish()
             },
-            PoolEvent::ConnectionLimitReached { ref connected, ref info } => {
-                f.debug_struct("PoolEvent::ConnectionLimitReached")
-                    .field("connected", connected)
-                    .field("info", info)
-                    .finish()
-            }
         }
     }
 }
@@ -219,7 +206,7 @@ where
     where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
         TFut: Future<
-            Output = Result<(TConnInfo, TMuxer), ConnectionError<THandlerErr, TTransErr>>
+            Output = Result<(TConnInfo, TMuxer), PendingConnectionError<TTransErr>>
         > + Send + 'static,
         THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
         THandler::Handler: ConnectionHandler<
@@ -260,7 +247,7 @@ where
     where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
         TFut: Future<
-            Output = Result<(TConnInfo, TMuxer), ConnectionError<THandlerErr, TTransErr>>
+            Output = Result<(TConnInfo, TMuxer), PendingConnectionError<TTransErr>>
         > + Send + 'static,
         THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
         THandler::Handler: ConnectionHandler<
@@ -295,7 +282,7 @@ where
     where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
         TFut: Future<
-            Output = Result<(TConnInfo, TMuxer), ConnectionError<THandlerErr, TTransErr>>
+            Output = Result<(TConnInfo, TMuxer), PendingConnectionError<TTransErr>>
         > + Send + 'static,
         THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
         THandler::Handler: ConnectionHandler<
@@ -564,7 +551,7 @@ where
                             id,
                             endpoint,
                             error,
-                            handler,
+                            handler: Some(handler),
                             peer,
                             pool: self
                         })
@@ -594,34 +581,38 @@ where
                                             .map_or(0, |conns| conns.len());
                         if let Err(e) = self.limits.check_established(current) {
                             let connected = entry.close();
-                            return Poll::Ready(PoolEvent::ConnectionLimitReached {
-                                connected,
-                                info: e,
+                            return Poll::Ready(PoolEvent::PendingConnectionError {
+                                id,
+                                endpoint: connected.endpoint,
+                                peer: Some(connected.info.peer_id().clone()),
+                                error: PendingConnectionError::ConnectionLimit(e),
+                                pool: self,
+                                handler: None,
                             })
                         }
                         // Check peer ID.
                         if let Some(peer) = peer {
                             if &peer != entry.connected().peer_id() {
                                 let connected = entry.close();
-                                let num_established = self.established.get(&peer)
-                                    .map_or(0, |conns| conns.len());
-                                return Poll::Ready(PoolEvent::ConnectionError {
+                                return Poll::Ready(PoolEvent::PendingConnectionError {
                                     id,
-                                    connected,
-                                    error: ConnectionError::InvalidPeerId,
+                                    endpoint: connected.endpoint,
+                                    peer: Some(connected.info.peer_id().clone()),
+                                    error: PendingConnectionError::InvalidPeerId,
                                     pool: self,
-                                    num_established,
+                                    handler: None,
                                 })
                             }
                         }
                         if &self.local_id == entry.connected().peer_id() {
                             let connected = entry.close();
-                            return Poll::Ready(PoolEvent::ConnectionError {
+                            return Poll::Ready(PoolEvent::PendingConnectionError {
                                 id,
-                                connected,
-                                error: ConnectionError::InvalidPeerId,
+                                endpoint: connected.endpoint,
+                                peer: Some(connected.info.peer_id().clone()),
+                                error: PendingConnectionError::InvalidPeerId,
                                 pool: self,
-                                num_established: 0,
+                                handler: None,
                             })
                         }
                         // Add the connection to the pool.

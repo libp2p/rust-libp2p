@@ -34,6 +34,7 @@ use crate::{
         IncomingInfo,
         IntoConnectionHandler,
         ListenerId,
+        PendingConnectionError,
         Substream,
         pool::Pool,
     },
@@ -96,7 +97,7 @@ where
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error, TTrans::Error>,
+        error: PendingConnectionError<TTrans::Error>,
     },
 
     /// A new connection to a peer has been opened.
@@ -107,15 +108,6 @@ where
         num_established: usize,
     },
 
-    /// A newly established connection has been dropped because the
-    /// connection limit for a peer has been reached.
-    ConnectionLimitReached {
-        /// Information about the dropped connection.
-        connected: Connected<TConnInfo>,
-        /// Information about the connection limit.
-        info: ConnectionLimit,
-    },
-
     /// An established connection to a peer has encountered an error.
     ///
     /// The connection is closed as a result of the error.
@@ -123,7 +115,7 @@ where
         /// Information about the connection that encountered the error.
         connected: Connected<TConnInfo>,
         /// The error that occurred.
-        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error, TTrans::Error>,
+        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error>,
         /// The remaining number of established connections to the same peer.
         num_established: usize,
     },
@@ -140,7 +132,7 @@ where
         multiaddr: Multiaddr,
 
         /// The error that happened.
-        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error, TTrans::Error>,
+        error: PendingConnectionError<TTrans::Error>,
     },
 
     /// Failed to reach a peer that we were trying to dial.
@@ -149,10 +141,11 @@ where
         multiaddr: Multiaddr,
 
         /// The error that happened.
-        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error, TTrans::Error>,
+        error: PendingConnectionError<TTrans::Error>,
 
-        /// The handler that was passed to `dial()`.
-        handler: THandler,
+        /// The handler that was passed to `dial()`, if the
+        /// connection failed before the handler was consumed.
+        handler: Option<THandler>,
     },
 
     /// An established connection produced an event.
@@ -246,12 +239,6 @@ where
                     .field("event", event)
                     .finish()
             }
-            NetworkEvent::ConnectionLimitReached { connected, info } => {
-                f.debug_struct("ConnectionLimitReached")
-                    .field("connected", connected)
-                    .field("info", info)
-                    .finish()
-            }
         }
     }
 }
@@ -318,7 +305,7 @@ where
     {
         let handler = builder(self.info());
         let upgrade = self.upgrade
-            .map_err(|err| ConnectionError::Transport(TransportError::Other(err)));
+            .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
         let info = IncomingInfo {
             local_addr: &self.local_addr,
             send_back_addr: &self.send_back_addr,

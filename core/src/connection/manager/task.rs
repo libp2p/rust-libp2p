@@ -20,11 +20,20 @@
 
 use crate::{
     muxing::StreamMuxer,
-    connection::{Close, Connected, ConnectionError},
+    connection::{
+        Close,
+        Connected,
+        Connection,
+        ConnectionError,
+        ConnectionHandler,
+        IntoConnectionHandler,
+        PendingConnectionError,
+        Substream,
+    },
 };
 use futures::{prelude::*, channel::mpsc, stream};
 use std::{pin::Pin, task::Context, task::Poll};
-use super::{Connection, ConnectionHandler, ConnectResult, IntoConnectionHandler, Substream};
+use super::ConnectResult;
 
 /// Identifier of a [`Task`] in a [`Manager`](super::Manager).
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,11 +51,10 @@ pub enum Command<T> {
 pub enum Event<T, H, TE, HE, C> {
     /// A connection to a node has succeeded.
     Established { id: TaskId, info: Connected<C> },
-    /// A connection produced an error.
-    ///
-    /// If the connection was already established, `handler` is `None`
-    /// since it was consumed when creating the `Connection`.
-    Error { id: TaskId, error: ConnectionError<HE, TE>, handler: Option<H> },
+    /// An established connection produced an error.
+    Error { id: TaskId, error: ConnectionError<HE> },
+    /// A pending connection failed.
+    Failed { id: TaskId, error: PendingConnectionError<TE>, handler: H },
     /// Notify the manager of an event from the connection.
     Notify { id: TaskId, event: T }
 }
@@ -57,6 +65,7 @@ impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
             Event::Established { id, .. } => id,
             Event::Error { id, .. } => id,
             Event::Notify { id, .. } => id,
+            Event::Failed { id, .. } => id,
         }
     }
 }
@@ -174,7 +183,7 @@ where
 impl<F, M, H, I, O, E, C> Future for Task<F, M, H, I, O, E, C>
 where
     M: StreamMuxer,
-    F: Future<Output = ConnectResult<C, M, <H::Handler as ConnectionHandler>::Error, E>>,
+    F: Future<Output = ConnectResult<C, M, E>>,
     H: IntoConnectionHandler<C>,
     H::Handler: ConnectionHandler<Substream = Substream<M>, InEvent = I, OutEvent = O>
 {
@@ -216,8 +225,7 @@ where
                             return Poll::Pending
                         }
                         Poll::Ready(Err(error)) => {
-                            let handler = Some(handler);
-                            let event = Event::Error { id, handler, error  };
+                            let event = Event::Failed { id, handler, error };
                             this.state = State::EstablishedReady { connection: None, event }
                         }
                     }
@@ -255,7 +263,7 @@ where
                             Poll::Ready(Err(error)) => {
                                 // Notify the manager of the error via an event,
                                 // dropping the connection.
-                                let event = Event::Error { id, error, handler: None };
+                                let event = Event::Error { id, error };
                                 this.state = State::EstablishedReady { connection: None, event };
                                 continue 'poll
                             }

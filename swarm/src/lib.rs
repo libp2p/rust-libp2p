@@ -93,7 +93,6 @@ use libp2p_core::{
     connection::{
         ConnectionId,
         ConnectionInfo,
-        ConnectionError,
         ListenerId,
         Substream
     },
@@ -392,9 +391,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     let connection = connection.id();
                     this.behaviour.inject_event(peer, connection, event);
                 },
-                Poll::Ready(NetworkEvent::ConnectionLimitReached { connected, info }) => {
-                    log::warn!("Connection limit reached: {:?}. Dropped {:?}", info, connected);
-                },
                 Poll::Ready(NetworkEvent::ConnectionEstablished { connection, num_established }) => {
                     let peer = connection.peer_id().clone();
                     if this.banned_peers.contains(&peer) {
@@ -410,19 +406,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 },
                 Poll::Ready(NetworkEvent::ConnectionError { connected, error, num_established }) => {
                     log::error!("Connection {:?} closed by {:?}", connected, error);
-                    match error {
-                        ConnectionError::InvalidPeerId => {
-                            // No `ConnectionEstablished` event is emitted prior
-                            // to this error, hence `inject_disconnected` must
-                            // not be called, since `inject_connected` was not
-                            // called either.
-                        }
-                        _ => if num_established == 0 {
-                            let peer = connected.peer_id().clone();
-                            let endpoint = connected.endpoint;
-                            this.behaviour.inject_disconnected(&peer, endpoint);
-                            return Poll::Ready(SwarmEvent::Disconnected(peer));
-                        }
+                    if num_established == 0 {
+                        let peer = connected.peer_id().clone();
+                        let endpoint = connected.endpoint;
+                        this.behaviour.inject_disconnected(&peer, endpoint);
+                        return Poll::Ready(SwarmEvent::Disconnected(peer));
                     }
                 },
                 Poll::Ready(NetworkEvent::IncomingConnection(incoming)) => {

@@ -41,6 +41,7 @@ use super::{
     ConnectionError,
     ConnectionHandler,
     IntoConnectionHandler,
+    PendingConnectionError,
     Substream
 };
 use task::{Task, TaskId};
@@ -67,7 +68,7 @@ mod task;
 // manager.
 
 /// The result of a pending connection attempt.
-type ConnectResult<C, M, HE, TE> = Result<(Connected<C>, M), ConnectionError<HE, TE>>;
+type ConnectResult<C, M, TE> = Result<(Connected<C>, M), PendingConnectionError<TE>>;
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -159,7 +160,7 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
         /// no longer resolve to a valid entry in the manager.
         id: ConnectionId,
         /// What happened.
-        error: ConnectionError<HE, TE>,
+        error: PendingConnectionError<TE>,
         /// The handler that was supposed to handle the failed connection.
         handler: H
     },
@@ -175,7 +176,7 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
         /// Information about the connection that encountered the error.
         connected: Connected<C>,
         /// The error that occurred.
-        error: ConnectionError<HE, TE>,
+        error: ConnectionError<HE>,
     },
 
     /// A connection has been established.
@@ -220,7 +221,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         C: Send + 'static,
         M: StreamMuxer + Send + Sync + 'static,
         M::OutboundSubstream: Send + 'static,
-        F: Future<Output = ConnectResult<C, M, HE, TE>> + Send + 'static,
+        F: Future<Output = ConnectResult<C, M, TE>> + Send + 'static,
         H: IntoConnectionHandler<C> + Send + 'static,
         H::Handler: ConnectionHandler<
             Substream = Substream<M>,
@@ -367,19 +368,20 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
                         entry: EstablishedEntry { task },
                     }
                 }
-                task::Event::Error { id, error, handler } => {
+                task::Event::Failed { id, error, handler } => {
+                    let id = ConnectionId(id);
+                    let _ = task.remove();
+                    Event::PendingConnectionError { id, error, handler }
+                }
+                task::Event::Error { id, error } => {
                     let id = ConnectionId(id);
                     let task = task.remove();
-                    match handler {
-                        Some(handler) =>
-                            Event::PendingConnectionError { id, error, handler },
-                        None => match task.state {
-                            TaskState::Established(connected) =>
-                                Event::ConnectionError { id, connected, error },
-                            TaskState::Pending => unreachable!(
-                                "handler = `None` implies (2) occurred on that task and thus (3)."
+                    match task.state {
+                        TaskState::Established(connected) =>
+                            Event::ConnectionError { id, connected, error },
+                        TaskState::Pending => unreachable!(
+                            "`Event::Error` implies (2) occurred on that task and thus (3)."
                             ),
-                        }
                     }
                 }
 

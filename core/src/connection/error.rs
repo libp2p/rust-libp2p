@@ -18,19 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use std::{io, fmt};
 
-/// Errors that can occur in the context of a pending or established `Connection`.
+/// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]
-pub enum ConnectionError<THandlerErr, TTransErr> {
-    /// An error occurred while negotiating the transport protocol(s).
-    Transport(TransportError<TTransErr>),
-
-    /// The peer identity obtained on the connection did not
-    /// match the one that was expected or is otherwise invalid.
-    InvalidPeerId,
-
+pub enum ConnectionError<THandlerErr> {
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
@@ -39,35 +33,83 @@ pub enum ConnectionError<THandlerErr, TTransErr> {
     Handler(THandlerErr),
 }
 
-impl<THandlerErr, TTransErr> fmt::Display
-for ConnectionError<THandlerErr, TTransErr>
+impl<THandlerErr> fmt::Display
+for ConnectionError<THandlerErr>
 where
     THandlerErr: fmt::Display,
-    TTransErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConnectionError::IO(err) => write!(f, "I/O error: {}", err),
-            ConnectionError::Handler(err) => write!(f, "Handler error: {}", err),
-            ConnectionError::Transport(err) => write!(f, "Transport error: {}", err),
-            ConnectionError::InvalidPeerId => write!(f, "Invalid peer ID.")
+            ConnectionError::IO(err) =>
+                write!(f, "Connection error: I/O error: {}", err),
+            ConnectionError::Handler(err) =>
+                write!(f, "Connection error: Handler error: {}", err),
         }
     }
 }
 
-impl<THandlerErr, TTransErr> std::error::Error
-for ConnectionError<THandlerErr, TTransErr>
+impl<THandlerErr> std::error::Error
+for ConnectionError<THandlerErr>
 where
     THandlerErr: std::error::Error + 'static,
-    TTransErr: std::error::Error + 'static
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::Handler(err) => Some(err),
-            ConnectionError::Transport(err) => Some(err),
-            ConnectionError::InvalidPeerId { .. } => None,
         }
     }
 }
 
+/// Errors that can occur in the context of a pending `Connection`.
+#[derive(Debug)]
+pub enum PendingConnectionError<TTransErr> {
+    /// An error occurred while negotiating the transport protocol(s).
+    Transport(TransportError<TTransErr>),
+
+    /// The peer identity obtained on the connection did not
+    /// match the one that was expected or is otherwise invalid.
+    InvalidPeerId,
+
+    /// The pending connection was successfully negotiated but dropped
+    /// because the connection limit for a peer has been reached.
+    ConnectionLimit(ConnectionLimit),
+
+    /// An I/O error occurred on the connection.
+    // TODO: Eventually this should also be a custom error?
+    IO(io::Error),
+}
+
+impl<TTransErr> fmt::Display
+for PendingConnectionError<TTransErr>
+where
+    TTransErr: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PendingConnectionError::IO(err) =>
+                write!(f, "Pending connection: I/O error: {}", err),
+            PendingConnectionError::Transport(err) =>
+                write!(f, "Pending connection: Transport error: {}", err),
+            PendingConnectionError::InvalidPeerId =>
+                write!(f, "Pending connection: Invalid peer ID."),
+            PendingConnectionError::ConnectionLimit(l) =>
+                write!(f, "Pending connection: Connection limit: {}.", l)
+        }
+    }
+}
+
+impl<TTransErr> std::error::Error
+for PendingConnectionError<TTransErr>
+where
+    TTransErr: std::error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            PendingConnectionError::IO(err) => Some(err),
+            PendingConnectionError::Transport(err) => Some(err),
+            PendingConnectionError::InvalidPeerId => None,
+            PendingConnectionError::ConnectionLimit(..) => None,
+        }
+    }
+}
