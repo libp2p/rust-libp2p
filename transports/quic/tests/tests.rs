@@ -85,6 +85,21 @@ impl Drop for QuicStream {
     }
 }
 
+struct Outbound<'a>(&'a mut Muxer, libp2p_quic::Outbound);
+
+impl<'a> futures::Future for Outbound<'a> {
+    type Output = Result<QuicStream>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let Outbound(conn, id) = &mut *self;
+        let id: Option<Substream> = Some(ready!(conn.poll_outbound(cx, id))?);
+        Poll::Ready(Ok(QuicStream {
+            id,
+            muxer: self.get_mut().0.clone(),
+            shutdown: false,
+        }))
+    }
+}
+
 #[derive(Debug)]
 struct Inbound<'a>(&'a mut Muxer);
 impl<'a> futures::Stream for Inbound<'a> {
@@ -156,7 +171,6 @@ fn wildcard_expansion() {
 #[test]
 fn communicating_between_dialer_and_listener() {
     init();
-    println!("");
     for _ in 0..100u32 {
         do_test()
     }
@@ -184,6 +198,7 @@ fn do_test() {
     let (quic_endpoint, join) = retry_on_eaddrinuse(quic_config, addr.clone());
     let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
 
+    trace!("running tests");
     let handle = async_std::task::spawn(async move {
         let key = loop {
             trace!("awaiting connection");
@@ -240,13 +255,11 @@ fn do_test() {
             "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
         );
         // Obtain a future socket through dialing
-        let connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
+        let mut connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
         trace!("Received a Connection: {:?}", connection);
-        let mut stream = QuicStream {
-            id: Some(connection.1.open_outbound().await.expect("failed")),
-            muxer: connection.1.clone(),
-            shutdown: false,
-        };
+        let id = connection.1.open_outbound();
+        let mut stream = Outbound(&mut connection.1, id).await.expect("failed");
+
         debug!("opened a stream: id {:?}", stream.id);
         let result = stream.read(&mut [][..]).await;
         let result = result.expect_err("reading from an unwritten stream cannot succeed");
