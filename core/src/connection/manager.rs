@@ -73,6 +73,17 @@ type ConnectResult<C, M, HE, TE> = Result<(Connected<C>, M), ConnectionError<HE,
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConnectionId(TaskId);
 
+impl ConnectionId {
+    /// Creates a `ConnectionId` from a non-negative integer.
+    ///
+    /// This is primarily useful for creating connection IDs
+    /// in test environments. There is in general no guarantee
+    /// that all connection IDs are based on non-negative integers.
+    pub fn new(id: usize) -> Self {
+        ConnectionId(TaskId(id))
+    }
+}
+
 /// A connection `Manager` orchestrates the I/O of a set of connections.
 pub struct Manager<I, O, H, E, HE, C> {
     /// The tasks of the managed connections.
