@@ -245,17 +245,13 @@ impl StreamMuxer for QuicMuxer {
                 Poll::Pending
             }
             Err(WriteError::UnknownStream) => {
+                error!(
+                    "The application used a connection that is already being \
+                    closed. This is a bug in the application or in libp2p."
+                );
                 if let Some(e) = &inner.close_reason {
-                    error!(
-                        "The application used a connection that is already being \
-                        closed. This is a bug in the application or in libp2p."
-                    );
                     Poll::Ready(Err(Error::ConnectionError(e.clone())))
                 } else {
-                    error!(
-                        "The application used a stream that has already been \
-                        closed. This is a bug in the application or in libp2p."
-                    );
                     Poll::Ready(Err(Error::ExpiredStream))
                 }
             }
