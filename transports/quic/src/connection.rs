@@ -117,27 +117,6 @@ enum OutboundInner {
 #[derive(Debug)]
 pub struct Outbound(OutboundInner);
 
-impl Future for Outbound {
-    type Output = Result<Substream, Error>;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = &mut *self;
-        match this.0 {
-            OutboundInner::Complete(_) => match replace(&mut this.0, OutboundInner::Done) {
-                OutboundInner::Complete(e) => Poll::Ready(e.map(Substream::unwritten)),
-                _ => unreachable!("we just checked that we have a `Complete`; qed"),
-            },
-            OutboundInner::Pending(ref mut receiver) => {
-                let result = ready!(receiver.poll_unpin(cx))
-                    .map(Substream::unwritten)
-                    .map_err(|oneshot::Canceled| Error::ConnectionLost);
-                this.0 = OutboundInner::Done;
-                Poll::Ready(result)
-            }
-            OutboundInner::Done => panic!("polled after yielding Ready"),
-        }
-    }
-}
-
 impl StreamMuxer for QuicMuxer {
     type OutboundSubstream = Outbound;
     type Substream = Substream;
@@ -160,7 +139,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn destroy_outbound(&self, outbound: Outbound) {
         let mut inner = self.inner();
-        let id = *match outbound.0 {
+        let id = match outbound.0 {
             OutboundInner::Complete(Err(_)) => return,
             OutboundInner::Complete(Ok(id)) => id,
             // try_recv is race-free, because the lock on `self` prevents
@@ -171,7 +150,8 @@ impl StreamMuxer for QuicMuxer {
             },
             OutboundInner::Done => return,
         };
-        inner.connection.destroy_stream(id)
+        inner.connection.destroy_stream(*id);
+        inner.streams.remove(id)
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {
@@ -267,7 +247,22 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        substream.poll_unpin(cx)
+        let stream = match substream.0 {
+            OutboundInner::Complete(_) => {
+                match replace(&mut substream.0, OutboundInner::Done) {
+                    OutboundInner::Complete(e) => e?,
+                    _ => unreachable!(),
+                }
+            }
+            OutboundInner::Pending(ref mut receiver) => {
+                let result = ready!(receiver.poll_unpin(cx))
+                    .map_err(|oneshot::Canceled| Error::ConnectionLost)?;
+                substream.0 = OutboundInner::Done;
+                result
+            }
+            OutboundInner::Done => panic!("polled after yielding Ready"),
+        };
+        Poll::Ready(Ok(Substream::unwritten(stream)))
     }
 
     /// Try to from a substream. This will return an error if the substream has
