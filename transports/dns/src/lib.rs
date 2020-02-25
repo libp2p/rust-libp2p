@@ -232,15 +232,14 @@ async fn resolve_dns<T>(p: Protocol<'_>, suffix: Multiaddr) -> Result<Multiaddr,
         T::Dial: Send
 {
     match p {
-        Protocol::Dns4(ref n) | Protocol::Dns6(ref n) => {
-            let name = n.to_string();
+        Protocol::Dns4(ref name) | Protocol::Dns6(ref name) => {
             let to_resolve = format!("{}:0", name);
             let list = match to_resolve[..].to_socket_addrs() {
                 Ok(list) => Ok(list.map(|s| s.ip()).collect::<Vec<_>>()),
                 Err(e) => Err(e)
             }.map_err(|_| {
                 error!("DNS resolver crashed");
-                DnsErr::ResolveFail(name.clone())
+                DnsErr::ResolveFail(name.to_string())
             })?;
 
             let is_dns4 = if let Protocol::Dns4(_) = p { true } else { false };
@@ -254,7 +253,7 @@ async fn resolve_dns<T>(p: Protocol<'_>, suffix: Multiaddr) -> Result<Multiaddr,
                     }
                 })
                 .next()
-                .ok_or_else(|| DnsErr::ResolveFail(name))
+                .ok_or_else(|| DnsErr::ResolveFail(name.to_string()))
         }
         Protocol::Dnsaddr(ref n) => {
             let conn = UdpClientConnection::new("8.8.8.8:53".parse().unwrap()).unwrap(); // TODO: error handling
