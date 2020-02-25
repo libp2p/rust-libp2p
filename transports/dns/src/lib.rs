@@ -226,10 +226,8 @@ where TErr: error::Error + 'static
 }
 
 async fn resolve_dns<T>(p: Protocol<'_>, suffix: Multiaddr) -> Result<Multiaddr, DnsErr<T::Error>>
-    where
-        T: Transport + Send + 'static,
-        T::Error: Send,
-        T::Dial: Send
+where
+    T: Transport
 {
     match p {
         Protocol::Dns4(ref name) | Protocol::Dns6(ref name) => {
