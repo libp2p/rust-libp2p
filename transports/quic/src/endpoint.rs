@@ -279,18 +279,17 @@ impl ConnectionEndpoint {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Vec<rustls::Certificate>, mpsc::SendError>> {
         assert!(!self.is_handshaking());
+        let certificate = self
+            .connection
+            .crypto_session()
+            .get_peer_certificates()
+            .expect("we always require the peer to present a certificate; qed");
         if self.connection.side().is_server() {
             ready!(self.channel.poll_ready(cx))?;
             self.channel
                 .start_send(EndpointMessage::ConnectionAccepted)?
         }
-        Poll::Ready(Ok(self
-            .connection
-            .crypto_session()
-            .get_peer_certificates()
-            .expect(
-                "we have finished handshaking, so we have exactly one certificate; qed",
-            )))
+        Poll::Ready(Ok(certificate))
     }
 
     /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.

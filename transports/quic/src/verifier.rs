@@ -107,7 +107,7 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClien
         &self,
         _dns_name: Option<&webpki::DNSName>,
     ) -> Option<rustls::internal::msgs::handshake::DistinguishedNames> {
-        Default::default()
+        Some(vec![])
     }
 
     fn verify_client_cert(
