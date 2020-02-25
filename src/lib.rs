@@ -268,8 +268,8 @@ use std::{error, io, time::Duration};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[cfg(all(feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_development_transport(keypair: identity::Keypair)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
@@ -282,8 +282,8 @@ pub fn build_development_transport(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-#[cfg(all(feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
@@ -308,8 +308,8 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-#[cfg(all(feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))))]
 pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
