@@ -405,7 +405,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                 },
                 Poll::Ready(NetworkEvent::ConnectionError { connected, error, num_established }) => {
-                    log::error!("Connection {:?} closed by {:?}", connected, error);
+                    log::debug!("Connection {:?} closed by {:?}", connected, error);
                     if num_established == 0 {
                         let peer = connected.peer_id().clone();
                         let endpoint = connected.endpoint;

@@ -82,7 +82,16 @@ where
     /// even if multiple (established) connections per peer are allowed.
     /// However, a single dialing attempt operates on a list of addresses
     /// to connect to, which can be extended with new addresses while
-    /// the connection attempt is still in progress.
+    /// the connection attempt is still in progress. Thereby each
+    /// dialing attempt is associated with a new connection and hence a new
+    /// connection ID.
+    ///
+    /// > **Note**: `dialing` must be consistent with the pending outgoing
+    /// > connections in `pool`. That is, for every entry in `dialing`
+    /// > there must exist a pending outgoing connection in `pool` with
+    /// > the same connection ID. This is ensured by the implementation of
+    /// > `Network` (see `dial_peer_impl` and `on_connection_failed`)
+    /// > together with the implementation of `DialingConnection::abort`.
     dialing: FnvHashMap<TPeerId, peer::DialingAttempt>,
 }
 
