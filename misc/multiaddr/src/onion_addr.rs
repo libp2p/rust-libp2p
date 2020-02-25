@@ -20,7 +20,7 @@ impl<'a> Onion3Addr<'a> {
 
     /// Consume this instance and create an owned version containing the same address
     pub fn acquire<'b>(self) -> Onion3Addr<'b> {
-        Self(Cow::Owned(self.0.into_owned()), self.1)
+        Onion3Addr(Cow::Owned(self.0.into_owned()), self.1)
     }
 }
 
