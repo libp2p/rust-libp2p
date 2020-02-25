@@ -33,7 +33,7 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use futures::{prelude::*, future::BoxFuture, FutureExt};
+use futures::{prelude::*, future::BoxFuture};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
