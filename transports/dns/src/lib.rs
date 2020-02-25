@@ -33,7 +33,7 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use futures::{prelude::*, future::BoxFuture};
+use futures::{prelude::*, future::BoxFuture, stream::FuturesOrdered};
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
@@ -46,7 +46,6 @@ use trust_dns_client::rr::{DNSClass, RecordType};
 use trust_dns_client::udp::UdpClientConnection;
 use trust_dns_client::client::{SyncClient, Client};
 use trust_dns_proto::rr::domain::Name;
-use futures::stream::FuturesOrdered;
 
 /// Represents the configuration for a DNS transport capability of libp2p.
 ///
