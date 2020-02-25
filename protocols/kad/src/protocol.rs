@@ -40,7 +40,8 @@ use std::{io, iter};
 use unsigned_varint::codec;
 use wasm_timer::Instant;
 
-pub(crate) const DEFAULT_PROTO_NAME: Cow<'static, [u8]> = Cow::Borrowed(b"/ipfs/kad/1.0.0");
+/// The protocol name used for negotiating with multistream-select.
+pub const DEFAULT_PROTO_NAME: Cow<'static, [u8]> = Cow::Borrowed(b"/ipfs/kad/1.0.0");
 
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

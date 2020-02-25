@@ -223,10 +223,10 @@ where
     }
 
     /// Get the protocol name of this kademlia instance.
-    pub fn protocol_name(&self) -> Cow<'static, [u8]> {
+    pub fn protocol_name(&self) -> &[u8] {
         self.protocol_name_override
             .as_ref()
-            .map_or_else(|| crate::protocol::DEFAULT_PROTO_NAME.clone(), Cow::clone)
+            .map_or(crate::protocol::DEFAULT_PROTO_NAME.as_ref(), AsRef::as_ref)
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
