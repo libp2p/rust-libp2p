@@ -43,7 +43,7 @@ wasm-timer = "0.2.4"
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.16.0", path = "protocols/deflate" }
 libp2p-dns = { version = "0.16.0", path = "transports/dns" }
-libp2p-mdns = { version = "0.16.0", path = "misc/mdns" }
+libp2p-mdns = { version = "0.16.0", path = "protocols/mdns" }
 libp2p-tcp = { version = "0.16.0", path = "transports/tcp" }
 libp2p-websocket = { version = "0.16.0", path = "transports/websocket", optional = true }
 
@@ -55,7 +55,6 @@ env_logger = "0.7.1"
 members = [
     "core",
     "misc/core-derive",
-    "misc/mdns",
     "misc/multiaddr",
     "misc/multihash",
     "misc/multistream-select",
@@ -66,6 +65,7 @@ members = [
     "protocols/gossipsub",
     "protocols/identify",
     "protocols/kad",
+    "protocols/mdns",
     "protocols/noise",
     "protocols/ping",
     "protocols/plaintext",
