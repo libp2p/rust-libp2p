@@ -248,12 +248,10 @@ impl StreamMuxer for QuicMuxer {
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let stream = match substream.0 {
-            OutboundInner::Complete(_) => {
-                match replace(&mut substream.0, OutboundInner::Done) {
-                    OutboundInner::Complete(e) => e?,
-                    _ => unreachable!(),
-                }
-            }
+            OutboundInner::Complete(_) => match replace(&mut substream.0, OutboundInner::Done) {
+                OutboundInner::Complete(e) => e?,
+                _ => unreachable!(),
+            },
             OutboundInner::Pending(ref mut receiver) => {
                 let result = ready!(receiver.poll_unpin(cx))
                     .map_err(|oneshot::Canceled| Error::ConnectionLost)?;
@@ -488,8 +486,7 @@ impl Drop for Muxer {
 impl Muxer {
     pub(crate) fn wake_driver(&mut self) {
         if let Some(waker) = self.waker.take() {
-            debug!("driver awoken!");
-            waker.wake();
+            waker.wake()
         }
     }
 
@@ -595,7 +592,11 @@ impl Muxer {
                     self.pending_stream = Some(stream)
                 }
                 Event::ConnectionLost { reason } => {
-                    debug!("lost connection due to {:?}", reason);
+                    debug!(
+                        "lost connection due to {:?} for side {:?}",
+                        reason,
+                        self.connection.side()
+                    );
                     self.close_reason = Some(reason);
                     if let Some(e) = self.close_waker.take() {
                         e.wake()
@@ -617,7 +618,7 @@ impl Muxer {
                     self.streams.wake_writer(stream);
                 }
                 Event::Connected => {
-                    debug!("connected!");
+                    debug!("connected for side {:?}!", self.connection.side());
                     self.wake_incoming();
                 }
                 Event::StreamOpened { dir: Dir::Bi } => {
