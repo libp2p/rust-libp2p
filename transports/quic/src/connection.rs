@@ -359,10 +359,19 @@ impl StreamMuxer for QuicMuxer {
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner();
         trace!(
-            "close() called with {} outbound streams",
-            inner.outbound_streams
+            "close() called with {} outbound streams for side {:?}",
+            inner.outbound_streams,
+            inner.connection.side()
         );
-        inner.outbound_streams -= 1;
+        if let Some(waker) = replace(&mut inner.close_waker, Some(cx.waker().clone())) {
+            waker.wake();
+        }
+        // To avoid reference count underflow, we must only decrement the
+        // refcount the *first* time this is called.
+        if !inner.shutting_down {
+            inner.outbound_streams -= 1;
+            inner.shutting_down = true;
+        }
         if inner.close_reason.is_some() {
             return Poll::Ready(Ok(()));
         } else if inner.outbound_streams == 0 {
@@ -370,18 +379,12 @@ impl StreamMuxer for QuicMuxer {
             inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
             return Poll::Ready(Ok(()));
         }
-        if let Some(waker) = replace(&mut inner.close_waker, Some(cx.waker().clone())) {
-            waker.wake();
-            return Poll::Pending;
-        }
         let Muxer {
             streams,
             connection,
             ..
         } = &mut *inner;
-        for id in streams.keys() {
-            let _ = connection.finish(*id);
-        }
+        streams.close(|id| drop(connection.finish(id)));
         Poll::Pending
     }
 }
@@ -461,6 +464,8 @@ pub(crate) struct Muxer {
     connectors: StreamSenderQueue,
     /// The number of outbound streams currently open.
     outbound_streams: usize,
+    /// `true` if and only if we are currently shutting down.
+    shutting_down: bool,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
     /// Waker to wake up the driver. This is not a `MaybeWaker` because only the
@@ -511,6 +516,7 @@ impl Muxer {
             connection,
             close_reason: None,
             waker: None,
+            shutting_down: false,
             driver: None,
         }
     }
@@ -523,15 +529,19 @@ impl Muxer {
         self.wake_driver();
     }
 
+    fn open_stream(&mut self) -> Option<stream_map::StreamId> {
+        self.connection.open().map(|e| {
+            self.outbound_streams += 1;
+            self.streams.add_stream(e)
+        })
+    }
+
     fn get_pending_stream(&mut self) -> Option<stream_map::StreamId> {
         self.wake_driver();
         if let Some(id) = self.pending_stream.take() {
             Some(id)
         } else {
-            self.connection.open().map(|e| {
-                self.outbound_streams += 1;
-                self.streams.add_stream(e)
-            })
+            self.open_stream()
         }
     }
 
@@ -540,9 +550,13 @@ impl Muxer {
         'a: while let Some(event) = self.connection.poll() {
             match event {
                 Event::StreamOpened { dir: Dir::Uni } | Event::DatagramReceived => {
-                    panic!("we disabled incoming unidirectional streams and datagrams")
+                    // This should never happen, but if it does, it is better to
+                    // log a nasty message and recover than to tear down the
+                    // process.
+                    error!("we disabled incoming unidirectional streams and datagrams")
                 }
                 Event::StreamAvailable { dir: Dir::Uni } => {
+                    // Ditto
                     panic!("we don’t use unidirectional streams")
                 }
                 Event::StreamReadable { stream } => {
@@ -560,7 +574,10 @@ impl Muxer {
                         stream,
                         self.connection.side()
                     );
-                    // Wake up the task waiting on us (if any)
+                    // Wake up the task waiting on us (if any).
+                    // This will panic if quinn-proto has already emitted a
+                    // `StreamFinished` event, but it will never emit
+                    // `StreamWritable` after `StreamFinished`.
                     self.streams.wake_writer(stream)
                 }
                 Event::StreamAvailable { dir: Dir::Bi } => {
@@ -569,20 +586,19 @@ impl Muxer {
                         self.connection.side()
                     );
                     if self.connectors.is_empty() {
-                        // no task to wake up
+                        // Nobody is waiting on the stream. Allow quinn-proto to
+                        // queue it, so that it can apply backpressure.
                         continue;
                     }
                     assert!(
                         self.pending_stream.is_none(),
                         "we cannot have both pending tasks and a pending stream; qed"
                     );
-                    let stream = self.connection.open().expect(
+                    let mut stream = self.open_stream().expect(
                         "we just were told that there is a stream available; there is \
                         a mutex that prevents other threads from calling open() in the \
                         meantime; qed",
                     );
-                    let mut stream = self.streams.add_stream(stream);
-                    self.outbound_streams += 1;
                     while let Some(oneshot) = self.connectors.pop_front() {
                         stream = match oneshot.send(stream) {
                             Ok(()) => continue 'a,
@@ -607,15 +623,22 @@ impl Muxer {
                     stream,
                     stop_reason,
                 } => {
-                    // Wake up the task waiting on us (if any)
                     trace!(
                         "Stream {:?} finished for side {:?} because of {:?}",
                         stream,
                         self.connection.side(),
                         stop_reason
                     );
+                    // This stream is no longer useable for outbound traffic.
                     self.outbound_streams -= 1;
+                    // If someone is waiting for this stream to become writable,
+                    // wake them up, so that they can find out the stream is
+                    // dead.
                     self.streams.wake_writer(stream);
+                    // Connection close could be blocked on this.
+                    if let Some(waker) = self.close_waker.take() {
+                        waker.wake()
+                    }
                 }
                 Event::Connected => {
                     debug!("connected for side {:?}!", self.connection.side());

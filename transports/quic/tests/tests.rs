@@ -22,10 +22,10 @@ use async_macros::ready;
 use futures::prelude::*;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerEvent, TransportError},
+    transport::ListenerEvent,
     StreamMuxer, Transport,
 };
-use libp2p_quic::{Config, Endpoint, Error, JoinHandle, Muxer, Substream};
+use libp2p_quic::{Config, Endpoint, Muxer, Substream};
 use log::{debug, info, trace};
 use std::{
     io::Result,
@@ -115,7 +115,6 @@ impl<'a> futures::Stream for Inbound<'a> {
 
 fn init() {
     use tracing_subscriber::{fmt::Subscriber, EnvFilter};
-    let _ = env_logger::try_init();
     let _ = Subscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
@@ -176,26 +175,15 @@ fn communicating_between_dialer_and_listener() {
     }
 }
 
-fn retry_on_eaddrinuse(config: Config, addr: Multiaddr) -> (Endpoint, JoinHandle) {
-    loop {
-        match Endpoint::new(config.clone(), addr.clone()) {
-            Ok(e) => break e,
-            Err(TransportError::Other(Error::IO(e)))
-                if e.kind() == std::io::ErrorKind::AddrInUse => {}
-            Err(e) => panic!("Failed to create endpoint: {}", e),
-        }
-    }
-}
-
 fn do_test() {
     use std::error::Error as _;
     let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
     let mut ready_tx = Some(ready_tx);
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
     let keypair2 = keypair.clone();
-    let addr: Multiaddr = "/ip4/0.0.0.0/udp/12345/quic".parse().expect("bad address?");
+    let addr: Multiaddr = "/ip4/127.0.0.1/udp/0/quic".parse().expect("bad address?");
     let quic_config = Config::new(&keypair2);
-    let (quic_endpoint, join) = retry_on_eaddrinuse(quic_config, addr.clone());
+    let (quic_endpoint, join) = Endpoint::new(quic_config, addr.clone()).unwrap();
     let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
 
     trace!("running tests");
@@ -229,8 +217,8 @@ fn do_test() {
                     debug!("writing data!");
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     debug!("data written!");
-                    socket.close().await.unwrap();
-                    debug!("socket closed!");
+                    // socket.close().await.unwrap();
+                    // debug!("socket closed!");
                     assert_eq!(socket.read(&mut buf).await.unwrap(), 0);
                     debug!("end of stream");
                     drop(socket);
@@ -250,10 +238,8 @@ fn do_test() {
     let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();
         let quic_config = Config::new(&keypair);
-        let (quic_endpoint, join) = retry_on_eaddrinuse(
-            quic_config,
-            "/ip4/127.0.0.1/udp/12346/quic".parse().unwrap(),
-        );
+        let (quic_endpoint, join) =
+            Endpoint::new(quic_config, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()).unwrap();
         // Obtain a future socket through dialing
         let mut connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
         trace!("Received a Connection: {:?}", connection);

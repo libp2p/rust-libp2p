@@ -85,35 +85,53 @@ impl Streams {
     /// Set a waker that will be notified when the task becomes writable or is
     /// finished, waking up any waker or channel that has already been
     /// registered.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been finished.
     pub(super) fn set_writer(&mut self, id: &StreamId, waker: task::Waker) {
         self.get(id).set_writer(waker);
     }
 
     /// Set a channel that will be notified when the task becomes writable or is
-    /// finished, waking up any existing registered waker or channel
+    /// finished, waking up any existing registered waker or channel.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been finished.
     pub(super) fn set_finisher(&mut self, id: &StreamId, finisher: oneshot::Sender<()>) {
         self.get(id).set_finisher(finisher);
     }
 
-    /// Remove an ID from the map
+    /// Remove an ID from the map.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the ID has already been removed.
     pub(super) fn remove(&mut self, id: StreamId) {
-        if self.map.remove(&id.0).is_none() {
-            panic!(
-                "Internal state corrupted. \
+        self.map.remove(&id.0).expect(
+            "Internal state corrupted. \
                 You probably used a Substream with the wrong StreamMuxer",
-            );
+        );
+    }
+
+    /// Wake all wakers and call the provided callback for each stream,
+    /// so as to free resources.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`Self::close`] has already been called.
+    pub(super) fn close<T: FnMut(quinn_proto::StreamId)>(&mut self, mut cb: T) {
+        for (stream, value) in &mut self.map {
+            value.wake_all();
+            cb(*stream)
         }
     }
 
+    /// Wake up everything
     pub(super) fn wake_all(&mut self) {
-        for i in self.map.values_mut() {
-            i.wake_all()
+        for value in self.map.values_mut() {
+            value.wake_all()
         }
-    }
-
-    pub(super) fn keys(
-        &self,
-    ) -> std::collections::hash_map::Keys<'_, quinn_proto::StreamId, StreamState> {
-        self.map.keys()
     }
 }

@@ -33,6 +33,8 @@ enum WriterStatus {
     /// The stream is being shut down. `finisher` is the channel used to notify
     /// the finishing task.
     Finishing { finisher: oneshot::Sender<()> },
+    /// The stream has been finished. Further operations will panic.
+    Finished,
 }
 
 impl WriterStatus {
@@ -43,6 +45,7 @@ impl WriterStatus {
             Self::Finishing { finisher } => {
                 let _ = finisher.send(());
             }
+            Self::Finished => panic!("using a finished stream"),
         }
     }
 }
@@ -83,12 +86,20 @@ impl StreamState {
 
     /// If a task is waiting for this stream to be finished or written to, wake
     /// it up. Otherwise, do nothing.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been finished.
     pub(crate) fn wake_writer(&mut self) {
         mem::replace(&mut self.writer, WriterStatus::Unblocked).take()
     }
 
     /// Set a waker that will be notified when the state becomes readable.
     /// Wake up any waker that has already been registered.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been finished.
     pub(crate) fn set_reader(&mut self, waker: task::Waker) {
         if let Some(waker) = mem::replace(&mut self.reader, Some(waker)) {
             waker.wake()
