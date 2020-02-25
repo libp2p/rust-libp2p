@@ -85,12 +85,12 @@
 //! Example ([`secio`] + [`yamux`] Protocol Upgrade):
 //!
 //! ```rust
-//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair, yamux};
+//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "secio", feature = "yamux"))] {
+//! use libp2p::{Transport, core::upgrade, tcp::TcpConfig, secio::SecioConfig, identity::Keypair, yamux};
 //! let tcp = TcpConfig::new();
 //! let secio = SecioConfig::new(Keypair::generate_ed25519());
 //! let yamux = yamux::Config::default();
-//! let transport = tcp.upgrade().authenticate(secio).multiplex(yamux);
+//! let transport = tcp.upgrade(upgrade::Version::V1).authenticate(secio).multiplex(yamux);
 //! # }
 //! ```
 //! In this example, `tcp_secio` is a new [`Transport`] that negotiates the secio protocol
