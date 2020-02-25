@@ -120,7 +120,7 @@ impl StreamState {
     }
 
     /// Wake up both readers and writers. This is just a shorthand for calling
-    /// [`Self::wake_writer`] and [`Self::wake_reader`].
+    /// [`wake_writer`] and [`wake_reader`].
     pub(crate) fn wake_all(&mut self) {
         self.wake_writer();
         self.wake_reader();

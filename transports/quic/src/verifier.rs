@@ -103,13 +103,17 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClien
         true
     }
 
-    fn client_auth_root_subjects(&self) -> rustls::internal::msgs::handshake::DistinguishedNames {
+    fn client_auth_root_subjects(
+        &self,
+        _dns_name: Option<&webpki::DNSName>,
+    ) -> Option<rustls::internal::msgs::handshake::DistinguishedNames> {
         Default::default()
     }
 
     fn verify_client_cert(
         &self,
         presented_certs: &[rustls::Certificate],
+        _dns_name: Option<&webpki::DNSName>,
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
         verify_presented_certs(presented_certs, &|time, end_entity_cert, trust_anchor| {
             end_entity_cert.verify_is_valid_tls_client_cert(

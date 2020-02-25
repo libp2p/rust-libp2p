@@ -9,7 +9,7 @@ keywords = ["peer-to-peer", "libp2p", "quic", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-rustls = { version = "0.16.0", features = ["dangerous_configuration"] }
+rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
 libp2p-core = { path = "../../core", version = "0.16.0" }
 log = "0.4.8"
 ipnet = "2.2.0"

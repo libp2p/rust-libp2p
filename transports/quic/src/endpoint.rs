@@ -62,7 +62,9 @@ fn make_client_config(
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.enable_early_data = true;
-    crypto.set_single_client_cert(vec![certificate], key);
+    crypto
+        .set_single_client_cert(vec![certificate], key)
+        .expect("we have a valid certificate; qed");
     let verifier = verifier::VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
     crypto
         .dangerous()
