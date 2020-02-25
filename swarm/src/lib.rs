@@ -64,7 +64,8 @@ pub use behaviour::{
     NetworkBehaviour,
     NetworkBehaviourAction,
     NetworkBehaviourEventProcess,
-    PollParameters
+    PollParameters,
+    NotifyHandler
 };
 pub use protocols_handler::{
     IntoProtocolsHandler,
@@ -190,7 +191,7 @@ where
     banned_peers: HashSet<PeerId>,
 
     /// Pending event message to be delivered.
-    send_event_to_complete: Option<(PeerId, Option<ConnectionId>, TInEvent)>
+    send_event_to_complete: Option<(PeerId, NotifyHandler, TInEvent)>
 }
 
 impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> Deref for
@@ -228,7 +229,7 @@ where
 impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
-      TInEvent: Send + 'static,
+      TInEvent: Clone + Send + 'static,
       TOutEvent: Send + 'static,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
       THandler: IntoProtocolsHandler + Send + 'static,
@@ -458,27 +459,44 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             }
 
             // Try to deliver pending event.
-            if let Some((peer_id, connection_id, event)) = this.send_event_to_complete.take() {
+            if let Some((peer_id, handler, event)) = this.send_event_to_complete.take() {
                 if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
-                    if let Some(conn_id) = connection_id {
-                        if let Some(mut conn) = peer.connection(conn_id) {
-                            if let Some(event) = conn.try_notify_handler(event, cx) {
-                                this.send_event_to_complete = Some((peer_id, connection_id, event));
+                    match handler {
+                        NotifyHandler::One(conn_id) =>
+                            if let Some(mut conn) = peer.connection(conn_id) {
+                                if let Some(event) = conn.try_notify_handler(event, cx) {
+                                    this.send_event_to_complete = Some((peer_id, handler, event));
+                                    return Poll::Pending
+                                }
+                            },
+                        NotifyHandler::Any => {
+                            let mut connections = peer.connections();
+                            let mut event = Some(event); // (*)
+                            while let Some(mut conn) = connections.next() {
+                                if conn.poll_ready_notify_handler(cx).is_ready() {
+                                    conn.notify_handler(event.take().expect("by (*)"));
+                                    break
+                                }
+                            }
+                            if let Some(event) = event.take() {
+                                this.send_event_to_complete = Some((peer_id, handler, event));
                                 return Poll::Pending
                             }
                         }
-                    } else {
-                        let mut connections = peer.connections();
-                        let mut event = Some(event); // (*)
-                        while let Some(mut conn) = connections.next() {
-                            if conn.poll_ready_notify_handler(cx).is_ready() {
-                                conn.notify_handler(event.take().expect("by (*)"));
-                                break
+                        NotifyHandler::All => {
+                            {
+                                let mut connections = peer.connections();
+                                while let Some(mut conn) = connections.next() {
+                                    if !conn.poll_ready_notify_handler(cx).is_ready() {
+                                        this.send_event_to_complete = Some((peer_id, handler, event));
+                                        return Poll::Pending
+                                    }
+                                }
                             }
-                        }
-                        if let Some(event) = event.take() {
-                            this.send_event_to_complete = Some((peer_id, None, event));
-                            return Poll::Pending
+                            let mut connections = peer.connections();
+                            while let Some(mut conn) = connections.next() {
+                                conn.notify_handler(event.clone());
+                            }
                         }
                     }
                 }
@@ -511,30 +529,48 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         return Poll::Ready(SwarmEvent::StartConnect(peer_id))
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, connection, event }) => {
+                Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event }) => {
                     if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
-                        if let Some(mut conn) = peer.connection(connection) {
-                            if let Some(event) = conn.try_notify_handler(event, cx) {
+                        match handler {
+                            NotifyHandler::One(connection) => {
+                                if let Some(mut conn) = peer.connection(connection) {
+                                    if let Some(event) = conn.try_notify_handler(event, cx) {
+                                        debug_assert!(this.send_event_to_complete.is_none());
+                                        let notify = NotifyHandler::One(connection);
+                                        this.send_event_to_complete = Some((peer_id, notify, event));
+                                        return Poll::Pending;
+                                    }
+                                }
+                            }
+                            NotifyHandler::Any => {
+                                let mut connections = peer.connections();
+                                while let Some(mut conn) = connections.next() {
+                                    if conn.poll_ready_notify_handler(cx).is_ready() {
+                                        conn.notify_handler(event);
+                                        continue 'poll
+                                    }
+                                }
+
                                 debug_assert!(this.send_event_to_complete.is_none());
-                                this.send_event_to_complete = Some((peer_id, Some(connection), event));
+                                this.send_event_to_complete = Some((peer_id, NotifyHandler::Any, event));
                                 return Poll::Pending;
                             }
-                        }
-                    }
-                },
-                Poll::Ready(NetworkBehaviourAction::NotifyAnyHandler { peer_id, event }) => {
-                    if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
-                        let mut connections = peer.connections();
-                        while let Some(mut conn) = connections.next() {
-                            if conn.poll_ready_notify_handler(cx).is_ready() {
-                                conn.notify_handler(event);
-                                continue 'poll
+                            NotifyHandler::All => {
+                                {
+                                    let mut connections = peer.connections();
+                                    while let Some(mut conn) = connections.next() {
+                                        if !conn.poll_ready_notify_handler(cx).is_ready() {
+                                            this.send_event_to_complete = Some((peer_id, NotifyHandler::All, event));
+                                            return Poll::Pending
+                                        }
+                                    }
+                                }
+                                let mut connections = peer.connections();
+                                while let Some(mut conn) = connections.next() {
+                                    conn.notify_handler(event.clone());
+                                }
                             }
                         }
-
-                        debug_assert!(this.send_event_to_complete.is_none());
-                        this.send_event_to_complete = Some((peer_id, None, event));
-                        return Poll::Pending;
                     }
                 },
                 Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
@@ -554,7 +590,7 @@ impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> Stream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
-      TInEvent: Send + 'static,
+      TInEvent: Clone + Send + 'static,
       TOutEvent: Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,
@@ -576,7 +612,7 @@ impl<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo> FusedStream for
     ExpandedSwarm<TBehaviour, TInEvent, TOutEvent, THandler, TConnInfo>
 where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
       THandler: IntoProtocolsHandler + Send + 'static,
-      TInEvent: Send + 'static,
+      TInEvent: Clone + Send + 'static,
       TOutEvent: Send + 'static,
       THandler::Handler: ProtocolsHandler<InEvent = TInEvent, OutEvent = TOutEvent>,
       TConnInfo: ConnectionInfo<PeerId = PeerId> + fmt::Debug + Clone + Send + 'static,

@@ -32,7 +32,13 @@ use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    NotifyHandler,
+    PollParameters,
+    ProtocolsHandler
+};
 use log::{info, debug, warn};
 use smallvec::SmallVec;
 use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
@@ -923,7 +929,7 @@ where
             // and the publisher is always assumed to have the "right" value.
             self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: source,
-                connection,
+                handler: NotifyHandler::One(connection),
                 event: KademliaHandlerIn::PutRecordRes {
                     key: record.key,
                     value: record.value,
@@ -976,7 +982,7 @@ where
                 debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
-                    connection,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::PutRecordRes {
                         key: record.key,
                         value: record.value,
@@ -988,7 +994,7 @@ where
                 info!("Record not stored: {:?}", e);
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
-                    connection,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::Reset(request_id)
                 })
             }
@@ -1064,8 +1070,8 @@ where
                 .position(|(p, _)| p == &peer)
                 .map(|p| q.inner.pending_rpcs.remove(p)))
         {
-            self.queued_events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
-                peer_id, event
+            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                peer_id, event, handler: NotifyHandler::Any
             });
         }
 
@@ -1148,7 +1154,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
-                    connection,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::FindNodeRes {
                         closer_peers,
                         request_id,
@@ -1168,7 +1174,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
-                    connection,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::GetProvidersRes {
                         closer_peers,
                         provider_peers,
@@ -1238,7 +1244,7 @@ where
 
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
-                    connection,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::GetRecordRes {
                         record,
                         closer_peers,
@@ -1391,8 +1397,8 @@ where
                             query.on_success(&peer_id, vec![])
                         }
                         if self.connected_peers.contains(&peer_id) {
-                            self.queued_events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
-                                peer_id, event
+                            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id, event, handler: NotifyHandler::Any
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id.clone(), event));

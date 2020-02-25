@@ -206,18 +206,6 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         peer_id: PeerId,
     },
 
-    /// Like `NotifyHandler`, except that if multiple established connections
-    /// to the peer exist, an unspecified choice is made.
-    ///
-    /// If no connections exists to the peer, the event is silently dropped.
-    /// To ensure delivery, a `NetworkBehaviour` must keep track of connected peers.
-    NotifyAnyHandler {
-        /// The peer for whom a `ProtocolsHandler` should be notified.
-        peer_id: PeerId,
-        /// The event to send.
-        event: TInEvent,
-    },
-
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
     ///
@@ -237,7 +225,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
         /// The ID of the connection whose `ProtocolsHandler` to notify.
-        connection: ConnectionId,
+        handler: NotifyHandler,
         /// The event to send.
         event: TInEvent,
     },
@@ -253,3 +241,15 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         address: Multiaddr,
     },
 }
+
+/// The options w.r.t. which connection handlers to notify of an event.
+#[derive(Debug, Clone)]
+pub enum NotifyHandler {
+    /// Notify a particular connection handler.
+    One(ConnectionId),
+    /// Notify an arbitrary connection handler.
+    Any,
+    /// Notify all connection handlers.
+    All
+}
+

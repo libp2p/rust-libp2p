@@ -28,7 +28,8 @@ use libp2p_swarm::{
     NetworkBehaviourAction,
     PollParameters,
     ProtocolsHandler,
-    OneShotHandler
+    OneShotHandler,
+    NotifyHandler
 };
 use rand;
 use smallvec::SmallVec;
@@ -80,8 +81,9 @@ impl Floodsub {
         // Send our topics to this node if we're already connected to it.
         if self.connected_peers.contains_key(&peer_id) {
             for topic in self.subscribed_topics.iter().cloned() {
-                self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer_id.clone(),
+                    handler: NotifyHandler::Any,
                     event: FloodsubRpc {
                         messages: Vec::new(),
                         subscriptions: vec![FloodsubSubscription {
@@ -113,8 +115,9 @@ impl Floodsub {
         }
 
         for peer in self.connected_peers.keys() {
-            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer.clone(),
+                handler: NotifyHandler::Any,
                 event: FloodsubRpc {
                     messages: Vec::new(),
                     subscriptions: vec![FloodsubSubscription {
@@ -143,8 +146,9 @@ impl Floodsub {
         self.subscribed_topics.remove(pos);
 
         for peer in self.connected_peers.keys() {
-            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer.clone(),
+                handler: NotifyHandler::Any,
                 event: FloodsubRpc {
                     messages: Vec::new(),
                     subscriptions: vec![FloodsubSubscription {
@@ -208,8 +212,9 @@ impl Floodsub {
                 continue;
             }
 
-            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
+                handler: NotifyHandler::Any,
                 event: FloodsubRpc {
                     subscriptions: Vec::new(),
                     messages: vec![message.clone()],
@@ -235,8 +240,9 @@ impl NetworkBehaviour for Floodsub {
         // We need to send our subscriptions to the newly-connected node.
         if self.target_peers.contains(&id) {
             for topic in self.subscribed_topics.iter().cloned() {
-                self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: id.clone(),
+                    handler: NotifyHandler::Any,
                     event: FloodsubRpc {
                         messages: Vec::new(),
                         subscriptions: vec![FloodsubSubscription {
@@ -339,8 +345,9 @@ impl NetworkBehaviour for Floodsub {
         }
 
         for (peer_id, rpc) in rpcs_to_dispatch {
-            self.events.push_back(NetworkBehaviourAction::NotifyAnyHandler {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id,
+                handler: NotifyHandler::Any,
                 event: rpc,
             });
         }
