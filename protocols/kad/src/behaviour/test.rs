@@ -45,7 +45,7 @@ use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng};
 use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
-use multihash::{Multihash, Hash::SHA2256};
+use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
@@ -104,6 +104,10 @@ fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaCon
     }
 
     (swarm_ids, swarms)
+}
+
+fn random_multihash() -> Multihash {
+    wrap(Code::Sha2_256, &thread_rng().gen::<[u8; 32]>())
 }
 
 #[test]
@@ -302,7 +306,7 @@ fn get_record_not_found() {
     swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
-    let target_key = record::Key::from(Multihash::random(SHA2256));
+    let target_key = record::Key::from(random_multihash());
     swarms[0].get_record(&target_key, Quorum::One);
 
     block_on(
@@ -460,7 +464,7 @@ fn get_value() {
     swarms[0].add_address(&swarm_ids[1], Protocol::Memory(port_base + 1).into());
     swarms[1].add_address(&swarm_ids[2], Protocol::Memory(port_base + 2).into());
 
-    let record = Record::new(Multihash::random(SHA2256), vec![4,5,6]);
+    let record = Record::new(random_multihash(), vec![4,5,6]);
 
     swarms[1].store.put(record.clone()).unwrap();
     swarms[0].get_record(&record.key, Quorum::One);
@@ -495,7 +499,7 @@ fn get_value_many() {
     let (_, mut swarms) = build_connected_nodes(num_nodes, num_nodes);
     let num_results = 10;
 
-    let record = Record::new(Multihash::random(SHA2256), vec![4,5,6]);
+    let record = Record::new(random_multihash(), vec![4,5,6]);
 
     for i in 0 .. num_nodes {
         swarms[i].store.put(record.clone()).unwrap();

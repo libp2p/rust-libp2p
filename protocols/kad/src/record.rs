@@ -142,13 +142,14 @@ impl ProviderRecord {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use multihash::Hash::SHA2256;
+    use multihash::{wrap, Code};
     use rand::Rng;
     use std::time::Duration;
 
     impl Arbitrary for Key {
         fn arbitrary<G: Gen>(_: &mut G) -> Key {
-            Key::from(Multihash::random(SHA2256))
+            let hash = rand::thread_rng().gen::<[u8; 32]>();
+            Key::from(wrap(Code::Sha2_256, &hash))
         }
     }
 
