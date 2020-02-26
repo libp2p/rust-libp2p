@@ -40,6 +40,9 @@ use std::{io, iter};
 use unsigned_varint::codec;
 use wasm_timer::Instant;
 
+/// The protocol name used for negotiating with multistream-select.
+pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
+
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum KadConnectionType {
@@ -152,7 +155,7 @@ impl KademliaProtocolConfig {
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_name: Cow::Borrowed(b"/ipfs/kad/1.0.0"),
+            protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME)
         }
     }
 }

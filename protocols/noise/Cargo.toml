@@ -8,7 +8,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
 [dependencies]
-curve25519-dalek = "1"
+curve25519-dalek = "2.0.0"
 futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.16.0", path = "../../core" }
@@ -17,7 +17,7 @@ prost = "0.6.1"
 rand = "0.7.2"
 sha2 = "0.8.0"
 static_assertions = "1"
-x25519-dalek = "0.5"
+x25519-dalek = "0.6.0"
 zeroize = "1"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]

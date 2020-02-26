@@ -222,6 +222,13 @@ where
         Self::with_config(id, store, Default::default())
     }
 
+    /// Get the protocol name of this kademlia instance.
+    pub fn protocol_name(&self) -> &[u8] {
+        self.protocol_name_override
+            .as_ref()
+            .map_or(crate::protocol::DEFAULT_PROTO_NAME.as_ref(), AsRef::as_ref)
+    }
+
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
         let local_key = kbucket::Key::new(id.clone());
