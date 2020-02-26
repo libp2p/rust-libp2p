@@ -39,6 +39,7 @@
 //! [`Finished`]: peers::PeersIterState::Finished
 
 pub mod closest;
+pub mod disjoint_closest;
 pub mod fixed;
 
 use libp2p_core::PeerId;
@@ -65,4 +66,3 @@ pub enum PeersIterState<'a> {
     /// The iterator finished.
     Finished
 }
-
