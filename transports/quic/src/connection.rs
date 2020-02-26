@@ -170,13 +170,8 @@ impl StreamMuxer for QuicMuxer {
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         trace!("being polled for inbound connections!");
         let mut inner = self.inner();
-        if inner.connection.is_drained() {
-            return Poll::Ready(Err(Error::ConnectionError(
-                inner
-                    .close_reason
-                    .clone()
-                    .expect("closed connections always have a reason; qed"),
-            )));
+        if let Some(close_reason) = &inner.close_reason {
+            return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
         }
         inner.wake_driver();
         match inner.connection.accept() {
@@ -413,13 +408,8 @@ impl Future for Upgrade {
         trace!("outbound polling!");
         let res = {
             let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
-            let peer_certificates = if inner.connection.is_drained() {
-                return Poll::Ready(Err(Error::ConnectionError(
-                    inner
-                        .close_reason
-                        .clone()
-                        .expect("closed connections always have a reason; qed"),
-                )));
+            let peer_certificates = if let Some(close_reason) = &inner.close_reason {
+                return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
             } else if inner.connection.is_handshaking() {
                 inner.handshake_or_accept_waker = Some(cx.waker().clone());
                 return Poll::Pending;
