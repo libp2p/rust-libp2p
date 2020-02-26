@@ -322,4 +322,106 @@ mod tests {
 
         quickcheck(prop as fn(_, _) -> _)
     }
+
+    #[test]
+    fn s_kademlia_disjoint_paths() {
+        let now = Instant::now();
+        let target: KeyBytes = Key::from(PeerId::random()).into();
+
+        let mut pool = [0; 12].into_iter()
+            .map(|_| Key::from(PeerId::random()))
+            .collect::<Vec<_>>();
+
+        pool.sort_unstable_by(|a, b| {
+            target.distance(a).cmp(&target.distance(b))
+        });
+
+        let known_closest_peers = pool.split_off(pool.len() - 3);
+
+        let config = DisjointClosestPeersIterConfig {
+            parallelism: 3,
+            disjoint_paths: 3,
+            num_results: 3,
+            ..DisjointClosestPeersIterConfig::default()
+        };
+
+        let mut peers_iter = DisjointClosestPeersIter::with_config(
+            config,
+            target,
+            known_closest_peers.clone(),
+        );
+
+        //////////////////////////////////////////////////////////////////////////////
+        // First round.
+
+        for _ in 0..3 {
+            if let PeersIterState::Waiting(Some(Cow::Owned(peer))) = peers_iter.next(now) {
+                assert!(known_closest_peers.contains(&Key::from(peer)));
+            } else {
+                panic!("Expected iterator to return peer to query.");
+            }
+        }
+
+        assert_eq!(
+            PeersIterState::WaitingAtCapacity,
+            peers_iter.next(now),
+        );
+
+        let response_2 = pool.split_off(pool.len() - 3);
+        let response_3 = pool.split_off(pool.len() - 3);
+        // Keys are closer than any of the previous two responses from honest node 1 and 2.
+        let malicious_response_1 = pool.split_off(pool.len() - 3);
+
+        // Response from malicious peer 1.
+        peers_iter.on_success(
+            known_closest_peers[0].preimage(),
+            malicious_response_1.clone().into_iter().map(|k| k.preimage().clone()),
+        );
+
+        // Response from peer 2.
+        peers_iter.on_success(
+            known_closest_peers[1].preimage(),
+            response_2.clone().into_iter().map(|k| k.preimage().clone()),
+        );
+
+        // Response from peer 3.
+        peers_iter.on_success(
+            known_closest_peers[2].preimage(),
+            response_3.clone().into_iter().map(|k| k.preimage().clone()),
+        );
+
+        //////////////////////////////////////////////////////////////////////////////
+        // Second round.
+
+        let mut next_to_query = vec![];
+        for _ in 0..3 {
+            if let PeersIterState::Waiting(Some(Cow::Owned(peer))) = peers_iter.next(now) {
+                next_to_query.push(peer)
+            } else {
+                panic!("Expected iterator to return peer to query.");
+            }
+        };
+
+        // Expect a peer from each disjoint path.
+        assert!(next_to_query.contains(malicious_response_1[0].preimage()));
+        assert!(next_to_query.contains(response_2[0].preimage()));
+        assert!(next_to_query.contains(response_3[0].preimage()));
+
+        for peer in next_to_query {
+            peers_iter.on_success(&peer, vec![]);
+        }
+
+        assert_eq!(
+            PeersIterState::Finished,
+            peers_iter.next(now),
+        );
+
+        let final_peers: Vec<_> = peers_iter.into_result().collect();
+
+        // Expect final result to contain peer from each disjoint path, even though not all are
+        // among the best ones.
+        assert!(final_peers.contains(malicious_response_1[0].preimage()));
+        assert!(final_peers.contains(response_2[0].preimage()));
+        assert!(final_peers.contains(response_3[0].preimage()));
+    }
 }
