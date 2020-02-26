@@ -347,7 +347,7 @@ impl ClosestPeersIter {
         self.state == State::Finished
     }
 
-    /// Consumes the iterator, returning the target and the closest peers.
+    /// Consumes the iterator, returning the closest peers.
     pub fn into_result(self) -> impl Iterator<Item = PeerId> {
         self.closest_peers
             .into_iter()
