@@ -21,7 +21,6 @@
 mod peers;
 
 use peers::PeersIterState;
-use peers::closest::{ClosestPeersIter, ClosestPeersIterConfig};
 use peers::disjoint_closest::{DisjointClosestPeersIter, DisjointClosestPeersIterConfig};
 use peers::fixed::FixedPeersIter;
 
@@ -98,32 +97,19 @@ impl<TInner> QueryPool<TInner> {
         self.add(peer_iter, inner)
     }
 
-    /// Adds a query to the pool that iterates towards the closest peers to the target.
-    pub fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
-    where
-        T: Into<KeyBytes>,
-        I: IntoIterator<Item = Key<PeerId>>
-    {
-        let cfg = ClosestPeersIterConfig {
-            num_results: self.config.replication_factor.get(),
-            .. ClosestPeersIterConfig::default()
-        };
-        let peer_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers));
-        self.add(peer_iter, inner)
-    }
-
     /// Adds a query to the pool that iterates towards the closest peers to the target on disjoint
     /// paths.
-    pub fn add_iter_disjoint_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
+    pub fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
     where
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>
     {
         let cfg = DisjointClosestPeersIterConfig {
             num_results: self.config.replication_factor.get(),
+            disjoint_paths: 1,
             .. DisjointClosestPeersIterConfig::default()
         };
-        let peer_iter = QueryPeerIter::DisjointClosest(DisjointClosestPeersIter::with_config(cfg, target, peers));
+        let peer_iter = QueryPeerIter::Closest(DisjointClosestPeersIter::with_config(cfg, target, peers));
         self.add(peer_iter, inner)
     }
 
@@ -231,8 +217,7 @@ pub struct Query<TInner> {
 
 /// The peer selection strategies that can be used by queries.
 enum QueryPeerIter {
-    Closest(ClosestPeersIter),
-    DisjointClosest(DisjointClosestPeersIter),
+    Closest(DisjointClosestPeersIter),
     Fixed(FixedPeersIter)
 }
 
@@ -251,7 +236,6 @@ impl<TInner> Query<TInner> {
     pub fn on_failure(&mut self, peer: &PeerId) {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
-            QueryPeerIter::DisjointClosest(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer)
         }
     }
@@ -265,7 +249,6 @@ impl<TInner> Query<TInner> {
     {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),
-            QueryPeerIter::DisjointClosest(iter) => iter.on_success(peer, new_peers),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer)
         }
     }
@@ -274,7 +257,6 @@ impl<TInner> Query<TInner> {
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
         match &self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
-            QueryPeerIter::DisjointClosest(iter) => iter.is_waiting(peer),
             QueryPeerIter::Fixed(iter) => iter.is_waiting(peer)
         }
     }
@@ -283,7 +265,6 @@ impl<TInner> Query<TInner> {
     fn next(&mut self, now: Instant) -> PeersIterState {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
-            QueryPeerIter::DisjointClosest(iter) => iter.next(now),
             QueryPeerIter::Fixed(iter) => iter.next()
         }
     }
@@ -295,7 +276,6 @@ impl<TInner> Query<TInner> {
     pub fn finish(&mut self) {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
-            QueryPeerIter::DisjointClosest(iter) => iter.finish(),
             QueryPeerIter::Fixed(iter) => iter.finish()
         }
     }
@@ -304,7 +284,6 @@ impl<TInner> Query<TInner> {
     pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(iter.into_result()),
-            QueryPeerIter::DisjointClosest(iter) => unimplemented!(),
             QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
         };
         QueryResult { inner: self.inner, peers }
