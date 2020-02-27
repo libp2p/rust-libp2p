@@ -120,7 +120,7 @@ impl Streams {
     ///
     /// # Panics
     ///
-    /// Panics if [`Self::close`] has already been called.
+    /// Panics if [`Stream::close`] has already been called.
     pub(super) fn close<T: FnMut(quinn_proto::StreamId)>(&mut self, mut cb: T) {
         for (stream, value) in &mut self.map {
             value.wake_all();
