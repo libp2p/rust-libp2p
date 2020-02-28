@@ -1,3 +1,9 @@
+# Version 0.16.2 (2020-02-28)
+
+- Fixed yamux connections not properly closing and being stuck in the `CLOSE_WAIT` state.
+- Added a `websocket_transport()` function in `libp2p-wasm-ext`, behind a Cargo feature.
+- Fixed ambiguity in `IntoProtocolsHandler::select` vs `ProtocolsHandler::select` in the `NetworkBehaviour` custom derive.
+
 # Version 0.16.1 (2020-02-18)
 
 - Fixed wrong representation of `PeerId`s being used in `Kademlia::get_closest_peers`.
