@@ -170,7 +170,7 @@ fn wildcard_expansion() {
 #[test]
 fn communicating_between_dialer_and_listener() {
     init();
-    for _ in 0..100u32 {
+    for _ in 0..1000u32 {
         do_test()
     }
 }
@@ -185,7 +185,6 @@ fn do_test() {
     let quic_config = Config::new(&keypair2);
     let (quic_endpoint, join) = Endpoint::new(quic_config, addr.clone()).unwrap();
     let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
-
     trace!("running tests");
     let handle = async_std::task::spawn(async move {
         let key = loop {

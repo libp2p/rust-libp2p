@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{certificate, endpoint::ConnectionEndpoint as Endpoint, error::Error};
+use super::{endpoint::ConnectionEndpoint as Endpoint, error::Error, socket};
 use async_macros::ready;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
@@ -72,14 +72,6 @@ impl Substream {
     fn live(id: stream_map::StreamId) -> Self {
         let status = SubstreamStatus::Live;
         Self { id, status }
-    }
-
-    /// Test if data can be sent on a stream.
-    fn is_live(&self) -> bool {
-        match self.status {
-            SubstreamStatus::Live | SubstreamStatus::Unwritten => true,
-            SubstreamStatus::Finishing(_) | SubstreamStatus::Finished => false,
-        }
     }
 }
 
@@ -176,12 +168,7 @@ impl StreamMuxer for QuicMuxer {
         inner.wake_driver();
         match inner.connection.accept() {
             None => {
-                if let Some(waker) = replace(
-                    &mut inner.handshake_or_accept_waker,
-                    Some(cx.waker().clone()),
-                ) {
-                    waker.wake()
-                }
+                inner.handshake_or_accept_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
             Some(id) => {
@@ -198,13 +185,6 @@ impl StreamMuxer for QuicMuxer {
         buf: &[u8],
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::WriteError;
-        if !substream.is_live() {
-            error!(
-                "The application used stream {:?} after it was no longer live",
-                substream.id
-            );
-            return Poll::Ready(Err(Error::ExpiredStream));
-        }
         let mut inner = self.inner();
         inner.wake_driver();
         if let Some(ref e) = inner.close_reason {
@@ -361,12 +341,6 @@ impl StreamMuxer for QuicMuxer {
         if let Some(waker) = replace(&mut inner.close_waker, Some(cx.waker().clone())) {
             waker.wake();
         }
-        // To avoid reference count underflow, we must only decrement the
-        // refcount the *first* time this is called.
-        if !inner.shutting_down {
-            inner.outbound_streams -= 1;
-            inner.shutting_down = true;
-        }
         if inner.close_reason.is_some() {
             return Poll::Ready(Ok(()));
         } else if inner.outbound_streams == 0 {
@@ -408,17 +382,14 @@ impl Future for Upgrade {
         trace!("outbound polling!");
         let res = {
             let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
-            let peer_certificates = if let Some(close_reason) = &inner.close_reason {
+            if let Some(close_reason) = &inner.close_reason {
                 return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
             } else if inner.connection.is_handshaking() {
                 inner.handshake_or_accept_waker = Some(cx.waker().clone());
                 return Poll::Pending;
             } else {
                 ready!(inner.connection.notify_handshake_complete(cx))?
-            };
-            // we have already verified that there is (exactly) one peer certificate,
-            // and that it is valid.
-            certificate::extract_libp2p_peerid(peer_certificates[0].as_ref())
+            }
         };
         Poll::Ready(Ok((
             res,
@@ -445,15 +416,11 @@ pub(crate) struct Muxer {
     connectors: StreamSenderQueue,
     /// The number of outbound streams currently open.
     outbound_streams: usize,
-    /// `true` if and only if we are currently shutting down.
-    shutting_down: bool,
     /// The close reason, if this connection has been lost
     close_reason: Option<quinn_proto::ConnectionError>,
     /// Waker to wake up the driver. This is not a `MaybeWaker` because only the
     /// driver task ever puts a waker here.
     waker: Option<std::task::Waker>,
-    /// A handle to wait on the driver to exit.
-    driver: Option<async_std::task::JoinHandle<Result<(), Error>>>,
     /// Close waker
     close_waker: Option<std::task::Waker>,
 }
@@ -489,7 +456,7 @@ impl Muxer {
     fn new(connection: Endpoint) -> Self {
         Muxer {
             close_waker: None,
-            outbound_streams: 1,
+            outbound_streams: 0,
             pending_stream: None,
             streams: Default::default(),
             handshake_or_accept_waker: None,
@@ -497,8 +464,6 @@ impl Muxer {
             connection,
             close_reason: None,
             waker: None,
-            shutting_down: false,
-            driver: None,
         }
     }
     fn shutdown(&mut self, error_code: u32) {
@@ -538,7 +503,7 @@ impl Muxer {
                 }
                 Event::StreamAvailable { dir: Dir::Uni } => {
                     // Ditto
-                    panic!("we don’t use unidirectional streams")
+                    error!("we don’t use unidirectional streams")
                 }
                 Event::StreamReadable { stream } => {
                     trace!(
@@ -634,6 +599,7 @@ impl Muxer {
     }
 }
 
+/// The connection driver
 #[derive(Debug)]
 pub(super) struct ConnectionDriver {
     inner: Arc<Mutex<Muxer>>,
@@ -643,19 +609,24 @@ pub(super) struct ConnectionDriver {
     timer: Option<futures_timer::Delay>,
     /// The last timeout returned by `quinn_proto::poll_timeout`.
     last_timeout: Option<Instant>,
+    /// Transmit socket
+    socket: Arc<socket::Socket>,
 }
 
 impl ConnectionDriver {
-    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Muxer>>)>(connection: Endpoint, cb: T) -> Upgrade {
+    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Muxer>>) -> Arc<crate::socket::Socket>>(
+        connection: Endpoint,
+        cb: T,
+    ) -> Upgrade {
         let inner = Arc::new(Mutex::new(Muxer::new(connection)));
-        cb(inner.clone());
-        let handle = async_std::task::spawn(Self {
+        let socket = cb(inner.clone());
+        async_std::task::spawn(Self {
             inner: inner.clone(),
             outgoing_packet: None,
             timer: None,
             last_timeout: None,
+            socket,
         });
-        inner.lock().driver = Some(handle);
         Upgrade {
             muxer: Some(QuicMuxer(inner)),
         }
@@ -671,7 +642,9 @@ impl Future for ConnectionDriver {
         inner.waker = Some(cx.waker().clone());
         loop {
             let now = Instant::now();
-            inner.connection.poll_transmit_pending(now, cx)?;
+            inner
+                .connection
+                .poll_transmit_pending(now, cx, &this.socket)?;
             inner.process_app_events();
             inner.connection.send_endpoint_events(cx)?;
             match inner.connection.poll_timeout() {

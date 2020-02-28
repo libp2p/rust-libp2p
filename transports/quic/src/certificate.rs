@@ -28,6 +28,7 @@
 
 use libp2p_core::identity;
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
+pub(super) const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
@@ -96,7 +97,7 @@ pub(crate) fn extract_libp2p_peerid(certificate: &[u8]) -> libp2p_core::PeerId {
         &mut |oid: untrusted::Input<'_>, value: untrusted::Input<'_>, _critical, _spki| match oid
             .as_slice_less_safe()
         {
-            [43, 6, 1, 4, 1, 131, 162, 90, 1, 1] => {
+            LIBP2P_OID_BYTES => {
                 id = Some(
                     extract_libp2p_extension(value).expect("we already validated the certificate"),
                 );

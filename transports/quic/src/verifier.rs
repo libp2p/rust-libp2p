@@ -20,6 +20,7 @@
 
 use libp2p_core::identity;
 
+use super::certificate::LIBP2P_OID_BYTES;
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 
@@ -110,7 +111,7 @@ fn verify_presented_certs(
         oid.as_slice_less_safe(),
         status,
     ) {
-        ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], ExtensionStatus::NotFound) => {
+        (LIBP2P_OID_BYTES, ExtensionStatus::NotFound) => {
             status = if verify_libp2p_extension(value, spki).is_ok() {
                 ExtensionStatus::Good
             } else {
@@ -118,7 +119,7 @@ fn verify_presented_certs(
             };
             webpki::Understood::Yes
         }
-        ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], _) => {
+        (LIBP2P_OID_BYTES, _) => {
             status = ExtensionStatus::Error;
             webpki::Understood::Yes
         }

@@ -277,19 +277,23 @@ impl ConnectionEndpoint {
     pub(crate) fn notify_handshake_complete(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Vec<rustls::Certificate>, mpsc::SendError>> {
+    ) -> Poll<Result<libp2p_core::PeerId, mpsc::SendError>> {
         assert!(!self.is_handshaking());
-        let certificate = self
-            .connection
-            .crypto_session()
-            .get_peer_certificates()
-            .expect("we always require the peer to present a certificate; qed");
         if self.connection.side().is_server() {
             ready!(self.channel.poll_ready(cx))?;
             self.channel
                 .start_send(EndpointMessage::ConnectionAccepted)?
         }
-        Poll::Ready(Ok(certificate))
+        let certificate = self
+            .connection
+            .crypto_session()
+            .get_peer_certificates()
+            .expect("we always require the peer to present a certificate; qed");
+        // we have already verified that there is (exactly) one peer certificate,
+        // and that it is valid.
+        Poll::Ready(Ok(crate::certificate::extract_libp2p_peerid(
+            certificate[0].as_ref(),
+        )))
     }
 
     /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.
@@ -333,11 +337,12 @@ impl ConnectionEndpoint {
         &mut self,
         now: Instant,
         cx: &mut Context<'_>,
+        socket: &socket::Socket,
     ) -> Result<(), Error> {
         let connection = &mut self.connection;
         match self
             .pending
-            .send_packet(cx, &self.socket, &mut || connection.poll_transmit(now))
+            .send_packet(cx, socket, &mut || connection.poll_transmit(now))
         {
             Poll::Ready(Ok(())) | Poll::Pending => Ok(()),
             Poll::Ready(Err(e)) => Err(Error::IO(e)),
@@ -473,7 +478,6 @@ pub(crate) struct ConnectionEndpoint {
     connection: Connection,
     handle: ConnectionHandle,
     channel: Channel,
-    socket: Arc<socket::Socket>,
 }
 
 /// A handle that can be used to wait for the endpoint driver to finish.
@@ -568,13 +572,6 @@ impl Endpoint {
     }
 }
 
-fn create_muxer(endpoint: ConnectionEndpoint, inner: &mut EndpointInner) -> Upgrade {
-    let handle = endpoint.handle;
-    super::connection::ConnectionDriver::spawn(endpoint, |weak| {
-        inner.muxers.insert(handle, weak);
-    })
-}
-
 fn accept_muxer(
     endpoint: &Arc<EndpointData>,
     connection: Connection,
@@ -586,10 +583,15 @@ fn accept_muxer(
         pending: socket::Pending::default(),
         connection,
         handle,
-        socket: endpoint.socket.clone(),
         channel,
     };
-    let upgrade = create_muxer(connection_endpoint, &mut *inner);
+
+    let socket = endpoint.socket.clone();
+
+    let upgrade = super::connection::ConnectionDriver::spawn(connection_endpoint, |weak| {
+        inner.muxers.insert(handle, weak);
+        socket
+    });
     if endpoint
         .new_connections
         .unbounded_send(ListenerEvent::Upgrade {
@@ -728,13 +730,13 @@ impl Transport for Endpoint {
             pending: socket::Pending::default(),
             connection,
             handle,
-            socket,
             channel: endpoint.channel,
         };
         Ok(super::connection::ConnectionDriver::spawn(
             endpoint,
             |weak| {
                 inner.muxers.insert(handle, weak);
+                socket
             },
         ))
     }
