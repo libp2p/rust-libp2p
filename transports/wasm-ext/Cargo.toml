@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-wasm-ext"
-version = "0.16.1"
+version = "0.16.2"
 authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>"]
 edition = "2018"
 description = "Allows passing in an external transport in a WASM environment"
