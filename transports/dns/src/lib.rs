@@ -145,8 +145,18 @@ where
         for (i, protocol) in addr.iter().enumerate() {
             resolve_futs.push(match protocol {
                 Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_) => {
-                    let suffix = &protocols[(i + 1)..];
-                    resolve_dns::<T>(protocol.clone().acquire(), suffix.into()).left_future()
+                    let is_dnsaddr = if let Protocol::Dnsaddr(_) = protocol { true } else { false };
+                    let suffix: Multiaddr = (&protocols[(i + 1)..]).into();
+
+                    resolve_dns::<T>(protocol.clone().acquire())
+                        .and_then(move |resolved_addr| {
+                            if is_dnsaddr {
+                                suffix_matching::<T>(resolved_addr, suffix).left_future()
+                            } else {
+                                future::ok(resolved_addr).right_future()
+                            }
+                        })
+                        .left_future()
                 }
                 ref p => future::ready(Ok(p.clone().into())).right_future()
             });
@@ -194,6 +204,8 @@ pub enum DnsErr<TErr> {
     },
     /// Found an IP address, but the underlying transport doesn't support the multiaddr.
     MultiaddrNotSupported,
+    /// Found an IP address, but the suffix doesn't matched.
+    SuffixDoesNotMatched,
 }
 
 impl<TErr> fmt::Display for DnsErr<TErr>
@@ -207,6 +219,7 @@ where TErr: fmt::Display
                 write!(f, "Failed to resolve DNS address: {:?}; {:?}", domain_name, error)
             },
             DnsErr::MultiaddrNotSupported => write!(f, "Resolve multiaddr not supported"),
+            DnsErr::SuffixDoesNotMatched => write!(f, "Suffix does not matched"),
         }
     }
 }
@@ -220,11 +233,12 @@ where TErr: error::Error + 'static
             DnsErr::ResolveFail(_) => None,
             DnsErr::ResolveError { error, .. } => Some(error),
             DnsErr::MultiaddrNotSupported => None,
+            DnsErr::SuffixDoesNotMatched => None,
         }
     }
 }
 
-async fn resolve_dns<T>(p: Protocol<'_>, suffix: Multiaddr) -> Result<Multiaddr, DnsErr<T::Error>>
+async fn resolve_dns<T>(p: Protocol<'_>) -> Result<Multiaddr, DnsErr<T::Error>>
 where
     T: Transport
 {
@@ -291,17 +305,40 @@ where
 
             // if resolved_addrs.len() == 0 {} // TODO
 
-            if suffix.len() == 0 {
-                Ok(resolved_addrs[0].clone())
-            } else {
-                // TODO: suffix matching
-                // https://github.com/multiformats/multiaddr/blob/master/protocols/DNSADDR.md#suffix-matching
-                println!("suffix: {:?}", suffix);
-                println!("resolved_addrs: {:?}", resolved_addrs);
-                Ok(resolved_addrs[0].clone())
-            }
+            Ok(resolved_addrs[0].clone())
         }
         _ => unreachable!()
+    }
+}
+
+async fn suffix_matching<T>(resolved_addr: Multiaddr, suffix: Multiaddr) -> Result<Multiaddr, DnsErr<T::Error>>
+where
+    T: Transport
+{
+    let resolved_addr_len = resolved_addr.iter().count();
+    let suffix_len = suffix.iter().count();
+
+    // Make sure the addr is at least as long as the suffix we're looking for.
+    if resolved_addr_len < suffix_len {
+        // not long enough.
+        return Err(DnsErr::SuffixDoesNotMatched);
+    }
+
+    // Matches everything after the /dnsaddr/... with the end of the dnsaddr record.
+    //
+    // v-------------------resolved_addr_len---------------------v
+    // /ip6/2001:db8:20:3:1000:100:20:3/tcp/1234/p2p/Qmxxxxxxxxxxx
+    //                                          /p2p/Qmxxxxxxxxxxx
+    // ^----(resolved_addr_len - suffix_len)----^---suffix_len---^
+    let resolved_addr_suffix: Multiaddr = {
+        let protocols = resolved_addr.iter().collect::<Vec<Protocol>>();
+        protocols[(resolved_addr_len - suffix_len)..].into()
+    };
+
+    if resolved_addr_suffix == suffix {
+        Ok(resolved_addr)
+    } else {
+        Err(DnsErr::SuffixDoesNotMatched)
     }
 }
 
@@ -415,7 +452,7 @@ mod tests {
             let transport = DnsConfig::new(CustomTransport).unwrap();
             let _ = transport
                 .clone()
-                .dial("/dnsaddr/sjc-1.bootstrap.libp2p.io/tcp/4001".parse().unwrap())
+                .dial("/dnsaddr/sjc-1.bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap())
                 .unwrap()
                 .await
                 .unwrap();
