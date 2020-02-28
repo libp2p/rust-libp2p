@@ -29,8 +29,8 @@
 use libp2p_core::identity;
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 pub(super) const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
-const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
-const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
+pub(super) const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
+pub(super) const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
@@ -83,68 +83,42 @@ pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
         .expect("certificate generation with valid params will succeed; qed")
 }
 
-/// Extract the peer’s public key from a libp2p certificate. It is erroneous to
-/// call this unless the certificate is known to be a valid libp2p certificate.
-/// The certificate verifiers in this crate validate that a certificate is in
-/// fact a valid libp2p certificate.
+/// Extracts the `PeerId` from a certificate’s libp2p extension. It is erroneous
+/// to call this unless the certificate is known to be a well-formed X.509
+/// certificate with a valid libp2p extension. The certificate verifiers in this
+/// crate validate check this.
 ///
 /// # Panics
 ///
-/// Panics if the key could not be extracted.
-pub(crate) fn extract_libp2p_peerid(certificate: &[u8]) -> libp2p_core::PeerId {
+/// Panics if there is no libp2p extension in the certificate, or if the
+/// certificate is ill-formed.
+pub(crate) fn unwrap_libp2p_certificate(certificate: &[u8]) -> libp2p_core::PeerId {
     let mut id = None;
-    let cb =
-        &mut |oid: untrusted::Input<'_>, value: untrusted::Input<'_>, _critical, _spki| match oid
-            .as_slice_less_safe()
-        {
-            LIBP2P_OID_BYTES => {
-                id = Some(
-                    extract_libp2p_extension(value).expect("we already validated the certificate"),
-                );
-                webpki::Understood::Yes
-            }
-            _ => webpki::Understood::No,
-        };
+    let cb = &mut |oid: untrusted::Input<'_>, value, _, _| match oid.as_slice_less_safe() {
+        LIBP2P_OID_BYTES => {
+            id = Some(extract_libp2p_peerid(value));
+            webpki::Understood::Yes
+        }
+        _ => webpki::Understood::No,
+    };
     webpki::EndEntityCert::from_with_extension_cb(certificate, cb)
-        .expect("we already validated the certificate");
-    id.expect("we already checked that a PeerId exists").into()
+        .expect("we already validated the certificate is well-formed");
+    id.expect("we already checked that a libp2p extension exists")
 }
 
-fn extract_libp2p_extension(
-    extension: untrusted::Input<'_>,
-) -> Result<identity::PublicKey, ring::error::Unspecified> {
+fn extract_libp2p_peerid(extension: untrusted::Input<'_>) -> libp2p_core::PeerId {
     use ring::{error::Unspecified, io::der};
-    extension.read_all(Unspecified, |mut reader| {
-        let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
-        inner.read_all(Unspecified, |mut reader| {
-            let public_key = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
-            der::bit_string_with_no_unused_bits(&mut reader)?;
-            identity::PublicKey::from_protobuf_encoding(public_key).map_err(|_| Unspecified)
+    extension
+        .read_all(Unspecified, |mut reader| {
+            let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
+            inner.read_all(Unspecified, |mut reader| {
+                let public_key =
+                    der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
+                der::bit_string_with_no_unused_bits(&mut reader)?;
+                Ok(identity::PublicKey::from_protobuf_encoding(public_key)
+                    .expect("already checked")
+                    .into())
+            })
         })
-    })
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    #[test]
-    fn can_make_a_certificate() {
-        drop(env_logger::try_init());
-        let keypair = identity::Keypair::generate_ed25519();
-        assert_eq!(
-            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()),
-            libp2p_core::PeerId::from_public_key(keypair.public())
-        );
-        log::trace!("trying secp256k1!");
-        let keypair = identity::Keypair::generate_secp256k1();
-        log::trace!("have a key!");
-        let public = keypair.public();
-        log::trace!("have a public key!");
-        assert_eq!(public, public, "key is not equal to itself?");
-        log::debug!("have a valid key!");
-        assert_eq!(
-            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()),
-            libp2p_core::PeerId::from_public_key(keypair.public())
-        );
-    }
+        .expect("we already checked this in the certificate verifier")
 }

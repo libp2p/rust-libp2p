@@ -277,7 +277,7 @@ impl ConnectionEndpoint {
     pub(crate) fn notify_handshake_complete(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<libp2p_core::PeerId, mpsc::SendError>> {
+    ) -> Poll<Result<libp2p_core::PeerId, Error>> {
         assert!(!self.is_handshaking());
         if self.connection.side().is_server() {
             ready!(self.channel.poll_ready(cx))?;
@@ -290,8 +290,8 @@ impl ConnectionEndpoint {
             .get_peer_certificates()
             .expect("we always require the peer to present a certificate; qed");
         // we have already verified that there is (exactly) one peer certificate,
-        // and that it is valid.
-        Poll::Ready(Ok(crate::certificate::extract_libp2p_peerid(
+        // and that it has a valid libp2p extension.
+        Poll::Ready(Ok(crate::certificate::unwrap_libp2p_certificate(
             certificate[0].as_ref(),
         )))
     }

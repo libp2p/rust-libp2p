@@ -338,9 +338,8 @@ impl StreamMuxer for QuicMuxer {
             inner.outbound_streams,
             inner.connection.side()
         );
-        if let Some(waker) = replace(&mut inner.close_waker, Some(cx.waker().clone())) {
-            waker.wake();
-        }
+        inner.wake_closer();
+        inner.close_waker = Some(cx.waker().clone());
         if inner.close_reason.is_some() {
             return Poll::Ready(Ok(()));
         } else if inner.outbound_streams == 0 {
@@ -380,21 +379,30 @@ impl Future for Upgrade {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let muxer = &mut self.get_mut().muxer;
         trace!("outbound polling!");
-        let res = {
-            let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
-            if let Some(close_reason) = &inner.close_reason {
-                return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
-            } else if inner.connection.is_handshaking() {
-                inner.handshake_or_accept_waker = Some(cx.waker().clone());
-                return Poll::Pending;
-            } else {
-                ready!(inner.connection.notify_handshake_complete(cx))?
+        let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
+        if let Some(close_reason) = &inner.close_reason {
+            return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
+        } else if inner.connection.is_handshaking() {
+            inner.handshake_or_accept_waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        } else {
+            match ready!(inner.connection.notify_handshake_complete(cx)) {
+                Ok(res) => {
+                    drop(inner);
+                    Poll::Ready(Ok((
+                        res,
+                        muxer.take().expect("polled after yielding Ready"),
+                    )))
+                }
+                Err(e) => {
+                    inner.shutdown(RESET);
+                    inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
+                    drop(inner);
+                    *muxer = None;
+                    Poll::Ready(Err(e))
+                }
             }
-        };
-        Poll::Ready(Ok((
-            res,
-            muxer.take().expect("polled after yielding Ready"),
-        )))
+        }
     }
 }
 
@@ -440,6 +448,12 @@ impl Muxer {
     pub(crate) fn wake_driver(&mut self) {
         if let Some(waker) = self.waker.take() {
             waker.wake()
+        }
+    }
+
+    fn wake_closer(&mut self) {
+        if let Some(close_waker) = self.close_waker.take() {
+            close_waker.wake()
         }
     }
 
@@ -560,9 +574,7 @@ impl Muxer {
                         self.connection.side()
                     );
                     self.close_reason = Some(reason);
-                    if let Some(e) = self.close_waker.take() {
-                        e.wake()
-                    }
+                    self.wake_closer();
                     self.shutdown(0);
                 }
                 Event::StreamFinished {
@@ -582,9 +594,7 @@ impl Muxer {
                     // dead.
                     self.streams.wake_writer(stream);
                     // Connection close could be blocked on this.
-                    if let Some(waker) = self.close_waker.take() {
-                        waker.wake()
-                    }
+                    self.wake_closer()
                 }
                 Event::Connected => {
                     debug!("connected for side {:?}!", self.connection.side());
