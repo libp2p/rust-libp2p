@@ -392,7 +392,7 @@ impl<TUserData> KademliaHandler<TUserData> {
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(10)),
+            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(2)),
         }
     }
 
@@ -645,7 +645,7 @@ where
                     }
                     (None, Some(event), _) => {
                         if self.substreams.is_empty() {
-                            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(2));
                         }
                         return Poll::Ready(event);
                     }
@@ -666,7 +666,7 @@ where
 
         if self.substreams.is_empty() {
             // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(2));
         } else {
             self.keep_alive = KeepAlive::Yes;
         }
