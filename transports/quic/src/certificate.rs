@@ -27,10 +27,9 @@
 //! library) are logged at `debug` level.
 
 use libp2p_core::identity;
-use log::{trace, warn};
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
-pub(crate) const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
+const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
@@ -46,7 +45,9 @@ fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen
                 .write_bitvec_bytes(signature, signature.len() * 8);
         })
     });
-    rcgen::CustomExtension::from_oid_content(LIBP2P_OID, contents)
+    let mut ext = rcgen::CustomExtension::from_oid_content(LIBP2P_OID, contents);
+    ext.set_criticality(true);
+    ext
 }
 
 fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::CustomExtension) {
@@ -81,139 +82,45 @@ pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
         .expect("certificate generation with valid params will succeed; qed")
 }
 
-/// Read a bitvec into a vector of bytes.  Requires the bitvec to be a whole number of bytes.
-fn read_bitvec(reader: &mut yasna::BERReaderSeq<'_, '_>) -> Result<Vec<u8>, yasna::ASN1Error> {
-    let (value, bits) = reader.next().read_bitvec_bytes()?;
-    // be extra careful regarding overflow
-    if bits % 8 == 0 {
-        Ok(value)
-    } else {
-        warn!("value was of wrong length, sorry!");
-        Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
-    }
-}
-
-fn parse_x509_extensions(
-    reader: &mut yasna::BERReaderSeq<'_, '_>,
-    certificate_key: &[u8],
-) -> Result<identity::PublicKey, yasna::ASN1Error> {
-    reader.next().read_tagged(yasna::Tag::context(3), |reader| {
-        let mut public_key = None;
-        let mut oids_seen = std::collections::HashSet::new();
-        reader.read_sequence_of(|reader| {
-            trace!("reading an extension");
-            public_key = parse_x509_extension(reader, &certificate_key, &mut oids_seen)?;
-            Ok(())
-        })?;
-        match public_key {
-            Some(e) => Ok(e),
-            None => Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Eof)),
-        }
-    })
-}
-
-fn parse_x509_extension(
-    reader: yasna::BERReader<'_, '_>,
-    certificate_key: &[u8],
-    oids_seen: &mut std::collections::HashSet<yasna::models::ObjectIdentifier>,
-) -> Result<Option<identity::PublicKey>, yasna::ASN1Error> {
-    reader.read_sequence(|reader| {
-        let oid = reader.next().read_oid()?;
-        trace!("read extensions with oid {:?}", oid);
-        if !oids_seen.insert(oid.clone()) {
-            warn!(
-                "found the second extension with oid {:?} in the same certificate",
-                oid
-            );
-            return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid));
-        }
-        reader.read_optional(|reader| reader.read_bool().map(drop))?;
-        let contents = reader.next().read_bytes()?;
-        match &**oid.components() {
-            LIBP2P_OID => verify_libp2p_extension(&contents, certificate_key).map(Some),
-            _ => Ok(None),
-        }
-    })
-}
-
-fn verify_libp2p_extension(
-    extension: &[u8],
-    certificate_key: &[u8],
-) -> yasna::ASN1Result<identity::PublicKey> {
-    yasna::parse_der(extension, |reader| {
-        reader.read_sequence(|mut reader| {
-            let public_key = read_bitvec(&mut reader)?;
-            let signature = read_bitvec(&mut reader)?;
-            let public_key = identity::PublicKey::from_protobuf_encoding(&public_key)
-                .map_err(|_| yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))?;
-            let mut v = Vec::with_capacity(LIBP2P_SIGNING_PREFIX_LENGTH + certificate_key.len());
-            v.extend_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
-            v.extend_from_slice(certificate_key);
-            if public_key.verify(&v, &signature) {
-                Ok(public_key)
-            } else {
-                Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid))
+/// Extract the peer’s public key from a libp2p certificate. It is erroneous to
+/// call this unless the certificate is known to be a valid libp2p certificate.
+/// The certificate verifiers in this crate validate that a certificate is in
+/// fact a valid libp2p certificate.
+///
+/// # Panics
+///
+/// Panics if the key could not be extracted.
+pub(crate) fn extract_libp2p_peerid(certificate: &[u8]) -> libp2p_core::PeerId {
+    let mut id = None;
+    webpki::EndEntityCert::from_with_extension_cb(
+        certificate,
+        &mut |oid, value, _critical, _spki| match oid.as_slice_less_safe() {
+            [43, 6, 1, 4, 1, 131, 162, 90, 1, 1] => {
+                use ring::io::der;
+                value
+                    .read_all(ring::error::Unspecified, |mut reader| {
+                        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?.read_all(
+                            ring::error::Unspecified,
+                            |mut reader| {
+                                let public_key = der::bit_string_with_no_unused_bits(&mut reader)?
+                                    .as_slice_less_safe();
+                                let _signature = der::bit_string_with_no_unused_bits(&mut reader)?;
+                                id = Some(
+                                    identity::PublicKey::from_protobuf_encoding(public_key)
+                                        .map_err(|_| ring::error::Unspecified)?,
+                                );
+                                Ok(())
+                            },
+                        )
+                    })
+                    .expect("we already validated the certificate");
+                webpki::Understood::Yes
             }
-        })
-    })
-}
-
-fn parse_certificate(certificate: &[u8]) -> yasna::ASN1Result<identity::PublicKey> {
-    trace!("parsing certificate");
-    yasna::parse_der(certificate, |reader| {
-        reader.read_sequence(|reader| {
-            let key = parse_tbscertificate(reader.next())?;
-            // skip algorithm
-            reader.next().read_der()?;
-            // skip signature
-            reader.next().read_der()?;
-            Ok(key)
-        })
-    })
-}
-
-fn parse_tbscertificate(
-    reader: yasna::BERReader<'_, '_>,
-) -> yasna::ASN1Result<identity::PublicKey> {
-    // trace!("parsing TBScertificate");
-    reader.read_sequence(|reader| {
-        // Check the X.509 version
-        if reader.next().read_der()? != [160, 3, 2, 1, 2] {
-            return Err(yasna::ASN1Error::new(yasna::ASN1ErrorKind::Invalid));
-        }
-        // Skip the serial number
-        reader.next().read_der()?;
-        // Skip the signature algorithm
-        reader.next().read_der()?;
-        // Skip the issuer
-        reader.next().read_der()?;
-        // Skip validity
-        reader.next().read_der()?;
-        // Skip subject
-        reader.next().read_der()?;
-        // trace!("reading subjectPublicKeyInfo");
-        let key = reader.next().read_sequence(|mut reader| {
-            // Skip the subject key algorithm
-            reader.next().read_der()?;
-            // trace!("reading subject key");
-            read_bitvec(&mut reader)
-        })?;
-        trace!("reading extensions");
-        parse_x509_extensions(reader, &key)
-    })
-}
-
-/// Extract the peer’s public key from a libp2p certificate, and check that the certificate’s
-/// public key is signed by it.
-pub(crate) fn extract_libp2p_peerid(
-    certificate: &[u8],
-) -> Result<libp2p_core::PeerId, webpki::Error> {
-    parse_certificate(certificate)
-        .map_err(|e| {
-            log::debug!("error in parsing: {:?}", e);
-            webpki::Error::InvalidSignatureForPublicKey
-        })
-        .map(libp2p_core::PeerId::from_public_key)
+            _ => webpki::Understood::No,
+        },
+    )
+    .expect("we already validated the certificate");
+    id.expect("we already checked that a PeerId exists").into()
 }
 
 #[cfg(test)]
@@ -224,7 +131,7 @@ mod test {
         drop(env_logger::try_init());
         let keypair = identity::Keypair::generate_ed25519();
         assert_eq!(
-            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()),
             libp2p_core::PeerId::from_public_key(keypair.public())
         );
         log::trace!("trying secp256k1!");
@@ -235,7 +142,7 @@ mod test {
         assert_eq!(public, public, "key is not equal to itself?");
         log::debug!("have a valid key!");
         assert_eq!(
-            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()).unwrap(),
+            extract_libp2p_peerid(&make_cert(&keypair).serialize_der().unwrap()),
             libp2p_core::PeerId::from_public_key(keypair.public())
         );
     }

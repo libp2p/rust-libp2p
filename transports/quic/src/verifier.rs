@@ -18,6 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_core::identity;
+
+const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
+const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
+
 static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
     &[
         &webpki::ECDSA_P256_SHA256,
@@ -76,6 +81,13 @@ impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServe
     }
 }
 
+#[derive(Copy, Clone)]
+enum ExtensionStatus {
+    NotFound,
+    Good,
+    Error,
+}
+
 fn verify_presented_certs(
     presented_certs: &[rustls::Certificate],
     cb: &dyn Fn(
@@ -91,11 +103,63 @@ fn verify_presented_certs(
         .map_err(|ring::error::Unspecified| rustls::TLSError::FailedToGetCurrentTime)?;
     let raw_certificate = presented_certs[0].as_ref();
     let inner_func = || {
-        let parsed_cert = webpki::EndEntityCert::from(raw_certificate)?;
+        let mut status = ExtensionStatus::NotFound;
+        let parsed_cert = webpki::EndEntityCert::from_with_extension_cb(
+            raw_certificate,
+            &mut |oid, value, _critical, spki| match (oid.as_slice_less_safe(), status) {
+                ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], ExtensionStatus::NotFound) => {
+                    status = if verify_libp2p_extension(value, spki).is_ok() {
+                        ExtensionStatus::Good
+                    } else {
+                        ExtensionStatus::Error
+                    };
+                    webpki::Understood::Yes
+                }
+                ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], _) => {
+                    status = ExtensionStatus::Error;
+                    webpki::Understood::Yes
+                }
+                _ => webpki::Understood::No,
+            },
+        )?;
+        match status {
+            ExtensionStatus::Good => {}
+            ExtensionStatus::Error | ExtensionStatus::NotFound => {
+                return Err(webpki::Error::UnknownIssuer)
+            }
+        }
         let trust_anchor = webpki::trust_anchor_util::cert_der_as_trust_anchor(raw_certificate)?;
         cb(time, parsed_cert, trust_anchor)
     };
     inner_func().map_err(rustls::TLSError::WebPKIError)
+}
+
+fn verify_libp2p_extension(
+    extension: untrusted::Input<'_>,
+    subject_public_key_info: untrusted::Input<'_>,
+) -> Result<identity::PublicKey, ring::error::Unspecified> {
+    use ring::{error::Unspecified, io::der};
+    let spki = subject_public_key_info.read_all(Unspecified, |mut reader| {
+        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
+        Ok(der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe())
+    })?;
+    extension.read_all(Unspecified, |mut reader| {
+        let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
+        inner.read_all(Unspecified, |mut reader| {
+            let public_key = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
+            let signature = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
+            let public_key =
+                identity::PublicKey::from_protobuf_encoding(public_key).map_err(|_| Unspecified)?;
+            let mut v = Vec::with_capacity(LIBP2P_SIGNING_PREFIX_LENGTH + spki.len());
+            v.extend_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
+            v.extend_from_slice(spki);
+            if public_key.verify(&v, signature) {
+                Ok(public_key)
+            } else {
+                Err(Unspecified)
+            }
+        })
+    })
 }
 
 impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClientCertificate {

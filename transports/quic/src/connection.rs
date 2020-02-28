@@ -428,11 +428,7 @@ impl Future for Upgrade {
                     .as_ref(),
             )
         };
-        let muxer = muxer.take().expect("polled after yielding Ready");
-        Poll::Ready(match res {
-            Ok(e) => Ok((e, muxer)),
-            Err(_) => Err(Error::BadCertificate(ring::error::Unspecified)),
-        })
+        Poll::Ready(Ok((res, muxer.take().expect("polled after yielding Ready"))))
     }
 }
 

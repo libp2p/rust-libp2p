@@ -79,4 +79,9 @@ members = [
     "transports/wasm-ext",
     "transports/websocket",
 ]
+exclude = [
+    "webpki"
+]
 
+[patch.crates-io]
+webpki = { path = "webpki" }
