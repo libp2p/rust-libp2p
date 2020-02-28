@@ -416,19 +416,14 @@ impl Future for Upgrade {
             } else {
                 ready!(inner.connection.notify_handshake_complete(cx))?
             };
-
-            certificate::extract_libp2p_peerid(
-                peer_certificates
-                    .get(0)
-                    .expect(
-                        "our certificate verifiers require exactly one \
-                         certificate to be presented, so an empty certificate \
-                         chain would already have been rejected; qed",
-                    )
-                    .as_ref(),
-            )
+            // we have already verified that there is (exactly) one peer certificate,
+            // and that it is valid.
+            certificate::extract_libp2p_peerid(peer_certificates[0].as_ref())
         };
-        Poll::Ready(Ok((res, muxer.take().expect("polled after yielding Ready"))))
+        Poll::Ready(Ok((
+            res,
+            muxer.take().expect("polled after yielding Ready"),
+        )))
     }
 }
 

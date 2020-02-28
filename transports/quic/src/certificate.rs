@@ -92,35 +92,35 @@ pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
 /// Panics if the key could not be extracted.
 pub(crate) fn extract_libp2p_peerid(certificate: &[u8]) -> libp2p_core::PeerId {
     let mut id = None;
-    webpki::EndEntityCert::from_with_extension_cb(
-        certificate,
-        &mut |oid, value, _critical, _spki| match oid.as_slice_less_safe() {
+    let cb =
+        &mut |oid: untrusted::Input<'_>, value: untrusted::Input<'_>, _critical, _spki| match oid
+            .as_slice_less_safe()
+        {
             [43, 6, 1, 4, 1, 131, 162, 90, 1, 1] => {
-                use ring::io::der;
-                value
-                    .read_all(ring::error::Unspecified, |mut reader| {
-                        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?.read_all(
-                            ring::error::Unspecified,
-                            |mut reader| {
-                                let public_key = der::bit_string_with_no_unused_bits(&mut reader)?
-                                    .as_slice_less_safe();
-                                let _signature = der::bit_string_with_no_unused_bits(&mut reader)?;
-                                id = Some(
-                                    identity::PublicKey::from_protobuf_encoding(public_key)
-                                        .map_err(|_| ring::error::Unspecified)?,
-                                );
-                                Ok(())
-                            },
-                        )
-                    })
-                    .expect("we already validated the certificate");
+                id = Some(
+                    extract_libp2p_extension(value).expect("we already validated the certificate"),
+                );
                 webpki::Understood::Yes
             }
             _ => webpki::Understood::No,
-        },
-    )
-    .expect("we already validated the certificate");
+        };
+    webpki::EndEntityCert::from_with_extension_cb(certificate, cb)
+        .expect("we already validated the certificate");
     id.expect("we already checked that a PeerId exists").into()
+}
+
+fn extract_libp2p_extension(
+    extension: untrusted::Input<'_>,
+) -> Result<identity::PublicKey, ring::error::Unspecified> {
+    use ring::{error::Unspecified, io::der};
+    extension.read_all(Unspecified, |mut reader| {
+        let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
+        inner.read_all(Unspecified, |mut reader| {
+            let public_key = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
+            der::bit_string_with_no_unused_bits(&mut reader)?;
+            identity::PublicKey::from_protobuf_encoding(public_key).map_err(|_| Unspecified)
+        })
+    })
 }
 
 #[cfg(test)]

@@ -69,15 +69,16 @@ impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServe
         _dns_name: webpki::DNSNameRef<'_>,
         _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs, &|time, end_entity_cert, trust_anchor| {
-            end_entity_cert.verify_is_valid_tls_server_cert(
+        let (time, end_entity_cert, trust_anchor) = verify_presented_certs(presented_certs)?;
+        end_entity_cert
+            .verify_is_valid_tls_server_cert(
                 ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
                 &webpki::TLSServerTrustAnchors(&[trust_anchor]),
                 &[],
                 time,
             )
-        })
-        .map(|()| rustls::ServerCertVerified::assertion())
+            .map(|()| rustls::ServerCertVerified::assertion())
+            .map_err(rustls::TLSError::WebPKIError)
     }
 }
 
@@ -90,48 +91,51 @@ enum ExtensionStatus {
 
 fn verify_presented_certs(
     presented_certs: &[rustls::Certificate],
-    cb: &dyn Fn(
+) -> Result<
+    (
         webpki::Time,
         webpki::EndEntityCert<'_>,
         webpki::TrustAnchor<'_>,
-    ) -> Result<(), webpki::Error>,
-) -> Result<(), rustls::TLSError> {
+    ),
+    rustls::TLSError,
+> {
     if presented_certs.len() != 1 {
         return Err(rustls::TLSError::NoCertificatesPresented);
     }
     let time = webpki::Time::try_from(std::time::SystemTime::now())
         .map_err(|ring::error::Unspecified| rustls::TLSError::FailedToGetCurrentTime)?;
     let raw_certificate = presented_certs[0].as_ref();
-    let inner_func = || {
-        let mut status = ExtensionStatus::NotFound;
-        let parsed_cert = webpki::EndEntityCert::from_with_extension_cb(
-            raw_certificate,
-            &mut |oid, value, _critical, spki| match (oid.as_slice_less_safe(), status) {
-                ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], ExtensionStatus::NotFound) => {
-                    status = if verify_libp2p_extension(value, spki).is_ok() {
-                        ExtensionStatus::Good
-                    } else {
-                        ExtensionStatus::Error
-                    };
-                    webpki::Understood::Yes
-                }
-                ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], _) => {
-                    status = ExtensionStatus::Error;
-                    webpki::Understood::Yes
-                }
-                _ => webpki::Understood::No,
-            },
-        )?;
-        match status {
-            ExtensionStatus::Good => {}
-            ExtensionStatus::Error | ExtensionStatus::NotFound => {
-                return Err(webpki::Error::UnknownIssuer)
-            }
+    let mut status = ExtensionStatus::NotFound;
+    let cb = &mut |oid: untrusted::Input<'_>, value, _critical, spki| match (
+        oid.as_slice_less_safe(),
+        status,
+    ) {
+        ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], ExtensionStatus::NotFound) => {
+            status = if verify_libp2p_extension(value, spki).is_ok() {
+                ExtensionStatus::Good
+            } else {
+                ExtensionStatus::Error
+            };
+            webpki::Understood::Yes
         }
-        let trust_anchor = webpki::trust_anchor_util::cert_der_as_trust_anchor(raw_certificate)?;
-        cb(time, parsed_cert, trust_anchor)
+        ([43, 6, 1, 4, 1, 131, 162, 90, 1, 1], _) => {
+            status = ExtensionStatus::Error;
+            webpki::Understood::Yes
+        }
+        _ => webpki::Understood::No,
     };
-    inner_func().map_err(rustls::TLSError::WebPKIError)
+    let parsed_cert = webpki::EndEntityCert::from_with_extension_cb(raw_certificate, cb)
+        .map_err(rustls::TLSError::WebPKIError)?;
+
+    match status {
+        ExtensionStatus::Good => {}
+        ExtensionStatus::Error | ExtensionStatus::NotFound => {
+            return Err(rustls::TLSError::WebPKIError(webpki::Error::UnknownIssuer))
+        }
+    }
+    let trust_anchor = webpki::trust_anchor_util::cert_der_as_trust_anchor(raw_certificate)
+        .map_err(rustls::TLSError::WebPKIError)?;
+    Ok((time, parsed_cert, trust_anchor))
 }
 
 fn verify_libp2p_extension(
@@ -179,14 +183,15 @@ impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClien
         presented_certs: &[rustls::Certificate],
         _dns_name: Option<&webpki::DNSName>,
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs, &|time, end_entity_cert, trust_anchor| {
-            end_entity_cert.verify_is_valid_tls_client_cert(
+        let (time, end_entity_cert, trust_anchor) = verify_presented_certs(presented_certs)?;
+        end_entity_cert
+            .verify_is_valid_tls_client_cert(
                 ALL_SUPPORTED_SIGNATURE_ALGORITHMS,
                 &webpki::TLSClientTrustAnchors(&[trust_anchor]),
                 &[],
                 time,
             )
-        })
-        .map(|()| rustls::ClientCertVerified::assertion())
+            .map(|()| rustls::ClientCertVerified::assertion())
+            .map_err(rustls::TLSError::WebPKIError)
     }
 }
