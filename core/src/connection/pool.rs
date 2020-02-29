@@ -736,23 +736,27 @@ where
         self.info().peer_id()
     }
 
-    /// Attempts to send an event to the connection handler, returning the event
-    /// if the handler is currently not ready to receive another event.
-    pub fn try_notify_handler(&mut self, event: TInEvent, cx: &mut Context) -> Option<TInEvent> {
-        self.entry.try_notify_handler(event, cx)
-    }
-
-    /// (Asynchronously) notifies the connection handler of an event.
+    /// (Asynchronously) sends an event to the connection handler.
     ///
-    /// Must be called only after a successful call to `poll_ready_notify_handler()`,
-    /// without iterruption by another thread.
-    pub fn notify_handler(&mut self, event: TInEvent) {
+    /// If the handler is not ready to receive the event, either because
+    /// it is busy or the connection is about to close, the given event
+    /// is returned with an `Err`.
+    ///
+    /// If execution of this method is preceded by successful execution of
+    /// `poll_ready_notify_handler` without another intervening execution
+    /// of `notify_handler`, it only fails if the connection is now about
+    /// to close.
+    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
         self.entry.notify_handler(event)
     }
 
-    /// Checks if the connection is ready to receive an event for the
-    /// connection handler via `notify_handler`.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<()> {
+    /// Checks if `notify_handler` is ready to accept an event.
+    ///
+    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
+    ///
+    /// Returns `Err(())` if the background task associated with the connection
+    /// is terminating and the connection is about to close.
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<Result<(),()>> {
         self.entry.poll_ready_notify_handler(cx)
     }
 

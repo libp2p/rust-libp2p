@@ -415,30 +415,36 @@ pub struct EstablishedEntry<'a, I, C> {
 }
 
 impl<'a, I, C> EstablishedEntry<'a, I, C> {
-    /// Attempts to send an event to the connection handler, returning the event
-    /// if the handler is currently not ready to receive another event.
-    pub fn try_notify_handler(&mut self, event: I, cx: &mut Context) -> Option<I> {
-        if self.poll_ready_notify_task(cx).is_pending() {
-            return Some(event)
-        }
-        let cmd = task::Command::NotifyHandler(event);
-        self.notify_task(cmd);
-        None
-    }
-
     /// (Asynchronously) sends an event to the connection handler.
     ///
-    /// **Note:** Must only be called after `poll_ready_notify_handler`
-    /// was successful and without interference by another thread,
-    /// otherwise the event is discarded.
-    pub fn notify_handler(&mut self, event: I) {
+    /// If the handler is not ready to receive the event, either because
+    /// it is busy or the connection is about to close, the given event
+    /// is returned with an `Err`.
+    ///
+    /// If execution of this method is preceded by successful execution of
+    /// `poll_ready_notify_handler` without another intervening execution
+    /// of `notify_handler`, it only fails if the connection is now about
+    /// to close.
+    ///
+    /// > **Note**: As this method does not take a `Context`, the current
+    /// > task _may not be notified_ if sending the event fails due to
+    /// > the connection handler not being ready at this time.
+    pub fn notify_handler(&mut self, event: I) -> Result<(), I> {
         let cmd = task::Command::NotifyHandler(event);
-        self.notify_task(cmd);
+        self.task.get_mut().sender.try_send(cmd)
+            .map_err(|e| match e.into_inner() {
+                task::Command::NotifyHandler(event) => event
+            })
     }
 
     /// Checks if `notify_handler` is ready to accept an event.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<()> {
-        self.poll_ready_notify_task(cx)
+    ///
+    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
+    ///
+    /// Returns `Err(())` if the background task associated with the connection
+    /// is terminating and the connection is about to close.
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<Result<(),()>> {
+        self.task.get_mut().sender.poll_ready(cx).map_err(|_| ())
     }
 
     /// Obtains information about the established connection.
@@ -461,38 +467,6 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
     /// Returns the connection id.
     pub fn id(&self) -> ConnectionId {
         ConnectionId(*self.task.key())
-    }
-
-    /// Sends a command to the task.
-    ///
-    /// Must be called only after a successful call to `poll_ready_notify_task`.
-    fn notify_task(&mut self, cmd: task::Command<I>) {
-        // It is possible that the sender is closed if the background task has already finished
-        // but the local state hasn't been updated yet because we haven't been polled in the
-        // meanwhile.
-        match self.task.get_mut().sender.start_send(cmd) {
-            Ok(()) => {},
-            Err(ref e) if e.is_full() => {
-                // TODO: somehow report to user?
-                log::debug!("Notifying connection task failed: channel is full.");
-            },
-            Err(ref e) if e.is_disconnected() => {
-                // The background task ended. The manager will eventually be
-                // informed through an `Error` event from the task.
-                log::trace!("Connection dropped: {:?}", self.task.key());
-            },
-            Err(e) => {
-                log::error!("Unexpected error: {:?}", e)
-            }
-        }
-    }
-
-    /// Wait until we have space to send an event using `start_send_event_msg`.
-    fn poll_ready_notify_task(&mut self, cx: &mut Context) -> Poll<()> {
-        // It is possible that the sender is closed if the background task has already finished
-        // but the local state hasn't been updated yet because we haven't been polled in the
-        // meanwhile.
-        self.task.get_mut().sender.poll_ready(cx).map(|_| ())
     }
 }
 
