@@ -27,6 +27,7 @@ yasna = { version = "0.3.1", features = ["num-bigint"] }
 ring = "0.16.11"
 webpki = "0.21.2"
 untrusted = "0.7.0"
+tls = { path = "../../protocols/tls", package = "libp2p-tls", version = "0.16.0" }
 
 [dev-dependencies]
 tracing-subscriber = "0.2.1"

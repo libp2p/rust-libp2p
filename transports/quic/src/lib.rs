@@ -102,7 +102,6 @@
 )]
 #![forbid(unsafe_code)]
 
-mod tls;
 mod connection;
 mod endpoint;
 mod error;

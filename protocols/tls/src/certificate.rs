@@ -92,7 +92,7 @@ pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
 /// If you get `Err` from this function, there is a bug somewhere. Either you
 /// called it without checking the preconditions, or there is a bug in this
 /// library or one of its dependencies.
-pub(crate) fn extract_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
+pub fn extract_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
     let mut id = None;
     let cb = &mut |oid: untrusted::Input<'_>, value, _, _| match oid.as_slice_less_safe() {
         super::LIBP2P_OID_BYTES => {

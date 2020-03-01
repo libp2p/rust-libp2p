@@ -71,6 +71,7 @@ members = [
     "protocols/ping",
     "protocols/plaintext",
     "protocols/secio",
+    "protocols/tls",
     "swarm",
     "transports/dns",
     "transports/quic",

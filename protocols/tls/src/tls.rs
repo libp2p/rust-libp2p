@@ -19,11 +19,60 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! TLS configuration for `libp2p-quic`.
+// Forbid warnings when testing, but don’t break other people’s code
+#![deny(
+    exceeding_bitshifts,
+    invalid_type_param_default,
+    missing_fragment_specifier,
+    mutable_transmutes,
+    no_mangle_const_items,
+    overflowing_literals,
+    patterns_in_fns_without_body,
+    pub_use_of_private_extern_crate,
+    unknown_crate_types,
+    const_err,
+    order_dependent_trait_objects,
+    illegal_floating_point_literal_pattern,
+    improper_ctypes,
+    late_bound_lifetime_arguments,
+    non_camel_case_types,
+    non_shorthand_field_patterns,
+    non_snake_case,
+    non_upper_case_globals,
+    no_mangle_generic_items,
+    path_statements,
+    private_in_public,
+    safe_packed_borrows,
+    stable_features,
+    type_alias_bounds,
+    tyvar_behind_raw_pointer,
+    unconditional_recursion,
+    unused,
+    unused_allocation,
+    unused_comparisons,
+    unused_mut,
+    unreachable_pub,
+    while_true,
+    anonymous_parameters,
+    bare_trait_objects,
+    elided_lifetimes_in_paths,
+    missing_copy_implementations,
+    missing_debug_implementations,
+    missing_docs,
+    single_use_lifetimes,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_extern_crates,
+    unused_import_braces,
+    unused_qualifications,
+    clippy::all
+)]
+#![forbid(unsafe_code)]
 
 mod certificate;
 mod verifier;
 
-pub(crate) use certificate::extract_peerid;
+pub use certificate::extract_peerid;
 use std::sync::Arc;
 
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
@@ -62,7 +111,7 @@ fn make_server_config(
 }
 
 /// Create TLS client and server configurations for libp2p.
-pub(crate) fn make_tls_config(
+pub fn make_tls_config(
     keypair: &libp2p_core::identity::Keypair,
 ) -> (rustls::ClientConfig, rustls::ServerConfig) {
     let cert = certificate::make_cert(&keypair);

@@ -59,7 +59,7 @@ impl Config {
         transport.datagram_receive_buffer_size(None);
         transport.keep_alive_interval(Some(Duration::from_millis(1000)));
         let transport = Arc::new(transport);
-        let (client_tls_config, server_tls_config) = super::tls::make_tls_config(keypair);
+        let (client_tls_config, server_tls_config) = tls::make_tls_config(keypair);
         let mut server_config = quinn_proto::ServerConfig::default();
         server_config.transport = transport.clone();
         server_config.crypto = Arc::new(server_tls_config);
@@ -259,7 +259,7 @@ impl ConnectionEndpoint {
             .expect("we always require the peer to present a certificate; qed");
         // we have already verified that there is (exactly) one peer certificate,
         // and that it has a valid libp2p extension.
-        Poll::Ready(Ok(crate::tls::extract_peerid(certificate[0].as_ref())?))
+        Poll::Ready(Ok(tls::extract_peerid(certificate[0].as_ref())?))
     }
 
     /// Wake up the last task registered by

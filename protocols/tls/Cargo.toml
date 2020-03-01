@@ -1,0 +1,29 @@
+[package]
+name = "libp2p-tls"
+version = "0.16.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2018"
+description = "TLS encryption for libp2p"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking", "tls"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+quinn = { git = "https://github.com/djc/quinn", optional = true, package = "quinn-proto" }
+rustls = "0.17.0"
+ring = "0.16.11"
+rcgen = "0.7.0"
+webpki = "0.21.2"
+untrusted = "0.7.0"
+log = "0.4.8"
+libp2p-core = { path = "../../core", version = "0.16.0" }
+yasna = "0.3.1"
+
+[features]
+default = ["quic"]
+quic = ["quinn"]
+
+[lib]
+name = "libp2p_tls"
+path = "src/tls.rs"
