@@ -102,12 +102,11 @@
 )]
 #![forbid(unsafe_code)]
 
-mod certificate;
+mod tls;
 mod connection;
 mod endpoint;
 mod error;
 mod socket;
-mod verifier;
 pub use connection::{Outbound, QuicMuxer as Muxer, Substream, Upgrade};
 pub use endpoint::{Config, Endpoint, JoinHandle, Listener};
 pub use error::Error;

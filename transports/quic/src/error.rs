@@ -21,7 +21,6 @@
 use err_derive::Error;
 use futures::channel::mpsc::SendError;
 use io::ErrorKind;
-use ring::error::Unspecified;
 use std::io;
 
 /// An error that can be returned by libp2p-quic.
@@ -31,8 +30,8 @@ pub enum Error {
     #[error(display = "Fatal I/O error {}", _0)]
     IO(#[error(source)] std::io::Error),
     /// Peer sent a malformed certificate
-    #[error(display = "Peer sent a malformed certificate")]
-    BadCertificate(#[error(source)] Unspecified),
+    #[error(display = "Peer sent a malformed certificate without it being detected ― this is a bug")]
+    BadCertificate(#[error(source)] webpki::Error),
     /// QUIC protocol error
     #[error(display = "QUIC protocol error: {}", _0)]
     ConnectionError(#[error(source)] quinn_proto::ConnectionError),
@@ -77,7 +76,7 @@ impl From<Error> for io::Error {
     fn from(e: Error) -> Self {
         match e {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
-            e @ Error::BadCertificate(Unspecified) => io::Error::new(ErrorKind::InvalidData, e),
+            e @ Error::BadCertificate(_) => io::Error::new(ErrorKind::InvalidData, e),
             Error::ConnectionError(e) => e.into(),
             e @ Error::CannotConnect(_)
             | e @ Error::NetworkFailure

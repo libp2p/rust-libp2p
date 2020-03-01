@@ -168,7 +168,7 @@ impl StreamMuxer for QuicMuxer {
         inner.wake_driver();
         match inner.connection.accept() {
             None => {
-                inner.handshake_or_accept_waker = Some(cx.waker().clone());
+                inner.connection.set_waker(cx);
                 Poll::Pending
             }
             Some(id) => {
@@ -187,9 +187,6 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::WriteError;
         let mut inner = self.inner();
         inner.wake_driver();
-        if let Some(ref e) = inner.close_reason {
-            return Poll::Ready(Err(Error::ConnectionError(e.clone())));
-        }
         match inner.connection.write(*substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(WriteError::Blocked) => {
@@ -212,6 +209,7 @@ impl StreamMuxer for QuicMuxer {
             }
             Err(WriteError::Stopped(e)) => {
                 substream.status = SubstreamStatus::Finished;
+                inner.outbound_streams -= 1;
                 Poll::Ready(Err(Error::Stopped(e)))
             }
         }
@@ -296,13 +294,12 @@ impl StreamMuxer for QuicMuxer {
         }
         let mut inner = self.inner();
         inner.wake_driver();
-        inner
-            .connection
-            .finish(*substream.id)
-            .map_err(|e| match e {
-                quinn_proto::FinishError::UnknownStream => Error::ConnectionClosing,
-                quinn_proto::FinishError::Stopped(e) => Error::Stopped(e),
-            })?;
+        let Muxer {
+            connection,
+            outbound_streams,
+            ..
+        } = &mut *inner;
+        connection.finish(*substream.id, outbound_streams)?;
         let (sender, mut receiver) = oneshot::channel();
         assert!(
             receiver.poll_unpin(cx).is_pending(),
@@ -350,9 +347,10 @@ impl StreamMuxer for QuicMuxer {
         let Muxer {
             streams,
             connection,
+            outbound_streams,
             ..
         } = &mut *inner;
-        streams.close(|id| drop(connection.finish(id)));
+        streams.close(|id| drop(connection.finish(id, outbound_streams)));
         Poll::Pending
     }
 }
@@ -382,25 +380,21 @@ impl Future for Upgrade {
         let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
         if let Some(close_reason) = &inner.close_reason {
             return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
-        } else if inner.connection.is_handshaking() {
-            inner.handshake_or_accept_waker = Some(cx.waker().clone());
-            return Poll::Pending;
-        } else {
-            match ready!(inner.connection.notify_handshake_complete(cx)) {
-                Ok(res) => {
-                    drop(inner);
-                    Poll::Ready(Ok((
-                        res,
-                        muxer.take().expect("polled after yielding Ready"),
-                    )))
-                }
-                Err(e) => {
-                    inner.shutdown(RESET);
-                    inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
-                    drop(inner);
-                    *muxer = None;
-                    Poll::Ready(Err(e))
-                }
+        }
+        match ready!(inner.connection.notify_handshake_complete(cx)) {
+            Ok(res) => {
+                drop(inner);
+                Poll::Ready(Ok((
+                    res,
+                    muxer.take().expect("polled after yielding Ready"),
+                )))
+            }
+            Err(e) => {
+                inner.shutdown(RESET);
+                inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
+                drop(inner);
+                *muxer = None;
+                Poll::Ready(Err(e))
             }
         }
     }
@@ -418,8 +412,6 @@ pub(crate) struct Muxer {
     connection: Endpoint,
     /// The stream statuses
     streams: stream_map::Streams,
-    /// Task waiting for new connections, or for the connection to finish handshaking.
-    handshake_or_accept_waker: Option<std::task::Waker>,
     /// Tasks waiting to make a connection.
     connectors: StreamSenderQueue,
     /// The number of outbound streams currently open.
@@ -461,28 +453,22 @@ impl Muxer {
         &mut self.connection
     }
 
-    fn wake_incoming(&mut self) {
-        if let Some(waker) = self.handshake_or_accept_waker.take() {
-            waker.wake()
-        }
-    }
-
     fn new(connection: Endpoint) -> Self {
         Muxer {
             close_waker: None,
             outbound_streams: 0,
             pending_stream: None,
             streams: Default::default(),
-            handshake_or_accept_waker: None,
             connectors: Default::default(),
             connection,
             close_reason: None,
             waker: None,
         }
     }
+
     fn shutdown(&mut self, error_code: u32) {
         debug!("shutting connection down!");
-        self.wake_incoming();
+        self.connection.wake();
         self.streams.wake_all();
         self.connectors.clear();
         self.connection.close(error_code);
@@ -598,11 +584,11 @@ impl Muxer {
                 }
                 Event::Connected => {
                     debug!("connected for side {:?}!", self.connection.side());
-                    self.wake_incoming();
+                    self.connection.wake();
                 }
                 Event::StreamOpened { dir: Dir::Bi } => {
                     debug!("stream opened for side {:?}", self.connection.side());
-                    self.wake_incoming()
+                    self.connection.wake()
                 }
             }
         }

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, socket, verifier, Upgrade};
+use crate::{error::Error, socket, Upgrade};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
 use futures::{channel::mpsc, prelude::*};
@@ -51,64 +51,24 @@ pub struct Config {
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
 }
 
-fn make_client_config(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
-) -> quinn_proto::ClientConfig {
-    let mut transport = quinn_proto::TransportConfig::default();
-    transport.stream_window_uni(0);
-    transport.datagram_receive_buffer_size(None);
-    transport.keep_alive_interval(Some(Duration::from_millis(1000)));
-    let mut crypto = rustls::ClientConfig::new();
-    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
-    crypto.enable_early_data = true;
-    crypto
-        .set_single_client_cert(vec![certificate], key)
-        .expect("we have a valid certificate; qed");
-    let verifier = verifier::VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
-    crypto
-        .dangerous()
-        .set_certificate_verifier(Arc::new(verifier));
-    quinn_proto::ClientConfig {
-        transport: Arc::new(transport),
-        crypto: Arc::new(crypto),
-    }
-}
-
-fn make_server_config(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
-) -> quinn_proto::ServerConfig {
-    let mut transport = quinn_proto::TransportConfig::default();
-    transport.stream_window_uni(0);
-    transport.datagram_receive_buffer_size(None);
-    let mut crypto = rustls::ServerConfig::new(Arc::new(
-        verifier::VeryInsecureRequireExactlyOneSelfSignedClientCertificate,
-    ));
-    crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
-    crypto
-        .set_single_cert(vec![certificate], key)
-        .expect("we are given a valid cert; qed");
-    let mut config = quinn_proto::ServerConfig::default();
-    config.transport = Arc::new(transport);
-    config.crypto = Arc::new(crypto);
-    config
-}
-
 impl Config {
-    /// Creates a new configuration object for TCP/IP.
+    /// Creates a new configuration object for QUIC.
     pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
-        let cert = super::certificate::make_cert(&keypair);
-        let (cert, key) = (
-            rustls::Certificate(
-                cert.serialize_der()
-                    .expect("serialization of a valid cert will succeed; qed"),
-            ),
-            rustls::PrivateKey(cert.serialize_private_key_der()),
-        );
+        let mut transport = quinn_proto::TransportConfig::default();
+        transport.stream_window_uni(0);
+        transport.datagram_receive_buffer_size(None);
+        transport.keep_alive_interval(Some(Duration::from_millis(1000)));
+        let transport = Arc::new(transport);
+        let (client_tls_config, server_tls_config) = super::tls::make_tls_config(keypair);
+        let mut server_config = quinn_proto::ServerConfig::default();
+        server_config.transport = transport.clone();
+        server_config.crypto = Arc::new(server_tls_config);
+        let mut client_config = quinn_proto::ClientConfig::default();
+        client_config.transport = transport;
+        client_config.crypto = Arc::new(client_tls_config);
         Self {
-            client_config: make_client_config(cert.clone(), key.clone()),
-            server_config: Arc::new(make_server_config(cert, key)),
+            client_config,
+            server_config: Arc::new(server_config),
             endpoint_config: Default::default(),
         }
     }
@@ -262,23 +222,31 @@ pub(super) struct EndpointData {
 
 type Sender = mpsc::Sender<EndpointMessage>;
 
-impl ConnectionEndpoint {
-    #[inline]
-    pub(crate) fn is_handshaking(&mut self) -> bool {
-        self.connection.is_handshaking()
-    }
+#[derive(Debug)]
+pub(crate) struct ConnectionEndpoint {
+    pending: socket::Pending,
+    connection: Connection,
+    handle: ConnectionHandle,
+    channel: Channel,
+    waker: Option<std::task::Waker>,
+}
 
+impl ConnectionEndpoint {
     /// Notify the endpoint that the handshake has completed,
     /// and get the certificates from it.
     ///
-    /// # Panics
+    /// If this returns [`Poll::Pending`], the current task can be worken up by
+    /// a call to [`ConnectionEndpoint::wake`].
     ///
-    /// Panics if the connection is still handshaking.
+    /// Calling this after it has returned `Ready` is erroneous.
     pub(crate) fn notify_handshake_complete(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<libp2p_core::PeerId, Error>> {
-        assert!(!self.is_handshaking());
+        if self.connection.is_handshaking() {
+            self.set_waker(cx);
+            return Poll::Pending;
+        }
         if self.connection.side().is_server() {
             ready!(self.channel.poll_ready(cx))?;
             self.channel
@@ -291,9 +259,23 @@ impl ConnectionEndpoint {
             .expect("we always require the peer to present a certificate; qed");
         // we have already verified that there is (exactly) one peer certificate,
         // and that it has a valid libp2p extension.
-        Poll::Ready(Ok(crate::certificate::unwrap_libp2p_certificate(
-            certificate[0].as_ref(),
-        )))
+        Poll::Ready(Ok(crate::tls::extract_peerid(certificate[0].as_ref())?))
+    }
+
+    /// Wake up the last task registered by
+    /// [`ConnectionEndpoint::notify_handshake_complete`] or
+    /// [`ConnectionEndpoint::set_waker`].
+    pub(crate) fn wake(&mut self) {
+        if let Some(waker) = self.waker.take() {
+            waker.wake()
+        }
+    }
+
+    /// Register the current task to be woken up when
+    /// [`ConnectionEndpoint::wake`] is called, overwriting any previous
+    /// registration.
+    pub(crate) fn set_waker(&mut self, cx: &mut Context<'_>) {
+        self.waker = Some(cx.waker().clone())
     }
 
     /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.
@@ -373,12 +355,21 @@ impl ConnectionEndpoint {
         self.connection.write(id, buffer)
     }
 
-    /// Shut down the writing side of a stream.
+    /// Shut down the writing side of a stream. If we will not get an
+    /// `StreamFinished` event, decrement `outbound_streams`.
     pub(crate) fn finish(
         &mut self,
         id: quinn_proto::StreamId,
-    ) -> Result<(), quinn_proto::FinishError> {
-        self.connection.finish(id)
+        outbound_streams: &mut usize,
+    ) -> Result<(), Error> {
+        self.connection.finish(id).map_err(|e| match e {
+            quinn_proto::FinishError::UnknownStream => Error::ConnectionClosing,
+            quinn_proto::FinishError::Stopped(e) => {
+                // we will never get a `StreamFinished` event
+                *outbound_streams -= 1;
+                Error::Stopped(e)
+            }
+        })
     }
 
     /// Get application-facing events
@@ -471,14 +462,6 @@ pub(crate) use channel_ref::EndpointRef;
 /// will get [`TransportError::MultiaddrNotSupported`].
 #[derive(Debug, Clone)]
 pub struct Endpoint(EndpointRef);
-
-#[derive(Debug)]
-pub(crate) struct ConnectionEndpoint {
-    pending: socket::Pending,
-    connection: Connection,
-    handle: ConnectionHandle,
-    channel: Channel,
-}
 
 /// A handle that can be used to wait for the endpoint driver to finish.
 pub type JoinHandle = async_std::task::JoinHandle<Result<(), Error>>;
@@ -584,6 +567,7 @@ fn accept_muxer(
         connection,
         handle,
         channel,
+        waker: None,
     };
 
     let socket = endpoint.socket.clone();
@@ -731,6 +715,7 @@ impl Transport for Endpoint {
             connection,
             handle,
             channel: endpoint.channel,
+            waker: None,
         };
         Ok(super::connection::ConnectionDriver::spawn(
             endpoint,

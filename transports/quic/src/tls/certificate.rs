@@ -26,11 +26,11 @@
 //! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
 //! library) are logged at `debug` level.
 
+use super::LIBP2P_SIGNING_PREFIX_LENGTH;
 use libp2p_core::identity;
+use log::error;
+
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
-pub(super) const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
-pub(super) const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
-pub(super) const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
@@ -60,9 +60,10 @@ fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::Cu
     assert_eq!(
         public.len(),
         LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH,
-        "ECDSA public keys are 65 bytes"
+        "ed25519 public keys are {} bytes",
+        LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH
     );
-    signing_buf[..LIBP2P_SIGNING_PREFIX_LENGTH].copy_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
+    signing_buf[..LIBP2P_SIGNING_PREFIX_LENGTH].copy_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
     signing_buf[LIBP2P_SIGNING_PREFIX_LENGTH..].copy_from_slice(public);
     let signature = keypair.sign(&signing_buf).expect("signing failed");
     (
@@ -88,25 +89,41 @@ pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
 /// certificate with a valid libp2p extension. The certificate verifiers in this
 /// crate validate check this.
 ///
-/// # Panics
-///
-/// Panics if there is no libp2p extension in the certificate, or if the
-/// certificate is ill-formed.
-pub(crate) fn unwrap_libp2p_certificate(certificate: &[u8]) -> libp2p_core::PeerId {
+/// If you get `Err` from this function, there is a bug somewhere. Either you
+/// called it without checking the preconditions, or there is a bug in this
+/// library or one of its dependencies.
+pub(crate) fn extract_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
     let mut id = None;
     let cb = &mut |oid: untrusted::Input<'_>, value, _, _| match oid.as_slice_less_safe() {
-        LIBP2P_OID_BYTES => {
-            id = Some(extract_libp2p_peerid(value));
+        super::LIBP2P_OID_BYTES => {
+            if id.is_some() {
+                error!(
+                    "multiple libp2p extensions should have been detected \
+                     earlier; something is wrong"
+                );
+                id = Some(Err(webpki::Error::UnknownIssuer))
+            }
+            id = Some(match extract_libp2p_peerid(value) {
+                Ok(value) => Ok(value),
+                Err(_) => {
+                    error!(
+                        "bogus libp2p extension should have been detected \
+                         earlier; something is wrong"
+                    );
+                    Err(webpki::Error::UnknownIssuer)
+                }
+            });
             webpki::Understood::Yes
         }
         _ => webpki::Understood::No,
     };
-    webpki::EndEntityCert::from_with_extension_cb(certificate, cb)
-        .expect("we already validated the certificate is well-formed");
-    id.expect("we already checked that a libp2p extension exists")
+    webpki::EndEntityCert::from_with_extension_cb(certificate, cb)?;
+    id.unwrap_or(Err(webpki::Error::UnknownIssuer))
 }
 
-fn extract_libp2p_peerid(extension: untrusted::Input<'_>) -> libp2p_core::PeerId {
+fn extract_libp2p_peerid(
+    extension: untrusted::Input<'_>,
+) -> Result<libp2p_core::PeerId, ring::error::Unspecified> {
     use ring::{error::Unspecified, io::der};
     extension
         .read_all(Unspecified, |mut reader| {
@@ -115,10 +132,8 @@ fn extract_libp2p_peerid(extension: untrusted::Input<'_>) -> libp2p_core::PeerId
                 let public_key =
                     der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
                 der::bit_string_with_no_unused_bits(&mut reader)?;
-                Ok(identity::PublicKey::from_protobuf_encoding(public_key)
-                    .expect("already checked")
-                    .into())
+                identity::PublicKey::from_protobuf_encoding(public_key).map_err(|_| Unspecified)
             })
         })
-        .expect("we already checked this in the certificate verifier")
+        .map(From::from)
 }

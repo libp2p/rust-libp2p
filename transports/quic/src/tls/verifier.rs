@@ -18,9 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::certificate::LIBP2P_OID_BYTES;
-pub(super) const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
-const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
     &[
         &webpki::ECDSA_P256_SHA256,
@@ -96,8 +93,8 @@ fn verify_libp2p_extension(
             let signature = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
             let public_key = libp2p_core::identity::PublicKey::from_protobuf_encoding(public_key)
                 .map_err(|_| Unspecified)?;
-            let mut v = Vec::with_capacity(LIBP2P_SIGNING_PREFIX_LENGTH + spki.len());
-            v.extend_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
+            let mut v = Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + spki.len());
+            v.extend_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
             v.extend_from_slice(spki);
             if public_key.verify(&v, signature) {
                 Ok(())
@@ -113,7 +110,7 @@ pub(super) fn verify_single_cert(
 ) -> Result<(webpki::EndEntityCert<'_>, webpki::TrustAnchor<'_>), rustls::TLSError> {
     let mut num_libp2p_extensions = 0usize;
     let cb = &mut |oid: untrusted::Input<'_>, value, _, spki| match oid.as_slice_less_safe() {
-        LIBP2P_OID_BYTES => {
+        super::LIBP2P_OID_BYTES => {
             num_libp2p_extensions += 1;
             if verify_libp2p_extension(value, spki).is_err() {
                 num_libp2p_extensions = 2; // this will force an error
