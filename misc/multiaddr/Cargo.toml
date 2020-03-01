@@ -6,7 +6,7 @@ description = "Implementation of the multiaddr format"
 homepage = "https://github.com/libp2p/rust-libp2p"
 keywords = ["multiaddr", "ipfs"]
 license = "MIT"
-version = "0.7.2"
+version = "0.7.3"
 
 [dependencies]
 arrayref = "0.3"
