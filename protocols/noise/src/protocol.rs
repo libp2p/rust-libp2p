@@ -27,6 +27,8 @@ use libp2p_core::identity;
 use rand::SeedableRng;
 use zeroize::Zeroize;
 
+const NOISE_STATIC_KEY_SIGNATURE_PREFIX: &str = "noise-libp2p-static-key:";
+
 /// The parameters of a Noise protocol, consisting of a choice
 /// for a handshake pattern as well as DH, cipher and hash functions.
 #[derive(Clone)]
@@ -92,8 +94,12 @@ pub trait Protocol<C> {
         C: AsRef<[u8]>
     {
         Self::linked(id_pk, dh_pk)
-            ||
-        sig.as_ref().map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
+            || sig.as_ref().map_or(false, |s| {
+                id_pk.verify(
+                    &[NOISE_STATIC_KEY_SIGNATURE_PREFIX.as_bytes(), dh_pk.as_ref()].concat(),
+                    s,
+                )
+            })
     }
 }
 
@@ -153,7 +159,13 @@ impl<T: Zeroize> Keypair<T> {
     where
         T: AsRef<[u8]>
     {
-        let sig = id_keys.sign(self.public.as_ref())?;
+        let msg = [
+            NOISE_STATIC_KEY_SIGNATURE_PREFIX.as_bytes(),
+            self.public.as_ref(),
+        ]
+        .concat();
+
+        let sig = id_keys.sign(&msg)?;
 
         let identity = KeypairIdentity {
             public: id_keys.public(),
