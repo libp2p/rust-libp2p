@@ -87,7 +87,7 @@ enum EndpointMessage {
 #[derive(Debug)]
 pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
-    muxers: HashMap<ConnectionHandle, Arc<Mutex<super::connection::Muxer>>>,
+    muxers: HashMap<ConnectionHandle, Arc<Mutex<super::stream_map::Streams>>>,
     pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
@@ -132,7 +132,7 @@ impl EndpointInner {
     fn send_connection_event(
         &mut self,
         handle: ConnectionHandle,
-        event: quinn_proto::ConnectionEvent,
+        mut event: quinn_proto::ConnectionEvent,
     ) {
         let Self { inner, muxers, .. } = self;
         let entry = match muxers.entry(handle) {
@@ -141,14 +141,15 @@ impl EndpointInner {
         };
         let mut connection = entry.get().lock();
         let mut is_drained = false;
-        {
-            let connection = &mut connection.connection().connection;
-            connection.handle_event(event);
-            while let Some(event) = connection.poll_endpoint_events() {
-                is_drained |= event.is_drained();
-                if let Some(event) = inner.handle_event(handle, event) {
-                    connection.handle_event(event)
-                }
+        loop {
+            let endpoint_event = match connection.handle_event(event) {
+                None => break,
+                Some(endpoint_event) => endpoint_event,
+            };
+            is_drained |= endpoint_event.is_drained();
+            event = match inner.handle_event(handle, endpoint_event) {
+                Some(event) => event,
+                None => break,
             }
         }
         connection.process_app_events();
@@ -271,10 +272,7 @@ impl ConnectionEndpoint {
         }
     }
 
-    /// Register the current task to be woken up when
-    /// [`ConnectionEndpoint::wake`] is called, overwriting any previous
-    /// registration.
-    pub(crate) fn set_waker(&mut self, cx: &mut Context<'_>) {
+    fn set_waker(&mut self, cx: &mut Context<'_>) {
         self.waker = Some(cx.waker().clone())
     }
 
@@ -331,14 +329,28 @@ impl ConnectionEndpoint {
         }
     }
 
+    pub(crate) fn handle_event(
+        &mut self,
+        event: quinn_proto::ConnectionEvent,
+    ) -> Option<quinn_proto::EndpointEvent> {
+        self.connection.handle_event(event);
+        self.connection.poll_endpoint_events()
+    }
+
     /// Check if this connection is drained.
     pub(crate) fn is_drained(&self) -> bool {
         self.connection.is_drained()
     }
 
     /// Accept an incoming stream, if possible.
-    pub(crate) fn accept(&mut self) -> Option<quinn_proto::StreamId> {
-        self.connection.accept(quinn_proto::Dir::Bi)
+    pub(crate) fn accept(&mut self, cx: &mut Context<'_>) -> Poll<quinn_proto::StreamId> {
+        match self.connection.accept(quinn_proto::Dir::Bi) {
+            None => {
+                self.set_waker(cx);
+                Poll::Pending
+            }
+            Some(e) => Poll::Ready(e),
+        }
     }
 
     /// Open an outgoing stream if it is possible to do so.
@@ -355,21 +367,12 @@ impl ConnectionEndpoint {
         self.connection.write(id, buffer)
     }
 
-    /// Shut down the writing side of a stream. If we will not get an
-    /// `StreamFinished` event, decrement `outbound_streams`.
+    /// Shut down the writing side of a stream.
     pub(crate) fn finish(
         &mut self,
         id: quinn_proto::StreamId,
-        outbound_streams: &mut usize,
-    ) -> Result<(), Error> {
-        self.connection.finish(id).map_err(|e| match e {
-            quinn_proto::FinishError::UnknownStream => Error::ConnectionClosing,
-            quinn_proto::FinishError::Stopped(e) => {
-                // we will never get a `StreamFinished` event
-                *outbound_streams -= 1;
-                Error::Stopped(e)
-            }
-        })
+    ) -> Result<(), quinn_proto::FinishError> {
+        self.connection.finish(id)
     }
 
     /// Get application-facing events
@@ -572,7 +575,7 @@ fn accept_muxer(
 
     let socket = endpoint.socket.clone();
 
-    let upgrade = super::connection::ConnectionDriver::spawn(connection_endpoint, |weak| {
+    let upgrade = crate::Upgrade::spawn(connection_endpoint, |weak| {
         inner.muxers.insert(handle, weak);
         socket
     });
@@ -717,13 +720,10 @@ impl Transport for Endpoint {
             channel: endpoint.channel,
             waker: None,
         };
-        Ok(super::connection::ConnectionDriver::spawn(
-            endpoint,
-            |weak| {
-                inner.muxers.insert(handle, weak);
-                socket
-            },
-        ))
+        Ok(crate::Upgrade::spawn(endpoint, |weak| {
+            inner.muxers.insert(handle, weak);
+            socket
+        }))
     }
 }
 

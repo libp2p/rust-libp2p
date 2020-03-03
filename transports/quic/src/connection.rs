@@ -18,19 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{endpoint::ConnectionEndpoint as Endpoint, error::Error, socket, stream_map};
+use super::{error::Error, stream_map};
 use async_macros::ready;
+use either::Either;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
-use log::{debug, error, info, trace, warn};
+use log::{error, trace};
 use parking_lot::{Mutex, MutexGuard};
-use quinn_proto::Dir;
 use std::{
     mem::replace,
-    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Instant,
 };
 
 /// A QUIC substream
@@ -82,11 +80,11 @@ impl Substream {
 /// to ease debugging, [`<QuicMuxer as StreamMuxer>::read_substream`] returns an
 /// error in this case.
 #[derive(Debug, Clone)]
-pub struct QuicMuxer(Arc<Mutex<Muxer>>);
+pub struct QuicMuxer(pub(crate) Arc<Mutex<stream_map::Streams>>);
 
 impl QuicMuxer {
     /// Returns the underlying data structure, including all state.
-    fn inner(&self) -> MutexGuard<'_, Muxer> {
+    fn inner(&self) -> MutexGuard<'_, stream_map::Streams> {
         self.0.lock()
     }
 }
@@ -112,18 +110,14 @@ impl StreamMuxer for QuicMuxer {
     type Error = Error;
     fn open_outbound(&self) -> Self::OutboundSubstream {
         let mut inner = self.inner();
-        if let Some(ref e) = inner.close_reason {
-            Outbound(OutboundInner::Complete(Err(Error::ConnectionError(
-                e.clone(),
-            ))))
-        } else if let Some(id) = inner.get_pending_stream() {
-            Outbound(OutboundInner::Complete(Ok(id)))
+        Outbound(if let Err(e) = inner.close_reason() {
+            OutboundInner::Complete(Err(e))
         } else {
-            let (sender, receiver) = oneshot::channel();
-            inner.connectors.push_front(sender);
-            inner.wake_driver();
-            Outbound(OutboundInner::Pending(receiver))
-        }
+            match inner.get_pending_stream() {
+                Either::Left(id) => OutboundInner::Complete(Ok(id)),
+                Either::Right(receiver) => OutboundInner::Pending(receiver),
+            }
+        })
     }
 
     fn destroy_outbound(&self, outbound: Outbound) {
@@ -139,15 +133,11 @@ impl StreamMuxer for QuicMuxer {
             },
             OutboundInner::Done => return,
         };
-        inner.connection.destroy_stream(*id);
-        inner.streams.remove(id)
+        inner.destroy_stream(id)
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {
-        let mut inner = self.inner();
-        inner.connection.destroy_stream(*substream.id);
-        trace!("Removing substream {:?} from map", substream.id);
-        inner.streams.remove(substream.id);
+        self.inner().destroy_stream(substream.id)
     }
 
     fn is_remote_acknowledged(&self) -> bool {
@@ -159,20 +149,10 @@ impl StreamMuxer for QuicMuxer {
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         trace!("being polled for inbound connections!");
         let mut inner = self.inner();
-        if let Some(close_reason) = &inner.close_reason {
-            return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
-        }
+        inner.close_reason()?;
         inner.wake_driver();
-        match inner.connection.accept() {
-            None => {
-                inner.connection.set_waker(cx);
-                Poll::Pending
-            }
-            Some(id) => {
-                inner.outbound_streams += 1;
-                Poll::Ready(Ok(Substream::live(inner.streams.add_stream(id))))
-            }
-        }
+        let stream = ready!(inner.accept(cx));
+        Poll::Ready(Ok(Substream::live(stream)))
     }
 
     fn write_substream(
@@ -184,29 +164,19 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::WriteError;
         let mut inner = self.inner();
         inner.wake_driver();
-        match inner.connection.write(*substream.id, buf) {
+        match inner.write(cx, &substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(WriteError::Blocked) => {
-                if let Some(ref e) = inner.close_reason {
-                    return Poll::Ready(Err(Error::ConnectionError(e.clone())));
-                }
-                inner.streams.set_writer(&substream.id, cx.waker().clone());
-                Poll::Pending
-            }
+            Err(WriteError::Blocked) => Poll::Pending,
             Err(WriteError::UnknownStream) => {
                 error!(
                     "The application used a connection that is already being \
                     closed. This is a bug in the application or in libp2p."
                 );
-                if let Some(e) = &inner.close_reason {
-                    Poll::Ready(Err(Error::ConnectionError(e.clone())))
-                } else {
-                    Poll::Ready(Err(Error::ExpiredStream))
-                }
+                inner.close_reason()?;
+                Poll::Ready(Err(Error::ExpiredStream))
             }
             Err(WriteError::Stopped(e)) => {
                 substream.status = SubstreamStatus::Finished;
-                inner.outbound_streams -= 1;
                 Poll::Ready(Err(Error::Stopped(e)))
             }
         }
@@ -244,20 +214,18 @@ impl StreamMuxer for QuicMuxer {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
         inner.wake_driver();
-        match inner.connection.read(*substream.id, buf) {
+        match inner.read(cx, &substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(ReadError::Blocked) => {
-                if let Some(error) = &inner.close_reason {
-                    Poll::Ready(Err(Error::ConnectionError(error.clone())))
-                } else if let SubstreamStatus::Unwritten = substream.status {
+                inner.close_reason()?;
+                if let SubstreamStatus::Unwritten = substream.status {
                     Poll::Ready(Err(Error::CannotReadFromUnwrittenStream))
                 } else {
                     trace!(
                         "Blocked on reading stream {:?} with side {:?}",
                         substream.id,
-                        inner.connection.side()
+                        inner.side()
                     );
-                    inner.streams.set_reader(&substream.id, cx.waker().clone());
                     Poll::Pending
                 }
             }
@@ -280,31 +248,19 @@ impl StreamMuxer for QuicMuxer {
             SubstreamStatus::Finished => return Poll::Ready(Ok(())),
             SubstreamStatus::Finishing(ref mut channel) => {
                 self.inner().wake_driver();
-                match channel.poll_unpin(cx) {
-                    Poll::Ready(Ok(())) | Poll::Ready(Err(oneshot::Canceled)) => {
-                        return Poll::Ready(Ok(()))
-                    }
-                    Poll::Pending => {}
-                }
+                ready!(channel.poll_unpin(cx)).map_err(|_| Error::NetworkFailure)?;
+                return Poll::Ready(Ok(()));
             }
             SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
         }
-        let mut inner = self.inner();
-        inner.wake_driver();
-        let Muxer {
-            connection,
-            outbound_streams,
-            ..
-        } = &mut *inner;
-        connection.finish(*substream.id, outbound_streams)?;
-        let (sender, mut receiver) = oneshot::channel();
-        assert!(
-            receiver.poll_unpin(cx).is_pending(),
-            "we haven’t written to the peer yet"
-        );
-        substream.status = SubstreamStatus::Finishing(receiver);
-        inner.streams.set_finisher(&substream.id, sender);
-        Poll::Pending
+        match self.inner().shutdown_stream(cx, &substream.id) {
+            Ok(receiver) => {
+                substream.status = SubstreamStatus::Finishing(receiver);
+                Poll::Pending
+            }
+            Err(quinn_proto::FinishError::Stopped(e)) => Poll::Ready(Err(Error::Stopped(e))),
+            Err(quinn_proto::FinishError::UnknownStream) => Poll::Ready(Err(Error::ExpiredStream)),
+        }
     }
 
     /// Flush pending data on this stream. libp2p-quic sends out data as soon as
@@ -326,350 +282,6 @@ impl StreamMuxer for QuicMuxer {
     /// Close the connection. Once this function is called, it is a logic error
     /// to call other methods on this object.
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut inner = self.inner();
-        trace!(
-            "close() called with {} outbound streams for side {:?}",
-            inner.outbound_streams,
-            inner.connection.side()
-        );
-        inner.wake_closer();
-        inner.close_waker = Some(cx.waker().clone());
-        if inner.close_reason.is_some() {
-            return Poll::Ready(Ok(()));
-        } else if inner.outbound_streams == 0 {
-            inner.shutdown(0);
-            inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
-            return Poll::Ready(Ok(()));
-        }
-        let Muxer {
-            streams,
-            connection,
-            outbound_streams,
-            ..
-        } = &mut *inner;
-        streams.close(|id| drop(connection.finish(id, outbound_streams)));
-        Poll::Pending
-    }
-}
-
-/// A QUIC connection that is
-#[derive(Debug)]
-pub struct Upgrade {
-    muxer: Option<QuicMuxer>,
-}
-
-#[cfg(test)]
-impl Drop for Upgrade {
-    fn drop(&mut self) {
-        debug!("dropping upgrade!");
-        assert!(
-            self.muxer.is_none(),
-            "dropped before being polled to completion"
-        );
-    }
-}
-
-impl Future for Upgrade {
-    type Output = Result<(libp2p_core::PeerId, QuicMuxer), Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let muxer = &mut self.get_mut().muxer;
-        trace!("outbound polling!");
-        let mut inner = muxer.as_mut().expect("polled after yielding Ready").inner();
-        if let Some(close_reason) = &inner.close_reason {
-            return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));
-        }
-        match ready!(inner.connection.notify_handshake_complete(cx)) {
-            Ok(res) => {
-                drop(inner);
-                Poll::Ready(Ok((
-                    res,
-                    muxer.take().expect("polled after yielding Ready"),
-                )))
-            }
-            Err(e) => {
-                inner.shutdown(RESET);
-                inner.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
-                drop(inner);
-                *muxer = None;
-                Poll::Ready(Err(e))
-            }
-        }
-    }
-}
-
-type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<stream_map::StreamId>>;
-
-/// A QUIC connection and its associated data.
-#[derive(Debug)]
-pub(crate) struct Muxer {
-    /// If this is `Some`, it is a stream that has been opened by the peer,
-    /// but not yet accepted by the application.  Otherwise, this is `None`.
-    pending_stream: Option<stream_map::StreamId>,
-    /// The QUIC state machine and endpoint messaging.
-    connection: Endpoint,
-    /// The stream statuses
-    streams: stream_map::Streams,
-    /// Tasks waiting to make a connection.
-    connectors: StreamSenderQueue,
-    /// The number of outbound streams currently open.
-    outbound_streams: usize,
-    /// The close reason, if this connection has been lost
-    close_reason: Option<quinn_proto::ConnectionError>,
-    /// Waker to wake up the driver. This is not a `MaybeWaker` because only the
-    /// driver task ever puts a waker here.
-    waker: Option<std::task::Waker>,
-    /// Close waker
-    close_waker: Option<std::task::Waker>,
-}
-
-const RESET: u32 = 1;
-
-impl Drop for Muxer {
-    fn drop(&mut self) {
-        if self.close_reason.is_none() {
-            warn!("connection uncleanly closed!");
-            self.shutdown(RESET)
-        }
-    }
-}
-
-impl Muxer {
-    pub(crate) fn wake_driver(&mut self) {
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
-        }
-    }
-
-    fn wake_closer(&mut self) {
-        if let Some(close_waker) = self.close_waker.take() {
-            close_waker.wake()
-        }
-    }
-
-    pub(crate) fn connection(&mut self) -> &mut Endpoint {
-        &mut self.connection
-    }
-
-    fn new(connection: Endpoint) -> Self {
-        Muxer {
-            close_waker: None,
-            outbound_streams: 0,
-            pending_stream: None,
-            streams: Default::default(),
-            connectors: Default::default(),
-            connection,
-            close_reason: None,
-            waker: None,
-        }
-    }
-
-    fn shutdown(&mut self, error_code: u32) {
-        debug!("shutting connection down!");
-        self.connection.wake();
-        self.streams.wake_all();
-        self.connectors.clear();
-        self.connection.close(error_code);
-        self.wake_driver();
-    }
-
-    fn open_stream(&mut self) -> Option<stream_map::StreamId> {
-        self.connection.open().map(|e| {
-            self.outbound_streams += 1;
-            self.streams.add_stream(e)
-        })
-    }
-
-    fn get_pending_stream(&mut self) -> Option<stream_map::StreamId> {
-        self.wake_driver();
-        if let Some(id) = self.pending_stream.take() {
-            Some(id)
-        } else {
-            self.open_stream()
-        }
-    }
-
-    pub(crate) fn process_app_events(&mut self) {
-        use quinn_proto::Event;
-        'a: while let Some(event) = self.connection.poll() {
-            match event {
-                Event::StreamOpened { dir: Dir::Uni } | Event::DatagramReceived => {
-                    // This should never happen, but if it does, it is better to
-                    // log a nasty message and recover than to tear down the
-                    // process.
-                    error!("we disabled incoming unidirectional streams and datagrams")
-                }
-                Event::StreamAvailable { dir: Dir::Uni } => {
-                    // Ditto
-                    error!("we don’t use unidirectional streams")
-                }
-                Event::StreamReadable { stream } => {
-                    trace!(
-                        "Stream {:?} readable for side {:?}",
-                        stream,
-                        self.connection.side()
-                    );
-                    // Wake up the task waiting on us (if any)
-                    self.streams.wake_reader(stream);
-                }
-                Event::StreamWritable { stream } => {
-                    trace!(
-                        "Stream {:?} writable for side {:?}",
-                        stream,
-                        self.connection.side()
-                    );
-                    // Wake up the task waiting on us (if any).
-                    // This will panic if quinn-proto has already emitted a
-                    // `StreamFinished` event, but it will never emit
-                    // `StreamWritable` after `StreamFinished`.
-                    self.streams.wake_writer(stream)
-                }
-                Event::StreamAvailable { dir: Dir::Bi } => {
-                    trace!(
-                        "Bidirectional stream available for side {:?}",
-                        self.connection.side()
-                    );
-                    if self.connectors.is_empty() {
-                        // Nobody is waiting on the stream. Allow quinn-proto to
-                        // queue it, so that it can apply backpressure.
-                        continue;
-                    }
-                    assert!(
-                        self.pending_stream.is_none(),
-                        "we cannot have both pending tasks and a pending stream; qed"
-                    );
-                    let mut stream = self.open_stream().expect(
-                        "we just were told that there is a stream available; there is \
-                        a mutex that prevents other threads from calling open() in the \
-                        meantime; qed",
-                    );
-                    while let Some(oneshot) = self.connectors.pop_front() {
-                        stream = match oneshot.send(stream) {
-                            Ok(()) => continue 'a,
-                            Err(e) => e,
-                        }
-                    }
-                    self.pending_stream = Some(stream)
-                }
-                Event::ConnectionLost { reason } => {
-                    debug!(
-                        "lost connection due to {:?} for side {:?}",
-                        reason,
-                        self.connection.side()
-                    );
-                    self.close_reason = Some(reason);
-                    self.wake_closer();
-                    self.shutdown(0);
-                }
-                Event::StreamFinished {
-                    stream,
-                    stop_reason,
-                } => {
-                    trace!(
-                        "Stream {:?} finished for side {:?} because of {:?}",
-                        stream,
-                        self.connection.side(),
-                        stop_reason
-                    );
-                    // This stream is no longer useable for outbound traffic.
-                    self.outbound_streams -= 1;
-                    // If someone is waiting for this stream to become writable,
-                    // wake them up, so that they can find out the stream is
-                    // dead.
-                    self.streams.wake_writer(stream);
-                    // Connection close could be blocked on this.
-                    self.wake_closer()
-                }
-                Event::Connected => {
-                    debug!("connected for side {:?}!", self.connection.side());
-                    self.connection.wake();
-                }
-                Event::StreamOpened { dir: Dir::Bi } => {
-                    debug!("stream opened for side {:?}", self.connection.side());
-                    self.connection.wake()
-                }
-            }
-        }
-    }
-}
-
-/// The connection driver
-#[derive(Debug)]
-pub(super) struct ConnectionDriver {
-    inner: Arc<Mutex<Muxer>>,
-    /// The packet awaiting transmission, if any.
-    outgoing_packet: Option<quinn_proto::Transmit>,
-    /// The timer being used by this connection
-    timer: Option<futures_timer::Delay>,
-    /// The last timeout returned by `quinn_proto::poll_timeout`.
-    last_timeout: Option<Instant>,
-    /// Transmit socket
-    socket: Arc<socket::Socket>,
-}
-
-impl ConnectionDriver {
-    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Muxer>>) -> Arc<crate::socket::Socket>>(
-        connection: Endpoint,
-        cb: T,
-    ) -> Upgrade {
-        let inner = Arc::new(Mutex::new(Muxer::new(connection)));
-        let socket = cb(inner.clone());
-        async_std::task::spawn(Self {
-            inner: inner.clone(),
-            outgoing_packet: None,
-            timer: None,
-            last_timeout: None,
-            socket,
-        });
-        Upgrade {
-            muxer: Some(QuicMuxer(inner)),
-        }
-    }
-}
-
-impl Future for ConnectionDriver {
-    type Output = Result<(), Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        debug!("being polled for timer!");
-        let mut inner = this.inner.lock();
-        inner.waker = Some(cx.waker().clone());
-        loop {
-            let now = Instant::now();
-            inner
-                .connection
-                .poll_transmit_pending(now, cx, &this.socket)?;
-            inner.process_app_events();
-            inner.connection.send_endpoint_events(cx)?;
-            match inner.connection.poll_timeout() {
-                None => {
-                    this.timer = None;
-                    this.last_timeout = None
-                }
-                Some(t) if t <= now => {
-                    inner.connection.handle_timeout(now);
-                    continue;
-                }
-                t if t == this.last_timeout => {}
-                Some(t) => this.timer = Some(futures_timer::Delay::new(t - now)),
-            }
-            if let Some(ref mut timer) = this.timer {
-                if timer.poll_unpin(cx).is_ready() {
-                    inner.connection.handle_timeout(now);
-                    continue;
-                }
-            }
-            if !inner.connection.is_drained() {
-                break Poll::Pending;
-            }
-            info!("exiting driver");
-            let close_reason = inner
-                .close_reason
-                .clone()
-                .expect("we never have a closed connection with no reason; qed");
-            break Poll::Ready(match close_reason {
-                quinn_proto::ConnectionError::LocallyClosed => Ok(()),
-                e => Err(e.into()),
-            });
-        }
+        self.inner().close(cx)
     }
 }

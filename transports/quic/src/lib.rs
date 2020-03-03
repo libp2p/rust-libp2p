@@ -108,6 +108,7 @@ mod error;
 mod socket;
 mod stream;
 mod stream_map;
-pub use connection::{Outbound, QuicMuxer as Muxer, Substream, Upgrade};
+pub use connection::{Outbound, QuicMuxer as Muxer, Substream};
 pub use endpoint::{Config, Endpoint, JoinHandle, Listener};
 pub use error::Error;
+pub use stream_map::Upgrade;

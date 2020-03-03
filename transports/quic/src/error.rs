@@ -30,7 +30,9 @@ pub enum Error {
     #[error(display = "Fatal I/O error {}", _0)]
     IO(#[error(source)] std::io::Error),
     /// Peer sent a malformed certificate
-    #[error(display = "Peer sent a malformed certificate without it being detected ― this is a bug")]
+    #[error(
+        display = "Peer sent a malformed certificate without it being detected ― this is a bug"
+    )]
     BadCertificate(#[error(source)] webpki::Error),
     /// QUIC protocol error
     #[error(display = "QUIC protocol error: {}", _0)]
