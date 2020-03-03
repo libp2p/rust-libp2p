@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{endpoint::ConnectionEndpoint as Endpoint, error::Error, socket};
+use super::{endpoint::ConnectionEndpoint as Endpoint, error::Error, socket, stream_map};
 use async_macros::ready;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
@@ -32,9 +32,6 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-
-mod stream;
-mod stream_map;
 
 /// A QUIC substream
 #[derive(Debug)]
