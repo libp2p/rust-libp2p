@@ -213,7 +213,6 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
-        inner.wake_driver();
         match inner.read(cx, &substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(ReadError::Blocked) => {

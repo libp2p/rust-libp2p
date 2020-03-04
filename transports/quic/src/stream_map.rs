@@ -111,6 +111,7 @@ impl Streams {
                 You probably used a Substream with the wrong StreamMuxer",
             )
         }
+        self.outbound_streams += 1;
         StreamId(id)
     }
 
@@ -150,10 +151,7 @@ impl Streams {
     /// Poll for incoming streams
     pub(super) fn accept(&mut self, cx: &mut Context<'_>) -> Poll<StreamId> {
         self.wake_driver();
-        self.connection.accept(cx).map(|e| {
-            self.outbound_streams += 1;
-            self.add_stream(e)
-        })
+        self.connection.accept(cx).map(|e| self.add_stream(e))
     }
 
     /// Wake up everything
@@ -175,9 +173,11 @@ impl Streams {
                 }
                 Event::StreamAvailable { dir: Dir::Uni } => {
                     // Ditto
-                    error!("We don’t use unidirectional streams, but got one \
-                            anyway. This is a libp2p-quic bug; please report it \
-                            at <https://github.com/libp2p/rust-libp2p>.")
+                    error!(
+                        "We don’t use unidirectional streams, but got one \
+                         anyway. This is a libp2p-quic bug; please report it \
+                         at <https://github.com/libp2p/rust-libp2p>."
+                    )
                 }
                 Event::StreamReadable { stream } => {
                     trace!(
@@ -280,10 +280,7 @@ impl Streams {
     }
 
     fn open_stream(&mut self) -> Option<StreamId> {
-        self.connection.open().map(|e| {
-            self.outbound_streams += 1;
-            self.add_stream(e)
-        })
+        self.connection.open().map(|e| self.add_stream(e))
     }
 
     pub(crate) fn write(

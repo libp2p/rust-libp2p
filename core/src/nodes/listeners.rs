@@ -369,7 +369,6 @@ where
 mod tests {
     use super::*;
     use crate::transport;
-    use futures::prelude::*;
 
     #[test]
     fn incoming_event() {
