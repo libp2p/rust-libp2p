@@ -43,15 +43,14 @@ mod keys_proto {
 pub use multiaddr;
 pub type Negotiated<T> = futures::compat::Compat01As03<multistream_select::Negotiated<futures::compat::Compat<T>>>;
 
-use std::{future::Future, pin::Pin};
-
 mod peer_id;
 mod translation;
 
+pub mod connection;
 pub mod either;
 pub mod identity;
 pub mod muxing;
-pub mod nodes;
+pub mod network;
 pub mod transport;
 pub mod upgrade;
 
@@ -62,101 +61,10 @@ pub use identity::PublicKey;
 pub use transport::Transport;
 pub use translation::address_translation;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
-pub use nodes::ConnectionInfo;
+pub use connection::{Connected, Endpoint, ConnectedPoint, ConnectionInfo};
+pub use network::Network;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum Endpoint {
-    /// The socket comes from a dialer.
-    Dialer,
-    /// The socket comes from a listener.
-    Listener,
-}
-
-impl std::ops::Not for Endpoint {
-    type Output = Endpoint;
-
-    fn not(self) -> Self::Output {
-        match self {
-            Endpoint::Dialer => Endpoint::Listener,
-            Endpoint::Listener => Endpoint::Dialer
-        }
-    }
-}
-
-impl Endpoint {
-    /// Is this endpoint a dialer?
-    pub fn is_dialer(self) -> bool {
-        if let Endpoint::Dialer = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Is this endpoint a listener?
-    pub fn is_listener(self) -> bool {
-        if let Endpoint::Listener = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-/// How we connected to a node.
-#[derive(Debug, Clone)]
-pub enum ConnectedPoint {
-    /// We dialed the node.
-    Dialer {
-        /// Multiaddress that was successfully dialed.
-        address: Multiaddr,
-    },
-    /// We received the node.
-    Listener {
-        /// Local connection address.
-        local_addr: Multiaddr,
-        /// Stack of protocols used to send back data to the remote.
-        send_back_addr: Multiaddr,
-    }
-}
-
-impl From<&'_ ConnectedPoint> for Endpoint {
-    fn from(endpoint: &'_ ConnectedPoint) -> Endpoint {
-        endpoint.to_endpoint()
-    }
-}
-
-impl From<ConnectedPoint> for Endpoint {
-    fn from(endpoint: ConnectedPoint) -> Endpoint {
-        endpoint.to_endpoint()
-    }
-}
-
-impl ConnectedPoint {
-    /// Turns the `ConnectedPoint` into the corresponding `Endpoint`.
-    pub fn to_endpoint(&self) -> Endpoint {
-        match self {
-            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener
-        }
-    }
-
-    /// Returns true if we are `Dialer`.
-    pub fn is_dialer(&self) -> bool {
-        match self {
-            ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false
-        }
-    }
-
-    /// Returns true if we are `Listener`.
-    pub fn is_listener(&self) -> bool {
-        match self {
-            ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true
-        }
-    }
-}
+use std::{future::Future, pin::Pin};
 
 /// Implemented on objects that can run a `Future` in the background.
 ///

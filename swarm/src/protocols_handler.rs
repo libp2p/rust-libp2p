@@ -220,19 +220,6 @@ pub trait ProtocolsHandler: Send + 'static {
     {
         IntoProtocolsHandler::into_node_handler_builder(self)
     }
-
-    /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.
-    ///
-    /// > **Note**: This is a shortcut for `self.into_node_handler_builder().build()`.
-    #[inline]
-    #[deprecated(note = "Use into_node_handler_builder instead")]
-    fn into_node_handler(self) -> NodeHandlerWrapper<Self>
-    where
-        Self: Sized,
-    {
-        #![allow(deprecated)]
-        self.into_node_handler_builder().build()
-    }
 }
 
 /// Configuration of inbound or outbound substream protocol(s)
