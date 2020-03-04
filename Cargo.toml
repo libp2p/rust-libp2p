@@ -85,4 +85,4 @@ exclude = [
 ]
 
 [patch.crates-io]
-webpki = { path = "webpki" }
+webpki = { git = "https://github.com/paritytech/webpki", branch = "extension-handlers" }

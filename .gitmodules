@@ -1,3 +1,0 @@
-[submodule "webpki"]
-	path = webpki
-	url = git+ssh://git@github.com/DemiMarie-parity/webpki
