@@ -100,7 +100,7 @@ mod tests {
             gs.events
                 .iter()
                 .fold(vec![], |mut collected_subscriptions, e| match e {
-                    NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
                         for s in &event.subscriptions {
                             match s.action {
                                 GossipsubSubscriptionAction::Subscribe => {
@@ -163,7 +163,7 @@ mod tests {
             gs.events
                 .iter()
                 .fold(vec![], |mut collected_subscriptions, e| match e {
-                    NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
                         for s in &event.subscriptions {
                             match s.action {
                                 GossipsubSubscriptionAction::Unsubscribe => {
@@ -328,7 +328,7 @@ mod tests {
             .events
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -394,7 +394,7 @@ mod tests {
             .events
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -437,10 +437,7 @@ mod tests {
             .events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::SendEvent {
-                    peer_id: _,
-                    event: _,
-                } => true,
+                NetworkBehaviourAction::NotifyHandler { .. } => true,
                 _ => false,
             })
             .collect();
@@ -448,7 +445,7 @@ mod tests {
         // check that there are two subscriptions sent to each peer
         for sevent in send_events.clone() {
             match sevent {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     assert!(
                         event.subscriptions.len() == 2,
                         "There should be two subscriptions sent to each peer (1 for each topic)."
@@ -625,7 +622,7 @@ mod tests {
             .events
             .iter()
             .fold(vec![], |mut collected_messages, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     for c in &event.messages {
                         collected_messages.push(c.clone())
                     }
@@ -664,7 +661,7 @@ mod tests {
 
             // is the message is being sent?
             let message_exists = gs.events.iter().any(|e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     event.messages.iter().any(|msg| id(msg) == msg_id)
                 }
                 _ => false,

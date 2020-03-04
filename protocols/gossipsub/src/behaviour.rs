@@ -27,8 +27,14 @@ use crate::protocol::{
 };
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    NotifyHandler,
+    PollParameters,
+    ProtocolsHandler
+};
 use log::{debug, error, info, trace, warn};
 use lru::LruCache;
 use rand;
@@ -146,8 +152,9 @@ impl Gossipsub {
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer.clone(),
+                    handler: NotifyHandler::Any,
                     event: event.clone(),
                 });
             }
@@ -191,9 +198,10 @@ impl Gossipsub {
 
             for peer in peer_list {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer.clone(),
                     event: event.clone(),
+                    handler: NotifyHandler::Any,
                 });
             }
         }
@@ -281,9 +289,10 @@ impl Gossipsub {
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
                 event: event.clone(),
+                handler: NotifyHandler::Any,
             });
         }
     }
@@ -461,8 +470,9 @@ impl Gossipsub {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
             let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: message_list,
@@ -508,8 +518,9 @@ impl Gossipsub {
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer: {:?}",
                 peer_id
             );
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -851,8 +862,9 @@ impl Gossipsub {
             grafts.append(&mut prunes);
 
             // send the control messages
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -869,8 +881,9 @@ impl Gossipsub {
                     topic_hash: topic_hash.clone(),
                 })
                 .collect();
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -908,9 +921,10 @@ impl Gossipsub {
 
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer.clone(),
                     event: event.clone(),
+                    handler: NotifyHandler::Any,
                 });
             }
         }
@@ -970,8 +984,9 @@ impl Gossipsub {
     /// Takes each control action mapping and turns it into a message
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer,
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -1010,8 +1025,9 @@ impl NetworkBehaviour for Gossipsub {
 
         if !subscriptions.is_empty() {
             // send our subscriptions to the peer
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: id.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     messages: Vec::new(),
                     subscriptions,
@@ -1074,7 +1090,7 @@ impl NetworkBehaviour for Gossipsub {
         debug_assert!(was_in.is_some());
     }
 
-    fn inject_node_event(&mut self, propagation_source: PeerId, event: GossipsubRpc) {
+    fn inject_event(&mut self, propagation_source: PeerId, _: ConnectionId, event: GossipsubRpc) {
         // Handle subscriptions
         // Update connected peers topics
         self.handle_received_subscriptions(&event.subscriptions, &propagation_source);
@@ -1128,17 +1144,17 @@ impl NetworkBehaviour for Gossipsub {
         if let Some(event) = self.events.pop_front() {
             // clone send event reference if others references are present
             match event {
-                NetworkBehaviourAction::SendEvent {
-                    peer_id,
-                    event: send_event,
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id, handler, event: send_event,
                 } => match Arc::try_unwrap(send_event) {
                     Ok(event) => {
-                        return Poll::Ready(NetworkBehaviourAction::SendEvent { peer_id, event });
+                        return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                            peer_id, event, handler
+                        });
                     }
                     Err(event) => {
-                        return Poll::Ready(NetworkBehaviourAction::SendEvent {
-                            peer_id,
-                            event: (*event).clone(),
+                        return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                            peer_id, event: (*event).clone(), handler
                         });
                     }
                 },

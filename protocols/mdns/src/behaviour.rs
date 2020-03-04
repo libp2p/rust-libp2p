@@ -20,7 +20,14 @@
 
 use crate::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
 use futures::prelude::*;
-use libp2p_core::{address_translation, ConnectedPoint, Multiaddr, PeerId, multiaddr::Protocol};
+use libp2p_core::{
+    ConnectedPoint,
+    Multiaddr,
+    PeerId,
+    address_translation,
+    connection::ConnectionId,
+    multiaddr::Protocol
+};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -95,7 +102,12 @@ impl Mdns {
 
     /// Returns true if the given `PeerId` is in the list of nodes discovered through mDNS.
     pub fn has_node(&self, peer_id: &PeerId) -> bool {
-        self.discovered_nodes.iter().any(|(p, _, _)| p == peer_id)
+        self.discovered_nodes().any(|p| p == peer_id)
+    }
+
+    /// Returns the list of nodes that we have discovered through mDNS and that are not expired.
+    pub fn discovered_nodes(&self) -> impl ExactSizeIterator<Item = &PeerId> {
+        self.discovered_nodes.iter().map(|(p, _, _)| p)
     }
 }
 
@@ -191,9 +203,10 @@ impl NetworkBehaviour for Mdns {
 
     fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
 
-    fn inject_node_event(
+    fn inject_event(
         &mut self,
         _: PeerId,
+        _: ConnectionId,
         _ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         void::unreachable(_ev)
