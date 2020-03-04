@@ -127,6 +127,11 @@ impl Streams {
         }
     }
 
+    /// Get the stream state for the stream.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there is no stream. This indicates misuse of the API.
     fn get(&mut self, id: &StreamId) -> &mut StreamState {
         self.map.get_mut(id).expect(
             "Internal state corrupted. \
@@ -134,32 +139,12 @@ impl Streams {
         )
     }
 
-    /// Indicate that the stream is open for reading. Calling this when nobody
-    /// is waiting for this stream to be readable is a harmless no-op.
-    pub(super) fn wake_reader(&mut self, id: quinn_proto::StreamId) {
-        if let Some(stream) = self.map.get_mut(&id) {
-            stream.wake_reader()
-        }
-    }
-
     /// If a task is waiting for this stream to be finished or written to, wake
     /// it up. Otherwise, do nothing.
-    pub(super) fn wake_writer(&mut self, id: quinn_proto::StreamId) {
+    fn wake_writer(&mut self, id: quinn_proto::StreamId) {
         if let Some(stream) = self.map.get_mut(&id) {
             stream.wake_writer()
         }
-    }
-
-    /// Remove an ID from the map.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the ID has already been removed.
-    pub(super) fn remove(&mut self, id: StreamId) {
-        self.map.remove(&id.0).expect(
-            "Internal state corrupted. \
-             You probably used a Substream with the wrong StreamMuxer",
-        );
     }
 
     /// Poll for incoming streams
@@ -190,7 +175,9 @@ impl Streams {
                 }
                 Event::StreamAvailable { dir: Dir::Uni } => {
                     // Ditto
-                    error!("we don’t use unidirectional streams")
+                    error!("We don’t use unidirectional streams, but got one \
+                            anyway. This is a libp2p-quic bug; please report it \
+                            at <https://github.com/libp2p/rust-libp2p>.")
                 }
                 Event::StreamReadable { stream } => {
                     trace!(
@@ -199,7 +186,9 @@ impl Streams {
                         self.connection.side()
                     );
                     // Wake up the task waiting on us (if any)
-                    self.wake_reader(stream);
+                    if let Some(stream) = self.map.get_mut(&stream) {
+                        stream.wake_reader()
+                    }
                 }
                 Event::StreamWritable { stream } => {
                     trace!(
@@ -363,7 +352,10 @@ impl Streams {
     pub(crate) fn destroy_stream(&mut self, stream: StreamId) {
         trace!("Removing substream {:?} from map", *stream);
         self.connection.destroy_stream(*stream);
-        self.remove(stream)
+        self.map.remove(&stream.0).expect(
+            "Internal state corrupted. \
+             You probably used a Substream with the wrong StreamMuxer",
+        );
     }
 
     pub(crate) fn close(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
