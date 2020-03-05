@@ -77,26 +77,19 @@
 //!
 //! ```no_run
 //! # fn main() {
-//! use bytes::Bytes;
+//! use async_std::net::TcpStream;
 //! use multistream_select::{dialer_select_proto, Version};
-//! use futures::{Future, Sink, Stream};
-//! use tokio_tcp::TcpStream;
-//! use tokio::runtime::current_thread::Runtime;
+//! use futures::prelude::*;
 //!
-//! #[derive(Debug, Copy, Clone)]
-//! enum MyProto { Echo, Hello }
+//! async_std::task::block_on(async move {
+//!     let socket = TcpStream::connect("127.0.0.1:10333").await.unwrap();
 //!
-//! let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap())
-//!     .from_err()
-//!     .and_then(move |io| {
-//!         let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
-//!         dialer_select_proto(io, protos, Version::V1)
-//!     })
-//!     .map(|(protocol, _io)| protocol);
+//!     let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
+//!     let (protocol, _io) = dialer_select_proto(socket, protos, Version::V1).await.unwrap();
 //!
-//! let mut rt = Runtime::new().unwrap();
-//! let protocol = rt.block_on(client).expect("failed to find a protocol");
-//! println!("Negotiated protocol: {:?}", protocol);
+//!     println!("Negotiated protocol: {:?}", protocol);
+//!     // You can now use `_io` to communicate with the remote.
+//! });
 //! # }
 //! ```
 //!

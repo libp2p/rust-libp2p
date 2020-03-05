@@ -20,7 +20,7 @@
 
 use crate::{ConnectedPoint, Negotiated};
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
-use futures::{future::Either, prelude::*, compat::Compat, compat::Compat01As03, compat::Future01CompatExt};
+use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
@@ -48,7 +48,7 @@ where
     U: InboundUpgrade<Negotiated<C>>,
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::listener_select_proto(Compat::new(conn), iter).compat();
+    let future = multistream_select::listener_select_proto(conn, iter);
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init { future, upgrade: up }
     }
@@ -61,7 +61,7 @@ where
     U: OutboundUpgrade<Negotiated<C>>
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::dialer_select_proto(Compat::new(conn), iter, v).compat();
+    let future = multistream_select::dialer_select_proto(conn, iter, v);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
     }
@@ -82,7 +82,7 @@ where
     U: InboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: Compat01As03<ListenerSelectFuture<Compat<C>, NameWrap<U::Info>>>,
+        future: ListenerSelectFuture<C, NameWrap<U::Info>>,
         upgrade: U,
     },
     Upgrade {
@@ -117,7 +117,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_inbound(Compat01As03::new(io), info.0))
+                        future: Box::pin(upgrade.upgrade_inbound(io, info.0))
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -158,7 +158,7 @@ where
     U: OutboundUpgrade<Negotiated<C>>
 {
     Init {
-        future: Compat01As03<DialerSelectFuture<Compat<C>, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>>,
+        future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
         upgrade: U
     },
     Upgrade {
@@ -193,7 +193,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_outbound(Compat01As03::new(connection), info.0))
+                        future: Box::pin(upgrade.upgrade_outbound(connection, info.0))
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
