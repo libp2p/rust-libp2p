@@ -248,6 +248,9 @@ impl ConnectionEndpoint {
             self.set_waker(cx);
             return Poll::Pending;
         }
+        if self.connection.is_closed() {
+            return Poll::Ready(Err(Error::ConnectionLost));
+        }
         if self.connection.side().is_server() {
             ready!(self.channel.poll_ready(cx))?;
             self.channel
