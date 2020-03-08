@@ -79,9 +79,7 @@ members = [
     "transports/wasm-ext",
     "transports/websocket",
 ]
-exclude = [
-    "webpki"
-]
 
 [patch.crates-io]
 webpki = { git = "https://github.com/paritytech/webpki", branch = "extension-handlers" }
+async-tls = { git = "https://github.com/async-std/async-tls" }
