@@ -38,15 +38,16 @@ enum WriterStatus {
 }
 
 impl WriterStatus {
-    fn take(self) {
+    fn take(self) -> bool {
         match self {
             Self::Unblocked => {}
             Self::Blocked { waker } => waker.wake(),
             Self::Finishing { finisher } => {
                 let _ = finisher.send(());
             }
-            Self::Finished => panic!("using a finished stream"),
-        }
+            Self::Finished => return false,
+        };
+        true
     }
 }
 
@@ -86,20 +87,12 @@ impl StreamState {
 
     /// If a task is waiting for this stream to be finished or written to, wake
     /// it up. Otherwise, do nothing.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the stream has already been finished.
     pub(crate) fn wake_writer(&mut self) {
-        mem::replace(&mut self.writer, WriterStatus::Unblocked).take()
+        mem::replace(&mut self.writer, WriterStatus::Unblocked).take();
     }
 
     /// Set a waker that will be notified when the state becomes readable.
     /// Wake up any waker that has already been registered.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the stream has already been finished.
     pub(crate) fn set_reader(&mut self, waker: task::Waker) {
         if let Some(waker) = mem::replace(&mut self.reader, Some(waker)) {
             waker.wake()
@@ -110,13 +103,13 @@ impl StreamState {
     /// finished, waking up any waker or channel that has already been
     /// registered.
     pub(crate) fn set_writer(&mut self, waker: task::Waker) {
-        mem::replace(&mut self.writer, WriterStatus::Blocked { waker }).take()
+        mem::replace(&mut self.writer, WriterStatus::Blocked { waker }).take();
     }
 
     /// Set a channel that will be notified when the task becomes writable or is
     /// finished, waking up any existing registered waker or channel
     pub(crate) fn set_finisher(&mut self, finisher: oneshot::Sender<()>) {
-        mem::replace(&mut self.writer, WriterStatus::Finishing { finisher }).take()
+        mem::replace(&mut self.writer, WriterStatus::Finishing { finisher }).take();
     }
 
     /// Wake up both readers and writers. This is just a shorthand for calling
@@ -124,5 +117,11 @@ impl StreamState {
     pub(crate) fn wake_all(&mut self) {
         self.wake_writer();
         self.wake_reader();
+    }
+
+    /// Mark this stream done for writing. Return `true` if this stream was not
+    /// already finished.
+    pub(crate) fn finish(&mut self) -> bool {
+        mem::replace(&mut self.writer, WriterStatus::Finished).take()
     }
 }

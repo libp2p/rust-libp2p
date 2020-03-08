@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! TLS configuration for `libp2p-quic`.
-// Forbid warnings when testing, but don’t break other people’s code
 #![deny(
     exceeding_bitshifts,
     invalid_type_param_default,
@@ -82,6 +81,7 @@ const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 fn make_client_config(
     certificate: rustls::Certificate,
     key: rustls::PrivateKey,
+    verifier: Arc<verifier::Libp2pCertificateVerifier>,
 ) -> rustls::ClientConfig {
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
@@ -89,20 +89,16 @@ fn make_client_config(
     crypto
         .set_single_client_cert(vec![certificate], key)
         .expect("we have a valid certificate; qed");
-    let verifier = verifier::VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
-    crypto
-        .dangerous()
-        .set_certificate_verifier(Arc::new(verifier));
+    crypto.dangerous().set_certificate_verifier(verifier);
     crypto
 }
 
 fn make_server_config(
     certificate: rustls::Certificate,
     key: rustls::PrivateKey,
+    verifier: Arc<verifier::Libp2pCertificateVerifier>,
 ) -> rustls::ServerConfig {
-    let mut crypto = rustls::ServerConfig::new(Arc::new(
-        verifier::VeryInsecureRequireExactlyOneSelfSignedClientCertificate,
-    ));
+    let mut crypto = rustls::ServerConfig::new(verifier);
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto
         .set_single_cert(vec![certificate], key)
@@ -116,15 +112,14 @@ pub fn make_tls_config(
 ) -> (rustls::ClientConfig, rustls::ServerConfig) {
     let cert = certificate::make_cert(&keypair);
     let private_key = cert.serialize_private_key_der();
-    let (cert, key) = (
-        rustls::Certificate(
-            cert.serialize_der()
-                .expect("serialization of a valid cert will succeed; qed"),
-        ),
-        rustls::PrivateKey(private_key),
+    let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
+    let cert = rustls::Certificate(
+        cert.serialize_der()
+            .expect("serialization of a valid cert will succeed; qed"),
     );
+    let key = rustls::PrivateKey(private_key);
     (
-        make_client_config(cert.clone(), key.clone()),
-        make_server_config(cert, key),
+        make_client_config(cert.clone(), key.clone(), verifier.clone()),
+        make_server_config(cert, key, verifier),
     )
 }

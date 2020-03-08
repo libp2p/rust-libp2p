@@ -249,12 +249,15 @@ impl Streams {
                         self.connection.side(),
                         stop_reason
                     );
-                    // This stream is no longer useable for outbound traffic.
-                    self.outbound_streams -= 1;
                     // If someone is waiting for this stream to become writable,
                     // wake them up, so that they can find out the stream is
-                    // dead.
-                    self.wake_writer(stream);
+                    // dead. If this is our first indication that the stream is
+                    // finished, decrement `outbound_streams`.
+                    if let Some(status) = self.map.get_mut(&stream) {
+                        if status.finish() {
+                            self.outbound_streams -= 1
+                        }
+                    }
                     // Connection close could be blocked on this.
                     self.wake_closer()
                 }
@@ -283,6 +286,15 @@ impl Streams {
         self.connection.open().map(|e| self.add_stream(e))
     }
 
+    fn finish(&mut self, id: &StreamId) -> Result<(), quinn_proto::FinishError> {
+        self.connection.finish(id.0).map_err(|e| {
+            if self.get(&id).finish() {
+                self.outbound_streams -= 1
+            }
+            e
+        })
+    }
+
     pub(crate) fn write(
         &mut self,
         cx: &mut Context<'_>,
@@ -291,13 +303,18 @@ impl Streams {
     ) -> Result<usize, quinn_proto::WriteError> {
         use quinn_proto::WriteError;
         self.wake_driver();
-        match self.connection.write(substream.0, buf) {
-            e @ Err(WriteError::Blocked) => {
-                self.get(substream).set_writer(cx.waker().clone());
-                e
+        self.connection.write(substream.0, buf).map_err(|e| {
+            let stream = self.get(substream);
+            match e {
+                WriteError::Blocked => stream.set_writer(cx.waker().clone()),
+                WriteError::Stopped(_) | WriteError::UnknownStream => {
+                    if stream.finish() {
+                        self.outbound_streams -= 1
+                    }
+                }
             }
-            e => e,
-        }
+            e
+        })
     }
 
     pub(crate) fn side(&self) -> quinn_proto::Side {
@@ -372,7 +389,10 @@ impl Streams {
         }
         for (&stream, value) in &mut self.map {
             value.wake_all();
-            let _ = self.connection.finish(stream);
+            if self.connection.finish(stream).is_err() && value.finish() {
+                // We just found that a stream is finished
+                self.outbound_streams -= 1
+            }
         }
         Poll::Pending
     }
@@ -390,7 +410,7 @@ impl Streams {
         substream: &StreamId,
     ) -> Result<oneshot::Receiver<()>, quinn_proto::FinishError> {
         self.wake_driver();
-        self.connection.finish(**substream)?;
+        self.finish(substream)?;
         let (sender, mut receiver) = oneshot::channel();
         let _ = receiver.poll_unpin(cx);
         self.get(substream).set_finisher(sender);

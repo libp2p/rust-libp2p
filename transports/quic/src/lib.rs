@@ -52,7 +52,6 @@
 //! `Endpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-// Forbid warnings when testing, but don’t break other people’s code
 #![deny(
     exceeding_bitshifts,
     invalid_type_param_default,

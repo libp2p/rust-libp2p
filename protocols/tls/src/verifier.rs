@@ -21,42 +21,39 @@
 static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
     &[
         &webpki::ECDSA_P256_SHA256,
-        &webpki::ECDSA_P256_SHA384,
-        &webpki::ECDSA_P384_SHA256,
-        &webpki::ECDSA_P384_SHA384,
         &webpki::ED25519,
+        &webpki::ECDSA_P384_SHA384,
+        &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+        &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+        &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+        // Deprecated and/or undesirable algorithms.
+
+        // deprecated elliptic curve algorithms
+        &webpki::ECDSA_P384_SHA256,
+        &webpki::ECDSA_P256_SHA384,
+        // RSA PKCS 1.5
         &webpki::RSA_PKCS1_2048_8192_SHA256,
         &webpki::RSA_PKCS1_2048_8192_SHA384,
         &webpki::RSA_PKCS1_2048_8192_SHA512,
         &webpki::RSA_PKCS1_3072_8192_SHA384,
-        &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-        &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-        &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
     ]
 };
 
-/// A ServerCertVerifier that considers any self-signed certificate to be valid.
-///
-/// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
-/// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any self-signed
-/// certificate with a valid libp2p extension **by design**.  Instead, it is the application’s job
-/// to check the peer ID that libp2p-quic provides.  libp2p-quic does guarantee that the connection
-/// is to a peer with the secret key corresponing to its `PeerId`, unless that endpoint has done
-/// something insecure.
-pub(crate) struct VeryInsecureRequireExactlyOneSelfSignedServerCertificate;
+/// Libp2p client and server certificate verifier.
+pub(crate) struct Libp2pCertificateVerifier;
 
-/// A ClientCertVerifier that requires client authentication, and requires the certificate to be
-/// self-signed.
+/// libp2p requires the following of X.509 server certificate chains:
 ///
-/// “Isn’t that insecure?”, you may ask.  Yes, it is!  That’s why this struct has the name it does!
-/// This doesn’t cause a vulnerability in libp2p-quic, however.  libp2p-quic accepts any self-signed
-/// certificate with a valid libp2p extension **by design**.  Instead, it is the application’s job
-/// to check the peer ID that libp2p-quic provides.  libp2p-quic does guarantee that the connection
-/// is to a peer with the secret key corresponing to its `PeerId`, unless that endpoint has done
-/// something insecure.
-pub(crate) struct VeryInsecureRequireExactlyOneSelfSignedClientCertificate;
-
-impl rustls::ServerCertVerifier for VeryInsecureRequireExactlyOneSelfSignedServerCertificate {
+/// * Exactly one certificate must be presented.
+/// * The certificate must be self-signed.
+/// * The certificate must have a valid libp2p extension that includes
+///   a signature of its public key.
+///
+/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
+/// the caller.
+///
+/// [`PeerId`]: libp2p_core::PeerId
+impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     fn verify_server_cert(
         &self,
         _roots: &rustls::RootCertStore,
@@ -82,21 +79,24 @@ fn verify_libp2p_extension(
     subject_public_key_info: untrusted::Input<'_>,
 ) -> Result<(), ring::error::Unspecified> {
     use ring::{error::Unspecified, io::der};
-    let spki = subject_public_key_info.read_all(Unspecified, |mut reader| {
+    use libp2p_core::identity::PublicKey;
+    let certificate_key = subject_public_key_info.read_all(Unspecified, |mut reader| {
         der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
-        Ok(der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe())
+        der::bit_string_with_no_unused_bits(&mut reader)
     })?;
     extension.read_all(Unspecified, |mut reader| {
         let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
         inner.read_all(Unspecified, |mut reader| {
-            let public_key = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
-            let signature = der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
-            let public_key = libp2p_core::identity::PublicKey::from_protobuf_encoding(public_key)
+            let public_key = der::bit_string_with_no_unused_bits(&mut reader)?;
+            let signature = der::bit_string_with_no_unused_bits(&mut reader)?;
+            // We deliberately discard the error information because this is
+            // either a broken peer or an attack.
+            let public_key = PublicKey::from_protobuf_encoding(public_key.as_slice_less_safe())
                 .map_err(|_| Unspecified)?;
-            let mut v = Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + spki.len());
+            let mut v = Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + certificate_key.len());
             v.extend_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
-            v.extend_from_slice(spki);
-            if public_key.verify(&v, signature) {
+            v.extend_from_slice(certificate_key.as_slice_less_safe());
+            if public_key.verify(&v, signature.as_slice_less_safe()) {
                 Ok(())
             } else {
                 Err(Unspecified)
@@ -144,7 +144,19 @@ fn verify_presented_certs(
     verify_single_cert(presented_certs[0].as_ref())
 }
 
-impl rustls::ClientCertVerifier for VeryInsecureRequireExactlyOneSelfSignedClientCertificate {
+/// libp2p requires the following of X.509 client certificate chains:
+///
+/// * Exactly one certificate must be presented. In particular, client
+///   authentication is mandatory in libp2p.
+/// * The certificate must be self-signed.
+/// * The certificate must have a valid libp2p extension that includes
+///   a signature of its public key.
+///
+/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
+/// the caller.
+///
+/// [`PeerId`]: libp2p_core::PeerId
+impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
     fn offer_client_auth(&self) -> bool {
         true
     }
