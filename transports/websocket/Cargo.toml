@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-tls = { git = "https://github.com/DemiMarie-parity/async-tls", branch = "upgrade-webpki-rustls" }
+async-tls = { git = "https://github.com/async-std/async-tls" }
 bytes = "0.5"
 either = "1.5.3"
 futures = "0.3.1"

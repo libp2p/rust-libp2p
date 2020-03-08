@@ -307,6 +307,10 @@ impl ConnectionEndpoint {
         self.connection.handle_timeout(now)
     }
 
+    pub(crate) fn send_streams(&self) -> usize {
+        self.connection.send_streams()
+    }
+
     /// Destroy a substream
     pub(crate) fn destroy_stream(&mut self, id: quinn_proto::StreamId) {
         // if either of these returns an error, there is nothing we can do, so

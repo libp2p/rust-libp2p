@@ -38,16 +38,15 @@ enum WriterStatus {
 }
 
 impl WriterStatus {
-    fn take(self) -> bool {
+    fn take(self) {
         match self {
             Self::Unblocked => {}
             Self::Blocked { waker } => waker.wake(),
             Self::Finishing { finisher } => {
                 let _ = finisher.send(());
             }
-            Self::Finished => return false,
-        };
-        true
+            Self::Finished => {}
+        }
     }
 }
 
@@ -121,7 +120,7 @@ impl StreamState {
 
     /// Mark this stream done for writing. Return `true` if this stream was not
     /// already finished.
-    pub(crate) fn finish(&mut self) -> bool {
+    pub(crate) fn finish(&mut self) {
         mem::replace(&mut self.writer, WriterStatus::Finished).take()
     }
 }

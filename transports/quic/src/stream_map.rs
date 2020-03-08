@@ -78,8 +78,6 @@ pub(super) struct Streams {
     map: HashMap<quinn_proto::StreamId, StreamState>,
     /// The QUIC state machine and endpoint messaging.
     connection: ConnectionEndpoint,
-    /// The number of outbound streams currently open.
-    outbound_streams: usize,
     /// Tasks waiting to make a connection.
     connectors: StreamSenderQueue,
     /// The close reason, if this connection has been lost
@@ -111,7 +109,6 @@ impl Streams {
                 You probably used a Substream with the wrong StreamMuxer",
             )
         }
-        self.outbound_streams += 1;
         StreamId(id)
     }
 
@@ -120,7 +117,6 @@ impl Streams {
             pending_stream: None,
             map: Default::default(),
             connection,
-            outbound_streams: 0,
             connectors: Default::default(),
             close_reason: None,
             waker: None,
@@ -251,12 +247,9 @@ impl Streams {
                     );
                     // If someone is waiting for this stream to become writable,
                     // wake them up, so that they can find out the stream is
-                    // dead. If this is our first indication that the stream is
-                    // finished, decrement `outbound_streams`.
+                    // dead.
                     if let Some(status) = self.map.get_mut(&stream) {
-                        if status.finish() {
-                            self.outbound_streams -= 1
-                        }
+                        status.finish()
                     }
                     // Connection close could be blocked on this.
                     self.wake_closer()
@@ -288,9 +281,7 @@ impl Streams {
 
     fn finish(&mut self, id: &StreamId) -> Result<(), quinn_proto::FinishError> {
         self.connection.finish(id.0).map_err(|e| {
-            if self.get(&id).finish() {
-                self.outbound_streams -= 1
-            }
+            self.get(&id).finish();
             e
         })
     }
@@ -307,11 +298,7 @@ impl Streams {
             let stream = self.get(substream);
             match e {
                 WriteError::Blocked => stream.set_writer(cx.waker().clone()),
-                WriteError::Stopped(_) | WriteError::UnknownStream => {
-                    if stream.finish() {
-                        self.outbound_streams -= 1
-                    }
-                }
+                WriteError::Stopped(_) | WriteError::UnknownStream => stream.finish(),
             }
             e
         })
@@ -375,24 +362,21 @@ impl Streams {
     pub(crate) fn close(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         trace!(
             "close() called with {} outbound streams for side {:?}",
-            self.outbound_streams,
+            self.connection.send_streams(),
             self.connection.side()
         );
         self.wake_closer();
         self.close_waker = Some(cx.waker().clone());
         if self.close_reason.is_some() {
             return Poll::Ready(Ok(()));
-        } else if self.outbound_streams == 0 {
+        } else if self.connection.send_streams() == 0 {
             self.shutdown(0);
             self.close_reason = Some(quinn_proto::ConnectionError::LocallyClosed);
             return Poll::Ready(Ok(()));
         }
         for (&stream, value) in &mut self.map {
             value.wake_all();
-            if self.connection.finish(stream).is_err() && value.finish() {
-                // We just found that a stream is finished
-                self.outbound_streams -= 1
-            }
+            let _ = self.connection.finish(stream);
         }
         Poll::Pending
     }
