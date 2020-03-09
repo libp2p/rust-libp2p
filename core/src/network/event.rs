@@ -44,6 +44,7 @@ use crate::{
 };
 use futures::prelude::*;
 use std::{error, fmt, hash::Hash};
+use smallvec::SmallVec;
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
@@ -55,6 +56,8 @@ where
     ListenerClosed {
         /// The listener ID that closed.
         listener_id: ListenerId,
+        /// The addresses that the listener was listening on.
+        addresses: SmallVec<[Multiaddr; 4]>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
         reason: Result<(), TTrans::Error>,
@@ -183,9 +186,10 @@ where
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ListenerClosed { listener_id, reason } => {
+            NetworkEvent::ListenerClosed { listener_id, addresses, reason } => {
                 f.debug_struct("ListenerClosed")
                     .field("listener_id", listener_id)
+                    .field("addresses", addresses)
                     .field("reason", reason)
                     .finish()
             }
