@@ -26,6 +26,7 @@ use libp2p_core::{
     Multiaddr,
     PeerId,
     PublicKey,
+    connection::ConnectionId,
     upgrade::{ReadOneError, UpgradeError}
 };
 use libp2p_swarm::{
@@ -109,9 +110,10 @@ impl NetworkBehaviour for Identify {
         self.observed_addresses.remove(peer_id);
     }
 
-    fn inject_node_event(
+    fn inject_event(
         &mut self,
         peer_id: PeerId,
+        _connection: ConnectionId,
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {

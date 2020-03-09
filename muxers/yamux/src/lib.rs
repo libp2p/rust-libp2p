@@ -152,7 +152,17 @@ where
 
     fn close(&self, c: &mut Context) -> Poll<()> {
         let mut inner = self.0.lock();
-        Pin::new(&mut inner.control).poll_close(c).map_err(YamuxError)
+        if let std::task::Poll::Ready(x) = Pin::new(&mut inner.control).poll_close(c) {
+            return Poll::Ready(x.map_err(YamuxError))
+        }
+        while let std::task::Poll::Ready(x) = inner.incoming.poll_next_unpin(c) {
+            match x {
+                Some(Ok(_))  => {} // drop inbound stream
+                Some(Err(e)) => return Poll::Ready(Err(e)),
+                None => return Poll::Ready(Ok(()))
+            }
+        }
+        Poll::Pending
     }
 
     fn flush_all(&self, _: &mut Context) -> Poll<()> {

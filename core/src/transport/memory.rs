@@ -279,8 +279,6 @@ impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
-    use std::io::Write;
 
     #[test]
     fn parse_memory_addr_works() {

@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.16.1"
+version = "0.16.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -55,11 +55,11 @@ secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 bytes = "0.5"
 futures = "0.3.1"
 multiaddr = { package = "parity-multiaddr", version = "0.7.2", path = "misc/multiaddr" }
-multihash = { package = "parity-multihash", version = "0.2.1", path = "misc/multihash" }
+multihash = "0.10"
 lazy_static = "1.2"
 libp2p-mplex = { version = "0.16.0", path = "muxers/mplex", optional = true }
 libp2p-identify = { version = "0.16.0", path = "protocols/identify", optional = true }
-libp2p-kad = { version = "0.16.1", path = "protocols/kad", optional = true }
+libp2p-kad = { version = "0.16.2", path = "protocols/kad", optional = true }
 libp2p-floodsub = { version = "0.16.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.16.0", path = "./protocols/gossipsub", optional = true }
 libp2p-ping = { version = "0.16.0", path = "protocols/ping", optional = true }
@@ -70,9 +70,9 @@ libp2p-core-derive = { version = "0.16.0", path = "misc/core-derive" }
 libp2p-secio = { version = "0.16.1", path = "protocols/secio", default-features = false, optional = true }
 libp2p-swarm = { version = "0.16.1", path = "swarm" }
 libp2p-uds = { version = "0.16.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.16.1", path = "transports/wasm-ext", optional = true }
-libp2p-yamux = { version = "0.16.0", path = "muxers/yamux", optional = true }
-libp2p-noise = { version = "0.16.0", path = "protocols/noise", optional = true }
+libp2p-wasm-ext = { version = "0.16.2", path = "transports/wasm-ext", optional = true }
+libp2p-yamux = { version = "0.16.2", path = "muxers/yamux", optional = true }
+libp2p-noise = { version = "0.16.2", path = "protocols/noise", optional = true }
 parking_lot = "0.10.0"
 pin-project = "0.4.6"
 smallvec = "1.0"
@@ -94,7 +94,6 @@ members = [
     "core",
     "misc/core-derive",
     "misc/multiaddr",
-    "misc/multihash",
     "misc/multistream-select",
     "misc/peer-id-generator",
     "muxers/mplex",

@@ -43,7 +43,7 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// ```no_run
 /// # fn main() {
 /// use futures::prelude::*;
-/// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
+/// use libp2p_core::connection::{ListenersEvent, ListenersStream};
 ///
 /// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
 ///
@@ -369,7 +369,6 @@ where
 mod tests {
     use super::*;
     use crate::transport;
-    use futures::prelude::*;
 
     #[test]
     fn incoming_event() {
