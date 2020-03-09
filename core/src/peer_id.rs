@@ -21,7 +21,8 @@
 use crate::PublicKey;
 use bs58;
 use thiserror::Error;
-use multihash;
+use multihash::{self, Code, Sha2_256};
+use rand::Rng;
 use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
@@ -69,17 +70,17 @@ impl PeerId {
         // will switch to not hashing the key (i.e. the correct behaviour).
         // In other words, rust-libp2p 0.16 is compatible with all versions of rust-libp2p.
         // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.17 and above.
-        let (hash_algorithm, canonical_algorithm) = /*if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+        let (hash_algorithm, canonical_algorithm): (_, Option<Code>) = /*if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             (multihash::Hash::Identity, Some(multihash::Hash::SHA2256))
         } else {*/
-            (multihash::Hash::SHA2256, None);
+            (Code::Sha2_256, None);
         //};
 
         let canonical = canonical_algorithm.map(|alg|
-            multihash::encode(alg, &key_enc).expect("SHA2256 is always supported"));
+            alg.hasher().expect("SHA2-256 hasher is always supported").digest(&key_enc));
 
-        let multihash = multihash::encode(hash_algorithm, &key_enc)
-            .expect("identity and sha2-256 are always supported by known public key types");
+        let multihash = hash_algorithm.hasher()
+            .expect("Identity and SHA-256 hasher are always supported").digest(&key_enc);
 
         PeerId { multihash, canonical }
     }
@@ -89,12 +90,11 @@ impl PeerId {
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
-                if multihash.algorithm() == multihash::Hash::SHA2256 {
+                if multihash.algorithm() == multihash::Code::Sha2_256 {
                     Ok(PeerId { multihash, canonical: None })
                 }
-                else if multihash.algorithm() == multihash::Hash::Identity {
-                    let canonical = multihash::encode(multihash::Hash::SHA2256, multihash.digest())
-                        .expect("SHA2256 is always supported");
+                else if multihash.algorithm() == multihash::Code::Identity {
+                    let canonical = Sha2_256::digest(&multihash.digest());
                     Ok(PeerId { multihash, canonical: Some(canonical) })
                 } else {
                     Err(multihash.into_bytes())
@@ -107,11 +107,10 @@ impl PeerId {
     /// Turns a `Multihash` into a `PeerId`. If the multihash doesn't use the correct algorithm,
     /// returns back the data as an error.
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
-        if data.algorithm() == multihash::Hash::SHA2256 {
+        if data.algorithm() == multihash::Code::Sha2_256 {
             Ok(PeerId { multihash: data, canonical: None })
-        } else if data.algorithm() == multihash::Hash::Identity {
-            let canonical = multihash::encode(multihash::Hash::SHA2256, data.digest())
-                .expect("SHA2256 is always supported");
+        } else if data.algorithm() == multihash::Code::Identity {
+            let canonical = Sha2_256::digest(data.digest());
             Ok(PeerId { multihash: data, canonical: Some(canonical) })
         } else {
             Err(data)
@@ -122,8 +121,9 @@ impl PeerId {
     ///
     /// This is useful for randomly walking on a DHT, or for testing purposes.
     pub fn random() -> PeerId {
+        let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
-            multihash: multihash::Multihash::random(multihash::Hash::SHA2256),
+            multihash: multihash::wrap(multihash::Code::Sha2_256, &peer_id),
             canonical: None,
         }
     }
@@ -158,11 +158,7 @@ impl PeerId {
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
         let alg = self.multihash.algorithm();
         let enc = public_key.clone().into_protobuf_encoding();
-        match multihash::encode(alg, &enc) {
-            Ok(h) => Some(h == self.multihash),
-            Err(multihash::EncodeError::UnsupportedType) => None,
-            Err(multihash::EncodeError::UnsupportedInputLength) => None,
-        }
+        Some(alg.hasher()?.digest(&enc) == self.multihash)
     }
 }
 
@@ -283,8 +279,8 @@ mod tests {
     #[test]
     fn peer_id_identity_equal_to_sha2256() {
         let random_bytes = (0..64).map(|_| rand::random::<u8>()).collect::<Vec<u8>>();
-        let mh1 = multihash::encode(multihash::Hash::SHA2256, &random_bytes).unwrap();
-        let mh2 = multihash::encode(multihash::Hash::Identity, &random_bytes).unwrap();
+        let mh1 = multihash::Sha2_256::digest(&random_bytes);
+        let mh2 = multihash::Identity::digest(&random_bytes);
         let peer_id1 = PeerId::try_from(mh1).unwrap();
         let peer_id2 = PeerId::try_from(mh2).unwrap();
         assert_eq!(peer_id1, peer_id2);
@@ -294,8 +290,8 @@ mod tests {
     #[test]
     fn peer_id_identity_hashes_equal_to_sha2256() {
         let random_bytes = (0..64).map(|_| rand::random::<u8>()).collect::<Vec<u8>>();
-        let mh1 = multihash::encode(multihash::Hash::SHA2256, &random_bytes).unwrap();
-        let mh2 = multihash::encode(multihash::Hash::Identity, &random_bytes).unwrap();
+        let mh1 = multihash::Sha2_256::digest(&random_bytes);
+        let mh2 = multihash::Identity::digest(&random_bytes);
         let peer_id1 = PeerId::try_from(mh1).unwrap();
         let peer_id2 = PeerId::try_from(mh2).unwrap();
 
@@ -309,26 +305,26 @@ mod tests {
 
     #[test]
     fn peer_id_equal_across_algorithms() {
-        use multihash::Hash;
+        use multihash::Code;
         use quickcheck::{Arbitrary, Gen};
 
         #[derive(Debug, Clone, PartialEq, Eq)]
-        struct HashAlgo(Hash);
+        struct HashAlgo(Code);
 
         impl Arbitrary for HashAlgo {
             fn arbitrary<G: Gen>(g: &mut G) -> Self {
                 match g.next_u32() % 4 { // make Hash::Identity more likely
-                    0 => HashAlgo(Hash::SHA2256),
-                    _ => HashAlgo(Hash::Identity)
+                    0 => HashAlgo(Code::Sha2_256),
+                    _ => HashAlgo(Code::Identity)
                 }
             }
         }
 
         fn property(data: Vec<u8>, algo1: HashAlgo, algo2: HashAlgo) -> bool {
-            let a = PeerId::try_from(multihash::encode(algo1.0, &data).unwrap()).unwrap();
-            let b = PeerId::try_from(multihash::encode(algo2.0, &data).unwrap()).unwrap();
+            let a = PeerId::try_from(algo1.0.hasher().unwrap().digest(&data)).unwrap();
+            let b = PeerId::try_from(algo2.0.hasher().unwrap().digest(&data)).unwrap();
 
-            if algo1 == algo2 || algo1.0 == Hash::Identity || algo2.0 == Hash::Identity {
+            if algo1 == algo2 || algo1.0 == Code::Identity || algo2.0 == Code::Identity {
                 a == b
             } else {
                 a != b

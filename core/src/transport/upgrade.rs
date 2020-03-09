@@ -68,7 +68,7 @@ use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 ///      namely a tuple of a [`ConnectionInfo`] (from the authentication upgrade) and a
 ///      [`StreamMuxer`] (from the multiplexing upgrade).
 ///
-/// [`Network`]: crate::nodes::Network
+/// [`Network`]: crate::Network
 pub struct Builder<T> {
     inner: T,
     version: upgrade::Version,

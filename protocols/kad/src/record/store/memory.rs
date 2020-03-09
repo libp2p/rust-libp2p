@@ -215,8 +215,13 @@ impl<'a> RecordStore<'a> for MemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use multihash::Hash::SHA2256;
+    use multihash::{wrap, Code};
     use quickcheck::*;
+    use rand::Rng;
+
+    fn random_multihash() -> Multihash {
+        wrap(Code::Sha2_256, &rand::thread_rng().gen::<[u8; 32]>())
+    }
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {
         kbucket::Key::new(r.key.clone())
@@ -251,7 +256,7 @@ mod tests {
     fn providers_ordered_by_distance_to_key() {
         fn prop(providers: Vec<kbucket::Key<PeerId>>) -> bool {
             let mut store = MemoryStore::new(PeerId::random());
-            let key = Key::from(Multihash::random(SHA2256));
+            let key = Key::from(random_multihash());
 
             let mut records = providers.into_iter().map(|p| {
                 ProviderRecord::new(key.clone(), p.into_preimage())
@@ -274,7 +279,7 @@ mod tests {
     fn provided() {
         let id = PeerId::random();
         let mut store = MemoryStore::new(id.clone());
-        let key = Multihash::random(SHA2256);
+        let key = random_multihash();
         let rec = ProviderRecord::new(key, id.clone());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![Cow::Borrowed(&rec)], store.provided().collect::<Vec<_>>());
@@ -285,7 +290,7 @@ mod tests {
     #[test]
     fn update_provider() {
         let mut store = MemoryStore::new(PeerId::random());
-        let key = Multihash::random(SHA2256);
+        let key = random_multihash();
         let prv = PeerId::random();
         let mut rec = ProviderRecord::new(key, prv);
         assert!(store.add_provider(rec.clone()).is_ok());
@@ -299,12 +304,12 @@ mod tests {
     fn max_provided_keys() {
         let mut store = MemoryStore::new(PeerId::random());
         for _ in 0 .. store.config.max_provided_keys {
-            let key = Multihash::random(SHA2256);
+            let key = random_multihash();
             let prv = PeerId::random();
             let rec = ProviderRecord::new(key, prv);
             let _ = store.add_provider(rec);
         }
-        let key = Multihash::random(SHA2256);
+        let key = random_multihash();
         let prv = PeerId::random();
         let rec = ProviderRecord::new(key, prv);
         match store.add_provider(rec) {

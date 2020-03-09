@@ -33,6 +33,7 @@ use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
+    connection::ConnectionId,
     either::EitherOutput,
     upgrade::{DeniedUpgrade, EitherUpgrade}
 };
@@ -87,19 +88,14 @@ where
         }
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_replaced(peer_id, closed_endpoint, new_endpoint)
-        }
-    }
-
-    fn inject_node_event(
+    fn inject_event(
         &mut self,
         peer_id: PeerId,
+        connection: ConnectionId,
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_node_event(peer_id, event);
+            inner.inject_event(peer_id, connection, event);
         }
     }
 
