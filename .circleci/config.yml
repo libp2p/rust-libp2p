@@ -7,7 +7,6 @@ workflows:
       - test
       - test-wasm
       - check-rustdoc-links
-      - integration-test
 
 jobs:
   test:
