@@ -236,7 +236,7 @@ impl ConnectionEndpoint {
     /// Notify the endpoint that the handshake has completed,
     /// and get the certificates from it.
     ///
-    /// If this returns [`Poll::Pending`], the current task can be worken up by
+    /// If this returns [`Poll::Pending`], the current task can be awoken by
     /// a call to [`ConnectionEndpoint::wake`].
     ///
     /// Calling this after it has returned `Ready` is erroneous.
@@ -440,6 +440,7 @@ mod channel_ref {
 
     impl Drop for Channel {
         fn drop(&mut self) {
+            // Wake up the endpoint task, to avoid deadlocks.
             let _ = self.0.start_send(Dummy);
         }
     }
@@ -455,21 +456,21 @@ mod channel_ref {
 
 pub(crate) use channel_ref::EndpointRef;
 
-/// A QUIC endpoint.  Each endpoint has its own configuration and listening socket.
+/// A QUIC endpoint. Each endpoint has its own configuration and listening socket.
 ///
-/// You generally need only one of these per process.  Endpoints are [`Send`] and [`Sync`], so you
-/// can share them among as many threads as you like.  However, performance may be better if you
-/// have one per CPU core, as this reduces lock contention.  Most applications will not need to
-/// worry about this.  `Endpoint` tries to use fine-grained locking to reduce the overhead.
+/// You generally need at most one of these per thread. Endpoints are [`Send`] and [`Sync`], so you
+/// can share them among as many threads as you like. However, performance may be better if you
+/// have one per CPU core, as this reduces lock contention. Most applications will not need to
+/// worry about this. [`Endpoint`] tries to use fine-grained locking to reduce the overhead.
 ///
-/// `Endpoint` wraps the underlying data structure in an [`Arc`], so cloning it just bumps the
-/// reference count.  All state is shared between the clones.  For example, you can pass different
-/// clones to [`Transport::listen_on`].  Each incoming connection will be received by exactly one of
+/// [`Endpoint`] wraps the underlying data structure in an [`Arc`], so cloning it just bumps the
+/// reference count. All state is shared between the clones. For example, you can pass different
+/// clones to [`Transport::listen_on`]. Each incoming connection will be received by exactly one of
 /// them.
 ///
-/// The **only** valid [`Multiaddr`] to pass to `listen_on` is the one used to create the
-/// `QuicEndpoint`.  You can obtain this via the `addr` method.  If you pass a different one, you
-/// will get [`TransportError::MultiaddrNotSupported`].
+/// The **only** valid [`Multiaddr`] to pass to [`Endpoint::listen_on`] is the one used to create the
+/// [`Endpoint`]. If you pass a different one, you will get
+/// [`TransportError::MultiaddrNotSupported`].
 #[derive(Debug, Clone)]
 pub struct Endpoint(EndpointRef);
 

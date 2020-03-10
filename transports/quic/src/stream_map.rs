@@ -49,7 +49,7 @@ impl std::ops::Deref for StreamId {
     }
 }
 
-/// A QUIC connection that is
+/// A QUIC connection that is being upgraded.
 #[derive(Debug)]
 pub struct Upgrade {
     muxer: Option<Arc<Mutex<Streams>>>,
@@ -72,7 +72,7 @@ type StreamSenderQueue = std::collections::VecDeque<oneshot::Sender<StreamId>>;
 #[derive(Debug)]
 pub(super) struct Streams {
     /// If this is `Some`, it is a stream that has been opened by the peer,
-    /// but not yet accepted by the application.  Otherwise, this is `None`.
+    /// but not yet accepted by the application. Otherwise, this is `None`.
     pending_stream: Option<StreamId>,
     /// The stream statuses
     map: HashMap<quinn_proto::StreamId, StreamState>,

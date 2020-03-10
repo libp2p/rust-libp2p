@@ -203,7 +203,7 @@ impl StreamMuxer for QuicMuxer {
         Poll::Ready(Ok(Substream::unwritten(stream)))
     }
 
-    /// Try to from a substream. This will return an error if the substream has
+    /// Try to read from a substream. This will return an error if the substream has
     /// not yet been written to.
     fn read_substream(
         &self,
