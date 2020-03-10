@@ -105,7 +105,7 @@ jobs:
           command: |
             rustc --version
       - run:
-          command: RUST_LOG=libp2p_kad cargo run --example ipfs-kad
+          command: RUST_LOG=debug cargo run --example ipfs-kad
       - save_cache:
           key: integration-test-cache-{{ epoch }}
           paths:
