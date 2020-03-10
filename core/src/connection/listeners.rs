@@ -149,7 +149,7 @@ where
         /// The ID of the listener that closed.
         listener_id: ListenerId,
         /// The addresses that the listener was listening on.
-        addresses: SmallVec<[Multiaddr; 4]>,
+        addresses: Vec<Multiaddr>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
         reason: Result<(), TTrans::Error>,
@@ -285,14 +285,14 @@ where
                 Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        addresses: listener.addresses.clone(),
+                        addresses: listener.addresses.to_vec(),
                         reason: Ok(()),
                     })
                 }
                 Poll::Ready(Some(Err(err))) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        addresses: listener.addresses.clone(),
+                        addresses: listener.addresses.to_vec(),
                         reason: Err(err),
                     })
                 }

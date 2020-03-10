@@ -44,7 +44,6 @@ use crate::{
 };
 use futures::prelude::*;
 use std::{error, fmt, hash::Hash};
-use smallvec::SmallVec;
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
@@ -57,7 +56,7 @@ where
         /// The listener ID that closed.
         listener_id: ListenerId,
         /// The addresses that the listener was listening on.
-        addresses: SmallVec<[Multiaddr; 4]>,
+        addresses: Vec<Multiaddr>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
         reason: Result<(), TTrans::Error>,
@@ -347,4 +346,3 @@ where
         self.info().to_connected_point()
     }
 }
-
