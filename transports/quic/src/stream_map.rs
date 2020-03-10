@@ -20,7 +20,7 @@
 
 //! The state of all active streams in a QUIC connection
 
-use super::endpoint::ConnectionEndpoint;
+use super::endpoint::Connection;
 use super::stream::StreamState;
 use super::{socket, Error};
 use async_macros::ready;
@@ -38,8 +38,8 @@ use std::{
     time::Instant,
 };
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 /// A stream ID.
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(super) struct StreamId(quinn_proto::StreamId);
 
 impl std::ops::Deref for StreamId {
@@ -77,7 +77,7 @@ pub(super) struct Streams {
     /// The stream statuses
     map: HashMap<quinn_proto::StreamId, StreamState>,
     /// The QUIC state machine and endpoint messaging.
-    connection: ConnectionEndpoint,
+    connection: Connection,
     /// Tasks waiting to make a connection.
     connectors: StreamSenderQueue,
     /// The close reason, if this connection has been lost
@@ -112,7 +112,7 @@ impl Streams {
         StreamId(id)
     }
 
-    fn new(connection: ConnectionEndpoint) -> Self {
+    pub(crate) fn new(connection: Connection) -> Self {
         Self {
             pending_stream: None,
             map: Default::default(),
@@ -417,20 +417,20 @@ struct ConnectionDriver {
 }
 
 impl Upgrade {
-    pub(crate) fn spawn<T: FnOnce(Arc<Mutex<Streams>>) -> Arc<crate::socket::Socket>>(
-        connection: ConnectionEndpoint,
-        cb: T,
+    pub(crate) fn spawn(
+        connection: Arc<Mutex<Streams>>,
+        socket: Arc<crate::socket::Socket>,
     ) -> Upgrade {
-        let inner = Arc::new(Mutex::new(Streams::new(connection)));
-        let socket = cb(inner.clone());
         async_std::task::spawn(ConnectionDriver {
-            inner: inner.clone(),
+            inner: connection.clone(),
             outgoing_packet: None,
             timer: None,
             last_timeout: None,
             socket,
         });
-        Upgrade { muxer: Some(inner) }
+        Upgrade {
+            muxer: Some(connection),
+        }
     }
 }
 

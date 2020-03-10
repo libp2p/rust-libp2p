@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, socket, Upgrade};
+use crate::{error::Error, socket, Upgrade, stream_map::Streams};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
 use futures::{channel::mpsc, prelude::*};
@@ -29,7 +29,7 @@ use libp2p_core::{
 };
 use log::{debug, info, trace, warn};
 use parking_lot::Mutex;
-use quinn_proto::{Connection, ConnectionHandle};
+use quinn_proto::ConnectionHandle;
 use std::{
     collections::{hash_map::Entry, HashMap},
     pin::Pin,
@@ -87,7 +87,7 @@ enum EndpointMessage {
 #[derive(Debug)]
 pub(super) struct EndpointInner {
     inner: quinn_proto::Endpoint,
-    muxers: HashMap<ConnectionHandle, Arc<Mutex<super::stream_map::Streams>>>,
+    muxers: HashMap<ConnectionHandle, Arc<Mutex<Streams>>>,
     pending: socket::Pending,
     /// Used to receive events from connections
     event_receiver: mpsc::Receiver<EndpointMessage>,
@@ -164,7 +164,7 @@ impl EndpointInner {
         &mut self,
         socket: &socket::Socket,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<(ConnectionHandle, Connection), Error>> {
+    ) -> Poll<Result<(ConnectionHandle, quinn_proto::Connection), Error>> {
         use quinn_proto::DatagramEvent;
         loop {
             let (bytes, peer) = ready!(socket.recv_from(cx, &mut self.buffer[..])?);
@@ -224,20 +224,20 @@ pub(super) struct EndpointData {
 type Sender = mpsc::Sender<EndpointMessage>;
 
 #[derive(Debug)]
-pub(crate) struct ConnectionEndpoint {
+pub(crate) struct Connection {
     pending: socket::Pending,
-    connection: Connection,
+    connection: quinn_proto::Connection,
     handle: ConnectionHandle,
     channel: Channel,
     waker: Option<std::task::Waker>,
 }
 
-impl ConnectionEndpoint {
+impl Connection {
     /// Notify the endpoint that the handshake has completed,
     /// and get the certificates from it.
     ///
     /// If this returns [`Poll::Pending`], the current task can be awoken by
-    /// a call to [`ConnectionEndpoint::wake`].
+    /// a call to [`Connection::wake`].
     ///
     /// Calling this after it has returned `Ready` is erroneous.
     pub(crate) fn notify_handshake_complete(
@@ -267,8 +267,8 @@ impl ConnectionEndpoint {
     }
 
     /// Wake up the last task registered by
-    /// [`ConnectionEndpoint::notify_handshake_complete`] or
-    /// [`ConnectionEndpoint::set_waker`].
+    /// [`Connection::notify_handshake_complete`] or
+    /// [`Connection::set_waker`].
     pub(crate) fn wake(&mut self) {
         if let Some(waker) = self.waker.take() {
             waker.wake()
@@ -465,11 +465,11 @@ pub(crate) use channel_ref::EndpointRef;
 ///
 /// [`Endpoint`] wraps the underlying data structure in an [`Arc`], so cloning it just bumps the
 /// reference count. All state is shared between the clones. For example, you can pass different
-/// clones to [`Transport::listen_on`]. Each incoming connection will be received by exactly one of
-/// them.
+/// clones to [`<Endpoint as Transport>::listen_on`]. Each incoming connection will be received by
+/// exactly one of them.
 ///
-/// The **only** valid [`Multiaddr`] to pass to [`Endpoint::listen_on`] is the one used to create the
-/// [`Endpoint`]. If you pass a different one, you will get
+/// The **only** valid [`Multiaddr`] to pass to [`<Endpoint as Transport>::listen_on`] is the one
+/// used to create the [`Endpoint`]. If you pass a different one, you will get
 /// [`TransportError::MultiaddrNotSupported`].
 #[derive(Debug, Clone)]
 pub struct Endpoint(EndpointRef);
@@ -568,12 +568,12 @@ impl Endpoint {
 
 fn accept_muxer(
     endpoint: &Arc<EndpointData>,
-    connection: Connection,
+    connection: quinn_proto::Connection,
     handle: ConnectionHandle,
     inner: &mut EndpointInner,
     channel: Channel,
 ) {
-    let connection_endpoint = ConnectionEndpoint {
+    let connection = Connection {
         pending: socket::Pending::default(),
         connection,
         handle,
@@ -583,10 +583,9 @@ fn accept_muxer(
 
     let socket = endpoint.socket.clone();
 
-    let upgrade = crate::Upgrade::spawn(connection_endpoint, |weak| {
-        inner.muxers.insert(handle, weak);
-        socket
-    });
+    let streams = Arc::new(Mutex::new(Streams::new(connection)));
+    inner.muxers.insert(handle, streams.clone());
+    let upgrade = crate::Upgrade::spawn(streams, socket);
     if endpoint
         .new_connections
         .unbounded_send(ListenerEvent::Upgrade {
@@ -708,7 +707,7 @@ impl Transport for Endpoint {
         };
         let Endpoint(endpoint) = self;
         let mut inner = endpoint.reference.inner.lock();
-        let s: Result<(_, Connection), _> = inner
+        let s = inner
             .inner
             .connect(
                 endpoint.reference.config.client_config.clone(),
@@ -721,17 +720,16 @@ impl Transport for Endpoint {
             });
         let (handle, connection) = s?;
         let socket = endpoint.reference.socket.clone();
-        let endpoint = ConnectionEndpoint {
+        let connection = Connection {
             pending: socket::Pending::default(),
             connection,
             handle,
             channel: endpoint.channel,
             waker: None,
         };
-        Ok(crate::Upgrade::spawn(endpoint, |weak| {
-            inner.muxers.insert(handle, weak);
-            socket
-        }))
+        let streams = Arc::new(Mutex::new(Streams::new(connection)));
+        inner.muxers.insert(handle, streams.clone());
+        Ok(crate::Upgrade::spawn(streams.clone(), socket))
     }
 }
 

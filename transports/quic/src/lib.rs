@@ -74,7 +74,6 @@
     no_mangle_generic_items,
     path_statements,
     private_in_public,
-    safe_packed_borrows,
     stable_features,
     type_alias_bounds,
     tyvar_behind_raw_pointer,
@@ -84,10 +83,7 @@
     unused_comparisons,
     unused_mut,
     unreachable_pub,
-    while_true,
     anonymous_parameters,
-    bare_trait_objects,
-    elided_lifetimes_in_paths,
     missing_copy_implementations,
     missing_debug_implementations,
     missing_docs,
@@ -99,7 +95,14 @@
     unused_qualifications,
     clippy::all
 )]
-#![forbid(unsafe_code)]
+#![forbid(
+    unsafe_code,
+    intra_doc_link_resolution_failure,
+    safe_packed_borrows,
+    while_true,
+    elided_lifetimes_in_paths,
+    bare_trait_objects
+)]
 
 mod connection;
 mod endpoint;
