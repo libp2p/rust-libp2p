@@ -22,8 +22,9 @@
 
 use super::*;
 
+use crate::handler::KademliaRequestId;
 use crate::K_VALUE;
-use crate::kbucket::Distance;
+use crate::kbucket::{Distance, Key};
 use crate::record::store::MemoryStore;
 use futures::{
     prelude::*,
@@ -31,6 +32,7 @@ use futures::{
     future::poll_fn,
 };
 use libp2p_core::{
+    connection::ConnectionId,
     PeerId,
     Transport,
     identity,
@@ -681,4 +683,45 @@ fn exceed_jobs_max_queries() {
             Poll::Ready(())
         })
     )
+}
+
+#[test]
+// Within `Behaviour::record_received` the exponentially decreasing expiration
+// based on the distance to the target for a record is calculated as following:
+//
+// 1. Calculate the amount of nodes between us and the record key beyond the k
+// replication constant as `n`.
+//
+// 2. Shift the configured record time-to-live `n` times to the right to
+// calculate an exponentially decreasing expiration.
+//
+// The configured record time-to-live is a u64. If `n` is larger or equal to 64
+// the right shift will lead to an overflow which panics in debug mode.
+fn record_received_no_right_shift_overflow() {
+    // This will likely generate enough keys to have equal to or more than 64
+    // peers between the record key and the node's local key.
+    let mut keys = (0..100000).map(|_| PeerId::random()).collect::<Vec<_>>();
+    keys.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
+
+    let local_id = keys.remove(0);
+    let target = keys.pop().unwrap();
+
+    let store = MemoryStore::new(local_id.clone());
+    let mut kad = Kademlia::new(local_id, store);
+
+    for key in keys.into_iter() {
+        kad.add_address(
+            &key,
+            "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap(),
+        );
+    }
+
+    let connection_id = ConnectionId::new(1234);
+    let request_id = KademliaRequestId::default();
+    let record = Record::new(
+        record::Key::from(target.clone().into_bytes()),
+        vec![],
+    );
+
+    kad.record_received(target, connection_id, request_id, record);
 }

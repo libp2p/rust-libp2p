@@ -364,6 +364,15 @@ pub struct KademliaRequestId {
     connec_unique_id: UniqueConnecId,
 }
 
+#[cfg(test)]
+impl Default for KademliaRequestId {
+    fn default() -> Self {
+        KademliaRequestId {
+            connec_unique_id: UniqueConnecId(0),
+        }
+    }
+}
+
 /// Unique identifier for a connection.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
