@@ -957,7 +957,7 @@ where
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
         let expiration = self.record_ttl.map(|ttl|
-            now + Duration::from_secs(ttl.as_secs() >> num_beyond_k)
+            now + Duration::from_secs(ttl.as_secs().checked_shr(num_beyond_k).unwrap_or(0))
         );
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
@@ -1911,4 +1911,3 @@ impl QueryInfo {
         }
     }
 }
-
