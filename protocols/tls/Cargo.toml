@@ -10,7 +10,6 @@ keywords = ["peer-to-peer", "libp2p", "networking", "tls"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-quinn = { git = "https://github.com/djc/quinn", optional = true, package = "quinn-proto" }
 rustls = "0.17.0"
 ring = "0.16.11"
 rcgen = "0.7.0"
@@ -19,6 +18,7 @@ untrusted = "0.7.0"
 log = "0.4.8"
 libp2p-core = { path = "../../core", version = "0.16.0" }
 yasna = "0.3.1"
+quinn = { git = "git+ssh://github.com/djc/quinn", optional = true, package = "quinn-proto", branch = "cid-dedup" }
 
 [features]
 default = ["quic"]

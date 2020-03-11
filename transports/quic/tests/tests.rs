@@ -169,11 +169,11 @@ fn wildcard_expansion() {
 
 #[test]
 fn communicating_between_dialer_and_listener() {
-    use tracing::{span, Level};
+    use tracing::info_span;
     init();
-    for _ in 0..1000u32 {
-        let span = span!(Level::ERROR, "single test");
-        let _span = span.enter();
+    for i in 0..1000u32 {
+        let span = info_span!("test", id = i);
+        let _guard = span.enter();
         do_test()
     }
 }

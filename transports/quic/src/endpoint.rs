@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, socket, Upgrade, stream_map::Streams};
+use crate::{error::Error, socket, stream_map::Streams, Upgrade};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
 use futures::{channel::mpsc, prelude::*};
@@ -27,7 +27,7 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace};
 use parking_lot::Mutex;
 use quinn_proto::ConnectionHandle;
 use std::{
@@ -263,7 +263,9 @@ impl Connection {
             .expect("we always require the peer to present a certificate; qed");
         // we have already verified that there is (exactly) one peer certificate,
         // and that it has a valid libp2p extension.
-        Poll::Ready(Ok(tls::extract_peerid(certificate[0].as_ref())?))
+        Poll::Ready(Ok(tls::extract_peerid(certificate[0].as_ref()).expect(
+            "our certificate verifiers guarantee that this will succeed; qed",
+        )))
     }
 
     /// Wake up the last task registered by
@@ -707,18 +709,14 @@ impl Transport for Endpoint {
         };
         let Endpoint(endpoint) = self;
         let mut inner = endpoint.reference.inner.lock();
-        let s = inner
+        let (handle, connection) = inner
             .inner
             .connect(
                 endpoint.reference.config.client_config.clone(),
                 socket_addr,
                 "l",
             )
-            .map_err(|e| {
-                warn!("Connection error: {:?}", e);
-                TransportError::Other(Error::CannotConnect(e))
-            });
-        let (handle, connection) = s?;
+            .expect("this function does no I/O, and we pass valid parameters, so it will succeed");
         let socket = endpoint.reference.socket.clone();
         let connection = Connection {
             pending: socket::Pending::default(),

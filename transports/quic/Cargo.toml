@@ -15,7 +15,7 @@ log = "0.4.8"
 ipnet = "2.2.0"
 err-derive = "0.2.2"
 futures = "0.3.4"
-quinn-proto = { git = "https://github.com/djc/quinn" }
+quinn-proto = { git = "https://github.com/djc/quinn", branch = "cid-dedup" }
 async-std = "1.5.0"
 async-macros = "2.0.0"
 futures-timer = "3.0.2"

@@ -29,17 +29,9 @@ pub enum Error {
     /// Fatal I/O error
     #[error(display = "Fatal I/O error {}", _0)]
     IO(#[error(source)] std::io::Error),
-    /// Peer sent a malformed certificate
-    #[error(
-        display = "Peer sent a malformed certificate without it being detected ― this is a bug"
-    )]
-    BadCertificate(#[error(source)] webpki::Error),
     /// QUIC protocol error
     #[error(display = "QUIC protocol error: {}", _0)]
     ConnectionError(#[error(source)] quinn_proto::ConnectionError),
-    /// Cannot establish connection
-    #[error(display = "Cannot establish connection: {}", _0)]
-    CannotConnect(#[error(source)] quinn_proto::ConnectError),
     /// Peer stopped receiving data
     #[error(display = "Peer stopped receiving data: code {}", _0)]
     Stopped(quinn_proto::VarInt),
@@ -78,9 +70,7 @@ impl From<Error> for io::Error {
     fn from(e: Error) -> Self {
         match e {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
-            e @ Error::BadCertificate(_) => io::Error::new(ErrorKind::InvalidData, e),
             Error::ConnectionError(e) => e.into(),
-            e @ Error::CannotConnect(_)
             | e @ Error::NetworkFailure
             | e @ Error::ConnectionClosing => io::Error::new(ErrorKind::Other, e),
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
