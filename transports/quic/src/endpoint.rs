@@ -43,17 +43,19 @@ use channel_ref::Channel;
 /// Represents the configuration for a QUIC transport capability for libp2p.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The client configuration.  Quinn provides functions for making one.
+    /// The client configuration
     client_config: quinn_proto::ClientConfig,
-    /// The server configuration.  Quinn provides functions for making one.
+    /// The server configuration
     server_config: Arc<quinn_proto::ServerConfig>,
     /// The endpoint configuration
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
+    /// The [`Multiaddr`]
+    multiaddr: Multiaddr,
 }
 
 impl Config {
     /// Creates a new configuration object for QUIC.
-    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
+    pub fn new(keypair: &libp2p_core::identity::Keypair, multiaddr: Multiaddr) -> Self {
         let mut transport = quinn_proto::TransportConfig::default();
         transport.stream_window_uni(0);
         transport.datagram_receive_buffer_size(None);
@@ -70,6 +72,7 @@ impl Config {
             client_config,
             server_config: Arc::new(server_config),
             endpoint_config: Default::default(),
+            multiaddr: multiaddr,
         }
     }
 }
@@ -483,15 +486,20 @@ pub type JoinHandle = async_std::task::JoinHandle<Result<(), Error>>;
 pub(crate) struct SendToken(());
 
 impl Endpoint {
-    /// Construct a `Endpoint` with the given `Config` and `Multiaddr`.
+    /// Construct a [`Endpoint`] with the given `Config`.
     pub fn new(
         config: Config,
-        mut address: Multiaddr,
     ) -> Result<(Self, JoinHandle), TransportError<<Self as Transport>::Error>> {
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&address) {
+        let Config {
+            mut multiaddr,
+            client_config,
+            server_config,
+            endpoint_config,
+        } = config;
+        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&multiaddr) {
             sa
         } else {
-            return Err(TransportError::MultiaddrNotSupported(address));
+            return Err(TransportError::MultiaddrNotSupported(multiaddr));
         };
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)
@@ -501,10 +509,10 @@ impl Endpoint {
         info!("bound socket to {:?}", socket_addr);
         if port_is_zero {
             assert_ne!(socket_addr.port(), 0);
-            assert_eq!(address.pop(), Some(Protocol::Quic));
-            assert_eq!(address.pop(), Some(Protocol::Udp(0)));
-            address.push(Protocol::Udp(socket_addr.port()));
-            address.push(Protocol::Quic);
+            assert_eq!(multiaddr.pop(), Some(Protocol::Quic));
+            assert_eq!(multiaddr.pop(), Some(Protocol::Udp(0)));
+            multiaddr.push(Protocol::Udp(socket_addr.port()));
+            multiaddr.push(Protocol::Quic);
         }
         let (new_connections, receive_connections) = mpsc::unbounded();
         let (event_sender, event_receiver) = mpsc::channel(0);
@@ -520,27 +528,32 @@ impl Endpoint {
                     .expect("we have a reference to the peer, so this will not fail; qed")
             }
         } else {
-            info!("sending address {:?}", address);
+            info!("sending address {:?}", multiaddr);
             new_connections
-                .unbounded_send(ListenerEvent::NewAddress(address.clone()))
+                .unbounded_send(ListenerEvent::NewAddress(multiaddr.clone()))
                 .expect("we have a reference to the peer, so this will not fail; qed");
         }
         let reference = Arc::new(EndpointData {
             socket: Arc::new(socket::Socket::new(socket.into())),
             inner: Mutex::new(EndpointInner {
                 inner: quinn_proto::Endpoint::new(
-                    config.endpoint_config.clone(),
-                    Some(config.server_config.clone()),
+                    endpoint_config.clone(),
+                    Some(server_config.clone()),
                 ),
                 muxers: HashMap::new(),
                 event_receiver,
                 pending: Default::default(),
                 buffer: vec![0; 0xFFFF],
             }),
-            address: address.clone(),
+            address: multiaddr.clone(),
             receive_connections: Mutex::new(Some(receive_connections)),
             new_connections,
-            config,
+            config: Config {
+                endpoint_config,
+                client_config,
+                server_config,
+                multiaddr: multiaddr.clone(),
+            },
         });
         let channel = Channel::new(event_sender);
         if socket_addr.ip().is_unspecified() {
@@ -556,10 +569,10 @@ impl Endpoint {
                     .expect("we have a reference to the peer, so this will not fail; qed")
             }
         } else {
-            info!("sending address {:?}", address);
+            info!("sending address {:?}", multiaddr);
             reference
                 .new_connections
-                .unbounded_send(ListenerEvent::NewAddress(address))
+                .unbounded_send(ListenerEvent::NewAddress(multiaddr))
                 .expect("we have a reference to the peer, so this will not fail; qed");
         }
         let endpoint = EndpointRef { reference, channel };

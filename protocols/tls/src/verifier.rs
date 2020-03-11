@@ -78,11 +78,16 @@ fn verify_libp2p_extension(
     extension: untrusted::Input<'_>,
     subject_public_key_info: untrusted::Input<'_>,
 ) -> Result<(), ring::error::Unspecified> {
-    use ring::{error::Unspecified, io::der};
     use libp2p_core::identity::PublicKey;
+    use ring::{error::Unspecified, io::der};
     let certificate_key = subject_public_key_info.read_all(Unspecified, |mut reader| {
-        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
-        der::bit_string_with_no_unused_bits(&mut reader)
+        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?.read_all(
+            Unspecified,
+            |mut reader| {
+                der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
+                der::bit_string_with_no_unused_bits(&mut reader)
+            },
+        )
     })?;
     extension.read_all(Unspecified, |mut reader| {
         let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
@@ -93,7 +98,8 @@ fn verify_libp2p_extension(
             // either a broken peer or an attack.
             let public_key = PublicKey::from_protobuf_encoding(public_key.as_slice_less_safe())
                 .map_err(|_| Unspecified)?;
-            let mut v = Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + certificate_key.len());
+            let mut v =
+                Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + certificate_key.len());
             v.extend_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
             v.extend_from_slice(certificate_key.as_slice_less_safe());
             if public_key.verify(&v, signature.as_slice_less_safe()) {

@@ -187,7 +187,8 @@ pub use libp2p_noise as noise;
 pub use libp2p_ping as ping;
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(all(feature = "quic", not(any(target_os = "emscripten", target_os = "unknown"))))]
+>>>>>>> Stashed changes
 #[doc(inline)]
 pub use libp2p_quic as quic;
 #[doc(inline)]

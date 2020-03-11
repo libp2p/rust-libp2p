@@ -6,7 +6,7 @@ edition = "2018"
 description = "TLS encryption for libp2p"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
-keywords = ["peer-to-peer", "libp2p", "networking", "tls"]
+keywords = ["peer-to-peer", "libp2p", "networking", "tls", "x509"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
@@ -18,12 +18,3 @@ untrusted = "0.7.0"
 log = "0.4.8"
 libp2p-core = { path = "../../core", version = "0.16.0" }
 yasna = "0.3.1"
-quinn = { git = "git+ssh://github.com/djc/quinn", optional = true, package = "quinn-proto", branch = "cid-dedup" }
-
-[features]
-default = ["quic"]
-quic = ["quinn"]
-
-[lib]
-name = "libp2p_tls"
-path = "src/tls.rs"
