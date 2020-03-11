@@ -7,7 +7,6 @@ workflows:
       - test
       - test-wasm
       - check-rustdoc-links
-      - integration-test
 
 jobs:
   test:
@@ -91,23 +90,3 @@ jobs:
             - ./target
             - /usr/local/cargo
             - /root/.cache/sccache
-
-  integration-test:
-    docker:
-      - image: rust
-      - image: ipfs/go-ipfs
-    steps:
-      - checkout
-      - restore_cache:
-          key: integration-test-cache-{{ epoch }}
-      - run:
-          name: Print Rust version
-          command: |
-            rustc --version
-      - run:
-          command: cargo run --example ipfs-kad
-      - save_cache:
-          key: integration-test-cache-{{ epoch }}
-          paths:
-            - "~/.cargo"
-            - "./target"
