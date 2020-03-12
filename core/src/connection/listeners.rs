@@ -285,14 +285,14 @@ where
                 Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        addresses: listener.addresses.to_vec(),
+                        addresses: listener_project.addresses.drain(..).collect(),
                         reason: Ok(()),
                     })
                 }
                 Poll::Ready(Some(Err(err))) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
-                        addresses: listener.addresses.to_vec(),
+                        addresses: listener_project.addresses.drain(..).collect(),
                         reason: Err(err),
                     })
                 }
