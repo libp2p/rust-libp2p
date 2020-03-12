@@ -189,7 +189,7 @@ fn query_iter() {
                             Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
                                 assert_eq!(&ok.key[..], search_target.as_bytes());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert_eq!(swarm.queries.size(), 0);
+                                assert_eq!(swarm.queries.len(), 0);
                                 assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
                                 let key = kbucket::Key::new(ok.key);
                                 assert_eq!(expected_distances, distances(&key, ok.peers));
@@ -436,7 +436,7 @@ fn put_record() {
 
                 if republished {
                     assert_eq!(swarms[0].store.records().count(), records.len());
-                    assert_eq!(swarms[0].queries.size(), 0);
+                    assert_eq!(swarms[0].queries.len(), 0);
                     for k in records.keys() {
                         swarms[0].store.remove(&k);
                     }
@@ -626,7 +626,7 @@ fn add_provider() {
                 // One round of publishing is complete.
                 assert!(results.is_empty());
                 for s in &swarms {
-                    assert_eq!(s.queries.size(), 0);
+                    assert_eq!(s.queries.len(), 0);
                 }
 
                 if republished {
@@ -662,7 +662,7 @@ fn exceed_jobs_max_queries() {
         swarms[0].bootstrap();
     }
 
-    assert_eq!(swarms[0].queries.size(), num);
+    assert_eq!(swarms[0].queries.len(), num);
 
     block_on(
         poll_fn(move |ctx| {
