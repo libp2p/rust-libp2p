@@ -90,3 +90,9 @@ jobs:
             - ./target
             - /usr/local/cargo
             - /root/.cache/sccache
+
+  check_attributes_below_comments:
+    steps:
+      - checkout
+      - run:
+          command: ./.circleci/attributes_below_comments.sh
