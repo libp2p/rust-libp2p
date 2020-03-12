@@ -92,6 +92,8 @@ jobs:
             - /root/.cache/sccache
 
   check_attributes_below_comments:
+    machine:
+      enabled: true
     steps:
       - checkout
       - run:
