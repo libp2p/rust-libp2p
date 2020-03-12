@@ -685,7 +685,6 @@ fn exceed_jobs_max_queries() {
     )
 }
 
-#[test]
 // Within `Behaviour::record_received` the exponentially decreasing expiration
 // based on the distance to the target for a record is calculated as following:
 //
@@ -697,6 +696,7 @@ fn exceed_jobs_max_queries() {
 //
 // The configured record time-to-live is a u64. If `n` is larger or equal to 64
 // the right shift will lead to an overflow which panics in debug mode.
+#[test]
 fn record_received_no_right_shift_overflow() {
     // This will likely generate enough keys to have equal to or more than 64
     // peers between the record key and the node's local key.
