@@ -981,31 +981,35 @@ where
         // overridden as it avoids having to load the existing record in the
         // first place.
 
-        // The record is cloned because of the weird libp2p protocol requirement
-        // to send back the value in the response, although this is a waste of
-        // resources.
-        match self.store.put(record.clone()) {
-            Ok(()) => {
-                debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
-                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: source,
-                    handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::PutRecordRes {
-                        key: record.key,
-                        value: record.value,
-                        request_id,
-                    },
-                })
-            }
-            Err(e) => {
-                info!("Record not stored: {:?}", e);
-                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: source,
-                    handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::Reset(request_id)
-                })
+        if !record.is_expired(Instant::now()) {
+            // The record is cloned because of the weird libp2p protocol requirement
+            // to send back the value in the response, although this is a waste of
+            // resources.
+            match self.store.put(record.clone()) {
+                Ok(()) => {
+                    debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
+                    self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: source,
+                        handler: NotifyHandler::One(connection),
+                        event: KademliaHandlerIn::PutRecordRes {
+                            key: record.key,
+                            value: record.value,
+                            request_id,
+                        },
+                    });
+                    return
+                }
+                Err(e) => {
+                    info!("Record not stored: {:?}", e);
+                }
             }
         }
+
+        self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+            peer_id: source,
+            handler: NotifyHandler::One(connection),
+            event: KademliaHandlerIn::Reset(request_id)
+        })
     }
 
     /// Processes a provider record received from a peer.
@@ -1911,4 +1915,3 @@ impl QueryInfo {
         }
     }
 }
-
