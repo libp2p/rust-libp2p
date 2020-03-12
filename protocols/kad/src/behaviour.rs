@@ -441,6 +441,11 @@ where
         &mut self.store
     }
 
+    /// Returns the number of iterative queries that are currently being performed.
+    pub fn num_active_iterative_queries(&self) -> usize {
+        self.queries.len()
+    }
+
     /// Bootstraps the local node to join the DHT.
     ///
     /// Bootstrapping is a multi-step operation that starts with a lookup of the local node's
@@ -1329,7 +1334,7 @@ where
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
-        let mut jobs_query_capacity = JOBS_MAX_QUERIES.saturating_sub(self.queries.size());
+        let mut jobs_query_capacity = JOBS_MAX_QUERIES.saturating_sub(self.queries.len());
 
         // Run the periodic provider announcement job.
         if let Some(mut job) = self.add_provider_job.take() {

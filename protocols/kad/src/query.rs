@@ -77,7 +77,7 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Gets the current size of the pool, i.e. the number of running queries.
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.queries.len()
     }
 
