@@ -7,7 +7,7 @@ workflows:
       - test
       - test-wasm
       - check-rustdoc-links
-      - check_attributes_below_comments
+      - check-attributes-below-comments
 
 jobs:
   test:
@@ -92,7 +92,7 @@ jobs:
             - /usr/local/cargo
             - /root/.cache/sccache
 
-  check_attributes_below_comments:
+  check-attributes-below-comments:
     machine:
       enabled: true
     steps:
