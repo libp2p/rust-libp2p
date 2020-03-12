@@ -7,6 +7,7 @@ workflows:
       - test
       - test-wasm
       - check-rustdoc-links
+      - check_attributes_below_comments
 
 jobs:
   test:
