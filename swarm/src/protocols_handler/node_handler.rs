@@ -29,12 +29,17 @@ use crate::protocols_handler::{
 
 use futures::prelude::*;
 use libp2p_core::{
-    ConnectedPoint,
     PeerId,
+    ConnectionInfo,
+    Connected,
+    connection::{
+        ConnectionHandler,
+        ConnectionHandlerEvent,
+        IntoConnectionHandler,
+        Substream,
+        SubstreamEndpoint,
+    },
     muxing::StreamMuxerBox,
-    nodes::Substream,
-    nodes::collection::ConnectionInfo,
-    nodes::handled_node::{IntoNodeHandler, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply}
 };
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
@@ -51,31 +56,14 @@ where
     TIntoProtoHandler: IntoProtocolsHandler
 {
     /// Builds a `NodeHandlerWrapperBuilder`.
-    #[inline]
     pub(crate) fn new(handler: TIntoProtoHandler) -> Self {
         NodeHandlerWrapperBuilder {
             handler,
         }
     }
-
-    /// Builds the `NodeHandlerWrapper`.
-    #[deprecated(note = "Pass the NodeHandlerWrapperBuilder directly")]
-    #[inline]
-    pub fn build(self) -> NodeHandlerWrapper<TIntoProtoHandler>
-    where TIntoProtoHandler: ProtocolsHandler
-    {
-        NodeHandlerWrapper {
-            handler: self.handler,
-            negotiating_in: Vec::new(),
-            negotiating_out: Vec::new(),
-            queued_dial_upgrades: Vec::new(),
-            unique_dial_upgrade_id: 0,
-            shutdown: Shutdown::None,
-        }
-    }
 }
 
-impl<TIntoProtoHandler, TProtoHandler, TConnInfo> IntoNodeHandler<(TConnInfo, ConnectedPoint)>
+impl<TIntoProtoHandler, TProtoHandler, TConnInfo> IntoConnectionHandler<TConnInfo>
     for NodeHandlerWrapperBuilder<TIntoProtoHandler>
 where
     TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
@@ -84,9 +72,9 @@ where
 {
     type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
 
-    fn into_handler(self, remote_info: &(TConnInfo, ConnectedPoint)) -> Self::Handler {
+    fn into_handler(self, connected: &Connected<TConnInfo>) -> Self::Handler {
         NodeHandlerWrapper {
-            handler: self.handler.into_handler(&remote_info.0.peer_id(), &remote_info.1),
+            handler: self.handler.into_handler(connected.peer_id(), &connected.endpoint),
             negotiating_in: Vec::new(),
             negotiating_out: Vec::new(),
             queued_dial_upgrades: Vec::new(),
@@ -96,6 +84,7 @@ where
     }
 }
 
+// A `ConnectionHandler` for an underlying `ProtocolsHandler`.
 /// Wraps around an implementation of `ProtocolsHandler`, and implements `NodeHandler`.
 // TODO: add a caching system for protocols that are supported or not
 pub struct NodeHandlerWrapper<TProtoHandler>
@@ -181,7 +170,7 @@ where
     }
 }
 
-impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
+impl<TProtoHandler> ConnectionHandler for NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
 {
@@ -196,17 +185,17 @@ where
     fn inject_substream(
         &mut self,
         substream: Self::Substream,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        endpoint: SubstreamEndpoint<Self::OutboundOpenInfo>,
     ) {
         match endpoint {
-            NodeHandlerEndpoint::Listener => {
+            SubstreamEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
                 let timeout = protocol.timeout().clone();
                 let upgrade = upgrade::apply_inbound(substream, SendWrapper(protocol.into_upgrade().1));
                 let timeout = Delay::new(timeout);
                 self.negotiating_in.push((upgrade, timeout));
             }
-            NodeHandlerEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
+            SubstreamEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
                 let pos = match self
                     .queued_dial_upgrades
                     .iter()
@@ -227,12 +216,13 @@ where
         }
     }
 
-    #[inline]
     fn inject_event(&mut self, event: Self::InEvent) {
         self.handler.inject_event(event);
     }
 
-    fn poll(&mut self, cx: &mut Context) -> Poll<Result<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>> {
+    fn poll(&mut self, cx: &mut Context) -> Poll<
+        Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>
+    > {
         // Continue negotiation of newly-opened substreams on the listening side.
         // We remove each element from `negotiating_in` one by one and add them back if not ready.
         for n in (0..self.negotiating_in.len()).rev() {
@@ -300,7 +290,7 @@ where
 
         match poll_result {
             Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                return Poll::Ready(Ok(NodeHandlerEvent::Custom(event)));
+                return Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event)));
             }
             Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol,
@@ -312,7 +302,7 @@ where
                 let (version, upgrade) = protocol.into_upgrade();
                 self.queued_dial_upgrades.push((id, (version, SendWrapper(upgrade))));
                 return Poll::Ready(Ok(
-                    NodeHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
+                    ConnectionHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
                 ));
             }
             Poll::Ready(ProtocolsHandlerEvent::Close(err)) => return Poll::Ready(Err(err.into())),

@@ -557,7 +557,7 @@ impl fmt::Debug for MdnsPeer {
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;
-    use libp2p_core::{PeerId, multiaddr::multihash::*};
+    use libp2p_core::{PeerId, multiaddr::multihash};
     use std::{io::{Error, ErrorKind}, time::Duration};
     use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
@@ -646,7 +646,7 @@ mod tests {
     #[test]
     fn discover_long_peer_id() {
         let max_value = String::from_utf8(vec![b'f'; 42]).unwrap();
-        let hash = encode(Hash::Identity, max_value.as_ref()).unwrap();
+        let hash = multihash::Identity::digest(max_value.as_ref());
         discover(PeerId::from_multihash(hash).unwrap())
     }
 }

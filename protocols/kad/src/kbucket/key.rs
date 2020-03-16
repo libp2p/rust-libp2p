@@ -173,7 +173,8 @@ pub struct Distance(pub(super) U256);
 mod tests {
     use super::*;
     use quickcheck::*;
-    use multihash::Hash::SHA2256;
+    use multihash::{wrap, Code};
+    use rand::Rng;
 
     impl Arbitrary for Key<PeerId> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<PeerId> {
@@ -183,7 +184,8 @@ mod tests {
 
     impl Arbitrary for Key<Multihash> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<Multihash> {
-            Key::from(Multihash::random(SHA2256))
+            let hash = rand::thread_rng().gen::<[u8; 32]>();
+            Key::from(wrap(Code::Sha2_256, &hash))
         }
     }
 

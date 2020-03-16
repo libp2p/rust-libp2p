@@ -206,7 +206,6 @@ pub trait StreamMuxer {
 
 /// Polls for an inbound from the muxer but wraps the output in an object that
 /// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
-#[inline]
 pub fn inbound_from_ref_and_wrap<P>(
     muxer: P,
 ) -> impl Future<Output = Result<SubstreamRef<P>, <P::Target as StreamMuxer>::Error>>
@@ -221,7 +220,6 @@ where
 
 /// Same as `outbound_from_ref`, but wraps the output in an object that
 /// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
-#[inline]
 pub fn outbound_from_ref_and_wrap<P>(muxer: P) -> OutboundSubstreamRefWrapFuture<P>
 where
     P: Deref + Clone,
@@ -260,7 +258,6 @@ where
 }
 
 /// Builds a new future for an outbound substream, where the muxer is a reference.
-#[inline]
 pub fn outbound_from_ref<P>(muxer: P) -> OutboundSubstreamRefFuture<P>
 where
     P: Deref,
@@ -297,7 +294,6 @@ where
 {
     type Output = Result<<P::Target as StreamMuxer>::Substream, <P::Target as StreamMuxer>::Error>;
 
-    #[inline]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         // We use a `this` because the compiler isn't smart enough to allow mutably borrowing
         // multiple different fields from the `Pin` at the same time.
@@ -311,7 +307,6 @@ where
     P: Deref,
     P::Target: StreamMuxer,
 {
-    #[inline]
     fn drop(&mut self) {
         self.muxer
             .destroy_outbound(self.outbound.take().expect("outbound was empty"))
@@ -320,7 +315,6 @@ where
 
 /// Builds an implementation of `Read`/`Write`/`AsyncRead`/`AsyncWrite` from an `Arc` to the
 /// muxer and a substream.
-#[inline]
 pub fn substream_from_ref<P>(
     muxer: P,
     substream: <P::Target as StreamMuxer>::Substream,
@@ -444,7 +438,6 @@ where
     P: Deref,
     P::Target: StreamMuxer,
 {
-    #[inline]
     fn drop(&mut self) {
         self.muxer.destroy_substream(self.substream.take().expect("substream was empty"))
     }

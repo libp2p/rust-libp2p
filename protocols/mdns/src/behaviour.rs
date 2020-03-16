@@ -20,7 +20,14 @@
 
 use crate::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
 use futures::prelude::*;
-use libp2p_core::{address_translation, ConnectedPoint, Multiaddr, PeerId, multiaddr::Protocol};
+use libp2p_core::{
+    ConnectedPoint,
+    Multiaddr,
+    PeerId,
+    address_translation,
+    connection::ConnectionId,
+    multiaddr::Protocol
+};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -196,9 +203,10 @@ impl NetworkBehaviour for Mdns {
 
     fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
 
-    fn inject_node_event(
+    fn inject_event(
         &mut self,
         _: PeerId,
+        _: ConnectionId,
         _ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         void::unreachable(_ev)

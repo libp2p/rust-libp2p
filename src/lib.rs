@@ -85,12 +85,12 @@
 //! Example ([`secio`] + [`yamux`] Protocol Upgrade):
 //!
 //! ```rust
-//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair, yamux};
+//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "secio", feature = "yamux"))] {
+//! use libp2p::{Transport, core::upgrade, tcp::TcpConfig, secio::SecioConfig, identity::Keypair, yamux};
 //! let tcp = TcpConfig::new();
 //! let secio = SecioConfig::new(Keypair::generate_ed25519());
 //! let yamux = yamux::Config::default();
-//! let transport = tcp.upgrade().authenticate(secio).multiplex(yamux);
+//! let transport = tcp.upgrade(upgrade::Version::V1).authenticate(secio).multiplex(yamux);
 //! # }
 //! ```
 //! In this example, `tcp_secio` is a new [`Transport`] that negotiates the secio protocol
@@ -152,7 +152,9 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
+#[cfg(feature = "pnet")]
 use libp2p_pnet::{PnetConfig, PreSharedKey};
+
 pub use bytes;
 pub use futures;
 #[doc(inline)]
@@ -162,47 +164,83 @@ pub use multihash;
 
 #[doc(inline)]
 pub use libp2p_core as core;
+#[cfg(feature = "deflate")]
+#[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
+#[cfg(feature = "dns")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
+#[cfg(feature = "identify")]
+#[cfg_attr(docsrs, doc(cfg(feature = "identify")))]
 #[doc(inline)]
 pub use libp2p_identify as identify;
+#[cfg(feature = "kad")]
+#[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
+#[cfg(feature = "floodsub")]
+#[cfg_attr(docsrs, doc(cfg(feature = "floodsub")))]
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
+#[cfg(feature = "gossipsub")]
+#[cfg_attr(docsrs, doc(cfg(feature = "gossipsub")))]
 #[doc(inline)]
 pub use libp2p_gossipsub as gossipsub;
+#[cfg(feature = "mplex")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
 #[doc(inline)]
 pub use libp2p_mplex as mplex;
+#[cfg(feature = "mdns")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(feature = "noise")]
+#[cfg_attr(docsrs, doc(cfg(feature = "noise")))]
 #[doc(inline)]
 pub use libp2p_noise as noise;
+#[cfg(feature = "ping")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ping")))]
 #[doc(inline)]
 pub use libp2p_ping as ping;
+#[cfg(feature = "plaintext")]
+#[cfg_attr(docsrs, doc(cfg(feature = "plaintext")))]
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
+#[cfg(feature = "secio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secio")))]
 #[doc(inline)]
 pub use libp2p_secio as secio;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
+#[cfg(feature = "tcp")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
+#[cfg(feature = "uds")]
+#[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[cfg(feature = "wasm-ext")]
+#[cfg_attr(docsrs, doc(cfg(feature = "wasm-ext")))]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(all(feature = "libp2p-websocket", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(feature = "websocket")]
+#[cfg_attr(docsrs, doc(cfg(feature = "websocket")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
+#[cfg(feature = "yamux")]
+#[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[cfg(feature = "pnet")]
+#[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
 
@@ -230,6 +268,8 @@ use std::{error, io, time::Duration};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_development_transport(keypair: identity::Keypair)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
@@ -242,10 +282,19 @@ pub fn build_development_transport(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
-    Ok(CommonTransport::new()?
+    let transport = {
+        let tcp = tcp::TcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp)?;
+        let trans_clone = transport.clone();
+        transport.or_transport(websocket::WsConfig::new(trans_clone))
+    };
+
+    Ok(transport
         .upgrade(core::upgrade::Version::V1)
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
@@ -259,79 +308,23 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))))]
 pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
     -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
-    Ok(CommonTransport::new()?
+    let transport = {
+        let tcp = tcp::TcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp)?;
+        let trans_clone = transport.clone();
+        transport.or_transport(websocket::WsConfig::new(trans_clone))
+    };
+
+    Ok(transport
         .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket))
         .upgrade(core::upgrade::Version::V1)
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
         .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
         .timeout(Duration::from_secs(20)))
-}
-
-/// Implementation of `Transport` that supports the most common protocols.
-///
-/// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
-/// future to get new transports.
-#[derive(Debug, Clone)]
-struct CommonTransport {
-    // The actual implementation of everything.
-    inner: CommonTransportInner
-}
-
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
-type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
-type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-type InnerImplementation = core::transport::dummy::DummyTransport;
-
-#[derive(Debug, Clone)]
-struct CommonTransportInner {
-    inner: InnerImplementation,
-}
-
-impl CommonTransport {
-    /// Initializes the `CommonTransport`.
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-    pub fn new() -> io::Result<CommonTransport> {
-        let tcp = tcp::TcpConfig::new().nodelay(true);
-        let transport = dns::DnsConfig::new(tcp)?;
-        #[cfg(feature = "libp2p-websocket")]
-        let transport = {
-            let trans_clone = transport.clone();
-            transport.or_transport(websocket::WsConfig::new(trans_clone))
-        };
-
-        Ok(CommonTransport {
-            inner: CommonTransportInner { inner: transport }
-        })
-    }
-
-    /// Initializes the `CommonTransport`.
-    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-    pub fn new() -> io::Result<CommonTransport> {
-        let inner = core::transport::dummy::DummyTransport::new();
-        Ok(CommonTransport {
-            inner: CommonTransportInner { inner }
-        })
-    }
-}
-
-impl Transport for CommonTransport {
-    type Output = <InnerImplementation as Transport>::Output;
-    type Error = <InnerImplementation as Transport>::Error;
-    type Listener = <InnerImplementation as Transport>::Listener;
-    type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
-    type Dial = <InnerImplementation as Transport>::Dial;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.inner.inner.listen_on(addr)
-    }
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.inner.dial(addr)
-    }
 }
