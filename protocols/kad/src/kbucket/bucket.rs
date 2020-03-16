@@ -404,7 +404,7 @@ where
     }
 }
 
-#[cfg(test)]
+// #[cfg(test)]
 // mod tests {
 //     use libp2p_core::PeerId;
 //     use rand::Rng;

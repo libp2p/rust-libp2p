@@ -33,6 +33,7 @@ mod addresses;
 mod behaviour;
 mod jobs;
 mod query;
+mod contact;
 
 mod dht_proto {
     include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));

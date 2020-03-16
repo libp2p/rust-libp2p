@@ -30,6 +30,7 @@ use crate::kbucket::{self, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
+use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
 use libp2p_swarm::{
@@ -47,10 +48,13 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
 
+// TODO: how Kademlia knows hers PeerId? By distance, but how?
+// TODO: add there hers PublicKey, and exchange it on the network
+
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
-    kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
+    kbuckets: KBucketsTable<kbucket::Key<PeerId>, Contact>,
 
     /// An optional protocol name override to segregate DHTs in the network.
     protocol_name_override: Option<Cow<'static, [u8]>>,
@@ -292,7 +296,7 @@ where
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::RoutingUpdated {
                             peer: peer.clone(),
-                            addresses: entry.value().clone(),
+                            addresses: entry.value().clone().into(),
                             old_peer: None,
                         }
                     ))
@@ -309,7 +313,7 @@ where
                     } else {
                         NodeStatus::Disconnected
                     };
-                match entry.insert(addresses.clone(), status) {
+                match entry.insert(addresses.clone().into(), status) {
                     kbucket::InsertResult::Inserted => {
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
@@ -615,7 +619,7 @@ where
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
                                 peer,
-                                addresses: entry.value().clone(),
+                                addresses: entry.value().clone().into(),
                                 old_peer: None,
                             }
                         ))
@@ -640,7 +644,7 @@ where
                 if new_status == NodeStatus::Connected {
                     if let Some(address) = address {
                         let addresses = Addresses::new(address);
-                        match entry.insert(addresses.clone(), new_status) {
+                        match entry.insert(addresses.clone().into(), new_status) {
                             kbucket::InsertResult::Inserted => {
                                 let event = KademliaEvent::RoutingUpdated {
                                     peer: peer.clone(),
@@ -1374,7 +1378,7 @@ where
                 let kbucket::Node { key, value } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
                     peer: key.into_preimage(),
-                    addresses: value,
+                    addresses: value.into(),
                     old_peer: entry.evicted.map(|n| n.key.into_preimage())
                 };
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
@@ -1743,11 +1747,12 @@ impl AddProviderError {
     }
 }
 
-impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
-    fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, Addresses>) -> KadPeer {
+impl<C: Into<Addresses>> From<kbucket::EntryView<kbucket::Key<PeerId>, C>> for KadPeer {
+    fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, C>) -> KadPeer {
+        let c: Addresses = e.node.value.into(); // TODO: Contact
         KadPeer {
             node_id: e.node.key.into_preimage(),
-            multiaddrs: e.node.value.into_vec(),
+            multiaddrs: c.into_vec(),
             connection_ty: match e.status {
                 NodeStatus::Connected => KadConnectionType::Connected,
                 NodeStatus::Disconnected => KadConnectionType::NotConnected

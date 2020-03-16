@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+/*
 #![cfg(test)]
 
 use super::*;
@@ -682,3 +683,4 @@ fn exceed_jobs_max_queries() {
         })
     )
 }
+*/

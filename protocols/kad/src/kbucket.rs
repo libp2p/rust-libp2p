@@ -474,7 +474,7 @@ where
     }
 }
 
-#[cfg(test)]
+// #[cfg(test)]
 // mod tests {
 //     use super::*;
 //     use libp2p_core::PeerId;
