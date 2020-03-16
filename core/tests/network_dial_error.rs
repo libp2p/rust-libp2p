@@ -29,7 +29,7 @@ use libp2p_core::{
     Transport,
     connection::PendingConnectionError,
     muxing::StreamMuxerBox,
-    network::{NetworkEvent, peer::PeerState},
+    network::NetworkEvent,
     upgrade,
 };
 use libp2p_swarm::{
@@ -137,7 +137,7 @@ fn deny_incoming_connec() {
 
         match swarm2.poll(cx) {
             Poll::Ready(NetworkEvent::DialError {
-                new_state: PeerState::Disconnected,
+                attempts_remaining: 0,
                 peer_id,
                 multiaddr,
                 error: PendingConnectionError::Transport(_)
@@ -294,7 +294,7 @@ fn multiple_addresses_err() {
         loop {
             match swarm.poll(cx) {
                 Poll::Ready(NetworkEvent::DialError {
-                    new_state,
+                    attempts_remaining,
                     peer_id,
                     multiaddr,
                     error: PendingConnectionError::Transport(_)
@@ -303,15 +303,10 @@ fn multiple_addresses_err() {
                     let expected = addresses.remove(0);
                     assert_eq!(multiaddr, expected);
                     if addresses.is_empty() {
-                        assert_eq!(new_state, PeerState::Disconnected);
+                        assert_eq!(attempts_remaining, 0);
                         return Poll::Ready(Ok(()));
                     } else {
-                        match new_state {
-                            PeerState::Dialing { num_pending_addresses } => {
-                                assert_eq!(num_pending_addresses.get(), addresses.len());
-                            },
-                            _ => panic!()
-                        }
+                        assert_eq!(attempts_remaining, addresses.len());
                     }
                 },
                 Poll::Ready(_) => unreachable!(),
