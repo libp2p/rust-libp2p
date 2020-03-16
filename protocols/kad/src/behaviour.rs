@@ -1752,6 +1752,7 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Contact>> for KadPeer {
     fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, Contact>) -> KadPeer {
         let Contact { addresses, public_key } = e.node.value;
         KadPeer {
+            public_key,
             node_id: e.node.key.into_preimage(),
             multiaddrs: addresses.into_vec(),
             connection_ty: match e.status {

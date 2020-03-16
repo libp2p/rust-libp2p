@@ -18,7 +18,8 @@
 
 
 use crate::Addresses;
-use libp2p_core::{PublicKey, Multiaddr};
+use libp2p_core::{Multiaddr};
+use libp2p_core::identity::ed25519::PublicKey;
 
 #[derive(Clone)]
 pub struct Contact {
