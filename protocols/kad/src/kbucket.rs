@@ -76,6 +76,7 @@ use arrayvec::{self, ArrayVec};
 use bucket::KBucket;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
+use libp2p_core::identity::ed25519::Keypair;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -83,6 +84,7 @@ const NUM_BUCKETS: usize = 256;
 /// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
 pub struct KBucketsTable<TKey, TVal> {
+    local_kp: Keypair,
     /// The key identifying the local peer that owns the routing table.
     local_key: TKey,
     /// The buckets comprising the routing table.
@@ -142,8 +144,9 @@ where
     /// The given `pending_timeout` specifies the duration after creation of
     /// a [`PendingEntry`] after which it becomes eligible for insertion into
     /// a full bucket, replacing the least-recently (dis)connected node.
-    pub fn new(local_key: TKey, pending_timeout: Duration) -> Self {
+    pub fn new(local_kp: Keypair, local_key: TKey, pending_timeout: Duration) -> Self {
         KBucketsTable {
+            local_kp,
             local_key,
             buckets: (0 .. NUM_BUCKETS).map(|_| KBucket::new(pending_timeout)).collect(),
             applied_pending: VecDeque::new()

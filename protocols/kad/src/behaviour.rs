@@ -47,8 +47,9 @@ use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
+use libp2p_core::identity::ed25519::Keypair;
 
-// TODO: how Kademlia knows hers PeerId? By distance, but how?
+// TODO: how Kademlia knows hers PeerId? It's stored in KBucketsTable
 // TODO: add there hers PublicKey, and exchange it on the network
 
 /// Network behaviour that handles Kademlia.
@@ -228,8 +229,8 @@ where
     for<'a> TStore: RecordStore<'a>
 {
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn new(id: PeerId, store: TStore) -> Self {
-        Self::with_config(id, store, Default::default())
+    pub fn new(kp: Keypair, id: PeerId, store: TStore) -> Self {
+        Self::with_config(kp, id, store, Default::default())
     }
 
     /// Get the protocol name of this kademlia instance.
@@ -240,7 +241,7 @@ where
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
+    pub fn with_config(kp: Keypair, id: PeerId, store: TStore, config: KademliaConfig) -> Self {
         let local_key = kbucket::Key::new(id.clone());
 
         let put_record_job = config
@@ -259,7 +260,7 @@ where
 
         Kademlia {
             store,
-            kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
+            kbuckets: KBucketsTable::new(kp, local_key, config.kbucket_pending_timeout),
             protocol_name_override: config.protocol_name_override,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
