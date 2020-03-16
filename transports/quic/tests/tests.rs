@@ -134,7 +134,7 @@ fn wildcard_expansion() {
     init();
     let addr: Multiaddr = "/ip4/0.0.0.0/udp/1234/quic".parse().unwrap();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let (listener, join) = Endpoint::new(Config::new(&keypair), addr.clone()).unwrap();
+    let (listener, join) = Endpoint::new(Config::new(&keypair, addr.clone())).unwrap();
     let mut incoming = listener.listen_on(addr).unwrap();
     // Process all initial `NewAddress` events and make sure they
     // do not contain wildcard address or port.
@@ -185,8 +185,8 @@ fn do_test() {
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
     let keypair2 = keypair.clone();
     let addr: Multiaddr = "/ip4/127.0.0.1/udp/0/quic".parse().expect("bad address?");
-    let quic_config = Config::new(&keypair2);
-    let (quic_endpoint, join) = Endpoint::new(quic_config, addr.clone()).unwrap();
+    let quic_config = Config::new(&keypair2, addr.clone());
+    let (quic_endpoint, join) = Endpoint::new(quic_config).unwrap();
     let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
     trace!("running tests");
     let handle = async_std::task::spawn(async move {
@@ -239,9 +239,9 @@ fn do_test() {
 
     let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();
-        let quic_config = Config::new(&keypair);
+        let quic_config = Config::new(&keypair, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap());
         let (quic_endpoint, join) =
-            Endpoint::new(quic_config, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()).unwrap();
+            Endpoint::new(quic_config).unwrap();
         // Obtain a future socket through dialing
         let mut connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
         trace!("Received a Connection: {:?}", connection);
@@ -291,12 +291,12 @@ fn do_test() {
 fn replace_port_0_in_returned_multiaddr_ipv4() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let config = Config::new(&keypair);
 
     let addr = "/ip4/127.0.0.1/udp/0/quic".parse::<Multiaddr>().unwrap();
     assert!(addr.to_string().ends_with("udp/0/quic"));
 
-    let (quic, join) = Endpoint::new(config, addr.clone()).expect("no error");
+    let config = Config::new(&keypair, addr.clone());
+    let (quic, join) = Endpoint::new(config).expect("no error");
 
     let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
         .next()
@@ -315,11 +315,11 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
 fn replace_port_0_in_returned_multiaddr_ipv6() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let config = Config::new(&keypair);
 
     let addr: Multiaddr = "/ip6/::1/udp/0/quic".parse().unwrap();
     assert!(addr.to_string().contains("udp/0/quic"));
-    let (quic, join) = Endpoint::new(config, addr.clone()).expect("no error");
+    let config = Config::new(&keypair, addr.clone());
+    let (quic, join) = Endpoint::new(config).expect("no error");
 
     let new_addr = futures::executor::block_on_stream(quic.listen_on(addr).unwrap())
         .next()
@@ -336,9 +336,9 @@ fn replace_port_0_in_returned_multiaddr_ipv6() {
 fn larger_addr_denied() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    let config = Config::new(&keypair);
     let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
         .parse::<Multiaddr>()
         .unwrap();
-    assert!(Endpoint::new(config, addr).is_err())
+        let config = Config::new(&keypair, addr);
+        assert!(Endpoint::new(config).is_err())
 }
