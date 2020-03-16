@@ -555,7 +555,7 @@ where
         PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
     > where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Clone,
-        TPeerId: Clone + fmt::Debug,
+        TPeerId: Clone
     {
         loop {
             let item = match self.manager.poll(cx) {
@@ -611,9 +611,13 @@ where
                         }
                         // Peer ID checks must already have happened. See `add_pending`.
                         if cfg!(debug_assertions) {
-                            assert_ne!(&self.local_id, entry.connected().peer_id());
+                            if &self.local_id == entry.connected().peer_id() {
+                                panic!("Unexpected local peer ID for remote.");
+                            }
                             if let Some(peer) = peer {
-                                assert_eq!(&peer, entry.connected().peer_id());
+                                if &peer != entry.connected().peer_id() {
+                                    panic!("Unexpected peer ID mismatch.");
+                                }
                             }
                         }
                         // Add the connection to the pool.
