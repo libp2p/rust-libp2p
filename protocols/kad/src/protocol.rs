@@ -39,6 +39,7 @@ use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
 use wasm_timer::Instant;
+use libp2p_core::identity::ed25519::PublicKey;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
@@ -83,6 +84,7 @@ impl Into<proto::message::ConnectionType> for KadConnectionType {
 /// Information about a peer, as known by the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KadPeer {
+    pub public_key: PublicKey,
     /// Identifier of the peer.
     pub node_id: PeerId,
     /// The multiaddresses that the sender think can be used in order to reach the peer.
@@ -112,7 +114,13 @@ impl TryFrom<proto::message::Peer> for KadPeer {
             .ok_or_else(|| invalid_data("unknown connection type"))?
             .into();
 
+        let public_key = PublicKey::decode(peer.public_key.as_slice())
+            .map_err(|e|
+                invalid_data(format!("invalid public key: {}", e).as_str())
+            )?;
+
         Ok(KadPeer {
+            public_key,
             node_id,
             multiaddrs: addrs,
             connection_ty
@@ -128,7 +136,8 @@ impl Into<proto::message::Peer> for KadPeer {
             connection: {
                 let ct: proto::message::ConnectionType = self.connection_ty.into();
                 ct as i32
-            }
+            },
+            public_key: self.public_key.encode().to_vec()
         }
     }
 }

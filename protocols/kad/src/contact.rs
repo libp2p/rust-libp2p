@@ -23,7 +23,7 @@ use libp2p_core::{PublicKey, Multiaddr};
 #[derive(Clone)]
 pub struct Contact {
     pub addresses: Addresses,
-    pub key: Option<PublicKey>
+    pub public_key: Option<PublicKey>
 }
 
 impl Contact {
@@ -57,7 +57,7 @@ impl From<Addresses> for Contact {
     fn from(addresses: Addresses) -> Self {
         Contact {
             addresses,
-            key: None
+            public_key: None
         }
     }
 }

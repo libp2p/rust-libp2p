@@ -1748,12 +1748,12 @@ impl AddProviderError {
     }
 }
 
-impl<C: Into<Addresses>> From<kbucket::EntryView<kbucket::Key<PeerId>, C>> for KadPeer {
-    fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, C>) -> KadPeer {
-        let c: Addresses = e.node.value.into(); // TODO: Contact
+impl From<kbucket::EntryView<kbucket::Key<PeerId>, Contact>> for KadPeer {
+    fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, Contact>) -> KadPeer {
+        let Contact { addresses, public_key } = e.node.value;
         KadPeer {
             node_id: e.node.key.into_preimage(),
-            multiaddrs: c.into_vec(),
+            multiaddrs: addresses.into_vec(),
             connection_ty: match e.status {
                 NodeStatus::Connected => KadConnectionType::Connected,
                 NodeStatus::Disconnected => KadConnectionType::NotConnected
