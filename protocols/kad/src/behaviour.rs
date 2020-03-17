@@ -289,7 +289,7 @@ where
     ///
     /// If the routing table has been updated as a result of this operation,
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr, public_key: PublicKey) {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
@@ -307,14 +307,19 @@ where
                 entry.value().insert(address);
             }
             kbucket::Entry::Absent(entry) => {
+                println!("Will insert newly connected node {} into a bucket", entry.key().clone().into_preimage().to_base58());
                 let addresses = Addresses::new(address);
+                let contact = Contact {
+                    addresses: addresses.clone(),
+                    public_key
+                };
                 let status =
                     if self.connected_peers.contains(peer) {
                         NodeStatus::Connected
                     } else {
                         NodeStatus::Disconnected
                     };
-                match entry.insert(addresses.clone().into(), status) {
+                match entry.insert(contact, status) {
                     kbucket::InsertResult::Inserted => {
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
@@ -643,33 +648,35 @@ where
             kbucket::Entry::Absent(entry) => {
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
-                    if let Some(address) = address {
-                        let addresses = Addresses::new(address);
-                        match entry.insert(addresses.clone().into(), new_status) {
-                            kbucket::InsertResult::Inserted => {
-                                let event = KademliaEvent::RoutingUpdated {
-                                    peer: peer.clone(),
-                                    addresses,
-                                    old_peer: None,
-                                };
-                                self.queued_events.push_back(
-                                    NetworkBehaviourAction::GenerateEvent(event));
-                            },
-                            kbucket::InsertResult::Full => {
-                                debug!("Bucket full. Peer not added to routing table: {}", peer)
-                            },
-                            kbucket::InsertResult::Pending { disconnected } => {
-                                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
-                                self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
-                                    peer_id: disconnected.into_preimage(),
-                                })
-                            },
-                        }
-                    } else {
-                        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::UnroutablePeer { peer }
-                        ));
-                    }
+                    println!("Won't insert newly connected node {} into a bucket: no public key available here", entry.key().clone().into_preimage().to_base58());
+                    // TODO: can we leave that disabled?
+                //     if let Some(address) = address {
+                //         let addresses = Addresses::new(address);
+                //         match entry.insert(addresses.clone().into(), new_status) {
+                //             kbucket::InsertResult::Inserted => {
+                //                 let event = KademliaEvent::RoutingUpdated {
+                //                     peer: peer.clone(),
+                //                     addresses,
+                //                     old_peer: None,
+                //                 };
+                //                 self.queued_events.push_back(
+                //                     NetworkBehaviourAction::GenerateEvent(event));
+                //             },
+                //             kbucket::InsertResult::Full => {
+                //                 debug!("Bucket full. Peer not added to routing table: {}", peer)
+                //             },
+                //             kbucket::InsertResult::Pending { disconnected } => {
+                //                 debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
+                //                 self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
+                //                     peer_id: disconnected.into_preimage(),
+                //                 })
+                //             },
+                //         }
+                //     } else {
+                //         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                //             KademliaEvent::UnroutablePeer { peer }
+                //         ));
+                //     }
                 }
             },
             _ => {}
@@ -748,7 +755,7 @@ where
                 let closest_peers = result.peers.map(kbucket::Key::from);
                 let provider_id = params.local_peer_id().clone();
                 let external_addresses = params.external_addresses().collect();
-                let provider_key = Some(self.kbuckets.local_public_key());
+                let provider_key = self.kbuckets.local_public_key();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     key,
                     provider_id,
@@ -1837,7 +1844,7 @@ enum QueryInfo {
         provider_id: PeerId,
         external_addresses: Vec<Multiaddr>,
         context: AddProviderContext,
-        provider_key: Option<PublicKey>
+        provider_key: PublicKey
     },
 
     /// A query that searches for the closest closest nodes to a key to be used

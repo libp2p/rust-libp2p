@@ -24,7 +24,7 @@ use libp2p_core::identity::ed25519::PublicKey;
 #[derive(Clone)]
 pub struct Contact {
     pub addresses: Addresses,
-    pub public_key: Option<PublicKey>
+    pub public_key: PublicKey
 }
 
 impl Contact {
@@ -54,11 +54,11 @@ impl Into<Addresses> for Contact {
     }
 }
 
-impl From<Addresses> for Contact {
-    fn from(addresses: Addresses) -> Self {
-        Contact {
-            addresses,
-            public_key: None
-        }
-    }
-}
+// impl From<Addresses> for Contact {
+//     fn from(addresses: Addresses) -> Self {
+//         Contact {
+//             addresses,
+//             public_key: None
+//         }
+//     }
+// }

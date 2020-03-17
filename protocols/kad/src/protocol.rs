@@ -87,7 +87,7 @@ impl Into<proto::message::ConnectionType> for KadConnectionType {
 /// Information about a peer, as known by the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KadPeer {
-    pub public_key: Option<PublicKey>,
+    pub public_key: PublicKey,
     /// Identifier of the peer.
     pub node_id: PeerId,
     /// The multiaddresses that the sender think can be used in order to reach the peer.
@@ -117,16 +117,21 @@ impl TryFrom<proto::message::Peer> for KadPeer {
             .ok_or_else(|| invalid_data("unknown connection type"))?
             .into();
 
-        let public_key = match peer.public_key {
-            Some(proto::message::peer::PublicKey::Bytes(bytes)) => {
-                PublicKey::decode(bytes.as_slice())
-                    .map(Some)
-                    .map_err(|e|
-                        invalid_data(format!("invalid public key: {}", e).as_str())
-                    )
-            }
-            None => Ok(None),
-        }?;
+        // let public_key = match peer.public_key {
+        //     Some(proto::message::peer::PublicKey::Bytes(bytes)) => {
+        //         PublicKey::decode(bytes.as_slice())
+        //             .map(Some)
+        //             .map_err(|e|
+        //                 invalid_data(format!("invalid public key: {}", e).as_str())
+        //             )
+        //     }
+        //     None => Ok(None),
+        // }?;
+
+        let public_key = PublicKey::decode(peer.public_key.as_slice())
+            .map_err(|e|
+                invalid_data(format!("invalid public key: {}", e).as_str())
+            )?;
 
         Ok(KadPeer {
             public_key,
@@ -139,7 +144,6 @@ impl TryFrom<proto::message::Peer> for KadPeer {
 
 impl Into<proto::message::Peer> for KadPeer {
     fn into(self) -> proto::message::Peer {
-        use proto::message::peer::PublicKey;
         proto::message::Peer {
             id: self.node_id.into_bytes(),
             addrs: self.multiaddrs.into_iter().map(|a| a.to_vec()).collect(),
@@ -147,7 +151,7 @@ impl Into<proto::message::Peer> for KadPeer {
                 let ct: proto::message::ConnectionType = self.connection_ty.into();
                 ct as i32
             },
-            public_key: self.public_key.map(|pk| PublicKey::Bytes(pk.encode().to_vec()))
+            public_key: self.public_key.encode().to_vec()
         }
     }
 }
