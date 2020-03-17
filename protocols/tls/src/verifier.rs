@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod x509;
 static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
     &[
         &webpki::ECDSA_P256_SHA256,
@@ -81,13 +82,8 @@ fn verify_libp2p_extension(
     use libp2p_core::identity::PublicKey;
     use ring::{error::Unspecified, io::der};
     let certificate_key = subject_public_key_info.read_all(Unspecified, |mut reader| {
-        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?.read_all(
-            Unspecified,
-            |mut reader| {
-                der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
-                der::bit_string_with_no_unused_bits(&mut reader)
-            },
-        )
+        der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
+        der::bit_string_with_no_unused_bits(&mut reader)
     })?;
     extension.read_all(Unspecified, |mut reader| {
         let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
@@ -187,7 +183,9 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
                 &[],
                 get_time()?,
             )
-            .map(|()| rustls::ClientCertVerified::assertion())
-            .map_err(rustls::TLSError::WebPKIError)
+            .map_err(rustls::TLSError::WebPKIError)?;
+        x509::verify_certificate(x509::parse_certificate(presented_certs[0].as_ref()).unwrap())
+            .unwrap();
+        Ok(rustls::ClientCertVerified::assertion())
     }
 }

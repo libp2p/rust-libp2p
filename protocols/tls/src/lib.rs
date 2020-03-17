@@ -85,7 +85,8 @@ fn make_client_config(
 ) -> rustls::ClientConfig {
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
-    crypto.enable_early_data = true;
+    crypto.alpn_protocols = vec![b"libp2p".to_vec()];
+    crypto.enable_early_data = false;
     crypto
         .set_single_client_cert(vec![certificate], key)
         .expect("we have a valid certificate; qed");
@@ -100,6 +101,7 @@ fn make_server_config(
 ) -> rustls::ServerConfig {
     let mut crypto = rustls::ServerConfig::new(verifier);
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
+    crypto.alpn_protocols = vec![b"libp2p".to_vec()];
     crypto
         .set_single_cert(vec![certificate], key)
         .expect("we have a valid certificate; qed");

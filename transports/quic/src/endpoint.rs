@@ -59,7 +59,7 @@ impl Config {
         let mut transport = quinn_proto::TransportConfig::default();
         transport.stream_window_uni(0);
         transport.datagram_receive_buffer_size(None);
-        transport.keep_alive_interval(Some(Duration::from_millis(1000)));
+        transport.keep_alive_interval(Some(Duration::from_millis(10)));
         let transport = Arc::new(transport);
         let (client_tls_config, server_tls_config) = tls::make_tls_config(keypair);
         let mut server_config = quinn_proto::ServerConfig::default();

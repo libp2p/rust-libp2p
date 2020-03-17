@@ -240,8 +240,7 @@ fn do_test() {
     let second_handle = async_std::task::spawn(async move {
         let addr = ready_rx.await.unwrap();
         let quic_config = Config::new(&keypair, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap());
-        let (quic_endpoint, join) =
-            Endpoint::new(quic_config).unwrap();
+        let (quic_endpoint, join) = Endpoint::new(quic_config).unwrap();
         // Obtain a future socket through dialing
         let mut connection = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
         trace!("Received a Connection: {:?}", connection);
@@ -339,6 +338,6 @@ fn larger_addr_denied() {
     let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
         .parse::<Multiaddr>()
         .unwrap();
-        let config = Config::new(&keypair, addr);
-        assert!(Endpoint::new(config).is_err())
+    let config = Config::new(&keypair, addr);
+    assert!(Endpoint::new(config).is_err())
 }

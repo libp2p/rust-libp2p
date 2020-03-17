@@ -71,8 +71,9 @@ impl From<Error> for io::Error {
         match e {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
             Error::ConnectionError(e) => e.into(),
-            | e @ Error::NetworkFailure
-            | e @ Error::ConnectionClosing => io::Error::new(ErrorKind::Other, e),
+            e @ Error::NetworkFailure | e @ Error::ConnectionClosing => {
+                io::Error::new(ErrorKind::Other, e)
+            }
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }
