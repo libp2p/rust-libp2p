@@ -20,6 +20,8 @@
 use crate::Addresses;
 use libp2p_core::{Multiaddr};
 use libp2p_core::identity::ed25519::PublicKey;
+use crate::protocol::KadPeer;
+use smallvec::SmallVec;
 
 #[derive(Clone)]
 pub struct Contact {
@@ -40,9 +42,6 @@ impl Contact {
     pub fn into_vec(self) -> Vec<Multiaddr> {
         self.addresses.into_vec()
     }
-    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(),()> {
-        self.addresses.remove(addr)
-    }
     pub fn insert(&mut self, addr: Multiaddr) -> bool {
         self.addresses.insert(addr)
     }
@@ -51,5 +50,14 @@ impl Contact {
 impl Into<Addresses> for Contact {
     fn into(self) -> Addresses {
         self.addresses
+    }
+}
+
+impl From<KadPeer> for Contact {
+    fn from(peer: KadPeer) -> Self {
+        Contact {
+            addresses: peer.multiaddrs.iter().cloned().collect::<SmallVec<[Multiaddr; 6]>>().into(),
+            public_key: peer.public_key
+        }
     }
 }

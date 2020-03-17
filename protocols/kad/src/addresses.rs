@@ -28,6 +28,12 @@ pub struct Addresses {
     addrs: SmallVec<[Multiaddr; 6]>,
 }
 
+#[derive(PartialEq, Eq, Debug)]
+pub enum Remove {
+    Completely = 0,
+    KeepLast = 1
+}
+
 impl Addresses {
     /// Creates a new list of addresses.
     pub fn new(addr: Multiaddr) -> Addresses {
@@ -64,8 +70,8 @@ impl Addresses {
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
-    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(),()> {
-        if self.addrs.len() == 1 {
+    pub fn remove(&mut self, addr: &Multiaddr, mode: Remove) -> Result<(),()> {
+        if mode == Remove::KeepLast && self.addrs.len() == 1 {
             return Err(())
         }
 
@@ -89,6 +95,14 @@ impl Addresses {
             true
         } else {
             false
+        }
+    }
+}
+
+impl From<SmallVec<[Multiaddr; 6]>> for Addresses {
+    fn from(addrs: SmallVec<[Multiaddr; 6]>) -> Self {
+        Addresses {
+            addrs
         }
     }
 }
