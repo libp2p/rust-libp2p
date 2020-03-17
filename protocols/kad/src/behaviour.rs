@@ -47,7 +47,7 @@ use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
-use libp2p_core::identity::ed25519::Keypair;
+use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 
 // TODO: how Kademlia knows hers PeerId? It's stored in KBucketsTable
 // TODO: add there hers PublicKey, and exchange it on the network
@@ -748,11 +748,13 @@ where
                 let closest_peers = result.peers.map(kbucket::Key::from);
                 let provider_id = params.local_peer_id().clone();
                 let external_addresses = params.external_addresses().collect();
+                let provider_key = Some(self.kbuckets.local_public_key());
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     key,
                     provider_id,
                     external_addresses,
                     context,
+                    provider_key
                 });
                 self.queries.add_fixed(closest_peers, inner);
                 None
@@ -1835,6 +1837,7 @@ enum QueryInfo {
         provider_id: PeerId,
         external_addresses: Vec<Multiaddr>,
         context: AddProviderContext,
+        provider_key: Option<PublicKey>
     },
 
     /// A query that searches for the closest closest nodes to a key to be used
@@ -1894,10 +1897,12 @@ impl QueryInfo {
                 key,
                 provider_id,
                 external_addresses,
+                provider_key,
                 ..
             } => KademliaHandlerIn::AddProvider {
                 key: key.clone(),
                 provider: crate::protocol::KadPeer {
+                    public_key: provider_key.clone(),
                     node_id: provider_id.clone(),
                     multiaddrs: external_addresses.clone(),
                     connection_ty: crate::protocol::KadConnectionType::Connected,

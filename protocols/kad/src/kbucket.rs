@@ -76,7 +76,7 @@ use arrayvec::{self, ArrayVec};
 use bucket::KBucket;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
-use libp2p_core::identity::ed25519::Keypair;
+use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -156,6 +156,10 @@ where
     /// Returns the local key.
     pub fn local_key(&self) -> &TKey {
         &self.local_key
+    }
+
+    pub fn local_public_key(&self) -> PublicKey {
+        self.local_kp.public()
     }
 
     /// Returns an `Entry` for the given key, representing the state of the entry
