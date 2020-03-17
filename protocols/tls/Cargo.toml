@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking", "tls", "x509"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-rustls = "0.17.0"
+rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
 ring = "0.16.11"
 rcgen = "0.7.0"
 webpki = "0.21.2"
