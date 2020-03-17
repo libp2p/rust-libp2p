@@ -21,8 +21,6 @@
 //! A [`ProtocolsHandler`] implementation that combines multiple other `ProtocolsHandler`s
 //! indexed by some key.
 
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade::ProtocolName;
 use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
     KeepAlive,
@@ -36,6 +34,9 @@ use crate::upgrade::{
     OutboundUpgradeSend,
     UpgradeInfoSend
 };
+use futures::{future::BoxFuture, prelude::*};
+use libp2p_core::upgrade::ProtocolName;
+use rand::Rng;
 use std::{collections::HashMap, fmt, hash::Hash, iter::{self, FromIterator}, task::{Context, Poll}};
 
 /// A [`ProtocolsHandler`] for multiple other `ProtocolsHandler`s.
@@ -65,6 +66,11 @@ where
     /// Insert a [`ProtocolsHandler`] at index `key`.
     pub fn add(&mut self, key: K, handler: H) {
         self.handlers.insert(key, handler);
+    }
+
+    /// Remove a [`ProtocolsHandler`] at index `key`.
+    pub fn del(&mut self, key: &K) {
+        self.handlers.remove(key);
     }
 }
 
@@ -157,12 +163,23 @@ where
     fn poll(&mut self, cx: &mut Context)
         -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>>
     {
-        for (k, h) in self.handlers.iter_mut() {
+        // Not always polling handlers in the same order should give anyone the chance to make progress.
+        let pos = rand::thread_rng().gen_range(0, self.handlers.len());
+
+        for (k, h) in self.handlers.iter_mut().skip(pos) {
             if let Poll::Ready(e) = h.poll(cx) {
                 let e = e.map_outbound_open_info(|i| (k.clone(), i)).map_custom(|p| (k.clone(), p));
                 return Poll::Ready(e)
             }
         }
+
+        for (k, h) in self.handlers.iter_mut().take(pos) {
+            if let Poll::Ready(e) = h.poll(cx) {
+                let e = e.map_outbound_open_info(|i| (k.clone(), i)).map_custom(|p| (k.clone(), p));
+                return Poll::Ready(e)
+            }
+        }
+
         Poll::Pending
     }
 }
