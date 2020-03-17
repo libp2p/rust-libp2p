@@ -747,9 +747,6 @@ where
             QueryInfo::PrepareAddProvider { key, context } => {
                 let closest_peers = result.peers.map(kbucket::Key::from);
                 let provider_id = params.local_peer_id().clone();
-                let local_peer_id = self.kbuckets.local_key().clone().into_preimage();
-                assert_eq!(params.local_peer_id().to_base58(), local_peer_id.to_base58());
-                println!("PrepareAddProvider: PeerIDs are equal. {} == {}", params.local_peer_id().to_base58(), local_peer_id.to_base58());
                 let external_addresses = params.external_addresses().collect();
                 let provider_key = Some(self.kbuckets.local_public_key());
                 let inner = QueryInner::new(QueryInfo::AddProvider {
