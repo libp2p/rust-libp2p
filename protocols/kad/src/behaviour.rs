@@ -548,6 +548,7 @@ where
                     peer_id: peer.node_id.clone(),
                     addresses: peer.multiaddrs.clone(),
                     ty: peer.connection_ty,
+                    public_key: peer.public_key.clone()
                 }
             ));
         }
@@ -558,7 +559,7 @@ where
                 log::trace!("Peer {:?} reported by {:?} in query {:?}.",
                             peer, source, query_id);
                 let addrs = peer.multiaddrs.iter().cloned().collect();
-                query.inner.addresses.insert(peer.node_id.clone(), addrs);
+                query.inner.addresses.insert(peer.node_id.clone(), addrs); // TODO: ???
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
@@ -649,7 +650,7 @@ where
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
                     println!("Won't insert newly connected node {} into a bucket: no public key available here", entry.key().clone().into_preimage().to_base58());
-                    // TODO: can we leave that disabled?
+                    // TODO: can we leave that disabled? Seems like yes, if add_address is called directly
                 //     if let Some(address) = address {
                 //         let addresses = Addresses::new(address);
                 //         match entry.insert(addresses.clone().into(), new_status) {
@@ -1029,6 +1030,7 @@ where
                 peer_id: provider.node_id.clone(),
                 addresses: provider.multiaddrs.clone(),
                 ty: provider.connection_ty,
+                public_key: provider.public_key.clone()
             }));
 
         if &provider.node_id != self.kbuckets.local_key().preimage() {
@@ -1506,6 +1508,8 @@ pub enum KademliaEvent {
         /// The connection status reported by the discovered peer
         /// towards the local peer.
         ty: KadConnectionType,
+        /// PublicKey of the discovered peer
+        public_key: PublicKey
     },
 
     /// The routing table has been updated.

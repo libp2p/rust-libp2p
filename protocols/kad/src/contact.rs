@@ -53,12 +53,3 @@ impl Into<Addresses> for Contact {
         self.addresses
     }
 }
-
-// impl From<Addresses> for Contact {
-//     fn from(addresses: Addresses) -> Self {
-//         Contact {
-//             addresses,
-//             public_key: None
-//         }
-//     }
-// }

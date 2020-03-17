@@ -117,17 +117,6 @@ impl TryFrom<proto::message::Peer> for KadPeer {
             .ok_or_else(|| invalid_data("unknown connection type"))?
             .into();
 
-        // let public_key = match peer.public_key {
-        //     Some(proto::message::peer::PublicKey::Bytes(bytes)) => {
-        //         PublicKey::decode(bytes.as_slice())
-        //             .map(Some)
-        //             .map_err(|e|
-        //                 invalid_data(format!("invalid public key: {}", e).as_str())
-        //             )
-        //     }
-        //     None => Ok(None),
-        // }?;
-
         let public_key = PublicKey::decode(peer.public_key.as_slice())
             .map_err(|e|
                 invalid_data(format!("invalid public key: {}", e).as_str())
