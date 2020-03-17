@@ -946,6 +946,8 @@ where
             return
         }
 
+        let now = Instant::now();
+
         // Calculate the expiration exponentially inversely proportional to the
         // number of nodes between the local node and the closest node to the key
         // (beyond the replication factor). This ensures avoiding over-caching
@@ -954,7 +956,7 @@ where
         let num_between = self.kbuckets.count_nodes_between(&target);
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
-        let expiration = exp_decr_expiration(self.record_ttl, num_beyond_k);
+        let expiration = self.record_ttl.map(|ttl| now + exp_decrease(ttl, num_beyond_k));
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
         record.expires = record.expires.or(expiration).min(expiration);
@@ -1026,13 +1028,9 @@ where
     }
 }
 
-/// Calculate exponentially decreasing expiration from a default time-to-live by a factor.
-fn exp_decr_expiration(default_ttl: Option<Duration>, factor: u32) -> Option<Instant> {
-    default_ttl.map(|ttl| Instant::now() + Duration::from_secs(
-        ttl.as_secs()
-            .checked_shr(factor)
-            .unwrap_or(0),
-    ))
+/// Exponentially decrease the given duration (base 2).
+fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
+    Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
 }
 
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
