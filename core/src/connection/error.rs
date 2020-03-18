@@ -29,6 +29,10 @@ pub enum ConnectionError<THandlerErr> {
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
 
+    /// The connection was dropped because the connection limit
+    /// for a peer has been reached.
+    ConnectionLimit(ConnectionLimit),
+
     /// The connection handler produced an error.
     Handler(THandlerErr),
 }
@@ -44,6 +48,8 @@ where
                 write!(f, "Connection error: I/O error: {}", err),
             ConnectionError::Handler(err) =>
                 write!(f, "Connection error: Handler error: {}", err),
+            ConnectionError::ConnectionLimit(l) =>
+                write!(f, "Connection error: Connection limit: {}.", l)
         }
     }
 }
@@ -57,6 +63,7 @@ where
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::Handler(err) => Some(err),
+            ConnectionError::ConnectionLimit(..) => None,
         }
     }
 }
@@ -70,10 +77,6 @@ pub enum PendingConnectionError<TTransErr> {
     /// The peer identity obtained on the connection did not
     /// match the one that was expected or is otherwise invalid.
     InvalidPeerId,
-
-    /// The pending connection was successfully negotiated but dropped
-    /// because the connection limit for a peer has been reached.
-    ConnectionLimit(ConnectionLimit),
 
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
@@ -93,8 +96,6 @@ where
                 write!(f, "Pending connection: Transport error: {}", err),
             PendingConnectionError::InvalidPeerId =>
                 write!(f, "Pending connection: Invalid peer ID."),
-            PendingConnectionError::ConnectionLimit(l) =>
-                write!(f, "Pending connection: Connection limit: {}.", l)
         }
     }
 }
@@ -109,7 +110,6 @@ where
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(err) => Some(err),
             PendingConnectionError::InvalidPeerId => None,
-            PendingConnectionError::ConnectionLimit(..) => None,
         }
     }
 }
