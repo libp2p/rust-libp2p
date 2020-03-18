@@ -55,7 +55,6 @@ use std::{
     error,
     fmt,
     hash::Hash,
-    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -331,7 +330,7 @@ where
         THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
         TConnInfo: Clone,
-        TPeerId: AsRef<[u8]> + Send + 'static,
+        TPeerId: Send + 'static,
     {
         // Poll the listener(s) for new connections.
         match ListenersStream::poll(Pin::new(&mut self.listeners), cx) {
@@ -383,7 +382,7 @@ where
             }
             Poll::Ready(PoolEvent::PendingConnectionError { id, endpoint, error, handler, pool, .. }) => {
                 let dialing = &mut self.dialing;
-                let (next, event) = on_connection_failed(pool, dialing, id, endpoint, error, handler);
+                let (next, event) = on_connection_failed(dialing, id, endpoint, error, handler);
                 if let Some(dial) = next {
                     let transport = self.listeners.transport().clone();
                     if let Err(e) = dial_peer_impl(transport, pool, dialing, dial) {
@@ -496,13 +495,11 @@ where
 /// If the failed connection attempt was a dialing attempt and there
 /// are more addresses to try, new `DialingOpts` are returned.
 fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
-    pool: &Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
     dialing: &mut FnvHashMap<TPeerId, peer::DialingAttempt>,
     id: ConnectionId,
     endpoint: ConnectedPoint,
     error: PendingConnectionError<TTrans::Error>,
-    handler: Option<THandler>,
+    handler: THandler,
 ) -> (Option<DialingOpts<TPeerId, THandler>>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>)
 where
     TTrans: Transport,
@@ -518,41 +515,27 @@ where
 
     if let Some(peer_id) = dialing_peer {
         // A pending outgoing connection to a known peer failed.
-        let attempt = dialing.remove(&peer_id).expect("by (1)");
+        let mut attempt = dialing.remove(&peer_id).expect("by (1)");
 
         let num_remain = attempt.next.len();
         let failed_addr = attempt.current.clone();
 
-        let new_state = if pool.is_connected(&peer_id) {
-            peer::PeerState::Connected
-        } else if num_remain == 0 { // (2)
-            peer::PeerState::Disconnected
-        } else {
-            peer::PeerState::Dialing {
-                num_pending_addresses: NonZeroUsize::new(num_remain).expect("by (2)"),
-            }
-        };
-
         let opts =
-            if let Some(handler) = handler {
-                if !attempt.next.is_empty() {
-                    let mut attempt = attempt;
-                    let next_attempt = attempt.next.remove(0);
-                    Some(DialingOpts {
-                        peer: peer_id.clone(),
-                        handler,
-                        address: next_attempt,
-                        remaining: attempt.next
-                    })
-                } else {
-                    None
-                }
+            if num_remain > 0 {
+                let next_attempt = attempt.next.remove(0);
+                let opts = DialingOpts {
+                    peer: peer_id.clone(),
+                    handler,
+                    address: next_attempt,
+                    remaining: attempt.next
+                };
+                Some(opts)
             } else {
                 None
             };
 
         (opts, NetworkEvent::DialError {
-            new_state,
+            attempts_remaining: num_remain,
             peer_id,
             multiaddr: failed_addr,
             error,
