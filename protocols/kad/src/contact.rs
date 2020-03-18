@@ -30,6 +30,13 @@ pub struct Contact {
 }
 
 impl Contact {
+    pub fn new(addresses: Addresses, public_key: PublicKey) -> Self {
+        Self {
+            addresses,
+            public_key
+        }
+    }
+
     pub fn first(&self) -> &Multiaddr {
         self.addresses.first()
     }

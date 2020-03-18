@@ -616,7 +616,7 @@ where
     }
 
     /// Updates the connection status of a peer in the Kademlia routing table.
-    fn connection_updated(&mut self, peer: PeerId, address: Option<Multiaddr>, new_status: NodeStatus) {
+    fn connection_updated(&mut self, peer: PeerId, contact: Option<Contact>, new_status: NodeStatus) {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, old_status) => {
@@ -648,35 +648,32 @@ where
             kbucket::Entry::Absent(entry) => {
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
-                    println!("Won't insert newly connected node {} into a bucket: no public key available here", entry.key().clone().into_preimage().to_base58());
-                    // TODO: can we leave that disabled? Seems like yes, if add_address is called directly
-                //     if let Some(address) = address {
-                //         let addresses = Addresses::new(address);
-                //         match entry.insert(addresses.clone().into(), new_status) {
-                //             kbucket::InsertResult::Inserted => {
-                //                 let event = KademliaEvent::RoutingUpdated {
-                //                     peer: peer.clone(),
-                //                     addresses,
-                //                     old_peer: None,
-                //                 };
-                //                 self.queued_events.push_back(
-                //                     NetworkBehaviourAction::GenerateEvent(event));
-                //             },
-                //             kbucket::InsertResult::Full => {
-                //                 debug!("Bucket full. Peer not added to routing table: {}", peer)
-                //             },
-                //             kbucket::InsertResult::Pending { disconnected } => {
-                //                 debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
-                //                 self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
-                //                     peer_id: disconnected.into_preimage(),
-                //                 })
-                //             },
-                //         }
-                //     } else {
-                //         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                //             KademliaEvent::UnroutablePeer { peer }
-                //         ));
-                //     }
+                    if let Some(contact) = contact {
+                        match entry.insert(contact, new_status) {
+                            kbucket::InsertResult::Inserted => {
+                                let event = KademliaEvent::RoutingUpdated {
+                                    peer: peer.clone(),
+                                    addresses: contact.addresses.clone(),
+                                    old_peer: None,
+                                };
+                                self.queued_events.push_back(
+                                    NetworkBehaviourAction::GenerateEvent(event));
+                            },
+                            kbucket::InsertResult::Full => {
+                                debug!("Bucket full. Peer not added to routing table: {}", peer)
+                            },
+                            kbucket::InsertResult::Pending { disconnected } => {
+                                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
+                                self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
+                                    peer_id: disconnected.into_preimage(),
+                                })
+                            },
+                        }
+                    } else {
+                        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::UnroutablePeer { peer }
+                        ));
+                    }
                 }
             },
             _ => {}
@@ -1095,18 +1092,24 @@ where
             self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id, event, handler: NotifyHandler::Any
             });
-
-            // TODO: collect inner.contacts here, and pass them to connection_updated
         }
 
         // The remote's address can only be put into the routing table,
         // and thus shared with other nodes, if the local node is the dialer,
         // since the remote address on an inbound connection is specific to
         // that connection (e.g. typically the TCP port numbers).
-        let address = match endpoint {
+        let new_address = match endpoint {
             ConnectedPoint::Dialer { address } => Some(address),
             ConnectedPoint::Listener { .. } => None,
         };
+
+        let contact = self.queries.iter().find_map(|q| q.inner.contacts.get(&peer));
+        let contact = match (address, public_key) {
+            (Some(addr), Some(pk)) => Contact::new(Addresses::new(addr), pk.clone()),
+            _ => None
+        };
+
+
 
         self.connection_updated(peer.clone(), address, NodeStatus::Connected);
         self.connected_peers.insert(peer);
