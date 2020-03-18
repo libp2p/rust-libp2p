@@ -198,48 +198,48 @@ fn verify_self_signature<'a>(
     x509_pkey_bytes: &'a [u8],
     x509_signature_algorithm: &[u8],
 ) -> Result<ring::signature::UnparsedPublicKey<&'a [u8]>, Error> {
-    let algorithm: &'static dyn signature::VerificationAlgorithm =
-        match (x509_signature_algorithm, x509_pkey_alg) {
-            (include_bytes!("data/alg-rsa-pkcs1-sha256.der"), _) => {
-                if x509_pkey_alg == include_bytes!("data/alg-rsa-encryption.der") {
-                    &signature::RSA_PKCS1_2048_8192_SHA256
-                } else {
-                    return Err(Error::UnsupportedSignatureAlgorithmForPublicKey);
-                }
-            }
-            (
-                include_bytes!("data/alg-rsa-pkcs1-sha384.der"),
-                include_bytes!("data/alg-rsa-encryption.der"),
-            ) => &signature::RSA_PKCS1_2048_8192_SHA384,
-            (
-                include_bytes!("data/alg-rsa-pkcs1-sha512.der"),
-                include_bytes!("data/alg-rsa-encryption.der"),
-            ) => &signature::RSA_PKCS1_2048_8192_SHA512,
-            (
-                include_bytes!("data/alg-ecdsa-sha256.der"),
-                include_bytes!("data/alg-ecdsa-p256.der"),
-            ) => &signature::ECDSA_P256_SHA256_ASN1,
-            (
-                include_bytes!("data/alg-ecdsa-sha384.der"),
-                include_bytes!("data/alg-ecdsa-p384.der"),
-            ) => &signature::ECDSA_P384_SHA384_ASN1,
-            (
-                include_bytes!("data/alg-ecdsa-sha384.der"),
-                include_bytes!("data/alg-ecdsa-p256.der"),
-            ) => &signature::ECDSA_P256_SHA384_ASN1,
-            (
-                include_bytes!("data/alg-ecdsa-sha256.der"),
-                include_bytes!("data/alg-ecdsa-p384.der"),
-            ) => &signature::ECDSA_P384_SHA256_ASN1,
-            (include_bytes!("data/alg-ed25519.der"), include_bytes!("data/alg-ed25519.der")) => {
-                &signature::ED25519
-            }
-            (
-                [0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a, ..],
-                include_bytes!("data/alg-rsa-encryption.der"),
-            ) => parse_rsa_pss(&x509_pkey_alg[11..])?,
+    const BUF: &[u8] = &[
+        0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a,
+    ];
+    use signature::{
+        RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA512,
+    };
+    let algorithm: &'static dyn signature::VerificationAlgorithm = match x509_signature_algorithm {
+        include_bytes!("data/alg-rsa-pkcs1-sha256.der") => match x509_pkey_alg {
+            include_bytes!("data/alg-rsa-encryption.der") => &RSA_PKCS1_2048_8192_SHA256,
             _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
-        };
+        },
+        include_bytes!("data/alg-rsa-pkcs1-sha384.der") => match x509_pkey_alg {
+            include_bytes!("data/alg-rsa-encryption.der") => &RSA_PKCS1_2048_8192_SHA384,
+            _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
+        },
+        include_bytes!("data/alg-rsa-pkcs1-sha512.der") => match x509_pkey_alg {
+            include_bytes!("data/alg-rsa-encryption.der") => &RSA_PKCS1_2048_8192_SHA512,
+            _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
+        },
+        include_bytes!("data/alg-ecdsa-sha256.der") => match x509_pkey_alg {
+            include_bytes!("data/alg-ecdsa-p256.der") => &signature::ECDSA_P256_SHA256_ASN1,
+            include_bytes!("data/alg-ecdsa-p384.der") => &signature::ECDSA_P384_SHA256_ASN1,
+            _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
+        },
+        include_bytes!("data/alg-ecdsa-sha384.der") => match x509_pkey_alg {
+            include_bytes!("data/alg-ecdsa-p256.der") => &signature::ECDSA_P256_SHA384_ASN1,
+            include_bytes!("data/alg-ecdsa-p384.der") => &signature::ECDSA_P384_SHA384_ASN1,
+            _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
+        },
+        include_bytes!("data/alg-ed25519.der") => match x509_pkey_alg {
+            include_bytes!("data/alg-ed25519.der") => &signature::ED25519,
+            _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
+        },
+        e if e.len() > 11 && &e[..11] == BUF => {
+            let alg = parse_rsa_pss(&e[11..])?;
+            match x509_pkey_alg {
+                include_bytes!("data/alg-rsa-encryption.der") => alg,
+                _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
+            }
+        }
+        _ => return Err(Error::UnsupportedSignatureAlgorithm),
+    };
     Ok(signature::UnparsedPublicKey::new(
         algorithm,
         x509_pkey_bytes,
