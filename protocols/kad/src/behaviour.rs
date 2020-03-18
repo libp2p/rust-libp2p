@@ -956,9 +956,7 @@ where
         let num_between = self.kbuckets.count_nodes_between(&target);
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
-        let expiration = self.record_ttl.map(|ttl|
-            now + Duration::from_secs(ttl.as_secs() >> num_beyond_k)
-        );
+        let expiration = self.record_ttl.map(|ttl| now + exp_decrease(ttl, num_beyond_k));
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
         record.expires = record.expires.or(expiration).min(expiration);
@@ -1028,6 +1026,11 @@ where
             }
         }
     }
+}
+
+/// Exponentially decrease the given duration (base 2).
+fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
+    Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
 }
 
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
@@ -1911,4 +1914,3 @@ impl QueryInfo {
         }
     }
 }
-
