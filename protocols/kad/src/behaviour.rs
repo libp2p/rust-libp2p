@@ -981,7 +981,7 @@ where
         // overridden as it avoids having to load the existing record in the
         // first place.
 
-        if !record.is_expired(Instant::now()) {
+        if !record.is_expired(now) {
             // The record is cloned because of the weird libp2p protocol
             // requirement to send back the value in the response, although this
             // is a waste of resources.
@@ -1004,10 +1004,7 @@ where
         // case where the record is discarded due to being expired. Given that
         // the remote sent the local node a [`KademliaHandlerEvent::PutRecord`]
         // request, the remote perceives the local node as one node among the k
-        // closest nodes to the target. Returning a [`KademliaHandlerIn::Reset`]
-        // instead of an [`KademliaHandlerIn::PutRecordRes`] to have the remote
-        // try another node would only result in the remote node to contact an
-        // even more distant node. In addition returning
+        // closest nodes to the target. In addition returning
         // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
         // information to a possibly malicious remote node.
         self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
