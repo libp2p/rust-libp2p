@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod x509;
-mod der;
 static ALL_SUPPORTED_SIGNATURE_ALGORITHMS: &[&webpki::SignatureAlgorithm] = {
     &[
         &webpki::ECDSA_P256_SHA256,
