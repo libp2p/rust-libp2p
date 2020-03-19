@@ -45,18 +45,21 @@ pub struct Handler<K, H> {
     handlers: HashMap<K, H>
 }
 
-impl<K, H> fmt::Debug for Handler<K, H> {
+impl<K, H> fmt::Debug for Handler<K, H>
+where
+    K: fmt::Debug + Eq + Hash,
+    H: fmt::Debug
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("Handler")
+        f.debug_struct("Handler")
+            .field("handlers", &self.handlers)
+            .finish()
     }
 }
 
 impl<K, H> Handler<K, H>
 where
-    K: Clone + std::fmt::Debug + Hash + Eq + Send + 'static,
-    H: ProtocolsHandler,
-    H::InboundProtocol: InboundUpgradeSend,
-    H::OutboundProtocol: OutboundUpgradeSend
+    K: Hash + Eq
 {
     /// Create a new empty handler.
     pub fn new() -> Self {
@@ -64,22 +67,14 @@ where
     }
 
     /// Insert a [`ProtocolsHandler`] at index `key`.
-    pub fn add(&mut self, key: K, handler: H) {
-        self.handlers.insert(key, handler);
-    }
-
-    /// Remove a [`ProtocolsHandler`] at index `key`.
-    pub fn del(&mut self, key: &K) {
-        self.handlers.remove(key);
+    pub fn insert(&mut self, key: K, handler: H) -> Option<H> {
+        self.handlers.insert(key, handler)
     }
 }
 
 impl<K, H> FromIterator<(K, H)> for Handler<K, H>
 where
-    K: Clone + std::fmt::Debug + Hash + Eq + Send + 'static,
-    H: ProtocolsHandler,
-    H::InboundProtocol: InboundUpgradeSend,
-    H::OutboundProtocol: OutboundUpgradeSend
+    K: Hash + Eq
 {
     fn from_iter<T>(iter: T) -> Self
     where
@@ -200,9 +195,15 @@ pub struct Upgrade<K, H> {
     upgrades: HashMap<K, H>
 }
 
-impl<K, H> fmt::Debug for Upgrade<K, H> {
+impl<K, H> fmt::Debug for Upgrade<K, H>
+where
+    K: fmt::Debug + Eq + Hash,
+    H: fmt::Debug
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("Upgrade")
+        f.debug_struct("Upgrade")
+            .field("upgrades", &self.upgrades)
+            .finish()
     }
 }
 
