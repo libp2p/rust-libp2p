@@ -25,7 +25,7 @@ use bs58;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Contact {
     pub addresses: Addresses,
-    pub public_key: PublicKey
+    pub public_key: PublicKey,
 }
 
 impl Contact {

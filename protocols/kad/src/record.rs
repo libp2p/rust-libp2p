@@ -112,6 +112,7 @@ pub struct ProviderRecord {
     pub provider: PeerId,
     /// The expiration time as measured by a local, monotonic clock.
     pub expires: Option<Instant>,
+    // pub weight: u32
 }
 
 impl Hash for ProviderRecord {

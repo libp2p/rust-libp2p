@@ -495,6 +495,7 @@ where
     /// The results of the (repeated) provider announcements sent by this node are
     /// delivered in [`AddProviderResult`].
     pub fn start_providing(&mut self, key: record::Key) {
+        // TODO: calculate weight for self?
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         if let Err(err) = self.store.add_provider(record) {
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -626,7 +627,7 @@ where
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
                                 peer,
-                                addresses: entry.value().clone().into(),
+                                addresses: entry.value().addresses.clone(),
                                 old_peer: None,
                             }
                         ))
@@ -650,27 +651,10 @@ where
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
                     if let Some(contact) = contact {
-                        let addresses = contact.addresses.clone();
-                        match entry.insert(contact, new_status) {
-                            kbucket::InsertResult::Inserted => {
-                                let event = KademliaEvent::RoutingUpdated {
-                                    peer: peer.clone(),
-                                    addresses,
-                                    old_peer: None,
-                                };
-                                self.queued_events.push_back(
-                                    NetworkBehaviourAction::GenerateEvent(event));
-                            },
-                            kbucket::InsertResult::Full => {
-                                debug!("Bucket full. Peer not added to routing table: {}", peer)
-                            },
-                            kbucket::InsertResult::Pending { disconnected } => {
-                                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
-                                self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
-                                    peer_id: disconnected.into_preimage(),
-                                })
-                            },
-                        }
+                        self.insert_new_peer(entry, contact, new_status)
+                            .map(|e|
+                                self.queued_events.push_back(e)
+                            );
                     } else {
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::UnroutablePeer { peer }
@@ -679,6 +663,42 @@ where
                 }
             },
             _ => {}
+        }
+    }
+
+    fn insert_new_peer(
+        &self,
+        entry: kbucket::AbsentEntry<kbucket::Key<PeerId>, Contact>,
+        contact: Contact,
+        status: NodeStatus
+    ) -> Option<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>
+    {
+        let addresses = contact.addresses.clone();
+        let peer = entry.key().into_preimage();
+        match entry.insert(contact, status) {
+            kbucket::InsertResult::Inserted => {
+                Some(
+                    NetworkBehaviourAction::GenerateEvent(
+                        KademliaEvent::RoutingUpdated {
+                            peer: peer.clone(),
+                            addresses,
+                            old_peer: None,
+                        }
+                    )
+                )
+            },
+            kbucket::InsertResult::Full => {
+                debug!("Bucket full. Peer not added to routing table: {}", peer);
+                None
+            },
+            kbucket::InsertResult::Pending { disconnected } => {
+                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
+                Some(
+                    NetworkBehaviourAction::DialPeer {
+                        peer_id: disconnected.into_preimage(),
+                    }
+                )
+            },
         }
     }
 
@@ -1032,6 +1052,7 @@ where
             }));
 
         if &provider.node_id != self.kbuckets.local_key().preimage() {
+            // TODO: calculate weight
             let record = ProviderRecord {
                 key,
                 provider: provider.node_id,
