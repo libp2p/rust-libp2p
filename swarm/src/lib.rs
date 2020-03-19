@@ -447,10 +447,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 }
                 Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason }) => {
                     log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
-                    this.behaviour.inject_listener_closed(listener_id);
                     for addr in addresses.iter() {
                         this.behaviour.inject_expired_listen_addr(addr);
                     }
+                    this.behaviour.inject_listener_closed(listener_id);
                 }
                 Poll::Ready(NetworkEvent::ListenerError { listener_id, error }) =>
                     this.behaviour.inject_listener_error(listener_id, &error),
