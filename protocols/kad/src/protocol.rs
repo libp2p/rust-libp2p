@@ -146,17 +146,20 @@ pub struct KademliaProtocolConfig {
 }
 
 impl KademliaProtocolConfig {
+    /// Returns the configured protocol name.
+    pub fn protocol_name(&self) -> &[u8] {
+        &self.protocol_name
+    }
+
     /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
+    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) {
         self.protocol_name = name.into();
-        self
     }
 
     /// Modifies the maximum allowed size of a single Kademlia packet.
-    pub fn with_max_packet_size(mut self, size: usize) -> Self {
+    pub fn set_max_packet_size(&mut self, size: usize) {
         self.max_packet_size = size;
-        self
     }
 }
 
