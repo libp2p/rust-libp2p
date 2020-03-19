@@ -339,3 +339,91 @@ where
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{
+        muxing::SingletonMuxer,
+        connection::{
+            ConnectionHandlerEvent,
+            Substream,
+            SubstreamEndpoint,
+        },
+    };
+    use futures::io::AllowStdIo;
+    use std::io::Cursor;
+
+    // `Vec<u8>` implements `std::io::Write`. `Cursor<Vec<u8>>` implements `std::io::Read`.
+    // `AllowStdIo<_>` transforms a type implementing `Read` and `Write` to a type implementing
+    // `AsyncRead` and `AsyncWrite`.
+    type TestSocket = AllowStdIo<Cursor<Vec<u8>>>;
+
+    struct TestConnectionHandler {}
+
+    impl ConnectionHandler for TestConnectionHandler {
+        type InEvent = ();
+        type OutEvent = ();
+        type Error = ();
+        type Substream = Substream<SingletonMuxer<TestSocket>>;
+        type OutboundOpenInfo = ();
+
+        fn inject_substream(
+            &mut self,
+            _: Self::Substream,
+            _: SubstreamEndpoint<Self::OutboundOpenInfo>,
+        ) {}
+
+        fn inject_event(&mut self, _: Self::InEvent) {}
+
+        fn poll(&mut self, _: &mut Context)
+            -> Poll<Result<
+                ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>,
+                Self::Error
+            >>
+        {
+            Poll::Pending
+        }
+    }
+
+    #[test]
+    fn task_state_event_buffering_is_bounded() {
+        let close_to_inifinity = 100_000;
+
+        let (task_to_manger_tx, mut task_to_manager_rx) =
+            mpsc::channel::<Event<(), TestConnectionHandler, (), (), ()>>(0);
+        let (mut manager_to_task_tx, manager_to_task_rx) =
+            mpsc::channel::<Command<()>>(close_to_inifinity);
+
+        futures::executor::block_on(async {
+            for _ in 0..close_to_inifinity {
+                manager_to_task_tx.send(Command::NotifyHandler(())).await.unwrap()
+            }
+        });
+
+        let task = Task::pending(
+            TaskId(0),
+            task_to_manger_tx,
+            manager_to_task_rx,
+            futures::future::pending::<ConnectResult<(), SingletonMuxer<TestSocket>, ()>>(),
+            TestConnectionHandler{},
+        );
+        let task_join_handle = async_std::task::spawn(task);
+
+        futures::executor::block_on(async {
+            loop {
+                match task_to_manager_rx.next().await.unwrap() {
+                    Event::Established {..} | Event::Error {..} =>
+                        unreachable!("Connection future never completes."),
+                    Event::Failed {..} => break,
+                    Event::Notify {..} => {},
+                }
+            }
+
+            // Signal the task to shut down.
+            drop(manager_to_task_tx);
+
+            // Wait for the task to shut down.
+            task_join_handle.await
+        });
+    }
+}
