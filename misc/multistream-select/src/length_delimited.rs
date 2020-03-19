@@ -18,11 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{Bytes, BytesMut, Buf, BufMut};
-use futures::{try_ready, Async, Poll, Sink, StartSend, Stream, AsyncSink};
-use std::{io, u16};
-use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint as uvi;
+use bytes::{Bytes, BytesMut, Buf as _, BufMut as _};
+use futures::{prelude::*, io::IoSlice};
+use std::{convert::TryFrom as _, io, pin::Pin, task::{Poll, Context}, u16};
 
 const MAX_LEN_BYTES: u16 = 2;
 const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
@@ -34,9 +32,11 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 /// We purposely only support a frame sizes up to 16KiB (2 bytes unsigned varint
 /// frame length). Frames mostly consist in a short protocol name, which is highly
 /// unlikely to be more than 16KiB long.
+#[pin_project::pin_project]
 #[derive(Debug)]
 pub struct LengthDelimited<R> {
     /// The inner I/O resource.
+    #[pin]
     inner: R,
     /// Read buffer for a single incoming unsigned-varint length-delimited frame.
     read_buffer: BytesMut,
@@ -76,20 +76,7 @@ impl<R> LengthDelimited<R> {
         }
     }
 
-    /// Returns a reference to the underlying I/O stream.
-    pub fn inner_ref(&self) -> &R {
-        &self.inner
-    }
-
-    /// Returns a mutable reference to the underlying I/O stream.
-    ///
-    /// > **Note**: Care should be taken to not tamper with the underlying stream of data
-    /// > coming in, as it may corrupt the stream of frames.
-    pub fn inner_mut(&mut self) -> &mut R {
-        &mut self.inner
-    }
-
-    /// Drops the `LengthDelimited` resource, yielding the underlying I/O stream
+    /// Drops the [`LengthDelimited`] resource, yielding the underlying I/O stream
     /// together with the remaining write buffer containing the uvi-framed data
     /// that has not yet been written to the underlying I/O stream.
     ///
@@ -107,7 +94,7 @@ impl<R> LengthDelimited<R> {
         (self.inner, self.write_buffer)
     }
 
-    /// Converts the `LengthDelimited` into a `LengthDelimitedReader`, dropping the
+    /// Converts the [`LengthDelimited`] into a [`LengthDelimitedReader`], dropping the
     /// uvi-framed `Sink` in favour of direct `AsyncWrite` access to the underlying
     /// I/O stream.
     ///
@@ -121,25 +108,29 @@ impl<R> LengthDelimited<R> {
     /// Writes all buffered frame data to the underlying I/O stream,
     /// _without flushing it_.
     ///
-    /// After this method returns `Async::Ready`, the write buffer of frames
+    /// After this method returns `Poll::Ready`, the write buffer of frames
     /// submitted to the `Sink` is guaranteed to be empty.
-    pub fn poll_write_buffer(&mut self) -> Poll<(), io::Error>
+    pub fn poll_write_buffer(self: Pin<&mut Self>, cx: &mut Context)
+        -> Poll<Result<(), io::Error>>
     where
         R: AsyncWrite
     {
-        while !self.write_buffer.is_empty() {
-            let n = try_ready!(self.inner.poll_write(&self.write_buffer));
+        let mut this = self.project();
 
-            if n == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::WriteZero,
-                    "Failed to write buffered frame."))
+        while !this.write_buffer.is_empty() {
+            match this.inner.as_mut().poll_write(cx, &this.write_buffer) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Ok(0)) => {
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "Failed to write buffered frame.")))
+                }
+                Poll::Ready(Ok(n)) => this.write_buffer.advance(n),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
             }
-
-            self.write_buffer.advance(n);
         }
 
-        Ok(Async::Ready(()))
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -147,72 +138,67 @@ impl<R> Stream for LengthDelimited<R>
 where
     R: AsyncRead
 {
-    type Item = Bytes;
-    type Error = io::Error;
+    type Item = Result<Bytes, io::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let mut this = self.project();
+
         loop {
-            match &mut self.read_state {
+            match this.read_state {
                 ReadState::ReadLength { buf, pos } => {
-                    match self.inner.read(&mut buf[*pos .. *pos + 1]) {
-                        Ok(0) => {
+                    match this.inner.as_mut().poll_read(cx, &mut buf[*pos .. *pos + 1]) {
+                        Poll::Ready(Ok(0)) => {
                             if *pos == 0 {
-                                return Ok(Async::Ready(None));
+                                return Poll::Ready(None);
                             } else {
-                                return Err(io::ErrorKind::UnexpectedEof.into());
+                                return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                             }
                         }
-                        Ok(n) => {
+                        Poll::Ready(Ok(n)) => {
                             debug_assert_eq!(n, 1);
                             *pos += n;
                         }
-                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                            return Ok(Async::NotReady);
-                        }
-                        Err(err) => {
-                            return Err(err);
-                        }
+                        Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
+                        Poll::Pending => return Poll::Pending,
                     };
 
                     if (buf[*pos - 1] & 0x80) == 0 {
                         // MSB is not set, indicating the end of the length prefix.
-                        let (len, _) = uvi::decode::u16(buf).map_err(|e| {
-                            log::debug!("invalid length prefix: {}", e);
-                            io::Error::new(io::ErrorKind::InvalidData, "invalid length prefix")
-                        })?;
+                        let (len, _) = unsigned_varint::decode::u16(buf)
+                            .map_err(|e| {
+                                log::debug!("invalid length prefix: {}", e);
+                                io::Error::new(io::ErrorKind::InvalidData, "invalid length prefix")
+                            })?;
 
                         if len >= 1 {
-                            self.read_state = ReadState::ReadData { len, pos: 0 };
-                            self.read_buffer.resize(len as usize, 0);
+                            *this.read_state = ReadState::ReadData { len, pos: 0 };
+                            this.read_buffer.resize(len as usize, 0);
                         } else {
                             debug_assert_eq!(len, 0);
-                            self.read_state = ReadState::default();
-                            return Ok(Async::Ready(Some(Bytes::new())));
+                            *this.read_state = ReadState::default();
+                            return Poll::Ready(Some(Ok(Bytes::new())));
                         }
                     } else if *pos == MAX_LEN_BYTES as usize {
                         // MSB signals more length bytes but we have already read the maximum.
                         // See the module documentation about the max frame len.
-                        return Err(io::Error::new(
+                        return Poll::Ready(Some(Err(io::Error::new(
                             io::ErrorKind::InvalidData,
-                            "Maximum frame length exceeded"));
+                            "Maximum frame length exceeded"))));
                     }
                 }
                 ReadState::ReadData { len, pos } => {
-                    match self.inner.read(&mut self.read_buffer[*pos..]) {
-                        Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
-                        Ok(n) => *pos += n,
-                        Err(err) =>
-                            if err.kind() == io::ErrorKind::WouldBlock {
-                                return Ok(Async::NotReady)
-                            } else {
-                                return Err(err)
-                            }
+                    match this.inner.as_mut().poll_read(cx, &mut this.read_buffer[*pos..]) {
+                        Poll::Ready(Ok(0)) => return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into()))),
+                        Poll::Ready(Ok(n)) => *pos += n,
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
                     };
+
                     if *pos == *len as usize {
                         // Finished reading the frame.
-                        let frame = self.read_buffer.split_off(0).freeze();
-                        self.read_state = ReadState::default();
-                        return Ok(Async::Ready(Some(frame)));
+                        let frame = this.read_buffer.split_off(0).freeze();
+                        *this.read_state = ReadState::default();
+                        return Poll::Ready(Some(Ok(frame)));
                     }
                 }
             }
@@ -220,58 +206,87 @@ where
     }
 }
 
-impl<R> Sink for LengthDelimited<R>
+impl<R> Sink<Bytes> for LengthDelimited<R>
 where
     R: AsyncWrite,
 {
-    type SinkItem = Bytes;
-    type SinkError = io::Error;
+    type Error = io::Error;
 
-    fn start_send(&mut self, msg: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         // Use the maximum frame length also as a (soft) upper limit
         // for the entire write buffer. The actual (hard) limit is thus
         // implied to be roughly 2 * MAX_FRAME_SIZE.
-        if self.write_buffer.len() >= MAX_FRAME_SIZE as usize {
-            self.poll_complete()?;
-            if self.write_buffer.len() >= MAX_FRAME_SIZE as usize {
-                return Ok(AsyncSink::NotReady(msg))
+        if self.as_mut().project().write_buffer.len() >= MAX_FRAME_SIZE as usize {
+            match self.as_mut().poll_write_buffer(cx) {
+                Poll::Ready(Ok(())) => {},
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                Poll::Pending => return Poll::Pending,
             }
+
+            debug_assert!(self.as_mut().project().write_buffer.is_empty());
         }
 
-        let len = msg.len() as u16;
-        if len > MAX_FRAME_SIZE {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Maximum frame size exceeded."))
-        }
-
-        let mut uvi_buf = uvi::encode::u16_buffer();
-        let uvi_len = uvi::encode::u16(len, &mut uvi_buf);
-        self.write_buffer.reserve(len as usize + uvi_len.len());
-        self.write_buffer.put(uvi_len);
-        self.write_buffer.put(msg);
-
-        Ok(AsyncSink::Ready)
+        Poll::Ready(Ok(()))
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+    fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
+        let this = self.project();
+
+        let len = match u16::try_from(item.len()) {
+            Ok(len) if len <= MAX_FRAME_SIZE => len,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Maximum frame size exceeded."))
+            }
+        };
+
+        let mut uvi_buf = unsigned_varint::encode::u16_buffer();
+        let uvi_len = unsigned_varint::encode::u16(len, &mut uvi_buf);
+        this.write_buffer.reserve(len as usize + uvi_len.len());
+        this.write_buffer.put(uvi_len);
+        this.write_buffer.put(item);
+
+        Ok(())
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         // Write all buffered frame data to the underlying I/O stream.
-        try_ready!(self.poll_write_buffer());
+        match LengthDelimited::poll_write_buffer(self.as_mut(), cx) {
+            Poll::Ready(Ok(())) => {},
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        }
+
+        let this = self.project();
+        debug_assert!(this.write_buffer.is_empty());
+
         // Flush the underlying I/O stream.
-        try_ready!(self.inner.poll_flush());
-        return Ok(Async::Ready(()));
+        this.inner.poll_flush(cx)
     }
 
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        try_ready!(self.poll_complete());
-        Ok(self.inner.shutdown()?)
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        // Write all buffered frame data to the underlying I/O stream.
+        match LengthDelimited::poll_write_buffer(self.as_mut(), cx) {
+            Poll::Ready(Ok(())) => {},
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        }
+
+        let this = self.project();
+        debug_assert!(this.write_buffer.is_empty());
+
+        // Close the underlying I/O stream.
+        this.inner.poll_close(cx)
     }
 }
 
 /// A `LengthDelimitedReader` implements a `Stream` of uvi-length-delimited
 /// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
+#[pin_project::pin_project]
 #[derive(Debug)]
 pub struct LengthDelimitedReader<R> {
+    #[pin]
     inner: LengthDelimited<R>
 }
 
@@ -284,25 +299,12 @@ impl<R> LengthDelimitedReader<R> {
     /// # Panic
     ///
     /// Will panic if called while there is data in the read or write buffer.
-    /// The read buffer is guaranteed to be empty whenever [`Stream::poll`] yields
-    /// a new `Message`. The write buffer is guaranteed to be empty whenever
-    /// [`LengthDelimited::poll_write_buffer`] yields [`Async::Ready`] or after
-    /// the [`Sink`] has been completely flushed via [`Sink::poll_complete`].
+    /// The read buffer is guaranteed to be empty whenever [`Stream::poll_next`]
+    /// yield a new `Message`. The write buffer is guaranteed to be empty whenever
+    /// [`LengthDelimited::poll_write_buffer`] yields [`Poll::Ready`] or after
+    /// the [`Sink`] has been completely flushed via [`Sink::poll_flush`].
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
-    }
-
-    /// Returns a reference to the underlying I/O stream.
-    pub fn inner_ref(&self) -> &R {
-        self.inner.inner_ref()
-    }
-
-    /// Returns a mutable reference to the underlying I/O stream.
-    ///
-    /// > **Note**: Care should be taken to not tamper with the underlying stream of data
-    /// > coming in, as it may corrupt the stream of frames.
-    pub fn inner_mut(&mut self) -> &mut R {
-        self.inner.inner_mut()
     }
 }
 
@@ -310,32 +312,10 @@ impl<R> Stream for LengthDelimitedReader<R>
 where
     R: AsyncRead
 {
-    type Item = Bytes;
-    type Error = io::Error;
+    type Item = Result<Bytes, io::Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll()
-    }
-}
-
-impl<R> io::Write for LengthDelimitedReader<R>
-where
-    R: AsyncWrite
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        while !self.inner.write_buffer.is_empty() {
-            if self.inner.poll_write_buffer()?.is_not_ready() {
-                return Err(io::ErrorKind::WouldBlock.into())
-            }
-        }
-        self.inner_mut().write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self.inner.poll_complete()? {
-            Async::Ready(()) => Ok(()),
-            Async::NotReady => Err(io::ErrorKind::WouldBlock.into())
-        }
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.project().inner.poll_next(cx)
     }
 }
 
@@ -343,23 +323,62 @@ impl<R> AsyncWrite for LengthDelimitedReader<R>
 where
     R: AsyncWrite
 {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        try_ready!(self.inner.poll_complete());
-        self.inner_mut().shutdown()
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
+        -> Poll<Result<usize, io::Error>>
+    {
+        // `this` here designates the `LengthDelimited`.
+        let mut this = self.project().inner;
+
+        // We need to flush any data previously written with the `LengthDelimited`.
+        match LengthDelimited::poll_write_buffer(this.as_mut(), cx) {
+            Poll::Ready(Ok(())) => {},
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        }
+        debug_assert!(this.write_buffer.is_empty());
+
+        this.project().inner.poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_close(cx)
+    }
+
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice])
+        -> Poll<Result<usize, io::Error>>
+    {
+        // `this` here designates the `LengthDelimited`.
+        let mut this = self.project().inner;
+
+        // We need to flush any data previously written with the `LengthDelimited`.
+        match LengthDelimited::poll_write_buffer(this.as_mut(), cx) {
+            Poll::Ready(Ok(())) => {},
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        }
+        debug_assert!(this.write_buffer.is_empty());
+
+        this.project().inner.poll_write_vectored(cx, bufs)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use futures::{Future, Stream};
     use crate::length_delimited::LengthDelimited;
-    use std::io::{Cursor, ErrorKind};
+    use async_std::net::{TcpListener, TcpStream};
+    use futures::{prelude::*, io::Cursor};
+    use quickcheck::*;
+    use std::io::ErrorKind;
 
     #[test]
     fn basic_read() {
         let data = vec![6, 9, 8, 7, 6, 5, 4];
         let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed.collect().wait().unwrap();
+        let recved = futures::executor::block_on(framed.try_collect::<Vec<_>>()).unwrap();
         assert_eq!(recved, vec![vec![9, 8, 7, 6, 5, 4]]);
     }
 
@@ -367,7 +386,7 @@ mod tests {
     fn basic_read_two() {
         let data = vec![6, 9, 8, 7, 6, 5, 4, 3, 9, 8, 7];
         let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed.collect().wait().unwrap();
+        let recved = futures::executor::block_on(framed.try_collect::<Vec<_>>()).unwrap();
         assert_eq!(recved, vec![vec![9, 8, 7, 6, 5, 4], vec![9, 8, 7]]);
     }
 
@@ -378,13 +397,10 @@ mod tests {
         let frame = (0..len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
         let mut data = vec![(len & 0x7f) as u8 | 0x80, (len >> 7) as u8];
         data.extend(frame.clone().into_iter());
-        let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed
-            .into_future()
-            .map(|(m, _)| m)
-            .map_err(|_| ())
-            .wait()
-            .unwrap();
+        let mut framed = LengthDelimited::new(Cursor::new(data));
+        let recved = futures::executor::block_on(async move {
+            framed.next().await
+        }).unwrap();
         assert_eq!(recved.unwrap(), frame);
     }
 
@@ -392,12 +408,10 @@ mod tests {
     fn packet_len_too_long() {
         let mut data = vec![0x81, 0x81, 0x1];
         data.extend((0..16513).map(|_| 0));
-        let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed
-            .into_future()
-            .map(|(m, _)| m)
-            .map_err(|(err, _)| err)
-            .wait();
+        let mut framed = LengthDelimited::new(Cursor::new(data));
+        let recved = futures::executor::block_on(async move {
+            framed.next().await.unwrap()
+        });
 
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::InvalidData)
@@ -410,7 +424,7 @@ mod tests {
     fn empty_frames() {
         let data = vec![0, 0, 6, 9, 8, 7, 6, 5, 4, 0, 3, 9, 8, 7];
         let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed.collect().wait().unwrap();
+        let recved = futures::executor::block_on(framed.try_collect::<Vec<_>>()).unwrap();
         assert_eq!(
             recved,
             vec![
@@ -427,7 +441,7 @@ mod tests {
     fn unexpected_eof_in_len() {
         let data = vec![0x89];
         let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed.collect().wait();
+        let recved = futures::executor::block_on(framed.try_collect::<Vec<_>>());
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::UnexpectedEof)
         } else {
@@ -439,7 +453,7 @@ mod tests {
     fn unexpected_eof_in_data() {
         let data = vec![5];
         let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed.collect().wait();
+        let recved = futures::executor::block_on(framed.try_collect::<Vec<_>>());
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::UnexpectedEof)
         } else {
@@ -451,12 +465,54 @@ mod tests {
     fn unexpected_eof_in_data2() {
         let data = vec![5, 9, 8, 7];
         let framed = LengthDelimited::new(Cursor::new(data));
-        let recved = framed.collect().wait();
+        let recved = futures::executor::block_on(framed.try_collect::<Vec<_>>());
         if let Err(io_err) = recved {
             assert_eq!(io_err.kind(), ErrorKind::UnexpectedEof)
         } else {
             panic!()
         }
     }
-}
 
+    #[test]
+    fn writing_reading() {
+        fn prop(frames: Vec<Vec<u8>>) -> TestResult {
+            async_std::task::block_on(async move {
+                let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let listener_addr = listener.local_addr().unwrap();
+
+                let expected_frames = frames.clone();
+                let server = async_std::task::spawn(async move {
+                    let socket = listener.accept().await.unwrap().0;
+                    let mut connec = rw_stream_sink::RwStreamSink::new(LengthDelimited::new(socket));
+
+                    let mut buf = vec![0u8; 0];
+                    for expected in expected_frames {
+                        if expected.is_empty() {
+                            continue;
+                        }
+                        if buf.len() < expected.len() {
+                            buf.resize(expected.len(), 0);
+                        }
+                        let n = connec.read(&mut buf).await.unwrap();
+                        assert_eq!(&buf[..n], &expected[..]);
+                    }
+                });
+
+                let client = async_std::task::spawn(async move {
+                    let socket = TcpStream::connect(&listener_addr).await.unwrap();
+                    let mut connec = LengthDelimited::new(socket);
+                    for frame in frames {
+                        connec.send(From::from(frame)).await.unwrap();
+                    }
+                });
+
+                server.await;
+                client.await;
+            });
+
+            TestResult::passed()
+        }
+
+        quickcheck(prop as fn(_) -> _)
+    }
+}

@@ -968,9 +968,7 @@ where
         let num_between = self.kbuckets.count_nodes_between(&target);
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
-        let expiration = self.record_ttl.map(|ttl|
-            now + Duration::from_secs(ttl.as_secs() >> num_beyond_k)
-        );
+        let expiration = self.record_ttl.map(|ttl| now + exp_decrease(ttl, num_beyond_k));
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
         record.expires = record.expires.or(expiration).min(expiration);
@@ -993,31 +991,41 @@ where
         // overridden as it avoids having to load the existing record in the
         // first place.
 
-        // The record is cloned because of the weird libp2p protocol requirement
-        // to send back the value in the response, although this is a waste of
-        // resources.
-        match self.store.put(record.clone()) {
-            Ok(()) => {
-                debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
-                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: source,
-                    handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::PutRecordRes {
-                        key: record.key,
-                        value: record.value,
-                        request_id,
-                    },
-                })
-            }
-            Err(e) => {
-                info!("Record not stored: {:?}", e);
-                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: source,
-                    handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::Reset(request_id)
-                })
+        if !record.is_expired(now) {
+            // The record is cloned because of the weird libp2p protocol
+            // requirement to send back the value in the response, although this
+            // is a waste of resources.
+            match self.store.put(record.clone()) {
+                Ok(()) => debug!("Record stored: {:?}; {} bytes", record.key, record.value.len()),
+                Err(e) => {
+                    info!("Record not stored: {:?}", e);
+                    self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: source,
+                        handler: NotifyHandler::One(connection),
+                        event: KademliaHandlerIn::Reset(request_id)
+                    });
+
+                    return
+                }
             }
         }
+
+        // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
+        // case where the record is discarded due to being expired. Given that
+        // the remote sent the local node a [`KademliaHandlerEvent::PutRecord`]
+        // request, the remote perceives the local node as one node among the k
+        // closest nodes to the target. In addition returning
+        // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
+        // information to a possibly malicious remote node.
+        self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+            peer_id: source,
+            handler: NotifyHandler::One(connection),
+            event: KademliaHandlerIn::PutRecordRes {
+                key: record.key,
+                value: record.value,
+                request_id,
+            },
+        })
     }
 
     /// Processes a provider record received from a peer.
@@ -1040,6 +1048,11 @@ where
             }
         }
     }
+}
+
+/// Exponentially decrease the given duration (base 2).
+fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
+    Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
 }
 
 impl<TStore> NetworkBehaviour for Kademlia<TStore>

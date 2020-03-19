@@ -105,9 +105,10 @@ jobs:
           command: |
             rustc --version
       - run:
-          command: cargo run --example ipfs-kad
+          command: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
       - save_cache:
           key: integration-test-cache-{{ epoch }}
           paths:
             - "~/.cargo"
             - "./target"
+
