@@ -78,6 +78,10 @@ pub enum PendingConnectionError<TTransErr> {
     /// match the one that was expected or is otherwise invalid.
     InvalidPeerId,
 
+    /// The buffer of events send from the [`Manager`] to the [`Task`] during
+    /// connection establishment reached its limit.
+    EventBufferLimitReached,
+
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
@@ -89,13 +93,17 @@ where
     TTransErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Pending connection: ")?;
+
         match self {
             PendingConnectionError::IO(err) =>
-                write!(f, "Pending connection: I/O error: {}", err),
+                write!(f, "I/O error: {}", err),
             PendingConnectionError::Transport(err) =>
-                write!(f, "Pending connection: Transport error: {}", err),
+                write!(f, "Transport error: {}", err),
             PendingConnectionError::InvalidPeerId =>
-                write!(f, "Pending connection: Invalid peer ID."),
+                write!(f, "Invalid peer ID."),
+            PendingConnectionError::EventBufferLimitReached =>
+                write!(f, "Event buffer limit reached."),
         }
     }
 }
@@ -110,6 +118,7 @@ where
             PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(err) => Some(err),
             PendingConnectionError::InvalidPeerId => None,
+            PendingConnectionError::EventBufferLimitReached => None,
         }
     }
 }

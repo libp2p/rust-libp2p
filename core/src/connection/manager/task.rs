@@ -35,6 +35,8 @@ use futures::{prelude::*, channel::mpsc, stream};
 use std::{pin::Pin, task::Context, task::Poll};
 use super::ConnectResult;
 
+const MAX_EVENT_BUFFERING: usize = 1000;
+
 /// Identifier of a [`Task`] in a [`Manager`](super::Manager).
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskId(pub(super) usize);
@@ -111,7 +113,7 @@ where
             state: State::Pending {
                 future: Box::pin(future),
                 handler,
-                events: Vec::new()
+                events: CappedVec::new(MAX_EVENT_BUFFERING)
             },
         }
     }
@@ -147,11 +149,14 @@ where
         /// The intended handler for the established connection.
         handler: H,
         /// While we are dialing the future, we need to buffer the events received via
-        /// `Command::NotifyHandler` so that they get delivered to the `handler`
+        /// [`Command::NotifyHandler`] so that they get delivered to the `handler`
         /// once the connection is established. We can't leave these in `Task::receiver`
         /// because we have to detect if the connection attempt has been aborted (by
         /// dropping the corresponding `sender` owned by the manager).
-        events: Vec<I>
+        ///
+        /// To prevent `events` to grow unbounded a [`CappedVec`] is used instead of
+        /// a [`Vec`].
+        events: CappedVec<I>
     },
 
     /// The connection is established and a new event is ready to be emitted.
@@ -170,6 +175,39 @@ where
 
     /// The task has finished.
     Done
+}
+
+/// A [`Vec`] with an upper size limit.
+struct CappedVec<T> {
+    limit: usize,
+    vec: Vec<T>
+}
+
+impl<T> CappedVec<T> {
+    fn new(limit: usize) -> Self {
+        CappedVec {
+            limit,
+            vec: vec![],
+        }
+    }
+
+    fn push(&mut self, item: T) -> Result<(), ()> {
+        if self.vec.len() == self.limit {
+            return Err(())
+        }
+
+        self.vec.push(item);
+        return Ok(())
+    }
+}
+
+impl<T> IntoIterator for CappedVec<T> {
+    type Item = T;
+    type IntoIter = <Vec<T> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.vec.into_iter()
+    }
 }
 
 impl<F, M, H, I, O, E, C> Unpin for Task<F, M, H, I, O, E, C>
@@ -204,8 +242,14 @@ where
                         match Stream::poll_next(Pin::new(&mut this.commands), cx) {
                             Poll::Pending => break,
                             Poll::Ready(None) => return Poll::Ready(()),
-                            Poll::Ready(Some(Command::NotifyHandler(event))) =>
-                                events.push(event),
+                            Poll::Ready(Some(Command::NotifyHandler(event))) => {
+                                if events.push(event).is_err() {
+                                    let error = PendingConnectionError::EventBufferLimitReached;
+                                    let event = Event::Failed { id, error, handler};
+                                    this.state = State::EstablishedReady { connection: None, event };
+                                    continue 'poll;
+                                };
+                            },
                         }
                     }
                     // Check if the connection succeeded.
@@ -387,15 +431,13 @@ mod test {
 
     #[test]
     fn task_state_event_buffering_is_bounded() {
-        let close_to_inifinity = 100_000;
-
         let (task_to_manger_tx, mut task_to_manager_rx) =
             mpsc::channel::<Event<(), TestConnectionHandler, (), (), ()>>(0);
         let (mut manager_to_task_tx, manager_to_task_rx) =
-            mpsc::channel::<Command<()>>(close_to_inifinity);
+            mpsc::channel::<Command<()>>(MAX_EVENT_BUFFERING + 1);
 
         futures::executor::block_on(async {
-            for _ in 0..close_to_inifinity {
+            for _ in 0..(MAX_EVENT_BUFFERING + 1){
                 manager_to_task_tx.send(Command::NotifyHandler(())).await.unwrap()
             }
         });
@@ -410,14 +452,19 @@ mod test {
         let task_join_handle = async_std::task::spawn(task);
 
         futures::executor::block_on(async {
-            loop {
+            let error = loop {
                 match task_to_manager_rx.next().await.unwrap() {
                     Event::Established {..} | Event::Error {..} =>
                         unreachable!("Connection future never completes."),
-                    Event::Failed {..} => break,
+                    Event::Failed { error, .. } => break error,
                     Event::Notify {..} => {},
                 }
-            }
+            };
+
+            match error {
+                PendingConnectionError::EventBufferLimitReached => {},
+                e => panic!("Expected `EventBufferLimitReached` but got {:?}", e),
+            };
 
             // Signal the task to shut down.
             drop(manager_to_task_tx);
