@@ -58,15 +58,19 @@ where
     }
 }
 
-impl<K, H> FromIterator<(K, H)> for MultiHandler<K, H>
+impl<K, H> MultiHandler<K, H>
 where
-    K: Hash + Eq
+    K: Hash + Eq,
+    H: ProtocolsHandler
 {
-    fn from_iter<T>(iter: T) -> Self
+    /// Create and populate a `MultiHandler` from the given handler iterator.
+    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtoname>
     where
-        T: IntoIterator<Item = (K, H)>
+        I: IntoIterator<Item = (K, H)>
     {
-        MultiHandler { handlers: HashMap::from_iter(iter) }
+        let m = MultiHandler { handlers: HashMap::from_iter(iter) };
+        uniq_proto_names(m.handlers.values().map(|h| h.listen_protocol().into_upgrade().1))?;
+        Ok(m)
     }
 }
 
@@ -183,32 +187,19 @@ where
     }
 }
 
+
 impl<K, H> IntoMultiHandler<K, H>
 where
-    K: Hash + Eq
+    K: Hash + Eq,
+    H: IntoProtocolsHandler
 {
-    /// Create a new empty `IntoMultiHandler` value.
-    pub fn new() -> Self {
-        IntoMultiHandler {
-            handlers: HashMap::new()
-        }
-    }
-
-    /// Insert a [`IntoProtocolsHandler`] at index `key`.
-    pub fn insert(&mut self, key: K, handler: H) -> Option<H> {
-        self.handlers.insert(key, handler)
-    }
-}
-
-impl<K, H> FromIterator<(K, H)> for IntoMultiHandler<K, H>
-where
-    K: Hash + Eq
-{
-    fn from_iter<T>(iter: T) -> Self
+    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtoname>
     where
-        T: IntoIterator<Item = (K, H)>
+        I: IntoIterator<Item = (K, H)>
     {
-        IntoMultiHandler { handlers: HashMap::from_iter(iter) }
+        let m = IntoMultiHandler { handlers: HashMap::from_iter(iter) };
+        uniq_proto_names(m.handlers.values().map(|h| h.inbound_protocol()))?;
+        Ok(m)
     }
 }
 
@@ -220,7 +211,11 @@ where
     type Handler = MultiHandler<K, H::Handler>;
 
     fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
-        MultiHandler::from_iter(self.handlers.into_iter().map(|(k, h)| (k, h.into_handler(p, c))))
+        MultiHandler {
+            handlers: self.handlers.into_iter()
+                .map(|(k, h)| (k, h.into_handler(p, c)))
+                .collect()
+        }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
@@ -328,4 +323,40 @@ where
         .boxed()
     }
 }
+
+/// Check that no two protocol names are equal.
+fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtoname>
+where
+    I: Iterator<Item = T>,
+    T: UpgradeInfoSend
+{
+    let mut set = std::collections::HashSet::new();
+    for infos in iter {
+        for i in infos.protocol_info() {
+            let v = Vec::from(i.protocol_name());
+            if set.contains(&v) {
+                return Err(DuplicateProtoname(v))
+            } else {
+                set.insert(v);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// It is an error if two handlers share the same protocol name.
+#[derive(Debug, Clone)]
+pub struct DuplicateProtoname(pub Vec<u8>);
+
+impl fmt::Display for DuplicateProtoname {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Ok(s) = std::str::from_utf8(&self.0) {
+            write!(f, "duplicate protocol name: {}", s)
+        } else {
+            write!(f, "duplicate protocol name: {:?}", self.0)
+        }
+    }
+}
+
+impl std::error::Error for DuplicateProtoname {}
 
