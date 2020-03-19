@@ -1105,15 +1105,15 @@ where
         };
 
         let contact = self.queries
-            .iter()
-            .find_map(|q| q.inner.contacts.get(&peer)) // Option<&Contact>
-            .as_mut() // &mut Option<&Contact>
-            .and_then(|c|
-                new_address.map(|addr| { c.insert(addr); c }) // insert(&mut self)
-            )
-            .cloned(); // Option<&Contact>
+            .iter_mut()
+            .find_map(|q| q.inner.contacts.get(&peer))
+            .cloned()
+            .and_then(|mut c|
+                new_address.map(|addr| {
+                    c.insert(addr);
+                    c
+                }));
 
-        // Need Option<Contact> here
         self.connection_updated(peer.clone(), contact, NodeStatus::Connected);
         self.connected_peers.insert(peer);
     }
