@@ -650,11 +650,12 @@ where
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
                     if let Some(contact) = contact {
-                        match entry.insert(contact.clone(), new_status) {
+                        let addresses = contact.addresses.clone();
+                        match entry.insert(contact, new_status) {
                             kbucket::InsertResult::Inserted => {
                                 let event = KademliaEvent::RoutingUpdated {
                                     peer: peer.clone(),
-                                    addresses: contact.addresses,
+                                    addresses,
                                     old_peer: None,
                                 };
                                 self.queued_events.push_back(
