@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-// TODO: modify src/dht.proto
-
-
 use crate::Addresses;
 use libp2p_core::{Multiaddr};
 use libp2p_core::identity::ed25519::PublicKey;
 use crate::protocol::KadPeer;
 use smallvec::SmallVec;
+use std::fmt::Formatter;
+use bs58;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Contact {
@@ -66,5 +65,27 @@ impl From<KadPeer> for Contact {
             addresses: peer.multiaddrs.iter().cloned().collect::<SmallVec<[Multiaddr; 6]>>().into(),
             public_key: peer.public_key
         }
+    }
+}
+
+impl std::fmt::Display for Contact {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+           "Contact({}, addresses: {:?})",
+            bs58::encode(self.public_key.encode()).into_string(),
+            self.addresses // TODO: implement better display for addresses
+        )
+    }
+}
+
+impl std::fmt::Debug for Contact {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Contact {{ public_key: {}, addresses: {:?} }}",
+            bs58::encode(self.public_key.encode()).into_string(),
+            self.addresses // TODO: implement better display for addresses
+        )
     }
 }

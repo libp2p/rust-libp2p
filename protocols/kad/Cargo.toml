@@ -28,6 +28,7 @@ wasm-timer = "0.2"
 uint = "0.8"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0"
+bs58 = "0.3.0"
 
 [dev-dependencies]
 libp2p-secio = { version = "0.16.0", path = "../secio" }
