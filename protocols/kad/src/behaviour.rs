@@ -224,7 +224,7 @@ impl KademliaConfig {
     }
 
     /// Sets the amount of time to keep connections alive when they're idle.
-    pub fn set_idle_keep_alive(&mut self, duration: Duration) -> &mut Self {
+    pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
         self.idle_keep_alive = duration;
         self
     }
@@ -1924,4 +1924,3 @@ impl QueryInfo {
         }
     }
 }
-
