@@ -113,7 +113,7 @@ where
             state: State::Pending {
                 future: Box::pin(future),
                 handler,
-                events: CappedVec::new(MAX_EVENT_BUFFERING)
+                events: BoundedVec::new(MAX_EVENT_BUFFERING)
             },
         }
     }
@@ -154,9 +154,9 @@ where
         /// because we have to detect if the connection attempt has been aborted (by
         /// dropping the corresponding `sender` owned by the manager).
         ///
-        /// To prevent `events` to grow unbounded a [`CappedVec`] is used instead of
+        /// To prevent `events` to grow unbounded a [`BoundedVec`] is used instead of
         /// a [`Vec`].
-        events: CappedVec<I>
+        events: BoundedVec<I>
     },
 
     /// The connection is established and a new event is ready to be emitted.
@@ -177,15 +177,15 @@ where
     Done
 }
 
-/// A [`Vec`] with an upper size limit.
-struct CappedVec<T> {
+/// A [`Vec`] with an upper size bound.
+struct BoundedVec<T> {
     limit: usize,
     vec: Vec<T>
 }
 
-impl<T> CappedVec<T> {
+impl<T> BoundedVec<T> {
     fn new(limit: usize) -> Self {
-        CappedVec {
+        BoundedVec {
             limit,
             vec: vec![],
         }
@@ -201,7 +201,7 @@ impl<T> CappedVec<T> {
     }
 }
 
-impl<T> IntoIterator for CappedVec<T> {
+impl<T> IntoIterator for BoundedVec<T> {
     type Item = T;
     type IntoIter = <Vec<T> as IntoIterator>::IntoIter;
 
