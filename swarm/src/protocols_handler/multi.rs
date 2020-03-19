@@ -24,6 +24,7 @@
 use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
     KeepAlive,
+    IntoProtocolsHandler,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr,
@@ -35,44 +36,29 @@ use crate::upgrade::{
     UpgradeInfoSend
 };
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade::ProtocolName;
+use libp2p_core::{ConnectedPoint, PeerId, upgrade::ProtocolName};
 use rand::Rng;
 use std::{collections::HashMap, fmt, hash::Hash, iter::{self, FromIterator}, task::{Context, Poll}};
 
 /// A [`ProtocolsHandler`] for multiple other `ProtocolsHandler`s.
 #[derive(Clone)]
-pub struct Handler<K, H> {
+pub struct MultiHandler<K, H> {
     handlers: HashMap<K, H>
 }
 
-impl<K, H> fmt::Debug for Handler<K, H>
+impl<K, H> fmt::Debug for MultiHandler<K, H>
 where
     K: fmt::Debug + Eq + Hash,
     H: fmt::Debug
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Handler")
+        f.debug_struct("MultiHandler")
             .field("handlers", &self.handlers)
             .finish()
     }
 }
 
-impl<K, H> Handler<K, H>
-where
-    K: Hash + Eq
-{
-    /// Create a new empty handler.
-    pub fn new() -> Self {
-        Handler { handlers: HashMap::new() }
-    }
-
-    /// Insert a [`ProtocolsHandler`] at index `key`.
-    pub fn insert(&mut self, key: K, handler: H) -> Option<H> {
-        self.handlers.insert(key, handler)
-    }
-}
-
-impl<K, H> FromIterator<(K, H)> for Handler<K, H>
+impl<K, H> FromIterator<(K, H)> for MultiHandler<K, H>
 where
     K: Hash + Eq
 {
@@ -80,11 +66,11 @@ where
     where
         T: IntoIterator<Item = (K, H)>
     {
-        Handler { handlers: HashMap::from_iter(iter) }
+        MultiHandler { handlers: HashMap::from_iter(iter) }
     }
 }
 
-impl<K, H> ProtocolsHandler for Handler<K, H>
+impl<K, H> ProtocolsHandler for MultiHandler<K, H>
 where
     K: Clone + std::fmt::Debug + Hash + Eq + Send + 'static,
     H: ProtocolsHandler,
@@ -176,6 +162,73 @@ where
         }
 
         Poll::Pending
+    }
+}
+
+/// A [`IntoProtocolsHandler`] for multiple other `IntoProtocolsHandler`s.
+#[derive(Clone)]
+pub struct IntoMultiHandler<K, H> {
+    handlers: HashMap<K, H>
+}
+
+impl<K, H> fmt::Debug for IntoMultiHandler<K, H>
+where
+    K: fmt::Debug + Eq + Hash,
+    H: fmt::Debug
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("IntoMultiHandler")
+            .field("handlers", &self.handlers)
+            .finish()
+    }
+}
+
+impl<K, H> IntoMultiHandler<K, H>
+where
+    K: Hash + Eq
+{
+    /// Create a new empty `IntoMultiHandler` value.
+    pub fn new() -> Self {
+        IntoMultiHandler {
+            handlers: HashMap::new()
+        }
+    }
+
+    /// Insert a [`IntoProtocolsHandler`] at index `key`.
+    pub fn insert(&mut self, key: K, handler: H) -> Option<H> {
+        self.handlers.insert(key, handler)
+    }
+}
+
+impl<K, H> FromIterator<(K, H)> for IntoMultiHandler<K, H>
+where
+    K: Hash + Eq
+{
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = (K, H)>
+    {
+        IntoMultiHandler { handlers: HashMap::from_iter(iter) }
+    }
+}
+
+impl<K, H> IntoProtocolsHandler for IntoMultiHandler<K, H>
+where
+    K: Clone + fmt::Debug + Eq + Hash + Send + 'static,
+    H: IntoProtocolsHandler
+{
+    type Handler = MultiHandler<K, H::Handler>;
+
+    fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
+        MultiHandler::from_iter(self.handlers.into_iter().map(|(k, h)| (k, h.into_handler(p, c))))
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+        Upgrade {
+            upgrades: self.handlers.iter()
+                .map(|(k, h)| (k.clone(), h.inbound_protocol()))
+                .collect()
+        }
     }
 }
 
