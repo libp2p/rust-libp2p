@@ -80,6 +80,9 @@ pub struct Kademlia<TStore> {
     /// How long to keep connections alive when they're idle.
     connection_idle_timeout: Duration,
 
+    /// Maximum allowed size of a packet on the wire.
+    max_protocol_packet_size: usize,
+
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
 
@@ -101,6 +104,7 @@ pub struct KademliaConfig {
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
+    max_protocol_packet_size: usize,
 }
 
 impl Default for KademliaConfig {
@@ -115,6 +119,7 @@ impl Default for KademliaConfig {
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
+            max_protocol_packet_size: 4096,
         }
     }
 }
@@ -228,6 +233,14 @@ impl KademliaConfig {
         self.connection_idle_timeout = duration;
         self
     }
+
+    /// Modifies the maximum allowed size of individual Kademlia packets.
+    ///
+    /// It might be necessary to increase this value if trying to put large records.
+    pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
+        self.max_protocol_packet_size = size;
+        self
+    }
 }
 
 impl<TStore> Kademlia<TStore>
@@ -276,6 +289,7 @@ where
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
+            max_protocol_packet_size: config.max_protocol_packet_size,
         }
     }
 
@@ -1064,7 +1078,8 @@ where
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        let mut protocol_config = KademliaProtocolConfig::default();
+        let mut protocol_config = KademliaProtocolConfig::default()
+            .with_max_packet_size(self.max_protocol_packet_size);
         if let Some(name) = self.protocol_name_override.as_ref() {
             protocol_config = protocol_config.with_protocol_name(name.clone());
         }

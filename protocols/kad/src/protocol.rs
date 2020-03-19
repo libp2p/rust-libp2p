@@ -141,6 +141,8 @@ impl Into<proto::message::Peer> for KadPeer {
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
     protocol_name: Cow<'static, [u8]>,
+    /// Maximum allowed size of a packet.
+    max_packet_size: usize,
 }
 
 impl KademliaProtocolConfig {
@@ -150,12 +152,19 @@ impl KademliaProtocolConfig {
         self.protocol_name = name.into();
         self
     }
+
+    /// Modifies the maximum allowed size of a single Kademlia packet.
+    pub fn with_max_packet_size(mut self, size: usize) -> Self {
+        self.max_packet_size = size;
+        self
+    }
 }
 
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME)
+            protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME),
+            max_packet_size: 4096,
         }
     }
 }
@@ -179,7 +188,7 @@ where
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
-        codec.set_max_len(4096);
+        codec.set_max_len(self.max_packet_size);
 
         future::ok(
             Framed::new(incoming, codec)
@@ -211,7 +220,7 @@ where
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
-        codec.set_max_len(4096);
+        codec.set_max_len(self.max_packet_size);
 
         future::ok(
             Framed::new(incoming, codec)
