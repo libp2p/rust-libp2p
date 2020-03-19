@@ -78,7 +78,7 @@ pub struct Kademlia<TStore> {
     provider_record_ttl: Option<Duration>,
 
     /// How long to keep connections alive when they're idle.
-    idle_keep_alive: Duration,
+    connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
