@@ -23,7 +23,7 @@ use libp2p_core::identity::ed25519::PublicKey;
 use crate::protocol::KadPeer;
 use smallvec::SmallVec;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Contact {
     pub addresses: Addresses,
     pub public_key: PublicKey

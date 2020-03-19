@@ -620,8 +620,9 @@ where
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, old_status) => {
-                if let Some(address) = address {
-                    if entry.value().insert(address) {
+                if let Some(contact) = contact {
+                    if *entry.value() != contact { // TODO: what about public key change?
+                        *entry.value() = contact; // TODO: is there a better way to do that?
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::RoutingUpdated {
                                 peer,
@@ -637,8 +638,8 @@ where
             },
 
             kbucket::Entry::Pending(mut entry, old_status) => {
-                if let Some(address) = address {
-                    entry.value().insert(address);
+                if let Some(contact) = contact {
+                    *entry.value() = contact;
                 }
                 if old_status != new_status {
                     entry.update(new_status);
@@ -649,11 +650,11 @@ where
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
                     if let Some(contact) = contact {
-                        match entry.insert(contact, new_status) {
+                        match entry.insert(contact.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
                                 let event = KademliaEvent::RoutingUpdated {
                                     peer: peer.clone(),
-                                    addresses: contact.addresses.clone(),
+                                    addresses: contact.addresses,
                                     old_peer: None,
                                 };
                                 self.queued_events.push_back(
@@ -1103,15 +1104,17 @@ where
             ConnectedPoint::Listener { .. } => None,
         };
 
-        let contact = self.queries.iter().find_map(|q| q.inner.contacts.get(&peer));
-        let contact = match (address, public_key) {
-            (Some(addr), Some(pk)) => Contact::new(Addresses::new(addr), pk.clone()),
-            _ => None
-        };
+        let contact = self.queries
+            .iter()
+            .find_map(|q| q.inner.contacts.get(&peer)) // Option<&Contact>
+            .as_mut() // &mut Option<&Contact>
+            .and_then(|c|
+                new_address.map(|addr| { c.insert(addr); c }) // insert(&mut self)
+            )
+            .cloned(); // Option<&Contact>
 
-
-
-        self.connection_updated(peer.clone(), address, NodeStatus::Connected);
+        // Need Option<Contact> here
+        self.connection_updated(peer.clone(), contact, NodeStatus::Connected);
         self.connected_peers.insert(peer);
     }
 
