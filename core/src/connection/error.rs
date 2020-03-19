@@ -78,8 +78,10 @@ pub enum PendingConnectionError<TTransErr> {
     /// match the one that was expected or is otherwise invalid.
     InvalidPeerId,
 
-    /// The buffer of events send from the [`Manager`] to the [`Task`] during
-    /// connection establishment reached its limit.
+    /// The buffer of events send from the
+    /// [`crate::connection::manager::Manager`] to the
+    /// [`crate::connection::manager::Task`] during connection establishment
+    /// reached its limit.
     EventBufferLimitReached,
 
     /// An I/O error occurred on the connection.
