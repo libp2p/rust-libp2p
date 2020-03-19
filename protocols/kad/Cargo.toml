@@ -29,6 +29,7 @@ uint = "0.8"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0"
 bs58 = "0.3.0"
+trust-graph = { path = "/Users/folex/Development/arqada/janus/trust-graph", version = "0.0.1" }
 
 [dev-dependencies]
 libp2p-secio = { version = "0.16.0", path = "../secio" }
