@@ -112,7 +112,7 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
         error: PendingConnectionError<TTransErr>,
         /// The handler that was supposed to handle the connection,
         /// if the connection failed before the handler was consumed.
-        handler: Option<THandler>,
+        handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<TPeerId>,
         /// A reference to the pool that managed the connection.
@@ -222,6 +222,7 @@ where
         TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
+        TPeerId: Clone + Send + 'static,
     {
         let endpoint = info.to_connected_point();
         if let Some(limit) = self.limits.max_pending_incoming {
@@ -263,7 +264,7 @@ where
         TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
-        TPeerId: Clone,
+        TPeerId: Clone + Send + 'static,
     {
         self.limits.check_outgoing(|| self.iter_pending_outgoing().count())?;
         let endpoint = info.to_connected_point();
@@ -298,14 +299,32 @@ where
         TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send + 'static,
+        TPeerId: Clone + Send + 'static,
     {
+        // Validate the received peer ID as the last step of the pending connection
+        // future, so that these errors can be raised before the `handler` is consumed
+        // by the background task, which happens when this future resolves to an
+        // "established" connection.
         let future = future.and_then({
             let endpoint = endpoint.clone();
+            let expected_peer = peer.clone();
+            let local_id = self.local_id.clone();
             move |(info, muxer)| {
+                if let Some(peer) = expected_peer {
+                    if &peer != info.peer_id() {
+                        return future::err(PendingConnectionError::InvalidPeerId)
+                    }
+                }
+
+                if &local_id == info.peer_id() {
+                    return future::err(PendingConnectionError::InvalidPeerId)
+                }
+
                 let connected = Connected { info, endpoint };
                 future::ready(Ok((connected, muxer)))
             }
         });
+
         let id = self.manager.add_pending(future, handler);
         self.pending.insert(id, (endpoint, peer));
         id
@@ -536,7 +555,7 @@ where
         PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
     > where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Clone,
-        TPeerId: Clone,
+        TPeerId: Clone
     {
         loop {
             let item = match self.manager.poll(cx) {
@@ -551,7 +570,7 @@ where
                             id,
                             endpoint,
                             error,
-                            handler: Some(handler),
+                            handler,
                             peer,
                             pool: self
                         })
@@ -581,39 +600,25 @@ where
                                             .map_or(0, |conns| conns.len());
                         if let Err(e) = self.limits.check_established(current) {
                             let connected = entry.close();
-                            return Poll::Ready(PoolEvent::PendingConnectionError {
+                            let num_established = e.current;
+                            return Poll::Ready(PoolEvent::ConnectionError {
                                 id,
-                                endpoint: connected.endpoint,
-                                peer: Some(connected.info.peer_id().clone()),
-                                error: PendingConnectionError::ConnectionLimit(e),
+                                connected,
+                                error: ConnectionError::ConnectionLimit(e),
+                                num_established,
                                 pool: self,
-                                handler: None,
                             })
                         }
-                        // Check peer ID.
-                        if let Some(peer) = peer {
-                            if &peer != entry.connected().peer_id() {
-                                let connected = entry.close();
-                                return Poll::Ready(PoolEvent::PendingConnectionError {
-                                    id,
-                                    endpoint: connected.endpoint,
-                                    peer: Some(connected.info.peer_id().clone()),
-                                    error: PendingConnectionError::InvalidPeerId,
-                                    pool: self,
-                                    handler: None,
-                                })
+                        // Peer ID checks must already have happened. See `add_pending`.
+                        if cfg!(debug_assertions) {
+                            if &self.local_id == entry.connected().peer_id() {
+                                panic!("Unexpected local peer ID for remote.");
                             }
-                        }
-                        if &self.local_id == entry.connected().peer_id() {
-                            let connected = entry.close();
-                            return Poll::Ready(PoolEvent::PendingConnectionError {
-                                id,
-                                endpoint: connected.endpoint,
-                                peer: Some(connected.info.peer_id().clone()),
-                                error: PendingConnectionError::InvalidPeerId,
-                                pool: self,
-                                handler: None,
-                            })
+                            if let Some(peer) = peer {
+                                if &peer != entry.connected().peer_id() {
+                                    panic!("Unexpected peer ID mismatch.");
+                                }
+                            }
                         }
                         // Add the connection to the pool.
                         let peer = entry.connected().peer_id().clone();

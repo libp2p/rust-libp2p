@@ -108,7 +108,7 @@ use libp2p_core::{
         NetworkEvent,
         NetworkConfig,
         Peer,
-        peer::{ConnectedPeer, PeerState},
+        peer::ConnectedPeer,
     },
     upgrade::ProtocolName,
 };
@@ -454,11 +454,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Poll::Ready(NetworkEvent::IncomingConnectionError { error, .. }) => {
                     log::debug!("Incoming connection failed: {:?}", error);
                 },
-                Poll::Ready(NetworkEvent::DialError { peer_id, multiaddr, error, new_state }) => {
-                    log::debug!("Connection attempt to peer {:?} at address {:?} failed with {:?}",
-                        peer_id, multiaddr, error);
+                Poll::Ready(NetworkEvent::DialError { peer_id, multiaddr, error, attempts_remaining }) => {
+                    log::debug!(
+                        "Connection attempt to {:?} via {:?} failed with {:?}. Attempts remaining: {}.",
+                        peer_id, multiaddr, error, attempts_remaining);
                     this.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
-                    if let PeerState::Disconnected = new_state {
+                    if attempts_remaining == 0 {
                         this.behaviour.inject_dial_failure(&peer_id);
                     }
                     return Poll::Ready(SwarmEvent::UnreachableAddr {
