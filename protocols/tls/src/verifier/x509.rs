@@ -1,15 +1,33 @@
+// Copyright 2020 Parity Technologies (UK) Ltd.
+//
+// Permission to use, copy, modify, and/or distribute this software for any
+// purpose with or without fee is hereby granted, provided that the above
+// copyright notice and this permission notice appear in all copies.
+
+// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHORS DISCLAIM ALL WARRANTIES
+// WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
+// ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+// WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+// ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+// OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use super::{
+    super::{LIBP2P_OID_BYTES, LIBP2P_SIGNING_PREFIX, LIBP2P_SIGNING_PREFIX_LENGTH},
+    der,
+};
 use libp2p_core::identity::PublicKey;
-use ring::{error::Unspecified, io::der, signature};
-use webpki::Error;
+use ring::signature;
+use untrusted::{Input, Reader};
+use webpki::{Error, Time};
 
 pub(super) struct X509Certificate<'a> {
     libp2p_extension: Libp2pExtension<'a>,
-    x509_tbs: untrusted::Input<'a>,
-    #[allow(dead_code)]
-    x509_validity: untrusted::Input<'a>,
-    x509_spki: untrusted::Input<'a>,
-    x509_signature_algorithm: untrusted::Input<'a>,
-    x509_signature: untrusted::Input<'a>,
+    x509_tbs: Input<'a>,
+    x509_validity: Input<'a>,
+    x509_spki: Input<'a>,
+    x509_signature_algorithm: Input<'a>,
+    x509_signature: Input<'a>,
 }
 
 struct Libp2pExtension<'a> {
@@ -17,124 +35,101 @@ struct Libp2pExtension<'a> {
     signature: &'a [u8],
 }
 
-fn expect_sequence<'a>(reader: &mut untrusted::Reader<'a>) -> Result<untrusted::Input<'a>, Error> {
-    der::expect_tag_and_get_value(reader, der::Tag::Sequence).map_err(|Unspecified| Error::BadDER)
+#[inline(always)]
+fn read_sequence<'a>(input: &mut Reader<'a>) -> Result<Input<'a>, Error> {
+    der::expect_tag_and_get_value(input, der::Tag::Sequence)
 }
 
-fn expect_oid<'a>(reader: &mut untrusted::Reader<'a>) -> Result<untrusted::Input<'a>, Error> {
-    der::expect_tag_and_get_value(reader, der::Tag::OID).map_err(|Unspecified| Error::BadDER)
+#[inline(always)]
+fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Error> {
+    der::bit_string_with_no_unused_bits(input).map_err(|_| e)
 }
 
-fn expect_octet_string<'a>(
-    reader: &mut untrusted::Reader<'a>,
-) -> Result<untrusted::Input<'a>, Error> {
-    der::expect_tag_and_get_value(reader, der::Tag::OctetString)
-        .map_err(|Unspecified| Error::BadDER)
-}
-
-fn parse_libp2p_extension<'a>(
-    extension: untrusted::Input<'a>,
-) -> Result<Libp2pExtension<'a>, Error> {
-    untrusted::Input::read_all(&extension, Unspecified, |reader| {
-        der::nested(reader, der::Tag::Sequence, Unspecified, |reader| {
-            let public_key = der::bit_string_with_no_unused_bits(reader)?;
-            let signature = der::bit_string_with_no_unused_bits(reader)?;
+fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a>, Error> {
+    let e = Error::ExtensionValueInvalid;
+    Input::read_all(&extension, e, |input| {
+        der::nested(input, der::Tag::Sequence, e, |input| {
+            let public_key = read_bit_string(input, e)?.as_slice_less_safe();
+            let signature = read_bit_string(input, e)?.as_slice_less_safe();
             // We deliberately discard the error information because this is
             // either a broken peer or an attack.
-            let peer_key = PublicKey::from_protobuf_encoding(public_key.as_slice_less_safe())
-                .map_err(|_| Unspecified)?;
+            let peer_key = PublicKey::from_protobuf_encoding(public_key).map_err(|_| e)?;
             Ok(Libp2pExtension {
-                signature: signature.as_slice_less_safe(),
+                signature,
                 peer_key,
             })
         })
     })
-    .map_err(|Unspecified| Error::ExtensionValueInvalid)
 }
 
 /// Parse X.509 extensions
-fn parse_extensions<'a>(reader: &mut untrusted::Reader<'a>) -> Result<Libp2pExtension<'a>, Error> {
+fn parse_extensions<'a>(input: &mut Reader<'a>) -> Result<Libp2pExtension<'a>, Error> {
     let mut libp2p_extension = None;
-    while !reader.at_end() {
-        const BOOLEAN: u8 = der::Tag::Boolean as _;
-        const OCTET_STRING: u8 = der::Tag::OctetString as _;
-        der::nested(reader, der::Tag::Sequence, Error::BadDER, |reader| {
-            let oid = expect_oid(reader)?;
-            let (tag, data) = der::read_tag_and_get_value(reader).map_err(|_| Error::BadDER)?;
-            let (critical, extension) = match tag {
-                BOOLEAN => match data.as_slice_less_safe() {
-                    [0xFF] => (true, expect_octet_string(reader)?),
-                    [0] => (false, expect_octet_string(reader)?),
-                    _ => return Err(Error::BadDER),
-                },
-                OCTET_STRING => (false, data),
-                _ => return Err(Error::BadDER),
-            };
-            match oid.as_slice_less_safe() {
-                super::super::LIBP2P_OID_BYTES if libp2p_extension.is_some() => Err(Error::BadDER),
-                super::super::LIBP2P_OID_BYTES => {
-                    libp2p_extension = Some(parse_libp2p_extension(extension)?);
-                    Ok(())
-                }
-                _ if critical => return Err(Error::UnsupportedCriticalExtension),
-                _ => Ok(()),
+    while !input.at_end() {
+        der::nested(input, der::Tag::Sequence, Error::BadDER, |input| {
+            let oid = der::expect_tag_and_get_value(input, der::Tag::OID)?;
+            let mut critical = false;
+            if input.peek(der::Tag::Boolean as _) {
+                critical = true;
+                der::expect_bytes(input, &[der::Tag::Boolean as _, 1, 0xFF])?
             }
+            let extension = der::expect_tag_and_get_value(input, der::Tag::OctetString)?;
+            match oid.as_slice_less_safe() {
+                LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
+                LIBP2P_OID_BYTES => libp2p_extension = Some(parse_libp2p_extension(extension)?),
+                _ if critical => return Err(Error::UnsupportedCriticalExtension),
+                _ => {},
+            }
+            Ok(())
         })?
     }
-    libp2p_extension.ok_or(Error::BadDER)
+    libp2p_extension.ok_or(Error::UnknownIssuer)
 }
 
 /// Extracts the algorithm id and public key from a certificate
 pub(super) fn parse_certificate(certificate: &[u8]) -> Result<X509Certificate<'_>, Error> {
     let ((x509_tbs, inner_tbs), x509_signature_algorithm, x509_signature) =
-        untrusted::Input::from(certificate)
-            .read_all(Error::BadDER, expect_sequence)?
+        Input::from(certificate)
+            .read_all(Error::BadDER, read_sequence)?
             .read_all(Error::BadDER, |reader| {
                 // tbsCertificate
-                let tbs = reader.read_partial(|reader| expect_sequence(reader))?;
+                let tbs = reader.read_partial(|reader| read_sequence(reader))?;
                 // signatureAlgorithm
-                let signature_algorithm = expect_sequence(reader)?;
+                let signature_algorithm = read_sequence(reader)?;
                 // signatureValue
-                let signature =
-                    der::bit_string_with_no_unused_bits(reader).map_err(|_| Error::BadDER)?;
+                let signature = read_bit_string(reader, Error::BadDER)?;
                 Ok((tbs, signature_algorithm, signature))
             })?;
-    let (x509_validity, x509_spki, libp2p_extension) =
-        inner_tbs.read_all(Error::BadDER, |mut reader| {
+    let (x509_validity, x509_spki, extensions) =
+        inner_tbs.read_all(Error::BadDER, |mut input| {
             // We require extensions, which means we require version 3
-            if reader
-                .read_bytes(5)
-                .map_err(|_| Error::BadDER)?
-                .as_slice_less_safe()
-                != [160, 3, 2, 1, 2]
-            {
+            if der::expect_bytes(input, &[160, 3, 2, 1, 2]).is_err() {
                 return Err(Error::UnsupportedCertVersion);
             }
             // serialNumber
-            der::positive_integer(&mut reader).map_err(|_| Error::BadDER)?;
+            der::positive_integer(&mut input)?;
             // signature
-            if expect_sequence(reader)? != x509_signature_algorithm {
+            if read_sequence(input)? != x509_signature_algorithm {
                 // signature algorithms don’t match
                 return Err(Error::SignatureAlgorithmMismatch);
             }
             // issuer
-            expect_sequence(reader)?;
+            read_sequence(input)?;
             // validity
-            let x509_validity = expect_sequence(reader)?;
+            let x509_validity = read_sequence(input)?;
             // subject
-            expect_sequence(reader)?;
+            read_sequence(input)?;
             // subjectPublicKeyInfo
-            let spki = expect_sequence(reader)?;
+            let spki = read_sequence(input)?;
             // subjectUniqueId and issuerUniqueId are unsupported
             // parse the extensions
-            let libp2p_extension = der::nested(
-                reader,
-                der::Tag::ContextSpecificConstructed3,
-                Error::BadDER,
-                |reader| der::nested(reader, der::Tag::Sequence, Error::BadDER, parse_extensions),
-            )?;
-            Ok((x509_validity, spki, libp2p_extension))
+            let extensions =
+                der::expect_tag_and_get_value(input, der::Tag::ContextSpecificConstructed3)?;
+            Ok((x509_validity, spki, extensions))
         })?;
+    let extensions = extensions.read_all(Error::BadDER, read_sequence)?;
+    let libp2p_extension = extensions.read_all(Error::BadDER, parse_extensions)?;
+
     Ok(X509Certificate {
         libp2p_extension,
         x509_tbs,
@@ -146,12 +141,10 @@ pub(super) fn parse_certificate(certificate: &[u8]) -> Result<X509Certificate<'_
 }
 
 fn verify_libp2p_signature(
-    libp2p_extension: Libp2pExtension<'_>,
-    x509_pkey_bytes: &[u8],
+    libp2p_extension: Libp2pExtension<'_>, x509_pkey_bytes: &[u8],
 ) -> Result<(), Error> {
-    let mut v =
-        Vec::with_capacity(super::super::LIBP2P_SIGNING_PREFIX_LENGTH + x509_pkey_bytes.len());
-    v.extend_from_slice(&super::super::LIBP2P_SIGNING_PREFIX[..]);
+    let mut v = Vec::with_capacity(LIBP2P_SIGNING_PREFIX_LENGTH + x509_pkey_bytes.len());
+    v.extend_from_slice(&LIBP2P_SIGNING_PREFIX[..]);
     v.extend_from_slice(x509_pkey_bytes);
     if libp2p_extension
         .peer_key
@@ -163,40 +156,47 @@ fn verify_libp2p_signature(
     }
 }
 
-pub(super) fn verify_certificate(certificate: X509Certificate<'_>) -> Result<(), Error> {
+pub(super) fn verify_certificate(
+    certificate: X509Certificate<'_>, time: Time,
+) -> Result<(), Error> {
     let X509Certificate {
         x509_tbs,
         x509_spki,
         x509_signature,
         x509_signature_algorithm,
         libp2p_extension,
-        ..
+        x509_validity,
     } = certificate;
 
-    let (x509_pkey_alg, x509_pkey_bytes) = x509_spki.read_all(Error::BadDER, |reader| {
-        let x509_pkey_alg = expect_sequence(reader)?.as_slice_less_safe();
-        let x509_pkey_bytes = der::bit_string_with_no_unused_bits(reader)
-            .map_err(|Unspecified| Error::BadDER)?
-            .as_slice_less_safe();
+    let (x509_pkey_alg, x509_pkey_bytes) = x509_spki.read_all(Error::BadDER, |input| {
+        let x509_pkey_alg = read_sequence(input)?.as_slice_less_safe();
+        let x509_pkey_bytes = read_bit_string(input, Error::BadDER)?.as_slice_less_safe();
         Ok((x509_pkey_alg, x509_pkey_bytes))
     })?;
-    let pkey = verify_self_signature(
+    verify_libp2p_signature(libp2p_extension, x509_pkey_bytes)?;
+    get_public_key(
         x509_pkey_alg,
         x509_pkey_bytes,
         x509_signature_algorithm.as_slice_less_safe(),
-    )?;
-    verify_libp2p_signature(libp2p_extension, x509_pkey_bytes)?;
-    pkey.verify(
+    )?
+    .verify(
         x509_tbs.as_slice_less_safe(),
         x509_signature.as_slice_less_safe(),
     )
-    .map_err(|_| Error::InvalidSignatureForPublicKey)
+    .map_err(|_| Error::InvalidSignatureForPublicKey)?;
+    x509_validity.read_all(Error::BadDER, |input| {
+        let not_before = der::time_choice(input)?;
+        let not_after = der::time_choice(input)?;
+        if time < not_before || time > not_after {
+            Err(Error::ExtensionValueInvalid)
+        } else {
+            Ok(())
+        }
+    })
 }
 
-fn verify_self_signature<'a>(
-    x509_pkey_alg: &[u8],
-    x509_pkey_bytes: &'a [u8],
-    x509_signature_algorithm: &[u8],
+fn get_public_key<'a>(
+    x509_pkey_alg: &[u8], x509_pkey_bytes: &'a [u8], x509_signature_algorithm: &[u8],
 ) -> Result<ring::signature::UnparsedPublicKey<&'a [u8]>, Error> {
     const BUF: &[u8] = &[
         0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a,
@@ -237,7 +237,7 @@ fn verify_self_signature<'a>(
                 include_bytes!("data/alg-rsa-encryption.der") => alg,
                 _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
             }
-        }
+        },
         _ => return Err(Error::UnsupportedSignatureAlgorithm),
     };
     Ok(signature::UnparsedPublicKey::new(
@@ -254,21 +254,18 @@ fn parse_rsa_pss(data: &[u8]) -> Result<&'static signature::RsaParameters, Error
         include_bytes!("data/alg-rsa-pss-sha256-v0.der")
         | include_bytes!("data/alg-rsa-pss-sha256-v1.der")
         | include_bytes!("data/alg-rsa-pss-sha256-v2.der")
-        | include_bytes!("data/alg-rsa-pss-sha256-v3.der") => {
-            Ok(&signature::RSA_PSS_2048_8192_SHA256)
-        }
+        | include_bytes!("data/alg-rsa-pss-sha256-v3.der") =>
+            Ok(&signature::RSA_PSS_2048_8192_SHA256),
         include_bytes!("data/alg-rsa-pss-sha384-v0.der")
         | include_bytes!("data/alg-rsa-pss-sha384-v1.der")
         | include_bytes!("data/alg-rsa-pss-sha384-v2.der")
-        | include_bytes!("data/alg-rsa-pss-sha384-v3.der") => {
-            Ok(&signature::RSA_PSS_2048_8192_SHA384)
-        }
+        | include_bytes!("data/alg-rsa-pss-sha384-v3.der") =>
+            Ok(&signature::RSA_PSS_2048_8192_SHA384),
         include_bytes!("data/alg-rsa-pss-sha512-v0.der")
         | include_bytes!("data/alg-rsa-pss-sha512-v1.der")
         | include_bytes!("data/alg-rsa-pss-sha512-v2.der")
-        | include_bytes!("data/alg-rsa-pss-sha512-v3.der") => {
-            Ok(&signature::RSA_PSS_2048_8192_SHA512)
-        }
+        | include_bytes!("data/alg-rsa-pss-sha512-v3.der") =>
+            Ok(&signature::RSA_PSS_2048_8192_SHA512),
         _ => Err(Error::UnsupportedSignatureAlgorithm),
     }
 }

@@ -254,11 +254,13 @@ impl Connection {
         if self.connection.is_closed() {
             return Poll::Ready(Err(Error::ConnectionLost));
         }
-        if self.connection.side().is_server() {
+        let side = self.connection.side();
+        if side.is_server() {
             ready!(self.channel.poll_ready(cx))?;
             self.channel
                 .start_send(EndpointMessage::ConnectionAccepted)?
         }
+        
         let certificate = self
             .connection
             .crypto_session()

@@ -79,8 +79,7 @@ const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 
 fn make_client_config(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
+    certificate: rustls::Certificate, key: rustls::PrivateKey,
     verifier: Arc<verifier::Libp2pCertificateVerifier>,
 ) -> rustls::ClientConfig {
     let mut crypto = rustls::ClientConfig::new();
@@ -95,8 +94,7 @@ fn make_client_config(
 }
 
 fn make_server_config(
-    certificate: rustls::Certificate,
-    key: rustls::PrivateKey,
+    certificate: rustls::Certificate, key: rustls::PrivateKey,
     verifier: Arc<verifier::Libp2pCertificateVerifier>,
 ) -> rustls::ServerConfig {
     let mut crypto = rustls::ServerConfig::new(verifier);

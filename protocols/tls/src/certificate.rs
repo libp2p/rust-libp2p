@@ -1,30 +1,25 @@
 // Copyright 2017-2018 Parity Technologies (UK) Ltd.
 //
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
+// Permission to use, copy, modify, and/or distribute this software for any
+// purpose with or without fee is hereby granted, provided that the above
+// copyright notice and this permission notice appear in all copies.
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
+// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHORS DISCLAIM ALL WARRANTIES
+// WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
+// ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+// WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+// ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+// OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 //! Certificate handling for libp2p
 //!
 //! This handles generation, signing, and verification.
 //!
-//! This crate uses the `log` crate to emit log output.  Events that will occur normally are output
-//! at `trace` level, while “expected” error conditions (ones that can result during correct use of the
-//! library) are logged at `debug` level.
+//! This crate uses the `log` crate to emit log output.  Events that will occur
+//! normally are output at `trace` level, while “expected” error conditions
+//! (ones that can result during correct use of the library) are logged at
+//! `debug` level.
 
 use super::LIBP2P_SIGNING_PREFIX_LENGTH;
 use libp2p_core::identity;
@@ -35,10 +30,11 @@ const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
 static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 // preferred, but not supported by rustls yet
 //const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 32;
-//static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ED25519;
-// same but with P-384
+//static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm =
+// &rcgen::PKCS_ED25519; same but with P-384
 //const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 97;
-//static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P384_SHA384;
+//static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm =
+// &rcgen::PKCS_ECDSA_P384_SHA384;
 
 fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen::CustomExtension {
     let public_key = public_key.into_protobuf_encoding();
@@ -78,8 +74,8 @@ fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::Cu
     )
 }
 
-/// Generates a self-signed TLS certificate that includes a libp2p-specific certificate extension
-/// containing the public key of the given keypair.
+/// Generates a self-signed TLS certificate that includes a libp2p-specific
+/// certificate extension containing the public key of the given keypair.
 pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     let mut params = rcgen::CertificateParams::new(vec![]);
     let (cert_keypair, libp2p_extension) = gen_signed_keypair(keypair);
@@ -117,10 +113,10 @@ pub fn extract_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki:
                          earlier; something is wrong"
                     );
                     Err(webpki::Error::UnknownIssuer)
-                }
+                },
             });
             webpki::Understood::Yes
-        }
+        },
         _ => webpki::Understood::No,
     };
     webpki::EndEntityCert::from_with_extension_cb(certificate, cb)?;

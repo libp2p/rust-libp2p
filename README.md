@@ -32,3 +32,8 @@ Where to ask questions?
 - https://github.com/sigp/lighthouse
 - https://github.com/golemfactory/golem-libp2p
 - https://github.com/comit-network/comit-rs
+
+## License
+
+Most code in the repository is under the MIT license in LICENSE. The files under
+transports/x509 are under the ISC-style license in LICENSE-ISC.
