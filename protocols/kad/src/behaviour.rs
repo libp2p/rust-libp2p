@@ -24,10 +24,10 @@ mod test;
 
 use crate::K_VALUE;
 use crate::addresses::Addresses;
-use crate::handler::{KademliaHandler, KademliaHandlerProto, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
+use crate::handler::{KademliaHandler, KademliaHandlerConfig, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus};
-use crate::protocol::{KadConnectionType, KadPeer};
+use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -100,7 +100,7 @@ pub struct KademliaConfig {
     record_publication_interval: Option<Duration>,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
-    idle_keep_alive: Duration,
+    connection_idle_timeout: Duration,
 }
 
 impl Default for KademliaConfig {
@@ -114,7 +114,7 @@ impl Default for KademliaConfig {
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
-            idle_keep_alive: Duration::from_secs(10),
+            connection_idle_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -225,7 +225,7 @@ impl KademliaConfig {
 
     /// Sets the amount of time to keep connections alive when they're idle.
     pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
-        self.idle_keep_alive = duration;
+        self.connection_idle_timeout = duration;
         self
     }
 }
@@ -275,7 +275,7 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
-            idle_keep_alive: config.idle_keep_alive,
+            connection_idle_timeout: config.connection_idle_timeout,
         }
     }
 
@@ -1047,16 +1047,20 @@ where
     for<'a> TStore: RecordStore<'a>,
     TStore: Send + 'static,
 {
-    type ProtocolsHandler = KademliaHandlerProto<QueryId>;
+    type ProtocolsHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        let mut handler = KademliaHandlerProto::dial_and_listen()
-            .with_idle_keep_alive(self.idle_keep_alive);
+        let mut protocol_config = KademliaProtocolConfig::default();
         if let Some(name) = self.protocol_name_override.as_ref() {
-            handler = handler.with_protocol_name(name.clone());
+            protocol_config = protocol_config.with_protocol_name(name.clone());
         }
-        handler
+
+        KademliaHandler::new(KademliaHandlerConfig {
+            protocol_config,
+            allow_listening: true,
+            idle_timeout: self.connection_idle_timeout,
+        })
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {

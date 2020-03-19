@@ -28,35 +28,17 @@ use libp2p_swarm::{
     NegotiatedSubstream,
     KeepAlive,
     SubstreamProtocol,
-    IntoProtocolsHandler,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
 use libp2p_core::{
-    PeerId,
-    ConnectedPoint,
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade}
 };
 use log::trace;
-use std::{borrow::Cow, error, fmt, io, marker::PhantomData, pin::Pin, task::{Context, Poll}, time::Duration};
+use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
-
-/// Prototype for a [`KademliaHandler`].
-pub struct KademliaHandlerProto<TUserData> {
-    /// Configuration for the Kademlia protocol.
-    config: KademliaProtocolConfig,
-
-    /// If false, we always refuse incoming Kademlia substreams.
-    allow_listening: bool,
-
-    /// How long to keep connections alive when they're idle.
-    idle_keep_alive: Duration,
-
-    /// Marker to keep the generic pinned.
-    marker: PhantomData<TUserData>,
-}
 
 /// Protocol handler that handles Kademlia communications with the remote.
 ///
@@ -66,10 +48,7 @@ pub struct KademliaHandlerProto<TUserData> {
 /// It also handles requests made by the remote.
 pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
-    config: KademliaProtocolConfig,
-
-    /// If false, we always refuse incoming Kademlia substreams.
-    allow_listening: bool,
+    config: KademliaHandlerConfig,
 
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
@@ -79,9 +58,19 @@ pub struct KademliaHandler<TUserData> {
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
+}
 
-    /// How long to keep connections alive when they're idle.
-    idle_keep_alive: Duration,
+/// Configuration of a [`KademliaHandler`].
+#[derive(Debug, Clone)]
+pub struct KademliaHandlerConfig {
+    /// Configuration of the wire protocol.
+    pub protocol_config: KademliaProtocolConfig,
+
+    /// If false, we deny incoming requests.
+    pub allow_listening: bool,
+
+    /// Time after which we close an idle connection.
+    pub idle_timeout: Duration,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -389,73 +378,23 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
-impl<TUserData> KademliaHandlerProto<TUserData> {
-    /// Create a `KademliaHandlerProto` that only allows sending messages to the remote but
-    /// denying incoming connections.
-    pub fn dial_only() -> Self {
-        KademliaHandlerProto::with_allow_listening(false)
-    }
+impl<TUserData> KademliaHandler<TUserData> {
+    /// Create a [`KademliaHandler`] using the given configuration.
+    pub fn new(config: KademliaHandlerConfig) -> Self {
+        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
 
-    /// Create a `KademliaHandlerProto` that only allows sending messages but also receive
-    /// incoming requests.
-    ///
-    /// The `Default` trait implementation wraps around this function.
-    pub fn dial_and_listen() -> Self {
-        KademliaHandlerProto::with_allow_listening(true)
-    }
-
-    fn with_allow_listening(allow_listening: bool) -> Self {
-        KademliaHandlerProto {
-            config: Default::default(),
-            allow_listening,
-            idle_keep_alive: Duration::from_secs(10),
-            marker: PhantomData,
-        }
-    }
-
-    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
-    /// between networks on purpose.
-    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
-        self.config = self.config.with_protocol_name(name);
-        self
-    }
-
-    /// Modifies the amount of time to keep connections alive when they're idle.
-    pub fn with_idle_keep_alive(mut self, duration: Duration) -> Self {
-        self.idle_keep_alive = duration;
-        self
-    }
-}
-
-impl<TUserData> Default for KademliaHandlerProto<TUserData> {
-    fn default() -> Self {
-        KademliaHandlerProto::dial_and_listen()
-    }
-}
-
-impl<TUserData> IntoProtocolsHandler for KademliaHandlerProto<TUserData>
-where
-    TUserData: Clone + Send + 'static,
-{
-    type Handler = KademliaHandler<TUserData>;
-
-    fn into_handler(self, _: &PeerId, _: &ConnectedPoint) -> Self::Handler {
         KademliaHandler {
-            config: self.config,
-            allow_listening: self.allow_listening,
+            config,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Until(Instant::now() + self.idle_keep_alive),
-            idle_keep_alive: self.idle_keep_alive,
+            keep_alive,
         }
     }
+}
 
-    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
-        if self.allow_listening {
-            upgrade::EitherUpgrade::A(self.config.clone())
-        } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
-        }
+impl<TUserData> Default for KademliaHandler<TUserData> {
+    fn default() -> Self {
+        KademliaHandler::new(Default::default())
     }
 }
 
@@ -473,8 +412,8 @@ where
 
     #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        if self.allow_listening {
-            SubstreamProtocol::new(self.config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
+        if self.config.allow_listening {
+            SubstreamProtocol::new(self.config.protocol_config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
             SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
@@ -500,7 +439,7 @@ where
             EitherOutput::Second(p) => void::unreachable(p),
         };
 
-        debug_assert!(self.allow_listening);
+        debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.substreams
@@ -686,14 +625,14 @@ where
             let mut substream = self.substreams.swap_remove(n);
 
             loop {
-                match advance_substream(substream, self.config.clone(), cx) {
+                match advance_substream(substream, self.config.protocol_config.clone(), cx) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
                         return Poll::Ready(event);
                     }
                     (None, Some(event), _) => {
                         if self.substreams.is_empty() {
-                            self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_keep_alive);
+                            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
                         }
                         return Poll::Ready(event);
                     }
@@ -714,12 +653,22 @@ where
 
         if self.substreams.is_empty() {
             // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_keep_alive);
+            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
         } else {
             self.keep_alive = KeepAlive::Yes;
         }
 
         Poll::Pending
+    }
+}
+
+impl Default for KademliaHandlerConfig {
+    fn default() -> Self {
+        KademliaHandlerConfig {
+            protocol_config: Default::default(),
+            allow_listening: true,
+            idle_timeout: Duration::from_secs(10),
+        }
     }
 }
 
