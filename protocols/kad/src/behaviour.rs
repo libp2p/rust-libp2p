@@ -319,25 +319,7 @@ where
                     } else {
                         NodeStatus::Disconnected
                     };
-                match entry.insert(contact, status) {
-                    kbucket::InsertResult::Inserted => {
-                        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::RoutingUpdated {
-                                peer: peer.clone(),
-                                addresses,
-                                old_peer: None,
-                            }
-                        ));
-                    },
-                    kbucket::InsertResult::Full => {
-                        debug!("Bucket full. Peer not added to routing table: {}", peer)
-                    },
-                    kbucket::InsertResult::Pending { disconnected } => {
-                        self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
-                            peer_id: disconnected.into_preimage(),
-                        })
-                    },
-                }
+                Self::insert_new_peer(entry, contact, status, &self.connected_peers);
             },
             kbucket::Entry::SelfEntry => {},
         }
@@ -651,7 +633,7 @@ where
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
                     if let Some(contact) = contact {
-                        self.insert_new_peer(entry, contact, new_status)
+                        Self::insert_new_peer(entry, contact, new_status, &self.connected_peers)
                             .map(|e|
                                 self.queued_events.push_back(e)
                             );
@@ -667,20 +649,20 @@ where
     }
 
     fn insert_new_peer(
-        &self,
         entry: kbucket::AbsentEntry<kbucket::Key<PeerId>, Contact>,
         contact: Contact,
-        status: NodeStatus
+        status: NodeStatus,
+        connected_peers: &FnvHashSet<PeerId>,
     ) -> Option<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>
     {
         let addresses = contact.addresses.clone();
-        let peer = entry.key().into_preimage();
+        let peer = entry.key().preimage().clone();
         match entry.insert(contact, status) {
             kbucket::InsertResult::Inserted => {
                 Some(
                     NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::RoutingUpdated {
-                            peer: peer.clone(),
+                            peer,
                             addresses,
                             old_peer: None,
                         }
@@ -688,11 +670,12 @@ where
                 )
             },
             kbucket::InsertResult::Full => {
+                // TODO: excess peer.clone()
                 debug!("Bucket full. Peer not added to routing table: {}", peer);
                 None
             },
             kbucket::InsertResult::Pending { disconnected } => {
-                debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
+                debug_assert!(!connected_peers.contains(disconnected.preimage()));
                 Some(
                     NetworkBehaviourAction::DialPeer {
                         peer_id: disconnected.into_preimage(),
