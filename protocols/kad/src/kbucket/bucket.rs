@@ -224,7 +224,7 @@ where
                 None
             };
 
-            if let InsertResult::Inserted = self.insert(node.clone(), status) {
+            if self.insert(node.clone(), status) == InsertResult::Inserted {
                 AppliedPending { inserted: node, evicted }
             } else {
                 unreachable!("Bucket is not full, we just evicted a node.")
