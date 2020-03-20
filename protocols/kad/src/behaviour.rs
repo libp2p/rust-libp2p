@@ -673,10 +673,10 @@ where
                 debug!("Bucket full. Peer not added to routing table: {}", peer);
                 None
             },
-            kbucket::InsertResult::Pending { disconnected } => {
+            kbucket::InsertResult::Pending { disconnected } => { // least recently connected peer is returned
                 debug_assert!(!connected_peers.contains(disconnected.preimage()));
                 Some(
-                    NetworkBehaviourAction::DialPeer {
+                    NetworkBehaviourAction::DialPeer { // will try to dial that peer in order to check if it's online
                         peer_id: disconnected.into_preimage(),
                     }
                 )
