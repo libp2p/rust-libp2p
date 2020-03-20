@@ -684,7 +684,6 @@ fn exceed_jobs_max_queries() {
 }
 
 #[test]
-// Test
 fn exp_decr_expiration_overflow() {
     fn prop_no_panic(ttl: Duration, factor: u32) {
         exp_decrease(ttl, factor);
