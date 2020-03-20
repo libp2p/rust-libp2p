@@ -216,37 +216,28 @@ where
         if let Some(pending) = self.pending.take() {
             if pending.replace <= Instant::now() {
                 if self.nodes.is_full() {
-                    if self.status(Position(0)) == NodeStatus::Connected {
+                    if self.all_nodes_connected() {
                         // The bucket is full with connected nodes. Drop the pending node.
                         return None
                     }
                     debug_assert!(self.first_connected_pos.map_or(true, |p| p > 0)); // (*)
-                    // The pending node will be inserted.
-                    let inserted = pending.node.clone();
-                    // A connected pending node goes at the end of the list for
-                    // the connected peers, removing the least-recently connected.
-                    if pending.status == NodeStatus::Connected {
-                        let evicted = Some(self.nodes.remove(0));
-                        self.first_connected_pos = self.first_connected_pos
-                            .map_or_else(
-                                | | Some(self.nodes.len()),
-                                |p| p.checked_sub(1));
-                        self.nodes.push(pending.node);
-                        return Some(AppliedPending { inserted, evicted })
-                    }
-                    // A disconnected pending node goes at the end of the list
-                    // for the disconnected peers.
-                    else if let Some(p) = self.first_connected_pos {
-                        let insert_pos = p.checked_sub(1).expect("by (*)");
-                        let evicted = Some(self.nodes.remove(0));
-                        self.nodes.insert(insert_pos, pending.node);
-                        return Some(AppliedPending { inserted, evicted })
-                    } else {
-                        // All nodes are disconnected. Insert the new node as the most
-                        // recently disconnected, removing the least-recently disconnected.
-                        let evicted = Some(self.nodes.remove(0));
-                        self.nodes.push(pending.node);
-                        return Some(AppliedPending { inserted, evicted })
+                    return match pending.status {
+                        NodeStatus::Connected => {
+                            // A connected pending node goes at the end of the list for
+                            // the connected peers, removing the least-recently connected.
+                            let evicted = self.pop_node();
+                            self.append_connected_node(pending.node.clone());
+
+                            Some(AppliedPending { inserted: pending.node, evicted: Some(evicted) })
+                        },
+                        NodeStatus::Disconnected => {
+                            // A disconnected pending node goes at the end of the list
+                            // for the disconnected peers.
+                            let evicted = self.pop_node();
+                            self.insert_disconnected_node(pending.node.clone());
+
+                            Some(AppliedPending { inserted: pending.node, evicted: Some(evicted) })
+                        },
                     }
                 } else {
                     // There is room in the bucket, so just insert the pending node.
