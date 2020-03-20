@@ -88,3 +88,13 @@ jobs:
       run: rustup default nightly
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo +nightly doc --verbose --workspace --no-deps --document-private-items
+
+  check-attributes-below-comments:
+    name: Check that Rust attributes are below comments
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu
+    steps:
+    - uses: actions/checkout@v1
+    - name: Check
+      run: ./.circleci/attributes_below_comments.sh

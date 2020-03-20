@@ -7,7 +7,6 @@ workflows:
       - test
       - test-wasm
       - check-rustdoc-links
-      - check-attributes-below-comments
 
 jobs:
   test:
@@ -91,11 +90,3 @@ jobs:
             - ./target
             - /usr/local/cargo
             - /root/.cache/sccache
-
-  check-attributes-below-comments:
-    machine:
-      enabled: true
-    steps:
-      - checkout
-      - run:
-          command: ./.circleci/attributes_below_comments.sh
