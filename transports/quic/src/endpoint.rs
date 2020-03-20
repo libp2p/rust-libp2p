@@ -27,7 +27,6 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use log::{debug, info, trace};
 use parking_lot::Mutex;
 use quinn_proto::ConnectionHandle;
 use std::{
@@ -37,6 +36,7 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+use tracing::{debug, info, trace};
 
 use channel_ref::Channel;
 
@@ -261,6 +261,10 @@ impl Connection {
                 .start_send(EndpointMessage::ConnectionAccepted)?
         }
 
+        assert!(
+            !self.connection.crypto_session().is_handshaking(),
+            "QUIC handshake cannot complete before TLS handshake"
+        );
         let certificate = self
             .connection
             .crypto_session()
@@ -268,9 +272,7 @@ impl Connection {
             .expect("we always require the peer to present a certificate; qed");
         // we have already verified that there is (exactly) one peer certificate,
         // and that it has a valid libp2p extension.
-        Poll::Ready(Ok(tls::extract_peerid(certificate[0].as_ref()).expect(
-            "our certificate verifiers guarantee that this will succeed; qed",
-        )))
+        Poll::Ready(Ok(tls::extract_peerid_or_panic(certificate[0].as_ref())))
     }
 
     /// Wake up the last task registered by
@@ -602,7 +604,7 @@ fn accept_muxer(
 
     let streams = Arc::new(Mutex::new(Streams::new(connection)));
     inner.muxers.insert(handle, streams.clone());
-    let upgrade = crate::Upgrade::spawn(streams, socket);
+    let upgrade = crate::Upgrade::spawn(streams, quinn_proto::Side::Server, socket);
     if endpoint
         .new_connections
         .unbounded_send(ListenerEvent::Upgrade {
@@ -622,6 +624,8 @@ impl Future for EndpointRef {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         let Self { reference, channel } = self.get_mut();
         let mut inner = reference.inner.lock();
+        let span = tracing::trace_span!("Endpoint", address = display(&reference.address));
+        let _guard = span.enter();
         trace!("driving events");
         inner.drive_events(cx);
         trace!("driving incoming packets");
@@ -742,7 +746,11 @@ impl Transport for Endpoint {
         };
         let streams = Arc::new(Mutex::new(Streams::new(connection)));
         inner.muxers.insert(handle, streams.clone());
-        Ok(crate::Upgrade::spawn(streams.clone(), socket))
+        Ok(crate::Upgrade::spawn(
+            streams.clone(),
+            quinn_proto::Side::Client,
+            socket,
+        ))
     }
 }
 

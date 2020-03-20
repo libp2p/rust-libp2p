@@ -23,13 +23,13 @@ use async_macros::ready;
 use either::Either;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::StreamMuxer;
-use log::{error, trace};
 use parking_lot::{Mutex, MutexGuard};
 use std::{
     mem::replace,
     sync::Arc,
     task::{Context, Poll},
 };
+use tracing::{error, trace};
 
 /// A QUIC substream
 #[derive(Debug)]
@@ -99,6 +99,13 @@ enum OutboundInner {
     Done,
 }
 
+macro_rules! span {
+    ($name:expr, $inner:expr, $id:expr) => {
+        let span = tracing::trace_span!($name, side = debug($inner.side()), id = debug(&$id.id));
+        let _guard = span.enter();
+    };
+}
+
 /// An outbound QUIC substream. This will eventually resolve to either a
 /// [`Substream`] or an [`Error`].
 #[derive(Debug)]
@@ -137,7 +144,9 @@ impl StreamMuxer for QuicMuxer {
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {
-        self.inner().destroy_stream(substream.id)
+        let mut inner = self.inner();
+        span!("destroy", inner, substream);
+        inner.destroy_stream(substream.id)
     }
 
     fn is_remote_acknowledged(&self) -> bool {
@@ -147,8 +156,10 @@ impl StreamMuxer for QuicMuxer {
     }
 
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        trace!("being polled for inbound connections!");
         let mut inner = self.inner();
+        let span = tracing::trace_span!("inbound", side = debug(inner.side()));
+        let _guard = span.enter();
+        trace!("being polled for inbound connections!");
         inner.close_reason()?;
         inner.wake_driver();
         let stream = ready!(inner.accept(cx));
@@ -163,6 +174,7 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::WriteError;
         let mut inner = self.inner();
+        span!("write", inner, substream);
         inner.wake_driver();
         match inner.write(cx, &substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
@@ -213,6 +225,7 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<usize, Self::Error>> {
         use quinn_proto::ReadError;
         let mut inner = self.inner();
+        span!("read", inner, substream);
         match inner.read(cx, &substream.id, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(ReadError::Blocked) => {
@@ -252,7 +265,9 @@ impl StreamMuxer for QuicMuxer {
             }
             SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
         }
-        match self.inner().shutdown_stream(cx, &substream.id) {
+        let mut inner = self.inner();
+        span!("shutdown", inner, substream);
+        match inner.shutdown_stream(cx, &substream.id) {
             Ok(receiver) => {
                 substream.status = SubstreamStatus::Finishing(receiver);
                 Poll::Pending

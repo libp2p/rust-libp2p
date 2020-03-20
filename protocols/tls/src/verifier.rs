@@ -89,3 +89,17 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         verify_presented_certs(presented_certs).map(|()| rustls::ClientCertVerified::assertion())
     }
 }
+
+/// Extracts the `PeerId` from a certificate’s libp2p extension. It is erroneous
+/// to call this unless the certificate is known to be a well-formed X.509
+/// certificate with a valid libp2p extension. The certificate verifiers in this
+/// crate validate check this.
+///
+/// # Panics
+///
+/// Panics if called on an invalid certificate.
+pub fn extract_peerid_or_panic(certificate: &[u8]) -> libp2p_core::PeerId {
+    let parsed = x509::parse_certificate(certificate)
+        .expect("our certificate verifiers already checked that the certificate is valid; qed");
+    x509::get_peerid(parsed)
+}

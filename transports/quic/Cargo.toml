@@ -29,7 +29,6 @@ webpki = "0.21.2"
 untrusted = "0.7.0"
 tls = { path = "../../protocols/tls", package = "libp2p-tls", version = "0.16.0" }
 either = "1.5.3"
-
-[dev-dependencies]
 tracing-subscriber = "0.2.1"
 tracing = "0.1.12"
+tracing-core = "0.1.10"

@@ -23,7 +23,6 @@
 
 use super::LIBP2P_SIGNING_PREFIX_LENGTH;
 use libp2p_core::identity;
-use log::error;
 
 const LIBP2P_OID: &[u64] = &[1, 3, 6, 1, 4, 1, 53594, 1, 1];
 const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 65;
@@ -31,10 +30,7 @@ static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECD
 // preferred, but not supported by rustls yet
 //const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 32;
 //static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm =
-// &rcgen::PKCS_ED25519; same but with P-384
-//const LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH: usize = 97;
-//static LIBP2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm =
-// &rcgen::PKCS_ECDSA_P384_SHA384;
+// &rcgen::PKCS_ED25519
 
 fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen::CustomExtension {
     let public_key = public_key.into_protobuf_encoding();
@@ -84,58 +80,4 @@ pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     params.key_pair = Some(cert_keypair);
     rcgen::Certificate::from_params(params)
         .expect("certificate generation with valid params will succeed; qed")
-}
-
-/// Extracts the `PeerId` from a certificate’s libp2p extension. It is erroneous
-/// to call this unless the certificate is known to be a well-formed X.509
-/// certificate with a valid libp2p extension. The certificate verifiers in this
-/// crate validate check this.
-///
-/// If you get `Err` from this function, there is a bug somewhere. Either you
-/// called it without checking the preconditions, or there is a bug in this
-/// library or one of its dependencies.
-pub fn extract_peerid(certificate: &[u8]) -> Result<libp2p_core::PeerId, webpki::Error> {
-    let mut id = None;
-    let cb = &mut |oid: untrusted::Input<'_>, value, _, _| match oid.as_slice_less_safe() {
-        super::LIBP2P_OID_BYTES => {
-            if id.is_some() {
-                error!(
-                    "multiple libp2p extensions should have been detected \
-                     earlier; something is wrong"
-                );
-                id = Some(Err(webpki::Error::UnknownIssuer))
-            }
-            id = Some(match extract_libp2p_peerid(value) {
-                Ok(value) => Ok(value),
-                Err(_) => {
-                    error!(
-                        "bogus libp2p extension should have been detected \
-                         earlier; something is wrong"
-                    );
-                    Err(webpki::Error::UnknownIssuer)
-                },
-            });
-            webpki::Understood::Yes
-        },
-        _ => webpki::Understood::No,
-    };
-    webpki::EndEntityCert::from_with_extension_cb(certificate, cb)?;
-    id.unwrap_or(Err(webpki::Error::UnknownIssuer))
-}
-
-fn extract_libp2p_peerid(
-    extension: untrusted::Input<'_>,
-) -> Result<libp2p_core::PeerId, ring::error::Unspecified> {
-    use ring::{error::Unspecified, io::der};
-    extension
-        .read_all(Unspecified, |mut reader| {
-            let inner = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
-            inner.read_all(Unspecified, |mut reader| {
-                let public_key =
-                    der::bit_string_with_no_unused_bits(&mut reader)?.as_slice_less_safe();
-                der::bit_string_with_no_unused_bits(&mut reader)?;
-                identity::PublicKey::from_protobuf_encoding(public_key).map_err(|_| Unspecified)
-            })
-        })
-        .map(From::from)
 }

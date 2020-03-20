@@ -27,7 +27,7 @@ pub(super) struct X509Certificate<'a> {
     x509_tbs: Input<'a>,
     x509_validity: Input<'a>,
     x509_spki: Input<'a>,
-    x509_signature_algorithm: Input<'a>,
+    x509_signature_algorithm: &'a [u8],
     x509_signature: Input<'a>,
 }
 
@@ -90,17 +90,17 @@ fn parse_extensions<'a>(input: &mut Reader<'a>) -> Result<Libp2pExtension<'a>, E
 /// Extracts the algorithm id and public key from a certificate
 pub(super) fn parse_certificate(certificate: &[u8]) -> Result<X509Certificate<'_>, Error> {
     let ((x509_tbs, inner_tbs), x509_signature_algorithm, x509_signature) =
-        Input::from(certificate)
-            .read_all(Error::BadDER, read_sequence)?
-            .read_all(Error::BadDER, |reader| {
+        Input::from(certificate).read_all(Error::BadDER, |input| {
+            der::nested(input, Tag::Sequence, Error::BadDER, |reader| {
                 // tbsCertificate
                 let tbs = reader.read_partial(|reader| read_sequence(reader))?;
                 // signatureAlgorithm
-                let signature_algorithm = read_sequence(reader)?;
+                let signature_algorithm = read_sequence(reader)?.as_slice_less_safe();
                 // signatureValue
                 let signature = read_bit_string(reader, Error::BadDER)?;
                 Ok((tbs, signature_algorithm, signature))
-            })?;
+            })
+        })?;
     let (x509_validity, x509_spki, extensions) =
         inner_tbs.read_all(Error::BadDER, |mut input| {
             // We require extensions, which means we require version 3
@@ -108,7 +108,7 @@ pub(super) fn parse_certificate(certificate: &[u8]) -> Result<X509Certificate<'_
             // serialNumber
             der::positive_integer(&mut input)?;
             // signature
-            if read_sequence(input)? != x509_signature_algorithm {
+            if read_sequence(input)?.as_slice_less_safe() != x509_signature_algorithm {
                 // signature algorithms don’t match
                 return Err(Error::SignatureAlgorithmMismatch);
             }
@@ -155,6 +155,10 @@ fn verify_libp2p_signature(
     }
 }
 
+pub(super) fn get_peerid(certificate: X509Certificate<'_>) -> libp2p_core::PeerId {
+    certificate.libp2p_extension.peer_key.into_peer_id()
+}
+
 pub(super) fn verify_certificate(
     certificate: X509Certificate<'_>, time: Time,
 ) -> Result<(), Error> {
@@ -173,21 +177,19 @@ pub(super) fn verify_certificate(
         Ok((x509_pkey_alg, x509_pkey_bytes))
     })?;
     verify_libp2p_signature(libp2p_extension, x509_pkey_bytes)?;
-    get_public_key(
-        x509_pkey_alg,
-        x509_pkey_bytes,
-        x509_signature_algorithm.as_slice_less_safe(),
-    )?
-    .verify(
-        x509_tbs.as_slice_less_safe(),
-        x509_signature.as_slice_less_safe(),
-    )
-    .map_err(|_| Error::InvalidSignatureForPublicKey)?;
+    get_public_key(x509_pkey_alg, x509_pkey_bytes, x509_signature_algorithm)?
+        .verify(
+            x509_tbs.as_slice_less_safe(),
+            x509_signature.as_slice_less_safe(),
+        )
+        .map_err(|_| Error::InvalidSignatureForPublicKey)?;
     x509_validity.read_all(Error::BadDER, |input| {
         let not_before = der::time_choice(input)?;
         let not_after = der::time_choice(input)?;
-        if time < not_before || time > not_after {
-            Err(Error::ExtensionValueInvalid)
+        if time < not_before {
+            Err(Error::CertNotValidYet)
+        } else if time > not_after {
+            Err(Error::CertExpired)
         } else {
             Ok(())
         }
@@ -197,9 +199,7 @@ pub(super) fn verify_certificate(
 fn get_public_key<'a>(
     x509_pkey_alg: &[u8], x509_pkey_bytes: &'a [u8], x509_signature_algorithm: &[u8],
 ) -> Result<ring::signature::UnparsedPublicKey<&'a [u8]>, Error> {
-    const BUF: &[u8] = &[
-        0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a,
-    ];
+    const RSASSA_PSS_PREFIX: &[u8; 11] = include_bytes!("data/alg-rsa-pss.der");
     use signature::{
         RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA512,
     };
@@ -230,8 +230,8 @@ fn get_public_key<'a>(
             include_bytes!("data/alg-ed25519.der") => &signature::ED25519,
             _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
         },
-        e if e.len() > 11 && &e[..11] == BUF => {
-            let alg = parse_rsa_pss(&e[11..])?;
+        e if e.starts_with(&RSASSA_PSS_PREFIX[..]) => {
+            let alg = parse_rsa_pss(&e[RSASSA_PSS_PREFIX.len()..])?;
             match x509_pkey_alg {
                 include_bytes!("data/alg-rsa-encryption.der") => alg,
                 _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),

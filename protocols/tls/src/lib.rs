@@ -71,8 +71,8 @@
 mod certificate;
 mod verifier;
 
-pub use certificate::extract_peerid;
 use std::sync::Arc;
+pub use verifier::extract_peerid_or_panic;
 
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();

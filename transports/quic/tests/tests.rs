@@ -26,6 +26,8 @@ use libp2p_core::{
     StreamMuxer, Transport,
 };
 use libp2p_quic::{Config, Endpoint, Muxer, Substream};
+use tracing::info_span;
+
 use log::{debug, info, trace};
 use std::{
     io::Result,
@@ -169,16 +171,13 @@ fn wildcard_expansion() {
 
 #[test]
 fn communicating_between_dialer_and_listener() {
-    use tracing::info_span;
     init();
     for i in 0..1000u32 {
-        let span = info_span!("test", id = i);
-        let _guard = span.enter();
-        do_test()
+        do_test(i)
     }
 }
 
-fn do_test() {
+fn do_test(_i: u32) {
     use std::error::Error as _;
     let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
     let mut ready_tx = Some(ready_tx);
@@ -190,6 +189,9 @@ fn do_test() {
     let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
     trace!("running tests");
     let handle = async_std::task::spawn(async move {
+        // let span = info_span!("test", id = i, side = "server");
+        // let _guard = span.enter();
+
         let key = loop {
             trace!("awaiting connection");
             match listener.next().await.unwrap().unwrap() {
