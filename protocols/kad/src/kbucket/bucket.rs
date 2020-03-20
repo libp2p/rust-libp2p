@@ -250,11 +250,7 @@ where
         // respectively).
         if let Some(pos) = self.position(key) {
             // Remove the node from its current position.
-            // Adjust `first_connected_pos` accordingly.
-            let node = match self.status(pos) {
-                NodeStatus::Connected => self.remove_connected_node(pos),
-                NodeStatus::Disconnected => self.remove_disconnected_node(pos),
-            };
+            let node = self.evict_node(pos);
             // If the least-recently connected node re-establishes its
             // connected status, drop the pending node.
             if self.is_least_recently_connected(pos) && new_status == NodeStatus::Connected {
@@ -342,16 +338,6 @@ where
         self.first_connected_pos == Some(0)
     }
 
-    fn remove_connected_node(&mut self, position: Position) -> Node<TKey, TVal> {
-        self.change_connected_pos(ChangePosition::RemoveConnected);
-        self.nodes.remove(position.0)
-    }
-
-    fn remove_disconnected_node(&mut self, position: Position) -> Node<TKey, TVal> {
-        self.change_connected_pos(ChangePosition::RemoveDisconnected);
-        self.nodes.remove(position.0)
-    }
-
     fn append_connected_node(&mut self, node: Node<TKey, TVal>) {
         // `num_entries` MUST be calculated BEFORE insertion
         self.change_connected_pos(ChangePosition::AppendConnected { num_entries: self.num_entries() });
@@ -382,6 +368,7 @@ where
     fn change_connected_pos(&mut self, action: ChangePosition) {
         match action {
             ChangePosition::AddDisconnected => {
+                // New disconnected node added => position of the first connected node moved by 1
                 self.first_connected_pos = self.first_connected_pos.map(|p| p + 1)
             },
             ChangePosition::AppendConnected { num_entries } => {
@@ -393,10 +380,10 @@ where
                 if self.num_connected() == 1 { // If it was the last connected node
                     self.first_connected_pos = None // Then mark there is no connected nodes left
                 }
-                // Otherwise – keep position the same
+                // Otherwise – keep mark the same
             }
             ChangePosition::RemoveDisconnected => {
-                // If there are connected nodes – lower first_connected_pos
+                // If there are connected nodes – lower mark
                 // Otherwise – keep it None
                 self.first_connected_pos = self.first_connected_pos.map(|p| p.checked_sub(1).unwrap_or(0))
             }
