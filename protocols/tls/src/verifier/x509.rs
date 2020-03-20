@@ -15,6 +15,7 @@
 use super::{
     super::{LIBP2P_OID_BYTES, LIBP2P_SIGNING_PREFIX, LIBP2P_SIGNING_PREFIX_LENGTH},
     der,
+    der::Tag,
 };
 use libp2p_core::identity::PublicKey;
 use ring::signature;
@@ -37,7 +38,7 @@ struct Libp2pExtension<'a> {
 
 #[inline(always)]
 fn read_sequence<'a>(input: &mut Reader<'a>) -> Result<Input<'a>, Error> {
-    der::expect_tag_and_get_value(input, der::Tag::Sequence)
+    der::expect_tag_and_get_value(input, Tag::Sequence)
 }
 
 #[inline(always)]
@@ -48,7 +49,7 @@ fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Er
 fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a>, Error> {
     let e = Error::ExtensionValueInvalid;
     Input::read_all(&extension, e, |input| {
-        der::nested(input, der::Tag::Sequence, e, |input| {
+        der::nested(input, Tag::Sequence, e, |input| {
             let public_key = read_bit_string(input, e)?.as_slice_less_safe();
             let signature = read_bit_string(input, e)?.as_slice_less_safe();
             // We deliberately discard the error information because this is
@@ -66,14 +67,14 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
 fn parse_extensions<'a>(input: &mut Reader<'a>) -> Result<Libp2pExtension<'a>, Error> {
     let mut libp2p_extension = None;
     while !input.at_end() {
-        der::nested(input, der::Tag::Sequence, Error::BadDER, |input| {
-            let oid = der::expect_tag_and_get_value(input, der::Tag::OID)?;
+        der::nested(input, Tag::Sequence, Error::BadDER, |input| {
+            let oid = der::expect_tag_and_get_value(input, Tag::OID)?;
             let mut critical = false;
-            if input.peek(der::Tag::Boolean as _) {
+            if input.peek(Tag::Boolean as _) {
                 critical = true;
-                der::expect_bytes(input, &[der::Tag::Boolean as _, 1, 0xFF])?
+                der::expect_bytes(input, &[Tag::Boolean as _, 1, 0xFF], Error::BadDER)?
             }
-            let extension = der::expect_tag_and_get_value(input, der::Tag::OctetString)?;
+            let extension = der::expect_tag_and_get_value(input, Tag::OctetString)?;
             match oid.as_slice_less_safe() {
                 LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
                 LIBP2P_OID_BYTES => libp2p_extension = Some(parse_libp2p_extension(extension)?),
@@ -103,9 +104,7 @@ pub(super) fn parse_certificate(certificate: &[u8]) -> Result<X509Certificate<'_
     let (x509_validity, x509_spki, extensions) =
         inner_tbs.read_all(Error::BadDER, |mut input| {
             // We require extensions, which means we require version 3
-            if der::expect_bytes(input, &[160, 3, 2, 1, 2]).is_err() {
-                return Err(Error::UnsupportedCertVersion);
-            }
+            der::expect_bytes(input, &[160, 3, 2, 1, 2], Error::UnsupportedCertVersion)?;
             // serialNumber
             der::positive_integer(&mut input)?;
             // signature
@@ -124,7 +123,7 @@ pub(super) fn parse_certificate(certificate: &[u8]) -> Result<X509Certificate<'_
             // subjectUniqueId and issuerUniqueId are unsupported
             // parse the extensions
             let extensions =
-                der::expect_tag_and_get_value(input, der::Tag::ContextSpecificConstructed3)?;
+                der::expect_tag_and_get_value(input, Tag::ContextSpecificConstructed3)?;
             Ok((x509_validity, spki, extensions))
         })?;
     let extensions = extensions.read_all(Error::BadDER, read_sequence)?;

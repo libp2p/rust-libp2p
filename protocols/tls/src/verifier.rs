@@ -75,9 +75,7 @@ fn verify_presented_certs(presented_certs: &[rustls::Certificate]) -> Result<(),
 ///
 /// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
+    fn offer_client_auth(&self) -> bool { true }
 
     fn client_auth_root_subjects(
         &self, _dns_name: Option<&webpki::DNSName>,

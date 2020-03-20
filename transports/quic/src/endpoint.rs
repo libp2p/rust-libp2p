@@ -260,7 +260,7 @@ impl Connection {
             self.channel
                 .start_send(EndpointMessage::ConnectionAccepted)?
         }
-        
+
         let certificate = self
             .connection
             .crypto_session()

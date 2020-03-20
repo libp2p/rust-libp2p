@@ -27,10 +27,12 @@ pub(super) fn expect_tag_and_get_value<'a>(
     ring::io::der::expect_tag_and_get_value(input, tag).map_err(|_| Error::BadDER)
 }
 
-pub(super) fn expect_bytes(input: &mut untrusted::Reader<'_>, bytes: &[u8]) -> Result<(), Error> {
+pub(super) fn expect_bytes(
+    input: &mut untrusted::Reader<'_>, bytes: &[u8], error: Error,
+) -> Result<(), Error> {
     match input.read_bytes(bytes.len()) {
         Ok(e) if e == untrusted::Input::from(bytes) => Ok(()),
-        _ => Err(Error::BadDER),
+        _ => Err(error),
     }
 }
 
