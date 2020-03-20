@@ -25,12 +25,11 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
-use bytes::{Bytes, BytesMut, BufMut};
 use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
-use futures::{prelude::*, try_ready};
-use log::trace;
-use std::{io, fmt, error::Error, convert::TryFrom};
-use tokio_io::{AsyncRead, AsyncWrite};
+
+use bytes::{Bytes, BytesMut, BufMut};
+use futures::{prelude::*, io::IoSlice, ready};
+use std::{convert::TryFrom, io, fmt, error::Error, pin::Pin, task::{Context, Poll}};
 use unsigned_varint as uvi;
 
 /// The maximum number of supported protocols that can be processed.
@@ -264,7 +263,9 @@ impl Message {
 }
 
 /// A `MessageIO` implements a [`Stream`] and [`Sink`] of [`Message`]s.
+#[pin_project::pin_project]
 pub struct MessageIO<R> {
+    #[pin]
     inner: LengthDelimited<R>,
 }
 
@@ -277,8 +278,8 @@ impl<R> MessageIO<R> {
         Self { inner: LengthDelimited::new(inner) }
     }
 
-    /// Converts the `MessageIO` into a `MessageReader`, dropping the
-    /// `Message`-oriented `Sink` in favour of direct `AsyncWrite` access
+    /// Converts the [`MessageIO`] into a [`MessageReader`], dropping the
+    /// [`Message`]-oriented `Sink` in favour of direct `AsyncWrite` access
     /// to the underlying I/O stream.
     ///
     /// This is typically done if further negotiation messages are expected to be
@@ -288,7 +289,7 @@ impl<R> MessageIO<R> {
         MessageReader { inner: self.inner.into_reader() }
     }
 
-    /// Drops the `MessageIO` resource, yielding the underlying I/O stream
+    /// Drops the [`MessageIO`] resource, yielding the underlying I/O stream
     /// together with the remaining write buffer containing the protocol
     /// negotiation frame data that has not yet been written to the I/O stream.
     ///
@@ -309,28 +310,28 @@ impl<R> MessageIO<R> {
     }
 }
 
-impl<R> Sink for MessageIO<R>
+impl<R> Sink<Message> for MessageIO<R>
 where
     R: AsyncWrite,
 {
-    type SinkItem = Message;
-    type SinkError = ProtocolError;
+    type Error = ProtocolError;
 
-    fn start_send(&mut self, msg: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_ready(cx).map_err(From::from)
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
         let mut buf = BytesMut::new();
-        msg.encode(&mut buf)?;
-        match self.inner.start_send(buf.freeze())? {
-            AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(msg)),
-            AsyncSink::Ready => Ok(AsyncSink::Ready),
-        }
+        item.encode(&mut buf)?;
+        self.project().inner.start_send(buf.freeze()).map_err(From::from)
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        Ok(self.inner.poll_complete()?)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_flush(cx).map_err(From::from)
     }
 
-    fn close(&mut self) -> Poll<(), Self::SinkError> {
-        Ok(self.inner.close()?)
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_close(cx).map_err(From::from)
     }
 }
 
@@ -338,18 +339,24 @@ impl<R> Stream for MessageIO<R>
 where
     R: AsyncRead
 {
-    type Item = Message;
-    type Error = ProtocolError;
+    type Item = Result<Message, ProtocolError>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        poll_stream(&mut self.inner)
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match poll_stream(self.project().inner, cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Ready(Some(Ok(m))) => Poll::Ready(Some(Ok(m))),
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(From::from(err)))),
+        }
     }
 }
 
 /// A `MessageReader` implements a `Stream` of `Message`s on an underlying
 /// I/O resource combined with direct `AsyncWrite` access.
+#[pin_project::pin_project]
 #[derive(Debug)]
 pub struct MessageReader<R> {
+    #[pin]
     inner: LengthDelimitedReader<R>
 }
 
@@ -373,35 +380,16 @@ impl<R> MessageReader<R> {
     pub fn into_inner(self) -> (R, BytesMut) {
         self.inner.into_inner()
     }
-
-    /// Returns a reference to the underlying I/O stream.
-    pub fn inner_ref(&self) -> &R {
-        self.inner.inner_ref()
-    }
 }
 
 impl<R> Stream for MessageReader<R>
 where
     R: AsyncRead
 {
-    type Item = Message;
-    type Error = ProtocolError;
+    type Item = Result<Message, ProtocolError>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        poll_stream(&mut self.inner)
-    }
-}
-
-impl<R> io::Write for MessageReader<R>
-where
-    R: AsyncWrite
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        poll_stream(self.project().inner, cx)
     }
 }
 
@@ -409,24 +397,39 @@ impl<TInner> AsyncWrite for MessageReader<TInner>
 where
     TInner: AsyncWrite
 {
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        self.inner.shutdown()
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().inner.poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        self.project().inner.poll_close(cx)
+    }
+
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<Result<usize, io::Error>> {
+        self.project().inner.poll_write_vectored(cx, bufs)
     }
 }
 
-fn poll_stream<S>(stream: &mut S) -> Poll<Option<Message>, ProtocolError>
+fn poll_stream<S>(stream: Pin<&mut S>, cx: &mut Context) -> Poll<Option<Result<Message, ProtocolError>>>
 where
-    S: Stream<Item = Bytes, Error = io::Error>,
+    S: Stream<Item = Result<Bytes, io::Error>>,
 {
-    let msg = if let Some(msg) = try_ready!(stream.poll()) {
-        Message::decode(msg)?
+    let msg = if let Some(msg) = ready!(stream.poll_next(cx)?) {
+        match Message::decode(msg) {
+            Ok(m) => m,
+            Err(err) => return Poll::Ready(Some(Err(err))),
+        }
     } else {
-        return Ok(Async::Ready(None))
+        return Poll::Ready(None)
     };
 
-    trace!("Received message: {:?}", msg);
+    log::trace!("Received message: {:?}", msg);
 
-    Ok(Async::Ready(Some(msg)))
+    Poll::Ready(Some(Ok(msg)))
 }
 
 /// A protocol error.

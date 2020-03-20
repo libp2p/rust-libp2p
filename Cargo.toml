@@ -10,7 +10,45 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-default = ["secp256k1", "libp2p-websocket"]
+default = [
+    "deflate",
+    "dns",
+    "floodsub",
+    "identify",
+    "kad",
+    "gossipsub",
+    "mdns",
+    "mplex",
+    "noise",
+    "ping",
+    "plaintext",
+    "pnet",
+    "secio",
+    "secp256k1",
+    "tcp",
+    "uds",
+    "wasm-ext",
+    "websocket",
+    "yamux",
+]
+deflate = ["libp2p-deflate"]
+dns = ["libp2p-dns"]
+floodsub = ["libp2p-floodsub"]
+identify = ["libp2p-identify"]
+kad = ["libp2p-kad"]
+gossipsub = ["libp2p-gossipsub"]
+mdns = ["libp2p-mdns"]
+mplex = ["libp2p-mplex"]
+noise = ["libp2p-noise"]
+ping = ["libp2p-ping"]
+plaintext = ["libp2p-plaintext"]
+pnet = ["libp2p-pnet"]
+secio = ["libp2p-secio"]
+tcp = ["libp2p-tcp"]
+uds = ["libp2p-uds"]
+wasm-ext = ["libp2p-wasm-ext"]
+websocket = ["libp2p-websocket"]
+yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 
 [dependencies]
@@ -19,32 +57,32 @@ futures = "0.3.1"
 multiaddr = { package = "parity-multiaddr", version = "0.7.2", path = "misc/multiaddr" }
 multihash = "0.10"
 lazy_static = "1.2"
-libp2p-mplex = { version = "0.16.0", path = "muxers/mplex" }
-libp2p-identify = { version = "0.16.0", path = "protocols/identify" }
-libp2p-kad = { version = "0.16.2", path = "protocols/kad" }
-libp2p-floodsub = { version = "0.16.0", path = "protocols/floodsub" }
-libp2p-gossipsub = { version = "0.16.0", path = "./protocols/gossipsub" }
-libp2p-ping = { version = "0.16.0", path = "protocols/ping" }
-libp2p-plaintext = { version = "0.16.0", path = "protocols/plaintext" }
-libp2p-pnet = { version = "0.16.0", path = "protocols/pnet" }
+libp2p-mplex = { version = "0.16.0", path = "muxers/mplex", optional = true }
+libp2p-identify = { version = "0.16.0", path = "protocols/identify", optional = true }
+libp2p-kad = { version = "0.16.2", path = "protocols/kad", optional = true }
+libp2p-floodsub = { version = "0.16.0", path = "protocols/floodsub", optional = true }
+libp2p-gossipsub = { version = "0.16.0", path = "./protocols/gossipsub", optional = true }
+libp2p-ping = { version = "0.16.0", path = "protocols/ping", optional = true }
+libp2p-plaintext = { version = "0.16.0", path = "protocols/plaintext", optional = true }
+libp2p-pnet = { version = "0.16.0", path = "protocols/pnet", optional = true }
 libp2p-core = { version = "0.16.0", path = "core" }
 libp2p-core-derive = { version = "0.16.0", path = "misc/core-derive" }
-libp2p-secio = { version = "0.16.1", path = "protocols/secio", default-features = false }
+libp2p-secio = { version = "0.16.1", path = "protocols/secio", default-features = false, optional = true }
 libp2p-swarm = { version = "0.16.1", path = "swarm" }
-libp2p-uds = { version = "0.16.0", path = "transports/uds" }
-libp2p-wasm-ext = { version = "0.16.2", path = "transports/wasm-ext" }
-libp2p-yamux = { version = "0.16.2", path = "muxers/yamux" }
-libp2p-noise = { version = "0.16.2", path = "protocols/noise" }
+libp2p-uds = { version = "0.16.0", path = "transports/uds", optional = true }
+libp2p-wasm-ext = { version = "0.16.2", path = "transports/wasm-ext", optional = true }
+libp2p-yamux = { version = "0.16.2", path = "muxers/yamux", optional = true }
+libp2p-noise = { version = "0.16.2", path = "protocols/noise", optional = true }
 parking_lot = "0.10.0"
 pin-project = "0.4.6"
 smallvec = "1.0"
 wasm-timer = "0.2.4"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
-libp2p-deflate = { version = "0.16.0", path = "protocols/deflate" }
-libp2p-dns = { version = "0.16.0", path = "transports/dns" }
-libp2p-mdns = { version = "0.16.0", path = "protocols/mdns" }
-libp2p-tcp = { version = "0.16.0", path = "transports/tcp" }
+libp2p-deflate = { version = "0.16.0", path = "protocols/deflate", optional = true }
+libp2p-dns = { version = "0.16.0", path = "transports/dns", optional = true }
+libp2p-mdns = { version = "0.16.0", path = "protocols/mdns", optional = true }
+libp2p-tcp = { version = "0.16.0", path = "transports/tcp", optional = true }
 libp2p-websocket = { version = "0.16.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]

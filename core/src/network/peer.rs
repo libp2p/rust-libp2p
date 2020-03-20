@@ -42,26 +42,8 @@ use std::{
     error,
     fmt,
     hash::Hash,
-    num::NonZeroUsize,
 };
 use super::{Network, DialingOpts};
-
-/// The state of a (remote) peer as seen by the local peer
-/// through a [`Network`].
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PeerState {
-    /// The [`Network`] is connected to the peer, i.e. has at least one
-    /// established connection.
-    Connected,
-    /// We are currently trying to reach this peer.
-    Dialing {
-        /// Number of addresses we are trying to dial.
-        num_pending_addresses: NonZeroUsize,
-    },
-    /// The [`Network`] is disconnected from the peer, i.e. has no
-    /// established connection and no pending, outgoing connection.
-    Disconnected,
-}
 
 /// The possible representations of a peer in a [`Network`], as
 /// seen by the local node.
