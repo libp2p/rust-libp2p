@@ -39,7 +39,6 @@ use crate::{
         pool::Pool,
     },
     muxing::StreamMuxer,
-    network::peer::PeerState,
     transport::{Transport, TransportError},
 };
 use futures::prelude::*;
@@ -122,8 +121,8 @@ where
 
     /// A dialing attempt to an address of a peer failed.
     DialError {
-        /// New state of a peer.
-        new_state: PeerState,
+        /// The number of remaining dialing attempts.
+        attempts_remaining: usize,
 
         /// Id of the peer we were trying to dial.
         peer_id: TPeerId,
@@ -145,7 +144,7 @@ where
 
         /// The handler that was passed to `dial()`, if the
         /// connection failed before the handler was consumed.
-        handler: Option<THandler>,
+        handler: THandler,
     },
 
     /// An established connection produced an event.
@@ -219,9 +218,9 @@ where
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::DialError { new_state, peer_id, multiaddr, error } => {
+            NetworkEvent::DialError { attempts_remaining, peer_id, multiaddr, error } => {
                 f.debug_struct("DialError")
-                    .field("new_state", new_state)
+                    .field("attempts_remaining", attempts_remaining)
                     .field("peer_id", peer_id)
                     .field("multiaddr", multiaddr)
                     .field("error", error)
