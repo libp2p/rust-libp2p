@@ -23,7 +23,7 @@ env_logger = "0.7.1"
 parking_lot = "0.10.0"
 rcgen = "0.7.0"
 protobuf = "2.10.1"
-yasna = { version = "0.3.1", features = ["num-bigint"] }
+yasna = { version = "0.3.1" }
 ring = "0.16.11"
 webpki = "0.21.2"
 untrusted = "0.7.0"
