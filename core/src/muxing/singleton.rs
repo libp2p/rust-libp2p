@@ -67,7 +67,7 @@ where
     type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
-    fn poll_inbound(&self, _: &mut Context) -> Poll<Result<Self::Substream, io::Error>> {
+    fn poll_inbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, io::Error>> {
         match self.endpoint {
             Endpoint::Dialer => return Poll::Pending,
             Endpoint::Listener => {}
@@ -84,7 +84,7 @@ where
         OutboundSubstream {}
     }
 
-    fn poll_outbound(&self, _: &mut Context, _: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, io::Error>> {
+    fn poll_outbound(&self, _: &mut Context<'_>, _: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, io::Error>> {
         match self.endpoint {
             Endpoint::Listener => return Poll::Pending,
             Endpoint::Dialer => {}
@@ -100,7 +100,7 @@ where
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
     }
 
-    fn read_substream(&self, cx: &mut Context, _: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn read_substream(&self, cx: &mut Context<'_>, _: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         let res = AsyncRead::poll_read(Pin::new(&mut *self.inner.lock()), cx, buf);
         if let Poll::Ready(Ok(_)) = res {
             self.remote_acknowledged.store(true, Ordering::Release);
@@ -108,15 +108,15 @@ where
         res
     }
 
-    fn write_substream(&self, cx: &mut Context, _: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn write_substream(&self, cx: &mut Context<'_>, _: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         AsyncWrite::poll_write(Pin::new(&mut *self.inner.lock()), cx, buf)
     }
 
-    fn flush_substream(&self, cx: &mut Context, _: &mut Self::Substream) -> Poll<Result<(), io::Error>> {
+    fn flush_substream(&self, cx: &mut Context<'_>, _: &mut Self::Substream) -> Poll<Result<(), io::Error>> {
         AsyncWrite::poll_flush(Pin::new(&mut *self.inner.lock()), cx)
     }
 
-    fn shutdown_substream(&self, cx: &mut Context, _: &mut Self::Substream) -> Poll<Result<(), io::Error>> {
+    fn shutdown_substream(&self, cx: &mut Context<'_>, _: &mut Self::Substream) -> Poll<Result<(), io::Error>> {
         AsyncWrite::poll_close(Pin::new(&mut *self.inner.lock()), cx)
     }
 
@@ -127,12 +127,12 @@ where
         self.remote_acknowledged.load(Ordering::Acquire)
     }
 
-    fn close(&self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // The `StreamMuxer` trait requires that `close()` implies `flush_all()`.
         self.flush_all(cx)
     }
 
-    fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         AsyncWrite::poll_flush(Pin::new(&mut *self.inner.lock()), cx)
     }
 }

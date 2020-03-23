@@ -273,7 +273,7 @@ where
     /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
     /// has been sent to any node yet.
     #[must_use]
-    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
+    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context<'_>) -> Poll<()>
     where
         TInEvent: Clone
     {
@@ -316,7 +316,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,

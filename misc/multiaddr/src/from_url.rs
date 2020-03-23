@@ -121,7 +121,7 @@ pub enum FromUrlErr {
 }
 
 impl fmt::Display for FromUrlErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FromUrlErr::BadUrl => write!(f, "Bad URL"),
             FromUrlErr::UnsupportedScheme => write!(f, "Unrecognized URL scheme"),

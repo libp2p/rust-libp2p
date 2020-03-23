@@ -74,7 +74,7 @@ where
 {
     type Item = Result<ListenerEvent<MapFuture<X, F>, E>, E>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         match TryStream::try_poll_next(this.stream, cx) {
             Poll::Ready(Some(Ok(event))) => {
@@ -124,7 +124,7 @@ where
 {
     type Output = Result<B, T::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let item = match TryFuture::try_poll(this.inner, cx) {
             Poll::Pending => return Poll::Pending,

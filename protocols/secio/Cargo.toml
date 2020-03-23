@@ -50,7 +50,3 @@ async-std = "1.0"
 criterion = "0.3"
 libp2p-mplex = { version = "0.16.0", path = "../../muxers/mplex" }
 libp2p-tcp = { version = "0.16.0", path = "../../transports/tcp" }
-
-[[bench]]
-name = "bench"
-harness = false

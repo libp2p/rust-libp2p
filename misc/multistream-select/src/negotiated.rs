@@ -57,7 +57,7 @@ where
 {
     type Output = Result<Negotiated<TInner>, NegotiationError>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut io = self.inner.take().expect("NegotiatedFuture called after completion.");
         match Negotiated::poll(Pin::new(&mut io), cx) {
             Poll::Pending => {
@@ -88,7 +88,7 @@ impl<TInner> Negotiated<TInner> {
 
     /// Polls the `Negotiated` for completion.
     #[project]
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), NegotiationError>>
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), NegotiationError>>
     where
         TInner: AsyncRead + AsyncWrite + Unpin
     {
@@ -194,7 +194,7 @@ where
     TInner: AsyncRead + AsyncWrite + Unpin
 {
     #[project]
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
         loop {
@@ -230,7 +230,7 @@ where
     }*/
 
     #[project]
-    fn poll_read_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut])
+    fn poll_read_vectored(mut self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &mut [IoSliceMut<'_>])
         -> Poll<Result<usize, io::Error>>
     {
         loop {
@@ -262,7 +262,7 @@ where
     TInner: AsyncWrite + AsyncRead + Unpin
 {
     #[project]
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         #[project]
         match self.project().state.project() {
             State::Completed { mut io, remaining } => {
@@ -281,7 +281,7 @@ where
     }
 
     #[project]
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         #[project]
         match self.project().state.project() {
             State::Completed { mut io, remaining } => {
@@ -300,7 +300,7 @@ where
     }
 
     #[project]
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // Ensure all data has been flushed and expected negotiation messages
         // have been received.
         ready!(self.as_mut().poll(cx).map_err(Into::<io::Error>::into)?);
@@ -316,7 +316,7 @@ where
     }
 
     #[project]
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice])
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>])
         -> Poll<Result<usize, io::Error>>
     {
         #[project]
@@ -398,13 +398,13 @@ mod tests {
     struct Capped { buf: Vec<u8>, step: usize }
 
     impl AsyncRead for Capped {
-        fn poll_read(self: Pin<&mut Self>, _: &mut Context, _: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        fn poll_read(self: Pin<&mut Self>, _: &mut Context<'_>, _: &mut [u8]) -> Poll<Result<usize, io::Error>> {
             unreachable!()
         }
     }
 
     impl AsyncWrite for Capped {
-        fn poll_write(mut self: Pin<&mut Self>, _: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        fn poll_write(mut self: Pin<&mut Self>, _: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
             if self.buf.len() + buf.len() > self.buf.capacity() {
                 return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
             }
@@ -413,11 +413,11 @@ mod tests {
             Poll::Ready(Ok(n))
         }
 
-        fn poll_flush(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), io::Error>> {
+        fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
             Poll::Ready(Ok(()))
         }
 
-        fn poll_close(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), io::Error>> {
+        fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
             Poll::Ready(Ok(()))
         }
     }
