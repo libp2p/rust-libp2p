@@ -389,47 +389,22 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// is returned.
     pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<bool, ConnectionLimit> {
         let mut addrs = me.behaviour.addresses_of_peer(peer_id).into_iter();
-        match me.network.peer(peer_id.clone()) {
-            Peer::Disconnected(peer) => {
-                if let Some(first) = addrs.next() {
-                    let handler = me.behaviour.new_handler().into_node_handler_builder();
-                    match peer.connect(first, addrs, handler) {
-                        Ok(_) => return Ok(true),
-                        Err(error) => {
-                            log::debug!(
-                                "New dialing attempt to disconnected peer {:?} failed: {:?}.",
-                                peer_id, error);
-                            me.behaviour.inject_dial_failure(&peer_id);
-                            return Err(error)
-                        }
-                    }
+        let mut peer = me.network.peer(peer_id.clone());
+        if let Some(first) = addrs.next() {
+            let handler = me.behaviour.new_handler().into_node_handler_builder();
+            match peer.dial(first, addrs, handler) {
+                Ok(_) => return Ok(true),
+                Err(error) => {
+                    log::debug!(
+                        "New dialing attempt to peer {:?} failed: {:?}.",
+                        peer_id, error);
+                    me.behaviour.inject_dial_failure(&peer_id);
+                    return Err(error)
                 }
-                Ok(false)
-            },
-            Peer::Connected(peer) => {
-                if let Some(first) = addrs.next() {
-                    let handler = me.behaviour.new_handler().into_node_handler_builder();
-                    match peer.connect(first, addrs, handler) {
-                        Ok(_) => return Ok(true),
-                        Err(error) => {
-                            log::debug!(
-                                "New dialing attempt to connected peer {:?} failed: {:?}.",
-                                peer_id, error);
-                            me.behaviour.inject_dial_failure(&peer_id);
-                            return Err(error)
-                        }
-                    }
-                }
-                Ok(false)
-            }
-            Peer::Dialing(mut peer) => {
-                peer.connection().add_addresses(addrs);
-                Ok(false)
-            },
-            Peer::Local => {
-                Err(ConnectionLimit { current: 0, limit: 0 })
             }
         }
+
+        Ok(false)
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
