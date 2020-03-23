@@ -23,7 +23,7 @@
 //! This provides a central location for socket I/O, and logs all incoming and outgoing packets.
 
 use async_std::net::UdpSocket;
-use log::{trace, warn};
+use tracing::{trace, warn};
 use quinn_proto::Transmit;
 use std::{future::Future, io::Result, task::Context, task::Poll};
 
@@ -42,9 +42,9 @@ pub(crate) struct Socket {
 impl Socket {
     /// Transmit a packet if possible, with appropriate logging.
     ///
-    /// We ignore I/O errors.  If a packet cannot be sent, we assume it is a transient condition
-    /// and drop it.  If it is not, the connection will eventually time out.  This provides a very
-    /// high degree of robustness.  Connections will transparently resume after a transient network
+    /// We ignore I/O errors. If a packet cannot be sent, we assume it is a transient condition and
+    /// drop it. If it is not, the connection will eventually time out. This provides a very high
+    /// degree of robustness. Connections will transparently resume after a transient network
     /// outage, and problems that are specific to one peer will not effect other peers.
     pub(crate) fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
         match {
@@ -94,41 +94,39 @@ impl Socket {
             }
         }
     }
-}
 
-impl Socket {
-    pub(crate) fn new(socket: UdpSocket) -> Self {
-        Self { socket }
-    }
-}
-
-impl Pending {
-    pub(crate) fn send_packet(
-        &mut self,
+    pub(crate) fn send_packets(
+        &self,
         cx: &mut Context<'_>,
-        socket: &Socket,
+        pending: &mut Pending,
         source: &mut dyn FnMut() -> Option<Transmit>,
     ) -> Poll<Result<()>> {
-        if let Some(ref mut transmit) = self.pending {
+        if let Some(ref mut transmit) = pending.pending {
             trace!("trying to send packet!");
-            match socket.poll_send_to(cx, &transmit) {
+            match self.poll_send_to(cx, &transmit) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Ok(())) => {}
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
         }
-        self.pending = None;
+        pending.pending = None;
         while let Some(transmit) = source() {
             trace!("trying to send packet!");
-            match socket.poll_send_to(cx, &transmit) {
+            match self.poll_send_to(cx, &transmit) {
                 Poll::Ready(Ok(())) => {}
                 Poll::Pending => {
-                    self.pending = Some(transmit);
+                    pending.pending = Some(transmit);
                     return Poll::Pending;
                 }
                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
         }
         Poll::Ready(Ok(()))
+    }
+}
+
+impl Socket {
+    pub(crate) fn new(socket: UdpSocket) -> Self {
+        Self { socket }
     }
 }

@@ -199,8 +199,8 @@ impl EndpointInner {
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Error>> {
         let Self { inner, pending, .. } = self;
-        pending
-            .send_packet(cx, socket, &mut || inner.poll_transmit())
+        socket
+            .send_packets(cx, pending, &mut || inner.poll_transmit())
             .map_err(Error::IO)
     }
 }
@@ -336,10 +336,7 @@ impl Connection {
         socket: &socket::Socket,
     ) -> Result<(), Error> {
         let connection = &mut self.connection;
-        match self
-            .pending
-            .send_packet(cx, socket, &mut || connection.poll_transmit(now))
-        {
+        match socket.send_packets(cx, &mut self.pending, &mut || connection.poll_transmit(now)) {
             Poll::Ready(Ok(())) | Poll::Pending => Ok(()),
             Poll::Ready(Err(e)) => Err(Error::IO(e)),
         }
