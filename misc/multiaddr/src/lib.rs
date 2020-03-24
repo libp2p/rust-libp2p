@@ -6,6 +6,7 @@ mod protocol;
 mod onion_addr;
 mod errors;
 mod from_url;
+mod storage;
 
 use serde::{
     Deserialize,
@@ -18,12 +19,13 @@ use std::{
     convert::TryFrom,
     fmt,
     io,
+    hash,
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     result::Result as StdResult,
     str::FromStr,
-    sync::Arc
 };
+use storage::Storage;
 pub use self::errors::{Result, Error};
 pub use self::from_url::{FromUrlErr, from_url, from_url_lossy};
 pub use self::protocol::Protocol;
@@ -36,28 +38,23 @@ static_assertions::const_assert! {
 }
 
 /// Representation of a Multiaddr.
-#[derive(PartialEq, Eq, Clone, Hash)]
-pub struct Multiaddr { bytes: Arc<Vec<u8>> }
+#[derive(Clone)]
+pub struct Multiaddr { storage: Storage }
 
 impl Multiaddr {
     /// Create a new, empty multiaddress.
     pub fn empty() -> Self {
-        Self { bytes: Arc::new(Vec::new()) }
-    }
-
-    /// Create a new, empty multiaddress with the given capacity.
-    pub fn with_capacity(n: usize) -> Self {
-        Self { bytes: Arc::new(Vec::with_capacity(n)) }
+        Self { storage: Storage::from_slice(&[]) }
     }
 
     /// Return the length in bytes of this multiaddress.
     pub fn len(&self) -> usize {
-        self.bytes.len()
+        self.as_ref().len()
     }
 
     /// Return a copy of this [`Multiaddr`]'s byte representation.
     pub fn to_vec(&self) -> Vec<u8> {
-        Vec::from(&self.bytes[..])
+        self.as_ref().to_vec()
     }
 
     /// Adds an already-parsed address component to the end of this multiaddr.
@@ -73,9 +70,10 @@ impl Multiaddr {
     /// ```
     ///
     pub fn push(&mut self, p: Protocol<'_>) {
-        let mut w = io::Cursor::<&mut Vec<u8>>::new(Arc::make_mut(&mut self.bytes));
+        let mut w = io::Cursor::new(self.to_vec());
         w.set_position(w.get_ref().len() as u64);
-        p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.")
+        p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.");
+        self.storage = Storage::from_slice(&w.into_inner());
     }
 
     /// Pops the last `Protocol` of this multiaddr, or `None` if the multiaddr is empty.
@@ -89,7 +87,7 @@ impl Multiaddr {
     /// ```
     ///
     pub fn pop<'a>(&mut self) -> Option<Protocol<'a>> {
-        let mut slice = &self.bytes[..]; // the remaining multiaddr slice
+        let mut slice = self.as_ref(); // the remaining multiaddr slice
         if slice.is_empty() {
             return None
         }
@@ -100,16 +98,17 @@ impl Multiaddr {
             }
             slice = s
         };
-        let remaining_len = self.bytes.len() - slice.len();
-        Arc::make_mut(&mut self.bytes).truncate(remaining_len);
+        let remaining_len = self.as_ref().len() - slice.len();
+        self.storage = Storage::from_slice(&self.as_ref()[..remaining_len]);
         Some(protocol)
     }
 
     /// Like [`Multiaddr::push`] but consumes `self`.
     pub fn with(mut self, p: Protocol<'_>) -> Self {
-        let mut w = io::Cursor::<&mut Vec<u8>>::new(Arc::make_mut(&mut self.bytes));
+        let mut w = io::Cursor::new(self.to_vec());
         w.set_position(w.get_ref().len() as u64);
         p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.");
+        self.storage = Storage::from_slice(&w.into_inner());
         self
     }
 
@@ -130,7 +129,7 @@ impl Multiaddr {
     /// ```
     ///
     pub fn iter(&self) -> Iter<'_> {
-        Iter(&self.bytes)
+        Iter(&self.as_ref())
     }
 
     /// Replace a [`Protocol`] at some position in this `Multiaddr`.
@@ -145,7 +144,7 @@ impl Multiaddr {
     where
         F: FnOnce(&Protocol) -> Option<Protocol<'a>>
     {
-        let mut address = Multiaddr::with_capacity(self.len());
+        let mut address = Multiaddr::empty();
         let mut fun = Some(by);
         let mut replaced = false;
 
@@ -192,9 +191,23 @@ impl fmt::Display for Multiaddr {
     }
 }
 
+impl PartialEq for Multiaddr {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+
+impl Eq for Multiaddr {}
+
+impl hash::Hash for Multiaddr {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.as_ref().hash(state);
+    }
+}
+
 impl AsRef<[u8]> for Multiaddr {
     fn as_ref(&self) -> &[u8] {
-        self.bytes.as_ref()
+        self.storage.bytes()
     }
 }
 
@@ -203,7 +216,7 @@ impl<'a> IntoIterator for &'a Multiaddr {
     type IntoIter = Iter<'a>;
 
     fn into_iter(self) -> Iter<'a> {
-        Iter(&self.bytes)
+        Iter(&self.as_ref())
     }
 }
 
@@ -216,7 +229,7 @@ impl<'a> FromIterator<Protocol<'a>> for Multiaddr {
         for cmp in iter {
             cmp.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
         }
-        Multiaddr { bytes: Arc::new(writer) }
+        Multiaddr { storage: Storage::from_slice(&writer) }
     }
 }
 
@@ -237,7 +250,7 @@ impl FromStr for Multiaddr {
             p.write_bytes(&mut writer).expect("Writing to a `Vec` never fails.");
         }
 
-        Ok(Multiaddr { bytes: Arc::new(writer) })
+        Ok(Multiaddr { storage: Storage::from_slice(&writer) })
     }
 }
 
@@ -264,7 +277,7 @@ impl<'a> From<Protocol<'a>> for Multiaddr {
     fn from(p: Protocol<'a>) -> Multiaddr {
         let mut w = Vec::new();
         p.write_bytes(&mut w).expect("Writing to a `Vec` never fails.");
-        Multiaddr { bytes: Arc::new(w) }
+        Multiaddr { storage: Storage::from_slice(&w) }
     }
 }
 
@@ -299,7 +312,7 @@ impl TryFrom<Vec<u8>> for Multiaddr {
             let (_, s) = Protocol::from_bytes(slice)?;
             slice = s
         }
-        Ok(Multiaddr { bytes: Arc::new(v) })
+        Ok(Multiaddr { storage: Storage::from_slice(&v) })
     }
 }
 
