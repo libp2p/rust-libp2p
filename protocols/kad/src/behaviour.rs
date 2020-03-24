@@ -48,6 +48,7 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
+use trust_graph::TrustGraph;
 
 // TODO: how Kademlia knows hers PeerId? It's stored in KBucketsTable
 // TODO: add there hers PublicKey, and exchange it on the network
@@ -87,6 +88,8 @@ pub struct Kademlia<TStore> {
 
     /// The record storage.
     store: TStore,
+
+    trust: TrustGraph,
 }
 
 /// The configuration for the `Kademlia` behaviour.
@@ -229,8 +232,8 @@ where
     for<'a> TStore: RecordStore<'a>
 {
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn new(kp: Keypair, id: PeerId, store: TStore) -> Self {
-        Self::with_config(kp, id, store, Default::default())
+    pub fn new(kp: Keypair, id: PeerId, store: TStore, trust: TrustGraph) -> Self {
+        Self::with_config(kp, id, store, Default::default(), trust)
     }
 
     /// Get the protocol name of this kademlia instance.
@@ -241,7 +244,7 @@ where
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn with_config(kp: Keypair, id: PeerId, store: TStore, config: KademliaConfig) -> Self {
+    pub fn with_config(kp: Keypair, id: PeerId, store: TStore, config: KademliaConfig, trust: TrustGraph) -> Self {
         let local_key = kbucket::Key::new(id.clone());
 
         let put_record_job = config
@@ -269,6 +272,7 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
+            trust
         }
     }
 
@@ -318,7 +322,7 @@ where
                     } else {
                         NodeStatus::Disconnected
                     };
-                Self::insert_new_peer(entry, contact, status, &self.connected_peers);
+                Self::insert_new_peer(entry, contact, status, &self.connected_peers, &self.trust);
             },
             kbucket::Entry::SelfEntry => {},
         }
@@ -632,7 +636,7 @@ where
                 // Only connected nodes with a known address are newly inserted.
                 if new_status == NodeStatus::Connected {
                     if let Some(contact) = contact {
-                        Self::insert_new_peer(entry, contact, new_status, &self.connected_peers)
+                        Self::insert_new_peer(entry, contact, new_status, &self.connected_peers, &self.trust)
                             .map(|e|
                                 self.queued_events.push_back(e)
                             );
@@ -652,11 +656,12 @@ where
         contact: Contact,
         status: NodeStatus,
         connected_peers: &FnvHashSet<PeerId>,
+        trust: &TrustGraph
     ) -> Option<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>
     {
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
-        let weight = 0; // unimplemented!("TODO: Call trustgraph here"); // TODO: Call trustgraph here
+        let weight = trust.weight(contact.public_key.clone()).unwrap_or(0);
         match entry.insert(contact, status, weight) {
             kbucket::InsertResult::Inserted => {
                 Some(
