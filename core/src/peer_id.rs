@@ -73,7 +73,7 @@ impl PeerId {
         let (hash_algorithm, canonical_algorithm) = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             (Code::Identity, Some(Code::Sha2_256))
         } else {
-            (Code::Sha2_256, None);
+            (Code::Sha2_256, None)
         };
 
         let canonical = canonical_algorithm.map(|alg|
