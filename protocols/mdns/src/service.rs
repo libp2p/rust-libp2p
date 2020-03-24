@@ -127,7 +127,7 @@ impl MdnsService {
         Self::new_inner(false)
     }
 
-    /// Same as `new`, but we don't send automatically send queries on the network.
+    /// Same as `new`, but we don't automatically send queries on the network.
     pub fn silent() -> io::Result<MdnsService> {
         Self::new_inner(true)
     }
