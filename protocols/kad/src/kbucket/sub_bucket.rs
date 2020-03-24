@@ -185,7 +185,7 @@ impl<Node> SubBucket<Node> {
         }
     }
 
-    fn evict_node(&mut self, position: Position) -> Option<Node<TKey, TVal>> {
+    pub fn evict_node(&mut self, position: Position) -> Option<Node> {
         match self.status(position) {
             NodeStatus::Connected => self.change_connected_pos(ChangePosition::RemoveConnected),
             NodeStatus::Disconnected => {
@@ -195,11 +195,15 @@ impl<Node> SubBucket<Node> {
         self.nodes.pop_at(position.0)
     }
 
-    pub fn pop_node(&mut self) -> Option<Node<TKey, TVal>> {
+    pub fn pop_node(&mut self) -> Option<Node> {
         self.evict_node(Position(0))
     }
 
-    fn is_least_recently_connected(&self, pos: Position) -> bool {
+    pub fn least_recently_connected(&self) -> Option<&Node> {
+        self.nodes.get(0)
+    }
+
+    pub fn is_least_recently_connected(&self, pos: Position) -> bool {
         pos.0 == 0
     }
 

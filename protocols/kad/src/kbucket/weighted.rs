@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-use crate::kbucket::{AppliedPending, InsertResult, Node, NodeStatus, PendingNode, SubBucket};
+use crate::kbucket::{
+    AppliedPending, InsertResult, Node, NodeStatus, PendingNode, Position, SubBucket,
+};
 use crate::W_VALUE;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedPendingNode<TKey, TVal> {
     /// The pending node to insert.
     pub node: WeightedNode<TKey, TVal>,
@@ -32,6 +35,7 @@ pub struct WeightedPendingNode<TKey, TVal> {
     pub replace: Instant,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedNode<TKey, TVal> {
     /// The key of the node, identifying the peer.
     pub key: TKey,
@@ -39,6 +43,21 @@ pub struct WeightedNode<TKey, TVal> {
     pub value: TVal,
     pub weight: u32,
     pub last_contact_time: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WeightedPosition {
+    pub weight: u32,
+    pub position: usize,
+}
+
+impl WeightedPosition {
+    pub fn new(weight: u32, position: Position) -> Self {
+        Self {
+            weight,
+            position: position.0,
+        }
+    }
 }
 
 impl<TKey, TVal> Into<Node<TKey, TVal>> for WeightedNode<TKey, TVal> {
@@ -124,14 +143,28 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         self.map.keys().min().cloned()
     }
 
-    // TODO: we can optimize: search through only top nodes in each bucket
-    fn least_recent(&self, weight_bound: u32) -> Option<WeightedNode<TKey, TVal>> {
+    fn least_recent(&self, weight_bound: u32) -> Option<&WeightedNode<TKey, TVal>> {
+        // Search through top nodes in each bucket (assuming they are sorted by contact time),
+        // and then take their top element
         self.map
             .iter()
             .filter(|(&&key, _)| key <= weight_bound)
-            .map(|(_, bucket)| bucket.iter())
-            .flatten()
-            .min_by(|(a, b)| Ord::cmp(a.last_contact_time, b.last_contact_time))
+            .min_by(|((_, bucket_a), (_, bucket_b))| {
+                Ord::cmp(
+                    bucket_a
+                        .least_recently_connected()
+                        .map(|n| n.last_contact_time),
+                    bucket_b
+                        .least_recently_connected()
+                        .map(|n| n.last_contact_time),
+                )
+            })
+            .and_then(|(_, bucket)| bucket.least_recently_connected())
+    }
+
+    fn evict_node(&mut self, position: WeightedPosition) -> Option<WeightedNode<TKey, TVal>> {
+        let mut bucket = self.get_bucket_mut(position.weight);
+        bucket.evict_node(Position(position.position)) // Position.position.Position(position.Position)
     }
 
     fn pop_node(&mut self, weight_bound: u32) -> Option<WeightedNode<TKey, TVal>> {
@@ -141,6 +174,20 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         } else {
             None // TODO: what it means if there's no least_recent node?
         }
+    }
+
+    fn position(&self, key: TKey) -> Option<WeightedPosition> {
+        self.map.iter().find_map(|(weight, bucket)| {
+            bucket
+                .position(key)
+                .map(|pos| WeightedPosition(weight, pos))
+        })
+    }
+
+    fn is_least_recently_connected(&self, node: &WeightedNode<TKey, TVal>) -> bool {
+        let least_recent = self.least_recent(node.weight);
+
+        least_recent.map_or(false, |l_r| l_r == node) // TODO: is it enough to compare references here?
     }
 
     pub fn insert(
@@ -213,5 +260,29 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
                     None
                 }
             })
+    }
+
+    pub fn update(&mut self, key: &TKey, new_status: NodeStatus) {
+        // Remove the node from its current position and then reinsert it
+        // with the desired status, which puts it at the end of either the
+        // prefix list of disconnected nodes or the suffix list of connected
+        // nodes (i.e. most-recently disconnected or most-recently connected,
+        // respectively).
+        if let Some(pos) = self.position(key) {
+            // Remove the node from its current position.
+            let node = self
+                .evict_node(pos)
+                .expect("position MUST have been correct");
+            // If the least-recently connected node re-establishes its
+            // connected status, drop the pending node.
+            if self.is_least_recently_connected(&node) && new_status == NodeStatus::Connected {
+                self.remove_pending();
+            }
+            // Reinsert the node with the desired status.
+            match self.insert(node, new_status) {
+                InsertResult::Inserted => {}
+                _ => unreachable!("The node is removed before being (re)inserted."),
+            }
+        }
     }
 }

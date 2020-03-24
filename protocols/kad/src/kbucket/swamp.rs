@@ -106,4 +106,29 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
                 }
             })
     }
+
+    pub fn update(&mut self, key: &TKey, new_status: NodeStatus) {
+        // Remove the node from its current position and then reinsert it
+        // with the desired status, which puts it at the end of either the
+        // prefix list of disconnected nodes or the suffix list of connected
+        // nodes (i.e. most-recently disconnected or most-recently connected,
+        // respectively).
+        if let Some(pos) = self.bucket.position(key) {
+            // Remove the node from its current position.
+            let node = self
+                .bucket
+                .evict_node(pos)
+                .expect("position MUST have been correct");
+            // If the least-recently connected node re-establishes its
+            // connected status, drop the pending node.
+            if self.bucket.is_least_recently_connected(pos) && new_status == NodeStatus::Connected {
+                self.remove_pending();
+            }
+            // Reinsert the node with the desired status.
+            match self.insert(node, new_status) {
+                InsertResult::Inserted => {}
+                _ => unreachable!("The node is removed before being (re)inserted."),
+            }
+        }
+    }
 }
