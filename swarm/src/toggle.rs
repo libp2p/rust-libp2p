@@ -76,15 +76,27 @@ where
         self.inner.as_mut().map(|b| b.addresses_of_peer(peer_id)).unwrap_or_else(Vec::new)
     }
 
-    fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
+    fn inject_connected(&mut self, peer_id: &PeerId) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connected(peer_id, endpoint)
+            inner.inject_connected(peer_id)
         }
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId, endpoint: ConnectedPoint) {
+    fn inject_disconnected(&mut self, peer_id: &PeerId) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_disconnected(peer_id, endpoint)
+            inner.inject_disconnected(peer_id)
+        }
+    }
+
+    fn inject_connection_established(&mut self, peer_id: &PeerId, connection: &ConnectionId, endpoint: &ConnectedPoint) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_connection_established(peer_id, connection, endpoint)
+        }
+    }
+
+    fn inject_connection_closed(&mut self, peer_id: &PeerId, connection: &ConnectionId, endpoint: &ConnectedPoint) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_connection_closed(peer_id, connection, endpoint)
         }
     }
 

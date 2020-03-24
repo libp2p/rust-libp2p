@@ -295,7 +295,7 @@ where
     /// Gets the configured limit on pending incoming connections,
     /// i.e. concurrent incoming connection attempts.
     pub fn incoming_limit(&self) -> Option<usize> {
-        self.pool.limits().max_pending_incoming
+        self.pool.limits().max_incoming
     }
 
     /// The total number of established connections in the `Network`.
@@ -391,8 +391,9 @@ where
                 }
                 event
             }
-            Poll::Ready(PoolEvent::ConnectionError { connected, error, num_established, .. }) => {
+            Poll::Ready(PoolEvent::ConnectionError { id, connected, error, num_established, .. }) => {
                 NetworkEvent::ConnectionError {
+                    id,
                     connected,
                     error,
                     num_established,
@@ -621,17 +622,29 @@ impl NetworkConfig {
         self
     }
 
+    /// Shortcut for calling `executor` with an object that calls the given closure.
+    pub fn set_executor_fn(mut self, f: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + 'static) -> Self {
+        struct SpawnImpl<F>(F);
+        impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
+            fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+                (self.0)(f)
+            }
+        }
+        self.set_executor(Box::new(SpawnImpl(f)));
+        self
+    }
+
     pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
         self.executor.as_ref()
     }
 
-    pub fn set_pending_incoming_limit(&mut self, n: usize) -> &mut Self {
-        self.pool_limits.max_pending_incoming = Some(n);
+    pub fn set_incoming_limit(&mut self, n: usize) -> &mut Self {
+        self.pool_limits.max_incoming = Some(n);
         self
     }
 
-    pub fn set_pending_outgoing_limit(&mut self, n: usize) -> &mut Self {
-        self.pool_limits.max_pending_outgoing = Some(n);
+    pub fn set_outgoing_limit(&mut self, n: usize) -> &mut Self {
+        self.pool_limits.max_outgoing = Some(n);
         self
     }
 

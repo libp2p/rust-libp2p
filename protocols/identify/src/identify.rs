@@ -97,16 +97,19 @@ impl NetworkBehaviour for Identify {
         Vec::new()
     }
 
-    fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
-        let observed = match endpoint {
-            ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
-        };
-
-        self.observed_addresses.insert(peer_id, observed);
+    fn inject_connected(&mut self, _: &PeerId) {
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId, _: ConnectedPoint) {
+    fn inject_connection_established(&mut self, peer_id: &PeerId, _: &ConnectionId, endpoint: &ConnectedPoint) {
+        let observed = match endpoint {
+            ConnectedPoint::Dialer { address } => address.clone(),
+            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
+        };
+
+        self.observed_addresses.insert(peer_id.clone(), observed); // TODO: Multiple
+    }
+
+    fn inject_disconnected(&mut self, peer_id: &PeerId) {
         self.observed_addresses.remove(peer_id);
     }
 
