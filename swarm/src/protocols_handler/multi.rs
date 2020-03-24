@@ -38,7 +38,14 @@ use crate::upgrade::{
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{ConnectedPoint, PeerId, upgrade::ProtocolName};
 use rand::Rng;
-use std::{collections::HashMap, fmt, hash::Hash, iter::{self, FromIterator}, task::{Context, Poll}};
+use std::{
+    collections::{HashMap, HashSet},
+    error,
+    fmt,
+    hash::Hash,
+    iter::{self, FromIterator},
+    task::{Context, Poll}
+};
 
 /// A [`ProtocolsHandler`] for multiple other `ProtocolsHandler`s.
 #[derive(Clone)]
@@ -64,7 +71,9 @@ where
     H: ProtocolsHandler
 {
     /// Create and populate a `MultiHandler` from the given handler iterator.
-    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtoname>
+    ///
+    /// It is an error for any two protocols handlers to share the same protocol name.
+    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
     {
@@ -76,7 +85,7 @@ where
 
 impl<K, H> ProtocolsHandler for MultiHandler<K, H>
 where
-    K: Clone + std::fmt::Debug + Hash + Eq + Send + 'static,
+    K: Clone + Hash + Eq + Send + 'static,
     H: ProtocolsHandler,
     H::InboundProtocol: InboundUpgradeSend,
     H::OutboundProtocol: OutboundUpgradeSend
@@ -103,7 +112,7 @@ where
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_fully_negotiated_outbound(protocol, arg)
         } else {
-            log::error!("inject_fully_negotiated_outbound: no handler for key {:?}", key)
+            log::error!("inject_fully_negotiated_outbound: no handler for key")
         }
     }
 
@@ -114,7 +123,7 @@ where
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_fully_negotiated_inbound(arg)
         } else {
-            log::error!("inject_fully_negotiated_inbound: no handler for key {:?}", key)
+            log::error!("inject_fully_negotiated_inbound: no handler for key")
         }
     }
 
@@ -122,7 +131,7 @@ where
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_event(event)
         } else {
-            log::error!("inject_event: no handler for key {:?}", key)
+            log::error!("inject_event: no handler for key")
         }
     }
 
@@ -134,7 +143,7 @@ where
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_dial_upgrade_error(arg, error)
         } else {
-            log::error!("inject_dial_upgrade_error: no handler for protocol {:?}", key)
+            log::error!("inject_dial_upgrade_error: no handler for protocol")
         }
     }
 
@@ -193,7 +202,10 @@ where
     K: Hash + Eq,
     H: IntoProtocolsHandler
 {
-    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtoname>
+    /// Create and populate an `IntoMultiHandler` from the given iterator.
+    ///
+    /// It is an error for any two protocols handlers to share the same protocol name.
+    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>
     {
@@ -205,7 +217,7 @@ where
 
 impl<K, H> IntoProtocolsHandler for IntoMultiHandler<K, H>
 where
-    K: Clone + fmt::Debug + Eq + Hash + Send + 'static,
+    K: Clone + Eq + Hash + Send + 'static,
     H: IntoProtocolsHandler
 {
     type Handler = MultiHandler<K, H::Handler>;
@@ -325,17 +337,17 @@ where
 }
 
 /// Check that no two protocol names are equal.
-fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtoname>
+fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtonameError>
 where
     I: Iterator<Item = T>,
     T: UpgradeInfoSend
 {
-    let mut set = std::collections::HashSet::new();
+    let mut set = HashSet::new();
     for infos in iter {
         for i in infos.protocol_info() {
             let v = Vec::from(i.protocol_name());
             if set.contains(&v) {
-                return Err(DuplicateProtoname(v))
+                return Err(DuplicateProtonameError(v))
             } else {
                 set.insert(v);
             }
@@ -346,9 +358,16 @@ where
 
 /// It is an error if two handlers share the same protocol name.
 #[derive(Debug, Clone)]
-pub struct DuplicateProtoname(pub Vec<u8>);
+pub struct DuplicateProtonameError(Vec<u8>);
 
-impl fmt::Display for DuplicateProtoname {
+impl DuplicateProtonameError {
+    /// The protocol name bytes that occured in more than one handler.
+    pub fn protocol_name(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl fmt::Display for DuplicateProtonameError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Ok(s) = std::str::from_utf8(&self.0) {
             write!(f, "duplicate protocol name: {}", s)
@@ -358,5 +377,5 @@ impl fmt::Display for DuplicateProtoname {
     }
 }
 
-impl std::error::Error for DuplicateProtoname {}
+impl error::Error for DuplicateProtonameError {}
 
