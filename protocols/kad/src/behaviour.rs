@@ -570,7 +570,7 @@ where
             .filter_map(move |p|
                 if &p.provider != source {
                     let key = kbucket::Key::new(p.provider.clone());
-                    kbuckets.entry(&key).view().map(|e| KadPeer::from(e.to_owned()))
+                    kbuckets.entry(&key).view().map(|e| KadPeer::from(e))
                 } else {
                     None
                 })
@@ -656,7 +656,8 @@ where
     {
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
-        match entry.insert(contact, status) {
+        let weight = unimplemented!("TODO: Call trustgraph here"); // TODO: Call trustgraph here
+        match entry.insert(contact, status, weight) {
             kbucket::InsertResult::Inserted => {
                 Some(
                     NetworkBehaviourAction::GenerateEvent(
@@ -1399,7 +1400,7 @@ where
 
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
-                let kbucket::Node { key, value } = entry.inserted;
+                let kbucket::Node { key, value, .. } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
                     peer: key.into_preimage(),
                     addresses: value.into(),
@@ -1769,6 +1770,21 @@ impl AddProviderError {
         match self {
             AddProviderError::Timeout { key, .. } => key,
             AddProviderError::LocalStorageError { key, .. } => key,
+        }
+    }
+}
+
+impl From<kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>> for KadPeer {
+    fn from(e: kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>) -> KadPeer {
+        let Contact { addresses, public_key } = e.node.value;
+        KadPeer {
+            public_key: public_key.clone(),
+            node_id: e.node.key.clone().into_preimage(),
+            multiaddrs: addresses.clone().into_vec(),
+            connection_ty: match e.status {
+                NodeStatus::Connected => KadConnectionType::Connected,
+                NodeStatus::Disconnected => KadConnectionType::NotConnected
+            }
         }
     }
 }

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-use crate::kbucket::InsertResult;
 use crate::K_VALUE;
 use arrayvec::ArrayVec;
 use std::time::Instant;
@@ -93,10 +92,9 @@ pub struct Node<TKey, TVal> {
 pub struct Position(pub usize);
 
 #[derive(Debug, Clone)]
-pub struct SubBucket<TKey, TVal, Node> {
+pub struct SubBucket<Node> {
     pub nodes: ArrayVec<[Node; K_VALUE.get()]>,
     pub first_connected_pos: Option<usize>,
-    // pub pending: Option<PendingNode<TKey, TVal>>,
 }
 
 impl<Node> SubBucket<Node> {
@@ -220,10 +218,10 @@ impl<Node> SubBucket<Node> {
     }
 
     /// Gets the position of an node in the bucket.
-    pub fn position(&self, key: &TKey) -> Option<Position> {
-        self.nodes
-            .iter()
-            .position(|p| p.key.as_ref() == key.as_ref())
-            .map(Position)
+    pub fn position<P>(&self, pred: P) -> Option<Position>
+    where
+        P: Fn(&Node) -> bool,
+    {
+        self.nodes.iter().position(pred).map(Position)
     }
 }

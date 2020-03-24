@@ -14,19 +14,28 @@
  * limitations under the License.
  */
 
-use crate::kbucket::{AppliedPending, InsertResult, Node, NodeStatus, PendingNode, SubBucket};
-use std::time::Instant;
+use crate::kbucket::{
+    AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, PendingNode, SubBucket,
+};
+use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone)]
 pub struct Swamp<TKey, TVal> {
     bucket: SubBucket<Node<TKey, TVal>>,
     pending: Option<PendingNode<TKey, TVal>>,
+    pending_timeout: Duration,
 }
 
-impl<TKey, TVal> Swamp<TKey, TVal> {
-    pub fn new() -> Self {
+impl<TKey, TVal> Swamp<TKey, TVal>
+where
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone,
+{
+    pub fn new(pending_timeout: Duration) -> Self {
         Self {
             bucket: SubBucket::new(),
             pending: None,
+            pending_timeout,
         }
     }
 
@@ -60,7 +69,7 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
     pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
         match status {
             NodeStatus::Connected => {
-                if self.bucket.is_full() {
+                if self.is_full() {
                     // TODO: use pending_active and call apply_pending?
                     if self.bucket.all_nodes_connected() || self.pending_exists() {
                         return InsertResult::Full;
@@ -70,11 +79,15 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
                             status: NodeStatus::Connected,
                             replace: Instant::now() + self.pending_timeout,
                         });
+                        let least_recent = self
+                            .bucket
+                            .least_recently_connected()
+                            .expect("bucket MUST be full here");
                         return InsertResult::Pending {
                             // Schedule a dial-up to check if the node is reachable
                             // NOTE: nodes[0] is disconnected (see all_nodes_connected check above)
                             //  and the least recently connected
-                            disconnected: self.nodes[0].key.clone(),
+                            disconnected: least_recent.key.clone(),
                         };
                     }
                 }
@@ -82,7 +95,7 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
                 InsertResult::Inserted
             }
             NodeStatus::Disconnected => {
-                if self.bucket.is_full() {
+                if self.is_full() {
                     return InsertResult::Full;
                 }
                 self.bucket.insert_disconnected_node(node);
@@ -96,24 +109,22 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
             return None;
         }
 
-        self.swamp_pending
-            .take()
-            .map(|PendingNode { node, status, .. }| {
-                let evicted = if self.bucket.is_full() {
-                    self.bucket.pop_node()
-                } else {
-                    None
-                };
+        self.pending.take().map(|PendingNode { node, status, .. }| {
+            let evicted = if self.is_full() {
+                self.bucket.pop_node()
+            } else {
+                None
+            };
 
-                if let InsertResult::Inserted = self.insert(node.clone(), status) {
-                    AppliedPending {
-                        inserted: node,
-                        evicted,
-                    }
-                } else {
-                    unreachable!("Bucket is not full, we just evicted a node.")
+            if let InsertResult::Inserted = self.insert(node.clone(), status) {
+                AppliedPending {
+                    inserted: node,
+                    evicted,
                 }
-            })
+            } else {
+                unreachable!("Bucket is not full, we just evicted a node.")
+            }
+        })
     }
 
     pub fn update(&mut self, key: &TKey, new_status: NodeStatus) -> bool {
@@ -122,7 +133,10 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
         // prefix list of disconnected nodes or the suffix list of connected
         // nodes (i.e. most-recently disconnected or most-recently connected,
         // respectively).
-        if let Some(pos) = self.bucket.position(key) {
+        if let Some(pos) = self
+            .bucket
+            .position(|node| node.key.as_ref() == key.as_ref())
+        {
             // Remove the node from its current position.
             let node = self
                 .bucket
@@ -143,5 +157,23 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
         } else {
             false
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
+        self.bucket.iter()
+    }
+
+    pub fn num_entries(&self) -> usize {
+        self.bucket.nodes.len()
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.bucket.is_full()
+    }
+
+    pub fn status(&self, key: &TKey) -> Option<NodeStatus> {
+        self.bucket
+            .position(|node| node.key.as_ref() == key.as_ref())
+            .map(|p| self.bucket.status(p))
     }
 }

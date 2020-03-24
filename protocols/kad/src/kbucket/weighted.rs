@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-use crate::kbucket::bucket::InsertResult::Inserted;
 use crate::kbucket::{
-    AppliedPending, InsertResult, Node, NodeStatus, PendingNode, Position, SubBucket,
+    AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, Position, SubBucket,
 };
 use crate::W_VALUE;
-use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -38,11 +35,7 @@ pub struct WeightedPendingNode<TKey, TVal> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedNode<TKey, TVal> {
-    /// The key of the node, identifying the peer.
-    pub key: TKey,
-    /// The associated value.
-    pub value: TVal,
-    pub weight: u32,
+    pub inner: Node<TKey, TVal>,
     pub last_contact_time: Option<Instant>,
 }
 
@@ -61,20 +54,14 @@ impl<TKey, TVal> WeightedNode<TKey, TVal> {
 
 impl<TKey, TVal> Into<Node<TKey, TVal>> for WeightedNode<TKey, TVal> {
     fn into(self) -> Node<TKey, TVal> {
-        Node {
-            key: self.key,
-            value: self.value,
-            weight: self.weight,
-        }
+        self.inner
     }
 }
 
 impl<TKey, TVal> From<Node<TKey, TVal>> for WeightedNode<TKey, TVal> {
     fn from(node: Node<TKey, TVal>) -> Self {
         Self {
-            key: node.key,
-            value: node.value,
-            weight: node.weight,
+            inner: node,
             last_contact_time: None,
         }
     }
@@ -95,6 +82,7 @@ impl WeightedPosition {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Weighted<TKey, TVal> {
     map: HashMap<u32, SubBucket<WeightedNode<TKey, TVal>>>,
     pending: Option<WeightedPendingNode<TKey, TVal>>,
@@ -102,7 +90,11 @@ pub struct Weighted<TKey, TVal> {
     pending_timeout: Duration,
 }
 
-impl<TKey, TVal> Weighted<TKey, TVal> {
+impl<TKey, TVal> Weighted<TKey, TVal>
+where
+    TKey: Clone + AsRef<KeyBytes>,
+    TVal: Clone,
+{
     pub fn new(pending_timeout: Duration) -> Self {
         Self {
             map: HashMap::new(),
@@ -115,7 +107,7 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
     pub fn all_nodes_connected(&self, weight: u32) -> bool {
         self.map
             .get(&weight)
-            .map_or_else(false, |bucket| bucket.all_nodes_connected())
+            .map_or(false, |bucket| bucket.all_nodes_connected())
     }
 
     pub fn set_pending(&mut self, node: WeightedPendingNode<TKey, TVal>) {
@@ -145,7 +137,7 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         self.pending.is_some()
     }
 
-    fn num_entries(&self) -> usize {
+    pub fn num_entries(&self) -> usize {
         self.map.values().map(|bucket| bucket.nodes.len()).sum()
     }
 
@@ -154,22 +146,28 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
     }
 
     fn get_bucket_mut(&mut self, weight: u32) -> &mut SubBucket<WeightedNode<TKey, TVal>> {
-        match self.map.entry(weight) {
-            Entry::Occupied(mut e) => e.get_mut(),
-            Entry::Vacant(e) => {
-                let mut bucket = SubBucket::new();
-                bucket.append_connected_node(node);
-                bucket
-            }
-        }
+        // self.map.get_mut(&weight).unwrap_or({
+        //     let bucket = SubBucket::new();
+        //     self.map.
+        // })
+
+        self.map.entry(weight).or_insert(SubBucket::new())
+
+        // match self.map.entry(weight) {
+        //     Entry::Occupied(mut e) => e.get_mut(),
+        //     Entry::Vacant(e) => {
+        //         let mut bucket = SubBucket::new();
+        //         e.insert(bucket)
+        //     }
+        // }
     }
 
     fn append_connected_node(&mut self, node: WeightedNode<TKey, TVal>) {
-        self.get_bucket_mut(node.weight).append_connected_node(node)
+        self.get_bucket_mut(node.inner.weight).append_connected_node(node)
     }
 
     fn insert_disconnected_node(&mut self, node: WeightedNode<TKey, TVal>) {
-        self.get_bucket_mut(node.weight)
+        self.get_bucket_mut(node.inner.weight)
             .insert_disconnected_node(node)
     }
 
@@ -182,14 +180,14 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         // and then take their top element
         self.map
             .iter()
-            .filter(|(&&weight, bucket)| weight <= weight_bound && !bucket.nodes.is_empty())
-            .min_by(|((weight_a, bucket_a), (weight_b, bucket_b))| {
+            .filter(|(weight, bucket)| **weight <= weight_bound && !bucket.nodes.is_empty())
+            .min_by(|(weight_a, bucket_a), (weight_b, bucket_b)| {
                 // First compare by weight, then compare by recency
                 Ord::cmp(weight_a, weight_b).then(Ord::cmp(
-                    bucket_a
+                    &bucket_a
                         .least_recently_connected()
                         .and_then(|n| n.last_contact_time),
-                    bucket_b
+                    &bucket_b
                         .least_recently_connected()
                         .and_then(|n| n.last_contact_time),
                 ))
@@ -198,31 +196,31 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
     }
 
     fn evict_node(&mut self, position: WeightedPosition) -> Option<WeightedNode<TKey, TVal>> {
-        let mut bucket = self.get_bucket_mut(position.weight);
+        let bucket = self.get_bucket_mut(position.weight);
         bucket.evict_node(Position(position.position)) // Position.position.Position(position.Position)
     }
 
     fn pop_node(&mut self, weight_bound: u32) -> Option<WeightedNode<TKey, TVal>> {
-        if let Some(least_recent) = self.least_recent(weight_bound) {
-            let mut bucket = self.get_bucket_mut(least_recent.weight);
+        if let Some(weight) = self.least_recent(weight_bound).map(|lr| lr.inner.weight) {
+            let bucket = self.get_bucket_mut(weight);
             bucket.pop_node()
         } else {
             None // TODO: what it means if there's no least_recent node?
         }
     }
 
-    fn position(&self, key: TKey) -> Option<WeightedPosition> {
-        self.map.iter().find_map(|(weight, bucket)| {
+    fn position(&self, key: &TKey) -> Option<WeightedPosition> {
+        self.map.iter().find_map(|(&weight, bucket)| {
             bucket
-                .position(key)
-                .map(|pos| WeightedPosition(weight, pos))
+                .position(|node| node.inner.key.as_ref() == key.as_ref())
+                .map(|pos| WeightedPosition::new(weight, pos))
         })
     }
 
     fn is_least_recently_connected(&self, node: &WeightedNode<TKey, TVal>) -> bool {
-        let least_recent = self.least_recent(node.weight);
+        let least_recent = self.least_recent(node.inner.weight);
 
-        least_recent.map_or(false, |l_r| l_r == node) // TODO: is it enough to compare references here?
+        least_recent.map_or(false, |l_r| l_r.inner.key.as_ref() == node.inner.key.as_ref())
     }
 
     pub fn insert<Node: Into<WeightedNode<TKey, TVal>>>(
@@ -242,18 +240,18 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
                     let min_key = self.min_key().expect("bucket MUST be full here");
 
                     // TODO: use pending_active and call apply_pending?
-                    if min_key < node.weight && !self.pending_exists() {
+                    if min_key < node.inner.weight && !self.pending_exists() {
                         // If bucket is full, but there's a sub-bucket with lower weight, and no pending node
                         // then set `node` to be pending, and schedule a dial-up check for the least recent node
-                        match self.least_recent(node.weight) {
-                            Some(least_recent) => {
+                        match self.least_recent(node.inner.weight).map(|lr| lr.inner.key.clone()) {
+                            Some(least_recent_key) => {
                                 self.set_pending(WeightedPendingNode {
                                     node,
                                     status,
                                     replace: Instant::now() + self.pending_timeout,
                                 });
                                 InsertResult::Pending {
-                                    disconnected: least_recent,
+                                    disconnected: least_recent_key,
                                 }
                             }
                             // There's no node to evict
@@ -281,7 +279,7 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
             .take()
             .and_then(|WeightedPendingNode { node, status, .. }| {
                 let evicted = if self.is_full() {
-                    self.pop_node(node.weight)
+                    self.pop_node(node.inner.weight)
                 } else {
                     None
                 };
@@ -289,7 +287,7 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
                 if let InsertResult::Inserted = self.insert(node.clone(), status) {
                     Some(AppliedPending {
                         inserted: node.into(),
-                        evicted: evicted.into(),
+                        evicted: evicted.map(|e| e.into()),
                     })
                 } else {
                     // NOTE: this is different from Swamp. Here it is possible that insert will return Full
@@ -321,5 +319,20 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         } else {
             false
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
+        self.map
+            .values()
+            .map(|bucket| bucket.iter().map(|(n, s)| (&n.inner, s)))
+            .flatten()
+    }
+
+    pub fn status(&self, key: &TKey) -> Option<NodeStatus> {
+        self.position(key).and_then(|position| {
+            self.map
+                .get(&position.weight)
+                .map(|bucket| bucket.status(Position(position.position)))
+        })
     }
 }
