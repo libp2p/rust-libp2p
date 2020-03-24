@@ -1,0 +1,187 @@
+/*
+ * Copyright 2019 Fluence Labs Limited
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// #[derive(Debug, Clone)]
+// struct WeightedSubBucket<TKey, TVal> {
+//     nodes: Vec<Node<TKey, TVal>>,
+//     first_connected_pos: Option<usize>,
+//     pending: Option<PendingNode<TKey, TVal>>,
+// }
+//
+// impl<TKey, TVal> WeightedSubBucket<TKey, TVal> {
+//     pub fn new() -> Self {
+//         Self {
+//             nodes: Vec::new(),
+//             first_connected_pos: None,
+//             pending: None,
+//         }
+//     }
+// }
+
+use crate::kbucket::InsertResult;
+use crate::K_VALUE;
+use arrayvec::ArrayVec;
+use std::time::Instant;
+
+/// The status of a node in a bucket.
+///
+/// The status of a node in a bucket together with the time of the
+/// last status change determines the position of the node in a
+/// bucket.
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub enum NodeStatus {
+    /// The node is considered connected.
+    Connected,
+    /// The node is considered disconnected.
+    Disconnected,
+}
+
+/// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
+#[derive(Debug, Clone)]
+pub struct PendingNode<TKey, TVal> {
+    /// The pending node to insert.
+    pub node: Node<TKey, TVal>,
+
+    /// The status of the pending node.
+    pub status: NodeStatus,
+
+    /// The instant at which the pending node is eligible for insertion into a bucket.
+    pub replace: Instant,
+}
+
+impl<TKey, TVal> PendingNode<TKey, TVal> {
+    pub fn key(&self) -> &TKey {
+        &self.node.key
+    }
+
+    pub fn status(&self) -> NodeStatus {
+        self.status
+    }
+
+    pub fn value_mut(&mut self) -> &mut TVal {
+        &mut self.node.value
+    }
+
+    pub fn is_ready(&self) -> bool {
+        Instant::now() >= self.replace
+    }
+
+    pub fn set_ready_at(&mut self, t: Instant) {
+        self.replace = t;
+    }
+}
+
+/// A `Node` in a bucket, representing a peer participating
+/// in the Kademlia DHT together with an associated value (e.g. contact
+/// information).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node<TKey, TVal> {
+    /// The key of the node, identifying the peer.
+    pub key: TKey,
+    /// The associated value.
+    pub value: TVal,
+    pub weight: u32,
+}
+
+/// The position of a node in a `KBucket`, i.e. a non-negative integer
+/// in the range `[0, K_VALUE)`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Position(pub usize);
+
+#[derive(Debug, Clone)]
+pub struct SubBucket<Node> {
+    pub nodes: ArrayVec<[Node; K_VALUE.get()]>,
+    pub first_connected_pos: Option<usize>,
+    // pub pending: Option<PendingNode<TKey, TVal>>,
+}
+
+impl<Node> SubBucket<Node> {
+    pub fn new() -> Self {
+        Self {
+            nodes: ArrayVec::new(),
+            first_connected_pos: None,
+        }
+    }
+
+    pub fn status(&self, pos: Position) -> NodeStatus {
+        if self.first_connected_pos.map_or(false, |i| pos.0 >= i) {
+            NodeStatus::Connected
+        } else {
+            NodeStatus::Disconnected
+        }
+    }
+
+    /// Returns an iterator over the nodes in the bucket, together with their status.
+    pub fn iter(&self) -> impl Iterator<Item = (&Node, NodeStatus)> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .map(move |(p, n)| (n, self.status(Position(p))))
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.nodes.is_full()
+    }
+
+    pub fn all_nodes_connected(&self) -> bool {
+        self.first_connected_pos == Some(0)
+    }
+
+    pub fn append_connected_node(&mut self, node: Node) {
+        // `num_entries` MUST be calculated BEFORE insertion
+        self.change_connected_pos(ChangePosition::AppendConnected {
+            num_entries: self.num_entries(),
+        });
+        self.nodes.push(node);
+    }
+
+    pub fn insert_disconnected_node(&mut self, node: Node) {
+        let current_position = self.first_connected_pos;
+        self.change_connected_pos(ChangePosition::AddDisconnected);
+        match current_position {
+            Some(p) => self.nodes.insert(p, node), // Insert disconnected node just before the first connected node
+            None => self.nodes.push(node),         // Or simply append disconnected node
+        }
+    }
+
+    fn change_connected_pos(&mut self, action: ChangePosition) {
+        match action {
+            ChangePosition::AddDisconnected => {
+                // New disconnected node added => position of the first connected node moved by 1
+                self.first_connected_pos = self.first_connected_pos.map(|p| p + 1)
+            }
+            ChangePosition::AppendConnected { num_entries } => {
+                // If there were no previously connected nodes – set mark to the given one (usually the last one)
+                // Otherwise – keep it the same
+                self.first_connected_pos = self.first_connected_pos.or(Some(num_entries));
+            }
+            ChangePosition::RemoveConnected => {
+                if self.num_connected() == 1 {
+                    // If it was the last connected node
+                    self.first_connected_pos = None // Then mark there is no connected nodes left
+                }
+                // Otherwise – keep mark the same
+            }
+            ChangePosition::RemoveDisconnected => {
+                // If there are connected nodes – lower mark
+                // Otherwise – keep it None
+                self.first_connected_pos = self
+                    .first_connected_pos
+                    .map(|p| p.checked_sub(1).unwrap_or(0))
+            }
+        }
+    }
+}

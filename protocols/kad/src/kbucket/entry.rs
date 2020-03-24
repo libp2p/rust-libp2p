@@ -115,7 +115,7 @@ where
     ///
     /// Returns `None` if the entry is neither present in a bucket nor
     /// pending insertion into a bucket.
-    pub fn view(&'a mut self) -> Option<EntryRefView<'a, TKey, TVal>> {
+    pub fn view(&'a self) -> Option<EntryRefView<'a, TKey, TVal>> {
         match self {
             Entry::Present(entry, status) => Some(EntryRefView {
                 node: NodeRefView {
@@ -189,7 +189,7 @@ where
             .value
     }
 
-    /// Sets the status of the entry to `NodeStatus::Disconnected`.
+    /// Sets the status of the entry.
     pub fn update(self, status: NodeStatus) -> Self {
         self.0.bucket.update(self.0.key, status);
         Self::new(self.0.bucket, self.0.key)
@@ -218,7 +218,7 @@ where
     pub fn value(&mut self) -> &mut TVal {
         self.0.bucket
             .pending_mut()
-            .expect("We can only build a ConnectedPendingEntry if the entry is pending; QED")
+            .expect("We can only build a PendingEntry if the entry is pending; QED")
             .value_mut()
     }
 
@@ -251,7 +251,8 @@ where
     pub fn insert(self, value: TVal, status: NodeStatus) -> InsertResult<TKey> {
         self.0.bucket.insert(Node {
             key: self.0.key.clone(),
-            value
+            value,
+            weight: unimplemented!("TODO: pass weight to AbsentEntry")
         }, status)
     }
 }

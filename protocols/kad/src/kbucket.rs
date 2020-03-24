@@ -69,12 +69,16 @@
 mod bucket;
 mod entry;
 mod key;
+mod sub_bucket;
+mod weighted;
+mod swamp;
 
 pub use entry::*;
+pub use sub_bucket::*;
 
 use arrayvec::{self, ArrayVec};
 use bucket::KBucket;
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 use std::time::{Duration, Instant};
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 
@@ -462,7 +466,7 @@ where
 
     /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.bucket.pending().map_or(false, |n| !n.is_ready())
+        self.bucket.has_pending()
     }
 
     /// Tests whether the given distance falls into this bucket.

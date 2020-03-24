@@ -88,6 +88,9 @@ use std::num::NonZeroUsize;
 /// The current value is `20`.
 pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 
+/// Total number of weighted nodes in weighted bucket
+pub const W_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
+
 /// The `α` parameter of the Kademlia specification.
 ///
 /// This parameter determines the default parallelism for iterative queries,
