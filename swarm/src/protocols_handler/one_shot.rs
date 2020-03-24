@@ -224,7 +224,8 @@ where
                 self.dial_negotiated += 1;
                 return Poll::Ready(
                     ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(self.dial_queue.remove(0)),
+                        protocol: SubstreamProtocol::new(self.dial_queue.remove(0))
+                            .with_timeout(self.inactive_timeout),
                         info: (),
                     },
                 );
