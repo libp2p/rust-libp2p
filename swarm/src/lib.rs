@@ -445,8 +445,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     this.behaviour.inject_expired_listen_addr(&listen_addr);
                     return Poll::Ready(SwarmEvent::ExpiredListenAddr(listen_addr));
                 }
-                Poll::Ready(NetworkEvent::ListenerClosed { listener_id, reason }) => {
+                Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason }) => {
                     log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
+                    for addr in addresses.iter() {
+                        this.behaviour.inject_expired_listen_addr(addr);
+                    }
                     this.behaviour.inject_listener_closed(listener_id);
                 }
                 Poll::Ready(NetworkEvent::ListenerError { listener_id, error }) =>

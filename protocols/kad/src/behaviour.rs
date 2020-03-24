@@ -24,10 +24,10 @@ mod test;
 
 use crate::K_VALUE;
 use crate::addresses::Addresses;
-use crate::handler::{KademliaHandler, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
+use crate::handler::{KademliaHandler, KademliaHandlerConfig, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus};
-use crate::protocol::{KadConnectionType, KadPeer};
+use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -52,8 +52,8 @@ pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
-    /// An optional protocol name override to segregate DHTs in the network.
-    protocol_name_override: Option<Cow<'static, [u8]>>,
+    /// Configuration of the wire protocol.
+    protocol_config: KademliaProtocolConfig,
 
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
@@ -77,6 +77,9 @@ pub struct Kademlia<TStore> {
     /// The TTL of provider records.
     provider_record_ttl: Option<Duration>,
 
+    /// How long to keep connections alive when they're idle.
+    connection_idle_timeout: Duration,
+
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
 
@@ -91,12 +94,13 @@ pub struct Kademlia<TStore> {
 pub struct KademliaConfig {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
-    protocol_name_override: Option<Cow<'static, [u8]>>,
+    protocol_config: KademliaProtocolConfig,
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
+    connection_idle_timeout: Duration,
 }
 
 impl Default for KademliaConfig {
@@ -104,12 +108,13 @@ impl Default for KademliaConfig {
         KademliaConfig {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
-            protocol_name_override: None,
+            protocol_config: Default::default(),
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
+            connection_idle_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -120,7 +125,7 @@ impl KademliaConfig {
     /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
     /// custom name therefore allows to segregate the DHT from others, if that is desired.
     pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
-        self.protocol_name_override = Some(name.into());
+        self.protocol_config.set_protocol_name(name);
         self
     }
 
@@ -217,6 +222,20 @@ impl KademliaConfig {
         self.provider_publication_interval = interval;
         self
     }
+
+    /// Sets the amount of time to keep connections alive when they're idle.
+    pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
+        self.connection_idle_timeout = duration;
+        self
+    }
+
+    /// Modifies the maximum allowed size of individual Kademlia packets.
+    ///
+    /// It might be necessary to increase this value if trying to put large records.
+    pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
+        self.protocol_config.set_max_packet_size(size);
+        self
+    }
 }
 
 impl<TStore> Kademlia<TStore>
@@ -230,9 +249,7 @@ where
 
     /// Get the protocol name of this kademlia instance.
     pub fn protocol_name(&self) -> &[u8] {
-        self.protocol_name_override
-            .as_ref()
-            .map_or(crate::protocol::DEFAULT_PROTO_NAME.as_ref(), AsRef::as_ref)
+        self.protocol_config.protocol_name()
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
@@ -256,7 +273,7 @@ where
         Kademlia {
             store,
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
-            protocol_name_override: config.protocol_name_override,
+            protocol_config: config.protocol_config,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
@@ -264,6 +281,7 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
+            connection_idle_timeout: config.connection_idle_timeout,
         }
     }
 
@@ -1052,11 +1070,11 @@ where
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        let mut handler = KademliaHandler::dial_and_listen();
-        if let Some(name) = self.protocol_name_override.as_ref() {
-            handler = handler.with_protocol_name(name.clone());
-        }
-        handler
+        KademliaHandler::new(KademliaHandlerConfig {
+            protocol_config: self.protocol_config.clone(),
+            allow_listening: true,
+            idle_timeout: self.connection_idle_timeout,
+        })
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -1335,7 +1353,7 @@ where
 
     fn poll(&mut self, cx: &mut Context, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
+            <KademliaHandler<QueryId> as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
