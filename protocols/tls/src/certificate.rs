@@ -74,6 +74,7 @@ fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::Cu
 /// certificate extension containing the public key of the given keypair.
 pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
     let mut params = rcgen::CertificateParams::new(vec![]);
+    params.distinguished_name = rcgen::DistinguishedName::new();
     let (cert_keypair, libp2p_extension) = gen_signed_keypair(keypair);
     params.custom_extensions.push(libp2p_extension);
     params.alg = &LIBP2P_SIGNATURE_ALGORITHM;

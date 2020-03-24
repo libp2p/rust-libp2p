@@ -23,9 +23,9 @@
 //! This provides a central location for socket I/O, and logs all incoming and outgoing packets.
 
 use async_std::net::UdpSocket;
-use tracing::{trace, warn};
 use quinn_proto::Transmit;
 use std::{future::Future, io::Result, task::Context, task::Poll};
+use tracing::{trace, warn};
 
 /// A pending packet for libp2p-quic
 #[derive(Debug, Default)]
