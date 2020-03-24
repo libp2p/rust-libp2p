@@ -487,7 +487,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             // the pending event emitted by the behaviour in the previous iteration
             // to the connection handler(s). The pending event must be delivered
             // before polling the behaviour again. If the targeted peer
-            // meanwhie disconnected, the event is discarded.
+            // meanwhile disconnected, the event is discarded.
             if let Some((peer_id, handler, event)) = this.pending_event.take() {
                 if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                     match handler {
@@ -495,24 +495,32 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             if let Some(mut conn) = peer.connection(conn_id) {
                                 if let Some(event) = notify_one(&mut conn, event, cx) {
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending
                                 }
                             },
                         PendingNotifyHandler::Any(ids) => {
                             if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::Any(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                return Poll::Pending
                             }
                         }
                         PendingNotifyHandler::All(ids) => {
                             if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::All(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                return Poll::Pending
                             }
                         }
                     }
+                }
+            }
+
+            // If the event delivery has failed we need to short-circuit this function here,
+            // because we only want to buffer one event at a time, and polling the behaviour
+            // could generate another event.
+            if this.pending_event.is_some() {
+                if network_not_ready {
+                    return Poll::Pending;
+                } else {
+                    continue;
                 }
             }
 
@@ -553,7 +561,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                     if let Some(event) = notify_one(&mut conn, event, cx) {
                                         let handler = PendingNotifyHandler::One(connection);
                                         this.pending_event = Some((peer_id, handler, event));
-                                        return Poll::Pending
+                                        continue;
                                     }
                                 }
                             }
@@ -562,7 +570,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                     let handler = PendingNotifyHandler::Any(ids);
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending
+                                    continue;
                                 }
                             }
                             NotifyHandler::All => {
@@ -570,7 +578,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
                                     let handler = PendingNotifyHandler::All(ids);
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending
+                                    continue;
                                 }
                             }
                         }
