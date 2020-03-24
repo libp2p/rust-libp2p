@@ -489,21 +489,24 @@ mod tests {
         */
     }
 
-    /*
     #[test]
     fn bucket_update() {
-        fn prop(mut bucket: KBucket<Key<PeerId>, ()>, pos: Position, status: NodeStatus) -> bool {
-            let num_nodes = bucket.num_entries();
-
-            // Capture position and key of the random node to update.
-            let pos = pos.0 % num_nodes;
-            let key = bucket.nodes[pos].key.clone();
+        fn prop(mut bucket: KBucket<Key<PeerId>, ()>, pos: usize, status: NodeStatus) -> bool {
+            let nodes = bucket
+                .iter()
+                .map(|(n, s)| (n.clone(), s))
+                .collect::<Vec<_>>();
 
             // Record the (ordered) list of status of all nodes in the bucket.
-            let mut expected = bucket
+            let mut expected = nodes
                 .iter()
-                .map(|(n, s)| (n.key.clone(), s))
+                .map(|(n, s)| (n.key.clone(), *s))
                 .collect::<Vec<_>>();
+
+            let num_nodes = bucket.num_entries();
+            // Capture position and key of the random node to update.
+            let pos = pos % num_nodes;
+            let key = expected.iter().nth(pos).unwrap().0.clone();
 
             // Update the node in the bucket.
             bucket.update(&key, status);
@@ -512,7 +515,13 @@ mod tests {
             // preserving the status and relative order of all other nodes.
             let expected_pos = match status {
                 NodeStatus::Connected => num_nodes - 1,
-                NodeStatus::Disconnected => bucket.first_connected_pos.unwrap_or(num_nodes) - 1,
+                NodeStatus::Disconnected => {
+                    nodes
+                        .iter()
+                        .filter(|(_, s)| *s == NodeStatus::Disconnected)
+                        .count()
+                        - 1
+                }
             };
             expected.remove(pos);
             expected.insert(expected_pos, (key.clone(), status));
@@ -520,9 +529,10 @@ mod tests {
                 .iter()
                 .map(|(n, s)| (n.key.clone(), s))
                 .collect::<Vec<_>>();
+            assert_eq!(expected, actual, "pos was {}", pos);
             expected == actual
         }
 
         quickcheck(prop as fn(_, _, _) -> _);
-    }*/
+    }
 }
