@@ -239,11 +239,11 @@ where
     }
 }
 
-/// Key and protocol name pair used as `UpgradeInfo::Info`.
+/// Index and protocol name pair used as `UpgradeInfo::Info`.
 #[derive(Debug, Clone)]
-pub struct KeyedProtoName<K, H>(K, H);
+pub struct IndexedProtoName<H>(usize, H);
 
-impl<K, H: ProtocolName> ProtocolName for KeyedProtoName<K, H> {
+impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
     fn protocol_name(&self) -> &[u8] {
         self.1.protocol_name()
     }
@@ -269,16 +269,17 @@ where
 
 impl<K, H> UpgradeInfoSend for Upgrade<K, H>
 where
-    K: Hash + Eq + Clone + Send + 'static,
-    H: UpgradeInfoSend
+    H: UpgradeInfoSend,
+    K: Send + 'static
 {
-    type Info = KeyedProtoName<K, H::Info>;
+    type Info = IndexedProtoName<H::Info>;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.upgrades.iter().map(|(k, i)| iter::repeat(k.clone()).zip(i.protocol_info()))
+        self.upgrades.iter().enumerate()
+            .map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info()))
             .flatten()
-            .map(|(k, i)| KeyedProtoName(k, i))
+            .map(|(i, h)| IndexedProtoName(i, h))
             .collect::<Vec<_>>()
             .into_iter()
     }
@@ -287,24 +288,16 @@ where
 impl<K, H> InboundUpgradeSend for Upgrade<K, H>
 where
     H: InboundUpgradeSend,
-    K: Clone + Hash + Eq + Send + 'static
+    K: Send + 'static
 {
     type Output = (K, <H as InboundUpgradeSend>::Output);
     type Error  = (K, <H as InboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
-        let KeyedProtoName(key, info) = info;
-
-        let i = self.upgrades.iter().position(|(k, _)| k == &key)
-            .expect(
-                "`upgrade_inbound` is applied to a key from `protocol_info`, which only \
-                contains keys from the same set of upgrades we are searching here, therefore \
-                looking for this key is guaranteed to give us a non-empty result; qed"
-            );
-
-        self.upgrades.remove(i).1
-            .upgrade_inbound(resource, info)
+        let IndexedProtoName(index, info) = info;
+        let (key, upgrade) = self.upgrades.remove(index);
+        upgrade.upgrade_inbound(resource, info)
             .map(move |out| {
                 match out {
                     Ok(o) => Ok((key, o)),
@@ -318,24 +311,16 @@ where
 impl<K, H> OutboundUpgradeSend for Upgrade<K, H>
 where
     H: OutboundUpgradeSend,
-    K: Clone + Hash + Eq + Send + 'static
+    K: Send + 'static
 {
     type Output = (K, <H as OutboundUpgradeSend>::Output);
     type Error  = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
-        let KeyedProtoName(key, info) = info;
-
-        let i = self.upgrades.iter().position(|(k, _)| k == &key)
-            .expect(
-                "`upgrade_outbound` is applied to a key from `protocol_info`, which only \
-                contains keys from the same set of upgrades we are searching here, therefore \
-                looking for this key is guaranteed to give us a non-empty result; qed"
-            );
-
-        self.upgrades.remove(i).1
-            .upgrade_outbound(resource, info)
+        let IndexedProtoName(index, info) = info;
+        let (key, upgrade) = self.upgrades.remove(index);
+        upgrade.upgrade_outbound(resource, info)
             .map(move |out| {
                 match out {
                     Ok(o) => Ok((key, o)),
