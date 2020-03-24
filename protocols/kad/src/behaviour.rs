@@ -24,15 +24,21 @@ mod test;
 
 use crate::K_VALUE;
 use crate::addresses::Addresses;
-use crate::handler::{KademliaHandler, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
+use crate::handler::{KademliaHandler, KademliaHandlerConfig, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus};
-use crate::protocol::{KadConnectionType, KadPeer};
+use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    NotifyHandler,
+    PollParameters,
+    ProtocolsHandler
+};
 use log::{info, debug, warn};
 use smallvec::SmallVec;
 use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
@@ -46,8 +52,8 @@ pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
-    /// An optional protocol name override to segregate DHTs in the network.
-    protocol_name_override: Option<Cow<'static, [u8]>>,
+    /// Configuration of the wire protocol.
+    protocol_config: KademliaProtocolConfig,
 
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
@@ -71,6 +77,9 @@ pub struct Kademlia<TStore> {
     /// The TTL of provider records.
     provider_record_ttl: Option<Duration>,
 
+    /// How long to keep connections alive when they're idle.
+    connection_idle_timeout: Duration,
+
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
 
@@ -85,12 +94,13 @@ pub struct Kademlia<TStore> {
 pub struct KademliaConfig {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
-    protocol_name_override: Option<Cow<'static, [u8]>>,
+    protocol_config: KademliaProtocolConfig,
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
+    connection_idle_timeout: Duration,
 }
 
 impl Default for KademliaConfig {
@@ -98,12 +108,13 @@ impl Default for KademliaConfig {
         KademliaConfig {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
-            protocol_name_override: None,
+            protocol_config: Default::default(),
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
+            connection_idle_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -114,7 +125,7 @@ impl KademliaConfig {
     /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
     /// custom name therefore allows to segregate the DHT from others, if that is desired.
     pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
-        self.protocol_name_override = Some(name.into());
+        self.protocol_config.set_protocol_name(name);
         self
     }
 
@@ -211,6 +222,20 @@ impl KademliaConfig {
         self.provider_publication_interval = interval;
         self
     }
+
+    /// Sets the amount of time to keep connections alive when they're idle.
+    pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
+        self.connection_idle_timeout = duration;
+        self
+    }
+
+    /// Modifies the maximum allowed size of individual Kademlia packets.
+    ///
+    /// It might be necessary to increase this value if trying to put large records.
+    pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
+        self.protocol_config.set_max_packet_size(size);
+        self
+    }
 }
 
 impl<TStore> Kademlia<TStore>
@@ -220,6 +245,11 @@ where
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
         Self::with_config(id, store, Default::default())
+    }
+
+    /// Get the protocol name of this kademlia instance.
+    pub fn protocol_name(&self) -> &[u8] {
+        self.protocol_config.protocol_name()
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
@@ -243,7 +273,7 @@ where
         Kademlia {
             store,
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
-            protocol_name_override: config.protocol_name_override,
+            protocol_config: config.protocol_config,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
@@ -251,6 +281,7 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
+            connection_idle_timeout: config.connection_idle_timeout,
         }
     }
 
@@ -910,13 +941,20 @@ where
     }
 
     /// Processes a record received from a peer.
-    fn record_received(&mut self, source: PeerId, request_id: KademliaRequestId, mut record: Record) {
+    fn record_received(
+        &mut self,
+        source: PeerId,
+        connection: ConnectionId,
+        request_id: KademliaRequestId,
+        mut record: Record
+    ) {
         if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
             // If the (alleged) publisher is the local node, do nothing. The record of
             // the original publisher should never change as a result of replication
             // and the publisher is always assumed to have the "right" value.
-            self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: source,
+                handler: NotifyHandler::One(connection),
                 event: KademliaHandlerIn::PutRecordRes {
                     key: record.key,
                     value: record.value,
@@ -936,9 +974,7 @@ where
         let num_between = self.kbuckets.count_nodes_between(&target);
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
-        let expiration = self.record_ttl.map(|ttl|
-            now + Duration::from_secs(ttl.as_secs() >> num_beyond_k)
-        );
+        let expiration = self.record_ttl.map(|ttl| now + exp_decrease(ttl, num_beyond_k));
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
         record.expires = record.expires.or(expiration).min(expiration);
@@ -961,29 +997,41 @@ where
         // overridden as it avoids having to load the existing record in the
         // first place.
 
-        // The record is cloned because of the weird libp2p protocol requirement
-        // to send back the value in the response, although this is a waste of
-        // resources.
-        match self.store.put(record.clone()) {
-            Ok(()) => {
-                debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: source,
-                    event: KademliaHandlerIn::PutRecordRes {
-                        key: record.key,
-                        value: record.value,
-                        request_id,
-                    },
-                })
-            }
-            Err(e) => {
-                info!("Record not stored: {:?}", e);
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: source,
-                    event: KademliaHandlerIn::Reset(request_id)
-                })
+        if !record.is_expired(now) {
+            // The record is cloned because of the weird libp2p protocol
+            // requirement to send back the value in the response, although this
+            // is a waste of resources.
+            match self.store.put(record.clone()) {
+                Ok(()) => debug!("Record stored: {:?}; {} bytes", record.key, record.value.len()),
+                Err(e) => {
+                    info!("Record not stored: {:?}", e);
+                    self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id: source,
+                        handler: NotifyHandler::One(connection),
+                        event: KademliaHandlerIn::Reset(request_id)
+                    });
+
+                    return
+                }
             }
         }
+
+        // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
+        // case where the record is discarded due to being expired. Given that
+        // the remote sent the local node a [`KademliaHandlerEvent::PutRecord`]
+        // request, the remote perceives the local node as one node among the k
+        // closest nodes to the target. In addition returning
+        // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
+        // information to a possibly malicious remote node.
+        self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+            peer_id: source,
+            handler: NotifyHandler::One(connection),
+            event: KademliaHandlerIn::PutRecordRes {
+                key: record.key,
+                value: record.value,
+                request_id,
+            },
+        })
     }
 
     /// Processes a provider record received from a peer.
@@ -1008,6 +1056,11 @@ where
     }
 }
 
+/// Exponentially decrease the given duration (base 2).
+fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
+    Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
+}
+
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     for<'a> TStore: RecordStore<'a>,
@@ -1017,11 +1070,11 @@ where
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        let mut handler = KademliaHandler::dial_and_listen();
-        if let Some(name) = self.protocol_name_override.as_ref() {
-            handler = handler.with_protocol_name(name.clone());
-        }
-        handler
+        KademliaHandler::new(KademliaHandlerConfig {
+            protocol_config: self.protocol_config.clone(),
+            allow_listening: true,
+            idle_timeout: self.connection_idle_timeout,
+        })
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -1055,7 +1108,9 @@ where
                 .position(|(p, _)| p == &peer)
                 .map(|p| q.inner.pending_rpcs.remove(p)))
         {
-            self.queued_events.push_back(NetworkBehaviourAction::SendEvent { peer_id, event });
+            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                peer_id, event, handler: NotifyHandler::Any
+            });
         }
 
         // The remote's address can only be put into the routing table,
@@ -1126,30 +1181,18 @@ where
         self.connected_peers.remove(id);
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, _old: ConnectedPoint, new_endpoint: ConnectedPoint) {
-        // We need to re-send the active queries.
-        for query in self.queries.iter() {
-            if query.is_waiting(&peer_id) {
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: peer_id.clone(),
-                    event: query.inner.info.to_request(query.id()),
-                });
-            }
-        }
-
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::new(peer_id)).value() {
-            if let ConnectedPoint::Dialer { address } = new_endpoint {
-                addrs.insert(address);
-            }
-        }
-    }
-
-    fn inject_node_event(&mut self, source: PeerId, event: KademliaHandlerEvent<QueryId>) {
+    fn inject_event(
+        &mut self,
+        source: PeerId,
+        connection: ConnectionId,
+        event: KademliaHandlerEvent<QueryId>
+    ) {
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::FindNodeRes {
                         closer_peers,
                         request_id,
@@ -1167,8 +1210,9 @@ where
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::GetProvidersRes {
                         closer_peers,
                         provider_peers,
@@ -1236,8 +1280,9 @@ where
                         Vec::new()
                     };
 
-                self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
+                self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
+                    handler: NotifyHandler::One(connection),
                     event: KademliaHandlerIn::GetRecordRes {
                         record,
                         closer_peers,
@@ -1285,7 +1330,7 @@ where
                 record,
                 request_id
             } => {
-                self.record_received(source, request_id, record);
+                self.record_received(source, connection, request_id, record);
             }
 
             KademliaHandlerEvent::PutRecordRes {
@@ -1308,7 +1353,7 @@ where
 
     fn poll(&mut self, cx: &mut Context, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
+            <KademliaHandler<QueryId> as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
@@ -1390,8 +1435,8 @@ where
                             query.on_success(&peer_id, vec![])
                         }
                         if self.connected_peers.contains(&peer_id) {
-                            self.queued_events.push_back(NetworkBehaviourAction::SendEvent {
-                                peer_id, event
+                            self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id, event, handler: NotifyHandler::Any
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id.clone(), event));
@@ -1897,4 +1942,3 @@ impl QueryInfo {
         }
     }
 }
-

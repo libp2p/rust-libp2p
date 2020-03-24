@@ -3,7 +3,7 @@ name: Continuous integration
 on:
   pull_request:
   push:
-    branches:    
+    branches:
       - master
 
 jobs:
@@ -88,3 +88,28 @@ jobs:
       run: rustup default nightly
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo +nightly doc --verbose --workspace --no-deps --document-private-items
+
+  integration-test:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    container:
+      image: rust
+    steps:
+    - uses: actions/checkout@v1
+    - name: Cache cargo registry
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo/registry
+        key: cargo-registry-${{ hashFiles('Cargo.toml') }}
+    - name: Cache cargo index
+      uses: actions/cache@v1
+      with:
+        path: ~/.cargo/git
+        key: cargo-index-${{ hashFiles('Cargo.toml') }}
+    - name: Cache cargo build
+      uses: actions/cache@v1
+      with:
+        path: target
+        key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+    - name: Run ipfs-kad example
+      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
