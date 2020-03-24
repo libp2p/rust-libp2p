@@ -224,4 +224,8 @@ impl<Node> SubBucket<Node> {
     {
         self.nodes.iter().position(pred).map(Position)
     }
+
+    pub fn get_mut(&mut self, position: Position) -> Option<&mut Node> {
+        self.nodes.get_mut(position.0)
+    }
 }

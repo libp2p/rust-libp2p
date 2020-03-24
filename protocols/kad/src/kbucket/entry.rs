@@ -102,7 +102,7 @@ where
     pub(super) fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         if let Some(status) = bucket.status(key) {
             Entry::Present(PresentEntry::new(bucket, key), status)
-        } else if let Some(pending) = bucket.as_pending(key) {
+        } else if let Some(pending) = bucket.pending_ref(key) {
             let status = pending.status();
             Entry::Pending(PendingEntry::new(bucket, key), status)
         } else {
@@ -119,16 +119,16 @@ where
             Entry::Present(entry, status) => Some(EntryRefView {
                 node: NodeRefView {
                     key: entry.0.key,
-                    value: entry.value()
+                    value: entry.value(),
                 },
-                status: *status
+                status: *status,
             }),
             Entry::Pending(entry, status) => Some(EntryRefView {
                 node: NodeRefView {
                     key: entry.0.key,
-                    value: entry.value()
+                    value: entry.value(),
                 },
-                status: *status
+                status: *status,
             }),
             _ => None,
         }
@@ -219,7 +219,7 @@ where
     pub fn value(&mut self) -> &mut TVal {
         self.0
             .bucket
-            .pending_mut()
+            .pending_mut(self.0.key)
             .expect("We can only build a PendingEntry if the entry is pending; QED")
             .value_mut()
     }

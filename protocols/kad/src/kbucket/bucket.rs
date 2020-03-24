@@ -30,7 +30,6 @@ pub use crate::kbucket::sub_bucket::{Node, NodeStatus, PendingNode, Position, Su
 use crate::kbucket::swamp::Swamp;
 use crate::kbucket::weighted::Weighted;
 pub use crate::{K_VALUE, W_VALUE};
-use futures::StreamExt;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -136,20 +135,14 @@ where
     }
 
     /// Returns a mutable reference to the pending node of the bucket, if there is any.
-    pub fn pending_mut(&mut self) -> Option<&mut PendingNode<TKey, TVal>> {
-        unimplemented!("pending_mut");
-        // self.pending.as_mut()
+    pub fn pending_mut(&mut self, key: &TKey) -> Option<&mut PendingNode<TKey, TVal>> {
+        Option::or(self.weighted.pending_mut(key), self.swamp.pending_mut(key))
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any
     /// with a matching key.
-    pub fn as_pending(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
-        unimplemented!("as_pending");
-        // self.swamp_pending
-        //     .iter()
-        //     .chain(self.weighted_pending.iter())
-        //     .find(|p| p.node.key.as_ref() == key.as_ref())
-        // self.pending().filter(|p| p.node.key.as_ref() == key.as_ref())
+    pub fn pending_ref(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
+        Option::or(self.weighted.pending_ref(key), self.swamp.pending_ref(key))
     }
 
     /// Updates the status of the pending node, if any.
@@ -170,10 +163,7 @@ where
     /// Returns `None` if the given key does not refer to a node in the
     /// bucket.
     pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
-        unimplemented!("get_mut");
-        // self.nodes
-        //     .iter_mut()
-        //     .find(move |p| p.key.as_ref() == key.as_ref())
+        Option::or(self.weighted.get_mut(key), self.swamp.get_mut(key))
     }
 
     /// Returns an iterator over the nodes in the bucket, together with their status.
@@ -396,7 +386,7 @@ mod tests {
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
-        for i in 0..K_VALUE.get() {
+        for _i in 0..K_VALUE.get() {
             let (first, first_status) = bucket.iter().next().unwrap();
             let first_disconnected = first.clone();
             assert_eq!(first_status, NodeStatus::Disconnected);
@@ -425,7 +415,7 @@ mod tests {
             assert!(!bucket.pending().is_empty());
 
             // Apply the pending node.
-            let pending = bucket.pending_mut().expect("No pending node.");
+            let pending = bucket.pending_mut(&key).expect("No pending node.");
             pending.set_ready_at(Instant::now() - Duration::from_secs(1));
             let result = bucket.apply_pending();
             assert_eq!(

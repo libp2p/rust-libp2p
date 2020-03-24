@@ -51,14 +51,14 @@ where
     pub fn pending_ready(&self) -> bool {
         self.pending
             .as_ref()
-            .map_or(false, |pending| pending.replace >= Instant::now())
+            .map_or(false, |pending| pending.is_ready())
     }
 
     // TODO: pending 2. Refactor?
     pub fn pending_active(&self) -> bool {
         self.pending
             .as_ref()
-            .map_or(false, |pending| pending.replace < Instant::now())
+            .map_or(false, |pending| !pending.is_ready())
     }
 
     // TODO: pending 3. Refactor?
@@ -178,19 +178,44 @@ where
     }
 
     pub fn update_pending(&mut self, key: &TKey, status: NodeStatus) -> bool {
-        if let Some(mut pending) = self.pending.as_mut() {
-            if pending.key().as_ref() == key.as_ref() {
-                pending.status = status;
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
+        self.pending_mut(key).map_or(false, |pending| {
+            pending.status = status;
+            true
+        })
     }
 
     pub fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
         self.pending.as_ref()
+    }
+
+    pub fn pending_mut(&mut self, key: &TKey) -> Option<&mut PendingNode<TKey, TVal>> {
+        if let Some(pending) = self.pending.as_mut() {
+            if pending.key().as_ref() == key.as_ref() {
+                return Some(pending);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn pending_ref(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
+        if let Some(pending) = self.pending.as_ref() {
+            if pending.key().as_ref() == key.as_ref() {
+                return Some(pending);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
+        if let Some(position) = self
+            .bucket
+            .position(|node| node.key.as_ref() == key.as_ref())
+        {
+            self.bucket.get_mut(position)
+        } else {
+            None
+        }
     }
 }

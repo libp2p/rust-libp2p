@@ -71,6 +71,12 @@ impl WeightedPosition {
     }
 }
 
+impl Into<Position> for WeightedPosition {
+    fn into(self) -> Position {
+        Position(self.position)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Weighted<TKey, TVal> {
     map: HashMap<u32, SubBucket<WeightedNode<TKey, TVal>>>,
@@ -111,14 +117,14 @@ where
     pub fn pending_ready(&self) -> bool {
         self.pending
             .as_ref()
-            .map_or(false, |pending| pending.replace >= Instant::now())
+            .map_or(false, |pending| pending.is_ready())
     }
 
     // TODO: pending 2. Refactor?
     pub fn pending_active(&self) -> bool {
         self.pending
             .as_ref()
-            .map_or(false, |pending| pending.replace < Instant::now())
+            .map_or(false, |pending| !pending.is_ready())
     }
 
     // TODO: pending 3. Refactor?
@@ -187,7 +193,7 @@ where
 
     fn evict_node(&mut self, position: WeightedPosition) -> Option<WeightedNode<TKey, TVal>> {
         let bucket = self.get_bucket_mut(position.weight);
-        bucket.evict_node(Position(position.position)) // Position.position.Position(position.Position)
+        bucket.evict_node(position.into())
     }
 
     fn pop_node(&mut self, weight_bound: u32) -> Option<WeightedNode<TKey, TVal>> {
@@ -327,24 +333,48 @@ where
         self.position(key).and_then(|position| {
             self.map
                 .get(&position.weight)
-                .map(|bucket| bucket.status(Position(position.position)))
+                .map(|bucket| bucket.status(position.into()))
         })
     }
 
     pub fn update_pending(&mut self, key: &TKey, status: NodeStatus) -> bool {
-        if let Some(mut pending) = self.pending.as_mut() {
-            if pending.key().as_ref() == key.as_ref() {
-                pending.status = status;
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
+        self.pending_mut(key).map_or(false, |pending| {
+            pending.status = status;
+            true
+        })
     }
 
     pub fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
         self.pending.as_ref()
+    }
+
+    pub fn pending_mut(&mut self, key: &TKey) -> Option<&mut PendingNode<TKey, TVal>> {
+        if let Some(pending) = self.pending.as_mut() {
+            if pending.key().as_ref() == key.as_ref() {
+                return Some(pending);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn pending_ref(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
+        if let Some(pending) = self.pending.as_ref() {
+            if pending.key().as_ref() == key.as_ref() {
+                return Some(pending);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
+        if let Some(position) = self.position(key) {
+            self.get_bucket_mut(position.weight)
+                .get_mut(position.into())
+                .map(|n| &mut n.inner)
+        } else {
+            None
+        }
     }
 }
