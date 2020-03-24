@@ -252,7 +252,7 @@ impl<K, H: ProtocolName> ProtocolName for KeyedProtoName<K, H> {
 /// Inbound and outbound upgrade for all `ProtocolsHandler`s.
 #[derive(Clone)]
 pub struct Upgrade<K, H> {
-    upgrades: HashMap<K, H>
+    upgrades: Vec<(K, H)>
 }
 
 impl<K, H> fmt::Debug for Upgrade<K, H>
@@ -295,18 +295,23 @@ where
 
     fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
         let KeyedProtoName(key, info) = info;
-        let u = self.upgrades.remove(&key).expect(
-            "`upgrade_inbound` is applied to a key from `protocol_info`, which only contains \
-            keys from the same set of upgrades we are searching here, therefore looking for this \
-            key is guaranteed to give us a non-empty result; qed"
-        );
-        u.upgrade_inbound(resource, info).map(move |out| {
-            match out {
-                Ok(o) => Ok((key, o)),
-                Err(e) => Err((key, e))
-            }
-        })
-        .boxed()
+
+        let i = self.upgrades.iter().position(|(k, _)| k == &key)
+            .expect(
+                "`upgrade_inbound` is applied to a key from `protocol_info`, which only \
+                contains keys from the same set of upgrades we are searching here, therefore \
+                looking for this key is guaranteed to give us a non-empty result; qed"
+            );
+
+        self.upgrades.remove(i).1
+            .upgrade_inbound(resource, info)
+            .map(move |out| {
+                match out {
+                    Ok(o) => Ok((key, o)),
+                    Err(e) => Err((key, e))
+                }
+            })
+            .boxed()
     }
 }
 
@@ -321,18 +326,23 @@ where
 
     fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
         let KeyedProtoName(key, info) = info;
-        let u = self.upgrades.remove(&key).expect(
-            "`upgrade_outbound` is applied to a key from `protocol_info`, which only contains \
-            keys from the same set of upgrades we are searching here, therefore looking for this \
-            key is guaranteed to give us a non-empty result; qed"
-        );
-        u.upgrade_outbound(resource, info).map(move |out| {
-            match out {
-                Ok(o) => Ok((key, o)),
-                Err(e) => Err((key, e))
-            }
-        })
-        .boxed()
+
+        let i = self.upgrades.iter().position(|(k, _)| k == &key)
+            .expect(
+                "`upgrade_outbound` is applied to a key from `protocol_info`, which only \
+                contains keys from the same set of upgrades we are searching here, therefore \
+                looking for this key is guaranteed to give us a non-empty result; qed"
+            );
+
+        self.upgrades.remove(i).1
+            .upgrade_outbound(resource, info)
+            .map(move |out| {
+                match out {
+                    Ok(o) => Ok((key, o)),
+                    Err(e) => Err((key, e))
+                }
+            })
+            .boxed()
     }
 }
 
