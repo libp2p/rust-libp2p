@@ -15,23 +15,11 @@
  */
 
 use crate::kbucket::{
-    AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, Position, SubBucket,
+    AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, PendingNode, Position, SubBucket,
 };
 use crate::W_VALUE;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WeightedPendingNode<TKey, TVal> {
-    /// The pending node to insert.
-    pub node: WeightedNode<TKey, TVal>,
-
-    /// The status of the pending node.
-    pub status: NodeStatus,
-
-    /// The instant at which the pending node is eligible for insertion into a bucket.
-    pub replace: Instant,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedNode<TKey, TVal> {
@@ -86,7 +74,7 @@ impl WeightedPosition {
 #[derive(Debug, Clone)]
 pub struct Weighted<TKey, TVal> {
     map: HashMap<u32, SubBucket<WeightedNode<TKey, TVal>>>,
-    pending: Option<WeightedPendingNode<TKey, TVal>>,
+    pending: Option<PendingNode<TKey, TVal>>,
     capacity: usize,
     pending_timeout: Duration,
 }
@@ -111,7 +99,7 @@ where
             .map_or(false, |bucket| bucket.all_nodes_connected())
     }
 
-    pub fn set_pending(&mut self, node: WeightedPendingNode<TKey, TVal>) {
+    pub fn set_pending(&mut self, node: PendingNode<TKey, TVal>) {
         self.pending = Some(node)
     }
 
@@ -164,7 +152,8 @@ where
     }
 
     fn append_connected_node(&mut self, node: WeightedNode<TKey, TVal>) {
-        self.get_bucket_mut(node.inner.weight).append_connected_node(node)
+        self.get_bucket_mut(node.inner.weight)
+            .append_connected_node(node)
     }
 
     fn insert_disconnected_node(&mut self, node: WeightedNode<TKey, TVal>) {
@@ -221,7 +210,9 @@ where
     fn is_least_recently_connected(&self, node: &WeightedNode<TKey, TVal>) -> bool {
         let least_recent = self.least_recent(node.inner.weight);
 
-        least_recent.map_or(false, |l_r| l_r.inner.key.as_ref() == node.inner.key.as_ref())
+        least_recent.map_or(false, |l_r| {
+            l_r.inner.key.as_ref() == node.inner.key.as_ref()
+        })
     }
 
     pub fn insert<Node: Into<WeightedNode<TKey, TVal>>>(
@@ -244,10 +235,13 @@ where
                     if min_key < node.inner.weight && !self.pending_exists() {
                         // If bucket is full, but there's a sub-bucket with lower weight, and no pending node
                         // then set `node` to be pending, and schedule a dial-up check for the least recent node
-                        match self.least_recent(node.inner.weight).map(|lr| lr.inner.key.clone()) {
+                        match self
+                            .least_recent(node.inner.weight)
+                            .map(|lr| lr.inner.key.clone())
+                        {
                             Some(least_recent_key) => {
-                                self.set_pending(WeightedPendingNode {
-                                    node,
+                                self.set_pending(PendingNode {
+                                    node: node.inner,
                                     status,
                                     replace: Instant::now() + self.pending_timeout,
                                 });
@@ -278,16 +272,16 @@ where
 
         self.pending
             .take()
-            .and_then(|WeightedPendingNode { node, status, .. }| {
+            .and_then(|PendingNode { node, status, .. }| {
                 let evicted = if self.is_full() {
-                    self.pop_node(node.inner.weight)
+                    self.pop_node(node.weight)
                 } else {
                     None
                 };
 
                 if let InsertResult::Inserted = self.insert(node.clone(), status) {
                     Some(AppliedPending {
-                        inserted: node.into(),
+                        inserted: node,
                         evicted: evicted.map(|e| e.into()),
                     })
                 } else {
@@ -335,5 +329,22 @@ where
                 .get(&position.weight)
                 .map(|bucket| bucket.status(Position(position.position)))
         })
+    }
+
+    pub fn update_pending(&mut self, key: &TKey, status: NodeStatus) -> bool {
+        if let Some(mut pending) = self.pending.as_mut() {
+            if pending.key().as_ref() == key.as_ref() {
+                pending.status = status;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
+        self.pending.as_ref()
     }
 }

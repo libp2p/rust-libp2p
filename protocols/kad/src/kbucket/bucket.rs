@@ -126,9 +126,13 @@ where
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any.
-    fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
-        // self.swamp.as_ref()
-        unimplemented!("pending")
+    // TODO: maybe return `impl Iterator`?
+    fn pending(&self) -> Vec<&PendingNode<TKey, TVal>> {
+        Iterator::chain(
+            self.weighted.pending().into_iter(),
+            self.swamp.pending().into_iter(),
+        )
+        .collect()
     }
 
     /// Returns a mutable reference to the pending node of the bucket, if there is any.
@@ -149,12 +153,16 @@ where
     }
 
     /// Updates the status of the pending node, if any.
-    pub fn update_pending(&mut self, status: NodeStatus) {
-        unimplemented!("update_pending");
-
-        // if let Some(pending) = &mut self.swamp_pending {
-        //     pending.status = status
-        // }
+    pub fn update_pending(&mut self, key: &TKey, status: NodeStatus) {
+        if !self.weighted.update_pending(key, status) {
+            if !self.swamp.update_pending(key, status) {
+                println!(
+                    "Didn't update pending node {:?} to {:?}",
+                    key.as_ref(),
+                    status
+                )
+            }
+        }
     }
 
     /// Gets a mutable reference to the node identified by the given key.
@@ -414,7 +422,7 @@ mod tests {
                 x => panic!("Expected Full, got {:?}", x),
             }
 
-            assert!(bucket.pending().is_some());
+            assert!(!bucket.pending().is_empty());
 
             // Apply the pending node.
             let pending = bucket.pending_mut().expect("No pending node.");
@@ -428,11 +436,11 @@ mod tests {
                 }]
             );
             assert_eq!(Some((&node, NodeStatus::Connected)), bucket.iter().last());
-            assert!(bucket.pending().is_none());
+            assert!(bucket.pending().is_empty());
             /* assert_eq!(Some(K_VALUE.get() - (i + 1)), bucket.first_connected_pos); */
         }
 
-        assert!(bucket.pending().is_none());
+        assert!(bucket.pending().is_empty());
         assert_eq!(K_VALUE.get(), bucket.num_entries());
 
         // Trying to insert another connected node fails.
@@ -467,13 +475,13 @@ mod tests {
         } else {
             panic!()
         }
-        assert!(bucket.pending().is_some());
+        assert!(!bucket.pending().is_empty());
 
         // Update the status of the first disconnected node to be connected.
         bucket.update(&first_disconnected.key, NodeStatus::Connected);
 
         // The pending node has been discarded.
-        assert!(bucket.pending().is_none());
+        assert!(bucket.pending().is_empty());
         assert!(bucket.iter().all(|(n, _)| &n.key != &key));
 
         // The initially disconnected node is now the most-recently connected.

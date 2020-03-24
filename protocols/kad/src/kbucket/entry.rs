@@ -226,7 +226,7 @@ where
 
     /// Updates the status of the pending entry.
     pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TKey, TVal> {
-        self.0.bucket.update_pending(status);
+        self.0.bucket.update_pending(self.0.key, status);
         PendingEntry::new(self.0.bucket, self.0.key)
     }
 }

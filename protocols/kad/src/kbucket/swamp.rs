@@ -176,4 +176,21 @@ where
             .position(|node| node.key.as_ref() == key.as_ref())
             .map(|p| self.bucket.status(p))
     }
+
+    pub fn update_pending(&mut self, key: &TKey, status: NodeStatus) -> bool {
+        if let Some(mut pending) = self.pending.as_mut() {
+            if pending.key().as_ref() == key.as_ref() {
+                pending.status = status;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    pub fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
+        self.pending.as_ref()
+    }
 }
