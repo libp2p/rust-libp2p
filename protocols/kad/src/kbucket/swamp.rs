@@ -30,10 +30,6 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
         }
     }
 
-    pub fn exists_active_pending(&self) -> bool {
-        self.pending.is_some() // TODO: check replace timeout
-    }
-
     pub fn set_pending(&mut self, node: PendingNode<TKey, TVal>) {
         self.pending = Some(node)
     }
@@ -42,18 +38,31 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
         self.pending = None
     }
 
+    // TODO: pending 1. Refactor?
     pub fn pending_ready(&self) -> bool {
         self.pending
             .as_ref()
-            .map_or(false, |pending| pending.replace <= Instant::now())
+            .map_or(false, |pending| pending.replace >= Instant::now())
+    }
+
+    // TODO: pending 2. Refactor?
+    pub fn pending_active(&self) -> bool {
+        self.pending
+            .as_ref()
+            .map_or(false, |pending| pending.replace < Instant::now())
+    }
+
+    // TODO: pending 3. Refactor?
+    pub fn pending_exists(&self) -> bool {
+        self.pending.is_some()
     }
 
     pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
         match status {
             NodeStatus::Connected => {
                 if self.bucket.is_full() {
-                    if self.bucket.all_nodes_connected() || self.exists_active_pending() {
-                        // TODO: check pending.replace in exists_active_pending & call apply_pending?
+                    // TODO: use pending_active and call apply_pending?
+                    if self.bucket.all_nodes_connected() || self.pending_exists() {
                         return InsertResult::Full;
                     } else {
                         self.set_pending(PendingNode {
@@ -107,7 +116,7 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
             })
     }
 
-    pub fn update(&mut self, key: &TKey, new_status: NodeStatus) {
+    pub fn update(&mut self, key: &TKey, new_status: NodeStatus) -> bool {
         // Remove the node from its current position and then reinsert it
         // with the desired status, which puts it at the end of either the
         // prefix list of disconnected nodes or the suffix list of connected
@@ -129,6 +138,10 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
                 InsertResult::Inserted => {}
                 _ => unreachable!("The node is removed before being (re)inserted."),
             }
+
+            true
+        } else {
+            false
         }
     }
 }

@@ -106,14 +106,6 @@ pub struct AppliedPending<TKey, TVal> {
     pub evicted: Option<Node<TKey, TVal>>,
 }
 
-enum ChangePosition {
-    AddDisconnected,
-    // num_entries – number of nodes in a bucket BEFORE appending
-    AppendConnected { num_entries: usize },
-    RemoveConnected,
-    RemoveDisconnected,
-}
-
 impl<TKey, TVal> KBucket<TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
@@ -129,7 +121,7 @@ where
     }
 
     pub fn has_pending(&self) -> bool {
-        self.exists_active_pending(true) || self.exists_active_pending(false)
+        self.pending_active(true) || self.pending_active(false)
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any.
@@ -155,6 +147,34 @@ where
         // self.pending().filter(|p| p.node.key.as_ref() == key.as_ref())
     }
 
+    /// Updates the status of the pending node, if any.
+    pub fn update_pending(&mut self, status: NodeStatus) {
+        unimplemented!("update_pending");
+
+        if let Some(pending) = &mut self.swamp_pending {
+            pending.status = status
+        }
+    }
+
+    /// Gets a mutable reference to the node identified by the given key.
+    ///
+    /// Returns `None` if the given key does not refer to a node in the
+    /// bucket.
+    pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
+        unimplemented!("get_mut");
+        self.nodes
+            .iter_mut()
+            .find(move |p| p.key.as_ref() == key.as_ref())
+    }
+
+    /// Returns an iterator over the nodes in the bucket, together with their status.
+    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
+        Iterator::chain(
+            self.weighted.values().map(|bucket| bucket.iter()).flatten(),
+            self.swamp.iter(),
+        )
+    }
+
     /// Inserts the pending node into the bucket, if its timeout has elapsed,
     /// replacing the least-recently connected node.
     ///
@@ -175,44 +195,12 @@ where
         .collect()
     }
 
-    /// Updates the status of the pending node, if any.
-    pub fn update_pending(&mut self, status: NodeStatus) {
-        unimplemented!("update_pending");
-
-        if let Some(pending) = &mut self.swamp_pending {
-            pending.status = status
-        }
-    }
-
-    /// Returns an iterator over the nodes in the bucket, together with their status.
-    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
-        self.weighted
-            .values()
-            .map(|bucket| bucket.iter())
-            .flatten()
-            .chain(self.swamp.iter())
-    }
-
     /// Updates the status of the node referred to by the given key, if it is
     /// in the bucket.
     pub fn update(&mut self, key: &TKey, new_status: NodeStatus) {
-        // Remove the node from its current position and then reinsert it
-        // with the desired status, which puts it at the end of either the
-        // prefix list of disconnected nodes or the suffix list of connected
-        // nodes (i.e. most-recently disconnected or most-recently connected,
-        // respectively).
-        if let Some(pos) = self.position(key) {
-            // Remove the node from its current position.
-            let node = self.evict_node(pos);
-            // If the least-recently connected node re-establishes its
-            // connected status, drop the pending node.
-            if self.is_least_recently_connected(pos) && new_status == NodeStatus::Connected {
-                self.remove_pending();
-            }
-            // Reinsert the node with the desired status.
-            match self.insert(node, new_status) {
-                InsertResult::Inserted => {}
-                _ => unreachable!("The node is removed before being (re)inserted."),
+        if !self.weighted.update(key, new_status) {
+            if !self.swamp.update(key, new_status) {
+                println!("Node {:?} wasn't updated to {:?}", key, new_status)
             }
         }
     }
@@ -234,7 +222,13 @@ where
     ///     i.e. as the most-recently disconnected node. If there are no connected nodes,
     ///     the new node is added as the last element of the bucket.
     ///
-    pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {}
+    pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
+        if node.weight > 0 {
+            self.weighted.insert(node, status)
+        } else {
+            self.swamp.insert(node, status)
+        }
+    }
 
     fn pending_ready(&self, weighted: bool) -> bool {
         if weighted {
@@ -252,27 +246,11 @@ where
         }
     }
 
-    fn exists_active_pending(&self, weighted: bool) -> bool {
+    fn pending_active(&self, weighted: bool) -> bool {
         if weighted {
             self.weighted.pending_active()
         } else {
-            self.swamp.exists_active_pending() // TODO: check if replace has passed?
-        }
-    }
-
-    fn set_pending(&mut self, node: PendingNode<TKey, TVal>) {
-        if node.node.weight == 0 {
-            self.swamp.set_pending(node)
-        } else {
-            self.weighted.set_pending(node)
-        }
-    }
-
-    fn remove_pending(&mut self) {
-        if node.node.weight == 0 {
-            self.swamp.remove_pending()
-        } else {
-            self.weighted.remove_pending()
+            self.swamp.pending_active()
         }
     }
 
@@ -282,34 +260,6 @@ where
         } else {
             self.weighted.all_nodes_connected(weight)
         }
-    }
-
-    fn append_connected_node(&mut self, node: Node<TKey, TVal>) {
-        // `num_entries` MUST be calculated BEFORE insertion
-        self.change_connected_pos(ChangePosition::AppendConnected {
-            num_entries: self.num_entries(),
-        });
-        self.nodes.push(node);
-    }
-
-    fn insert_disconnected_node(&mut self, node: Node<TKey, TVal>) {
-        let current_position = self.first_connected_pos;
-        self.change_connected_pos(ChangePosition::AddDisconnected);
-        match current_position {
-            Some(p) => self.nodes.insert(p, node), // Insert disconnected node just before the first connected node
-            None => self.nodes.push(node),         // Or simply append disconnected node
-        }
-    }
-
-    /// Gets a mutable reference to the node identified by the given key.
-    ///
-    /// Returns `None` if the given key does not refer to a node in the
-    /// bucket.
-    pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
-        unimplemented!("get_mut");
-        self.nodes
-            .iter_mut()
-            .find(move |p| p.key.as_ref() == key.as_ref())
     }
 }
 

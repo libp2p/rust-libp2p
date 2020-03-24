@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+use crate::kbucket::bucket::InsertResult::Inserted;
 use crate::kbucket::{
     AppliedPending, InsertResult, Node, NodeStatus, PendingNode, Position, SubBucket,
 };
@@ -42,7 +43,41 @@ pub struct WeightedNode<TKey, TVal> {
     /// The associated value.
     pub value: TVal,
     pub weight: u32,
-    pub last_contact_time: u128,
+    pub last_contact_time: Option<Instant>,
+}
+
+impl<TKey, TVal> WeightedNode<TKey, TVal> {
+    fn update(mut self, status: NodeStatus) -> Self {
+        let new_time = if status == NodeStatus::Connected {
+            Some(Instant::now())
+        } else {
+            None
+        };
+        self.last_contact_time = new_time;
+
+        self
+    }
+}
+
+impl<TKey, TVal> Into<Node<TKey, TVal>> for WeightedNode<TKey, TVal> {
+    fn into(self) -> Node<TKey, TVal> {
+        Node {
+            key: self.key,
+            value: self.value,
+            weight: self.weight,
+        }
+    }
+}
+
+impl<TKey, TVal> From<Node<TKey, TVal>> for WeightedNode<TKey, TVal> {
+    fn from(node: Node<TKey, TVal>) -> Self {
+        Self {
+            key: node.key,
+            value: node.value,
+            weight: node.weight,
+            last_contact_time: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,16 +91,6 @@ impl WeightedPosition {
         Self {
             weight,
             position: position.0,
-        }
-    }
-}
-
-impl<TKey, TVal> Into<Node<TKey, TVal>> for WeightedNode<TKey, TVal> {
-    fn into(self) -> Node<TKey, TVal> {
-        Node {
-            key: self.key,
-            value: self.value,
-            weight: self.weight,
         }
     }
 }
@@ -93,10 +118,6 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
             .map_or_else(false, |bucket| bucket.all_nodes_connected())
     }
 
-    pub fn pending_active(&self) -> bool {
-        self.pending.is_some() // TODO: check replace timeout
-    }
-
     pub fn set_pending(&mut self, node: WeightedPendingNode<TKey, TVal>) {
         self.pending = Some(node)
     }
@@ -105,10 +126,23 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         self.pending = None
     }
 
+    // TODO: pending 1. Refactor?
     pub fn pending_ready(&self) -> bool {
         self.pending
             .as_ref()
-            .map_or(false, |pending| pending.replace <= Instant::now())
+            .map_or(false, |pending| pending.replace >= Instant::now())
+    }
+
+    // TODO: pending 2. Refactor?
+    pub fn pending_active(&self) -> bool {
+        self.pending
+            .as_ref()
+            .map_or(false, |pending| pending.replace < Instant::now())
+    }
+
+    // TODO: pending 3. Refactor?
+    pub fn pending_exists(&self) -> bool {
+        self.pending.is_some()
     }
 
     fn num_entries(&self) -> usize {
@@ -148,16 +182,17 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         // and then take their top element
         self.map
             .iter()
-            .filter(|(&&key, _)| key <= weight_bound)
-            .min_by(|((_, bucket_a), (_, bucket_b))| {
-                Ord::cmp(
+            .filter(|(&&weight, bucket)| weight <= weight_bound && !bucket.nodes.is_empty())
+            .min_by(|((weight_a, bucket_a), (weight_b, bucket_b))| {
+                // First compare by weight, then compare by recency
+                Ord::cmp(weight_a, weight_b).then(Ord::cmp(
                     bucket_a
                         .least_recently_connected()
-                        .map(|n| n.last_contact_time),
+                        .and_then(|n| n.last_contact_time),
                     bucket_b
                         .least_recently_connected()
-                        .map(|n| n.last_contact_time),
-                )
+                        .and_then(|n| n.last_contact_time),
+                ))
             })
             .and_then(|(_, bucket)| bucket.least_recently_connected())
     }
@@ -190,11 +225,13 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
         least_recent.map_or(false, |l_r| l_r == node) // TODO: is it enough to compare references here?
     }
 
-    pub fn insert(
+    pub fn insert<Node: Into<WeightedNode<TKey, TVal>>>(
         &mut self,
-        node: WeightedNode<TKey, TVal>,
+        node: Node,
         status: NodeStatus,
     ) -> InsertResult<TKey> {
+        let node = node.into().update(status);
+
         match status {
             NodeStatus::Connected => {
                 if !self.is_full() {
@@ -204,7 +241,8 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
                 } else {
                     let min_key = self.min_key().expect("bucket MUST be full here");
 
-                    if min_key < node.weight && !self.pending_active() {
+                    // TODO: use pending_active and call apply_pending?
+                    if min_key < node.weight && !self.pending_exists() {
                         // If bucket is full, but there's a sub-bucket with lower weight, and no pending node
                         // then set `node` to be pending, and schedule a dial-up check for the least recent node
                         match self.least_recent(node.weight) {
@@ -262,12 +300,7 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
             })
     }
 
-    pub fn update(&mut self, key: &TKey, new_status: NodeStatus) {
-        // Remove the node from its current position and then reinsert it
-        // with the desired status, which puts it at the end of either the
-        // prefix list of disconnected nodes or the suffix list of connected
-        // nodes (i.e. most-recently disconnected or most-recently connected,
-        // respectively).
+    pub fn update(&mut self, key: &TKey, new_status: NodeStatus) -> bool {
         if let Some(pos) = self.position(key) {
             // Remove the node from its current position.
             let node = self
@@ -283,6 +316,10 @@ impl<TKey, TVal> Weighted<TKey, TVal> {
                 InsertResult::Inserted => {}
                 _ => unreachable!("The node is removed before being (re)inserted."),
             }
+
+            true
+        } else {
+            false
         }
     }
 }

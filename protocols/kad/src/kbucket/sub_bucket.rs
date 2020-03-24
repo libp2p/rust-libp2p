@@ -14,27 +14,18 @@
  * limitations under the License.
  */
 
-// #[derive(Debug, Clone)]
-// struct WeightedSubBucket<TKey, TVal> {
-//     nodes: Vec<Node<TKey, TVal>>,
-//     first_connected_pos: Option<usize>,
-//     pending: Option<PendingNode<TKey, TVal>>,
-// }
-//
-// impl<TKey, TVal> WeightedSubBucket<TKey, TVal> {
-//     pub fn new() -> Self {
-//         Self {
-//             nodes: Vec::new(),
-//             first_connected_pos: None,
-//             pending: None,
-//         }
-//     }
-// }
-
 use crate::kbucket::InsertResult;
 use crate::K_VALUE;
 use arrayvec::ArrayVec;
 use std::time::Instant;
+
+enum ChangePosition {
+    AddDisconnected,
+    // num_entries – number of nodes in a bucket BEFORE appending
+    AppendConnected { num_entries: usize },
+    RemoveConnected,
+    RemoveDisconnected,
+}
 
 /// The status of a node in a bucket.
 ///
@@ -102,7 +93,7 @@ pub struct Node<TKey, TVal> {
 pub struct Position(pub usize);
 
 #[derive(Debug, Clone)]
-pub struct SubBucket<Node> {
+pub struct SubBucket<TKey, TVal, Node> {
     pub nodes: ArrayVec<[Node; K_VALUE.get()]>,
     pub first_connected_pos: Option<usize>,
     // pub pending: Option<PendingNode<TKey, TVal>>,
