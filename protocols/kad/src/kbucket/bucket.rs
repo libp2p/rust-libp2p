@@ -272,7 +272,7 @@ mod tests {
                 let node = Node {
                     key: key.clone(),
                     value: (),
-                    weight: 7,
+                    weight: 0,
                 };
                 let status = NodeStatus::arbitrary(g);
                 match bucket.insert(node, status) {
@@ -308,7 +308,7 @@ mod tests {
             let node = Node {
                 key,
                 value: (),
-                weight: 7,
+                weight: 0,
             };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
             assert_eq!(bucket.num_entries(), num_entries_start + i + 1);
@@ -330,7 +330,7 @@ mod tests {
                 let node = Node {
                     key: key.clone(),
                     value: (),
-                    weight: 7,
+                    weight: 0,
                 };
                 let full = bucket.num_entries() == K_VALUE.get();
                 match bucket.insert(node, status) {
@@ -380,11 +380,11 @@ mod tests {
         let node = Node {
             key,
             value: (),
-            weight: 7,
+            weight: 0,
         };
         match bucket.insert(node, NodeStatus::Disconnected) {
             InsertResult::Full => {}
-            x => panic!("{:?}", x),
+            x => panic!("Expected Full, got {:?}", x),
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
@@ -399,19 +399,19 @@ mod tests {
             let node = Node {
                 key: key.clone(),
                 value: (),
-                weight: 7,
+                weight: 0,
             };
             match bucket.insert(node.clone(), NodeStatus::Connected) {
                 InsertResult::Pending { disconnected } => {
                     assert_eq!(disconnected, first_disconnected.key)
                 }
-                x => panic!("{:?}", x),
+                x => panic!("Expected Pending, got {:?}", x),
             }
 
             // Trying to insert another connected node fails.
             match bucket.insert(node.clone(), NodeStatus::Connected) {
                 InsertResult::Full => {}
-                x => panic!("{:?}", x),
+                x => panic!("Expected Full, got {:?}", x),
             }
 
             assert!(bucket.pending().is_some());
@@ -440,7 +440,7 @@ mod tests {
         let node = Node {
             key,
             value: (),
-            weight: 7,
+            weight: 0,
         };
         match bucket.insert(node, NodeStatus::Connected) {
             InsertResult::Full => {}
@@ -460,7 +460,7 @@ mod tests {
         let node = Node {
             key: key.clone(),
             value: (),
-            weight: 7,
+            weight: 0,
         };
         if let InsertResult::Pending { disconnected } = bucket.insert(node, NodeStatus::Connected) {
             assert_eq!(&disconnected, &first_disconnected.key);

@@ -656,7 +656,7 @@ where
     {
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
-        let weight = unimplemented!("TODO: Call trustgraph here"); // TODO: Call trustgraph here
+        let weight = 0; // unimplemented!("TODO: Call trustgraph here"); // TODO: Call trustgraph here
         match entry.insert(contact, status, weight) {
             kbucket::InsertResult::Inserted => {
                 Some(

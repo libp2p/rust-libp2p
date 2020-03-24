@@ -36,6 +36,7 @@ pub struct WeightedPendingNode<TKey, TVal> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedNode<TKey, TVal> {
     pub inner: Node<TKey, TVal>,
+    // TODO: refresh last_contact_time
     pub last_contact_time: Option<Instant>,
 }
 
