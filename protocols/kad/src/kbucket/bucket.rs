@@ -140,13 +140,14 @@ where
 
     /// Returns a mutable reference to the pending node of the bucket, if there is any.
     pub fn pending_mut(&mut self) -> Option<&mut PendingNode<TKey, TVal>> {
-        // self.pending.as_mut()
-        unimplemented!("pending_mut")
+        unimplemented!("pending_mut");
+        self.pending.as_mut()
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any
     /// with a matching key.
     pub fn as_pending(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
+        unimplemented!("as_pending");
         self.swamp_pending
             .iter()
             .chain(self.weighted_pending.iter())
@@ -160,33 +161,24 @@ where
     /// If a pending node has been inserted, its key is returned together with
     /// the node that was replaced. `None` indicates that the nodes in the
     /// bucket remained unchanged.
-    pub fn apply_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
-        if !self.pending_ready() {
-            return None;
-        }
+    pub fn apply_pending(&mut self) -> Vec<AppliedPending<TKey, TVal>> {
+        // self.weighted
+        //     .apply_pending()
+        //     .iter()
+        //     .chain(self.swamp.apply_pending().iter())
+        //     .collect()
 
-        self.swamp_pending
-            .take()
-            .map(|PendingNode { node, status, .. }| {
-                let evicted = if self.is_full(node.weight > 0) {
-                    Some(self.pop_node(node.weight))
-                } else {
-                    None
-                };
-
-                if let InsertResult::Inserted = self.insert(node.clone(), status) {
-                    AppliedPending {
-                        inserted: node,
-                        evicted,
-                    }
-                } else {
-                    unreachable!("Bucket is not full, we just evicted a node.")
-                }
-            })
+        Iterator::chain(
+            self.weighted.apply_pending().iter(),
+            self.swamp.apply_pending().iter(),
+        )
+        .collect()
     }
 
     /// Updates the status of the pending node, if any.
     pub fn update_pending(&mut self, status: NodeStatus) {
+        unimplemented!("update_pending");
+
         if let Some(pending) = &mut self.swamp_pending {
             pending.status = status
         }
@@ -309,95 +301,12 @@ where
         }
     }
 
-    fn evict_node(&mut self, position: Position) -> Node<TKey, TVal> {
-        match self.status(position) {
-            NodeStatus::Connected => self.change_connected_pos(ChangePosition::RemoveConnected),
-            NodeStatus::Disconnected => {
-                self.change_connected_pos(ChangePosition::RemoveDisconnected)
-            }
-        }
-        self.nodes.remove(position.0)
-    }
-
-    fn pop_node(&mut self, weight: u32) -> Node<TKey, TVal> {
-        self.evict_node(Position(0))
-    }
-
-    fn change_connected_pos(&mut self, action: ChangePosition) {
-        match action {
-            ChangePosition::AddDisconnected => {
-                // New disconnected node added => position of the first connected node moved by 1
-                self.first_connected_pos = self.first_connected_pos.map(|p| p + 1)
-            }
-            ChangePosition::AppendConnected { num_entries } => {
-                // If there were no previously connected nodes – set mark to the given one (usually the last one)
-                // Otherwise – keep it the same
-                self.first_connected_pos = self.first_connected_pos.or(Some(num_entries));
-            }
-            ChangePosition::RemoveConnected => {
-                if self.num_connected() == 1 {
-                    // If it was the last connected node
-                    self.first_connected_pos = None // Then mark there is no connected nodes left
-                }
-                // Otherwise – keep mark the same
-            }
-            ChangePosition::RemoveDisconnected => {
-                // If there are connected nodes – lower mark
-                // Otherwise – keep it None
-                self.first_connected_pos = self
-                    .first_connected_pos
-                    .map(|p| p.checked_sub(1).unwrap_or(0))
-            }
-        }
-    }
-
-    fn is_least_recently_connected(&self, pos: Position) -> bool {
-        pos.0 == 0
-    }
-
-    /// Returns the status of the node at the given position.
-    pub fn status(&self, pos: Position) -> NodeStatus {
-        if self.first_connected_pos.map_or(false, |i| pos.0 >= i) {
-            NodeStatus::Connected
-        } else {
-            NodeStatus::Disconnected
-        }
-    }
-
-    /// Checks whether the given position refers to a connected node.
-    pub fn is_connected(&self, pos: Position) -> bool {
-        self.status(pos) == NodeStatus::Connected
-    }
-
-    /// Gets the number of entries currently in the bucket.
-    pub fn num_entries(&self) -> usize {
-        self.nodes.len()
-    }
-
-    /// Gets the number of entries in the bucket that are considered connected.
-    pub fn num_connected(&self) -> usize {
-        self.first_connected_pos
-            .map_or(0, |i| self.num_entries() - i)
-    }
-
-    /// Gets the number of entries in the bucket that are considered disconnected.
-    pub fn num_disconnected(&self) -> usize {
-        self.num_entries() - self.num_connected()
-    }
-
-    /// Gets the position of an node in the bucket.
-    pub fn position(&self, key: &TKey) -> Option<Position> {
-        self.nodes
-            .iter()
-            .position(|p| p.key.as_ref() == key.as_ref())
-            .map(Position)
-    }
-
     /// Gets a mutable reference to the node identified by the given key.
     ///
     /// Returns `None` if the given key does not refer to a node in the
     /// bucket.
     pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
+        unimplemented!("get_mut");
         self.nodes
             .iter_mut()
             .find(move |p| p.key.as_ref() == key.as_ref())

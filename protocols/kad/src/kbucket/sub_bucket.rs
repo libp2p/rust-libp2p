@@ -184,4 +184,51 @@ impl<Node> SubBucket<Node> {
             }
         }
     }
+
+    fn evict_node(&mut self, position: Position) -> Option<Node<TKey, TVal>> {
+        match self.status(position) {
+            NodeStatus::Connected => self.change_connected_pos(ChangePosition::RemoveConnected),
+            NodeStatus::Disconnected => {
+                self.change_connected_pos(ChangePosition::RemoveDisconnected)
+            }
+        }
+        self.nodes.pop_at(position.0)
+    }
+
+    pub fn pop_node(&mut self) -> Option<Node<TKey, TVal>> {
+        self.evict_node(Position(0))
+    }
+
+    fn is_least_recently_connected(&self, pos: Position) -> bool {
+        pos.0 == 0
+    }
+
+    /// Checks whether the given position refers to a connected node.
+    pub fn is_connected(&self, pos: Position) -> bool {
+        self.status(pos) == NodeStatus::Connected
+    }
+
+    /// Gets the number of entries currently in the bucket.
+    pub fn num_entries(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Gets the number of entries in the bucket that are considered connected.
+    pub fn num_connected(&self) -> usize {
+        self.first_connected_pos
+            .map_or(0, |i| self.num_entries() - i)
+    }
+
+    /// Gets the number of entries in the bucket that are considered disconnected.
+    pub fn num_disconnected(&self) -> usize {
+        self.num_entries() - self.num_connected()
+    }
+
+    /// Gets the position of an node in the bucket.
+    pub fn position(&self, key: &TKey) -> Option<Position> {
+        self.nodes
+            .iter()
+            .position(|p| p.key.as_ref() == key.as_ref())
+            .map(Position)
+    }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use crate::kbucket::{InsertResult, Node, NodeStatus, PendingNode, SubBucket};
+use crate::kbucket::{AppliedPending, InsertResult, Node, NodeStatus, PendingNode, SubBucket};
 use std::time::Instant;
 
 pub struct Swamp<TKey, TVal> {
@@ -80,5 +80,30 @@ impl<TKey, TVal> Swamp<TKey, TVal> {
                 InsertResult::Inserted
             }
         }
+    }
+
+    pub fn apply_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
+        if !self.pending_ready() {
+            return None;
+        }
+
+        self.swamp_pending
+            .take()
+            .map(|PendingNode { node, status, .. }| {
+                let evicted = if self.bucket.is_full() {
+                    self.bucket.pop_node()
+                } else {
+                    None
+                };
+
+                if let InsertResult::Inserted = self.insert(node.clone(), status) {
+                    AppliedPending {
+                        inserted: node,
+                        evicted,
+                    }
+                } else {
+                    unreachable!("Bucket is not full, we just evicted a node.")
+                }
+            })
     }
 }
