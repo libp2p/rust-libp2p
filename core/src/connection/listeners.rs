@@ -148,6 +148,8 @@ where
     Closed {
         /// The ID of the listener that closed.
         listener_id: ListenerId,
+        /// The addresses that the listener was listening on.
+        addresses: Vec<Multiaddr>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
         reason: Result<(), TTrans::Error>,
@@ -283,12 +285,14 @@ where
                 Poll::Ready(None) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
+                        addresses: listener_project.addresses.drain(..).collect(),
                         reason: Ok(()),
                     })
                 }
                 Poll::Ready(Some(Err(err))) => {
                     return Poll::Ready(ListenersEvent::Closed {
                         listener_id: *listener_project.id,
+                        addresses: listener_project.addresses.drain(..).collect(),
                         reason: Err(err),
                     })
                 }
@@ -351,9 +355,10 @@ where
                 .field("listener_id", listener_id)
                 .field("local_addr", local_addr)
                 .finish(),
-            ListenersEvent::Closed { listener_id, reason } => f
+            ListenersEvent::Closed { listener_id, addresses, reason } => f
                 .debug_struct("ListenersEvent::Closed")
                 .field("listener_id", listener_id)
+                .field("addresses", addresses)
                 .field("reason", reason)
                 .finish(),
             ListenersEvent::Error { listener_id, error } => f

@@ -54,6 +54,8 @@ where
     ListenerClosed {
         /// The listener ID that closed.
         listener_id: ListenerId,
+        /// The addresses that the listener was listening on.
+        addresses: Vec<Multiaddr>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
         reason: Result<(), TTrans::Error>,
@@ -182,9 +184,10 @@ where
                     .field("listen_addr", listen_addr)
                     .finish()
             }
-            NetworkEvent::ListenerClosed { listener_id, reason } => {
+            NetworkEvent::ListenerClosed { listener_id, addresses, reason } => {
                 f.debug_struct("ListenerClosed")
                     .field("listener_id", listener_id)
+                    .field("addresses", addresses)
                     .field("reason", reason)
                     .finish()
             }
@@ -342,4 +345,3 @@ where
         self.info().to_connected_point()
     }
 }
-
