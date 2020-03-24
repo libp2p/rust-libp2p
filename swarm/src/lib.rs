@@ -681,9 +681,9 @@ where
 /// Notify all of the given connections of a peer of an event.
 ///
 /// Returns `Some` with the given event and a new list of connections if
-/// at least one of the given connections is not currently able to receive the event
-/// but is not closing, in which case the current task is scheduled to be woken up.
-/// The returned connections are those which are not closing.
+/// at least one of the given connections is alive but not currently able to receive
+/// the event, in which case the current task is scheduled to be woken up and
+/// the returned connections are those which are alive.
 ///
 /// Returns `None` if all connections are either closing or the event
 /// was successfully sent to all handlers whose connections are not closing,
@@ -708,16 +708,22 @@ where
     }
 
     {
-        let mut pending = SmallVec::new();
+        let mut pending = false;
+        let mut alive = SmallVec::new();
         for id in ids.iter() {
-            if let Some(mut conn) = peer.connection(*id) { // (*)
-                if conn.poll_ready_notify_handler(cx).is_pending() {
-                    pending.push(*id)
+            if let Some(mut conn) = peer.connection(*id) {
+                match conn.poll_ready_notify_handler(cx) {
+                    Poll::Pending => {
+                        pending = true;
+                        alive.push(*id);
+                    }
+                    Poll::Ready(Ok(())) => alive.push(*id),
+                    Poll::Ready(Err(())) => {} // connection is closing
                 }
             }
         }
-        if !pending.is_empty() {
-            return Some((event, pending))
+        if pending {
+            return Some((event, alive))
         }
     }
 
