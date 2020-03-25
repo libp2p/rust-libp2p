@@ -32,65 +32,17 @@ use libp2p_core::{
     network::NetworkEvent,
     upgrade,
 };
-use libp2p_swarm::{
-    NegotiatedSubstream,
-    ProtocolsHandler,
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr,
-    protocols_handler::NodeHandlerWrapperBuilder
-};
 use rand::seq::SliceRandom;
-use std::{io, task::Context, task::Poll};
+use std::{io, task::Poll};
+use util::TestHandler;
 
-// TODO: replace with DummyProtocolsHandler after https://github.com/servo/rust-smallvec/issues/139 ?
-#[derive(Default)]
-struct TestHandler;
-
-impl ProtocolsHandler for TestHandler {
-    type InEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
-    type OutEvent = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
-    type Error = io::Error;
-    type InboundProtocol = upgrade::DeniedUpgrade;
-    type OutboundProtocol = upgrade::DeniedUpgrade;
-    type OutboundOpenInfo = ();      // TODO: cannot be Void (https://github.com/servo/rust-smallvec/issues/139)
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        SubstreamProtocol::new(upgrade::DeniedUpgrade)
-    }
-
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as upgrade::InboundUpgrade<NegotiatedSubstream>>::Output
-    ) { panic!() }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo
-    ) { panic!() }
-
-    fn inject_event(&mut self, _: Self::InEvent) {
-        panic!()
-    }
-
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Error>) {
-
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
-
-    fn poll(&mut self, _: &mut Context) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>> {
-        Poll::Pending
-    }
-}
+type TestNetwork<TTrans> = Network<TTrans, (), (), TestHandler>;
 
 #[test]
 fn deny_incoming_connec() {
     // Checks whether refusing an incoming connection on a swarm triggers the correct events.
 
-    let mut swarm1: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler>, _, _> = {
+    let mut swarm1 = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
@@ -98,7 +50,7 @@ fn deny_incoming_connec() {
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new())
             .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
-        Network::new(transport, local_public_key.into(), Default::default())
+        TestNetwork::new(transport, local_public_key.into(), Default::default())
     };
 
     let mut swarm2 = {
@@ -109,7 +61,7 @@ fn deny_incoming_connec() {
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new())
             .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
-        Network::new(transport, local_public_key.into(), Default::default())
+        TestNetwork::new(transport, local_public_key.into(), Default::default())
     };
 
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -125,7 +77,7 @@ fn deny_incoming_connec() {
     swarm2
         .peer(swarm1.local_peer_id().clone())
         .into_disconnected().unwrap()
-        .connect(address.clone(), Vec::new(), TestHandler::default().into_node_handler_builder())
+        .connect(address.clone(), Vec::new(), TestHandler())
         .unwrap();
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
@@ -180,7 +132,7 @@ fn dial_self() {
                 util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
             })
             .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
-        Network::new(transport, local_public_key.into(), Default::default())
+        TestNetwork::new(transport, local_public_key.into(), Default::default())
     };
 
     swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -195,7 +147,7 @@ fn dial_self() {
         }))
         .unwrap();
 
-    swarm.dial(&local_address, TestHandler::default().into_node_handler_builder()).unwrap();
+    swarm.dial(&local_address, TestHandler()).unwrap();
 
     let mut got_dial_err = false;
     let mut got_inc_err = false;
@@ -226,7 +178,7 @@ fn dial_self() {
                 },
                 Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
                     assert_eq!(*inc.local_addr(), local_address);
-                    inc.accept(TestHandler::default().into_node_handler_builder()).unwrap();
+                    inc.accept(TestHandler()).unwrap();
                 },
                 Poll::Ready(ev) => {
                     panic!("Unexpected event: {:?}", ev)
@@ -242,7 +194,7 @@ fn dial_self_by_id() {
     // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
     // place.
 
-    let mut swarm: Network<_, _, _, NodeHandlerWrapperBuilder<TestHandler>> = {
+    let mut swarm = {
         let local_key = identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
@@ -250,7 +202,7 @@ fn dial_self_by_id() {
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new())
             .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
-        Network::new(transport, local_public_key.into(), Default::default())
+        TestNetwork::new(transport, local_public_key.into(), Default::default())
     };
 
     let peer_id = swarm.local_peer_id().clone();
@@ -269,7 +221,7 @@ fn multiple_addresses_err() {
             .authenticate(libp2p_secio::SecioConfig::new(local_key))
             .multiplex(libp2p_mplex::MplexConfig::new())
             .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)));
-        Network::new(transport, local_public_key.into(), Default::default())
+        TestNetwork::new(transport, local_public_key.into(), Default::default())
     };
 
     let mut addresses = Vec::new();
@@ -287,7 +239,7 @@ fn multiple_addresses_err() {
     let target = PeerId::random();
     swarm.peer(target.clone())
         .into_disconnected().unwrap()
-        .connect(first, rest, TestHandler::default().into_node_handler_builder())
+        .connect(first, rest, TestHandler())
         .unwrap();
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
