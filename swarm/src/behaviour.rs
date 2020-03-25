@@ -301,13 +301,3 @@ impl Default for DialPeerCondition {
     }
 }
 
-// impl DialPeerCondition {
-//     pub fn check<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
-//         &self, peer: &Peer<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-//     ) -> bool {
-//         match (self, peer) {
-//             (DialPeerCondition::Disconnected, Peer::Disconnected(_)
-//         }
-//     }
-// }
-
