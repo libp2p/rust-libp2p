@@ -166,7 +166,7 @@ pub enum SwarmEvent<TBvEv, THandleErr> {
         /// Reason for the disconnection.
         cause: ConnectionError<NodeHandlerWrapperError<THandleErr>>,
     },
-    /// A new connection arrived on a listener and is now starting to handshake.
+    /// A new connection arrived on a listener and is in the process of protocol negotiation.
     ///
     /// A corresponding [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished),
     /// [`BannedPeer`](SwarmEvent::BannedPeer), or
