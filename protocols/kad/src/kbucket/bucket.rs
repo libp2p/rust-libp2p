@@ -354,7 +354,6 @@ mod tests {
 
             // Split the list of nodes at the first connected node.
             let first_connected_pos = nodes.iter().position(|(s, _)| *s == NodeStatus::Connected);
-            /* assert_eq!(bucket.first_connected_pos, first_connected_pos); */
             let tail = first_connected_pos.map_or(Vec::new(), |p| nodes.split_off(p));
 
             // All nodes before the first connected node must be disconnected and
