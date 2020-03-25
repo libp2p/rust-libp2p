@@ -98,8 +98,6 @@ where
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        // TODO: This enum contains `PeerIdMismatch`, which cannot possibly happen for an incoming
-        // connection. Ideally we should use a different enum.
         error: PendingConnectionError<TTrans::Error>,
     },
 

@@ -44,7 +44,7 @@ use either::Either;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{error, fmt, hash::Hash, num::NonZeroU32, task::Context, task::Poll};
+use std::{convert::TryFrom as _, error, fmt, hash::Hash, num::NonZeroU32, task::Context, task::Poll};
 
 /// A connection `Pool` manages a set of connections for each peer.
 pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId> {
@@ -580,7 +580,7 @@ where
                     let num_established =
                         if let Some(conns) = self.established.get_mut(connected.peer_id()) {
                             conns.remove(&id);
-                            conns.len() as u32
+                            u32::try_from(conns.len()).unwrap()
                         } else {
                             0
                         };
@@ -600,7 +600,7 @@ where
                                             .map_or(0, |conns| conns.len());
                         if let Err(e) = self.limits.check_established(current) {
                             let connected = entry.close();
-                            let num_established = e.current as u32;
+                            let num_established = u32::try_from(e.current).unwrap();
                             return Poll::Ready(PoolEvent::ConnectionError {
                                 id,
                                 connected,
@@ -623,7 +623,7 @@ where
                         // Add the connection to the pool.
                         let peer = entry.connected().peer_id().clone();
                         let conns = self.established.entry(peer).or_default();
-                        let num_established = NonZeroU32::new(conns.len() as u32 + 1)
+                        let num_established = NonZeroU32::new(u32::try_from(conns.len() + 1).unwrap())
                             .expect("n + 1 is always non-zero; qed");
                         conns.insert(id, endpoint);
                         match self.get(id) {
