@@ -130,7 +130,7 @@ pub trait NetworkBehaviour: Send + 'static {
     }
 
     /// A listener closed.
-    fn inject_listener_closed(&mut self, _id: ListenerId) {
+    fn inject_listener_closed(&mut self, _id: ListenerId, _err: Option<std::io::Error>) {
     }
 
     /// Polls for things that swarm should do.
@@ -252,4 +252,3 @@ pub enum NotifyHandler {
     /// Notify all connection handlers.
     All
 }
-
