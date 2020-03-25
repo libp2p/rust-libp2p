@@ -356,8 +356,8 @@ where
             Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
                 return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
             }
-            Poll::Ready(ListenersEvent::Closed { listener_id, reason }) => {
-                return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, reason })
+            Poll::Ready(ListenersEvent::Closed { listener_id, addresses, reason }) => {
+                return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason })
             }
             Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
                 return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })

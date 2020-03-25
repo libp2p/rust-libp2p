@@ -27,7 +27,7 @@ use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
-const _MAX_INLINE_KEY_LENGTH: usize = 42;
+const MAX_INLINE_KEY_LENGTH: usize = 42;
 
 /// Identifier of a peer of the network.
 ///
@@ -70,11 +70,11 @@ impl PeerId {
         // will switch to not hashing the key (i.e. the correct behaviour).
         // In other words, rust-libp2p 0.16 is compatible with all versions of rust-libp2p.
         // Rust-libp2p 0.12 and below is **NOT** compatible with rust-libp2p 0.17 and above.
-        let (hash_algorithm, canonical_algorithm): (_, Option<Code>) = /*if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
-            (multihash::Hash::Identity, Some(multihash::Hash::SHA2256))
-        } else {*/
-            (Code::Sha2_256, None);
-        //};
+        let (hash_algorithm, canonical_algorithm) = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+            (Code::Identity, Some(Code::Sha2_256))
+        } else {
+            (Code::Sha2_256, None)
+        };
 
         let canonical = canonical_algorithm.map(|alg|
             alg.hasher().expect("SHA2-256 hasher is always supported").digest(&key_enc));

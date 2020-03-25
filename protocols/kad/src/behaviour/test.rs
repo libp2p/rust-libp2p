@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/*
 #![cfg(test)]
 
 use super::*;
@@ -683,4 +682,15 @@ fn exceed_jobs_max_queries() {
         })
     )
 }
-*/
+
+#[test]
+fn exp_decr_expiration_overflow() {
+    fn prop_no_panic(ttl: Duration, factor: u32) {
+        exp_decrease(ttl, factor);
+    }
+
+    // Right shifting a u64 by >63 results in a panic.
+    prop_no_panic(KademliaConfig::default().record_ttl.unwrap(), 64);
+
+    quickcheck(prop_no_panic as fn(_, _))
+}

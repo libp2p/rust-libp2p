@@ -871,7 +871,7 @@ impl PoolLimits {
     {
         if let Some(limit) = limit {
             let current = current();
-            if limit >= current {
+            if current >= limit {
                 return Err(ConnectionLimit { limit, current })
             }
         }
