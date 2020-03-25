@@ -681,9 +681,9 @@ where
 /// Notify all of the given connections of a peer of an event.
 ///
 /// Returns `Some` with the given event and a new list of connections if
-/// at least one of the given connections is alive but not currently able to receive
+/// at least one of the given connections is currently not able to receive
 /// the event, in which case the current task is scheduled to be woken up and
-/// the returned connections are those which are alive.
+/// the returned connections are those which still need to receive the event.
 ///
 /// Returns `None` if all connections are either closing or the event
 /// was successfully sent to all handlers whose connections are not closing,
@@ -707,32 +707,23 @@ where
         }
     }
 
-    {
-        let mut pending = false;
-        let mut alive = SmallVec::new();
-        for id in ids.iter() {
-            if let Some(mut conn) = peer.connection(*id) {
-                match conn.poll_ready_notify_handler(cx) {
-                    Poll::Pending => {
-                        pending = true;
-                        alive.push(*id);
-                    }
-                    Poll::Ready(Ok(())) => alive.push(*id),
-                    Poll::Ready(Err(())) => {} // connection is closing
-                }
+    let mut pending = SmallVec::new();
+    for id in ids.into_iter() {
+        if let Some(mut conn) = peer.connection(id) {
+            match conn.poll_ready_notify_handler(cx) {
+                Poll::Pending => pending.push(id),
+                Poll::Ready(Ok(())) => {
+                    // Can now only fail due to the connection suddenly closing,
+                    // which we ignore.
+                    let _ = conn.notify_handler(event.clone());
+                },
+                Poll::Ready(Err(())) => {} // connection is closing
             }
-        }
-        if pending {
-            return Some((event, alive))
         }
     }
 
-    for id in ids.into_iter() {
-        if let Some(mut conn) = peer.connection(id) {
-            // All connections were ready. Can now only fail due
-            // to a connection suddenly closing, which we ignore.
-            let _ = conn.notify_handler(event.clone());
-        }
+    if !pending.is_empty() {
+        return Some((event, pending))
     }
 
     None
