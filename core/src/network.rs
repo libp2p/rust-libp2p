@@ -517,7 +517,7 @@ where
         // A pending outgoing connection to a known peer failed.
         let mut attempt = dialing.remove(&peer_id).expect("by (1)");
 
-        let num_remain = attempt.next.len();
+        let num_remain = attempt.next.len() as u32;
         let failed_addr = attempt.current.clone();
 
         let opts =
