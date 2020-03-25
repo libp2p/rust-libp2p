@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn bucket_update() {
         fn prop(mut bucket: KBucket<Key<PeerId>, ()>, pos: usize, status: NodeStatus) -> bool {
-            let nodes = bucket
+            let mut nodes = bucket
                 .iter()
                 .map(|(n, s)| (n.clone(), s))
                 .collect::<Vec<_>>();
@@ -503,32 +503,31 @@ mod tests {
                 .map(|(n, s)| (n.key.clone(), *s))
                 .collect::<Vec<_>>();
 
-            let num_nodes = bucket.num_entries();
             // Capture position and key of the random node to update.
-            let pos = pos % num_nodes;
+            let pos = pos % bucket.num_entries();
             let key = expected.iter().nth(pos).unwrap().0.clone();
 
             // Update the node in the bucket.
             bucket.update(&key, status);
 
+            nodes.remove(pos);
             // Check that the bucket now contains the node with the new status,
             // preserving the status and relative order of all other nodes.
             let expected_pos = match status {
-                NodeStatus::Connected => num_nodes - 1,
-                NodeStatus::Disconnected => {
-                    nodes
-                        .iter()
-                        .filter(|(_, s)| *s == NodeStatus::Disconnected)
-                        .count()
-                        - 1
-                }
+                NodeStatus::Connected => nodes.len(),
+                NodeStatus::Disconnected => nodes
+                    .iter()
+                    .filter(|(_, s)| *s == NodeStatus::Disconnected)
+                    .count(),
             };
             expected.remove(pos);
             expected.insert(expected_pos, (key.clone(), status));
+
             let actual = bucket
                 .iter()
                 .map(|(n, s)| (n.key.clone(), s))
                 .collect::<Vec<_>>();
+
             assert_eq!(expected, actual, "pos was {}", pos);
             expected == actual
         }

@@ -31,44 +31,25 @@ pub mod record;
 
 mod addresses;
 mod behaviour;
+mod contact;
 mod jobs;
 mod query;
-mod contact;
 
 mod dht_proto {
     include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));
 }
 
 pub use addresses::Addresses;
-pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
-    BootstrapResult,
-    BootstrapOk,
-    BootstrapError,
-
-    GetRecordResult,
-    GetRecordOk,
-    GetRecordError,
-
-    PutRecordResult,
-    PutRecordOk,
-    PutRecordError,
-
-    GetClosestPeersResult,
-    GetClosestPeersOk,
-    GetClosestPeersError,
-
-    AddProviderResult,
-    AddProviderOk,
-    AddProviderError,
-
-    GetProvidersResult,
-    GetProvidersOk,
-    GetProvidersError,
+    AddProviderError, AddProviderOk, AddProviderResult, BootstrapError, BootstrapOk,
+    BootstrapResult, GetClosestPeersError, GetClosestPeersOk, GetClosestPeersResult,
+    GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError, GetRecordOk,
+    GetRecordResult, PutRecordError, PutRecordOk, PutRecordResult,
 };
-pub use query::QueryId;
+pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use protocol::KadConnectionType;
-pub use record::{store, Record, ProviderRecord};
+pub use query::QueryId;
+pub use record::{store, ProviderRecord, Record};
 
 use std::num::NonZeroUsize;
 
@@ -100,4 +81,3 @@ pub const W_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 ///
 /// The current value is `3`.
 pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
-
