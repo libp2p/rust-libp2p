@@ -479,14 +479,22 @@ mod tests {
             Some((&first_disconnected, NodeStatus::Connected)),
             bucket.iter().last()
         );
-        /*
-        assert_eq!(
-            bucket.position(&first_disconnected.key).map(|p| p.0),
-            bucket.first_connected_pos
-        );
-        assert_eq!(1, bucket.num_connected());
-        assert_eq!(K_VALUE.get() - 1, bucket.num_disconnected());
-        */
+
+        let num_connected = bucket
+            .iter()
+            .filter(|(_, s)| *s == NodeStatus::Connected)
+            .count();
+        let num_disconnected = bucket
+            .iter()
+            .filter(|(_, s)| *s == NodeStatus::Disconnected)
+            .count();
+        let position = bucket
+            .iter()
+            .position(|(n, _)| n.key.as_ref() == first_disconnected.key.as_ref());
+
+        assert_eq!(1, num_connected);
+        assert_eq!(K_VALUE.get() - 1, num_disconnected);
+        assert_eq!(position, Some(num_disconnected));
     }
 
     #[test]
