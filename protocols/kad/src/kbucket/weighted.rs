@@ -141,20 +141,7 @@ where
     }
 
     fn get_bucket_mut(&mut self, weight: u32) -> &mut SubBucket<WeightedNode<TKey, TVal>> {
-        // self.map.get_mut(&weight).unwrap_or({
-        //     let bucket = SubBucket::new();
-        //     self.map.
-        // })
-
         self.map.entry(weight).or_insert(SubBucket::new())
-
-        // match self.map.entry(weight) {
-        //     Entry::Occupied(mut e) => e.get_mut(),
-        //     Entry::Vacant(e) => {
-        //         let mut bucket = SubBucket::new();
-        //         e.insert(bucket)
-        //     }
-        // }
     }
 
     fn append_connected_node(&mut self, node: WeightedNode<TKey, TVal>) {
@@ -376,5 +363,60 @@ where
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kbucket::Key;
+    use libp2p_core::PeerId;
+    use quickcheck::*;
+    use rand;
+    use std::collections::VecDeque;
+    use std::time::Instant;
+
+    #[test]
+    fn simple_insert() {
+        fn prop(status: Vec<NodeStatus>) -> bool {
+            use NodeStatus::*;
+
+            let mut bucket = Weighted::new(Duration::from_secs(100000));
+            for (i, status) in status.into_iter().enumerate() {
+                let key = Key::new(PeerId::random());
+                let node = Node {
+                    key: key.clone(),
+                    value: (),
+                    weight: rand::random::<u32>() % 20,
+                };
+
+                let result = bucket.insert(node, status);
+                if i < W_VALUE.get() {
+                    assert_eq!(result, InsertResult::Inserted, "position {}", i);
+                } else {
+                    match result {
+                        InsertResult::Pending { .. } => {
+                            assert_eq!(
+                                status, Connected,
+                                "Only Connected nodes could become pending"
+                            );
+                            assert!(bucket.pending.is_some());
+                        }
+                        InsertResult::Inserted => {
+                            assert!(
+                                false,
+                                "There shouldn't be a place in the bucket. {} {:?}",
+                                i, status
+                            );
+                        }
+                        InsertResult::Full => {}
+                    }
+                }
+            }
+
+            true
+        }
+
+        quickcheck(prop as fn(_) -> _);
     }
 }
