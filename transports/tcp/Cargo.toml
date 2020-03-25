@@ -13,10 +13,10 @@ categories = ["network-programming", "asynchronous"]
 async-std = { version = "1.0", optional = true }
 futures = "0.3.1"
 futures-timer = "3.0"
-get_if_addrs = "0.5.3"
-ipnet = "2.0.0"
+ipnetwork = "0.15"
 libp2p-core = { version = "0.16.0", path = "../../core" }
 log = "0.4.1"
+pnet = "0.25"
 tokio = { version = "0.2", default-features = false, features = ["tcp"], optional = true }
 
 [features]

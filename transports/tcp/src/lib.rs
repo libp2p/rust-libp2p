@@ -31,13 +31,13 @@
 
 use futures::{future::{self, Ready}, prelude::*};
 use futures_timer::Delay;
-use get_if_addrs::{IfAddr, get_if_addrs};
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use ipnetwork::IpNetwork;
 use libp2p_core::{
     Transport,
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
+use pnet::datalink;
 use log::{debug, trace};
 use std::{
     collections::VecDeque,
@@ -383,26 +383,14 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 }
 
 // Collect all local host addresses and use the provided port number as listen port.
-fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
+fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNetwork, Multiaddr)>> {
     let mut addrs = Vec::new();
-    for iface in get_if_addrs()? {
-        let ip = iface.ip();
-        let ma = ip_to_multiaddr(ip, port);
-        let ipn = match iface.addr {
-            IfAddr::V4(ip4) => {
-                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
-                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
-                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
-                IpNet::V4(ipnet)
-            }
-            IfAddr::V6(ip6) => {
-                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
-                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
-                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
-                IpNet::V6(ipnet)
-            }
-        };
-        addrs.push((ip, ipn, ma))
+    for iface in datalink::interfaces() {
+        for net in iface.ips {
+            let ip = net.ip();
+            let ma = ip_to_multiaddr(ip, port);
+            addrs.push((ip, net, ma))
+        }
     }
     Ok(addrs)
 }
@@ -413,7 +401,7 @@ enum Addresses {
     /// A specific address is used to listen.
     One(Multiaddr),
     /// A set of addresses is used to listen.
-    Many(Vec<(IpAddr, IpNet, Multiaddr)>)
+    Many(Vec<(IpAddr, IpNetwork, Multiaddr)>)
 }
 
 type Buffer<T> = VecDeque<Result<ListenerEvent<Ready<Result<T, io::Error>>, io::Error>, io::Error>>;
@@ -424,7 +412,7 @@ type Buffer<T> = VecDeque<Result<ListenerEvent<Ready<Result<T, io::Error>>, io::
 fn check_for_interface_changes<T>(
     socket_addr: &SocketAddr,
     listen_port: u16,
-    listen_addrs: &mut Vec<(IpAddr, IpNet, Multiaddr)>,
+    listen_addrs: &mut Vec<(IpAddr, IpNetwork, Multiaddr)>,
     pending: &mut Buffer<T>
 ) -> Result<(), io::Error> {
     // Check for exact match:
@@ -433,7 +421,7 @@ fn check_for_interface_changes<T>(
     }
 
     // No exact match => check netmask
-    if listen_addrs.iter().find(|(_, net, _)| net.contains(&socket_addr.ip())).is_some() {
+    if listen_addrs.iter().find(|(_, net, _)| net.contains(socket_addr.ip())).is_some() {
         return Ok(())
     }
 
@@ -463,7 +451,7 @@ fn check_for_interface_changes<T>(
     // We should now be able to find the local address, if not something
     // is seriously wrong and we report an error.
     if listen_addrs.iter()
-        .find(|(ip, net, _)| ip == &socket_addr.ip() || net.contains(&socket_addr.ip()))
+        .find(|(ip, net, _)| ip == &socket_addr.ip() || net.contains(socket_addr.ip()))
         .is_none()
     {
         let msg = format!("{} does not match any listen address", socket_addr.ip());
