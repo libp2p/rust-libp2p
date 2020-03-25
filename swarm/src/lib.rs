@@ -129,20 +129,6 @@ pub type Swarm<TBehaviour, TConnInfo = PeerId> = ExpandedSwarm<
     TConnInfo,
 >;
 
-
-// /// Contains the state of the network, plus the way it should behave.
-// pub struct SwarmNetwork<TTransport, TBehaviour, TConnInfo = PeerId> {
-//     behaviour: TBehaviour,
-//     inner: Network<
-//         TTransport,
-//         <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
-//         <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
-//         <TBehaviour as NetworkBehaviour>::ProtocolsHandler,
-//         TConnInfo,
-//     >
-// }
-
-
 /// Substream for which a protocol has been chosen.
 ///
 /// Implements the [`AsyncRead`](futures::io::AsyncRead) and
