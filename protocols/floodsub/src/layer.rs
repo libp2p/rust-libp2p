@@ -20,6 +20,7 @@
 
 use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use crate::topic::Topic;
+use crate::FloodsubOptions;
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
 use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
@@ -43,8 +44,7 @@ pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
 
-    /// Peer id of the local node. Used for the source of the messages that we publish.
-    local_peer_id: PeerId,
+    options: FloodsubOptions,
 
     /// List of peers to send messages to.
     target_peers: FnvHashSet<PeerId>,
@@ -64,11 +64,16 @@ pub struct Floodsub {
 }
 
 impl Floodsub {
-    /// Creates a `Floodsub`.
+    /// Creates a `Floodsub` with default options.
     pub fn new(local_peer_id: PeerId) -> Self {
+        Self::from_options(FloodsubOptions::new(local_peer_id))
+    }
+
+    /// Creates a `Floodsub` with the given options.
+    pub fn from_options(options: FloodsubOptions) -> Self {
         Floodsub {
             events: VecDeque::new(),
-            local_peer_id,
+            options,
             target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
@@ -190,7 +195,7 @@ impl Floodsub {
 
     fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = impl Into<Topic>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
         let message = FloodsubMessage {
-            source: self.local_peer_id.clone(),
+            source: self.options.local_peer_id.clone(),
             data: data.into(),
             // If the sequence numbers are predictable, then an attacker could flood the network
             // with packets with the predetermined sequence numbers and absorb our legitimate
@@ -202,6 +207,10 @@ impl Floodsub {
         let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
             self.received.add(&message);
+            if self.options.subscribe_local_messages {
+                self.events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Message(message.clone())));
+            }
         }
         // Don't publish the message if we have to check subscriptions
         // and we're not subscribed ourselves to any of the topics.
