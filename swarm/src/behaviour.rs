@@ -72,24 +72,32 @@ pub trait NetworkBehaviour: Send + 'static {
     /// address should be the most likely to be reachable.
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr>;
 
-    /// Indicates the behaviour that we connected to the node with the given peer id through the
-    /// given endpoint.
+    /// Indicates the behaviour that we connected to the node with the given peer id.
     ///
     /// This node now has a handler (as spawned by `new_handler`) running in the background.
+    ///
+    /// This method is only called when the connection to the peer is
+    /// established, preceded by `inject_connection_established`.
     fn inject_connected(&mut self, peer_id: &PeerId);
 
-    /// Indicates the behaviour that we disconnected from the node with the given peer id. The
-    /// endpoint is the one we used to be connected to.
+    /// Indicates the behaviour that we disconnected from the node with the given peer id.
     ///
     /// There is no handler running anymore for this node. Any event that has been sent to it may
     /// or may not have been processed by the handler.
+    ///
+    /// This method is only called when the last established connection to the peer
+    /// is closed, preceded by `inject_connection_closed`.
     fn inject_disconnected(&mut self, peer_id: &PeerId);
 
-    /// TODO
+    /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint)
     {}
 
-    /// TODO
+    /// Informs the behaviour about a closed connection to a peer.
+    ///
+    /// A call to this method is always paired with an earlier call to
+    /// `inject_connection_established` with the same peer ID, connection ID and
+    /// endpoint.
     fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint)
     {}
 
