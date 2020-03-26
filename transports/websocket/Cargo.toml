@@ -16,7 +16,7 @@ either = "1.5.3"
 futures = "0.3.1"
 libp2p-core = { version = "0.16.0", path = "../../core" }
 log = "0.4.8"
-quicksink = "0.1"
+quicksink = { git = "https://github.com/paritytech/quicksink", branch = "develop" }
 rustls = "0.16"
 rw-stream-sink = "0.2.0"
 soketto = { version = "0.3", features = ["deflate"] }

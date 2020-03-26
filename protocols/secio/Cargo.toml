@@ -20,7 +20,7 @@ libp2p-core = { version = "0.16.0", path = "../../core" }
 log = "0.4.6"
 prost = "0.6.1"
 pin-project = "0.4.6"
-quicksink = "0.1"
+quicksink = { git = "https://github.com/paritytech/quicksink", branch = "develop" }
 rand = "0.7"
 rw-stream-sink = "0.2.0"
 sha2 = "0.8.0"

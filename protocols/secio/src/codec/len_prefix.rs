@@ -79,6 +79,9 @@ where
                 Action::Close => w.close().await?
             }
             Ok(w)
+        })
+        .sink_map_err(|e| {
+            e.into_inner().unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "sink is closed"))
         });
 
         LenPrefixCodec {
