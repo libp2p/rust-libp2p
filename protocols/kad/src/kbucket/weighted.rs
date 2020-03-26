@@ -378,16 +378,16 @@ mod tests {
 
     #[test]
     fn simple_insert() {
-        fn prop(status: Vec<NodeStatus>) -> bool {
+        fn prop(weight_status: Vec<(u32, NodeStatus)>) -> bool {
             use NodeStatus::*;
 
             let mut bucket = Weighted::new(Duration::from_secs(100000));
-            for (i, status) in status.into_iter().enumerate() {
+            for (i, (weight, status)) in weight_status.into_iter().enumerate() {
                 let key = Key::new(PeerId::random());
                 let node = Node {
                     key: key.clone(),
                     value: (),
-                    weight: rand::random::<u32>() % 20,
+                    weight,
                 };
 
                 let result = bucket.insert(node, status);
