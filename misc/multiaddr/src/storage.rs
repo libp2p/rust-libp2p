@@ -1,3 +1,22 @@
+// Copyright 2020 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
 use std::sync::Arc;
 
 /// MAX_INLINE is the maximum size of a multiaddr that can be stored inline.
@@ -41,8 +60,22 @@ impl Storage {
 
 #[cfg(test)]
 mod tests {
+    use crate::Multiaddr;
     use super::{Storage, MAX_INLINE};
     use quickcheck::quickcheck;
+
+    #[test]
+    fn multihash_size() {
+        fn assert_size(ma: &str, n: usize, inline: bool) {
+            let ma: Multiaddr = ma.parse().unwrap();
+            assert_eq!(ma.as_ref().len(), n);
+            assert_eq!(n <= MAX_INLINE, inline);
+        }
+        assert_size("/ip4/127.0.0.1", 5, true);
+        assert_size("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000", 20, true);
+        assert_size("/dns4/0123456789012345678901234/tcp/8000", 30, true);
+        assert_size("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC", 59, false);
+    }
 
     #[test]
     fn struct_size() {

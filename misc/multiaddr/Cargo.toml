@@ -25,3 +25,8 @@ bincode = "1"
 quickcheck = "0.9.0"
 rand = "0.7.2"
 serde_json = "1.0"
+criterion = "0.3"
+
+[[bench]]
+name = "clone"
+harness = false
