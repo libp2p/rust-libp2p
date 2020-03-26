@@ -178,12 +178,6 @@ where
     /// the node that was replaced. `None` indicates that the nodes in the
     /// bucket remained unchanged.
     pub fn apply_pending(&mut self) -> Vec<AppliedPending<TKey, TVal>> {
-        // self.weighted
-        //     .apply_pending()
-        //     .iter()
-        //     .chain(self.swamp.apply_pending().iter())
-        //     .collect()
-
         Iterator::chain(
             self.weighted.apply_pending().into_iter(),
             self.swamp.apply_pending().into_iter(),

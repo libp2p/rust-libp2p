@@ -311,10 +311,18 @@ where
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
-        self.map
-            .values()
-            .map(|bucket| bucket.iter().map(|(n, s)| (&n.inner, s)))
+    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> + '_ {
+        let mut keys = self.map.keys().collect::<Vec<_>>();
+        keys.sort();
+        let map: &HashMap<u32, _> = &self.map;
+
+        keys.into_iter()
+            .map(move |w| {
+                map.get(&w)
+                    .into_iter()
+                    .map(|bucket| bucket.iter().map(|(n, s)| (&n.inner, s)))
+                    .flatten()
+            })
             .flatten()
     }
 

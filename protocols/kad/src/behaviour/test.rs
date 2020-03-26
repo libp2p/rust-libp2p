@@ -74,7 +74,7 @@ fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> (u64, Vec<(ed2551
 
         let local_id = local_public_key.clone().into_peer_id();
         let store = MemoryStore::new(local_id.clone());
-        let trust = TrustGraph::new(HashMap::new());
+        let trust = TrustGraph::new(Vec::new());
         let behaviour = Kademlia::with_config(ed25519_key.clone(), local_id.clone(), store, cfg.clone(), trust);
         result.push((ed25519_key, Swarm::new(transport, behaviour, local_id)));
     }
