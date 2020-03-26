@@ -1,7 +1,12 @@
 use std::sync::Arc;
 
-/// MAX_INLINE is the maximum size of a multiaddr that can be stored inline
-const MAX_INLINE: usize = 38;
+/// MAX_INLINE is the maximum size of a multiaddr that can be stored inline.
+/// There is an overhead of 2 bytes, 1 for the length and 1 for the enum discriminator.
+/// 30 is chosen so that the overall size is 32. This should still be big enough to fit
+/// a multiaddr containing an ipv4 or ipv6 address and port.
+///
+/// More complex multiaddrs like those containing peer ids will be stored on the heap.
+const MAX_INLINE: usize = 30;
 
 #[derive(Clone)]
 pub(crate) enum Storage {
@@ -42,7 +47,7 @@ mod tests {
     #[test]
     fn struct_size() {
         // this should be true for both 32 and 64 bit archs
-        assert_eq!(std::mem::size_of::<Storage>(), 40);
+        assert_eq!(std::mem::size_of::<Storage>(), 32);
     }
 
     #[test]
