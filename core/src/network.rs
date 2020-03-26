@@ -52,6 +52,7 @@ use fnv::{FnvHashMap};
 use futures::{prelude::*, future};
 use std::{
     collections::hash_map,
+    convert::TryFrom as _,
     error,
     fmt,
     hash::Hash,
@@ -517,7 +518,7 @@ where
         // A pending outgoing connection to a known peer failed.
         let mut attempt = dialing.remove(&peer_id).expect("by (1)");
 
-        let num_remain = attempt.next.len();
+        let num_remain = u32::try_from(attempt.next.len()).unwrap();
         let failed_addr = attempt.current.clone();
 
         let opts =
