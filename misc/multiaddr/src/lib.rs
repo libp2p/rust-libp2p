@@ -70,10 +70,9 @@ impl Multiaddr {
     /// ```
     ///
     pub fn push(&mut self, p: Protocol<'_>) {
-        let mut w = io::Cursor::new(self.to_vec());
-        w.set_position(w.get_ref().len() as u64);
-        p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.");
-        self.storage = Storage::from_slice(&w.into_inner());
+        let mut w = Buffer::from_ref(self.as_ref());
+        p.write_bytes(&mut w).expect("Writing to a `Buffer` never fails.");
+        self.storage = w.to_storage();
     }
 
     /// Pops the last `Protocol` of this multiaddr, or `None` if the multiaddr is empty.
@@ -105,10 +104,9 @@ impl Multiaddr {
 
     /// Like [`Multiaddr::push`] but consumes `self`.
     pub fn with(mut self, p: Protocol<'_>) -> Self {
-        let mut w = io::Cursor::new(self.to_vec());
-        w.set_position(w.get_ref().len() as u64);
-        p.write_bytes(&mut w).expect("Writing to a `io::Cursor<&mut Vec<u8>>` never fails.");
-        self.storage = Storage::from_slice(&w.into_inner());
+        let mut w = Buffer::from_ref(self.as_ref());
+        p.write_bytes(&mut w).expect("Writing to a `Buffer` never fails.");
+        self.storage = w.to_storage();
         self
     }
 
@@ -423,5 +421,28 @@ macro_rules! multiaddr {
             )+
             elem.collect::<$crate::Multiaddr>()
         }
+    }
+}
+
+struct Buffer(smallvec::SmallVec<[u8; 32]>);
+
+impl Buffer {
+    fn from_ref(data: &[u8]) -> Self {
+        Self(data.into())
+    }
+
+    fn to_storage(self) -> Storage {
+        Storage::from_slice(&self.0)
+    }
+}
+
+impl io::Write for Buffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
