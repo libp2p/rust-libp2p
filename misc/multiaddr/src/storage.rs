@@ -8,7 +8,7 @@ pub(crate) enum Storage {
     /// hash is stored inline if it is smaller than MAX_INLINE
     Inline(u8, [u8; MAX_INLINE]),
     /// hash is stored on the heap. this must be only used if the hash is actually larger than
-    /// MAX_INLINE bytes to ensure an unique representation.
+    /// MAX_INLINE bytes to ensure a unique representation.
     Heap(Arc<[u8]>),
 }
 
