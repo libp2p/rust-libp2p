@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-use crate::K_VALUE;
-use arrayvec::ArrayVec;
 use std::time::Instant;
 
 enum ChangePosition {
@@ -93,15 +91,17 @@ pub struct Position(pub usize);
 
 #[derive(Debug, Clone)]
 pub struct SubBucket<Node> {
-    pub nodes: ArrayVec<[Node; K_VALUE.get()]>,
+    pub nodes: Vec<Node>,
     pub first_connected_pos: Option<usize>,
+    pub capacity: usize,
 }
 
 impl<Node> SubBucket<Node> {
-    pub fn new() -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
-            nodes: ArrayVec::new(),
+            nodes: Vec::with_capacity(capacity + 1),
             first_connected_pos: None,
+            capacity,
         }
     }
 
@@ -122,7 +122,7 @@ impl<Node> SubBucket<Node> {
     }
 
     pub fn is_full(&self) -> bool {
-        self.nodes.is_full()
+        self.nodes.len() >= self.capacity
     }
 
     pub fn all_nodes_connected(&self) -> bool {
@@ -181,7 +181,16 @@ impl<Node> SubBucket<Node> {
                 self.change_connected_pos(ChangePosition::RemoveDisconnected)
             }
         }
-        self.nodes.pop_at(position.0)
+        if position.0 >= self.nodes.len() {
+            println!(
+                "WARNING: tried to evict node at {} while there's only {} nodes",
+                position.0,
+                self.nodes.len()
+            );
+            None
+        } else {
+            Some(self.nodes.remove(position.0))
+        }
     }
 
     pub fn pop_node(&mut self) -> Option<Node> {
