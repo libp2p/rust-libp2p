@@ -18,7 +18,6 @@ use serde::{
 use std::{
     convert::TryFrom,
     fmt,
-    io,
     hash,
     iter::FromIterator,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -70,9 +69,9 @@ impl Multiaddr {
     /// ```
     ///
     pub fn push(&mut self, p: Protocol<'_>) {
-        let mut w = Buffer::from_ref(self.as_ref());
+        let mut w: smallvec::SmallVec<[u8; 32]> = self.as_ref().into();
         p.write_bytes(&mut w).expect("Writing to a `Buffer` never fails.");
-        self.storage = w.to_storage();
+        self.storage = Storage::from_slice(&w);
     }
 
     /// Pops the last `Protocol` of this multiaddr, or `None` if the multiaddr is empty.
@@ -104,9 +103,7 @@ impl Multiaddr {
 
     /// Like [`Multiaddr::push`] but consumes `self`.
     pub fn with(mut self, p: Protocol<'_>) -> Self {
-        let mut w = Buffer::from_ref(self.as_ref());
-        p.write_bytes(&mut w).expect("Writing to a `Buffer` never fails.");
-        self.storage = w.to_storage();
+        self.push(p);
         self
     }
 
@@ -421,28 +418,5 @@ macro_rules! multiaddr {
             )+
             elem.collect::<$crate::Multiaddr>()
         }
-    }
-}
-
-struct Buffer(smallvec::SmallVec<[u8; 32]>);
-
-impl Buffer {
-    fn from_ref(data: &[u8]) -> Self {
-        Self(data.into())
-    }
-
-    fn to_storage(self) -> Storage {
-        Storage::from_slice(&self.0)
-    }
-}
-
-impl io::Write for Buffer {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
     }
 }
