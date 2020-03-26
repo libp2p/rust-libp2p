@@ -101,6 +101,11 @@
     bare_trait_objects
 )]
 
+#[cfg(not(feature = "tracing"))]
+use log::{debug, error, info, trace, warn};
+#[cfg(feature = "tracing")]
+use tracing::{debug, error, info, trace, warn};
+
 mod connection;
 mod endpoint;
 mod error;

@@ -23,6 +23,7 @@
 use super::endpoint::Connection;
 use super::stream::StreamState;
 use super::{socket, Error};
+use crate::{debug, error, info, trace};
 use async_macros::ready;
 use either::Either;
 use futures::{channel::oneshot, future::FutureExt};
@@ -36,7 +37,6 @@ use std::{
     task::{Context, Poll, Waker},
     time::Instant,
 };
-use tracing::{debug, error, info, trace};
 
 /// A stream ID.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -441,7 +441,9 @@ impl Future for ConnectionDriver {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         let mut inner = this.inner.lock();
+        #[cfg(feature = "tracing")]
         let span = tracing::trace_span!("Connection", side = debug(inner.side()),);
+        #[cfg(feature = "tracing")]
         let _guard = span.enter();
         inner.waker = Some(cx.waker().clone());
         loop {
@@ -493,7 +495,9 @@ impl Future for Upgrade {
         let muxer = &mut self.get_mut().muxer;
         trace!("outbound polling!");
         let mut inner = muxer.as_mut().expect("polled after yielding Ready").lock();
+        #[cfg(feature = "tracing")]
         let span = tracing::trace_span!("Upgrade", side = debug(inner.side()),);
+        #[cfg(feature = "tracing")]
         let _guard = span.enter();
         if let Some(close_reason) = &inner.close_reason {
             return Poll::Ready(Err(Error::ConnectionError(close_reason.clone())));

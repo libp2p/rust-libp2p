@@ -26,7 +26,6 @@ use libp2p_core::{
     StreamMuxer, Transport,
 };
 use libp2p_quic::{Config, Endpoint, Muxer, Substream};
-use tracing::info_span;
 
 use log::{debug, info, trace};
 use std::{
@@ -115,12 +114,15 @@ impl<'a> futures::Stream for Inbound<'a> {
     }
 }
 
+#[cfg(feature = "tracing")]
 fn init() {
     use tracing_subscriber::{fmt::Subscriber, EnvFilter};
     let _ = Subscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 }
+#[cfg(not(feature = "tracing"))]
+fn init() {}
 
 struct Closer(Muxer);
 
@@ -189,9 +191,6 @@ fn do_test(_i: u32) {
     let mut listener = quic_endpoint.clone().listen_on(addr).unwrap();
     trace!("running tests");
     let handle = async_std::task::spawn(async move {
-        // let span = info_span!("test", id = i, side = "server");
-        // let _guard = span.enter();
-
         let key = loop {
             trace!("awaiting connection");
             match listener.next().await.unwrap().unwrap() {

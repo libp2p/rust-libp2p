@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::{error::Error, stream_map};
+use crate::{error, trace};
 use async_macros::ready;
 use either::Either;
 use futures::{channel::oneshot, prelude::*};
@@ -29,7 +30,6 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tracing::{error, trace};
 
 /// A QUIC substream
 #[derive(Debug)]
@@ -99,11 +99,21 @@ enum OutboundInner {
     Done,
 }
 
+#[cfg(feature = "tracing")]
 macro_rules! span {
+    ($name:expr, $($id:ident = $e:expr),*) => {
+        let span = tracing::trace_span!($name, $($id:ident = $e:expr),*);
+        let _guard = span.enter();
+	}
     ($name:expr, $inner:expr, $id:expr) => {
         let span = tracing::trace_span!($name, side = debug($inner.side()), id = debug(&$id.id));
         let _guard = span.enter();
     };
+}
+#[cfg(not(feature = "tracing"))]
+macro_rules! span {
+    ($name:expr, $($id:ident = $e:expr),*) => {};
+    ($name:expr, $inner:expr, $id:expr) => {};
 }
 
 /// An outbound QUIC substream. This will eventually resolve to either a
@@ -157,8 +167,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner();
-        let span = tracing::trace_span!("inbound", side = debug(inner.side()));
-        let _guard = span.enter();
+        span!("inbound", side = debug(inner.side()));
         trace!("being polled for inbound connections!");
         inner.close_reason()?;
         inner.wake_driver();

@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{debug, info, trace};
 use crate::{error::Error, socket, stream_map::Streams, Upgrade};
 use async_macros::ready;
 use async_std::{net::SocketAddr, task::spawn};
@@ -36,7 +37,6 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
-use tracing::{debug, info, trace};
 
 use channel_ref::Channel;
 
@@ -621,7 +621,9 @@ impl Future for EndpointRef {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         let Self { reference, channel } = self.get_mut();
         let mut inner = reference.inner.lock();
+        #[cfg(feature = "tracing")]
         let span = tracing::trace_span!("Endpoint", address = display(&reference.address));
+        #[cfg(feature = "tracing")]
         let _guard = span.enter();
         trace!("driving events");
         inner.drive_events(cx);
@@ -777,7 +779,9 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 #[test]
 fn multiaddr_to_udp_conversion() {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    #[cfg(feature = "tracing")]
     use tracing_subscriber::{fmt::Subscriber, EnvFilter};
+    #[cfg(feature = "tracing")]
     let _ = Subscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
