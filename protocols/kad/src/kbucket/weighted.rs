@@ -141,20 +141,9 @@ where
     }
 
     fn get_bucket_mut(&mut self, weight: u32) -> &mut SubBucket<WeightedNode<TKey, TVal>> {
-        // self.map.get_mut(&weight).unwrap_or({
-        //     let bucket = SubBucket::new();
-        //     self.map.
-        // })
-
-        self.map.entry(weight).or_insert(SubBucket::new())
-
-        // match self.map.entry(weight) {
-        //     Entry::Occupied(mut e) => e.get_mut(),
-        //     Entry::Vacant(e) => {
-        //         let mut bucket = SubBucket::new();
-        //         e.insert(bucket)
-        //     }
-        // }
+        self.map
+            .entry(weight)
+            .or_insert(SubBucket::new(W_VALUE.get()))
     }
 
     fn append_connected_node(&mut self, node: WeightedNode<TKey, TVal>) {

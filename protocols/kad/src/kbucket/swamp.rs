@@ -17,6 +17,7 @@
 use crate::kbucket::{
     AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, PendingNode, SubBucket,
 };
+use crate::K_VALUE;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -33,7 +34,7 @@ where
 {
     pub fn new(pending_timeout: Duration) -> Self {
         Self {
-            bucket: SubBucket::new(),
+            bucket: SubBucket::new(K_VALUE.get()),
             pending: None,
             pending_timeout,
         }
