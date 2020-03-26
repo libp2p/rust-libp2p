@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-tls"
+name = "libp2p-x509"
 version = "0.16.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
