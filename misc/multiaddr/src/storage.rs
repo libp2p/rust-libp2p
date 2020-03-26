@@ -45,7 +45,8 @@ impl Storage {
         }
     }
 
-    /// creates storage from a vec. For a size up to MAX_INLINE, this will not allocate.
+    /// Creates storage from a slice.
+    /// For a size up to MAX_INLINE, this will not allocate.
     pub fn from_slice(slice: &[u8]) -> Self {
         let len = slice.len();
         if len <= MAX_INLINE {
