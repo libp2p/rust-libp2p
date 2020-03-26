@@ -258,7 +258,7 @@ fn multiple_addresses_err() {
                         assert_eq!(attempts_remaining, 0);
                         return Poll::Ready(Ok(()));
                     } else {
-                        assert_eq!(attempts_remaining, addresses.len());
+                        assert_eq!(attempts_remaining, addresses.len() as u32);
                     }
                 },
                 Poll::Ready(_) => unreachable!(),
