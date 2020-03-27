@@ -14,7 +14,7 @@ async-tls = "0.6"
 bytes = "0.5"
 either = "1.5.3"
 futures = "0.3.1"
-libp2p-core = { version = "0.16.0", path = "../../core" }
+libp2p-core = { version = "0.16.8", path = "../../core" }
 log = "0.4.8"
 quicksink = "0.1"
 rustls = "0.16"
