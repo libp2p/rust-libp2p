@@ -76,7 +76,7 @@ mod weighted;
 pub use entry::*;
 pub use sub_bucket::*;
 
-use arrayvec::{self, ArrayVec};
+use arrayvec::self;
 use bucket::KBucket;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 use std::collections::{VecDeque};
@@ -241,7 +241,7 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_> {
+            fmap: |b: &KBucket<TKey, _>| -> Vec<_> {
                 b.iter().map(|(n, _)| n.key.clone()).collect()
             },
         }
@@ -263,7 +263,7 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_> {
+            fmap: |b: &KBucket<_, TVal>| -> Vec<_> {
                 b.iter()
                     .map(|(n, status)| EntryView {
                         node: n.clone(),
@@ -292,7 +292,14 @@ where
                 .filter(|(n, _)| n.key.as_ref().distance(&local_key) <= distance)
                 .count();
             let num_rest: usize = iter.map(|i| self.buckets[i.get()].num_entries()).sum();
-            num_first + num_rest
+            let result = num_first + num_rest;
+            println!(
+                "There are {} nodes between local {} and remote {}",
+                result,
+                bs58::encode(local_key.as_ref()).into_string(),
+                bs58::encode(target.as_ref()).into_string()
+            );
+            result
         } else {
             0
         }
@@ -313,7 +320,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<arrayvec::IntoIter<[TOut; K_VALUE.get()]>>,
+    iter: Option<std::vec::IntoIter<TOut>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap,
@@ -386,14 +393,26 @@ impl Iterator for ClosestBucketsIter {
     fn next(&mut self) -> Option<Self::Item> {
         match self.state {
             ClosestBucketsIterState::Start(i) => {
+                println!(
+                    "ClosestBucketsIter: distance = {}; Start({}) -> ZoomIn({})",
+                    self.distance.0, i.0, i.0
+                );
                 self.state = ClosestBucketsIterState::ZoomIn(i);
                 Some(i)
             }
             ClosestBucketsIterState::ZoomIn(i) => {
                 if let Some(i) = self.next_in(i) {
+                    println!(
+                        "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomIn({})",
+                        self.distance.0, i.0, i.0
+                    );
                     self.state = ClosestBucketsIterState::ZoomIn(i);
                     Some(i)
                 } else {
+                    println!(
+                        "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomOut(0)",
+                        self.distance.0, i.0
+                    );
                     let i = BucketIndex(0);
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
@@ -401,14 +420,28 @@ impl Iterator for ClosestBucketsIter {
             }
             ClosestBucketsIterState::ZoomOut(i) => {
                 if let Some(i) = self.next_out(i) {
+                    println!(
+                        "ClosestBucketsIter: distance = {}; ZoomOut({}) -> ZoomOut({})",
+                        self.distance.0, i.0, i.0
+                    );
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 } else {
+                    println!(
+                        "ClosestBucketsIter: distance = {}; ZoomOut({}) ->Done",
+                        self.distance.0, i.0
+                    );
                     self.state = ClosestBucketsIterState::Done;
                     None
                 }
             }
-            ClosestBucketsIterState::Done => None,
+            ClosestBucketsIterState::Done => {
+                println!(
+                    "ClosestBucketsIter: distance = {}; Done",
+                    self.distance.0
+                );
+                None
+            },
         }
     }
 }
@@ -418,7 +451,7 @@ where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<[TOut; K_VALUE.get()]>,
+    TMap: Fn(&KBucket<TKey, TVal>) -> Vec<TOut>,
     TOut: AsRef<KeyBytes>,
 {
     type Item = TOut;
@@ -427,7 +460,14 @@ where
         loop {
             match &mut self.iter {
                 Some(iter) => match iter.next() {
-                    Some(k) => return Some(k),
+                    Some(k) => {
+                        println!(
+                            "ClosestIter: target = {}; next node {}",
+                            bs58::encode(&self.target.as_ref()).into_string(),
+                            bs58::encode(k.as_ref()).into_string()
+                        );
+                        return Some(k)
+                    },
                     None => self.iter = None,
                 },
                 None => {
@@ -436,13 +476,22 @@ where
                         self.table.applied_pending.extend(bucket.apply_pending());
                         let mut v = (self.fmap)(bucket);
                         v.sort_by(|a, b| {
-                            self.target
-                                .as_ref()
-                                .distance(a.as_ref())
-                                .cmp(&self.target.as_ref().distance(b.as_ref()))
+                            Ord::cmp(
+                                &self.target.as_ref().distance(a.as_ref()),
+                                &self.target.as_ref().distance(b.as_ref())
+                            )
                         });
+                        println!(
+                            "ClosestIter: target = {}; next bucket {} with {} nodes",
+                            bs58::encode(&self.target.as_ref()).into_string(),
+                            i.0, v.len()
+                        );
                         self.iter = Some(v.into_iter());
                     } else {
+                        println!(
+                            "ClosestIter: target = {}; Finished.",
+                            bs58::encode(&self.target.as_ref()).into_string()
+                        );
                         return None;
                     }
                 }

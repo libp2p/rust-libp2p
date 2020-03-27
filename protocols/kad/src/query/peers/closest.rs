@@ -281,7 +281,12 @@ impl ClosestPeersIter {
                         // their results can still be delivered to the iterator.
                         debug_assert!(self.num_waiting > 0);
                         self.num_waiting -= 1;
-                        peer.state = PeerState::Unresponsive
+                        peer.state = PeerState::Unresponsive;
+                        println!(
+                            "ClosestPeerIter: target = {}; peer {} timed out",
+                            bs58::encode(&self.target).into_string(),
+                            peer.key.preimage().to_base58()
+                        );
                     }
                     else if at_capacity {
                         // The iterator is still waiting for a result from a peer and is
@@ -299,16 +304,32 @@ impl ClosestPeersIter {
 
                 PeerState::Succeeded =>
                     if let Some(ref mut cnt) = result_counter {
+                        println!(
+                            "ClosestPeerIter: target = {}; peer {} succeeded",
+                            bs58::encode(&self.target).into_string(),
+                            peer.key.preimage().to_base58()
+                        );
                         *cnt += 1;
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
                         if *cnt >= self.config.num_results {
+                            println!(
+                                "ClosestPeerIter: target = {}; Got all {} results, finished.",
+                                bs58::encode(&self.target).into_string(),
+                                *cnt
+                            );
                             self.state = State::Finished;
                             return PeersIterState::Finished
                         }
                     }
 
-                PeerState::NotContacted =>
+                PeerState::NotContacted => {
+                    println!(
+                        "ClosestPeerIter: target = {}; new peer {}. Capacity left? {}",
+                        bs58::encode(&self.target).into_string(),
+                        peer.key.preimage().to_base58(),
+                        !at_capacity
+                    );
                     if !at_capacity {
                         let timeout = now + self.config.peer_timeout;
                         peer.state = PeerState::Waiting(timeout);
@@ -317,9 +338,16 @@ impl ClosestPeersIter {
                     } else {
                         return PeersIterState::WaitingAtCapacity
                     }
+                }
 
                 PeerState::Unresponsive | PeerState::Failed => {
                     // Skip over unresponsive or failed peers.
+                    println!(
+                        "ClosestPeerIter: target = {}; peer {} is {:?}",
+                        bs58::encode(&self.target).into_string(),
+                        peer.key.preimage().to_base58(),
+                        peer.state
+                    );
                 }
             }
         }
