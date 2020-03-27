@@ -123,3 +123,4 @@ libp2p-core = { path = "core", version = "0.16.0" }
 #       visible via dependency mechanics (i.e., not visible HERE)
 [patch.crates-io]
 libp2p-core = { path = "core", version = "0.16.0" }
+#trust-graph = { path = "../arqada/janus/trust-graph" }

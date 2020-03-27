@@ -677,6 +677,7 @@ where
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
         let weight = trust.weight(contact.public_key.clone()).unwrap_or(0);
+        println!("Calculated weight for {}: {}", entry.key().preimage().to_base58(), weight);
         match entry.insert(contact, status, weight) {
             kbucket::InsertResult::Inserted => {
                 Some(
