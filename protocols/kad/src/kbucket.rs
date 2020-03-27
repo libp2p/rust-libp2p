@@ -76,7 +76,6 @@ mod weighted;
 pub use entry::*;
 pub use sub_bucket::*;
 
-use arrayvec::self;
 use bucket::KBucket;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 use std::collections::{VecDeque};

@@ -95,6 +95,18 @@ pub enum InsertResult<TKey> {
     Full,
 }
 
+impl<Key> std::fmt::Display for InsertResult<Key> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let descritpion = match self {
+            InsertResult::Inserted => "InsertResult::Inserted",
+            InsertResult::Pending { .. } => "InsertResult::Pending",
+            InsertResult::Full => "InsertResult::Full",
+        };
+
+        write!(f, "{}", descritpion)
+    }
+}
+
 /// The result of applying a pending node to a bucket, possibly
 /// replacing an existing node.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,11 +225,23 @@ where
     ///     the new node is added as the last element of the bucket.
     ///
     pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
-        if node.weight > 0 {
+        let peer_id = bs58::encode(node.key.as_ref()).into_string();
+        let weight = node.weight;
+
+        let result = if node.weight > 0 {
             self.weighted.insert(node, status)
         } else {
             self.swamp.insert(node, status)
-        }
+        };
+
+        println!(
+            "Bucket: inserting node {} weight {} -> {}",
+            peer_id,
+            weight,
+            result
+        );
+
+        result
     }
 
     fn is_full(&self, weighted: bool) -> bool {

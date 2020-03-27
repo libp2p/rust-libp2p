@@ -318,6 +318,7 @@ where
 
         keys.into_iter()
             .map(move |w| {
+                println!("Weighted: iterating through {} weight", w);
                 map.get(&w)
                     .into_iter()
                     .map(|bucket| bucket.iter().map(|(n, s)| (&n.inner, s)))
