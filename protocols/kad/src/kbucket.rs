@@ -400,10 +400,11 @@ impl Iterator for ClosestBucketsIter {
                 Some(i)
             }
             ClosestBucketsIterState::ZoomIn(i) => {
+                let old_i = i.0;
                 if let Some(i) = self.next_in(i) {
                     println!(
                         "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomIn({})",
-                        self.distance.0, i.0, i.0
+                        self.distance.0, old_i, i.0
                     );
                     self.state = ClosestBucketsIterState::ZoomIn(i);
                     Some(i)
@@ -418,16 +419,17 @@ impl Iterator for ClosestBucketsIter {
                 }
             }
             ClosestBucketsIterState::ZoomOut(i) => {
+                let old_i = i.0;
                 if let Some(i) = self.next_out(i) {
                     println!(
                         "ClosestBucketsIter: distance = {}; ZoomOut({}) -> ZoomOut({})",
-                        self.distance.0, i.0, i.0
+                        self.distance.0, old_i, i.0
                     );
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 } else {
                     println!(
-                        "ClosestBucketsIter: distance = {}; ZoomOut({}) ->Done",
+                        "ClosestBucketsIter: distance = {}; ZoomOut({}) -> Done",
                         self.distance.0, i.0
                     );
                     self.state = ClosestBucketsIterState::Done;
