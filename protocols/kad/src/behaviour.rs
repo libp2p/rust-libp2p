@@ -595,13 +595,23 @@ where
         let kbuckets = &mut self.kbuckets;
         self.store.providers(key)
             .into_iter()
-            .filter_map(move |p|
-                if &p.provider != source {
+            .filter_map(move |p| {
+
+                let entry = if &p.provider != source {
                     let key = kbucket::Key::new(p.provider.clone());
                     kbuckets.entry(&key).view().map(|e| KadPeer::from(e))
                 } else {
                     None
-                })
+                };
+                println!(
+                    "Local provider for {}: {}; source: {}; found? {}",
+                    bs58::encode(key).into_string(),
+                    p.provider.to_base58(),
+                    source.to_base58(),
+                    entry.is_some()
+                );
+                entry
+            })
             .take(self.queries.config().replication_factor.get())
             .collect()
     }
