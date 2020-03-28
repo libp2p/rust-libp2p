@@ -510,6 +510,11 @@ where
             ));
         } else {
             let target = kbucket::Key::new(key.clone());
+            println!(
+                "start_providing for key {} ; kademlia key {}",
+                bs58::encode(target.preimage().as_ref()).into_string(), // peer id
+                bs58::encode(target.as_ref()).into_string(), // sha256
+            );
             let peers = self.kbuckets.closest_keys(&target);
             let context = AddProviderContext::Publish;
             let info = QueryInfo::PrepareAddProvider { key, context };
@@ -1261,6 +1266,10 @@ where
 
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
+                println!(
+                    "provider peers: {}",
+                    provider_peers.iter().map(|p| p.node_id.to_base58() + ", ").collect::<String>()
+                );
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
