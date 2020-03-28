@@ -174,6 +174,7 @@ where
     pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
         let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
         if let Some(i) = index {
+            println!("Node {} belongs to bucket {}", bs58::encode(key.as_ref()).into_string(), i.get());
             let bucket = &mut self.buckets[i.get()];
             self.applied_pending.extend(bucket.apply_pending());
             Entry::new(bucket, key)

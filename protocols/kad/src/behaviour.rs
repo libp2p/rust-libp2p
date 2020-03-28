@@ -326,7 +326,11 @@ where
                 entry.value().insert(address);
             }
             kbucket::Entry::Absent(entry) => {
-                println!("Will insert newly connected node {} into a bucket", entry.key().clone().into_preimage().to_base58());
+                println!(
+                    "Will insert newly connected node {} with key {}",
+                    entry.key().clone().into_preimage().to_base58(),
+                    bs58::encode(entry.key().as_ref()).into_string()
+                );
                 let contact = Contact {
                     addresses: Addresses::new(address),
                     public_key
