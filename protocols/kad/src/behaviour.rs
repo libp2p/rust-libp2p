@@ -534,6 +534,11 @@ where
             providers: Vec::new(),
         };
         let target = kbucket::Key::new(key);
+        println!(
+            "get_providers for key {} ; kademlia key {}",
+            bs58::encode(target.preimage().as_ref()).into_string(), // peer id
+            bs58::encode(target.as_ref()).into_string(), // sha256
+        );
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner);
