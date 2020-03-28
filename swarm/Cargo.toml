@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.1"
 libp2p-core = { version = "0.16.0", path = "../core" }
 log = "0.4"
+rand = "0.7"
 smallvec = "1.0"
 wasm-timer = "0.2"
 void = "1"
