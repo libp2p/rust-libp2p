@@ -225,8 +225,7 @@ where
     ///     the new node is added as the last element of the bucket.
     ///
     pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
-        let peer_id = bs58::encode(node.key.as_ref()).into_string();
-        let weight = node.weight;
+        let debug_node = node.clone(); // TODO: only for debugging. Should removed at some point.
 
         let result = if node.weight > 0 {
             self.weighted.insert(node, status)
@@ -236,8 +235,8 @@ where
 
         println!(
             "Bucket: inserting node {} weight {} -> {}",
-            peer_id,
-            weight,
+            bs58::encode(debug_node.key.as_ref()).into_string(),
+            debug_node.weight,
             result
         );
 
