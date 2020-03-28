@@ -49,6 +49,7 @@ use std::task::{Context, Poll};
 use wasm_timer::Instant;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 use trust_graph::TrustGraph;
+use derivative::Derivative;
 
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TStore> {
@@ -1539,7 +1540,8 @@ impl Quorum {
 /// The events produced by the `Kademlia` behaviour.
 ///
 /// See [`NetworkBehaviour::poll`].
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub enum KademliaEvent {
     /// The result of [`Kademlia::bootstrap`].
     BootstrapResult(BootstrapResult),
@@ -1575,6 +1577,7 @@ pub enum KademliaEvent {
         /// towards the local peer.
         ty: KadConnectionType,
         /// PublicKey of the discovered peer
+        #[derivative(Debug="ignore")]
         public_key: PublicKey
     },
 

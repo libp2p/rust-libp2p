@@ -29,6 +29,7 @@ uint = "0.8"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 void = "1.0"
 bs58 = "0.3.0"
+derivative = "2.0.2"
 
 trust-graph = { git = "ssh://git@github.com/fluencelabs/arqada.git", branch = "libp2p_migration" }
 

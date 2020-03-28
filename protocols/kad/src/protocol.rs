@@ -35,7 +35,8 @@ use futures::prelude::*;
 use futures_codec::Framed;
 use prost::Message;
 use unsigned_varint::codec;
-use wasm_timer::Instant;
+use derivative::Derivative;
+use std::time::Instant;
 
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::identity::ed25519::PublicKey;
@@ -85,8 +86,10 @@ impl Into<proto::message::ConnectionType> for KadConnectionType {
 }
 
 /// Information about a peer, as known by the sender.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq, Eq)]
 pub struct KadPeer {
+    #[derivative(Debug="ignore")]
     pub public_key: PublicKey,
     /// Identifier of the peer.
     pub node_id: PeerId,
