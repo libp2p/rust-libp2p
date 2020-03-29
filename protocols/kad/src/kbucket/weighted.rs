@@ -376,3 +376,58 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kbucket::Key;
+    use libp2p_core::PeerId;
+    use quickcheck::*;
+    use rand;
+    use std::collections::VecDeque;
+    use std::time::Instant;
+
+    #[test]
+    fn simple_insert() {
+        fn prop(weight_status: Vec<(u32, NodeStatus)>) -> bool {
+            use NodeStatus::*;
+
+            let mut bucket = Weighted::new(Duration::from_secs(100000));
+            for (i, (weight, status)) in weight_status.into_iter().enumerate() {
+                let key = Key::new(PeerId::random());
+                let node = Node {
+                    key: key.clone(),
+                    value: (),
+                    weight,
+                };
+
+                let result = bucket.insert(node, status);
+                if i < W_VALUE.get() {
+                    assert_eq!(result, InsertResult::Inserted, "position {}", i);
+                } else {
+                    match result {
+                        InsertResult::Pending { .. } => {
+                            assert_eq!(
+                                status, Connected,
+                                "Only Connected nodes could become pending"
+                            );
+                            assert!(bucket.pending.is_some());
+                        }
+                        InsertResult::Inserted => {
+                            assert!(
+                                false,
+                                "There shouldn't be a place in the bucket. {} {:?}",
+                                i, status
+                            );
+                        }
+                        InsertResult::Full => {}
+                    }
+                }
+            }
+
+            true
+        }
+
+        quickcheck(prop as fn(_) -> _);
+    }
+}
