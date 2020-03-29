@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 pub struct WeightedNode<TKey, TVal> {
     pub inner: Node<TKey, TVal>,
     // TODO: refresh last_contact_time
+    // TODO: move to bucket
     pub last_contact_time: Option<Instant>,
 }
 
@@ -312,7 +313,7 @@ where
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> + '_ {
-        let mut keys = self.map.keys().collect::<Vec<_>>();
+        let mut keys = self.map.keys().cloned().collect::<Vec<_>>();
         keys.sort();
         let map: &HashMap<u32, _> = &self.map;
 
@@ -426,6 +427,61 @@ mod tests {
             }
 
             true
+        }
+
+        quickcheck(prop as fn(_) -> _);
+    }
+
+    #[test]
+    fn weight_priority() {
+        fn prop(weight_status: Vec<(u32, NodeStatus)>) -> bool {
+            let mut bucket = Weighted::new(Duration::from_secs(100000));
+
+            let mut map: HashMap<u32, Vec<(Node<Key<PeerId>, ()>, NodeStatus)>> = HashMap::new();
+            for (weight, status) in weight_status {
+                let node: Node<Key<PeerId>, ()> = Node {
+                    key: Key::new(PeerId::random()),
+                    value: (),
+                    weight,
+                };
+
+                match bucket.insert(node.clone(), status.clone()) {
+                    InsertResult::Inserted => {
+                        let nodes = map.entry(node.weight).or_insert(Vec::new());
+                        let position = match status {
+                            NodeStatus::Connected => nodes.len(),
+                            NodeStatus::Disconnected => nodes
+                                .iter()
+                                .filter(|t| t.1 == NodeStatus::Disconnected)
+                                .count(),
+                        };
+
+                        nodes.insert(position, (node, status))
+                    }
+                    _ => {}
+                }
+            }
+
+            let mut expected = map.into_iter().collect::<Vec<_>>();
+            expected.sort_by_key(|(k, _)| *k);
+            let expected = expected
+                .into_iter()
+                .flat_map(|(_, ns)| ns)
+                .map(|(n, s)| (n.key, n.weight, s))
+                .collect::<Vec<_>>();
+
+            let bucket_nodes = bucket
+                .iter()
+                .map(|(n, s)| (n.key.clone(), n.weight, s))
+                .collect::<Vec<_>>();
+
+            // Checking the same thing 3 times, why not? It's better to перебдеть.
+            assert_eq!(expected.len(), bucket_nodes.len());
+            for i in 1..expected.len() {
+                assert_eq!(expected[i], bucket_nodes[i], "\n\nposition {}", i);
+            }
+
+            expected == bucket_nodes
         }
 
         quickcheck(prop as fn(_) -> _);

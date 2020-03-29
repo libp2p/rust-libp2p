@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use derivative::Derivative;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use sha2::digest::generic_array::{typenum::U32, GenericArray};
@@ -38,9 +39,11 @@ construct_uint! {
 ///
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Derivative)]
+#[derivative(Debug)]
 pub struct Key<T> {
     preimage: T,
+    #[derivative(Debug = "ignore")]
     bytes: KeyBytes,
 }
 
