@@ -20,6 +20,7 @@ use crate::kbucket::{
 use crate::W_VALUE;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use log::trace;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedNode<TKey, TVal> {
@@ -319,7 +320,7 @@ where
 
         keys.into_iter()
             .map(move |w| {
-                println!("Weighted: iterating through {} weight", w);
+                trace!("Weighted: iterating through {} weight", w);
                 map.get(&w)
                     .into_iter()
                     .map(|bucket| bucket.iter().map(|(n, s)| (&n.inner, s)))
@@ -384,9 +385,6 @@ mod tests {
     use crate::kbucket::Key;
     use libp2p_core::PeerId;
     use quickcheck::*;
-    use rand;
-    use std::collections::VecDeque;
-    use std::time::Instant;
 
     #[test]
     fn simple_insert() {

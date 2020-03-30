@@ -15,6 +15,7 @@
  */
 
 use std::time::Instant;
+use log::debug;
 
 enum ChangePosition {
     AddDisconnected,
@@ -182,7 +183,7 @@ impl<Node> SubBucket<Node> {
             }
         }
         if position.0 >= self.nodes.len() {
-            println!(
+            debug!(
                 "WARNING: tried to evict node at {} while there's only {} nodes",
                 position.0,
                 self.nodes.len()

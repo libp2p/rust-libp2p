@@ -18,14 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
-
-use crate::{K_VALUE, ALPHA_VALUE};
-use crate::kbucket::{Key, KeyBytes, Distance};
-use libp2p_core::PeerId;
-use std::{time::Duration, iter::FromIterator};
+use std::{iter::FromIterator, time::Duration};
 use std::collections::btree_map::{BTreeMap, Entry};
+
+use log::trace;
 use wasm_timer::Instant;
+
+use libp2p_core::PeerId;
+
+use crate::{ALPHA_VALUE, K_VALUE};
+use crate::kbucket::{Distance, Key, KeyBytes};
+
+use super::*;
 
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
@@ -282,7 +286,7 @@ impl ClosestPeersIter {
                         debug_assert!(self.num_waiting > 0);
                         self.num_waiting -= 1;
                         peer.state = PeerState::Unresponsive;
-                        println!(
+                        trace!(
                             "ClosestPeerIter: target = {}; peer {} timed out",
                             bs58::encode(&self.target).into_string(),
                             peer.key.preimage().to_base58()
@@ -304,7 +308,7 @@ impl ClosestPeersIter {
 
                 PeerState::Succeeded =>
                     if let Some(ref mut cnt) = result_counter {
-                        println!(
+                        trace!(
                             "ClosestPeerIter: target = {}; peer {} succeeded",
                             bs58::encode(&self.target).into_string(),
                             peer.key.preimage().to_base58()
@@ -313,7 +317,7 @@ impl ClosestPeersIter {
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
                         if *cnt >= self.config.num_results {
-                            println!(
+                            trace!(
                                 "ClosestPeerIter: target = {}; Got all {} results, finished.",
                                 bs58::encode(&self.target).into_string(),
                                 *cnt
@@ -324,7 +328,7 @@ impl ClosestPeersIter {
                     }
 
                 PeerState::NotContacted => {
-                    println!(
+                    trace!(
                         "ClosestPeerIter: target = {}; new peer {}. Capacity left? {}",
                         bs58::encode(&self.target).into_string(),
                         peer.key.preimage().to_base58(),
@@ -342,7 +346,7 @@ impl ClosestPeersIter {
 
                 PeerState::Unresponsive | PeerState::Failed => {
                     // Skip over unresponsive or failed peers.
-                    println!(
+                    trace!(
                         "ClosestPeerIter: target = {}; peer {} is {:?}",
                         bs58::encode(&self.target).into_string(),
                         peer.key.preimage().to_base58(),
@@ -481,12 +485,15 @@ enum PeerState {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use libp2p_core::PeerId;
-    use quickcheck::*;
-    use multihash::Multihash;
-    use rand::{Rng, thread_rng};
     use std::{iter, time::Duration};
+
+    use multihash::Multihash;
+    use quickcheck::*;
+    use rand::{Rng, thread_rng};
+
+    use libp2p_core::PeerId;
+
+    use super::*;
 
     fn random_peers(n: usize) -> impl Iterator<Item = PeerId> + Clone {
         (0 .. n).map(|_| PeerId::random())

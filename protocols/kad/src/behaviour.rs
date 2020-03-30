@@ -327,7 +327,7 @@ where
                 entry.value().insert(address);
             }
             kbucket::Entry::Absent(entry) => {
-                println!(
+                debug!(
                     "Will insert newly connected node {} with key {}",
                     entry.key().clone().into_preimage().to_base58(),
                     bs58::encode(entry.key().as_ref()).into_string()
@@ -510,7 +510,7 @@ where
             ));
         } else {
             let target = kbucket::Key::new(key.clone());
-            println!(
+            debug!(
                 "start_providing for key {} ; kademlia key {}",
                 bs58::encode(target.preimage().as_ref()).into_string(), // peer id
                 bs58::encode(target.as_ref()).into_string(), // sha256
@@ -540,7 +540,7 @@ where
             providers: Vec::new(),
         };
         let target = kbucket::Key::new(key);
-        println!(
+        debug!(
             "get_providers for key {} ; kademlia key {}",
             bs58::encode(target.preimage().as_ref()).into_string(), // peer id
             bs58::encode(target.as_ref()).into_string(), // sha256
@@ -609,7 +609,7 @@ where
                 } else {
                     None
                 };
-                println!(
+                debug!(
                     "Local provider for {}: {}; source: {}; found? {}",
                     bs58::encode(key).into_string(),
                     p.provider.to_base58(),
@@ -702,7 +702,7 @@ where
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
         let weight = trust.weight(contact.public_key.clone()).unwrap_or(0);
-        println!(
+        debug!(
             "Calculated weight for {} pk {}: {}",
             entry.key().preimage().to_base58(),
             bs58::encode(contact.public_key.encode().to_vec().as_slice()).into_string(),
@@ -1271,7 +1271,7 @@ where
 
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
-                println!(
+                debug!(
                     "provider peers: {}",
                     provider_peers.iter().map(|p| p.node_id.to_base58() + ", ").collect::<String>()
                 );
