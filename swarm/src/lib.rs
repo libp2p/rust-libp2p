@@ -450,11 +450,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     for addr in addresses.iter() {
                         this.behaviour.inject_expired_listen_addr(addr);
                     }
-                    let err = match reason {
-                        Ok(()) => None,
-                        Err(e) => Some(e),
-                    };
-                    this.behaviour.inject_listener_closed(listener_id, err);
+                    this.behaviour.inject_listener_closed(listener_id, reason);
                 }
                 Poll::Ready(NetworkEvent::ListenerError { listener_id, error }) =>
                     this.behaviour.inject_listener_error(listener_id, &error),

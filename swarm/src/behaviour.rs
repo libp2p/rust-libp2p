@@ -130,7 +130,7 @@ pub trait NetworkBehaviour: Send + 'static {
     }
 
     /// A listener closed.
-    fn inject_listener_closed(&mut self, _id: ListenerId, _err: Option<std::io::Error>) {
+    fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), std::io::Error>) {
     }
 
     /// Polls for things that swarm should do.
