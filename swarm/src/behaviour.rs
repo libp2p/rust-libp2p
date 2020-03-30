@@ -274,6 +274,7 @@ pub enum NotifyHandler {
 /// The available conditions under which a new dialing attempt to
 /// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].
 #[derive(Debug, Copy, Clone)]
+#[non_exhaustive]
 pub enum DialPeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
     /// considered disconnected, i.e. there is no established connection
