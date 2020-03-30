@@ -167,7 +167,7 @@ pub enum SwarmEvent<TBvEv> {
         error: Box<dyn error::Error + Send>,
     },
     /// A new dialing attempt has been initiated.
-    Dialing(PeerId, ConnectionId),
+    Dialing(PeerId),
 }
 
 /// Contains the state of the network, plus the way it should behave.
@@ -600,8 +600,8 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if this.banned_peers.contains(&peer_id) {
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
-                        if let Some(id) = ExpandedSwarm::dial(this, peer_id.clone(), condition) {
-                            return Poll::Ready(SwarmEvent::Dialing(peer_id, id))
+                        if let Some(_id) = ExpandedSwarm::dial(this, peer_id.clone(), condition) {
+                            return Poll::Ready(SwarmEvent::Dialing(peer_id))
                         }
                     }
                 },
