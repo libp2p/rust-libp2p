@@ -21,7 +21,7 @@
 //! The `Entry` API for quering and modifying the entries of a `KBucketsTable`
 //! representing the nodes participating in the Kademlia DHT.
 
-pub use super::bucket::{Node, NodeStatus, InsertResult, AppliedPending, K_VALUE};
+pub use super::bucket::{AppliedPending, InsertResult, Node, NodeStatus, K_VALUE};
 pub use super::key::*;
 
 use super::*;
@@ -31,30 +31,30 @@ pub struct EntryRefView<'a, TPeerId, TVal> {
     /// The node represented by the entry.
     pub node: NodeRefView<'a, TPeerId, TVal>,
     /// The status of the node identified by the key.
-    pub status: NodeStatus
+    pub status: NodeStatus,
 }
 
 /// An immutable by-reference view of a `Node`.
 pub struct NodeRefView<'a, TKey, TVal> {
     pub key: &'a TKey,
-    pub value: &'a TVal
+    pub value: &'a TVal,
 }
 
-impl<TKey, TVal> EntryRefView<'_, TKey, TVal> {
-    pub fn to_owned(&self) -> EntryView<TKey, TVal>
-    where
-        TKey: Clone,
-        TVal: Clone
-    {
-        EntryView {
-            node: Node {
-                key: self.node.key.clone(),
-                value: self.node.value.clone()
-            },
-            status: self.status
-        }
-    }
-}
+// impl<TKey, TVal> EntryRefView<'_, TKey, TVal> {
+//     pub fn to_owned(&self) -> EntryView<TKey, TVal>
+//     where
+//         TKey: Clone,
+//         TVal: Clone,
+//     {
+//         EntryView {
+//             node: Node {
+//                 key: self.node.key.clone(),
+//                 value: self.node.value.clone(),
+//             },
+//             status: self.status,
+//         }
+//     }
+// }
 
 /// A cloned, immutable view of an entry that is either present in a bucket
 /// or pending insertion.
@@ -63,7 +63,7 @@ pub struct EntryView<TKey, TVal> {
     /// The node represented by the entry.
     pub node: Node<TKey, TVal>,
     /// The status of the node.
-    pub status: NodeStatus
+    pub status: NodeStatus,
 }
 
 impl<TKey: AsRef<KeyBytes>, TVal> AsRef<KeyBytes> for EntryView<TKey, TVal> {
@@ -96,14 +96,13 @@ struct EntryRef<'a, TKey, TVal> {
 impl<'a, TKey, TVal> Entry<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
-    TVal: Clone
+    TVal: Clone,
 {
     /// Creates a new `Entry` for a `Key`, encapsulating access to a bucket.
     pub(super) fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
-        if let Some(pos) = bucket.position(key) {
-            let status = bucket.status(pos);
+        if let Some(status) = bucket.status(key) {
             Entry::Present(PresentEntry::new(bucket, key), status)
-        } else if let Some(pending) = bucket.as_pending(key) {
+        } else if let Some(pending) = bucket.pending_ref(key) {
             let status = pending.status();
             Entry::Pending(PendingEntry::new(bucket, key), status)
         } else {
@@ -120,18 +119,18 @@ where
             Entry::Present(entry, status) => Some(EntryRefView {
                 node: NodeRefView {
                     key: entry.0.key,
-                    value: entry.value()
+                    value: entry.value(),
                 },
-                status: *status
+                status: *status,
             }),
             Entry::Pending(entry, status) => Some(EntryRefView {
                 node: NodeRefView {
                     key: entry.0.key,
-                    value: entry.value()
+                    value: entry.value(),
                 },
-                status: *status
+                status: *status,
             }),
-            _ => None
+            _ => None,
         }
     }
 
@@ -170,7 +169,7 @@ pub struct PresentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
 impl<'a, TKey, TVal> PresentEntry<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
-    TVal: Clone
+    TVal: Clone,
 {
     fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         PresentEntry(EntryRef { bucket, key })
@@ -183,13 +182,15 @@ where
 
     /// Returns the value associated with the key.
     pub fn value(&mut self) -> &mut TVal {
-        &mut self.0.bucket
+        &mut self
+            .0
+            .bucket
             .get_mut(self.0.key)
             .expect("We can only build a ConnectedEntry if the entry is in the bucket; QED")
             .value
     }
 
-    /// Sets the status of the entry to `NodeStatus::Disconnected`.
+    /// Sets the status of the entry.
     pub fn update(self, status: NodeStatus) -> Self {
         self.0.bucket.update(self.0.key, status);
         Self::new(self.0.bucket, self.0.key)
@@ -203,7 +204,7 @@ pub struct PendingEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
 impl<'a, TKey, TVal> PendingEntry<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
-    TVal: Clone
+    TVal: Clone,
 {
     fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         PendingEntry(EntryRef { bucket, key })
@@ -216,15 +217,16 @@ where
 
     /// Returns the value associated with the key.
     pub fn value(&mut self) -> &mut TVal {
-        self.0.bucket
-            .pending_mut()
-            .expect("We can only build a ConnectedPendingEntry if the entry is pending; QED")
+        self.0
+            .bucket
+            .pending_mut(self.0.key)
+            .expect("We can only build a PendingEntry if the entry is pending; QED")
             .value_mut()
     }
 
     /// Updates the status of the pending entry.
     pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TKey, TVal> {
-        self.0.bucket.update_pending(status);
+        self.0.bucket.update_pending(self.0.key, status);
         PendingEntry::new(self.0.bucket, self.0.key)
     }
 }
@@ -236,7 +238,7 @@ pub struct AbsentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
 impl<'a, TKey, TVal> AbsentEntry<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
-    TVal: Clone
+    TVal: Clone,
 {
     fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         AbsentEntry(EntryRef { bucket, key })
@@ -248,11 +250,14 @@ where
     }
 
     /// Attempts to insert the entry into a bucket.
-    pub fn insert(self, value: TVal, status: NodeStatus) -> InsertResult<TKey> {
-        self.0.bucket.insert(Node {
-            key: self.0.key.clone(),
-            value
-        }, status)
+    pub fn insert(self, value: TVal, status: NodeStatus, weight: u32) -> InsertResult<TKey> {
+        self.0.bucket.insert(
+            Node {
+                key: self.0.key.clone(),
+                value,
+                weight,
+            },
+            status,
+        )
     }
 }
-

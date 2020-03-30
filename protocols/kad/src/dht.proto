@@ -62,6 +62,8 @@ message Message {
 
 		// used to signal the sender's connection capabilities to the peer
 		ConnectionType connection = 3;
+
+		bytes publicKey = 4;
 	}
 
 	// defines what type of message it is.
