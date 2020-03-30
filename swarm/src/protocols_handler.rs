@@ -43,6 +43,7 @@ mod map_out;
 mod node_handler;
 mod one_shot;
 mod select;
+pub mod multi;
 
 pub use crate::upgrade::{
     InboundUpgradeSend,
