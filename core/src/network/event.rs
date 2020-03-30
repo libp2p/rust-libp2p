@@ -42,7 +42,7 @@ use crate::{
     transport::{Transport, TransportError},
 };
 use futures::prelude::*;
-use std::{error, fmt, hash::Hash};
+use std::{error, fmt, hash::Hash, num::NonZeroU32};
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
@@ -88,7 +88,7 @@ where
     /// A new connection arrived on a listener.
     IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>),
 
-    /// A new connection was arriving on a listener, but an error happened when negotiating it.
+    /// An error happened on a connection during its initial handshake.
     ///
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
@@ -105,8 +105,9 @@ where
     ConnectionEstablished {
         /// The newly established connection.
         connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
-        /// The total number of established connections to the same peer.
-        num_established: usize,
+        /// The total number of established connections to the same peer, including the one that
+        /// has just been opened.
+        num_established: NonZeroU32,
     },
 
     /// An established connection to a peer has encountered an error.
@@ -118,13 +119,13 @@ where
         /// The error that occurred.
         error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error>,
         /// The remaining number of established connections to the same peer.
-        num_established: usize,
+        num_established: u32,
     },
 
     /// A dialing attempt to an address of a peer failed.
     DialError {
         /// The number of remaining dialing attempts.
-        attempts_remaining: usize,
+        attempts_remaining: u32,
 
         /// Id of the peer we were trying to dial.
         peer_id: TPeerId,
