@@ -42,7 +42,7 @@ use libp2p_swarm::{
 use log::{info, debug, warn};
 use smallvec::SmallVec;
 use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
@@ -534,7 +534,7 @@ where
     pub fn get_providers(&mut self, key: record::Key) {
         let info = QueryInfo::GetProviders {
             key: key.clone(),
-            providers: Vec::new(),
+            providers: HashSet::new(),
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
@@ -1233,7 +1233,7 @@ where
                         providers, ..
                     } = &mut query.inner.info {
                         for peer in provider_peers {
-                            providers.push(peer.node_id);
+                            providers.insert(peer.node_id);
                         }
                     }
                 }
@@ -1701,7 +1701,7 @@ pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 #[derive(Debug, Clone)]
 pub struct GetProvidersOk {
     pub key: record::Key,
-    pub providers: Vec<PeerId>,
+    pub providers: HashSet<PeerId>,
     pub closest_peers: Vec<PeerId>
 }
 
@@ -1710,7 +1710,7 @@ pub struct GetProvidersOk {
 pub enum GetProvidersError {
     Timeout {
         key: record::Key,
-        providers: Vec<PeerId>,
+        providers: HashSet<PeerId>,
         closest_peers: Vec<PeerId>
     }
 }
@@ -1843,7 +1843,7 @@ enum QueryInfo {
         /// The key for which to search for providers.
         key: record::Key,
         /// The found providers.
-        providers: Vec<PeerId>,
+        providers: HashSet<PeerId>,
     },
 
     /// A query that searches for the closest closest nodes to a key to be
