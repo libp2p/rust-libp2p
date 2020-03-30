@@ -475,7 +475,7 @@ mod tests {
 
             // Checking the same thing 3 times, why not? It's better to перебдеть.
             assert_eq!(expected.len(), bucket_nodes.len());
-            for i in 1..expected.len() {
+            for i in 0..expected.len() {
                 assert_eq!(expected[i], bucket_nodes[i], "\n\nposition {}", i);
             }
 
