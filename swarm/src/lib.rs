@@ -862,7 +862,7 @@ pub struct SwarmBuilder<TBehaviour, TConnInfo> {
     local_peer_id: PeerId,
     transport: BoxTransport<(TConnInfo, StreamMuxerBox), io::Error>,
     behaviour: TBehaviour,
-    network_config: Option<NetworkConfig>,
+    network_config: NetworkConfig,
 }
 
 impl<TBehaviour, TConnInfo> SwarmBuilder<TBehaviour, TConnInfo>
@@ -893,13 +893,37 @@ where TBehaviour: NetworkBehaviour,
             local_peer_id,
             transport,
             behaviour,
-            network_config: None,
+            network_config: Default::default(),
         }
     }
 
-    /// Configures the underlying network for the swarm.
-    pub fn network_config(mut self, cfg: NetworkConfig) -> Self {
-        self.network_config = Some(cfg);
+    /// Configures the `Executor` to use for spawning background tasks.
+    ///
+    /// By default, unless another executor has been configured,
+    /// [`SwarmBuilder::build`] will try to set up a `ThreadPool`.
+    pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
+        self.network_config.set_executor(e);
+        self
+    }
+
+    /// Configures a limit for the number of simultaneous incoming
+    /// connection attempts.
+    pub fn incoming_connection_limit(mut self, n: usize) -> Self {
+        self.network_config.set_incoming_limit(n);
+        self
+    }
+
+    /// Configures a limit for the number of simultaneous outgoing
+    /// connection attempts.
+    pub fn outgoing_connection_limit(mut self, n: usize) -> Self {
+        self.network_config.set_outgoing_limit(n);
+        self
+    }
+
+    /// Configures a limit for the number of simultaneous
+    /// established connections per peer.
+    pub fn peer_connection_limit(mut self, n: usize) -> Self {
+        self.network_config.set_established_per_peer_limit(n);
         self
     }
 
@@ -913,7 +937,7 @@ where TBehaviour: NetworkBehaviour,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        let mut network_cfg = self.network_config.unwrap_or_default();
+        let mut network_cfg = self.network_config;
 
         // If no executor has been explicitly configured, try to set up a thread pool.
         if network_cfg.executor().is_none() {
@@ -992,7 +1016,6 @@ mod tests {
         PeerId,
         PublicKey,
         identity,
-        network::NetworkConfig,
         transport::dummy::{DummyStream, DummyTransport}
     };
     use libp2p_mplex::Multiplex;
@@ -1006,10 +1029,8 @@ mod tests {
         let id = get_random_id();
         let transport = DummyTransport::<(PeerId, Multiplex<DummyStream>)>::new();
         let behaviour = DummyBehaviour {};
-        let mut network_cfg = NetworkConfig::default();
-        network_cfg.set_incoming_limit(4);
         let swarm = SwarmBuilder::new(transport, behaviour, id.into())
-            .network_config(network_cfg)
+            .incoming_connection_limit(4)
             .build();
         assert_eq!(swarm.network.incoming_limit(), Some(4));
     }
