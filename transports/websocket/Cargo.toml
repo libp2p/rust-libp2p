@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-tls = "0.6"
+async-tls = "0.7.0"
 bytes = "0.5"
 either = "1.5.3"
 futures = "0.3.1"
