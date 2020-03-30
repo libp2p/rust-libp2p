@@ -263,6 +263,10 @@ where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash + Clone,
 {
+    pub fn id(&self) -> &TPeerId {
+        &self.peer_id
+    }
+
     /// Attempts to establish a new connection to this peer using the given addresses,
     /// if there is currently no ongoing dialing attempt.
     ///
@@ -411,6 +415,10 @@ where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash + Clone,
 {
+    pub fn id(&self) -> &TPeerId {
+        &self.peer_id
+    }
+
     /// Disconnects from this peer, closing all pending connections.
     pub fn disconnect(self) -> DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> {
         self.network.disconnect(&self.peer_id);
@@ -508,6 +516,10 @@ where
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
 {
+    pub fn id(&self) -> &TPeerId {
+        &self.peer_id
+    }
+
     /// Attempts to connect to this peer using the given addresses.
     pub fn connect<TIter>(self, first: Multiaddr, rest: TIter, handler: THandler)
         -> Result<DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,

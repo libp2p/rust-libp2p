@@ -220,7 +220,7 @@ where
     /// [`Connection`](crate::connection::Connection) upon success and the
     /// connection ID is returned.
     pub fn dial(&mut self, address: &Multiaddr, handler: THandler)
-        -> Result<ConnectionId, DialError<TTrans::Error>>
+        -> Result<ConnectionId, ConnectionLimit>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -232,10 +232,17 @@ where
         TConnInfo: Send + 'static,
         TPeerId: Send + 'static,
     {
-        let future = self.transport().clone().dial(address.clone())?
-            .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
         let info = OutgoingInfo { address, peer_id: None };
-        self.pool.add_outgoing(future, handler, info).map_err(DialError::MaxPending)
+        match self.transport().clone().dial(address.clone()) {
+            Ok(f) => {
+                let f = f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
+                self.pool.add_outgoing(f, handler, info)
+            }
+            Err(err) => {
+                let f = future::err(PendingConnectionError::Transport(err));
+                self.pool.add_outgoing(f, handler, info)
+            }
+        }
     }
 
     /// Returns information about the state of the `Network`.
@@ -285,6 +292,22 @@ where
     /// has at least one established connection.
     pub fn connected_peers(&self) -> impl Iterator<Item = &TPeerId> {
         self.pool.iter_connected()
+    }
+
+    /// Checks whether the network has an established connection to a peer.
+    pub fn is_connected(&self, peer: &TPeerId) -> bool {
+        self.pool.is_connected(peer)
+    }
+
+    /// Checks whether the network has an ongoing dialing attempt to a peer.
+    pub fn is_dialing(&self, peer: &TPeerId) -> bool {
+        self.dialing.contains_key(peer)
+    }
+
+    /// Checks whether the network has neither an ongoing dialing attempt,
+    /// nor an established connection to a peer.
+    pub fn is_disconnected(&self, peer: &TPeerId) -> bool {
+        !self.is_connected(peer) && !self.is_dialing(peer)
     }
 
     /// Returns a list of all the peers to whom a new outgoing connection
@@ -568,43 +591,6 @@ pub struct NetworkInfo {
     pub num_connections: usize,
     pub num_connections_pending: usize,
     pub num_connections_established: usize,
-}
-
-/// The possible errors of [`Network::dial`].
-#[derive(Debug)]
-pub enum DialError<T> {
-    /// The configured limit of pending outgoing connections has been reached.
-    MaxPending(ConnectionLimit),
-    /// A transport error occurred when creating the connection.
-    Transport(TransportError<T>),
-}
-
-impl<T> fmt::Display for DialError<T>
-where T: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DialError::MaxPending(limit) => write!(f, "Dial error (pending limit): {}", limit.current),
-            DialError::Transport(err) => write!(f, "Dial error (transport): {}", err),
-        }
-    }
-}
-
-impl<T> std::error::Error for DialError<T>
-where T: std::error::Error + 'static,
-{
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            DialError::MaxPending(_) => None,
-            DialError::Transport(e) => Some(e),
-        }
-    }
-}
-
-impl<T> From<TransportError<T>> for DialError<T> {
-    fn from(e: TransportError<T>) -> DialError<T> {
-        DialError::Transport(e)
-    }
 }
 
 /// The (optional) configuration for a [`Network`].

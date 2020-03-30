@@ -35,7 +35,7 @@ pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnecti
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
-use std::{fmt, pin::Pin, task::Context, task::Poll};
+use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use std::hash::Hash;
 use substream::{Muxing, SubstreamEvent};
 
@@ -334,3 +334,6 @@ impl fmt::Display for ConnectionLimit {
         write!(f, "{}/{}", self.current, self.limit)
     }
 }
+
+/// A `ConnectionLimit` can represent an error if it has been exceeded.
+impl Error for ConnectionLimit {}
