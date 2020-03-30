@@ -31,7 +31,7 @@ void = "1.0"
 bs58 = "0.3.0"
 derivative = "2.0.2"
 
-trust-graph = { git = "ssh://git@github.com/fluencelabs/arqada.git", branch = "libp2p_migration" }
+trust-graph = { git = "ssh://git@github.com/fluencelabs/arqada.git", branch = "master" }
 
 [dev-dependencies]
 libp2p-secio = { version = "0.16.0", path = "../secio" }
