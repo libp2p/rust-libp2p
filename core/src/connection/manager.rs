@@ -134,9 +134,6 @@ where
 #[derive(Debug)]
 struct TaskInfo<I, C> {
     /// Channel endpoint to send messages to the task.
-    //
-    // Note: Only established tasks can handle commands. Do not send commands to
-    // pending tasks (see `[<Task as Future>::poll]`).
     sender: mpsc::Sender<task::Command<I>>,
     /// The state of the task as seen by the `Manager`.
     state: TaskState<C>,
