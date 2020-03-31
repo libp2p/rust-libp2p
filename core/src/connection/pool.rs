@@ -330,18 +330,6 @@ where
         id
     }
 
-    /// Sends an event to all nodes.
-    ///
-    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
-    /// has been sent to any node yet.
-    #[must_use]
-    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
-    where
-        TInEvent: Clone
-    {
-        self.manager.poll_broadcast(event, cx)
-    }
-
     /// Adds an existing established connection to the pool.
     ///
     /// Returns the assigned connection ID on success. An error is returned
