@@ -670,6 +670,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
                         let result = match condition {
+                            DialPeerCondition::Always =>
+                            {
+                                ExpandedSwarm::dial(this, &peer_id)
+                            }
                             DialPeerCondition::Disconnected
                                 if this.network.is_disconnected(&peer_id) =>
                             {
