@@ -1,3 +1,10 @@
+# Version ???
+
+- Support for multiple connections per peer and configurable connection limits.
+  See [PR #1440](https://github.com/libp2p/rust-libp2p/pull/1440),
+  [PR #1519](https://github.com/libp2p/rust-libp2p/pull/1519) and
+  [issue #912](https://github.com/libp2p/rust-libp2p/issues/912) for details.
+
 # Version 0.16.2 (2020-02-28)
 
 - Fixed yamux connections not properly closing and being stuck in the `CLOSE_WAIT` state.
