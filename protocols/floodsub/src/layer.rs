@@ -22,14 +22,15 @@ use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubs
 use crate::topic::Topic;
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
     PollParameters,
     ProtocolsHandler,
     OneShotHandler,
-    NotifyHandler
+    NotifyHandler,
+    DialPeerCondition,
 };
 use rand;
 use smallvec::SmallVec;
@@ -96,7 +97,9 @@ impl Floodsub {
         }
 
         if self.target_peers.insert(peer_id.clone()) {
-            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id });
+            self.events.push_back(NetworkBehaviourAction::DialPeer {
+                peer_id, condition: DialPeerCondition::Disconnected
+            });
         }
     }
 
@@ -236,9 +239,9 @@ impl NetworkBehaviour for Floodsub {
         Vec::new()
     }
 
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
+    fn inject_connected(&mut self, id: &PeerId) {
         // We need to send our subscriptions to the newly-connected node.
-        if self.target_peers.contains(&id) {
+        if self.target_peers.contains(id) {
             for topic in self.subscribed_topics.iter().cloned() {
                 self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: id.clone(),
@@ -257,14 +260,17 @@ impl NetworkBehaviour for Floodsub {
         self.connected_peers.insert(id.clone(), SmallVec::new());
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
+    fn inject_disconnected(&mut self, id: &PeerId) {
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in.is_some());
 
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
         if self.target_peers.contains(id) {
-            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id: id.clone() });
+            self.events.push_back(NetworkBehaviourAction::DialPeer {
+                peer_id: id.clone(),
+                condition: DialPeerCondition::Disconnected
+            });
         }
     }
 

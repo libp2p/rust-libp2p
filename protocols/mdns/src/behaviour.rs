@@ -21,7 +21,6 @@
 use crate::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
 use futures::prelude::*;
 use libp2p_core::{
-    ConnectedPoint,
     Multiaddr,
     PeerId,
     address_translation,
@@ -199,9 +198,9 @@ impl NetworkBehaviour for Mdns {
             .collect()
     }
 
-    fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
+    fn inject_connected(&mut self, _: &PeerId) {}
 
-    fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
+    fn inject_disconnected(&mut self, _: &PeerId) {}
 
     fn inject_event(
         &mut self,
