@@ -26,6 +26,8 @@
   [PR 1484](https://github.com/libp2p/rust-libp2p/pull/1484)
 - `multihash`: Removed the crate in favour of the upstream crate:
   [PR 1472](https://github.com/libp2p/rust-libp2p/pull/1472)
+- `libp2p-core`: Remove `poll_broadcast`:
+  [PR-1527](https://github.com/libp2p/rust-libp2p/pull/1527)
 
 # Version 0.16.2 (2020-02-28)
 
