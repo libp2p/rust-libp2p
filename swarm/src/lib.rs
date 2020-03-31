@@ -1073,7 +1073,7 @@ where TBehaviour: NetworkBehaviour,
     }
 }
 
-/// The possible failures of [`Swarm::dial`].
+/// The possible failures of [`ExpandedSwarm::dial`].
 #[derive(Debug)]
 pub enum DialError {
     /// The configured limit for simultaneous outgoing connections
