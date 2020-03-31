@@ -269,18 +269,6 @@ where
             })
     }
 
-    /// Notifies the connection handler of _every_ connection of _every_ peer of an event.
-    ///
-    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
-    /// has been sent to any node yet.
-    #[must_use]
-    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
-    where
-        TInEvent: Clone
-    {
-        self.pool.poll_broadcast(event, cx)
-    }
-
     /// Returns a list of all connected peers, i.e. peers to whom the `Network`
     /// has at least one established connection.
     pub fn connected_peers(&self) -> impl Iterator<Item = &TPeerId> {
@@ -641,4 +629,3 @@ impl NetworkConfig {
         self
     }
 }
-
