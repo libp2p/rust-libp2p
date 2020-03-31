@@ -866,7 +866,7 @@ impl PoolLimits {
     where
         F: FnOnce() -> usize
     {
-        Self::check(current, self.max_pending_incoming)
+        Self::check(current, self.max_incoming)
     }
 
     fn check_outgoing_per_peer<F>(&self, current: F) -> Result<(), ConnectionLimit>

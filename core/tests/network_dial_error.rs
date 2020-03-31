@@ -251,7 +251,7 @@ fn connection_limit() {
 
     let mut cfg = NetworkConfig::default();
     cfg.set_outgoing_per_peer_limit(outgoing_per_peer_limit);
-    cfg.set_pending_outgoing_limit(outgoing_limit);
+    cfg.set_outgoing_limit(outgoing_limit);
     let mut network = new_network(cfg);
 
     let target = PeerId::random();
