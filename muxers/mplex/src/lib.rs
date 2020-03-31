@@ -339,7 +339,10 @@ where C: AsyncRead + AsyncWrite + Unpin
             }
         },
         Poll::Pending => Poll::Pending,
-        Poll::Ready(Err(err)) => Poll::Ready(Err(err))
+        Poll::Ready(Err(err)) => {
+            inner.error = Err(IoError::new(err.kind(), err.to_string()));
+            Poll::Ready(Err(err))
+        }
     }
 }
 
@@ -440,6 +443,7 @@ where C: AsyncRead + AsyncWrite + Unpin
                     inner.buffer.retain(|elem| {
                         elem.substream_id() != substream.num || elem.endpoint() == Some(Endpoint::Dialer)
                     });
+                    inner.error = Err(IoError::new(err.kind(), err.to_string()));
                     return Poll::Ready(Err(err));
                 },
             };
@@ -552,7 +556,11 @@ where C: AsyncRead + AsyncWrite + Unpin
         ensure_no_error_no_close(&mut inner)?;
         let inner = &mut *inner; // Avoids borrow errors
         inner.notifier_write.insert(cx.waker());
-        Sink::poll_flush(Pin::new(&mut inner.inner), &mut Context::from_waker(&waker_ref(&inner.notifier_write)))
+        let result = Sink::poll_flush(Pin::new(&mut inner.inner), &mut Context::from_waker(&waker_ref(&inner.notifier_write)));
+        if let Poll::Ready(Err(err)) = &result {
+            inner.error = Err(IoError::new(err.kind(), err.to_string()));
+        }
+        result
     }
 
     fn shutdown_substream(&self, cx: &mut Context, sub: &mut Self::Substream) -> Poll<Result<(), IoError>> {
@@ -597,7 +605,10 @@ where C: AsyncRead + AsyncWrite + Unpin
                 inner.is_shutdown = true;
                 Poll::Ready(Ok(()))
             }
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+            Poll::Ready(Err(err)) => {
+                inner.error = Err(IoError::new(err.kind(), err.to_string()));
+                Poll::Ready(Err(err))
+            }
             Poll::Pending => Poll::Pending,
         }
     }
@@ -611,7 +622,11 @@ where C: AsyncRead + AsyncWrite + Unpin
             return Poll::Ready(Err(IoError::new(e.kind(), e.to_string())))
         }
         inner.notifier_write.insert(cx.waker());
-        Sink::poll_flush(Pin::new(&mut inner.inner), &mut Context::from_waker(&waker_ref(&inner.notifier_write)))
+        let result = Sink::poll_flush(Pin::new(&mut inner.inner), &mut Context::from_waker(&waker_ref(&inner.notifier_write)));
+        if let Poll::Ready(Err(err)) = &result {
+            inner.error = Err(IoError::new(err.kind(), err.to_string()));
+        }
+        result
     }
 }
 
