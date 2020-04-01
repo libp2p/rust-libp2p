@@ -107,8 +107,7 @@ impl ClosestPeersIter {
                     let distance = key.distance(&target);
                     let state = PeerState::NotContacted;
                     (distance, Peer { key, state })
-                })
-                .take(config.num_results));
+                }));
 
         // The iterator initially makes progress by iterating towards the target.
         let state = State::Iterating { no_progress : 0 };
