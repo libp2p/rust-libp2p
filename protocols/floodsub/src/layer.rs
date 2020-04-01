@@ -44,7 +44,7 @@ pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
 
-    options: FloodsubConfig,
+    config: FloodsubConfig,
 
     /// List of peers to send messages to.
     target_peers: FnvHashSet<PeerId>,
@@ -70,10 +70,10 @@ impl Floodsub {
     }
 
     /// Creates a `Floodsub` with the given configuration.
-    pub fn from_config(options: FloodsubConfig) -> Self {
+    pub fn from_config(config: FloodsubConfig) -> Self {
         Floodsub {
             events: VecDeque::new(),
-            options,
+            config,
             target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
@@ -195,7 +195,7 @@ impl Floodsub {
 
     fn publish_many_inner(&mut self, topic: impl IntoIterator<Item = impl Into<Topic>>, data: impl Into<Vec<u8>>, check_self_subscriptions: bool) {
         let message = FloodsubMessage {
-            source: self.options.local_peer_id.clone(),
+            source: self.config.local_peer_id.clone(),
             data: data.into(),
             // If the sequence numbers are predictable, then an attacker could flood the network
             // with packets with the predetermined sequence numbers and absorb our legitimate
@@ -207,7 +207,7 @@ impl Floodsub {
         let self_subscribed = self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
             self.received.add(&message);
-            if self.options.subscribe_local_messages {
+            if self.config.subscribe_local_messages {
                 self.events.push_back(
                     NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Message(message.clone())));
             }
