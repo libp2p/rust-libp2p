@@ -37,7 +37,7 @@ pub use self::protocol::{FloodsubMessage, FloodsubRpc};
 pub use self::topic::Topic;
 
 /// Configuration options for the Floodsub protocol.
-pub struct FloodsubOptions {
+pub struct FloodsubConfig {
     /// Peer id of the local node. Used for the source of the messages that we publish.
     pub local_peer_id: PeerId,
 
@@ -46,7 +46,7 @@ pub struct FloodsubOptions {
     pub subscribe_local_messages: bool,
 }
 
-impl FloodsubOptions {
+impl FloodsubConfig {
     pub fn new(local_peer_id: PeerId) -> Self {
         Self {
             local_peer_id,

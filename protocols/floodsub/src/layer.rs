@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use crate::protocol::{FloodsubProtocol, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use crate::topic::Topic;
-use crate::FloodsubOptions;
+use crate::FloodsubConfig;
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
 use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
@@ -44,7 +44,7 @@ pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
 
-    options: FloodsubOptions,
+    options: FloodsubConfig,
 
     /// List of peers to send messages to.
     target_peers: FnvHashSet<PeerId>,
@@ -64,13 +64,13 @@ pub struct Floodsub {
 }
 
 impl Floodsub {
-    /// Creates a `Floodsub` with default options.
+    /// Creates a `Floodsub` with default configuration.
     pub fn new(local_peer_id: PeerId) -> Self {
-        Self::from_options(FloodsubOptions::new(local_peer_id))
+        Self::from_config(FloodsubConfig::new(local_peer_id))
     }
 
-    /// Creates a `Floodsub` with the given options.
-    pub fn from_options(options: FloodsubOptions) -> Self {
+    /// Creates a `Floodsub` with the given configuration.
+    pub fn from_config(options: FloodsubConfig) -> Self {
         Floodsub {
             events: VecDeque::new(),
             options,
@@ -237,7 +237,7 @@ impl Floodsub {
 }
 
 impl NetworkBehaviour for Floodsub {
-    type ProtocolsHandler = OneShotHandler<FloodsubConfig, FloodsubRpc, InnerMessage>;
+    type ProtocolsHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
