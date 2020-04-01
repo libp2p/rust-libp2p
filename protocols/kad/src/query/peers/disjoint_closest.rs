@@ -199,7 +199,11 @@ where
     let num_results_per_iter = config.num_results / config.disjoint_paths;
     let remaining_num_results = config.num_results % config.disjoint_paths;
 
-    let mut peers = peers.into_iter().collect::<Vec<Key<PeerId>>>();
+    let mut peers = peers.into_iter()
+        // Each `[ClosestPeersIterConfig]` should be configured with ALPHA_VALUE
+        // peers at initialization.
+        .take(ALPHA_VALUE.get() * config.disjoint_paths)
+        .collect::<Vec<Key<PeerId>>>();
     let peers_per_iter = peers.len() / config.disjoint_paths;
     let remaining_peers = peers.len() % config.disjoint_paths;
 
