@@ -27,7 +27,7 @@ use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use smallvec::SmallVec;
 use std::{
     borrow::Cow,
@@ -274,7 +274,13 @@ impl ProtocolsHandler for GossipsubHandler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(e) => {
-                                    return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                                    if let io::ErrorKind::PermissionDenied = e.kind() {
+                                        error!("Message over the maximum transmission limit was not sent.");
+                                        self.outbound_substream =
+                                            Some(OutboundSubstreamState::WaitingOutput(substream));
+                                    } else {
+                                        return Poll::Ready(ProtocolsHandlerEvent::Close(e));
+                                    }
                                 }
                             }
                         }
