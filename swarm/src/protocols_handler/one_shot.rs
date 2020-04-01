@@ -245,9 +245,9 @@ where
 #[derive(Debug)]
 pub struct OneShotHandlerConfig {
     /// After the given duration has elapsed, an inactive connection will shutdown.
-    inactive_timeout: Duration,
+    pub inactive_timeout: Duration,
     /// Timeout duration for each newly opened outbound substream.
-    substream_timeout: Duration,
+    pub substream_timeout: Duration,
 }
 
 impl Default for OneShotHandlerConfig {
