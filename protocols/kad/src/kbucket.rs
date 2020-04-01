@@ -103,7 +103,7 @@ pub struct KBucketsTable<TKey, TVal> {
 /// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in the
 /// interval `[0, NUM_BUCKETS)`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-struct BucketIndex(usize);
+pub struct BucketIndex(usize);
 
 impl BucketIndex {
     /// Creates a new `BucketIndex` for a `Distance`.
@@ -120,7 +120,7 @@ impl BucketIndex {
     }
 
     /// Gets the index value as an unsigned integer.
-    fn get(&self) -> usize {
+    pub fn get(&self) -> usize {
         self.0
     }
 
@@ -506,8 +506,8 @@ where
 
 /// A reference to a bucket in a `KBucketsTable`.
 pub struct KBucketRef<'a, TPeerId, TVal> {
-    index: BucketIndex,
-    bucket: &'a mut KBucket<TPeerId, TVal>,
+    pub index: BucketIndex,
+    pub bucket: &'a mut KBucket<TPeerId, TVal>,
 }
 
 impl<TKey, TVal> KBucketRef<'_, TKey, TVal>
