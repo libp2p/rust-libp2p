@@ -691,4 +691,31 @@ mod tests {
 
         QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
     }
+
+    #[test]
+    fn try_all_provided_peers_on_failure() {
+        let now = Instant::now();
+
+        let mut iter = ClosestPeersIter::with_config(
+            ClosestPeersIterConfig {
+                num_results: 1,
+                ..ClosestPeersIterConfig::default()
+            },
+            Key::from(Into::<Multihash>::into(PeerId::random())),
+            random_peers(2).map(Key::from), // (*)
+        );
+
+        let next_peer = match iter.next(now) {
+            PeersIterState::Waiting(Some(p)) => p.clone().into_owned(),
+            _ => panic!("Expected iterator to return peer to query.")
+        };
+
+        iter.on_failure(&next_peer);
+
+        assert!(
+            iter.next(now) != PeersIterState::Finished,
+            "Expected iterator to return another peer to query, given that it was initialized with \
+             two peers, see (*).",
+        );
+    }
 }
