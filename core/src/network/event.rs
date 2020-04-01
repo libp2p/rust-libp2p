@@ -114,6 +114,8 @@ where
     ///
     /// The connection is closed as a result of the error.
     ConnectionError {
+        /// The ID of the connection that encountered an error.
+        id: ConnectionId,
         /// Information about the connection that encountered the error.
         connected: Connected<TConnInfo>,
         /// The error that occurred.

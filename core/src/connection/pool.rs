@@ -225,7 +225,7 @@ where
         TPeerId: Clone + Send + 'static,
     {
         let endpoint = info.to_connected_point();
-        if let Some(limit) = self.limits.max_pending_incoming {
+        if let Some(limit) = self.limits.max_incoming {
             let current = self.iter_pending_incoming().count();
             if current >= limit {
                 return Err(ConnectionLimit { limit, current })
@@ -328,18 +328,6 @@ where
         let id = self.manager.add_pending(future, handler);
         self.pending.insert(id, (endpoint, peer));
         id
-    }
-
-    /// Sends an event to all nodes.
-    ///
-    /// This function is "atomic", in the sense that if `Poll::Pending` is returned then no event
-    /// has been sent to any node yet.
-    #[must_use]
-    pub fn poll_broadcast(&mut self, event: &TInEvent, cx: &mut Context) -> Poll<()>
-    where
-        TInEvent: Clone
-    {
-        self.manager.poll_broadcast(event, cx)
     }
 
     /// Adds an existing established connection to the pool.
@@ -846,8 +834,8 @@ where
 /// The configurable limits of a connection [`Pool`].
 #[derive(Debug, Clone, Default)]
 pub struct PoolLimits {
-    pub max_pending_outgoing: Option<usize>,
-    pub max_pending_incoming: Option<usize>,
+    pub max_outgoing: Option<usize>,
+    pub max_incoming: Option<usize>,
     pub max_established_per_peer: Option<usize>,
 }
 
@@ -863,7 +851,7 @@ impl PoolLimits {
     where
         F: FnOnce() -> usize
     {
-        Self::check(current, self.max_pending_outgoing)
+        Self::check(current, self.max_outgoing)
     }
 
     fn check<F>(current: F, limit: Option<usize>) -> Result<(), ConnectionLimit>

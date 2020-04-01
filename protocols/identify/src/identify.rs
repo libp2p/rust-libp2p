@@ -37,7 +37,13 @@ use libp2p_swarm::{
     ProtocolsHandler,
     ProtocolsHandlerUpgrErr
 };
-use std::{collections::HashMap, collections::VecDeque, io, pin::Pin, task::Context, task::Poll};
+use std::{
+    collections::{HashMap, VecDeque},
+    io,
+    pin::Pin,
+    task::Context,
+    task::Poll
+};
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -49,7 +55,7 @@ pub struct Identify {
     /// The public key of the local node. To report on the wire.
     local_public_key: PublicKey,
     /// For each peer we're connected to, the observed address to send back to it.
-    observed_addresses: HashMap<PeerId, Multiaddr>,
+    observed_addresses: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
@@ -97,23 +103,32 @@ impl NetworkBehaviour for Identify {
         Vec::new()
     }
 
-    fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
-        let observed = match endpoint {
-            ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
-        };
-
-        self.observed_addresses.insert(peer_id, observed);
+    fn inject_connected(&mut self, _: &PeerId) {
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId, _: ConnectedPoint) {
+    fn inject_connection_established(&mut self, peer_id: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
+        let addr = match endpoint {
+            ConnectedPoint::Dialer { address } => address.clone(),
+            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
+        };
+
+        self.observed_addresses.entry(peer_id.clone()).or_default().insert(*conn, addr);
+    }
+
+    fn inject_connection_closed(&mut self, peer_id: &PeerId, conn: &ConnectionId, _: &ConnectedPoint) {
+        if let Some(addrs) = self.observed_addresses.get_mut(peer_id) {
+            addrs.remove(conn);
+        }
+    }
+
+    fn inject_disconnected(&mut self, peer_id: &PeerId) {
         self.observed_addresses.remove(peer_id);
     }
 
     fn inject_event(
         &mut self,
         peer_id: PeerId,
-        _connection: ConnectionId,
+        connection: ConnectionId,
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
@@ -132,9 +147,9 @@ impl NetworkBehaviour for Identify {
             }
             IdentifyHandlerEvent::Identify(sender) => {
                 let observed = self.observed_addresses.get(&peer_id)
-                    .expect("We only receive events from nodes we're connected to. We insert \
-                             into the hashmap when we connect to a node and remove only when we \
-                             disconnect; QED");
+                    .and_then(|addrs| addrs.get(&connection))
+                    .expect("`inject_event` is only called with an established connection \
+                             and `inject_connection_established` ensures there is an entry; qed");
                 self.pending_replies.push_back(
                     Reply::Queued {
                         peer: peer_id,
