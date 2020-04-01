@@ -27,7 +27,14 @@
 - `multihash`: Removed the crate in favour of the upstream crate:
   [PR 1472](https://github.com/libp2p/rust-libp2p/pull/1472)
 - `libp2p-core`: Remove `poll_broadcast`:
-  [PR-1527](https://github.com/libp2p/rust-libp2p/pull/1527)
+  [PR 1527](https://github.com/libp2p/rust-libp2p/pull/1527)
+- `libp2p-swarm`: Allow configuration of outbound substreams:
+  [PR 1521](https://github.com/libp2p/rust-libp2p/pull/1521)
+- `libp2p-mplex`: Guard against use of underlying `Sink` upon
+  error or connection close:
+  [PR 1529](https://github.com/libp2p/rust-libp2p/pull/1529)
+- `libp2p-swarm`: Pass the cause of closing a listener to `inject_listener_closed`:
+  [PR 1517](https://github.com/libp2p/rust-libp2p/pull/1517)
 
 # Version 0.16.2 (2020-02-28)
 
