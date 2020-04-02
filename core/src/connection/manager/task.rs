@@ -87,7 +87,7 @@ where
     commands: stream::Fuse<mpsc::Receiver<Command<I>>>,
 
     /// Inner state of this `Task`.
-    state: State<F, M, H, I, O, E, C>,
+    state: State<F, M, H, O, E, C>,
 }
 
 impl<F, M, H, I, O, E, C> Task<F, M, H, I, O, E, C>
@@ -111,7 +111,6 @@ where
             state: State::Pending {
                 future: Box::pin(future),
                 handler,
-                events: Vec::new()
             },
         }
     }
@@ -133,7 +132,7 @@ where
 }
 
 /// The state associated with the `Task` of a connection.
-enum State<F, M, H, I, O, E, C>
+enum State<F, M, H, O, E, C>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler<C>,
@@ -146,12 +145,6 @@ where
         future: Pin<Box<F>>,
         /// The intended handler for the established connection.
         handler: H,
-        /// While we are dialing the future, we need to buffer the events received via
-        /// `Command::NotifyHandler` so that they get delivered to the `handler`
-        /// once the connection is established. We can't leave these in `Task::receiver`
-        /// because we have to detect if the connection attempt has been aborted (by
-        /// dropping the corresponding `sender` owned by the manager).
-        events: Vec<I>
     },
 
     /// The connection is established and a new event is ready to be emitted.
@@ -198,30 +191,29 @@ where
 
         'poll: loop {
             match std::mem::replace(&mut this.state, State::Done) {
-                State::Pending { mut future, handler, mut events } => {
-                    // Process commands from the manager.
-                    loop {
-                        match Stream::poll_next(Pin::new(&mut this.commands), cx) {
-                            Poll::Pending => break,
-                            Poll::Ready(None) => return Poll::Ready(()),
-                            Poll::Ready(Some(Command::NotifyHandler(event))) =>
-                                events.push(event),
-                        }
+                State::Pending { mut future, handler } => {
+                    // Check if the manager aborted this task by dropping the `commands`
+                    // channel sender side.
+                    match Stream::poll_next(Pin::new(&mut this.commands), cx) {
+                        Poll::Pending => {},
+                        Poll::Ready(None) => return Poll::Ready(()),
+                        Poll::Ready(Some(Command::NotifyHandler(_))) => unreachable!(
+                            "Manager does not allow sending commands to pending tasks.",
+                        )
                     }
                     // Check if the connection succeeded.
                     match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Ready(Ok((info, muxer))) => {
-                            let mut c = Connection::new(muxer, handler.into_handler(&info));
-                            for event in events {
-                                c.inject_event(event)
-                            }
                             this.state = State::EstablishedReady {
-                                connection: Some(c),
+                                connection: Some(Connection::new(
+                                    muxer,
+                                    handler.into_handler(&info),
+                                )),
                                 event: Event::Established { id, info }
                             }
                         }
                         Poll::Pending => {
-                            this.state = State::Pending { future, handler, events };
+                            this.state = State::Pending { future, handler };
                             return Poll::Pending
                         }
                         Poll::Ready(Err(error)) => {
@@ -338,4 +330,3 @@ where
         }
     }
 }
-
