@@ -1,5 +1,8 @@
 # Version ???
 
+
+# Version 0.17.0 (2020-04-02)
+
 - `libp2p-core`: Finished "identity hashing" for peer IDs migration.
   [PR 1460](https://github.com/libp2p/rust-libp2p/pull/1460)
 - `libp2p-core`: Remove `poll_broadcast`.
