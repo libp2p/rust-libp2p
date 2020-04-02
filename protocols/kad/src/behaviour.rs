@@ -150,7 +150,7 @@ impl KademliaConfig {
     // TODO: Document that when enabled the number of disjoint paths is equal to the number of
     // parallelism.
     pub fn enable_disjoint_path_queries(&mut self) -> &mut Self {
-        self.query_config.disjoint_paths = true;
+        self.query_config.use_disjoint_paths = true;
         self
     }
 

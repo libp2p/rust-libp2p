@@ -104,15 +104,11 @@ impl<TInner> QueryPool<TInner> {
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>
     {
-        let mut cfg = DisjointClosestPeersIterConfig {
+        let cfg = DisjointClosestPeersIterConfig {
             num_results: self.config.replication_factor.get(),
-            disjoint_paths: 1,
+            use_disjoint_paths: self.config.use_disjoint_paths,
             .. DisjointClosestPeersIterConfig::default()
         };
-
-        if self.config.disjoint_paths {
-            cfg.disjoint_paths = cfg.parallelism;
-        }
 
         let peer_iter = QueryPeerIter::Closest(DisjointClosestPeersIter::with_config(cfg, target, peers));
         self.add(peer_iter, inner)
@@ -207,7 +203,7 @@ pub struct QueryConfig {
     /// Whether to use disjoint paths on iterative lookups.
     ///
     /// See [`crate::behaviour::KademliaConfig::enable_disjoint_path_queries`] for details.
-    pub disjoint_paths: bool,
+    pub use_disjoint_paths: bool,
 }
 
 impl Default for QueryConfig {
@@ -215,7 +211,7 @@ impl Default for QueryConfig {
         QueryConfig {
             timeout: Duration::from_secs(60),
             replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0"),
-            disjoint_paths: false,
+            use_disjoint_paths: false,
         }
     }
 }

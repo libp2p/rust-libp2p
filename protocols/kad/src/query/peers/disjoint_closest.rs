@@ -36,8 +36,8 @@ pub struct DisjointClosestPeersIterConfig {
     /// nodes to a target. Defaults to `ALPHA_VALUE`.
     pub parallelism: usize,
 
-    // TODO: Document that it needs to be equal or larger than parallelism?
-    pub disjoint_paths: usize,
+    // TODO: Document that the number of disjoint paths is equal to the amount of parallelism.
+    pub use_disjoint_paths: bool,
 
     /// Number of results (closest peers) to search for.
     ///
@@ -58,7 +58,7 @@ impl Default for DisjointClosestPeersIterConfig {
     fn default() -> Self {
         DisjointClosestPeersIterConfig {
             parallelism: ALPHA_VALUE.get(),
-            disjoint_paths: 3,
+            use_disjoint_paths: false,
             num_results: K_VALUE.get(),
             peer_timeout: Duration::from_secs(10),
         }
@@ -100,6 +100,22 @@ impl DisjointClosestPeersIter {
         I: IntoIterator<Item = Key<PeerId>>,
         T: Into<KeyBytes> + Clone,
     {
+        // TODO: Document that this basically makes the disjoint path iterator a no-op shallow wrapper.
+        if !config.use_disjoint_paths {
+            return DisjointClosestPeersIter {
+                iters: vec![ClosestPeersIter::with_config(
+                    ClosestPeersIterConfig {
+                        parallelism: config.parallelism,
+                        num_results: config.num_results,
+                        peer_timeout: config.peer_timeout,
+                    },
+                    target,
+                    known_closest_peers,
+                )],
+                yielded_peers: HashMap::new(),
+            }
+        }
+
         let iters = split_inputs_per_disjoint_path(&config, known_closest_peers)
             .into_iter()
             .map(|(config, peers)| ClosestPeersIter::with_config(config, target.clone(), peers))
@@ -213,27 +229,19 @@ fn split_inputs_per_disjoint_path<I>(
 where
     I: IntoIterator<Item = Key<PeerId>>,
 {
-    let parallelism_per_iter = config.parallelism / config.disjoint_paths;
-    let remaining_parallelism = config.parallelism % config.disjoint_paths;
-
-    let num_results_per_iter = config.num_results / config.disjoint_paths;
-    let remaining_num_results = config.num_results % config.disjoint_paths;
+    // TODO: Make it more obvious that the number of parallelism is the number of disjoint paths.
+    let num_results_per_iter = config.num_results / config.parallelism;
+    let remaining_num_results = config.num_results % config.parallelism;
 
     let mut peers = peers.into_iter()
         // Each `[ClosestPeersIterConfig]` should be configured with ALPHA_VALUE
         // peers at initialization.
-        .take(ALPHA_VALUE.get() * config.disjoint_paths)
+        .take(ALPHA_VALUE.get() * config.parallelism)
         .collect::<Vec<Key<PeerId>>>();
-    let peers_per_iter = peers.len() / config.disjoint_paths;
-    let remaining_peers = peers.len() % config.disjoint_paths;
+    let peers_per_iter = peers.len() / config.parallelism;
+    let remaining_peers = peers.len() % config.parallelism;
 
-    (0..config.disjoint_paths).map(|i| {
-        let parallelism = if i < remaining_parallelism {
-            parallelism_per_iter + 1
-        } else {
-            parallelism_per_iter
-        };
-
+    (0..config.parallelism).map(|i| {
         let num_results = if i < remaining_num_results {
             num_results_per_iter + 1
         } else {
@@ -250,7 +258,7 @@ where
 
         (
             ClosestPeersIterConfig {
-                parallelism,
+                parallelism: 1,
                 num_results,
                 peer_timeout: config.peer_timeout,
             },
@@ -270,7 +278,7 @@ mod tests {
             DisjointClosestPeersIterConfig {
                 parallelism: g.gen::<u16>() as usize,
                 num_results: g.gen::<u16>() as usize,
-                disjoint_paths: g.gen::<u16>() as usize,
+                use_disjoint_paths: g.gen::<bool>(),
                 peer_timeout: Duration::from_secs(1),
             }
         }
@@ -295,7 +303,6 @@ mod tests {
         fn prop(config: DisjointClosestPeersIterConfig, peers: PeerVec) -> TestResult {
             if config.parallelism == 0
                 || config.num_results == 0
-                || config.disjoint_paths == 0
                 || peers.0.len() == 0
             {
                 return TestResult::discard();
@@ -304,13 +311,6 @@ mod tests {
             let mut iters = split_inputs_per_disjoint_path(&config, peers.0.clone());
 
             // Ensure the sum of each resource of each disjoint path equals the allowed input.
-
-            assert_eq!(
-                config.parallelism,
-                iters
-                    .iter()
-                    .fold(0, |acc, (config, _)| { acc + config.parallelism }),
-            );
 
             assert_eq!(
                 config.num_results,
@@ -327,11 +327,6 @@ mod tests {
             );
 
             // Ensure 'best-effort' fairness, the highest and lowest are newer more than 1 apart.
-
-            iters.sort_by(|(a_config, _), (b_config, _)| {
-                a_config.parallelism.cmp(&b_config.parallelism)
-            });
-            assert!(iters[iters.len() - 1].0.parallelism - iters[0].0.parallelism <= 1);
 
             iters.sort_by(|(a_config, _), (b_config, _)| {
                 a_config.num_results.cmp(&b_config.num_results)
@@ -364,7 +359,7 @@ mod tests {
 
         let config = DisjointClosestPeersIterConfig {
             parallelism: 3,
-            disjoint_paths: 3,
+            use_disjoint_paths: true,
             num_results: 3,
             ..DisjointClosestPeersIterConfig::default()
         };
