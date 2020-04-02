@@ -142,6 +142,18 @@ impl KademliaConfig {
         self
     }
 
+    /// Enable queries to use disjoint paths when iteratively looking for the
+    /// closest node to a target.
+    ///
+    /// See the S/Kademlia paper for details.
+    //
+    // TODO: Document that when enabled the number of disjoint paths is equal to the number of
+    // parallelism.
+    pub fn enable_disjoint_path_queries(&mut self) -> &mut Self {
+        self.query_config.disjoint_paths = true;
+        self
+    }
+
     /// Sets the TTL for stored records.
     ///
     /// The TTL should be significantly longer than the (re-)publication
@@ -1895,4 +1907,3 @@ impl QueryInfo {
         }
     }
 }
-

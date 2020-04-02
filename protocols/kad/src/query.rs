@@ -104,11 +104,16 @@ impl<TInner> QueryPool<TInner> {
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>
     {
-        let cfg = DisjointClosestPeersIterConfig {
+        let mut cfg = DisjointClosestPeersIterConfig {
             num_results: self.config.replication_factor.get(),
             disjoint_paths: 1,
             .. DisjointClosestPeersIterConfig::default()
         };
+
+        if self.config.disjoint_paths {
+            cfg.disjoint_paths = cfg.parallelism;
+        }
+
         let peer_iter = QueryPeerIter::Closest(DisjointClosestPeersIter::with_config(cfg, target, peers));
         self.add(peer_iter, inner)
     }
@@ -189,15 +194,28 @@ pub struct QueryId(usize);
 /// The configuration for queries in a `QueryPool`.
 #[derive(Debug, Clone)]
 pub struct QueryConfig {
+    /// Timeout of a single query.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::set_query_timeout`] for details.
     pub timeout: Duration,
+
+    /// The replication factor to use.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::set_replication_factor`] for details.
     pub replication_factor: NonZeroUsize,
+
+    /// Whether to use disjoint paths on iterative lookups.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::enable_disjoint_path_queries`] for details.
+    pub disjoint_paths: bool,
 }
 
 impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
             timeout: Duration::from_secs(60),
-            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0")
+            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0"),
+            disjoint_paths: false,
         }
     }
 }
