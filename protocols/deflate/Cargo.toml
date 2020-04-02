@@ -2,7 +2,7 @@
 name = "libp2p-deflate"
 edition = "2018"
 description = "Deflate encryption protocol for libp2p"
-version = "0.16.0"
+version = "0.17.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,11 +11,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.16.0", path = "../../core" }
+libp2p-core = { version = "0.17.0", path = "../../core" }
 flate2 = "1.0"
 
 [dev-dependencies]
 async-std = "1.0"
-libp2p-tcp = { version = "0.16.0", path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.17.0", path = "../../transports/tcp" }
 rand = "0.7"
 quickcheck = "0.9"

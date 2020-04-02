@@ -33,6 +33,7 @@ use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use fnv::{FnvHashMap, FnvHashSet};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
 use libp2p_swarm::{
+    DialPeerCondition,
     NetworkBehaviour,
     NetworkBehaviourAction,
     NotifyHandler,
@@ -42,7 +43,7 @@ use libp2p_swarm::{
 use log::{info, debug, warn};
 use smallvec::SmallVec;
 use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use wasm_timer::Instant;
@@ -343,6 +344,7 @@ where
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                             peer_id: disconnected.into_preimage(),
+                            condition: DialPeerCondition::Disconnected
                         })
                     },
                 }
@@ -534,7 +536,7 @@ where
     pub fn get_providers(&mut self, key: record::Key) {
         let info = QueryInfo::GetProviders {
             key: key.clone(),
-            providers: Vec::new(),
+            providers: HashSet::new(),
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
@@ -675,6 +677,7 @@ where
                                 debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
                                 self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                                     peer_id: disconnected.into_preimage(),
+                                    condition: DialPeerCondition::Disconnected
                                 })
                             },
                         }
@@ -1100,12 +1103,25 @@ where
         peer_addrs
     }
 
-    fn inject_connected(&mut self, peer: PeerId, endpoint: ConnectedPoint) {
+    fn inject_connection_established(&mut self, peer: &PeerId, _: &ConnectionId, endpoint: &ConnectedPoint) {
+        // The remote's address can only be put into the routing table,
+        // and thus shared with other nodes, if the local node is the dialer,
+        // since the remote address on an inbound connection is specific to
+        // that connection (e.g. typically the TCP port numbers).
+        let address = match endpoint {
+            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+
+        self.connection_updated(peer.clone(), address, NodeStatus::Connected);
+    }
+
+    fn inject_connected(&mut self, peer: &PeerId) {
         // Queue events for sending pending RPCs to the connected peer.
         // There can be only one pending RPC for a particular peer and query per definition.
         for (peer_id, event) in self.queries.iter_mut().filter_map(|q|
             q.inner.pending_rpcs.iter()
-                .position(|(p, _)| p == &peer)
+                .position(|(p, _)| p == peer)
                 .map(|p| q.inner.pending_rpcs.remove(p)))
         {
             self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
@@ -1113,17 +1129,7 @@ where
             });
         }
 
-        // The remote's address can only be put into the routing table,
-        // and thus shared with other nodes, if the local node is the dialer,
-        // since the remote address on an inbound connection is specific to
-        // that connection (e.g. typically the TCP port numbers).
-        let address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address),
-            ConnectedPoint::Listener { .. } => None,
-        };
-
-        self.connection_updated(peer.clone(), address, NodeStatus::Connected);
-        self.connected_peers.insert(peer);
+        self.connected_peers.insert(peer.clone());
     }
 
     fn inject_addr_reach_failure(
@@ -1173,7 +1179,7 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId, _old_endpoint: ConnectedPoint) {
+    fn inject_disconnected(&mut self, id: &PeerId) {
         for query in self.queries.iter_mut() {
             query.on_failure(id);
         }
@@ -1233,7 +1239,7 @@ where
                         providers, ..
                     } = &mut query.inner.info {
                         for peer in provider_peers {
-                            providers.push(peer.node_id);
+                            providers.insert(peer.node_id);
                         }
                     }
                 }
@@ -1441,7 +1447,7 @@ where
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id.clone(), event));
                             self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
-                                peer_id
+                                peer_id, condition: DialPeerCondition::Disconnected
                             });
                         }
                     }
@@ -1701,7 +1707,7 @@ pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 #[derive(Debug, Clone)]
 pub struct GetProvidersOk {
     pub key: record::Key,
-    pub providers: Vec<PeerId>,
+    pub providers: HashSet<PeerId>,
     pub closest_peers: Vec<PeerId>
 }
 
@@ -1710,7 +1716,7 @@ pub struct GetProvidersOk {
 pub enum GetProvidersError {
     Timeout {
         key: record::Key,
-        providers: Vec<PeerId>,
+        providers: HashSet<PeerId>,
         closest_peers: Vec<PeerId>
     }
 }
@@ -1843,7 +1849,7 @@ enum QueryInfo {
         /// The key for which to search for providers.
         key: record::Key,
         /// The found providers.
-        providers: Vec<PeerId>,
+        providers: HashSet<PeerId>,
     },
 
     /// A query that searches for the closest closest nodes to a key to be
