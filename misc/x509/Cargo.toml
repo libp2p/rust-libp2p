@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-x509"
-version = "0.16.0"
+version = "0.17.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
 description = "X.509 generation and verification for libp2p"
@@ -16,5 +16,5 @@ rcgen = "0.7.0"
 webpki = "0.21.2"
 untrusted = "0.7.0"
 log = "0.4.8"
-libp2p-core = { path = "../../core", version = "0.16.0" }
+libp2p-core = { path = "../../core", version = "0.17.1" }
 yasna = "0.3.1"
