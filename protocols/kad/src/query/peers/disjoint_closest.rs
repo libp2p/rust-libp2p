@@ -271,7 +271,7 @@ where
 mod tests {
     use super::*;
     use quickcheck::*;
-    use rand::Rng;
+    use rand::{Rng, seq::SliceRandom};
 
     impl Arbitrary for DisjointClosestPeersIterConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
@@ -442,5 +442,145 @@ mod tests {
         assert!(final_peers.contains(malicious_response_1[0].preimage()));
         assert!(final_peers.contains(response_2[0].preimage()));
         assert!(final_peers.contains(response_3[0].preimage()));
+    }
+
+    fn random_peers(n: usize) -> impl Iterator<Item = PeerId> + Clone {
+        (0 .. n).map(|_| PeerId::random())
+    }
+
+    #[derive(Debug, Clone)]
+    struct Graph(HashMap<PeerId, Peer>);
+
+    impl Arbitrary for Graph {
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            let mut peers = HashMap::new();
+            let mut peer_ids = random_peers(g.gen_range(K_VALUE.get(), 100))
+                .collect::<Vec<_>>();
+
+            for peer_id in peer_ids.clone() {
+                peer_ids.shuffle(g);
+
+                peers.insert(peer_id, Peer{
+                    known_peers: peer_ids[0..g.gen_range(1, K_VALUE.get())].to_vec(),
+                });
+            }
+
+            Graph(peers)
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct Peer {
+        known_peers: Vec<PeerId>,
+    }
+
+    #[derive(Debug, Clone)]
+    struct Parallelism(usize);
+
+    impl Arbitrary for Parallelism{
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            Parallelism(g.gen_range(1, 10))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct NumResults(usize);
+
+    impl Arbitrary for NumResults{
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            NumResults(g.gen_range(1, K_VALUE.get()))
+        }
+    }
+
+    enum PeerIterator {
+        DisjointClosest(DisjointClosestPeersIter),
+        Closest(ClosestPeersIter),
+        DisjointClosestDisjointDisabled(DisjointClosestPeersIter),
+    }
+
+    impl PeerIterator {
+        fn next(&mut self, now: Instant) -> PeersIterState {
+            match self {
+                PeerIterator::DisjointClosest(iter) => iter.next(now),
+                PeerIterator::Closest(iter) => iter.next(now),
+                PeerIterator::DisjointClosestDisjointDisabled(iter) => iter.next(now),
+            }
+        }
+
+        fn on_success(&mut self, peer: &PeerId, closer_peers: Vec<PeerId>) {
+            match self {
+                PeerIterator::DisjointClosest(iter) => iter.on_success(peer, closer_peers),
+                PeerIterator::Closest(iter) => iter.on_success(peer, closer_peers),
+                PeerIterator::DisjointClosestDisjointDisabled(iter) => iter.on_success(peer, closer_peers),
+            }
+        }
+
+        fn into_result(self) -> Vec<PeerId> {
+            match self {
+                PeerIterator::DisjointClosest(iter) => iter.into_result().collect(),
+                PeerIterator::Closest(iter) => iter.into_result().collect(),
+                PeerIterator::DisjointClosestDisjointDisabled(iter) => iter.into_result().collect(),
+            }
+        }
+    }
+
+    #[test]
+    fn closest_and_disjoint_closest_yield_same_result() {
+        fn prop(graph: Graph, parallelism: Parallelism, num_results: NumResults) {
+            let now = Instant::now();
+            let target: KeyBytes = Key::from(PeerId::random()).into();
+
+            let mut known_closest_peers = graph.0.iter().take(parallelism.0 * ALPHA_VALUE.get()).map(|(key, _peers)| Key::new(key.clone())).collect::<Vec<_>>();
+            known_closest_peers.sort_unstable_by(|a, b| {
+                target.distance(a).cmp(&target.distance(b))
+            });
+
+            let iters = vec![
+                PeerIterator::DisjointClosest(DisjointClosestPeersIter::with_config(DisjointClosestPeersIterConfig{
+                    parallelism: parallelism.0,
+                    use_disjoint_paths: true,
+                    num_results: num_results.0,
+                    ..DisjointClosestPeersIterConfig::default()
+                }, target.clone(), known_closest_peers.clone())),
+                PeerIterator::Closest(ClosestPeersIter::with_config(ClosestPeersIterConfig{
+                    parallelism: parallelism.0,
+                    num_results: num_results.0,
+                    ..ClosestPeersIterConfig::default()
+                }, target.clone(), known_closest_peers.clone())),
+                PeerIterator::DisjointClosestDisjointDisabled(DisjointClosestPeersIter::with_config(DisjointClosestPeersIterConfig{
+                    parallelism: parallelism.0,
+                    use_disjoint_paths: false,
+                    num_results: num_results.0,
+                    ..DisjointClosestPeersIterConfig::default()
+                }, target.clone(), known_closest_peers.clone())),
+            ];
+
+            iters.into_iter().map(|mut iter| {
+                loop {
+                    match iter.next(now) {
+                        PeersIterState::Waiting(Some(peer_id)) => {
+                            let peer_id = peer_id.clone().into_owned();
+                            iter.on_success(&peer_id, graph.0.get(&peer_id).unwrap().known_peers.clone())
+                        } ,
+                        PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) => panic!("There are never more than one requests in flight."),
+                        PeersIterState::Finished => break,
+                    }
+                }
+
+                let mut result = iter.into_result().into_iter().map(Key::new).collect::<Vec<_>>();
+                result.sort_unstable_by(|a, b| {
+                    target.distance(a).cmp(&target.distance(b))
+                });
+                result
+            }).fold(None, |acc, res| {
+                match acc {
+                    None => Some(res),
+                    Some(prev_res) if prev_res.len() != res.len() => panic!("unequal amount of peers"),
+                    res @ _ => res,
+                }
+            });
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_, _, _))
     }
 }
