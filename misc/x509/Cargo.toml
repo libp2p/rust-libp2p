@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
 ring = "0.16.11"
-rcgen = "0.7.0"
+rcgen = { version = "0.7.0", default-features = false }
 webpki = "0.21.2"
 untrusted = "0.7.0"
 log = "0.4.8"
