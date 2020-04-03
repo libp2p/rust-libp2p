@@ -104,7 +104,7 @@ macro_rules! span {
     ($name:expr, side = $e:expr) => {
         let span = tracing::trace_span!($name, side = $e);
         let _guard = span.enter();
-	};
+    };
     ($name:expr, $inner:expr, $id:expr) => {
         let span = tracing::trace_span!($name, side = debug($inner.side()), id = debug(&$id.id));
         let _guard = span.enter();

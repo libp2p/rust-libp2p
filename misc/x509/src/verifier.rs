@@ -43,6 +43,18 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         verify_presented_certs(presented_certs).map(|()| rustls::ServerCertVerified::assertion())
     }
+
+    fn verify_certificate_signature(
+        &self, scheme: rustls::SignatureScheme, version: rustls::ProtocolVersion,
+        certificate: &rustls::Certificate, msg: &[u8], signature: &[u8],
+    ) -> Result<rustls::HandshakeSignatureValid, rustls::TLSError> {
+        assert_eq!(version, rustls::ProtocolVersion::TLSv1_3);
+        x509::parse_certificate(certificate.as_ref())
+            .map_err(rustls::TLSError::WebPKIError)?
+            .verify_signature(scheme, msg, signature)
+            .map_err(rustls::TLSError::WebPKIError)
+            .map(|()| rustls::HandshakeSignatureValid::assertion())
+    }
 }
 
 fn get_time() -> Result<webpki::Time, rustls::TLSError> {
@@ -54,12 +66,10 @@ fn verify_presented_certs(presented_certs: &[rustls::Certificate]) -> Result<(),
     if presented_certs.len() != 1 {
         return Err(rustls::TLSError::NoCertificatesPresented);
     }
-    x509::verify_certificate(
-        x509::parse_certificate(presented_certs[0].as_ref())
-            .map_err(rustls::TLSError::WebPKIError)?,
-        get_time()?,
-    )
-    .map_err(rustls::TLSError::WebPKIError)
+    x509::parse_certificate(presented_certs[0].as_ref())
+        .map_err(rustls::TLSError::WebPKIError)?
+        .verify_libp2p(get_time()?)
+        .map_err(rustls::TLSError::WebPKIError)
 }
 
 /// libp2p requires the following of X.509 client certificate chains:
@@ -87,6 +97,18 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         &self, presented_certs: &[rustls::Certificate], _dns_name: Option<&webpki::DNSName>,
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
         verify_presented_certs(presented_certs).map(|()| rustls::ClientCertVerified::assertion())
+    }
+
+    fn verify_certificate_signature(
+        &self, scheme: rustls::SignatureScheme, version: rustls::ProtocolVersion,
+        certificate: &rustls::Certificate, msg: &[u8], signature: &[u8],
+    ) -> Result<rustls::HandshakeSignatureValid, rustls::TLSError> {
+        assert_eq!(version, rustls::ProtocolVersion::TLSv1_3);
+        x509::parse_certificate(certificate.as_ref())
+            .map_err(rustls::TLSError::WebPKIError)?
+            .verify_signature(scheme, msg, signature)
+            .map_err(rustls::TLSError::WebPKIError)
+            .map(|()| rustls::HandshakeSignatureValid::assertion())
     }
 }
 
