@@ -49,17 +49,13 @@ mod tests {
 
         // build and connect peer_no random peers
         let mut peers = vec![];
-        let dummy_connected_point = ConnectedPoint::Dialer {
-            address: "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
-        };
 
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
             <Gossipsub as NetworkBehaviour>::inject_connected(
                 &mut gs,
-                peer.clone(),
-                dummy_connected_point.clone(),
+                &peer,
             );
             if to_subscribe {
                 gs.handle_received_subscriptions(

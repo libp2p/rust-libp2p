@@ -27,7 +27,7 @@ use crate::protocol::{
 };
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -1012,7 +1012,7 @@ impl NetworkBehaviour for Gossipsub {
         Vec::new()
     }
 
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
+    fn inject_connected(&mut self, id: &PeerId) {
         info!("New peer connected: {:?}", id);
         // We need to send our subscriptions to the newly-connected node.
         let mut subscriptions = vec![];
@@ -1040,7 +1040,7 @@ impl NetworkBehaviour for Gossipsub {
         self.peer_topics.insert(id.clone(), Vec::new());
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
+    fn inject_disconnected(&mut self, id: &PeerId) {
         // remove from mesh, topic_peers, peer_topic and fanout
         debug!("Peer disconnected: {:?}", id);
         {
@@ -1164,8 +1164,8 @@ impl NetworkBehaviour for Gossipsub {
                 NetworkBehaviourAction::DialAddress { address } => {
                     return Poll::Ready(NetworkBehaviourAction::DialAddress { address });
                 }
-                NetworkBehaviourAction::DialPeer { peer_id } => {
-                    return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id });
+                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
+                    return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition });
                 }
                 NetworkBehaviourAction::ReportObservedAddr { address } => {
                     return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address });

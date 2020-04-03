@@ -1,3 +1,53 @@
+# Version ???
+
+
+# Version 0.17.0 (2020-04-02)
+
+- `libp2p-core`: Finished "identity hashing" for peer IDs migration.
+  [PR 1460](https://github.com/libp2p/rust-libp2p/pull/1460)
+- `libp2p-core`: Remove `poll_broadcast`.
+  [PR 1527](https://github.com/libp2p/rust-libp2p/pull/1527)
+- `libp2p-core`, `libp2p-swarm`: Report addresses of closed listeners.
+  [PR 1485](https://github.com/libp2p/rust-libp2p/pull/1485)
+- `libp2p-core`: Support for multiple connections per peer and configurable connection limits.
+  See [PR #1440](https://github.com/libp2p/rust-libp2p/pull/1440),
+  [PR #1519](https://github.com/libp2p/rust-libp2p/pull/1519) and
+  [issue #912](https://github.com/libp2p/rust-libp2p/issues/912) for details.
+
+- `libp2p-swarm`: Pass the cause of closing a listener to `inject_listener_closed`.
+  [PR 1517](https://github.com/libp2p/rust-libp2p/pull/1517)
+- `libp2p-swarm`: Support for multiple connections per peer and configurable connection limits.
+  See [PR #1440](https://github.com/libp2p/rust-libp2p/pull/1440),
+  [PR #1519](https://github.com/libp2p/rust-libp2p/pull/1519) and
+  [issue #912](https://github.com/libp2p/rust-libp2p/issues/912) for details.
+- `libp2p-swarm`: The `SwarmEvent` now returns more events.
+  [PR 1515](https://github.com/libp2p/rust-libp2p/pull/1515)
+- `libp2p-swarm`: New `protocols_handler::multi` module.
+  [PR 1497](https://github.com/libp2p/rust-libp2p/pull/1497)
+- `libp2p-swarm`: Allow configuration of outbound substreams.
+  [PR 1521](https://github.com/libp2p/rust-libp2p/pull/1521)
+
+- `libp2p-kad`: Providers returned from a lookup are now deduplicated.
+  [PR 1528](https://github.com/libp2p/rust-libp2p/pull/1528)
+- `libp2p-kad`: Allow customising the maximum packet size.
+  [PR 1502](https://github.com/libp2p/rust-libp2p/pull/1502)
+- `libp2p-kad`: Allow customising the (libp2p) connection keep-alive timeout.
+  [PR 1477](https://github.com/libp2p/rust-libp2p/pull/1477)
+- `libp2p-kad`: Avoid storing records that are expired upon receipt (optimisation).
+  [PR 1496](https://github.com/libp2p/rust-libp2p/pull/1496)
+- `libp2p-kad`: Fixed potential panic on computing record expiry.
+  [PR 1492](https://github.com/libp2p/rust-libp2p/pull/1492)
+
+- `libp2p-mplex`: Guard against use of underlying `Sink` upon
+  error or connection close.
+  [PR 1529](https://github.com/libp2p/rust-libp2p/pull/1529)
+
+- `multistream-select`: Upgrade to stable futures.
+  [PR 1484](https://github.com/libp2p/rust-libp2p/pull/1484)
+
+- `multihash`: Removed the crate in favour of the upstream crate.
+  [PR 1472](https://github.com/libp2p/rust-libp2p/pull/1472)
+
 # Version 0.16.2 (2020-02-28)
 
 - Fixed yamux connections not properly closing and being stuck in the `CLOSE_WAIT` state.
