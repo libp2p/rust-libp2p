@@ -133,7 +133,7 @@ where
 /// the associated user data.
 #[derive(Debug)]
 struct TaskInfo<I, C> {
-    /// channel endpoint to send messages to the task
+    /// Channel endpoint to send messages to the task.
     sender: mpsc::Sender<task::Command<I>>,
     /// The state of the task as seen by the `Manager`.
     state: TaskState<C>,
@@ -284,40 +284,6 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         }
 
         ConnectionId(task_id)
-    }
-
-    /// Notifies the handlers of all managed connections of an event.
-    ///
-    /// This function is "atomic", in the sense that if `Poll::Pending` is
-    /// returned then no event has been sent.
-    #[must_use]
-    pub fn poll_broadcast(&mut self, event: &I, cx: &mut Context) -> Poll<()>
-    where
-        I: Clone
-    {
-        for task in self.tasks.values_mut() {
-            if let Poll::Pending = task.sender.poll_ready(cx) { // (*)
-                return Poll::Pending;
-            }
-        }
-
-        for (id, task) in self.tasks.iter_mut() {
-            let cmd = task::Command::NotifyHandler(event.clone());
-            match task.sender.start_send(cmd) {
-                Ok(()) => {},
-                Err(e) if e.is_full() => unreachable!("by (*)"),
-                Err(e) if e.is_disconnected() => {
-                    // The background task ended. The manager will eventually be
-                    // informed through an `Error` event from the task.
-                    log::trace!("Connection dropped: {:?}", id);
-                },
-                Err(e) => {
-                    log::error!("Unexpected error: {:?}", e);
-                }
-            }
-        }
-
-        Poll::Ready(())
     }
 
     /// Gets an entry for a managed connection, if it exists.

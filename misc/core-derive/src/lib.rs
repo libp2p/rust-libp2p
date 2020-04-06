@@ -131,44 +131,52 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_connected()`.
     let inject_connected_stmts = {
-        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
             if is_ignored(&field) {
                 return None;
             }
-
-            Some(if field_n == num_fields - 1 {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_connected(peer_id, endpoint); },
-                    None => quote!{ self.#field_n.inject_connected(peer_id, endpoint); },
-                }
-            } else {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_connected(peer_id.clone(), endpoint.clone()); },
-                    None => quote!{ self.#field_n.inject_connected(peer_id.clone(), endpoint.clone()); },
-                }
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_connected(peer_id); },
+                None => quote!{ self.#field_n.inject_connected(peer_id); },
             })
         })
     };
 
     // Build the list of statements to put in the body of `inject_disconnected()`.
     let inject_disconnected_stmts = {
-        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
             if is_ignored(&field) {
                 return None;
             }
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id); },
+                None => quote!{ self.#field_n.inject_disconnected(peer_id); },
+            })
+        })
+    };
 
-            Some(if field_n == num_fields - 1 {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint); },
-                    None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint); },
-                }
-            } else {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint.clone()); },
-                    None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint.clone()); },
-                }
+    // Build the list of statements to put in the body of `inject_connection_established()`.
+    let inject_connection_established_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint); },
+                None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint); },
+            })
+        })
+    };
+
+    // Build the list of statements to put in the body of `inject_connection_closed()`.
+    let inject_connection_closed_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_connection_closed(peer_id, connection_id, endpoint); },
+                None => quote!{ self.#field_n.inject_connection_closed(peer_id, connection_id, endpoint); },
             })
         })
     };
@@ -263,8 +271,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 return None
             }
             Some(match field.ident {
-                Some(ref i) => quote!(self.#i.inject_listener_closed(id);),
-                None => quote!(self.#field_n.inject_listener_closed(id);)
+                Some(ref i) => quote!(self.#i.inject_listener_closed(id, reason);),
+                None => quote!(self.#field_n.inject_listener_closed(id, reason);)
             })
         })
     };
@@ -383,8 +391,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     std::task::Poll::Ready(#network_behaviour_action::DialAddress { address }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address });
                     }
-                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id });
+                    std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::DialPeer { peer_id, condition });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
@@ -421,12 +429,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 out
             }
 
-            fn inject_connected(&mut self, peer_id: #peer_id, endpoint: #connected_point) {
+            fn inject_connected(&mut self, peer_id: &#peer_id) {
                 #(#inject_connected_stmts);*
             }
 
-            fn inject_disconnected(&mut self, peer_id: &#peer_id, endpoint: #connected_point) {
+            fn inject_disconnected(&mut self, peer_id: &#peer_id) {
                 #(#inject_disconnected_stmts);*
+            }
+
+            fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
+                #(#inject_connection_established_stmts);*
+            }
+
+            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
+                #(#inject_connection_closed_stmts);*
             }
 
             fn inject_addr_reach_failure(&mut self, peer_id: Option<&#peer_id>, addr: &#multiaddr, error: &dyn std::error::Error) {
@@ -453,7 +469,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_listener_error_stmts);*
             }
 
-            fn inject_listener_closed(&mut self, id: #listener_id) {
+            fn inject_listener_closed(&mut self, id: #listener_id, reason: Result<(), &std::io::Error>) {
                 #(#inject_listener_closed_stmts);*
             }
 

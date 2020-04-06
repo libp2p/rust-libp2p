@@ -2,7 +2,7 @@
 name = "libp2p-identify"
 edition = "2018"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.16.0"
+version = "0.17.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,8 +11,8 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.16.0", path = "../../core" }
-libp2p-swarm = { version = "0.16.0", path = "../../swarm" }
+libp2p-core = { version = "0.17.0", path = "../../core" }
+libp2p-swarm = { version = "0.17.0", path = "../../swarm" }
 log = "0.4.1"
 prost = "0.6.1"
 smallvec = "1.0"
@@ -20,9 +20,9 @@ wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.0"
-libp2p-mplex = { version = "0.16.0", path = "../../muxers/mplex" }
-libp2p-secio = { version = "0.16.0", path = "../../protocols/secio" }
-libp2p-tcp = { version = "0.16.0", path = "../../transports/tcp" }
+libp2p-mplex = { version = "0.17.0", path = "../../muxers/mplex" }
+libp2p-secio = { version = "0.17.0", path = "../../protocols/secio" }
+libp2p-tcp = { version = "0.17.0", path = "../../transports/tcp" }
 
 [build-dependencies]
 prost-build = "0.6"
