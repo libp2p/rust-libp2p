@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod calendar;
-mod der;
-mod x509;
+use libp2p_core::identity::PublicKey;
+use ring::io::der;
+use untrusted::{Input, Reader};
+use webpki::Error;
 
 /// Libp2p client and server certificate verifier.
 pub(crate) struct Libp2pCertificateVerifier;
@@ -51,27 +52,98 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         assert_eq!(version, rustls::ProtocolVersion::TLSv1_3);
         x509::parse_certificate(certificate.as_ref())
             .map_err(rustls::TLSError::WebPKIError)?
-            .verify_signature(scheme, msg, signature)
+            .verify_signature_against_scheme(get_time()?, scheme, msg, signature)
             .map_err(rustls::TLSError::WebPKIError)
             .map(|()| rustls::HandshakeSignatureValid::assertion())
     }
 }
 
-fn get_time() -> Result<webpki::Time, rustls::TLSError> {
-    webpki::Time::try_from(std::time::SystemTime::now())
-        .map_err(|ring::error::Unspecified| rustls::TLSError::FailedToGetCurrentTime)
+fn verify_libp2p_signature(
+    libp2p_extension: &Libp2pExtension<'_>, x509_pkey_bytes: &[u8],
+) -> Result<(), Error> {
+    let mut v = Vec::with_capacity(crate::LIBP2P_SIGNING_PREFIX_LENGTH + x509_pkey_bytes.len());
+    v.extend_from_slice(&crate::LIBP2P_SIGNING_PREFIX[..]);
+    v.extend_from_slice(x509_pkey_bytes);
+    if libp2p_extension
+        .peer_key
+        .verify(&v, libp2p_extension.signature)
+    {
+        Ok(())
+    } else {
+        Err(Error::UnknownIssuer)
+    }
+}
+
+fn get_time() -> Result<u64, rustls::TLSError> {
+    use std::time::{SystemTime, SystemTimeError};
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|_: SystemTimeError| rustls::TLSError::FailedToGetCurrentTime)
+        .map(|e| e.as_secs())
+}
+
+fn parse_certificate(
+    certificate: &[u8],
+) -> Result<(x509::X509Certificate<'_>, Libp2pExtension<'_>), Error> {
+    let parsed = x509::parse_certificate(certificate)?;
+    let mut libp2p_extension = None;
+
+    parsed
+        .extensions()
+        .iterate(&mut |oid, critical, extension| {
+            Ok(match oid {
+                crate::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
+                crate::LIBP2P_OID_BYTES => {
+                    libp2p_extension = Some(parse_libp2p_extension(extension)?)
+                }
+                _ if critical => return Err(Error::UnsupportedCriticalExtension),
+                _ => {}
+            })
+        })?;
+    let libp2p_extension = libp2p_extension.ok_or(Error::UnknownIssuer)?;
+    Ok((parsed, libp2p_extension))
 }
 
 fn verify_presented_certs(presented_certs: &[rustls::Certificate]) -> Result<(), rustls::TLSError> {
     if presented_certs.len() != 1 {
         return Err(rustls::TLSError::NoCertificatesPresented);
     }
-    x509::parse_certificate(presented_certs[0].as_ref())
-        .map_err(rustls::TLSError::WebPKIError)?
-        .verify_libp2p(get_time()?)
+    let (certificate, extension) =
+        parse_certificate(presented_certs[0].as_ref()).map_err(rustls::TLSError::WebPKIError)?;
+    let now = get_time()?;
+    certificate
+        .verify_data_algorithm_signature(now, &certificate.das())
+        .map_err(rustls::TLSError::WebPKIError)?;
+    verify_libp2p_signature(&extension, certificate.subject_public_key_info().key())
         .map_err(rustls::TLSError::WebPKIError)
 }
 
+struct Libp2pExtension<'a> {
+    peer_key: PublicKey,
+    signature: &'a [u8],
+}
+
+#[inline(always)]
+fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Error> {
+    der::bit_string_with_no_unused_bits(input).map_err(|_| e)
+}
+
+fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a>, Error> {
+    let e = Error::ExtensionValueInvalid;
+    Input::read_all(&extension, e, |input| {
+        der::nested(input, der::Tag::Sequence, e, |input| {
+            let public_key = read_bit_string(input, e)?.as_slice_less_safe();
+            let signature = read_bit_string(input, e)?.as_slice_less_safe();
+            // We deliberately discard the error information because this is
+            // either a broken peer or an attack.
+            let peer_key = PublicKey::from_protobuf_encoding(public_key).map_err(|_| e)?;
+            Ok(Libp2pExtension {
+                signature,
+                peer_key,
+            })
+        })
+    })
+}
 /// libp2p requires the following of X.509 client certificate chains:
 ///
 /// * Exactly one certificate must be presented. In particular, client
@@ -85,7 +157,9 @@ fn verify_presented_certs(presented_certs: &[rustls::Certificate]) -> Result<(),
 ///
 /// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
-    fn offer_client_auth(&self) -> bool { true }
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
 
     fn client_auth_root_subjects(
         &self, _dns_name: Option<&webpki::DNSName>,
@@ -106,7 +180,7 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
         assert_eq!(version, rustls::ProtocolVersion::TLSv1_3);
         x509::parse_certificate(certificate.as_ref())
             .map_err(rustls::TLSError::WebPKIError)?
-            .verify_signature(scheme, msg, signature)
+            .verify_signature_against_scheme(get_time()?, scheme, msg, signature)
             .map_err(rustls::TLSError::WebPKIError)
             .map(|()| rustls::HandshakeSignatureValid::assertion())
     }
@@ -121,7 +195,7 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
 ///
 /// Panics if called on an invalid certificate.
 pub fn extract_peerid_or_panic(certificate: &[u8]) -> libp2p_core::PeerId {
-    let parsed = x509::parse_certificate(certificate)
-        .expect("our certificate verifiers already checked that the certificate is valid; qed");
-    x509::get_peerid(parsed)
+    let r = parse_certificate(certificate)
+        .expect("we already checked that the certificate was valid during the handshake; qed");
+    libp2p_core::PeerId::from_public_key(r.1.peer_key)
 }

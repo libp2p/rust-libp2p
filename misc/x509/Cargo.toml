@@ -18,3 +18,9 @@ untrusted = "0.7.0"
 log = "0.4.8"
 libp2p-core = { path = "../../core", version = "0.17.1" }
 yasna = "0.3.1"
+
+[dependencies.x509]
+package = "x509-signature"
+git = "https://github.com/paritytech/x509-signature"
+branch = "master"
+features = ["webpki", "rustls"]
