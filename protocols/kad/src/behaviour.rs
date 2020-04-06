@@ -740,6 +740,7 @@ where
                 Some(
                     NetworkBehaviourAction::DialPeer { // will try to dial that peer in order to check if it's online
                         peer_id: disconnected.into_preimage(),
+                        condition: DialPeerCondition::Disconnected,
                     }
                 )
             },
