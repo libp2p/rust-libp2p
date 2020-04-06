@@ -293,8 +293,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }
 
         Some(match field.ident {
-            Some(ref i) => quote!{ #elem => self.#i.inject_event(peer_id, connection_id, ev) },
-            None => quote!{ #elem => self.#field_n.inject_event(peer_id, connection_id, ev) },
+            Some(ref i) => quote!{ #elem => ::libp2p::swarm::NetworkBehaviour::inject_event(&mut self.#i, peer_id, connection_id, ev) },
+            None => quote!{ #elem => ::libp2p::swarm::NetworkBehaviour::inject_event(&mut self.#field_n, peer_id, connection_id, ev) },
         })
     });
 
