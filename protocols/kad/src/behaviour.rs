@@ -740,6 +740,7 @@ where
                 Some(
                     NetworkBehaviourAction::DialPeer { // will try to dial that peer in order to check if it's online
                         peer_id: disconnected.into_preimage(),
+                        condition: DialPeerCondition::Disconnected,
                     }
                 )
             },
@@ -1234,12 +1235,22 @@ where
         // and thus shared with other nodes, if the local node is the dialer,
         // since the remote address on an inbound connection is specific to
         // that connection (e.g. typically the TCP port numbers).
-        let address = match endpoint {
+        let new_address = match endpoint {
             ConnectedPoint::Dialer { address } => Some(address.clone()),
             ConnectedPoint::Listener { .. } => None,
         };
 
-        self.connection_updated(peer.clone(), address, NodeStatus::Connected);
+        let contact = self.queries
+            .iter_mut()
+            .find_map(|q| q.inner.contacts.get(peer))
+            .cloned()
+            .and_then(|mut c|
+                new_address.map(|addr| {
+                    c.insert(addr);
+                    c
+                }));
+
+        self.connection_updated(peer.clone(), contact, NodeStatus::Connected);
     }
 
     fn inject_connected(&mut self, peer: &PeerId) {
@@ -1255,27 +1266,7 @@ where
             });
         }
 
-        // The remote's address can only be put into the routing table,
-        // and thus shared with other nodes, if the local node is the dialer,
-        // since the remote address on an inbound connection is specific to
-        // that connection (e.g. typically the TCP port numbers).
-        let new_address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address),
-            ConnectedPoint::Listener { .. } => None,
-        };
-
-        let contact = self.queries
-            .iter_mut()
-            .find_map(|q| q.inner.contacts.get(&peer))
-            .cloned()
-            .and_then(|mut c|
-                new_address.map(|addr| {
-                    c.insert(addr);
-                    c
-                }));
-
-        self.connection_updated(peer.clone(), contact, NodeStatus::Connected);
-        self.connected_peers.insert(peer);
+        self.connected_peers.insert(peer.clone());
     }
 
     fn inject_addr_reach_failure(
