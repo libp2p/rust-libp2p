@@ -309,11 +309,6 @@ where
                 trace!("starting TLS handshake with {}", address);
                 let stream = self.tls_config.client.connect(&dns_name, stream)
                     .map_err(|e| {
-                        // We should never enter here as we passed a `DNSNameRef` to `connect`.
-                        debug!("invalid domain name: {:?}", dns_name);
-                        Error::Tls(e.into())
-                    })?
-                    .map_err(|e| {
                         debug!("TLS handshake with {} failed: {}", address, e);
                         Error::Tls(tls::Error::from(e))
                     })
