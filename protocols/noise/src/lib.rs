@@ -60,7 +60,8 @@ pub use io::NoiseOutput;
 pub use io::handshake;
 pub use io::handshake::{Handshake, RemoteIdentity, IdentityExchange};
 pub use protocol::{Keypair, AuthenticKeypair, KeypairIdentity, PublicKey, SecretKey};
-pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
+pub use protocol::{Protocol, ProtocolParams, IX, IK, XX};
+pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 
 use futures::prelude::*;
 use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade};

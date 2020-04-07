@@ -21,6 +21,7 @@
 //! Components of a Noise protocol.
 
 pub mod x25519;
+pub mod x25519_spec;
 
 use crate::NoiseError;
 use libp2p_core::identity;
@@ -95,6 +96,13 @@ pub trait Protocol<C> {
             ||
         sig.as_ref().map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
     }
+
+    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>) -> Result<Vec<u8>, NoiseError>
+    where
+        C: AsRef<[u8]>
+    {
+        Ok(id_keys.sign(dh_pk.as_ref())?)
+    }
 }
 
 /// DH keypair.
@@ -151,9 +159,10 @@ impl<T: Zeroize> Keypair<T> {
     /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
     pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, NoiseError>
     where
-        T: AsRef<[u8]>
+        T: AsRef<[u8]>,
+        T: Protocol<T>
     {
-        let sig = id_keys.sign(self.public.as_ref())?;
+        let sig = T::sign(id_keys, &self.public)?;
 
         let identity = KeypairIdentity {
             public: id_keys.public(),
