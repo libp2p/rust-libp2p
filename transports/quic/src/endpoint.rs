@@ -55,25 +55,28 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration object for QUIC.
-    pub fn new(keypair: &libp2p_core::identity::Keypair, multiaddr: Multiaddr) -> Self {
+    pub fn new(
+        keypair: &libp2p_core::identity::Keypair,
+        multiaddr: Multiaddr,
+    ) -> Result<Self, x509::ConfigError> {
         let mut transport = quinn_proto::TransportConfig::default();
         transport.stream_window_uni(0);
         transport.datagram_receive_buffer_size(None);
         transport.keep_alive_interval(Some(Duration::from_millis(10)));
         let transport = Arc::new(transport);
-        let (client_tls_config, server_tls_config) = x509::make_tls_config(keypair);
+        let (client_tls_config, server_tls_config) = x509::make_tls_config(keypair)?;
         let mut server_config = quinn_proto::ServerConfig::default();
         server_config.transport = transport.clone();
         server_config.crypto = Arc::new(server_tls_config);
         let mut client_config = quinn_proto::ClientConfig::default();
         client_config.transport = transport;
         client_config.crypto = Arc::new(client_tls_config);
-        Self {
+        Ok(Self {
             client_config,
             server_config: Arc::new(server_config),
             endpoint_config: Default::default(),
             multiaddr: multiaddr,
-        }
+        })
     }
 }
 
