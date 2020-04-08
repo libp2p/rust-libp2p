@@ -111,7 +111,7 @@ fn verify_presented_certs(presented_certs: &[rustls::Certificate]) -> Result<(),
         parse_certificate(presented_certs[0].as_ref()).map_err(rustls::TLSError::WebPKIError)?;
     let now = get_time()?;
     certificate
-        .verify_data_algorithm_signature(now, &certificate.das())
+        .verify_signature_of_certificate(now, &certificate)
         .map_err(rustls::TLSError::WebPKIError)?;
     verify_libp2p_signature(&extension, certificate.subject_public_key_info().key())
         .map_err(rustls::TLSError::WebPKIError)
