@@ -385,17 +385,35 @@ fn get_record_not_found() {
     )
 }
 
+/// A node joining a fully connected network via a single bootnode should be able to put a record to
+/// the X closest nodes of the network where X is equal to the configured replication factor.
 #[test]
 fn put_record() {
     fn prop(replication_factor: usize, records: Vec<Record>) {
         let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
         let num_total = replication_factor.get() * 2;
-        let num_group = replication_factor.get();
 
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
-        let mut swarms = build_connected_nodes_with_config(num_total, num_group, config);
-        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
+
+        let mut swarms = {
+            let mut fully_connected_swarms = build_fully_connected_nodes_with_config(
+                num_total - 1,
+                config.clone(),
+            );
+
+            let mut single_swarm = build_node_with_config(config);
+            single_swarm.1.add_address(
+                Swarm::local_peer_id(&fully_connected_swarms[0].1),
+                fully_connected_swarms[0].0.clone(),
+            );
+
+            let mut swarms = vec![single_swarm];
+            swarms.append(&mut fully_connected_swarms);
+
+            // Drop the swarm addresses.
+            swarms.into_iter().map(|(_addr, swarm)| swarm).collect::<Vec<_>>()
+        };
 
         let records = records.into_iter()
             .take(num_total)
@@ -426,7 +444,7 @@ fn put_record() {
                             Poll::Ready(Some(KademliaEvent::PutRecordResult(res))) |
                             Poll::Ready(Some(KademliaEvent::RepublishRecordResult(res))) => {
                                 match res {
-                                    Err(e) => panic!(e),
+                                    Err(e) => panic!("{:?}", e),
                                     Ok(ok) => {
                                         assert!(records.contains_key(&ok.key));
                                         let record = swarm.store.get(&ok.key).unwrap();
@@ -484,7 +502,21 @@ fn put_record() {
                         .collect::<HashSet<_>>();
 
                     assert_eq!(actual.len(), replication_factor.get());
-                    assert_eq!(actual, expected);
+
+                    let actual_not_expected = actual.difference(&expected)
+                        .collect::<Vec<&PeerId>>();
+                    assert!(
+                        actual_not_expected.is_empty(),
+                        "Did not expect records to be stored on nodes {:?}.",
+                        actual_not_expected,
+                    );
+
+                    let expected_not_actual = expected.difference(&actual)
+                        .collect::<Vec<&PeerId>>();
+                    assert!(expected_not_actual.is_empty(),
+                           "Expected record to be stored on nodes {:?}.",
+                           expected_not_actual,
+                    );
                 }
 
                 if republished {
@@ -505,7 +537,7 @@ fn put_record() {
         )
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_,_))
+    QuickCheck::new().tests(3).quickcheck(prop as fn(_,_) -> _)
 }
 
 #[test]
@@ -588,18 +620,36 @@ fn get_value_many() {
     )
 }
 
+/// A node joining a fully connected network via a single bootnode should be able to add itself as a
+/// provider to the X closest nodes of the network where X is equal to the configured replication
+/// factor.
 #[test]
 fn add_provider() {
     fn prop(replication_factor: usize, keys: Vec<record::Key>) {
         let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
         let num_total = replication_factor.get() * 2;
-        let num_group = replication_factor.get();
 
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
 
-        let mut swarms = build_connected_nodes_with_config(num_total, num_group, config);
-        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
+        let mut swarms = {
+            let mut fully_connected_swarms = build_fully_connected_nodes_with_config(
+                num_total - 1,
+                config.clone(),
+            );
+
+            let mut single_swarm = build_node_with_config(config);
+            single_swarm.1.add_address(
+                Swarm::local_peer_id(&fully_connected_swarms[0].1),
+                fully_connected_swarms[0].0.clone(),
+            );
+
+            let mut swarms = vec![single_swarm];
+            swarms.append(&mut fully_connected_swarms);
+
+            // Drop addresses before returning.
+            swarms.into_iter().map(|(_addr, swarm)| swarm).collect::<Vec<_>>()
+        };
 
         let keys: HashSet<_> = keys.into_iter().take(num_total).collect();
 
