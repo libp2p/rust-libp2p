@@ -55,9 +55,8 @@ fn encode_signed_key(public_key: identity::PublicKey, signature: &[u8]) -> rcgen
     ext
 }
 
-fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::CustomExtension) {
-    let temp_keypair = rcgen::KeyPair::generate(&LIBP2P_SIGNATURE_ALGORITHM)
-        .expect("we pass valid parameters, and assume we have enough memory and randomness; qed");
+fn gen_signed_keypair(keypair: &identity::Keypair) -> Result<(rcgen::KeyPair, rcgen::CustomExtension), crate::ConfigError> {
+    let temp_keypair = rcgen::KeyPair::generate(&LIBP2P_SIGNATURE_ALGORITHM)?;
     let mut signing_buf =
         [0u8; LIBP2P_SIGNING_PREFIX_LENGTH + LIBP2P_SIGNATURE_ALGORITHM_PUBLIC_KEY_LENGTH];
     let public = temp_keypair.public_key_raw();
@@ -69,22 +68,21 @@ fn gen_signed_keypair(keypair: &identity::Keypair) -> (rcgen::KeyPair, rcgen::Cu
     );
     signing_buf[..LIBP2P_SIGNING_PREFIX_LENGTH].copy_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
     signing_buf[LIBP2P_SIGNING_PREFIX_LENGTH..].copy_from_slice(public);
-    let signature = keypair.sign(&signing_buf).expect("signing failed");
-    (
+    let signature = keypair.sign(&signing_buf)?;
+    Ok((
         temp_keypair,
         encode_signed_key(keypair.public(), &signature),
-    )
+    ))
 }
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
 /// certificate extension containing the public key of the given keypair.
-pub(crate) fn make_cert(keypair: &identity::Keypair) -> rcgen::Certificate {
+pub(crate) fn make_cert(keypair: &identity::Keypair) -> Result<rcgen::Certificate, crate::ConfigError> {
     let mut params = rcgen::CertificateParams::new(vec![]);
     params.distinguished_name = rcgen::DistinguishedName::new();
-    let (cert_keypair, libp2p_extension) = gen_signed_keypair(keypair);
+    let (cert_keypair, libp2p_extension) = gen_signed_keypair(keypair)?;
     params.custom_extensions.push(libp2p_extension);
     params.alg = &LIBP2P_SIGNATURE_ALGORITHM;
     params.key_pair = Some(cert_keypair);
-    rcgen::Certificate::from_params(params)
-        .expect("certificate generation with valid params will succeed; qed")
+    rcgen::Certificate::from_params(params).map_err(From::from)
 }

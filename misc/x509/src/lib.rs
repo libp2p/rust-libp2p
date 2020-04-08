@@ -62,6 +62,9 @@ pub enum ConfigError {
     /// TLS private key or certificate rejected
     #[error(display = "TLS private or certificate key rejected: {}", _0)]
     TLSError(#[error(source)] rustls::TLSError),
+    /// Signing failed
+    #[error(display = "Signing failed: {}", _0)]
+    SigningError(#[error(source)] libp2p_core::identity::error::SigningError),
     /// Certificate generation error
     #[error(display = "Certificate generation error: {}", _0)]
     RcgenError(#[error(source)] rcgen::RcgenError),
@@ -95,7 +98,7 @@ fn make_server_config(
 pub fn make_tls_config(
     keypair: &libp2p_core::identity::Keypair,
 ) -> Result<(rustls::ClientConfig, rustls::ServerConfig), ConfigError> {
-    let cert = certificate::make_cert(&keypair);
+    let cert = certificate::make_cert(&keypair)?;
     let private_key = cert.serialize_private_key_der();
     let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
     let cert = rustls::Certificate(cert.serialize_der()?);
