@@ -149,7 +149,7 @@ where
 
         /// The handler that was passed to `dial()`, if the
         /// connection failed before the handler was consumed.
-        handler: THandler,
+        handler: Option<THandler>,
     },
 
     /// An established connection produced an event.
