@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Parity Technologies (UK) Ltd.
+// Copyright 2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -101,7 +101,7 @@ impl Socket {
         pending: &mut Pending,
         source: &mut dyn FnMut() -> Option<Transmit>,
     ) -> Poll<Result<()>> {
-        if let Some(ref mut transmit) = pending.pending {
+        if let Some(transmit) = &pending.pending {
             trace!("trying to send packet!");
             match self.poll_send_to(cx, &transmit) {
                 Poll::Pending => return Poll::Pending,

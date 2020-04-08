@@ -1,4 +1,4 @@
-// Copyright 2019-2020 Parity Technologies (UK) Ltd.
+// Copyright 2020 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -34,7 +34,7 @@
 //! let quic_endpoint = Endpoint::new(quic_config).expect("I/O error");
 //! ```
 //!
-//! The `Config` structs implements the `Transport` trait of the `swarm` library. See the
+//! The `Endpoint` struct implements the `Transport` trait of the `swarm` library. See the
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 //!
 //! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
