@@ -48,8 +48,8 @@
 mod certificate;
 mod verifier;
 
-use std::sync::Arc;
 use err_derive::Error;
+use std::sync::Arc;
 pub use verifier::extract_peerid_or_panic;
 
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
@@ -64,22 +64,20 @@ pub enum ConfigError {
     TLSError(#[error(source)] rustls::TLSError),
     /// Certificate generation error
     #[error(display = "Certificate generation error: {}", _0)]
-    RcgenError(#[error(source)] rcgen::RcgenError)
+    RcgenError(#[error(source)] rcgen::RcgenError),
 }
 
 fn make_client_config(
     certificate: rustls::Certificate, key: rustls::PrivateKey,
     verifier: Arc<verifier::Libp2pCertificateVerifier>,
-) -> rustls::ClientConfig {
+) -> Result<rustls::ClientConfig, rustls::TLSError> {
     let mut crypto = rustls::ClientConfig::new();
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.alpn_protocols = vec![b"libp2p".to_vec()];
     crypto.enable_early_data = false;
-    crypto
-        .set_single_client_cert(vec![certificate], key)
-        .expect("we have a valid certificate; qed");
+    crypto.set_single_client_cert(vec![certificate], key)?;
     crypto.dangerous().set_certificate_verifier(verifier);
-    crypto
+    Ok(crypto)
 }
 
 fn make_server_config(
@@ -103,7 +101,7 @@ pub fn make_tls_config(
     let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);
     Ok((
-        make_client_config(cert.clone(), key.clone(), verifier.clone()),
+        make_client_config(cert.clone(), key.clone(), verifier.clone())?,
         make_server_config(cert, key, verifier)?,
     ))
 }
