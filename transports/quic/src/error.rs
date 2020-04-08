@@ -38,6 +38,9 @@ pub enum Error {
     /// Connection was prematurely closed
     #[error(display = "Connection was prematurely closed")]
     ConnectionLost,
+    /// Error making the connection
+    #[error(display = "Connection failure: {}", _0)]
+    ConnectError(#[error(source)] quinn_proto::ConnectError),
     /// Cannot listen on the same endpoint more than once
     #[error(display = "Cannot listen on the same endpoint more than once")]
     AlreadyListening,
@@ -71,9 +74,9 @@ impl From<Error> for io::Error {
         match e {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
             Error::ConnectionError(e) => e.into(),
-            e @ Error::NetworkFailure | e @ Error::ConnectionClosing => {
-                io::Error::new(ErrorKind::Other, e)
-            }
+            e @ Error::NetworkFailure
+            | e @ Error::ConnectionClosing
+            | e @ Error::ConnectError(_) => io::Error::new(ErrorKind::Other, e),
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }

@@ -419,7 +419,6 @@ struct ConnectionDriver {
 impl Upgrade {
     pub(crate) fn spawn(
         connection: Arc<Mutex<Streams>>,
-        _side: quinn_proto::Side,
         socket: Arc<crate::socket::Socket>,
     ) -> Upgrade {
         let inner = connection.clone();

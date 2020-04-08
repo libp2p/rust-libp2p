@@ -604,7 +604,7 @@ fn accept_muxer(
 
     let streams = Arc::new(Mutex::new(Streams::new(connection)));
     inner.muxers.insert(handle, streams.clone());
-    let upgrade = crate::Upgrade::spawn(streams, quinn_proto::Side::Server, socket);
+    let upgrade = crate::Upgrade::spawn(streams, socket);
     if endpoint
         .new_connections
         .unbounded_send(ListenerEvent::Upgrade {
@@ -730,14 +730,11 @@ impl Transport for Endpoint {
         };
         let Endpoint(endpoint) = self;
         let mut inner = endpoint.reference.inner.lock();
-        let (handle, connection) = inner
-            .inner
-            .connect(
-                endpoint.reference.config.client_config.clone(),
-                socket_addr,
-                "l",
-            )
-            .expect("this function does no I/O, and we pass valid parameters, so it will succeed");
+        let (handle, connection) = inner.inner.connect(
+            endpoint.reference.config.client_config.clone(),
+            socket_addr,
+            "l",
+        ).map_err(|e| TransportError::Other(Error::ConnectError(e)))?;
         let socket = endpoint.reference.socket.clone();
         let connection = Connection {
             pending: socket::Pending::default(),
@@ -748,11 +745,7 @@ impl Transport for Endpoint {
         };
         let streams = Arc::new(Mutex::new(Streams::new(connection)));
         inner.muxers.insert(handle, streams.clone());
-        Ok(crate::Upgrade::spawn(
-            streams.clone(),
-            quinn_proto::Side::Client,
-            socket,
-        ))
+        Ok(crate::Upgrade::spawn(streams.clone(), socket))
     }
 }
 
