@@ -30,7 +30,7 @@
 //!
 //! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?");
-//! let quic_config = Config::new(&keypair, addr);
+//! let quic_config = Config::new(&keypair, addr).expect("could not make config");
 //! let quic_endpoint = Endpoint::new(quic_config).expect("I/O error");
 //! ```
 //!
