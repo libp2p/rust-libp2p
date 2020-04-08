@@ -22,7 +22,7 @@
 
 use super::*;
 
-use crate::K_VALUE;
+use crate::{ALPHA_VALUE, K_VALUE};
 use crate::kbucket::Distance;
 use crate::record::store::MemoryStore;
 use futures::{
@@ -136,7 +136,12 @@ fn random_multihash() -> Multihash {
 fn bootstrap() {
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2, 20);
-        let num_group = rng.gen_range(1, num_total);
+        // When looking for the closest node to a key, Kademlia considers ALPHA_VALUE nodes to query
+        // at initialization. If `num_groups` is larger than ALPHA_VALUE the remaining locally known
+        // nodes will not be considered. Given that no other node is aware of them, they would be
+        // lost entirely. To prevent the above restrict `num_groups` to be equal or smaller than
+        // ALPHA_VALUE.
+        let num_group = rng.gen_range(1, (num_total % ALPHA_VALUE.get()) + 2);
 
         let mut swarms = build_connected_nodes(num_total, num_group).into_iter()
             .map(|(_a, s)| s)
