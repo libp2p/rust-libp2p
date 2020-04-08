@@ -93,11 +93,10 @@ fn parse_certificate(
         .iterate(&mut |oid, critical, extension| {
             Ok(match oid {
                 crate::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
-                crate::LIBP2P_OID_BYTES => {
-                    libp2p_extension = Some(parse_libp2p_extension(extension)?)
-                }
+                crate::LIBP2P_OID_BYTES =>
+                    libp2p_extension = Some(parse_libp2p_extension(extension)?),
                 _ if critical => return Err(Error::UnsupportedCriticalExtension),
-                _ => {}
+                _ => {},
             })
         })?;
     let libp2p_extension = libp2p_extension.ok_or(Error::UnknownIssuer)?;
@@ -157,9 +156,7 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
 ///
 /// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
+    fn offer_client_auth(&self) -> bool { true }
 
     fn client_auth_root_subjects(
         &self, _dns_name: Option<&webpki::DNSName>,

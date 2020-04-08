@@ -21,6 +21,5 @@ yasna = "0.3.1"
 
 [dependencies.x509]
 package = "x509-signature"
-git = "https://github.com/paritytech/x509-signature"
-branch = "master"
-features = ["webpki", "rustls"]
+version = "0.1.0"
+features = ["webpki", "rustls", "std"]
