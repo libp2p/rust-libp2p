@@ -20,40 +20,17 @@
 
 //! TLS configuration for `libp2p-quic`.
 #![deny(
-    exceeding_bitshifts,
-    invalid_type_param_default,
-    missing_fragment_specifier,
-    mutable_transmutes,
-    no_mangle_const_items,
-    overflowing_literals,
-    patterns_in_fns_without_body,
-    pub_use_of_private_extern_crate,
-    unknown_crate_types,
     const_err,
-    order_dependent_trait_objects,
-    illegal_floating_point_literal_pattern,
+    deprecated,
     improper_ctypes,
-    late_bound_lifetime_arguments,
-    non_camel_case_types,
     non_shorthand_field_patterns,
-    non_snake_case,
-    non_upper_case_globals,
+    nonstandard_style,
     no_mangle_generic_items,
-    path_statements,
-    private_in_public,
-    safe_packed_borrows,
-    stable_features,
+    renamed_and_removed_lints,
+    unknown_lints,
     type_alias_bounds,
-    tyvar_behind_raw_pointer,
     unconditional_recursion,
-    unused,
-    unused_allocation,
-    unused_comparisons,
-    unused_mut,
-    unreachable_pub,
     while_true,
-    anonymous_parameters,
-    bare_trait_objects,
     elided_lifetimes_in_paths,
     missing_copy_implementations,
     missing_debug_implementations,
@@ -61,9 +38,9 @@
     single_use_lifetimes,
     trivial_casts,
     trivial_numeric_casts,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_qualifications,
+    rust_2018_idioms,
+    unused,
+    future_incompatible,
     clippy::all
 )]
 #![forbid(unsafe_code)]
@@ -72,11 +49,23 @@ mod certificate;
 mod verifier;
 
 use std::sync::Arc;
+use err_derive::Error;
 pub use verifier::extract_peerid_or_panic;
 
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
+
+/// Error creating a configuration
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    /// TLS private key or certificate rejected
+    #[error(display = "TLS private or certificate key rejected: {}", _0)]
+    TLSError(#[error(source)] rustls::TLSError),
+    /// Certificate generation error
+    #[error(display = "Certificate generation error: {}", _0)]
+    RcgenError(#[error(source)] rcgen::RcgenError)
+}
 
 fn make_client_config(
     certificate: rustls::Certificate, key: rustls::PrivateKey,
@@ -96,30 +85,25 @@ fn make_client_config(
 fn make_server_config(
     certificate: rustls::Certificate, key: rustls::PrivateKey,
     verifier: Arc<verifier::Libp2pCertificateVerifier>,
-) -> rustls::ServerConfig {
+) -> Result<rustls::ServerConfig, rustls::TLSError> {
     let mut crypto = rustls::ServerConfig::new(verifier);
     crypto.versions = vec![rustls::ProtocolVersion::TLSv1_3];
     crypto.alpn_protocols = vec![b"libp2p".to_vec()];
-    crypto
-        .set_single_cert(vec![certificate], key)
-        .expect("we have a valid certificate; qed");
-    crypto
+    crypto.set_single_cert(vec![certificate], key)?;
+    Ok(crypto)
 }
 
 /// Create TLS client and server configurations for libp2p.
 pub fn make_tls_config(
     keypair: &libp2p_core::identity::Keypair,
-) -> (rustls::ClientConfig, rustls::ServerConfig) {
+) -> Result<(rustls::ClientConfig, rustls::ServerConfig), ConfigError> {
     let cert = certificate::make_cert(&keypair);
     let private_key = cert.serialize_private_key_der();
     let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
-    let cert = rustls::Certificate(
-        cert.serialize_der()
-            .expect("serialization of a valid cert will succeed; qed"),
-    );
+    let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);
-    (
+    Ok((
         make_client_config(cert.clone(), key.clone(), verifier.clone()),
-        make_server_config(cert, key, verifier),
-    )
+        make_server_config(cert, key, verifier)?,
+    ))
 }

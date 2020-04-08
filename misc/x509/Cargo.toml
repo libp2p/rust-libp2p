@@ -18,6 +18,7 @@ untrusted = "0.7.0"
 log = "0.4.8"
 libp2p-core = { path = "../../core", version = "0.17.1" }
 yasna = "0.3.1"
+err-derive = "0.2.2"
 
 [dependencies.x509]
 package = "x509-signature"
