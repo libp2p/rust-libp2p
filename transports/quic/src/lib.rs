@@ -34,11 +34,11 @@
 //! let quic_endpoint = Endpoint::new(quic_config).expect("I/O error");
 //! ```
 //!
-//! The `Endpoint` struct implements the `Transport` trait of the `swarm` library. See the
-//! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
+//! The `Endpoint` struct implements the `Transport` trait of the `core` library. See the
+//! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 //!
 //! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
-//! QUIC connections do not need to be upgraded.  You will get a compile-time error if you try.
+//! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.
 //! Instead, you must pass all needed configuration into the constructor.
 //!
 //! # Design Notes
@@ -50,56 +50,30 @@
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
 #![deny(
-    exceeding_bitshifts,
-    invalid_type_param_default,
-    missing_fragment_specifier,
-    mutable_transmutes,
-    no_mangle_const_items,
-    overflowing_literals,
-    patterns_in_fns_without_body,
-    pub_use_of_private_extern_crate,
-    unknown_crate_types,
     const_err,
-    order_dependent_trait_objects,
-    illegal_floating_point_literal_pattern,
+    deprecated,
     improper_ctypes,
-    late_bound_lifetime_arguments,
-    non_camel_case_types,
     non_shorthand_field_patterns,
-    non_snake_case,
-    non_upper_case_globals,
+    nonstandard_style,
     no_mangle_generic_items,
-    path_statements,
-    private_in_public,
-    stable_features,
+    renamed_and_removed_lints,
+    unknown_lints,
     type_alias_bounds,
-    tyvar_behind_raw_pointer,
     unconditional_recursion,
-    unused,
-    unused_allocation,
-    unused_comparisons,
-    unused_mut,
-    unreachable_pub,
-    anonymous_parameters,
+    while_true,
+    elided_lifetimes_in_paths,
     missing_copy_implementations,
     missing_debug_implementations,
     missing_docs,
     single_use_lifetimes,
     trivial_casts,
     trivial_numeric_casts,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_qualifications,
+    rust_2018_idioms,
+    unused,
+    future_incompatible,
     clippy::all
 )]
-#![forbid(
-    unsafe_code,
-    intra_doc_link_resolution_failure,
-    safe_packed_borrows,
-    while_true,
-    elided_lifetimes_in_paths,
-    bare_trait_objects
-)]
+#![forbid(unsafe_code, intra_doc_link_resolution_failure)]
 
 #[cfg(not(feature = "tracing"))]
 use log::{debug, error, info, trace, warn};
