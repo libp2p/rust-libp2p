@@ -9,29 +9,29 @@ keywords = ["peer-to-peer", "libp2p", "quic", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
-libp2p-core = { path = "../../core", version = "0.17.1" }
-log = "0.4.8"
-ipnet = "2.2.0"
+async-macros = "2.0.0"
+async-std = "1.5.0"
+either = "1.5.3"
+env_logger = "0.7.1"
 err-derive = "0.2.2"
 futures = "0.3.4"
-quinn-proto = "0.6.0"
-async-std = "1.5.0"
-async-macros = "2.0.0"
 futures-timer = "3.0.2"
-env_logger = "0.7.1"
+ipnet = "2.2.0"
+libp2p-core = { path = "../../core", version = "0.17.1" }
+log = "0.4.8"
 parking_lot = "0.10.0"
-rcgen = { version = "0.7.0", default_features = false }
 protobuf = "2.10.1"
-yasna = { version = "0.3.1" }
+quinn-proto = "0.6.0"
+rcgen = { version = "0.7.0", default_features = false }
 ring = "0.16.11"
-webpki = "0.21.2"
-untrusted = "0.7.0"
-x509 = { path = "../../misc/x509", package = "libp2p-x509", version = "0.17.1" }
-either = "1.5.3"
-tracing-subscriber = { version = "0.2.1", optional = true }
+rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
 tracing = { version = "0.1.12", optional = true }
 tracing-core = { version = "0.1.10", optional = true }
+tracing-subscriber = { version = "0.2.1", optional = true }
+untrusted = "0.7.0"
+webpki = "0.21.2"
+x509 = { path = "../../misc/x509", package = "libp2p-x509", version = "0.17.1" }
+yasna = { version = "0.3.1" }
 
 [features]
 trace = [
