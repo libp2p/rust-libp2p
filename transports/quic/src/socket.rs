@@ -45,8 +45,9 @@ impl Socket {
     /// We ignore I/O errors. If a packet cannot be sent, we assume it is a transient condition and
     /// drop it. If it is not, the connection will eventually time out. This provides a very high
     /// degree of robustness. Connections will transparently resume after a transient network
-    /// outage, and problems that are specific to one peer will not effect other peers.
-    pub(crate) fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
+    /// outage, and problems that are specific to one peer will not effect other peers. QUIC
+    /// automatically resends lost packets.
+    fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
         match {
             let fut = self.socket.send_to(&packet.contents, &packet.destination);
             futures::pin_mut!(fut);
