@@ -47,7 +47,7 @@ impl Socket {
     /// degree of robustness. Connections will transparently resume after a transient network
     /// outage, and problems that are specific to one peer will not effect other peers. QUIC
     /// automatically resends lost packets.
-    fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<Result<()>> {
+    fn poll_send_to(&self, cx: &mut Context<'_>, packet: &Transmit) -> Poll<()> {
         match {
             let fut = self.socket.send_to(&packet.contents, &packet.destination);
             futures::pin_mut!(fut);
@@ -56,11 +56,11 @@ impl Socket {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(e)) => {
                 trace!("sent packet of length {} to {}", e, packet.destination);
-                Poll::Ready(Ok(()))
+                Poll::Ready(())
             }
             Poll::Ready(Err(e)) => {
                 warn!("Ignoring I/O error on transmit: {:?}", e);
-                Poll::Ready(Ok(()))
+                Poll::Ready(())
             }
         }
     }
@@ -106,20 +106,18 @@ impl Socket {
             trace!("trying to send packet!");
             match self.poll_send_to(cx, &transmit) {
                 Poll::Pending => return Poll::Pending,
-                Poll::Ready(Ok(())) => {}
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Ready(()) => {}
             }
         }
         pending.pending = None;
         while let Some(transmit) = source() {
             trace!("trying to send packet!");
             match self.poll_send_to(cx, &transmit) {
-                Poll::Ready(Ok(())) => {}
+                Poll::Ready(()) => {}
                 Poll::Pending => {
                     pending.pending = Some(transmit);
                     return Poll::Pending;
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
         }
         Poll::Ready(Ok(()))
