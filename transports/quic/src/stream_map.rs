@@ -406,8 +406,6 @@ impl Streams {
 #[derive(Debug)]
 struct ConnectionDriver {
     inner: Arc<Mutex<Streams>>,
-    /// The packet awaiting transmission, if any.
-    outgoing_packet: Option<quinn_proto::Transmit>,
     /// The timer being used by this connection
     timer: Option<futures_timer::Delay>,
     /// The last timeout returned by `quinn_proto::poll_timeout`.
@@ -424,7 +422,6 @@ impl Upgrade {
         let inner = connection.clone();
         async_std::task::spawn(ConnectionDriver {
             inner,
-            outgoing_packet: None,
             timer: None,
             last_timeout: None,
             socket,
