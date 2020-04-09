@@ -1278,13 +1278,7 @@ where
                     None => None
                 };
 
-                // If no record is found, at least report known closer peers.
-                let closer_peers =
-                    if record.is_none() {
-                        self.find_closest(&kbucket::Key::new(key), &source)
-                    } else {
-                        Vec::new()
-                    };
+                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,

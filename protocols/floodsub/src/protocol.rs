@@ -27,16 +27,16 @@ use futures::{Future, io::{AsyncRead, AsyncWrite}};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
-pub struct FloodsubConfig {}
+pub struct FloodsubProtocol {}
 
-impl FloodsubConfig {
-    /// Builds a new `FloodsubConfig`.
-    pub fn new() -> FloodsubConfig {
-        FloodsubConfig {}
+impl FloodsubProtocol {
+    /// Builds a new `FloodsubProtocol`.
+    pub fn new() -> FloodsubProtocol {
+        FloodsubProtocol {}
     }
 }
 
-impl UpgradeInfo for FloodsubConfig {
+impl UpgradeInfo for FloodsubProtocol {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -45,7 +45,7 @@ impl UpgradeInfo for FloodsubConfig {
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
+impl<TSocket> InboundUpgrade<TSocket> for FloodsubProtocol
 where
     TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {

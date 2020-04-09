@@ -1,5 +1,10 @@
 # Version ???
 
+- `libp2p-floodsub`: Allow sent messages seen as subscribed.
+  [PR 1520](https://github.com/libp2p/rust-libp2p/pull/1520)
+
+- `libp2p-wasm-ext`: Fix "parsed is null" errors being thrown.
+  [PR 1535](https://github.com/libp2p/rust-libp2p/pull/1535)
 
 # Version 0.17.0 (2020-04-02)
 
