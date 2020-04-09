@@ -112,7 +112,7 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
         error: PendingConnectionError<TTransErr>,
         /// The handler that was supposed to handle the connection,
         /// if the connection failed before the handler was consumed.
-        handler: THandler,
+        handler: Option<THandler>,
         /// The (expected) peer of the failed connection.
         peer: Option<TPeerId>,
         /// A reference to the pool that managed the connection.
@@ -558,7 +558,7 @@ where
                             id,
                             endpoint,
                             error,
-                            handler,
+                            handler: Some(handler),
                             peer,
                             pool: self
                         })
@@ -588,13 +588,13 @@ where
                                             .map_or(0, |conns| conns.len());
                         if let Err(e) = self.limits.check_established(current) {
                             let connected = entry.close();
-                            let num_established = u32::try_from(e.current).unwrap();
-                            return Poll::Ready(PoolEvent::ConnectionError {
+                            return Poll::Ready(PoolEvent::PendingConnectionError {
                                 id,
-                                connected,
-                                error: ConnectionError::ConnectionLimit(e),
-                                num_established,
-                                pool: self,
+                                endpoint: connected.endpoint,
+                                error: PendingConnectionError::ConnectionLimit(e),
+                                handler: None,
+                                peer,
+                                pool: self
                             })
                         }
                         // Peer ID checks must already have happened. See `add_pending`.
