@@ -567,7 +567,6 @@ where
                 (None, NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
-                    handler,
                 }),
             ConnectedPoint::Listener { local_addr, send_back_addr } =>
                 (None, NetworkEvent::IncomingConnectionError {
