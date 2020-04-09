@@ -1,10 +1,19 @@
 # Version ???
 
+
+# Version 0.18.0 (2020-04-09)
+
+- `libp2p-core`: Treat connection limit errors as pending connection errors.
+  [PR 1546](https://github.com/libp2p/rust-libp2p/pull/1546)
+
 - `libp2p-core-derive`: Disambiguate calls to `NetworkBehaviour::inject_event`.
   [PR 1543](https://github.com/libp2p/rust-libp2p/pull/1543)
 
 - `libp2p-floodsub`: Allow sent messages seen as subscribed.
   [PR 1520](https://github.com/libp2p/rust-libp2p/pull/1520)
+
+- `libp2p-kad`: Return peers independent of record existence.
+  [PR 1544](https://github.com/libp2p/rust-libp2p/pull/1544)
 
 - `libp2p-wasm-ext`: Fix "parsed is null" errors being thrown.
   [PR 1535](https://github.com/libp2p/rust-libp2p/pull/1535)
