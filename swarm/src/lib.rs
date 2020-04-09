@@ -77,6 +77,7 @@ pub use protocols_handler::{
     ProtocolsHandlerSelect,
     ProtocolsHandlerUpgrErr,
     OneShotHandler,
+    OneShotHandlerConfig,
     SubstreamProtocol
 };
 
@@ -593,7 +594,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     for addr in addresses.iter() {
                         this.behaviour.inject_expired_listen_addr(addr);
                     }
-                    this.behaviour.inject_listener_closed(listener_id);
+                    this.behaviour.inject_listener_closed(listener_id, match &reason {
+                        Ok(()) => Ok(()),
+                        Err(err) => Err(err),
+                    });
                     return Poll::Ready(SwarmEvent::ListenerClosed {
                         addresses,
                         reason,

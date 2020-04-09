@@ -271,8 +271,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 return None
             }
             Some(match field.ident {
-                Some(ref i) => quote!(self.#i.inject_listener_closed(id);),
-                None => quote!(self.#field_n.inject_listener_closed(id);)
+                Some(ref i) => quote!(self.#i.inject_listener_closed(id, reason);),
+                None => quote!(self.#field_n.inject_listener_closed(id, reason);)
             })
         })
     };
@@ -469,7 +469,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_listener_error_stmts);*
             }
 
-            fn inject_listener_closed(&mut self, id: #listener_id) {
+            fn inject_listener_closed(&mut self, id: #listener_id, reason: Result<(), &std::io::Error>) {
                 #(#inject_listener_closed_stmts);*
             }
 
