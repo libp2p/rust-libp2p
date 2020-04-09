@@ -1,5 +1,8 @@
 # Version ???
 
+- `libp2p-core-derive`: Disambiguate calls to `NetworkBehaviour::inject_event`.
+  [PR 1543](https://github.com/libp2p/rust-libp2p/pull/1543)
+
 - `libp2p-floodsub`: Allow sent messages seen as subscribed.
   [PR 1520](https://github.com/libp2p/rust-libp2p/pull/1520)
 
