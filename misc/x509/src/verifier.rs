@@ -20,6 +20,10 @@
 
 use libp2p_core::identity::PublicKey;
 use ring::io::der;
+use rustls::{
+    internal::msgs::handshake::DigitallySignedStruct, Certificate, ClientCertVerified,
+    HandshakeSignatureValid, ServerCertVerified, TLSError,
+};
 use untrusted::{Input, Reader};
 use webpki::Error;
 
@@ -42,20 +46,30 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
         &self, _roots: &rustls::RootCertStore, presented_certs: &[rustls::Certificate],
         _dns_name: webpki::DNSNameRef<'_>, _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs).map(|()| rustls::ServerCertVerified::assertion())
+        verify_presented_certs(presented_certs).map(|()| ServerCertVerified::assertion())
     }
 
-    fn verify_certificate_signature(
-        &self, scheme: rustls::SignatureScheme, version: rustls::ProtocolVersion,
-        certificate: &rustls::Certificate, msg: &[u8], signature: &[u8],
-    ) -> Result<rustls::HandshakeSignatureValid, rustls::TLSError> {
-        assert_eq!(version, rustls::ProtocolVersion::TLSv1_3);
-        x509::parse_certificate(certificate.as_ref())
-            .map_err(rustls::TLSError::WebPKIError)?
-            .verify_signature_against_scheme(get_time()?, scheme, msg, signature)
-            .map_err(rustls::TLSError::WebPKIError)
-            .map(|()| rustls::HandshakeSignatureValid::assertion())
+    fn verify_tls12_signature(
+        &self, _message: &[u8], _cert: &Certificate, _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        panic!("got asked to verify a TLS1.2 signature, but TLS1.2 was disabled")
     }
+
+    fn verify_tls13_signature(
+        &self, message: &[u8], cert: &Certificate, dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        verify_tls13_signature(message, cert, dss)
+    }
+}
+
+fn verify_tls13_signature(
+    message: &[u8], cert: &Certificate, dss: &DigitallySignedStruct,
+) -> Result<HandshakeSignatureValid, TLSError> {
+    x509::parse_certificate(cert.as_ref())
+        .map_err(rustls::TLSError::WebPKIError)?
+        .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
+        .map_err(rustls::TLSError::WebPKIError)
+        .map(|()| rustls::HandshakeSignatureValid::assertion())
 }
 
 fn verify_libp2p_signature(
@@ -74,11 +88,11 @@ fn verify_libp2p_signature(
     }
 }
 
-fn get_time() -> Result<u64, rustls::TLSError> {
+fn get_time() -> Result<u64, TLSError> {
     use std::time::{SystemTime, SystemTimeError};
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|_: SystemTimeError| rustls::TLSError::FailedToGetCurrentTime)
+        .map_err(|_: SystemTimeError| TLSError::FailedToGetCurrentTime)
         .map(|e| e.as_secs())
 }
 
@@ -93,28 +107,31 @@ fn parse_certificate(
         .iterate(&mut |oid, critical, extension| {
             Ok(match oid {
                 crate::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
-                crate::LIBP2P_OID_BYTES =>
-                    libp2p_extension = Some(parse_libp2p_extension(extension)?),
+                crate::LIBP2P_OID_BYTES => {
+                    libp2p_extension = Some(parse_libp2p_extension(extension)?)
+                }
                 _ if critical => return Err(Error::UnsupportedCriticalExtension),
-                _ => {},
+                _ => {}
             })
         })?;
     let libp2p_extension = libp2p_extension.ok_or(Error::UnknownIssuer)?;
     Ok((parsed, libp2p_extension))
 }
 
-fn verify_presented_certs(presented_certs: &[rustls::Certificate]) -> Result<(), rustls::TLSError> {
+fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSError> {
     if presented_certs.len() != 1 {
-        return Err(rustls::TLSError::NoCertificatesPresented);
+        return Err(TLSError::NoCertificatesPresented);
     }
     let (certificate, extension) =
-        parse_certificate(presented_certs[0].as_ref()).map_err(rustls::TLSError::WebPKIError)?;
+        parse_certificate(presented_certs[0].as_ref()).map_err(TLSError::WebPKIError)?;
     let now = get_time()?;
+    certificate.valid(now)
+        .map_err(TLSError::WebPKIError)?;
     certificate
-        .verify_signature_of_certificate(now, &certificate)
-        .map_err(rustls::TLSError::WebPKIError)?;
+        .check_self_signature()
+        .map_err(TLSError::WebPKIError)?;
     verify_libp2p_signature(&extension, certificate.subject_public_key_info().key())
-        .map_err(rustls::TLSError::WebPKIError)
+        .map_err(TLSError::WebPKIError)
 }
 
 struct Libp2pExtension<'a> {
@@ -156,7 +173,9 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
 ///
 /// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
-    fn offer_client_auth(&self) -> bool { true }
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
 
     fn client_auth_root_subjects(
         &self, _dns_name: Option<&webpki::DNSName>,
@@ -165,19 +184,23 @@ impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
     }
 
     fn verify_client_cert(
-        &self, presented_certs: &[rustls::Certificate], _dns_name: Option<&webpki::DNSName>,
-    ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs).map(|()| rustls::ClientCertVerified::assertion())
+        &self, presented_certs: &[Certificate], _dns_name: Option<&webpki::DNSName>,
+    ) -> Result<ClientCertVerified, rustls::TLSError> {
+        verify_presented_certs(presented_certs).map(|()| ClientCertVerified::assertion())
     }
 
-    fn verify_certificate_signature(
-        &self, scheme: rustls::SignatureScheme, version: rustls::ProtocolVersion,
-        certificate: &rustls::Certificate, msg: &[u8], signature: &[u8],
-    ) -> Result<rustls::HandshakeSignatureValid, rustls::TLSError> {
-        assert_eq!(version, rustls::ProtocolVersion::TLSv1_3);
-        x509::parse_certificate(certificate.as_ref())
+    fn verify_tls12_signature(
+        &self, _message: &[u8], _cert: &Certificate, _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        panic!("got asked to verify a TLS1.2 signature, but TLS1.2 was disabled")
+    }
+
+    fn verify_tls13_signature(
+        &self, message: &[u8], cert: &Certificate, dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        x509::parse_certificate(cert.as_ref())
             .map_err(rustls::TLSError::WebPKIError)?
-            .verify_signature_against_scheme(get_time()?, scheme, msg, signature)
+            .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
             .map_err(rustls::TLSError::WebPKIError)
             .map(|()| rustls::HandshakeSignatureValid::assertion())
     }

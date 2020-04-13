@@ -50,6 +50,7 @@ wasm-ext = ["libp2p-wasm-ext"]
 websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
+tracing = ["libp2p-quic/tracing"]
 
 [dependencies]
 bytes = "0.5"
@@ -119,4 +120,4 @@ members = [
 ]
 
 [patch.crates-io]
-rustls = { git = "https://github.com/DemiMarie-parity/rustls", branch = "manual-verify" }
+rustls = { git = "https://github.com/ctz/rustls", branch = "jbp-custom-sigverify" }
