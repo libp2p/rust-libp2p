@@ -369,7 +369,9 @@ impl ClosestPeersIter {
     /// k closest nodes it has not already queried".
     fn at_capacity(&self) -> bool {
         match self.state {
-            State::Stalled => self.num_waiting >= self.config.num_results,
+            State::Stalled => self.num_waiting >= usize::max(
+                self.config.num_results, self.config.parallelism
+            ),
             State::Iterating { .. } => self.num_waiting >= self.config.parallelism,
             State::Finished => true
         }
