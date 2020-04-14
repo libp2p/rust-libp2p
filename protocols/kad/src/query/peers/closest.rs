@@ -727,7 +727,7 @@ mod tests {
         let num_results = parallelism / 2;
         let target: KeyBytes = Key::from(PeerId::random()).into();
 
-        let mut closest_peers = random_peers(100).map(Key::from).collect::<Vec<_>>();
+        let mut closest_peers = random_peers(1000).map(Key::from).collect::<Vec<_>>();
         closest_peers.sort_unstable_by(|a, b| {
             target.distance(a).cmp(&target.distance(b))
         });
@@ -753,7 +753,8 @@ mod tests {
                 let peer = peer.clone().into_owned();
                 iter.on_success(
                     &peer,
-                    pool.pop().map(|p| vec![p.preimage().clone()]).unwrap().into_iter(),
+                    // Split off 10 nodes - non of them being any closer.
+                    pool.split_off(pool.len() - 10).into_iter().map(|p| p.preimage().clone()),
                 );
             } else {
                 panic!("Expected iterator to yield another peer.");
