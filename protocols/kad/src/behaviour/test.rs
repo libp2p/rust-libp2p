@@ -544,9 +544,10 @@ fn put_record() {
 fn get_value() {
     let mut swarms = build_nodes(3);
 
-    for i in 1..3 {
-        let (peer_id, address) = (Swarm::local_peer_id(&swarms[i].1).clone(), swarms[i].0.clone());
-        swarms[0].1.add_address(&peer_id, address);
+    // Let first peer know of second peer and second peer know of third peer.
+    for i in 0..2 {
+        let (peer_id, address) = (Swarm::local_peer_id(&swarms[i+1].1).clone(), swarms[i+1].0.clone());
+        swarms[i].1.add_address(&peer_id, address);
     }
 
     // Drop the swarm addresses.
