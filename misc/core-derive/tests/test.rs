@@ -204,3 +204,35 @@ fn where_clause() {
         bar: T,
     }
 }
+
+#[test]
+fn nested_derives_with_import() {
+    use libp2p::swarm::NetworkBehaviourEventProcess;
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Foo {
+        ping: libp2p::ping::Ping,
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Bar {
+        foo: Foo,
+    }
+
+    impl NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
+        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {
+        }
+    }
+
+    impl NetworkBehaviourEventProcess<()> for Bar {
+        fn inject_event(&mut self, _: ()) {
+        }
+    }
+
+    #[allow(dead_code)]
+    fn bar() {
+        require_net_behaviour::<Bar>();
+    }
+}
