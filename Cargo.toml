@@ -120,4 +120,4 @@ members = [
 ]
 
 [patch.crates-io]
-rustls = { git = "https://github.com/ctz/rustls", branch = "jbp-custom-sigverify" }
+rustls = { git = "https://github.com/ctz/rustls" }
