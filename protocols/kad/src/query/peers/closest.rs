@@ -695,7 +695,7 @@ mod tests {
     }
 
     #[test]
-    fn stalled_iter_at_capacity_max_of_parallelism_and_num_results() {
+    fn stalled_at_capacity() {
         fn prop(mut iter: ClosestPeersIter) {
             iter.state = State::Stalled;
 
