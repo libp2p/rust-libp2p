@@ -48,7 +48,7 @@
 mod certificate;
 mod verifier;
 
-use err_derive::Error;
+use thiserror::Error;
 use std::sync::Arc;
 pub use verifier::extract_peerid_or_panic;
 
@@ -60,14 +60,14 @@ const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 #[derive(Debug, Error)]
 pub enum ConfigError {
     /// TLS private key or certificate rejected
-    #[error(display = "TLS private or certificate key rejected: {}", _0)]
-    TLSError(#[error(source)] rustls::TLSError),
+    #[error("TLS private or certificate key rejected: {0}")]
+    TLSError(#[error(transparent)] #[from] rustls::TLSError),
     /// Signing failed
-    #[error(display = "Signing failed: {}", _0)]
-    SigningError(#[error(source)] libp2p_core::identity::error::SigningError),
+    #[error("Signing failed: {0}")]
+    SigningError(#[from] libp2p_core::identity::error::SigningError),
     /// Certificate generation error
-    #[error(display = "Certificate generation error: {}", _0)]
-    RcgenError(#[error(source)] rcgen::RcgenError),
+    #[error("Certificate generation error: {0}")]
+    RcgenError(#[from] rcgen::RcgenError),
 }
 
 fn make_client_config(
