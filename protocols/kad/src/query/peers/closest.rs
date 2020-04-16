@@ -695,76 +695,27 @@ mod tests {
     }
 
     #[test]
-    fn stalled_iter_at_capacity_use_max_of_parallelism_and_num_results() {
-        let target: KeyBytes = Key::from(PeerId::random()).into();
+    fn stalled_iter_at_capacity_max_of_parallelism_and_num_results() {
+        fn prop(mut iter: ClosestPeersIter) {
+            iter.state = State::Stalled;
 
-        let mut iter = ClosestPeersIter::with_config(
-            ClosestPeersIterConfig {
-                num_results: 4,
-                parallelism: 8,
-                ..ClosestPeersIterConfig::default()
-            },
-            target,
-            std::iter::empty(),
-        );
-        iter.state = State::Stalled;
-        iter.num_waiting = 7; // Smaller than `parallelism`, but larger than `num_results`.
-
-        assert!(!iter.at_capacity());
-    }
-
-    /// When not making progress for `parallelism` time a [`ClosestPeersIter`] becomes
-    /// [`State::Stalled`]. When stalled an iterator is allowed to make more parallel requests up to
-    /// `num_results`. If `num_results` is smaller than `parallelism` make sure to still allow up to
-    /// `parallelism` requests in-flight.
-    #[test]
-    fn stalled_iter_allows_equal_or_more_than_parallelism_in_flight() {
-        let now = Instant::now();
-
-        let mut num_requests_in_flight = 0;
-
-        let parallelism = 8;
-        let num_results = parallelism / 2;
-        let target: KeyBytes = Key::from(PeerId::random()).into();
-
-        let mut closest_peers = random_peers(1000).map(Key::from).collect::<Vec<_>>();
-        closest_peers.sort_unstable_by(|a, b| {
-            target.distance(a).cmp(&target.distance(b))
-        });
-        let mut pool = closest_peers.split_off(K_VALUE.get());
-
-        let mut iter = ClosestPeersIter::with_config(
-            ClosestPeersIterConfig {
-                num_results,
-                parallelism,
-                ..ClosestPeersIterConfig::default()
-            },
-            target,
-            closest_peers.into_iter(),
-        );
-
-        // Have the request for the closest known peer be in-flight for the remainder of the test.
-        // Thereby the iterator never finishes (it ignores timeouts).
-        iter.next(now);
-        num_requests_in_flight += 1;
-
-        while matches!(iter.state, State::Iterating{ .. }) {
-            if let PeersIterState::Waiting(Some(peer)) = iter.next(now) {
-                let peer = peer.clone().into_owned();
-                iter.on_success(
-                    &peer,
-                    // Split off 10 nodes - non of them being any closer.
-                    pool.split_off(pool.len() - 10).into_iter().map(|p| p.preimage().clone()),
-                );
-            } else {
-                panic!("Expected iterator to yield another peer.");
+            for i in 0..usize::max(iter.config.parallelism, iter.config.num_results) {
+                iter.num_waiting = i;
+                assert!(
+                    !iter.at_capacity(),
+                    "Iterator should not be at capacity if less than \
+                     `max(parallelism, num_results)` requests are waiting.",
+                )
             }
+
+            iter.num_waiting = usize::max(iter.config.parallelism, iter.config.num_results);
+            assert!(
+                iter.at_capacity(),
+                "Iterator should be at capacity if `max(parallelism, num_results)` requests are \
+                 waiting.",
+            )
         }
 
-        while matches!(iter.next(now), PeersIterState::Waiting(Some(_))) {
-            num_requests_in_flight += 1;
-        }
-
-        assert_eq!(usize::max(parallelism, num_results), num_requests_in_flight);
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_))
     }
 }
