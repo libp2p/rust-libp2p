@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use err_derive::Error;
+use thiserror::Error;
 use futures::channel::mpsc::SendError;
 use io::ErrorKind;
 use std::io;
@@ -27,39 +27,39 @@ use std::io;
 #[derive(Error, Debug)]
 pub enum Error {
     /// Fatal I/O error
-    #[error(display = "Fatal I/O error {}", _0)]
-    IO(#[error(source)] std::io::Error),
+    #[error("Fatal I/O error {0}")]
+    IO(#[error(transparent)] #[from] std::io::Error),
     /// QUIC protocol error
-    #[error(display = "QUIC protocol error: {}", _0)]
-    ConnectionError(#[error(source)] quinn_proto::ConnectionError),
+    #[error("QUIC protocol error: {0}")]
+    ConnectionError(#[from] quinn_proto::ConnectionError),
     /// Peer stopped receiving data
-    #[error(display = "Peer stopped receiving data: code {}", _0)]
+    #[error("Peer stopped receiving data: code {0}")]
     Stopped(quinn_proto::VarInt),
     /// Connection was prematurely closed
-    #[error(display = "Connection was prematurely closed")]
+    #[error("Connection was prematurely closed")]
     ConnectionLost,
-    /// Error making the connection
-    #[error(display = "Connection failure: {}", _0)]
-    ConnectError(#[error(source)] quinn_proto::ConnectError),
+    /// Error making the connection.
+    #[error("Connection failure: {0}")]
+    ConnectError(#[from] quinn_proto::ConnectError),
     /// Cannot listen on the same endpoint more than once
-    #[error(display = "Cannot listen on the same endpoint more than once")]
+    #[error("Cannot listen on the same endpoint more than once")]
     AlreadyListening,
     /// The stream was reset by the peer.
-    #[error(display = "Peer reset stream: code {}", _0)]
+    #[error("Peer reset stream: code {0}")]
     Reset(quinn_proto::VarInt),
     /// Either an attempt was made to write to a stream that was already shut down,
     /// or a previous operation on this stream failed.
-    #[error(display = "Use of a stream that has is no longer valid. This is a \
+    #[error("Use of a stream that has is no longer valid. This is a \
                        bug in the application.")]
     ExpiredStream,
     /// Reading from a stream that has not been written to.
-    #[error(display = "Reading from a stream that has not been written to.")]
+    #[error("Reading from a stream that has not been written to.")]
     CannotReadFromUnwrittenStream,
     /// Fatal internal error or network failure
-    #[error(display = "Fatal internal error or network failure")]
+    #[error("Fatal internal error or network failure")]
     NetworkFailure,
     /// Connection already being closed
-    #[error(display = "Connection already being closed")]
+    #[error("Connection already being closed")]
     ConnectionClosing,
 }
 

@@ -13,7 +13,6 @@ async-macros = "2.0.0"
 async-std = "1.5.0"
 either = "1.5.3"
 env_logger = "0.7.1"
-err-derive = "0.2.2"
 futures = "0.3.4"
 futures-timer = "3.0.2"
 ipnet = "2.2.0"
@@ -32,6 +31,7 @@ untrusted = "0.7.0"
 webpki = "0.21.2"
 x509 = { path = "../../misc/x509", package = "libp2p-x509", version = "0.18.0" }
 yasna = { version = "0.3.1" }
+thiserror = "1.0.15"
 
 [features]
 trace = [
