@@ -108,7 +108,7 @@ impl ClosestPeersIter {
                     let state = PeerState::NotContacted;
                     (distance, Peer { key, state })
                 })
-                .take(config.num_results));
+                .take(K_VALUE.into()));
 
         // The iterator initially makes progress by iterating towards the target.
         let state = State::Iterating { no_progress : 0 };
@@ -695,6 +695,26 @@ mod tests {
     }
 
     #[test]
+    fn without_success_try_up_to_k_peers() {
+        fn prop(mut iter: ClosestPeersIter) {
+            let now = Instant::now();
+
+            for _ in 0..(usize::min(iter.closest_peers.len(), K_VALUE.get())) {
+                match iter.next(now) {
+                    PeersIterState::Waiting(Some(p)) => {
+                        let peer = p.clone().into_owned();
+                        iter.on_failure(&peer);
+                    },
+                    _ => panic!("Expected iterator to yield another peer to query."),
+                }
+            }
+
+            assert_eq!(PeersIterState::Finished, iter.next(now));
+        }
+
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_))
+    }
+
     fn stalled_at_capacity() {
         fn prop(mut iter: ClosestPeersIter) {
             iter.state = State::Stalled;
