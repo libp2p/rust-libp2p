@@ -740,7 +740,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                     this.behaviour.inject_dial_failure(&peer_id);
                                 }
                             }
-                        };
+                        }
                     }
                 },
                 Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event }) => {
