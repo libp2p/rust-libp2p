@@ -730,15 +730,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         } else {
                             log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
                                 peer_id, condition);
-                            match this.network.peer(peer_id.clone()) {
-                                Peer::Dialing(mut peer) => {
-                                    let addrs = this.behaviour.addresses_of_peer(peer.id());
-                                    peer.connection().add_addresses(addrs);
-                                },
-                                Peer::Connected(_) => {},
-                                Peer::Disconnected(..) | Peer::Local => {
-                                    this.behaviour.inject_dial_failure(&peer_id);
-                                }
+                            if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
+                                let addrs = this.behaviour.addresses_of_peer(peer.id());
+                                peer.connection().add_addresses(addrs);
                             }
                         }
                     }
