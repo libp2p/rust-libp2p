@@ -733,8 +733,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
                                 let addrs = this.behaviour.addresses_of_peer(peer.id());
                                 peer.connection().add_addresses(addrs);
-                            } else {
-                                this.behaviour.inject_dial_failure(&peer_id);
                             }
                         };
                     }
