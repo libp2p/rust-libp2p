@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.18.0"
+version = "0.18.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -68,7 +68,7 @@ libp2p-pnet = { version = "0.18.0", path = "protocols/pnet", optional = true }
 libp2p-core = { version = "0.18.0", path = "core" }
 libp2p-core-derive = { version = "0.18.0", path = "misc/core-derive" }
 libp2p-secio = { version = "0.18.0", path = "protocols/secio", default-features = false, optional = true }
-libp2p-swarm = { version = "0.18.0", path = "swarm" }
+libp2p-swarm = { version = "0.18.1", path = "swarm" }
 libp2p-uds = { version = "0.18.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.18.0", path = "transports/wasm-ext", optional = true }
 libp2p-yamux = { version = "0.18.0", path = "muxers/yamux", optional = true }

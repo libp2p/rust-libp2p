@@ -1,6 +1,11 @@
 # Version ???
 
 
+# Version 0.18.1 (2020-04-17)
+
+- `libp2p-swarm`: Make sure inject_dial_failure is called in all situations.
+  [PR 1549](https://github.com/libp2p/rust-libp2p/pull/1549)
+
 # Version 0.18.0 (2020-04-09)
 
 - `libp2p-core`: Treat connection limit errors as pending connection errors.
