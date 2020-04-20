@@ -21,7 +21,6 @@ log = "0.4.8"
 parking_lot = "0.10.0"
 protobuf = "2.10.1"
 quinn-proto = "0.6.0"
-rcgen = { version = "0.7.0", default_features = false }
 ring = "0.16.11"
 rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
 tracing = { version = "0.1.12", optional = true }

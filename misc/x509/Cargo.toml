@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 libp2p-core = { path = "../../core", version = "0.18.0" }
 log = "0.4.8"
-rcgen = { version = "0.7.0", default-features = false }
+rcgen = { version = "0.8.1", default-features = false }
 ring = "0.16.11"
 rustls = { version = "0.17.0", features = ["dangerous_configuration"] }
 thiserror = "1.0.15"
