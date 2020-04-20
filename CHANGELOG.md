@@ -1,5 +1,9 @@
 # Version ???
 
+- `libp2p-kad`: Consider fixed (K_VALUE) amount of peers at closest query
+  initialization. Unless `KademliaConfig::set_replication_factor` is used change
+  has no effect.
+  [PR 1536](https://github.com/libp2p/rust-libp2p/pull/1536)
 
 # Version 0.18.1 (2020-04-17)
 
