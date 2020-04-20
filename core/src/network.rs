@@ -512,7 +512,7 @@ fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TP
     id: ConnectionId,
     endpoint: ConnectedPoint,
     error: PendingConnectionError<TTrans::Error>,
-    handler: THandler,
+    handler: Option<THandler>,
 ) -> (Option<DialingOpts<TPeerId, THandler>>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>)
 where
     TTrans: Transport,
@@ -533,22 +533,29 @@ where
         let num_remain = u32::try_from(attempt.next.len()).unwrap();
         let failed_addr = attempt.current.clone();
 
-        let opts =
+        let (opts, attempts_remaining) =
             if num_remain > 0 {
-                let next_attempt = attempt.next.remove(0);
-                let opts = DialingOpts {
-                    peer: peer_id.clone(),
-                    handler,
-                    address: next_attempt,
-                    remaining: attempt.next
-                };
-                Some(opts)
+                if let Some(handler) = handler {
+                    let next_attempt = attempt.next.remove(0);
+                    let opts = DialingOpts {
+                        peer: peer_id.clone(),
+                        handler,
+                        address: next_attempt,
+                        remaining: attempt.next
+                    };
+                    (Some(opts), num_remain)
+                } else {
+                    // The error is "fatal" for the dialing attempt, since
+                    // the handler was already consumed. All potential
+                    // remaining connection attempts are thus void.
+                    (None, 0)
+                }
             } else {
-                None
+                (None, 0)
             };
 
         (opts, NetworkEvent::DialError {
-            attempts_remaining: num_remain,
+            attempts_remaining,
             peer_id,
             multiaddr: failed_addr,
             error,
@@ -560,7 +567,6 @@ where
                 (None, NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
-                    handler,
                 }),
             ConnectedPoint::Listener { local_addr, send_back_addr } =>
                 (None, NetworkEvent::IncomingConnectionError {

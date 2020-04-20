@@ -21,6 +21,8 @@
 //! Implements the floodsub protocol, see also the:
 //! [spec](https://github.com/libp2p/specs/tree/master/pubsub).
 
+use libp2p_core::PeerId;
+
 pub mod protocol;
 
 mod layer;
@@ -33,3 +35,22 @@ mod rpc_proto {
 pub use self::layer::{Floodsub, FloodsubEvent};
 pub use self::protocol::{FloodsubMessage, FloodsubRpc};
 pub use self::topic::Topic;
+
+/// Configuration options for the Floodsub protocol.
+pub struct FloodsubConfig {
+    /// Peer id of the local node. Used for the source of the messages that we publish.
+    pub local_peer_id: PeerId,
+
+    /// `true` if messages published by local node should be propagated as messages received from
+    /// the network, `false` by default.
+    pub subscribe_local_messages: bool,
+}
+
+impl FloodsubConfig {
+    pub fn new(local_peer_id: PeerId) -> Self {
+        Self {
+            local_peer_id,
+            subscribe_local_messages: false
+        }
+    }
+}
