@@ -347,6 +347,8 @@ where
             },
             kbucket::Entry::SelfEntry => {},
         }
+
+        self.print_bucket_table();
     }
 
     /// Returns an iterator over all peer IDs of nodes currently contained in a bucket
@@ -699,6 +701,8 @@ where
             },
             _ => {}
         }
+
+        self.print_bucket_table();
     }
 
     fn insert_new_peer(
@@ -1165,7 +1169,7 @@ where
                 let peer_id = &peer_id[len - 10..];
 
                 format!(
-                    "\t{} {} {} {}{} {}\n",
+                    "[bcktdbg]\t{} {} {} {}{} {}\n",
                     status_s,
                     node.weight,
                     peer_id,
@@ -1175,11 +1179,11 @@ where
                 )
             }).collect::<String>();
 
-            Some(format!("{}\n{}\n", header, elems))
+            Some(format!("[bcktdbg] {}\n{}\n", header, elems))
         }).collect::<String>();
 
         if buckets.trim().is_empty() {
-            log::info!("Bucket table is empty.")
+            log::info!("[bcktdbg] Bucket table is empty.")
         } else {
             log::info!("\n{}", buckets);
         }
@@ -1507,7 +1511,6 @@ where
             Self::OutEvent,
         >,
     > {
-        log::info!("Kademlia NetworkBehaviour poll");
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -1553,6 +1556,7 @@ where
 
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
+                self.print_bucket_table();
                 let kbucket::Node { key, value, .. } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
                     peer: key.into_preimage(),
