@@ -50,7 +50,7 @@ use libp2p_core::identity::ed25519;
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
-fn build_node() -> (Multiaddr, TestSwarm) {
+fn build_node() -> (Ed25519::Keypair, Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
 }
 
@@ -80,25 +80,25 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Ed25519::Keypair, Multiaddr, 
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes(num: usize) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_nodes(num: usize) -> Vec<(Ed25519::Keypair, Multiaddr, TestSwarm)> {
     build_nodes_with_config(num, Default::default())
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(Ed25519::Keypair, Multiaddr, TestSwarm)> {
     (0..num).map(|_| build_node_with_config(cfg.clone())).collect()
 }
 
-fn build_connected_nodes(total: usize, step: usize) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_connected_nodes(total: usize, step: usize) -> Vec<(Ed25519::Keypair, Multiaddr, TestSwarm)> {
     build_connected_nodes_with_config(total, step, Default::default())
 }
 
 fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaConfig)
-    -> Vec<(Multiaddr, TestSwarm)>
+    -> Vec<(Ed25519::Keypair, Multiaddr, TestSwarm)>
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_ids: Vec<_> = swarms.iter()
-        .map(|(addr, swarm)| (addr.clone(), Swarm::local_peer_id(swarm).clone()))
+        .map(|(_, addr, swarm)| (addr.clone(), Swarm::local_peer_id(swarm).clone()))
         .collect();
 
     let mut i = 0;
@@ -116,16 +116,16 @@ fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaCon
 }
 
 fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
-    -> Vec<(Multiaddr, TestSwarm)>
+    -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)>
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_addr_and_peer_id: Vec<_> = swarms.iter()
-        .map(|(addr, swarm)| (addr.clone(), Swarm::local_peer_id(swarm).clone()))
+        .map(|(public, addr, swarm)| (public, addr.clone(), Swarm::local_peer_id(swarm).clone()))
         .collect();
 
     for (_addr, swarm) in swarms.iter_mut() {
-        for (addr, peer) in &swarm_addr_and_peer_id {
-            swarm.add_address(&peer, addr.clone());
+        for (public, addr, peer) in &swarm_addr_and_peer_id {
+            swarm.add_address(&peer, addr.clone(), public);
         }
     }
 
