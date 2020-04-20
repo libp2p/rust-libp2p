@@ -403,6 +403,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             return Err(error)
                         }
                     }
+                } else {
+                    log::debug!(
+                        "New dialing attempt to disconnected peer {:?} failed: no address.",
+                        peer_id
+                    );
+                    me.behaviour.inject_dial_failure(&peer_id);
                 }
                 Ok(false)
             },
@@ -419,6 +425,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             return Err(error)
                         }
                     }
+                } else {
+                    log::debug!(
+                        "New dialing attempt to disconnected peer {:?} failed: no address.",
+                        peer_id
+                    );
+                    me.behaviour.inject_dial_failure(&peer_id);
                 }
                 Ok(false)
             }
@@ -427,6 +439,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 Ok(false)
             },
             Peer::Local => {
+                me.behaviour.inject_dial_failure(&peer_id);
                 Err(ConnectionLimit { current: 0, limit: 0 })
             }
         }
@@ -701,34 +714,25 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if this.banned_peers.contains(&peer_id) {
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
-                        let result = match condition {
+                        let condition_matched = match condition {
                             DialPeerCondition::Disconnected
-                                if this.network.is_disconnected(&peer_id) =>
-                            {
-                                ExpandedSwarm::dial(this, &peer_id)
-                            }
+                                if this.network.is_disconnected(&peer_id) => true,
                             DialPeerCondition::NotDialing
-                                if !this.network.is_dialing(&peer_id) =>
-                            {
-                                ExpandedSwarm::dial(this, &peer_id)
-                            }
-                            _ => {
-                                log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
-                                    peer_id, condition);
-                                if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
-                                    let addrs = this.behaviour.addresses_of_peer(peer.id());
-                                    peer.connection().add_addresses(addrs);
-                                }
-                                Ok(false)
-                            }
+                                if !this.network.is_dialing(&peer_id) => true,
+                            _ => false
                         };
-                        match result {
-                            Ok(false) => {},
-                            Ok(true) => return Poll::Ready(SwarmEvent::Dialing(peer_id)),
-                            Err(err) => {
-                                log::debug!("Initiating dialing attempt to {:?} failed: {:?}",
-                                    &peer_id, err);
-                                this.behaviour.inject_dial_failure(&peer_id);
+
+                        if condition_matched {
+                            if let Ok(true) = ExpandedSwarm::dial(this, &peer_id) {
+                                return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                            }
+
+                        } else {
+                            log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
+                                peer_id, condition);
+                            if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
+                                let addrs = this.behaviour.addresses_of_peer(peer.id());
+                                peer.connection().add_addresses(addrs);
                             }
                         }
                     }
