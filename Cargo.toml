@@ -115,7 +115,8 @@ members = [
     "transports/wasm-ext"
 ]
 
-[patch.'https://github.com/fluencelabs/rust-libp2p']
+#[patch.'https://github.com/fluencelabs/rust-libp2p']
+[patch.'ssh://git@github.com/fluencelabs/rust-libp2p.git']
 libp2p-core = { path = "core" }
 
 # NOTE: this is required because trust-graph depends on libp2p-core = 0.17.0,
