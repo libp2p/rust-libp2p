@@ -116,11 +116,11 @@ members = [
 ]
 
 [patch.'https://github.com/fluencelabs/rust-libp2p']
-libp2p-core = { path = "core", version = "0.17.0" }
+libp2p-core = { path = "core" }
 
 # NOTE: this is required because trust-graph depends on libp2p-core = 0.17.0,
 #       and patches it to git only in patch section, which apparently isn't
 #       visible via dependency mechanics (i.e., not visible HERE)
 [patch.crates-io]
-libp2p-core = { path = "core", version = "0.17.0" }
+libp2p-core = { path = "core" }
 #trust-graph = { path = "../arqada/janus/trust-graph" }
