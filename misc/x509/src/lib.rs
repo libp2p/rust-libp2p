@@ -21,7 +21,6 @@
 //! TLS configuration for `libp2p-quic`.
 #![deny(
     const_err,
-    deprecated,
     improper_ctypes,
     non_shorthand_field_patterns,
     nonstandard_style,

@@ -128,7 +128,7 @@ fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSErro
     certificate.valid(now)
         .map_err(TLSError::WebPKIError)?;
     certificate
-        .check_self_signature()
+        .check_self_issued()
         .map_err(TLSError::WebPKIError)?;
     verify_libp2p_signature(&extension, certificate.subject_public_key_info().key())
         .map_err(TLSError::WebPKIError)
