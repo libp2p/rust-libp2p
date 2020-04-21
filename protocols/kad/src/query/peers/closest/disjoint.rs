@@ -20,7 +20,6 @@
 
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
-use crate::query::peers::closest::{ClosestPeersIter, ClosestPeersIterConfig};
 use libp2p_core::PeerId;
 use std::collections::HashMap;
 use wasm_timer::Instant;
@@ -60,8 +59,7 @@ impl ClosestDisjointPeersIter {
         I: IntoIterator<Item = Key<PeerId>>,
         T: Into<KeyBytes> + Clone,
     {
-        // TODO: Don't collect them all (all k-buckets), but only parts.
-        let peers = known_closest_peers.into_iter().collect::<Vec<_>>();
+        let peers = known_closest_peers.into_iter().take(K_VALUE.get()).collect::<Vec<_>>();
         let iters = split_num_results_per_disjoint_path(&config)
             .into_iter()
             // NOTE: All [`ClosestPeersIter`] share the same set of peers at initialization. The

@@ -49,6 +49,8 @@ use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
+// TODO: Have these tests use disjoint paths as well.
+
 fn build_node() -> (Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
 }

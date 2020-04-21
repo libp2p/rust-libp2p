@@ -153,11 +153,12 @@ impl KademliaConfig {
     /// Enable queries to use disjoint paths when iteratively looking for the
     /// closest node to a target.
     ///
-    /// See the S/Kademlia paper for details.
-    //
-    // TODO: Document that when enabled the number of disjoint paths is equal to the number of
-    // parallelism.
-    pub fn enable_disjoint_path_queries(&mut self) -> &mut Self {
+    /// When enabled the amount of disjoint paths used equals the configured
+    /// parallelism.
+    ///
+    /// See the S/Kademlia paper for more information on the high level design
+    /// as well as its security improvements.
+    pub fn use_disjoint_path_queries(&mut self) -> &mut Self {
         self.query_config.use_disjoint_paths = true;
         self
     }
