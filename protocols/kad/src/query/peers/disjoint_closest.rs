@@ -116,9 +116,14 @@ impl DisjointClosestPeersIter {
             }
         }
 
-        let iters = split_inputs_per_disjoint_path(&config, known_closest_peers)
+        // TODO: Don't collect them all (all k-buckets), but only parts.
+        let peers = known_closest_peers.into_iter().collect::<Vec<_>>();
+        let iters = split_num_results_per_disjoint_path(&config)
             .into_iter()
-            .map(|(config, peers)| ClosestPeersIter::with_config(config, target.clone(), peers))
+            // NOTE: All [`ClosestPeersIter`] share the same set of peers at initialization. The
+            // [`DisjointClosestPeersIter`] ensures a peer is only ever queried by a single
+            // [`ClosestPeersIter`].
+            .map(|config| ClosestPeersIter::with_config(config, target.clone(), peers.clone()))
             .collect();
 
         DisjointClosestPeersIter {
@@ -214,32 +219,18 @@ impl DisjointClosestPeersIter {
     }
 }
 
-/// Takes as input a set of resources (allowed parallelism, striven for number of results, set of
-/// peers) and splits them equally (best-effort) into buckets, one for each disjoint path.
+/// Takes as input a [`DisjointClosestPeersIterConfig`] splits `num_results` for each disjoint path
+/// (`== parallelism`) equally (best-effort) into buckets, one for each disjoint path returning a
+/// `ClosestPeersIterConfig` for each disjoint path.
 ///
-/// 'best-effort' as in no more than one apart. E.g. with 10 peers and 4 disjoint paths it would
-/// return [3, 3, 2, 2].
-//
-// TODO: What if parallelism is smaller than disjoint_paths? In that case we would not explore as
-// many disjoint paths as we could.
-fn split_inputs_per_disjoint_path<I>(
+/// 'best-effort' as in no more than one apart. E.g. with 10 overall num_result and 4 disjoint paths
+/// it would return [3, 3, 2, 2].
+fn split_num_results_per_disjoint_path(
     config: &DisjointClosestPeersIterConfig,
-    peers: I,
-) -> Vec<(ClosestPeersIterConfig, Vec<Key<PeerId>>)>
-where
-    I: IntoIterator<Item = Key<PeerId>>,
-{
-    // TODO: Make it more obvious that the number of parallelism is the number of disjoint paths.
+) -> Vec<ClosestPeersIterConfig> {
+    // Note: The number of parallelism is equal to the number of disjoint paths.
     let num_results_per_iter = config.num_results / config.parallelism;
     let remaining_num_results = config.num_results % config.parallelism;
-
-    let mut peers = peers.into_iter()
-        // Each `[ClosestPeersIterConfig]` should be configured with ALPHA_VALUE
-        // peers at initialization.
-        .take(ALPHA_VALUE.get() * config.parallelism)
-        .collect::<Vec<Key<PeerId>>>();
-    let peers_per_iter = peers.len() / config.parallelism;
-    let remaining_peers = peers.len() % config.parallelism;
 
     (0..config.parallelism).map(|i| {
         let num_results = if i < remaining_num_results {
@@ -248,22 +239,11 @@ where
             num_results_per_iter
         };
 
-        // TODO: Should we shuffle the peers beforehand? They might be sorted which will lead to
-        // unfairness between iterators.
-        let peers = if i < remaining_peers {
-            peers.split_off(peers.len() - (peers_per_iter + 1))
-        } else {
-            peers.split_off(peers.len() - peers_per_iter)
-        };
-
-        (
             ClosestPeersIterConfig {
                 parallelism: 1,
                 num_results,
                 peer_timeout: config.peer_timeout,
-            },
-            peers,
-        )
+            }
     }).collect()
 }
 
@@ -272,6 +252,7 @@ mod tests {
     use super::*;
     use quickcheck::*;
     use rand::{Rng, seq::SliceRandom};
+    use std::collections::HashSet;
 
     impl Arbitrary for DisjointClosestPeersIterConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
@@ -299,47 +280,35 @@ mod tests {
     }
 
     #[test]
-    fn split_inputs_per_disjoint_path_quickcheck() {
-        fn prop(config: DisjointClosestPeersIterConfig, peers: PeerVec) -> TestResult {
-            if config.parallelism == 0
-                || config.num_results == 0
-                || peers.0.len() == 0
+    fn split_num_results_per_disjoint_path_quickcheck() {
+        fn prop(config: DisjointClosestPeersIterConfig) -> TestResult {
+            if config.parallelism == 0 || config.num_results == 0
             {
                 return TestResult::discard();
             }
 
-            let mut iters = split_inputs_per_disjoint_path(&config, peers.0.clone());
+            let mut iters = split_num_results_per_disjoint_path(&config);
 
-            // Ensure the sum of each resource of each disjoint path equals the allowed input.
+            // Ensure the sum of all disjoint paths equals the allowed input.
 
             assert_eq!(
                 config.num_results,
                 iters
                     .iter()
-                    .fold(0, |acc, (config, _)| { acc + config.num_results }),
-            );
-
-            assert_eq!(
-                peers.0.len(),
-                iters
-                    .iter()
-                    .fold(0, |acc, (_, peers)| { acc + peers.len() }),
+                    .fold(0, |acc, config| { acc + config.num_results }),
             );
 
             // Ensure 'best-effort' fairness, the highest and lowest are newer more than 1 apart.
 
-            iters.sort_by(|(a_config, _), (b_config, _)| {
+            iters.sort_by(|a_config, b_config| {
                 a_config.num_results.cmp(&b_config.num_results)
             });
-            assert!(iters[iters.len() - 1].0.num_results - iters[0].0.num_results <= 1);
-
-            iters.sort_by(|(_, a_peers), (_, b_peers)| a_peers.len().cmp(&b_peers.len()));
-            assert!(iters[iters.len() - 1].1.len() - iters[0].1.len() <= 1);
+            assert!(iters[iters.len() - 1].num_results - iters[0].num_results <= 1);
 
             TestResult::passed()
         }
 
-        quickcheck(prop as fn(_, _) -> _)
+        quickcheck(prop as fn(_) -> _)
     }
 
     #[test]
@@ -347,7 +316,7 @@ mod tests {
         let now = Instant::now();
         let target: KeyBytes = Key::from(PeerId::random()).into();
 
-        let mut pool = [0; 12].into_iter()
+        let mut pool = [0; 12].iter()
             .map(|_| Key::from(PeerId::random()))
             .collect::<Vec<_>>();
 
@@ -454,14 +423,14 @@ mod tests {
     impl Arbitrary for Graph {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let mut peers = HashMap::new();
-            let mut peer_ids = random_peers(g.gen_range(K_VALUE.get(), 100))
+            let mut peer_ids = random_peers(g.gen_range(K_VALUE.get(), 500))
                 .collect::<Vec<_>>();
 
             for peer_id in peer_ids.clone() {
                 peer_ids.shuffle(g);
 
                 peers.insert(peer_id, Peer{
-                    known_peers: peer_ids[0..g.gen_range(1, K_VALUE.get())].to_vec(),
+                    known_peers: peer_ids[0..g.gen_range(K_VALUE.get(), peer_ids.len())].to_vec(),
                 });
             }
 
@@ -493,41 +462,44 @@ mod tests {
     }
 
     enum PeerIterator {
-        DisjointClosest(DisjointClosestPeersIter),
+        Disjoint(DisjointClosestPeersIter),
         Closest(ClosestPeersIter),
-        DisjointClosestDisjointDisabled(DisjointClosestPeersIter),
     }
 
     impl PeerIterator {
         fn next(&mut self, now: Instant) -> PeersIterState {
             match self {
-                PeerIterator::DisjointClosest(iter) => iter.next(now),
+                PeerIterator::Disjoint(iter) => iter.next(now),
                 PeerIterator::Closest(iter) => iter.next(now),
-                PeerIterator::DisjointClosestDisjointDisabled(iter) => iter.next(now),
             }
         }
 
         fn on_success(&mut self, peer: &PeerId, closer_peers: Vec<PeerId>) {
             match self {
-                PeerIterator::DisjointClosest(iter) => iter.on_success(peer, closer_peers),
+                PeerIterator::Disjoint(iter) => iter.on_success(peer, closer_peers),
                 PeerIterator::Closest(iter) => iter.on_success(peer, closer_peers),
-                PeerIterator::DisjointClosestDisjointDisabled(iter) => iter.on_success(peer, closer_peers),
             }
         }
 
         fn into_result(self) -> Vec<PeerId> {
             match self {
-                PeerIterator::DisjointClosest(iter) => iter.into_result().collect(),
+                PeerIterator::Disjoint(iter) => iter.into_result().collect(),
                 PeerIterator::Closest(iter) => iter.into_result().collect(),
-                PeerIterator::DisjointClosestDisjointDisabled(iter) => iter.into_result().collect(),
             }
         }
     }
 
+    /// Ensure [`ClosestPeersIter`] and [`DisjointClosestPeersIter`] yield similar closest peers.
+    ///
+    // NOTE: One can not ensure both iterators yield the *same* result. While [`ClosestPeersIter`]
+    // always yields the closest peers, [`DisjointClosestPeersIter`] might not. Imagine a node on
+    // path x yielding the 22 absolute closest peers, not returned by any other node. In addition
+    // imagine only 10 results are allowed per path. Path x will choose the 10 closest out of those
+    // 22 and drop the remaining 12, thus the overall [`DisjointClosestPeersIter`] will not yield
+    // the absolute closest peers combining all paths.
     #[test]
-    fn closest_and_disjoint_closest_yield_same_result() {
+    fn closest_and_disjoint_closest_yield_similar_result() {
         fn prop(graph: Graph, parallelism: Parallelism, num_results: NumResults) {
-            let now = Instant::now();
             let target: KeyBytes = Key::from(PeerId::random()).into();
 
             let mut known_closest_peers = graph.0.iter().take(parallelism.0 * ALPHA_VALUE.get()).map(|(key, _peers)| Key::new(key.clone())).collect::<Vec<_>>();
@@ -535,52 +507,69 @@ mod tests {
                 target.distance(a).cmp(&target.distance(b))
             });
 
-            let iters = vec![
-                PeerIterator::DisjointClosest(DisjointClosestPeersIter::with_config(DisjointClosestPeersIterConfig{
+            let closest = drive_to_finish(PeerIterator::Closest(ClosestPeersIter::with_config(
+                ClosestPeersIterConfig{
+                    parallelism: parallelism.0,
+                    num_results: num_results.0,
+                    ..ClosestPeersIterConfig::default()
+                },
+                target.clone(),
+                known_closest_peers.clone(),
+            )), &graph, &target);
+
+            let disjoint = drive_to_finish(PeerIterator::Disjoint(DisjointClosestPeersIter::with_config(
+                DisjointClosestPeersIterConfig{
                     parallelism: parallelism.0,
                     use_disjoint_paths: true,
                     num_results: num_results.0,
                     ..DisjointClosestPeersIterConfig::default()
-                }, target.clone(), known_closest_peers.clone())),
-                PeerIterator::Closest(ClosestPeersIter::with_config(ClosestPeersIterConfig{
-                    parallelism: parallelism.0,
-                    num_results: num_results.0,
-                    ..ClosestPeersIterConfig::default()
-                }, target.clone(), known_closest_peers.clone())),
-                PeerIterator::DisjointClosestDisjointDisabled(DisjointClosestPeersIter::with_config(DisjointClosestPeersIterConfig{
-                    parallelism: parallelism.0,
-                    use_disjoint_paths: false,
-                    num_results: num_results.0,
-                    ..DisjointClosestPeersIterConfig::default()
-                }, target.clone(), known_closest_peers.clone())),
-            ];
+                },
+                target.clone(),
+                known_closest_peers.clone(),
+            )),&graph, &target);
 
-            iters.into_iter().map(|mut iter| {
-                loop {
-                    match iter.next(now) {
-                        PeersIterState::Waiting(Some(peer_id)) => {
-                            let peer_id = peer_id.clone().into_owned();
-                            iter.on_success(&peer_id, graph.0.get(&peer_id).unwrap().known_peers.clone())
-                        } ,
-                        PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) => panic!("There are never more than one requests in flight."),
-                        PeersIterState::Finished => break,
-                    }
-                }
+            assert_eq!(
+                closest.len(), disjoint.len()
+            );
 
-                let mut result = iter.into_result().into_iter().map(Key::new).collect::<Vec<_>>();
-                result.sort_unstable_by(|a, b| {
-                    target.distance(a).cmp(&target.distance(b))
-                });
-                result
-            }).fold(None, |acc, res| {
-                match acc {
-                    None => Some(res),
-                    Some(prev_res) if prev_res.len() != res.len() => panic!("unequal amount of peers"),
-                    res @ _ => res,
+            if closest != disjoint {
+                let closest_only = closest.difference(&disjoint).collect::<Vec<_>>();
+                let disjoint_only = disjoint.difference(&closest).collect::<Vec<_>>();
+                if closest_only.len() > num_results.0 / 2 {
+                    panic!(
+                        "Expected both iterators to derive same peer set or be no more than \
+                         `(num_results / 2)` apart, but only `ClosestPeersIter` got {:?} and only \
+                         `DisjointClosestPeersIter` got {:?}.",
+                        closest_only, disjoint_only,
+                    );
                 }
-            });
+            };
         }
 
-        QuickCheck::new().quickcheck(prop as fn(_, _, _))
+        fn drive_to_finish(
+            mut iter: PeerIterator,
+            graph: &Graph,
+            target: &KeyBytes,
+        ) -> HashSet<PeerId> {
+            let now = Instant::now();
+            loop {
+                match iter.next(now) {
+                    PeersIterState::Waiting(Some(peer_id)) => {
+                        let peer_id = peer_id.clone().into_owned();
+                        iter.on_success(&peer_id, graph.0.get(&peer_id).unwrap().known_peers.clone())
+                    } ,
+                    PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) => panic!("There are never more than one requests in flight."),
+                    PeersIterState::Finished => break,
+                }
+            }
+
+            let mut result = iter.into_result().into_iter().map(Key::new).collect::<Vec<_>>();
+            result.sort_unstable_by(|a, b| {
+                target.distance(a).cmp(&target.distance(b))
+            });
+            result.into_iter().map(|k| k.into_preimage()).collect()
+        }
+
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _, _))
     }
 }
