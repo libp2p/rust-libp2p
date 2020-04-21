@@ -109,7 +109,7 @@ where
 {
     type Output = Connection<T::Output>;
     type Error = Error<T::Error>;
-    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -146,6 +146,9 @@ where
                 ListenerEvent::AddressExpired(mut a) => {
                     a = a.with(proto.clone());
                     ListenerEvent::AddressExpired(a)
+                }
+                ListenerEvent::Error(err) => {
+                    ListenerEvent::Error(Error::Transport(err))
                 }
                 ListenerEvent::Upgrade { upgrade, mut local_addr, mut remote_addr } => {
                     local_addr = local_addr.with(proto.clone());
@@ -305,11 +308,6 @@ where
                 let dns_name = dns_name.expect("for use_tls we have checked that dns_name is some");
                 trace!("starting TLS handshake with {}", address);
                 let stream = self.tls_config.client.connect(&dns_name, stream)
-                    .map_err(|e| {
-                        // We should never enter here as we passed a `DNSNameRef` to `connect`.
-                        debug!("invalid domain name: {:?}", dns_name);
-                        Error::Tls(e.into())
-                    })?
                     .map_err(|e| {
                         debug!("TLS handshake with {} failed: {}", address, e);
                         Error::Tls(tls::Error::from(e))

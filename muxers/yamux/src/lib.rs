@@ -24,8 +24,10 @@
 use futures::{future, prelude::*, ready, stream::{BoxStream, LocalBoxStream}};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
-use std::{fmt, io, iter, pin::Pin, task::Context};
+use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
 use thiserror::Error;
+
+pub use yamux::WindowUpdateMode;
 
 /// A Yamux connection.
 pub struct Yamux<S>(Mutex<Inner<S>>);
@@ -37,7 +39,7 @@ impl<S> fmt::Debug for Yamux<S> {
 }
 
 struct Inner<S> {
-    /// The `futures::stream::Stream` of incoming substreams.
+    /// The [`futures::stream::Stream`] of incoming substreams.
     incoming: S,
     /// Handle to control the connection.
     control: yamux::Control,
@@ -150,7 +152,17 @@ where
 
     fn close(&self, c: &mut Context) -> Poll<()> {
         let mut inner = self.0.lock();
-        Pin::new(&mut inner.control).poll_close(c).map_err(YamuxError)
+        if let std::task::Poll::Ready(x) = Pin::new(&mut inner.control).poll_close(c) {
+            return Poll::Ready(x.map_err(YamuxError))
+        }
+        while let std::task::Poll::Ready(x) = inner.incoming.poll_next_unpin(c) {
+            match x {
+                Some(Ok(_))  => {} // drop inbound stream
+                Some(Err(e)) => return Poll::Ready(Err(e)),
+                None => return Poll::Ready(Ok(()))
+            }
+        }
+        Poll::Pending
     }
 
     fn flush_all(&self, _: &mut Context) -> Poll<()> {
@@ -171,7 +183,7 @@ impl Config {
         Config(cfg)
     }
 
-    /// Turn this into a `LocalConfig` for use with upgrades of !Send resources.
+    /// Turn this into a [`LocalConfig`] for use with upgrades of ![`Send`] resources.
     pub fn local(self) -> LocalConfig {
         LocalConfig(self)
     }
@@ -180,6 +192,20 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config(yamux::Config::default())
+    }
+}
+
+impl Deref for Config {
+    type Target = yamux::Config;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Config {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -253,7 +279,7 @@ where
     }
 }
 
-/// The Yamux [`StreamMuxer`] error type.
+/// The Yamux [`libp2p_core::StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error("yamux error: {0}")]
 pub struct YamuxError(#[from] pub yamux::ConnectionError);

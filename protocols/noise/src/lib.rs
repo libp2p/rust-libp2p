@@ -78,7 +78,7 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
 
 impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     /// Turn the `NoiseConfig` into an authenticated upgrade for use
-    /// with a [`Network`](libp2p_core::nodes::Network).
+    /// with a [`Network`](libp2p_core::Network).
     pub fn into_authenticated(self) -> NoiseAuthenticated<H, C, R> {
         NoiseAuthenticated { config: self }
     }
@@ -297,8 +297,8 @@ where
 ///
 /// On success, the upgrade yields the [`PeerId`] obtained from the
 /// `RemoteIdentity`. The output of this upgrade is thus directly suitable
-/// for creating an [`authenticated`](libp2p_core::TransportBuilder::authenticate)
-/// transport for use with a [`Network`](libp2p_core::nodes::Network).
+/// for creating an [`authenticated`](libp2p_core::transport::upgrade::Authenticate)
+/// transport for use with a [`Network`](libp2p_core::Network).
 #[derive(Clone)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {
     config: NoiseConfig<P, C, R>

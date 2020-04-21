@@ -20,7 +20,7 @@
 
 mod memory;
 
-pub use memory::MemoryStore;
+pub use memory::{MemoryStore, MemoryStoreConfig};
 
 use crate::K_VALUE;
 use super::*;

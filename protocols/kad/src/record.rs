@@ -25,6 +25,7 @@ pub mod store;
 use bytes::Bytes;
 use libp2p_core::PeerId;
 use multihash::Multihash;
+use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use wasm_timer::Instant;
 
@@ -41,6 +42,12 @@ impl Key {
     /// Copies the bytes of the key into a new vector.
     pub fn to_vec(&self) -> Vec<u8> {
         Vec::from(&self.0[..])
+    }
+}
+
+impl Borrow<[u8]> for Key {
+    fn borrow(&self) -> &[u8] {
+        &self.0[..]
     }
 }
 
@@ -135,13 +142,14 @@ impl ProviderRecord {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use multihash::Hash::SHA2256;
+    use multihash::{wrap, Code};
     use rand::Rng;
     use std::time::Duration;
 
     impl Arbitrary for Key {
         fn arbitrary<G: Gen>(_: &mut G) -> Key {
-            Key::from(Multihash::random(SHA2256))
+            let hash = rand::thread_rng().gen::<[u8; 32]>();
+            Key::from(wrap(Code::Sha2_256, &hash))
         }
     }
 

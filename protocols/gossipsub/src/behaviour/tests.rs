@@ -18,13 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-
 // collection of tests for the gossipsub network behaviour
 
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use async_std::net::TcpStream;
 
     // helper functions for testing
 
@@ -34,15 +32,11 @@ mod tests {
         peer_no: usize,
         topics: Vec<String>,
         to_subscribe: bool,
-    ) -> (
-        Gossipsub<TcpStream>,
-        Vec<PeerId>,
-        Vec<TopicHash>,
-    ) {
+    ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub<TcpStream> = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -55,17 +49,13 @@ mod tests {
 
         // build and connect peer_no random peers
         let mut peers = vec![];
-        let dummy_connected_point = ConnectedPoint::Dialer {
-            address: "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
-        };
 
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
-            <Gossipsub<TcpStream> as NetworkBehaviour>::inject_connected(
+            <Gossipsub as NetworkBehaviour>::inject_connected(
                 &mut gs,
-                peer.clone(),
-                dummy_connected_point.clone(),
+                &peer,
             );
             if to_subscribe {
                 gs.handle_received_subscriptions(
@@ -106,7 +96,7 @@ mod tests {
             gs.events
                 .iter()
                 .fold(vec![], |mut collected_subscriptions, e| match e {
-                    NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
                         for s in &event.subscriptions {
                             match s.action {
                                 GossipsubSubscriptionAction::Subscribe => {
@@ -169,7 +159,7 @@ mod tests {
             gs.events
                 .iter()
                 .fold(vec![], |mut collected_subscriptions, e| match e {
-                    NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
                         for s in &event.subscriptions {
                             match s.action {
                                 GossipsubSubscriptionAction::Unsubscribe => {
@@ -334,7 +324,7 @@ mod tests {
             .events
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -400,7 +390,7 @@ mod tests {
             .events
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -443,10 +433,7 @@ mod tests {
             .events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::SendEvent {
-                    peer_id: _,
-                    event: _,
-                } => true,
+                NetworkBehaviourAction::NotifyHandler { .. } => true,
                 _ => false,
             })
             .collect();
@@ -454,7 +441,7 @@ mod tests {
         // check that there are two subscriptions sent to each peer
         for sevent in send_events.clone() {
             match sevent {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     assert!(
                         event.subscriptions.len() == 2,
                         "There should be two subscriptions sent to each peer (1 for each topic)."
@@ -572,7 +559,7 @@ mod tests {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub<usize> = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test".into()).no_hash().clone();
@@ -584,25 +571,25 @@ mod tests {
         gs.topic_peers.insert(topic_hash.clone(), peers.clone());
 
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| true });
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 30, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 30, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 20, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 20, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 0, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 0, { |_| true });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         // test the filter
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         let random_peers =
-            Gossipsub::<usize>::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
                 |peer| peers.contains(peer)
             });
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
@@ -631,7 +618,7 @@ mod tests {
             .events
             .iter()
             .fold(vec![], |mut collected_messages, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     for c in &event.messages {
                         collected_messages.push(c.clone())
                     }
@@ -670,7 +657,7 @@ mod tests {
 
             // is the message is being sent?
             let message_exists = gs.events.iter().any(|e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     event.messages.iter().any(|msg| id(msg) == msg_id)
                 }
                 _ => false,

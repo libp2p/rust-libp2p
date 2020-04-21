@@ -27,8 +27,14 @@ use crate::protocol::{
 };
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, ProtocolsHandler};
+use libp2p_core::{Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_swarm::{
+    NetworkBehaviour,
+    NetworkBehaviourAction,
+    NotifyHandler,
+    PollParameters,
+    ProtocolsHandler
+};
 use log::{debug, error, info, trace, warn};
 use lru::LruCache;
 use rand;
@@ -38,7 +44,6 @@ use std::{
     collections::HashSet,
     collections::VecDeque,
     iter,
-    marker::PhantomData,
     sync::Arc,
     task::{Context, Poll},
 };
@@ -46,9 +51,8 @@ use wasm_timer::{Instant, Interval};
 
 mod tests;
 
-/// Network behaviour that automatically identifies nodes periodically, and returns information
-/// about them.
-pub struct Gossipsub<TSubstream> {
+/// Network behaviour that handles the gossipsub protocol.
+pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
@@ -85,12 +89,9 @@ pub struct Gossipsub<TSubstream> {
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
-
-    /// Marker to pin the generics.
-    marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> Gossipsub<TSubstream> {
+impl Gossipsub {
     /// Creates a `Gossipsub` struct given a set of parameters specified by `gs_config`.
     pub fn new(local_peer_id: PeerId, gs_config: GossipsubConfig) -> Self {
         let local_peer_id = if gs_config.no_source_id {
@@ -119,7 +120,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 Instant::now() + gs_config.heartbeat_initial_delay,
                 gs_config.heartbeat_interval,
             ),
-            marker: PhantomData,
         }
     }
 
@@ -152,8 +152,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer.clone(),
+                    handler: NotifyHandler::Any,
                     event: event.clone(),
                 });
             }
@@ -197,9 +198,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             for peer in peer_list {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer.clone(),
                     event: event.clone(),
+                    handler: NotifyHandler::Any,
                 });
             }
         }
@@ -287,9 +289,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
                 event: event.clone(),
+                handler: NotifyHandler::Any,
             });
         }
     }
@@ -389,7 +392,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
-    /// Gossipsub LEAVE(topic) - Notifies mesh[topic] peers with PRUNE messages.
+    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
 
@@ -467,8 +470,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
             let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: message_list,
@@ -514,8 +518,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer: {:?}",
                 peer_id
             );
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer_id.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -584,7 +589,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             "Handling subscriptions: {:?}, from source: {:?}",
             subscriptions, propagation_source
         );
-        let subscribed_topics = match self.peer_topics.get_mut(&propagation_source) {
+        let subscribed_topics = match self.peer_topics.get_mut(propagation_source) {
             Some(topics) => topics,
             None => {
                 error!("Subscription by unknown peer: {:?}", &propagation_source);
@@ -847,7 +852,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 })
                 .collect();
             let mut prunes: Vec<GossipsubControlAction> = to_prune
-                .remove(&peer)
+                .remove(peer)
                 .unwrap_or_else(|| vec![])
                 .iter()
                 .map(|topic_hash| GossipsubControlAction::Prune {
@@ -857,8 +862,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
             grafts.append(&mut prunes);
 
             // send the control messages
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -875,8 +881,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     topic_hash: topic_hash.clone(),
                 })
                 .collect();
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -886,7 +893,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Helper function which forwards a message to mesh[topic] peers.
+    /// Helper function which forwards a message to mesh\[topic\] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
         let msg_id = (self.config.message_id_fn)(&message);
         debug!("Forwarding message: {:?}", msg_id);
@@ -914,9 +921,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: peer.clone(),
                     event: event.clone(),
+                    handler: NotifyHandler::Any,
                 });
             }
         }
@@ -976,8 +984,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Takes each control action mapping and turns it into a message
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer,
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -988,11 +997,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for Gossipsub<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type ProtocolsHandler = GossipsubHandler<TSubstream>;
+impl NetworkBehaviour for Gossipsub {
+    type ProtocolsHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -1006,7 +1012,7 @@ where
         Vec::new()
     }
 
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
+    fn inject_connected(&mut self, id: &PeerId) {
         info!("New peer connected: {:?}", id);
         // We need to send our subscriptions to the newly-connected node.
         let mut subscriptions = vec![];
@@ -1019,8 +1025,9 @@ where
 
         if !subscriptions.is_empty() {
             // send our subscriptions to the peer
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: id.clone(),
+                handler: NotifyHandler::Any,
                 event: Arc::new(GossipsubRpc {
                     messages: Vec::new(),
                     subscriptions,
@@ -1033,11 +1040,11 @@ where
         self.peer_topics.insert(id.clone(), Vec::new());
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
+    fn inject_disconnected(&mut self, id: &PeerId) {
         // remove from mesh, topic_peers, peer_topic and fanout
         debug!("Peer disconnected: {:?}", id);
         {
-            let topics = match self.peer_topics.get(&id) {
+            let topics = match self.peer_topics.get(id) {
                 Some(topics) => (topics),
                 None => {
                     warn!("Disconnected node, not in connected nodes");
@@ -1083,7 +1090,7 @@ where
         debug_assert!(was_in.is_some());
     }
 
-    fn inject_node_event(&mut self, propagation_source: PeerId, event: GossipsubRpc) {
+    fn inject_event(&mut self, propagation_source: PeerId, _: ConnectionId, event: GossipsubRpc) {
         // Handle subscriptions
         // Update connected peers topics
         self.handle_received_subscriptions(&event.subscriptions, &propagation_source);
@@ -1137,17 +1144,17 @@ where
         if let Some(event) = self.events.pop_front() {
             // clone send event reference if others references are present
             match event {
-                NetworkBehaviourAction::SendEvent {
-                    peer_id,
-                    event: send_event,
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id, handler, event: send_event,
                 } => match Arc::try_unwrap(send_event) {
                     Ok(event) => {
-                        return Poll::Ready(NetworkBehaviourAction::SendEvent { peer_id, event });
+                        return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                            peer_id, event, handler
+                        });
                     }
                     Err(event) => {
-                        return Poll::Ready(NetworkBehaviourAction::SendEvent {
-                            peer_id,
-                            event: (*event).clone(),
+                        return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                            peer_id, event: (*event).clone(), handler
                         });
                     }
                 },
@@ -1157,8 +1164,8 @@ where
                 NetworkBehaviourAction::DialAddress { address } => {
                     return Poll::Ready(NetworkBehaviourAction::DialAddress { address });
                 }
-                NetworkBehaviourAction::DialPeer { peer_id } => {
-                    return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id });
+                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
+                    return Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition });
                 }
                 NetworkBehaviourAction::ReportObservedAddr { address } => {
                     return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address });

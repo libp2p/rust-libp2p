@@ -23,6 +23,7 @@ use libp2p_core::PeerId;
 use multihash::Multihash;
 use sha2::{Digest, Sha256};
 use sha2::digest::generic_array::{GenericArray, typenum::U32};
+use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 
 construct_uint! {
@@ -51,9 +52,9 @@ impl<T> Key<T> {
     /// [`Key::into_preimage`].
     pub fn new(preimage: T) -> Key<T>
     where
-        T: AsRef<[u8]>
+        T: Borrow<[u8]>
     {
-        let bytes = KeyBytes::new(&preimage);
+        let bytes = KeyBytes::new(preimage.borrow());
         Key { preimage, bytes }
     }
 
@@ -132,9 +133,9 @@ impl KeyBytes {
     /// value through a random oracle.
     pub fn new<T>(value: T) -> Self
     where
-        T: AsRef<[u8]>
+        T: Borrow<[u8]>
     {
-        KeyBytes(Sha256::digest(value.as_ref()))
+        KeyBytes(Sha256::digest(value.borrow()))
     }
 
     /// Computes the distance of the keys according to the XOR metric.
@@ -172,7 +173,8 @@ pub struct Distance(pub(super) U256);
 mod tests {
     use super::*;
     use quickcheck::*;
-    use multihash::Hash::SHA2256;
+    use multihash::{wrap, Code};
+    use rand::Rng;
 
     impl Arbitrary for Key<PeerId> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<PeerId> {
@@ -182,7 +184,8 @@ mod tests {
 
     impl Arbitrary for Key<Multihash> {
         fn arbitrary<G: Gen>(_: &mut G) -> Key<Multihash> {
-            Key::from(Multihash::random(SHA2256))
+            let hash = rand::thread_rng().gen::<[u8; 32]>();
+            Key::from(wrap(Code::Sha2_256, &hash))
         }
     }
 

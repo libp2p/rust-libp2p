@@ -68,7 +68,7 @@ use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
 ///      namely a tuple of a [`ConnectionInfo`] (from the authentication upgrade) and a
 ///      [`StreamMuxer`] (from the multiplexing upgrade).
 ///
-/// [`Network`]: crate::nodes::Network
+/// [`Network`]: crate::Network
 pub struct Builder<T> {
     inner: T,
     version: upgrade::Version,
@@ -239,7 +239,7 @@ type EitherUpgrade<C, U> = future::Either<InboundUpgradeApply<C, U>, OutboundUpg
 
 /// An upgrade on an authenticated, non-multiplexed [`Transport`].
 ///
-/// See [`Builder::upgrade`](Builder::upgrade).
+/// See [`Transport::upgrade`]
 #[derive(Debug, Copy, Clone)]
 pub struct Upgrade<T, U> { inner: T, upgrade: U }
 
@@ -378,24 +378,26 @@ pub struct ListenerStream<S, U> {
     upgrade: U
 }
 
-impl<S, U, F, I, C, D> Stream for ListenerStream<S, U>
+impl<S, U, F, I, C, D, E> Stream for ListenerStream<S, U>
 where
-    S: TryStream<Ok = ListenerEvent<F>>,
+    S: TryStream<Ok = ListenerEvent<F, E>, Error = E>,
     F: TryFuture<Ok = (I, C)>,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D> + Clone
 {
-    type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>>, TransportUpgradeError<S::Error, U::Error>>;
+    type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>, TransportUpgradeError<E, U::Error>>, TransportUpgradeError<E, U::Error>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match ready!(TryStream::try_poll_next(self.stream.as_mut(), cx)) {
             Some(Ok(event)) => {
-                let event = event.map(move |future| {
-                    ListenerUpgradeFuture {
-                        future: Box::pin(future),
-                        upgrade: future::Either::Left(Some(self.upgrade.clone()))
-                    }
-                });
+                let event = event
+                    .map(move |future| {
+                        ListenerUpgradeFuture {
+                            future: Box::pin(future),
+                            upgrade: future::Either::Left(Some(self.upgrade.clone()))
+                        }
+                    })
+                    .map_err(TransportUpgradeError::Transport);
                 Poll::Ready(Some(Ok(event)))
             }
             Some(Err(err)) => {

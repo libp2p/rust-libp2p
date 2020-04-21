@@ -56,15 +56,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
-    struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
-        kademlia: Kademlia<TSubstream, MemoryStore>,
-        mdns: Mdns<TSubstream>
+    struct MyBehaviour {
+        kademlia: Kademlia<MemoryStore>,
+        mdns: Mdns
     }
 
-    impl<T> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<T>
-    where
-        T: AsyncRead + AsyncWrite
-    {
+    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             if let MdnsEvent::Discovered(list) = event {
@@ -75,10 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<T> NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour<T>
-    where
-        T: AsyncRead + AsyncWrite
-    {
+    impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
         // Called when `kademlia` produces an event.
         fn inject_event(&mut self, message: KademliaEvent) {
             match message {
@@ -153,10 +147,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }))
 }
 
-fn handle_input_line<T>(kademlia: &mut Kademlia<T, MemoryStore>, line: String)
-where
-    T: AsyncRead + AsyncWrite
-{
+fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
     let mut args = line.split(" ");
 
     match args.next() {

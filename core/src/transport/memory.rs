@@ -173,7 +173,7 @@ pub struct Listener {
 }
 
 impl Stream for Listener {
-    type Item = Result<ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>>, MemoryTransportError>;
+    type Item = Result<ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>, MemoryTransportError>, MemoryTransportError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         if self.tell_listen_addr {
@@ -279,8 +279,6 @@ impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
-    use std::io::Write;
 
     #[test]
     fn parse_memory_addr_works() {

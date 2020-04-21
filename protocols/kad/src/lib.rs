@@ -65,6 +65,7 @@ pub use behaviour::{
     GetProvidersOk,
     GetProvidersError,
 };
+pub use query::QueryId;
 pub use protocol::KadConnectionType;
 pub use record::{store, Record, ProviderRecord};
 

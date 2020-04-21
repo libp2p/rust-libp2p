@@ -25,6 +25,7 @@ use crate::protocol::{
 use crate::record::{self, Record};
 use futures::prelude::*;
 use libp2p_swarm::{
+    NegotiatedSubstream,
     KeepAlive,
     SubstreamProtocol,
     ProtocolsHandler,
@@ -33,10 +34,10 @@ use libp2p_swarm::{
 };
 use libp2p_core::{
     either::EitherOutput,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, Negotiated}
+    upgrade::{self, InboundUpgrade, OutboundUpgrade}
 };
 use log::trace;
-use std::{borrow::Cow, error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
+use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 /// Protocol handler that handles Kademlia communications with the remote.
@@ -45,65 +46,66 @@ use wasm_timer::Instant;
 /// make.
 ///
 /// It also handles requests made by the remote.
-pub struct KademliaHandler<TSubstream, TUserData>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-{
+pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
-    config: KademliaProtocolConfig,
-
-    /// If false, we always refuse incoming Kademlia substreams.
-    allow_listening: bool,
+    config: KademliaHandlerConfig,
 
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active substreams with the state they are in.
-    substreams: Vec<SubstreamState<TSubstream, TUserData>>,
+    substreams: Vec<SubstreamState<TUserData>>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
 }
 
+/// Configuration of a [`KademliaHandler`].
+#[derive(Debug, Clone)]
+pub struct KademliaHandlerConfig {
+    /// Configuration of the wire protocol.
+    pub protocol_config: KademliaProtocolConfig,
+
+    /// If false, we deny incoming requests.
+    pub allow_listening: bool,
+
+    /// Time after which we close an idle connection.
+    pub idle_timeout: Duration,
+}
+
 /// State of an active substream, opened either by us or by the remote.
-enum SubstreamState<TSubstream, TUserData>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-{
+enum SubstreamState<TUserData> {
     /// We haven't started opening the outgoing substream yet.
     /// Contains the request we want to send, and the user data if we expect an answer.
     OutPendingOpen(KadRequestMsg, Option<TUserData>),
     /// Waiting to send a message to the remote.
     OutPendingSend(
-        KadOutStreamSink<Negotiated<TSubstream>>,
+        KadOutStreamSink<NegotiatedSubstream>,
         KadRequestMsg,
         Option<TUserData>,
     ),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    OutPendingFlush(KadOutStreamSink<Negotiated<TSubstream>>, Option<TUserData>),
+    OutPendingFlush(KadOutStreamSink<NegotiatedSubstream>, Option<TUserData>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    OutWaitingAnswer(KadOutStreamSink<Negotiated<TSubstream>>, TUserData),
+    OutWaitingAnswer(KadOutStreamSink<NegotiatedSubstream>, TUserData),
     /// An error happened on the substream and we should report the error to the user.
     OutReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
-    OutClosing(KadOutStreamSink<Negotiated<TSubstream>>),
+    OutClosing(KadOutStreamSink<NegotiatedSubstream>),
     /// Waiting for a request from the remote.
-    InWaitingMessage(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>),
+    InWaitingMessage(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// Waiting for the user to send a `KademliaHandlerIn` event containing the response.
-    InWaitingUser(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>),
+    InWaitingUser(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// Waiting to send an answer back to the remote.
-    InPendingSend(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>, KadResponseMsg),
+    InPendingSend(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>, KadResponseMsg),
     /// Waiting to flush an answer back to the remote.
-    InPendingFlush(UniqueConnecId, KadInStreamSink<Negotiated<TSubstream>>),
+    InPendingFlush(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
     /// The substream is being closed.
-    InClosing(KadInStreamSink<Negotiated<TSubstream>>),
+    InClosing(KadInStreamSink<NegotiatedSubstream>),
 }
 
-impl<TSubstream, TUserData> SubstreamState<TSubstream, TUserData>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-{
+impl<TUserData> SubstreamState<TUserData> {
     /// Tries to close the substream.
     ///
     /// If the substream is not ready to be closed, returns it back.
@@ -266,7 +268,7 @@ impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 }
 
 /// Event to send to the handler.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum KademliaHandlerIn<TUserData> {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
@@ -366,10 +368,7 @@ pub enum KademliaHandlerIn<TUserData> {
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
-///
-/// We don't implement `Clone` on purpose, in order to prevent users from answering the same
-/// request twice.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KademliaRequestId {
     /// Unique identifier for an incoming connection.
     connec_unique_id: UniqueConnecId,
@@ -379,61 +378,33 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
-impl<TSubstream, TUserData> KademliaHandler<TSubstream, TUserData>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-{
-    /// Create a `KademliaHandler` that only allows sending messages to the remote but denying
-    /// incoming connections.
-    pub fn dial_only() -> Self {
-        KademliaHandler::with_allow_listening(false)
-    }
+impl<TUserData> KademliaHandler<TUserData> {
+    /// Create a [`KademliaHandler`] using the given configuration.
+    pub fn new(config: KademliaHandlerConfig) -> Self {
+        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
 
-    /// Create a `KademliaHandler` that only allows sending messages but also receive incoming
-    /// requests.
-    ///
-    /// The `Default` trait implementation wraps around this function.
-    pub fn dial_and_listen() -> Self {
-        KademliaHandler::with_allow_listening(true)
-    }
-
-    fn with_allow_listening(allow_listening: bool) -> Self {
         KademliaHandler {
-            config: Default::default(),
-            allow_listening,
+            config,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
-            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(10)),
+            keep_alive,
         }
     }
-
-    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
-    /// between networks on purpose.
-    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
-        self.config = self.config.with_protocol_name(name);
-        self
-    }
 }
 
-impl<TSubstream, TUserData> Default for KademliaHandler<TSubstream, TUserData>
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-{
-    #[inline]
+impl<TUserData> Default for KademliaHandler<TUserData> {
     fn default() -> Self {
-        KademliaHandler::dial_and_listen()
+        KademliaHandler::new(Default::default())
     }
 }
 
-impl<TSubstream, TUserData> ProtocolsHandler for KademliaHandler<TSubstream, TUserData>
+impl<TUserData> ProtocolsHandler for KademliaHandler<TUserData>
 where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
-    TUserData: Clone,
+    TUserData: Clone + Send + 'static,
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
     type Error = io::Error; // TODO: better error type?
-    type Substream = TSubstream;
     type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
     // Message of the request to send to the remote, and user data if we expect an answer.
@@ -441,8 +412,8 @@ where
 
     #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        if self.allow_listening {
-            SubstreamProtocol::new(self.config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
+        if self.config.allow_listening {
+            SubstreamProtocol::new(self.config.protocol_config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
             SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
         }
@@ -450,7 +421,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<TSubstream>>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
         self.substreams
@@ -459,7 +430,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Negotiated<TSubstream>>>::Output,
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
@@ -468,7 +439,7 @@ where
             EitherOutput::Second(p) => void::unreachable(p),
         };
 
-        debug_assert!(self.allow_listening);
+        debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.substreams
@@ -654,7 +625,7 @@ where
             let mut substream = self.substreams.swap_remove(n);
 
             loop {
-                match advance_substream(substream, self.config.clone(), cx) {
+                match advance_substream(substream, self.config.protocol_config.clone(), cx) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
                         return Poll::Ready(event);
@@ -691,16 +662,26 @@ where
     }
 }
 
+impl Default for KademliaHandlerConfig {
+    fn default() -> Self {
+        KademliaHandlerConfig {
+            protocol_config: Default::default(),
+            allow_listening: true,
+            idle_timeout: Duration::from_secs(10),
+        }
+    }
+}
+
 /// Advances one substream.
 ///
 /// Returns the new state for that substream, an event to generate, and whether the substream
 /// should be polled again.
-fn advance_substream<TSubstream, TUserData>(
-    state: SubstreamState<TSubstream, TUserData>,
+fn advance_substream<TUserData>(
+    state: SubstreamState<TUserData>,
     upgrade: KademliaProtocolConfig,
     cx: &mut Context,
 ) -> (
-    Option<SubstreamState<TSubstream, TUserData>>,
+    Option<SubstreamState<TUserData>>,
     Option<
         ProtocolsHandlerEvent<
             KademliaProtocolConfig,
@@ -711,8 +692,6 @@ fn advance_substream<TSubstream, TUserData>(
     >,
     bool,
 )
-where
-    TSubstream: AsyncRead + AsyncWrite + Unpin,
 {
     match state {
         SubstreamState::OutPendingOpen(msg, user_data) => {

@@ -2,7 +2,7 @@
 name = "libp2p-secio"
 edition = "2018"
 description = "Secio encryption protocol for libp2p"
-version = "0.15.0"
+version = "0.18.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,13 +16,13 @@ ctr = "0.3"
 futures = "0.3.1"
 hmac = "0.7.0"
 lazy_static = "1.2.0"
-libp2p-core = { version = "0.15.0", path = "../../core" }
+libp2p-core = { version = "0.18.0", path = "../../core" }
 log = "0.4.6"
 prost = "0.6.1"
 pin-project = "0.4.6"
 quicksink = "0.1"
 rand = "0.7"
-rw-stream-sink = { version = "0.2.0", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = "0.2.0"
 sha2 = "0.8.0"
 static_assertions = "1"
 twofish = "0.2.0"
@@ -48,8 +48,8 @@ aes-all = ["aesni"]
 [dev-dependencies]
 async-std = "1.0"
 criterion = "0.3"
-libp2p-mplex = { version = "0.15.0", path = "../../muxers/mplex" }
-libp2p-tcp = { version = "0.15.0", path = "../../transports/tcp" }
+libp2p-mplex = { version = "0.18.0", path = "../../muxers/mplex" }
+libp2p-tcp = { version = "0.18.0", path = "../../transports/tcp" }
 
 [[bench]]
 name = "bench"

@@ -84,13 +84,13 @@ pub struct AndThenStream<TListener, TMap> {
 
 impl<TListener, TMap, TTransOut, TMapOut, TListUpgr, TTransErr> Stream for AndThenStream<TListener, TMap>
 where
-    TListener: TryStream<Ok = ListenerEvent<TListUpgr>, Error = TTransErr>,
+    TListener: TryStream<Ok = ListenerEvent<TListUpgr, TTransErr>, Error = TTransErr>,
     TListUpgr: TryFuture<Ok = TTransOut, Error = TTransErr>,
     TMap: FnOnce(TTransOut, ConnectedPoint) -> TMapOut + Clone,
     TMapOut: TryFuture
 {
     type Item = Result<
-        ListenerEvent<AndThenFuture<TListUpgr, TMap, TMapOut>>,
+        ListenerEvent<AndThenFuture<TListUpgr, TMap, TMapOut>, EitherError<TTransErr, TMapOut::Error>>,
         EitherError<TTransErr, TMapOut::Error>
     >;
 
@@ -115,8 +115,10 @@ where
                         }
                     }
                     ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
-                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
+                    ListenerEvent::Error(e) => ListenerEvent::Error(EitherError::A(e)),
                 };
+
                 Poll::Ready(Some(Ok(event)))
             }
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::A(err)))),

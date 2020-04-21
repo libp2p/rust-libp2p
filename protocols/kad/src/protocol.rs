@@ -25,10 +25,6 @@
 //! The upgrade's output is a `Sink + Stream` of messages. The `Stream` component is used
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
-//!
-//! [`KademliaProtocolConfig`]: protocol::KademliaProtocolConfig
-//! [`KadRequestMsg`]: protocol::KadRequestMsg
-//! [`KadResponseMsg`]: protocol::KadResponseMsg
 
 use bytes::BytesMut;
 use codec::UviBytes;
@@ -43,6 +39,9 @@ use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
 use wasm_timer::Instant;
+
+/// The protocol name used for negotiating with multistream-select.
+pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
 
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -142,21 +141,33 @@ impl Into<proto::message::Peer> for KadPeer {
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
     protocol_name: Cow<'static, [u8]>,
+    /// Maximum allowed size of a packet.
+    max_packet_size: usize,
 }
 
 impl KademliaProtocolConfig {
+    /// Returns the configured protocol name.
+    pub fn protocol_name(&self) -> &[u8] {
+        &self.protocol_name
+    }
+
     /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn with_protocol_name(mut self, name: impl Into<Cow<'static, [u8]>>) -> Self {
+    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) {
         self.protocol_name = name.into();
-        self
+    }
+
+    /// Modifies the maximum allowed size of a single Kademlia packet.
+    pub fn set_max_packet_size(&mut self, size: usize) {
+        self.max_packet_size = size;
     }
 }
 
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_name: Cow::Borrowed(b"/ipfs/kad/1.0.0"),
+            protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME),
+            max_packet_size: 4096,
         }
     }
 }
@@ -180,7 +191,7 @@ where
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
-        codec.set_max_len(4096);
+        codec.set_max_len(self.max_packet_size);
 
         future::ok(
             Framed::new(incoming, codec)
@@ -212,7 +223,7 @@ where
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let mut codec = UviBytes::default();
-        codec.set_max_len(4096);
+        codec.set_max_len(self.max_packet_size);
 
         future::ok(
             Framed::new(incoming, codec)

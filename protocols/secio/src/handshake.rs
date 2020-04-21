@@ -31,8 +31,7 @@ use log::{debug, trace};
 use prost::Message;
 use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
-use std::cmp::{self, Ordering};
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::{cmp::{self, Ordering}, io};
 
 
 /// Performs a handshake on the given socket.
@@ -101,9 +100,8 @@ where
     let remote_proposition_bytes = match socket.next().await {
         Some(b) => b?,
         None => {
-            let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
             debug!("unexpected eof while waiting for remote's proposition");
-            return Err(err.into())
+            return Err(SecioError::IoError(io::ErrorKind::UnexpectedEof.into()))
         },
     };
 
@@ -229,9 +227,8 @@ where
         let raw = match socket.next().await {
             Some(r) => r?,
             None => {
-                let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
                 debug!("unexpected eof while waiting for remote's exchange");
-                return Err(err.into())
+                return Err(SecioError::IoError(io::ErrorKind::UnexpectedEof.into()))
             },
         };
 

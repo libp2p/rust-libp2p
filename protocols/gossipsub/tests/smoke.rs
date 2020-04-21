@@ -30,23 +30,21 @@ use std::{
 };
 
 use libp2p_core::{
+    Multiaddr,
+    Transport,
     identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,
-    nodes::Substream,
-    transport::{boxed::Boxed, MemoryTransport},
-    upgrade, Multiaddr, PeerId, Transport,
+    transport::MemoryTransport,
+    upgrade,
 };
 use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 
-type TestSwarm =
-    Swarm<Boxed<(PeerId, StreamMuxerBox), Error>, Gossipsub<Substream<StreamMuxerBox>>>;
-
 struct Graph {
-    pub nodes: Vec<(Multiaddr, TestSwarm)>,
+    pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
 }
 
 impl Future for Graph {
@@ -77,7 +75,7 @@ impl Graph {
             .cycle()
             .take(num_nodes)
             .map(|_| build_node())
-            .collect::<Vec<(Multiaddr, TestSwarm)>>();
+            .collect::<Vec<(Multiaddr, Swarm<Gossipsub>)>>();
 
         let mut connected_nodes = vec![not_connected_nodes.pop().unwrap()];
 
@@ -137,7 +135,7 @@ impl Graph {
     }
 }
 
-fn build_node() -> (Multiaddr, TestSwarm) {
+fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     let key = identity::Keypair::generate_ed25519();
     let public_key = key.public();
 
@@ -148,7 +146,7 @@ fn build_node() -> (Multiaddr, TestSwarm) {
         })
         .multiplex(yamux::Config::default())
         .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-        .map_err(|e| panic!("Failed to create transport: {:?}", e))
+        .map_err(|e| -> Error { panic!("Failed to create transport: {:?}", e) })
         .boxed();
 
     let peer_id = public_key.clone().into_peer_id();

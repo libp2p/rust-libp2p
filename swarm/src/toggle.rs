@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess, PollParameters};
+use crate::upgrade::{SendWrapper, InboundUpgradeSend, OutboundUpgradeSend};
 use crate::protocols_handler::{
     KeepAlive,
     SubstreamProtocol,
@@ -27,13 +28,14 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr,
     IntoProtocolsHandler
 };
+
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
-    Negotiated,
+    connection::ConnectionId,
     either::EitherOutput,
-    upgrade::{InboundUpgrade, OutboundUpgrade, DeniedUpgrade, EitherUpgrade}
+    upgrade::{DeniedUpgrade, EitherUpgrade}
 };
 use std::{error, task::Context, task::Poll};
 
@@ -74,31 +76,38 @@ where
         self.inner.as_mut().map(|b| b.addresses_of_peer(peer_id)).unwrap_or_else(Vec::new)
     }
 
-    fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
+    fn inject_connected(&mut self, peer_id: &PeerId) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connected(peer_id, endpoint)
+            inner.inject_connected(peer_id)
         }
     }
 
-    fn inject_disconnected(&mut self, peer_id: &PeerId, endpoint: ConnectedPoint) {
+    fn inject_disconnected(&mut self, peer_id: &PeerId) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_disconnected(peer_id, endpoint)
+            inner.inject_disconnected(peer_id)
         }
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
+    fn inject_connection_established(&mut self, peer_id: &PeerId, connection: &ConnectionId, endpoint: &ConnectedPoint) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_replaced(peer_id, closed_endpoint, new_endpoint)
+            inner.inject_connection_established(peer_id, connection, endpoint)
         }
     }
 
-    fn inject_node_event(
+    fn inject_connection_closed(&mut self, peer_id: &PeerId, connection: &ConnectionId, endpoint: &ConnectedPoint) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_connection_closed(peer_id, connection, endpoint)
+        }
+    }
+
+    fn inject_event(
         &mut self,
         peer_id: PeerId,
+        connection: ConnectionId,
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_node_event(peer_id, event);
+            inner.inject_event(peer_id, connection, event);
         }
     }
 
@@ -173,9 +182,9 @@ where
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(inner.inbound_protocol())
+            EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
         } else {
-            EitherUpgrade::B(DeniedUpgrade)
+            EitherUpgrade::B(SendWrapper(DeniedUpgrade))
         }
     }
 }
@@ -192,22 +201,21 @@ where
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
     type Error = TInner::Error;
-    type Substream = TInner::Substream;
-    type InboundProtocol = EitherUpgrade<TInner::InboundProtocol, DeniedUpgrade>;
+    type InboundProtocol = EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         if let Some(inner) = self.inner.as_ref() {
-            inner.listen_protocol().map_upgrade(EitherUpgrade::A)
+            inner.listen_protocol().map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
         } else {
-            SubstreamProtocol::new(EitherUpgrade::B(DeniedUpgrade))
+            SubstreamProtocol::new(EitherUpgrade::B(SendWrapper(DeniedUpgrade)))
         }
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgrade<Negotiated<Self::Substream>>>::Output
+        out: <Self::InboundProtocol as InboundUpgradeSend>::Output
     ) {
         let out = match out {
             EitherOutput::First(out) => out,
@@ -220,7 +228,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Output,
+        out: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
@@ -232,7 +240,7 @@ where
             .inject_event(event)
     }
 
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Negotiated<Self::Substream>>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
     }

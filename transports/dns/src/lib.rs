@@ -98,7 +98,7 @@ where
     type Error = DnsErr<T::Error>;
     type Listener = stream::MapErr<
         stream::MapOk<T::Listener,
-            fn(ListenerEvent<T::ListenerUpgrade>) -> ListenerEvent<Self::ListenerUpgrade>>,
+            fn(ListenerEvent<T::ListenerUpgrade, T::Error>) -> ListenerEvent<Self::ListenerUpgrade, Self::Error>>,
         fn(T::Error) -> Self::Error>;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
@@ -109,9 +109,13 @@ where
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let listener = self.inner.listen_on(addr).map_err(|err| err.map(DnsErr::Underlying))?;
         let listener = listener
-            .map_ok::<_, fn(_) -> _>(|event| event.map(|upgr| {
-                upgr.map_err::<_, fn(_) -> _>(DnsErr::Underlying)
-            }))
+            .map_ok::<_, fn(_) -> _>(|event| {
+                event
+                    .map(|upgr| {
+                        upgr.map_err::<_, fn(_) -> _>(DnsErr::Underlying)
+                    })
+                    .map_err(DnsErr::Underlying)
+            })
             .map_err::<_, fn(_) -> _>(DnsErr::Underlying);
         Ok(listener)
     }
@@ -257,7 +261,7 @@ mod tests {
         impl Transport for CustomTransport {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade>, Self::Error>>;
+            type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
             type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 

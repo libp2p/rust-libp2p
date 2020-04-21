@@ -75,16 +75,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::build_development_transport(local_key)?;
 
     // Create a Floodsub topic
-    let floodsub_topic = floodsub::TopicBuilder::new("chat").build();
+    let floodsub_topic = floodsub::Topic::new("chat");
 
     // We create a custom network behaviour that combines floodsub and mDNS.
     // In the future, we want to improve libp2p to make this easier to do.
     // Use the derive to generate delegating NetworkBehaviour impl and require the
     // NetworkBehaviourEventProcess implementations below.
     #[derive(NetworkBehaviour)]
-    struct MyBehaviour<TSubstream: AsyncRead + AsyncWrite> {
-        floodsub: Floodsub<TSubstream>,
-        mdns: Mdns<TSubstream>,
+    struct MyBehaviour {
+        floodsub: Floodsub,
+        mdns: Mdns,
 
         // Struct fields which do not implement NetworkBehaviour need to be ignored
         #[behaviour(ignore)]
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ignored_member: bool,
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour<TSubstream> {
+    impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl<TSubstream: AsyncRead + AsyncWrite> NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour<TSubstream> {
+    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm.floodsub.publish(floodsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break
             }
