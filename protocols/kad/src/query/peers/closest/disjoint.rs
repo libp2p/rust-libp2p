@@ -21,70 +21,30 @@
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
 use crate::query::peers::closest::{ClosestPeersIter, ClosestPeersIterConfig};
-use crate::{ALPHA_VALUE, K_VALUE};
 use libp2p_core::PeerId;
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 use wasm_timer::Instant;
 
-// TODO: This duplicates a lot of documentation (See ClosestPeersIterConfig).
-#[derive(Debug, Clone)]
-pub struct DisjointClosestPeersIterConfig {
-    /// Allowed level of parallelism.
-    ///
-    /// The `α` parameter in the Kademlia paper. The maximum number of peers that
-    /// the iterator is allowed to wait for in parallel while iterating towards the closest
-    /// nodes to a target. Defaults to `ALPHA_VALUE`.
-    pub parallelism: usize,
-
-    // TODO: Document that the number of disjoint paths is equal to the amount of parallelism.
-    pub use_disjoint_paths: bool,
-
-    /// Number of results (closest peers) to search for.
-    ///
-    /// The number of closest peers for which the iterator must obtain successful results
-    /// in order to finish successfully. Defaults to `K_VALUE`.
-    pub num_results: usize,
-
-    /// The timeout for a single peer.
-    ///
-    /// If a successful result is not reported for a peer within this timeout
-    /// window, the iterator considers the peer unresponsive and will not wait for
-    /// the peer when evaluating the termination conditions, until and unless a
-    /// result is delivered. Defaults to `10` seconds.
-    pub peer_timeout: Duration,
-}
-
-impl Default for DisjointClosestPeersIterConfig {
-    fn default() -> Self {
-        DisjointClosestPeersIterConfig {
-            parallelism: ALPHA_VALUE.get(),
-            use_disjoint_paths: false,
-            num_results: K_VALUE.get(),
-            peer_timeout: Duration::from_secs(10),
-        }
-    }
-}
-
-/// Wraps around a set of `ClosestPeersIter`, enforcing the amount of configured disjoint paths
-/// according to the S/Kademlia paper.
-pub struct DisjointClosestPeersIter {
+/// Wraps around a set of `ClosestPeersIter`, enforcing a disjoint discovery path per configured
+/// parallelism according to the S/Kademlia paper.
+pub struct ClosestDisjointPeersIter {
     iters: Vec<ClosestPeersIter>,
     /// Mapping of yielded peers to iterator that yielded them.
     ///
-    /// More specifically index into the `DisjointClosestPeersIter::iters` vector. On the one hand
+    /// More specifically index into the `ClosestDisjointPeersIter::iters` vector. On the one hand
     /// this is used to link responses from remote peers back to the corresponding iterator, on the
     /// other hand it is used to track which peers have been contacted in the past.
     yielded_peers: HashMap<PeerId, usize>,
 }
 
-impl DisjointClosestPeersIter {
+impl ClosestDisjointPeersIter {
     /// Creates a new iterator with a default configuration.
     pub fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
     where
         I: IntoIterator<Item = Key<PeerId>>,
     {
         Self::with_config(
-            DisjointClosestPeersIterConfig::default(),
+            ClosestPeersIterConfig::default(),
             target,
             known_closest_peers,
         )
@@ -92,7 +52,7 @@ impl DisjointClosestPeersIter {
 
     /// Creates a new iterator with the given configuration.
     pub fn with_config<I, T>(
-        config: DisjointClosestPeersIterConfig,
+        config: ClosestPeersIterConfig,
         target: T,
         known_closest_peers: I,
     ) -> Self
@@ -100,33 +60,17 @@ impl DisjointClosestPeersIter {
         I: IntoIterator<Item = Key<PeerId>>,
         T: Into<KeyBytes> + Clone,
     {
-        // TODO: Document that this basically makes the disjoint path iterator a no-op shallow wrapper.
-        if !config.use_disjoint_paths {
-            return DisjointClosestPeersIter {
-                iters: vec![ClosestPeersIter::with_config(
-                    ClosestPeersIterConfig {
-                        parallelism: config.parallelism,
-                        num_results: config.num_results,
-                        peer_timeout: config.peer_timeout,
-                    },
-                    target,
-                    known_closest_peers,
-                )],
-                yielded_peers: HashMap::new(),
-            }
-        }
-
         // TODO: Don't collect them all (all k-buckets), but only parts.
         let peers = known_closest_peers.into_iter().collect::<Vec<_>>();
         let iters = split_num_results_per_disjoint_path(&config)
             .into_iter()
             // NOTE: All [`ClosestPeersIter`] share the same set of peers at initialization. The
-            // [`DisjointClosestPeersIter`] ensures a peer is only ever queried by a single
+            // [`ClosestDisjointPeersIter`] ensures a peer is only ever queried by a single
             // [`ClosestPeersIter`].
             .map(|config| ClosestPeersIter::with_config(config, target.clone(), peers.clone()))
             .collect();
 
-        DisjointClosestPeersIter {
+        ClosestDisjointPeersIter {
             iters,
             yielded_peers: HashMap::new(),
         }
@@ -219,14 +163,14 @@ impl DisjointClosestPeersIter {
     }
 }
 
-/// Takes as input a [`DisjointClosestPeersIterConfig`] splits `num_results` for each disjoint path
+/// Takes as input a [`ClosestPeersIterConfig`] splits `num_results` for each disjoint path
 /// (`== parallelism`) equally (best-effort) into buckets, one for each disjoint path returning a
 /// `ClosestPeersIterConfig` for each disjoint path.
 ///
 /// 'best-effort' as in no more than one apart. E.g. with 10 overall num_result and 4 disjoint paths
 /// it would return [3, 3, 2, 2].
 fn split_num_results_per_disjoint_path(
-    config: &DisjointClosestPeersIterConfig,
+    config: &ClosestPeersIterConfig,
 ) -> Vec<ClosestPeersIterConfig> {
     // Note: The number of parallelism is equal to the number of disjoint paths.
     let num_results_per_iter = config.num_results / config.parallelism;
@@ -250,16 +194,17 @@ fn split_num_results_per_disjoint_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::{ALPHA_VALUE, K_VALUE};
     use quickcheck::*;
     use rand::{Rng, seq::SliceRandom};
     use std::collections::HashSet;
 
-    impl Arbitrary for DisjointClosestPeersIterConfig {
+    impl Arbitrary for ClosestPeersIterConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            DisjointClosestPeersIterConfig {
+            ClosestPeersIterConfig {
                 parallelism: g.gen::<u16>() as usize,
                 num_results: g.gen::<u16>() as usize,
-                use_disjoint_paths: g.gen::<bool>(),
                 peer_timeout: Duration::from_secs(1),
             }
         }
@@ -281,7 +226,7 @@ mod tests {
 
     #[test]
     fn split_num_results_per_disjoint_path_quickcheck() {
-        fn prop(config: DisjointClosestPeersIterConfig) -> TestResult {
+        fn prop(config: ClosestPeersIterConfig) -> TestResult {
             if config.parallelism == 0 || config.num_results == 0
             {
                 return TestResult::discard();
@@ -326,14 +271,13 @@ mod tests {
 
         let known_closest_peers = pool.split_off(pool.len() - 3);
 
-        let config = DisjointClosestPeersIterConfig {
+        let config = ClosestPeersIterConfig {
             parallelism: 3,
-            use_disjoint_paths: true,
             num_results: 3,
-            ..DisjointClosestPeersIterConfig::default()
+            ..ClosestPeersIterConfig::default()
         };
 
-        let mut peers_iter = DisjointClosestPeersIter::with_config(
+        let mut peers_iter = ClosestDisjointPeersIter::with_config(
             config,
             target,
             known_closest_peers.clone(),
@@ -462,7 +406,7 @@ mod tests {
     }
 
     enum PeerIterator {
-        Disjoint(DisjointClosestPeersIter),
+        Disjoint(ClosestDisjointPeersIter),
         Closest(ClosestPeersIter),
     }
 
@@ -489,44 +433,52 @@ mod tests {
         }
     }
 
-    /// Ensure [`ClosestPeersIter`] and [`DisjointClosestPeersIter`] yield similar closest peers.
+    /// Ensure [`ClosestPeersIter`] and [`ClosestDisjointPeersIter`] yield similar closest peers.
     ///
     // NOTE: One can not ensure both iterators yield the *same* result. While [`ClosestPeersIter`]
-    // always yields the closest peers, [`DisjointClosestPeersIter`] might not. Imagine a node on
+    // always yields the closest peers, [`ClosestDisjointPeersIter`] might not. Imagine a node on
     // path x yielding the 22 absolute closest peers, not returned by any other node. In addition
     // imagine only 10 results are allowed per path. Path x will choose the 10 closest out of those
-    // 22 and drop the remaining 12, thus the overall [`DisjointClosestPeersIter`] will not yield
+    // 22 and drop the remaining 12, thus the overall [`ClosestDisjointPeersIter`] will not yield
     // the absolute closest peers combining all paths.
     #[test]
     fn closest_and_disjoint_closest_yield_similar_result() {
         fn prop(graph: Graph, parallelism: Parallelism, num_results: NumResults) {
             let target: KeyBytes = Key::from(PeerId::random()).into();
 
-            let mut known_closest_peers = graph.0.iter().take(parallelism.0 * ALPHA_VALUE.get()).map(|(key, _peers)| Key::new(key.clone())).collect::<Vec<_>>();
+            let mut known_closest_peers = graph.0.iter()
+                .take(parallelism.0 * ALPHA_VALUE.get())
+                .map(|(key, _peers)| Key::new(key.clone()))
+                .collect::<Vec<_>>();
             known_closest_peers.sort_unstable_by(|a, b| {
                 target.distance(a).cmp(&target.distance(b))
             });
 
-            let closest = drive_to_finish(PeerIterator::Closest(ClosestPeersIter::with_config(
-                ClosestPeersIterConfig{
-                    parallelism: parallelism.0,
-                    num_results: num_results.0,
-                    ..ClosestPeersIterConfig::default()
-                },
-                target.clone(),
-                known_closest_peers.clone(),
-            )), &graph, &target);
+            let cfg = ClosestPeersIterConfig{
+                parallelism: parallelism.0,
+                num_results: num_results.0,
+                ..ClosestPeersIterConfig::default()
+            };
 
-            let disjoint = drive_to_finish(PeerIterator::Disjoint(DisjointClosestPeersIter::with_config(
-                DisjointClosestPeersIterConfig{
-                    parallelism: parallelism.0,
-                    use_disjoint_paths: true,
-                    num_results: num_results.0,
-                    ..DisjointClosestPeersIterConfig::default()
-                },
-                target.clone(),
-                known_closest_peers.clone(),
-            )),&graph, &target);
+            let closest = drive_to_finish(
+                PeerIterator::Closest(ClosestPeersIter::with_config(
+                    cfg.clone(),
+                    target.clone(),
+                    known_closest_peers.clone(),
+                )),
+                &graph,
+                &target,
+            );
+
+            let disjoint = drive_to_finish(
+                PeerIterator::Disjoint(ClosestDisjointPeersIter::with_config(
+                    cfg,
+                    target.clone(),
+                    known_closest_peers.clone(),
+                )),
+                &graph,
+                &target,
+            );
 
             assert_eq!(
                 closest.len(), disjoint.len()
@@ -539,7 +491,7 @@ mod tests {
                     panic!(
                         "Expected both iterators to derive same peer set or be no more than \
                          `(num_results / 2)` apart, but only `ClosestPeersIter` got {:?} and only \
-                         `DisjointClosestPeersIter` got {:?}.",
+                         `ClosestDisjointPeersIter` got {:?}.",
                         closest_only, disjoint_only,
                     );
                 }

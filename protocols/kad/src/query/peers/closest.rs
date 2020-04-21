@@ -27,6 +27,8 @@ use std::{time::Duration, iter::FromIterator};
 use std::collections::btree_map::{BTreeMap, Entry};
 use wasm_timer::Instant;
 
+pub mod disjoint;
+
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
 #[derive(Debug, Clone)]
