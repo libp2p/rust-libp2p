@@ -123,10 +123,8 @@ impl Transport for $tcp_config {
             socket.bind(&socket_addr.into())?;
             socket.listen(1024)?; // we may want to make this configurable
 
-            let listener = match <$tcp_listener>::try_from(socket.into_tcp_listener()) {
-                Ok(listener) => listener,
-                Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e))
-            };
+            let listener = <$tcp_listener>::try_from(socket.into_tcp_listener())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
             let local_addr = listener.local_addr()?;
             let port = local_addr.port();
