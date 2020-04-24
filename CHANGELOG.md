@@ -4,6 +4,11 @@
   initialization. Unless `KademliaConfig::set_replication_factor` is used change
   has no effect.
   [PR 1536](https://github.com/libp2p/rust-libp2p/pull/1536)
+- `libp2p-tcp`: On listeners started with an IPv6 multi-address the socket
+  option `IPV6_V6ONLY` is set to true. Instead of relying on IPv4-mapped IPv6
+  address support, two listeners can be started if IPv4 and IPv6 should both
+  be supported. IPv4 listener addresses are not affected by this change.
+  [PR 1555](https://github.com/libp2p/rust-libp2p/pull/1555)
 
 # Version 0.18.1 (2020-04-17)
 
