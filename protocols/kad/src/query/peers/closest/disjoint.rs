@@ -28,7 +28,7 @@ use wasm_timer::Instant;
 /// parallelism according to the S/Kademlia paper.
 pub struct ClosestDisjointPeersIter {
     iters: Vec<ClosestPeersIter>,
-    /// Mapping of yielded peers to index of iterator that yielded them.
+    /// Mapping of yielded peers to iterator that yielded them.
     ///
     /// More specifically index into the `ClosestDisjointPeersIter::iters` vector. On the one hand
     /// this is used to link responses from remote peers back to the corresponding iterator, on the
@@ -64,8 +64,9 @@ impl ClosestDisjointPeersIter {
         let peers = known_closest_peers.into_iter().take(K_VALUE.get()).collect::<Vec<_>>();
         let iters = split_num_results_per_disjoint_path(&config)
             .into_iter()
-            // NOTE: All [`ClosestPeersIter`] share the same set of peers at initialization. The
-            // [`ClosestDisjointPeersIter`] ensures a peer is only ever queried by a single
+            // NOTE: All [`ClosestPeersIter`] share the same set of peers at
+            // initialization. The [`ClosestDisjointPeersIter.yielded_peers`]
+            // ensures a peer is only ever queried by a single
             // [`ClosestPeersIter`].
             .map(|config| ClosestPeersIter::with_config(config, target.clone(), peers.clone()))
             .collect::<Vec<_>>();
@@ -99,7 +100,7 @@ impl ClosestDisjointPeersIter {
         let mut state = PeersIterState::Finished;
 
         // Order in which to query the iterators to ensure fairness. Make sure
-        // to query the last queried iterator after all others.
+        // to query the previously queried iterator last.
         let iter_order = {
             let mut all = (0..self.iters.len()).collect::<Vec<_>>();
             let mut next_up = all.split_off(self.last_quiered + 1);
@@ -115,39 +116,45 @@ impl ClosestDisjointPeersIter {
                 match iter.next(now) {
                     PeersIterState::Waiting(None) => {
                         match state {
+                            PeersIterState::Waiting(Some(_)) => {
+                                // [`ClosestDisjointPeersIter::next`] returns immediately once a
+                                // [`ClosestPeersIter`] yielded a peer. Thus this state is
+                                // unreachable.
+                                unreachable!();
+                            },
                             PeersIterState::Waiting(None) => {}
                             PeersIterState::WaitingAtCapacity => {
                                 state = PeersIterState::Waiting(None)
                             }
                             PeersIterState::Finished => state = PeersIterState::Waiting(None),
-                            // TODO: Document.
-                            _ => unreachable!(),
                         };
 
                         break;
                     }
                     PeersIterState::Waiting(Some(peer)) => {
-                        // TODO: Hack to get around the borrow checker. Can we do better?
-                        let peer = peer.clone().into_owned();
-
-                        if self.yielded_peers.contains_key(&peer) {
+                        if self.yielded_peers.contains_key(&*peer) {
                             // Another iterator already returned this peer. S/Kademlia requires each
                             // peer to be only used on one path. Marking it as failed for this
                             // iterator, asking it to return another peer in the next loop
                             // iteration.
+                            let peer = peer.into_owned();
                             iter.on_failure(&peer);
                         } else {
-                            self.yielded_peers.insert(peer.clone(), i);
-                            return PeersIterState::Waiting(Some(Cow::Owned(peer)));
+                            self.yielded_peers.insert(peer.clone().into_owned(), i);
+                            return PeersIterState::Waiting(Some(Cow::Owned(peer.into_owned())));
                         }
                     }
                     PeersIterState::WaitingAtCapacity => {
                         match state {
+                            PeersIterState::Waiting(Some(_)) => {
+                                // [`ClosestDisjointPeersIter::next`] returns immediately once a
+                                // [`ClosestPeersIter`] yielded a peer. Thus this state is
+                                // unreachable.
+                                unreachable!();
+                            },
                             PeersIterState::Waiting(None) => {}
                             PeersIterState::WaitingAtCapacity => {}
                             PeersIterState::Finished => state = PeersIterState::WaitingAtCapacity,
-                            // TODO: Document.
-                            _ => unreachable!(),
                         };
 
                         break;
@@ -166,15 +173,8 @@ impl ClosestDisjointPeersIter {
         }
     }
 
-    // TODO: Collects all Iterators into a Vec and again returns an Iterator. Can we do better?
     pub fn into_result(self) -> impl Iterator<Item = PeerId> {
-        self.iters
-            .into_iter()
-            .fold(vec![], |mut acc, iter| {
-                acc.extend(iter.into_result());
-                acc
-            })
-            .into_iter()
+        self.iters.into_iter().flat_map(|i| i.into_result())
     }
 }
 
