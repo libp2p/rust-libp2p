@@ -28,12 +28,14 @@ use wasm_timer::Instant;
 /// parallelism according to the S/Kademlia paper.
 pub struct ClosestDisjointPeersIter {
     iters: Vec<ClosestPeersIter>,
-    /// Mapping of yielded peers to iterator that yielded them.
+    /// Mapping of yielded peers to index of iterator that yielded them.
     ///
     /// More specifically index into the `ClosestDisjointPeersIter::iters` vector. On the one hand
     /// this is used to link responses from remote peers back to the corresponding iterator, on the
     /// other hand it is used to track which peers have been contacted in the past.
     yielded_peers: HashMap<PeerId, usize>,
+    /// Index of the iterator last queried.
+    last_quiered: usize,
 }
 
 impl ClosestDisjointPeersIter {
@@ -66,11 +68,15 @@ impl ClosestDisjointPeersIter {
             // [`ClosestDisjointPeersIter`] ensures a peer is only ever queried by a single
             // [`ClosestPeersIter`].
             .map(|config| ClosestPeersIter::with_config(config, target.clone(), peers.clone()))
-            .collect();
+            .collect::<Vec<_>>();
+
+        let iters_len = iters.len();
 
         ClosestDisjointPeersIter {
             iters,
             yielded_peers: HashMap::new(),
+            // Wraps around, thus iterator 0 will be queried first.
+            last_quiered: iters_len - 1,
         }
     }
 
@@ -92,8 +98,19 @@ impl ClosestDisjointPeersIter {
     pub fn next(&mut self, now: Instant) -> PeersIterState {
         let mut state = PeersIterState::Finished;
 
-        // TODO: Iterating through all iterators in the same order might be unfair.
-        for (i, iter) in &mut self.iters.iter_mut().enumerate() {
+        // Order in which to query the iterators to ensure fairness. Make sure
+        // to query the last queried iterator after all others.
+        let iter_order = {
+            let mut all = (0..self.iters.len()).collect::<Vec<_>>();
+            let mut next_up = all.split_off(self.last_quiered + 1);
+            next_up.append(&mut all);
+            next_up
+        };
+
+        for i in &mut iter_order.into_iter() {
+            self.last_quiered = i;
+            let iter = &mut self.iters[i];
+
             loop {
                 match iter.next(now) {
                     PeersIterState::Waiting(None) => {
@@ -478,9 +495,7 @@ mod tests {
                 &target,
             );
 
-            assert_eq!(
-                closest.len(), disjoint.len()
-            );
+            assert_eq!(closest.len(), disjoint.len());
 
             if closest != disjoint {
                 let closest_only = closest.difference(&disjoint).collect::<Vec<_>>();
