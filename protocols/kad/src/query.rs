@@ -208,7 +208,7 @@ pub struct QueryConfig {
 
     /// Whether to use disjoint paths on iterative lookups.
     ///
-    /// See [`crate::behaviour::KademliaConfig::enable_disjoint_path_queries`] for details.
+    /// See [`crate::behaviour::KademliaConfig::use_disjoint_path_queries`] for details.
     pub use_disjoint_paths: bool,
 }
 
