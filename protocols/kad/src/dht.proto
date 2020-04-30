@@ -1,6 +1,10 @@
 syntax = "proto3";
 package dht.pb;
 
+message Records {
+	repeated Record records = 1;
+}
+
 // Record represents a dht record that contains a value
 // for a key value pair
 message Record {

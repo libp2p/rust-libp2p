@@ -539,7 +539,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
     }
 }
 
-fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
+pub fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     let key = record::Key::from(record.key);
     let value = record.value;
 
@@ -562,7 +562,7 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     Ok(Record { key, value, publisher, expires })
 }
 
-fn record_to_proto(record: Record) -> proto::Record {
+pub fn record_to_proto(record: Record) -> proto::Record {
     proto::Record {
         key: record.key.to_vec(),
         value: record.value,
