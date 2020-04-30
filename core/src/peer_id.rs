@@ -46,7 +46,7 @@ pub struct PeerId {
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("PeerId")
-            .field(&self.to_base58())
+            .field(&self.to_string())
             .finish()
     }
 }
