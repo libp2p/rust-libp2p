@@ -53,7 +53,7 @@ impl fmt::Debug for PeerId {
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_base58().fmt(f)
+        bs58::encode(self.as_bytes()).into_string().fmt(f)
     }
 }
 
@@ -251,6 +251,8 @@ mod tests {
     fn peer_id_is_public_key() {
         let key = identity::Keypair::generate_ed25519().public();
         let peer_id = key.clone().into_peer_id();
+        println!("peer_id: {}", peer_id.to_base58());
+        println!("peer_id: {}", bs58::encode(peer_id.as_bytes()).into_string());
         assert_eq!(peer_id.is_public_key(&key), Some(true));
     }
 
