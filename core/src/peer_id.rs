@@ -160,6 +160,14 @@ impl PeerId {
         let enc = public_key.clone().into_protobuf_encoding();
         Some(alg.hasher()?.digest(&enc) == self.multihash)
     }
+
+    /// Returns public key if it was inlined in this `PeerId`.
+    pub fn as_public_key(&self) -> Option<PublicKey> {
+        match self.multihash.algorithm() {
+            Code::Identity => PublicKey::from_protobuf_encoding(self.multihash.digest()).ok(),
+            _ => None
+        }
+    }
 }
 
 impl hash::Hash for PeerId {
@@ -251,9 +259,14 @@ mod tests {
     fn peer_id_is_public_key() {
         let key = identity::Keypair::generate_ed25519().public();
         let peer_id = key.clone().into_peer_id();
-        println!("peer_id: {}", peer_id.to_base58());
-        println!("peer_id: {}", bs58::encode(peer_id.as_bytes()).into_string());
         assert_eq!(peer_id.is_public_key(&key), Some(true));
+    }
+
+    #[test]
+    fn peer_id_to_public_key() {
+        let key = identity::Keypair::generate_ed25519().public();
+        let peer_id = key.clone().into_peer_id();
+        assert_eq!(peer_id.as_public_key(), Some(key));
     }
 
     #[test]
