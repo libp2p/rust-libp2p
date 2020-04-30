@@ -330,7 +330,7 @@ where
             kbucket::Entry::Absent(entry) => {
                 debug!(
                     "Will insert newly connected node {} with key {}",
-                    entry.key().clone().into_preimage().to_base58(),
+                    entry.key().clone().into_preimage(),
                     bs58::encode(entry.key().as_ref()).into_string()
                 );
                 let contact = Contact {
@@ -624,8 +624,8 @@ where
                 debug!(
                     "Local provider for {}: {}; source: {}; found? {}",
                     bs58::encode(key).into_string(),
-                    p.provider.to_base58(),
-                    source.to_base58(),
+                    p.provider,
+                    source,
                     entry.is_some()
                 );
                 entry
@@ -718,7 +718,7 @@ where
         let weight = trust.weight(contact.public_key.clone()).unwrap_or(0);
         debug!(
             "Calculated weight for {} pk {}: {}",
-            entry.key().preimage().to_base58(),
+            entry.key().preimage(),
             bs58::encode(contact.public_key.encode().to_vec().as_slice()).into_string(),
             weight
         );
@@ -1164,7 +1164,7 @@ where
                 let len = kademlia_key.len();
                 let kademlia_key = &kademlia_key[len - 10..];
 
-                let peer_id = node.key.preimage().to_base58();
+                let peer_id = node.key.preimage().to_string();
                 let len = peer_id.len();
                 let peer_id = &peer_id[len - 10..];
 
@@ -1361,7 +1361,7 @@ where
                 let provider_peers = self.provider_peers(&key, &source);
                 debug!(
                     "provider peers: {}",
-                    provider_peers.iter().map(|p| p.node_id.to_base58() + ", ").collect::<String>()
+                    provider_peers.iter().map(|p| p.node_id.to_string() + ", ").collect::<String>()
                 );
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {

@@ -289,7 +289,7 @@ impl ClosestPeersIter {
                         trace!(
                             "ClosestPeerIter: target = {}; peer {} timed out",
                             bs58::encode(&self.target).into_string(),
-                            peer.key.preimage().to_base58()
+                            peer.key.preimage()
                         );
                     }
                     else if at_capacity {
@@ -311,7 +311,7 @@ impl ClosestPeersIter {
                         trace!(
                             "ClosestPeerIter: target = {}; peer {} succeeded",
                             bs58::encode(&self.target).into_string(),
-                            peer.key.preimage().to_base58()
+                            peer.key.preimage()
                         );
                         *cnt += 1;
                         // If `num_results` successful results have been delivered for the
@@ -331,7 +331,7 @@ impl ClosestPeersIter {
                     trace!(
                         "ClosestPeerIter: target = {}; new peer {}. Capacity left? {}",
                         bs58::encode(&self.target).into_string(),
-                        peer.key.preimage().to_base58(),
+                        peer.key.preimage(),
                         !at_capacity
                     );
                     if !at_capacity {
@@ -349,7 +349,7 @@ impl ClosestPeersIter {
                     trace!(
                         "ClosestPeerIter: target = {}; peer {} is {:?}",
                         bs58::encode(&self.target).into_string(),
-                        peer.key.preimage().to_base58(),
+                        peer.key.preimage(),
                         peer.state
                     );
                 }
