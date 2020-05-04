@@ -146,10 +146,6 @@ where
 
         /// The error that happened.
         error: PendingConnectionError<TTrans::Error>,
-
-        /// The handler that was passed to `dial()`, if the
-        /// connection failed before the handler was consumed.
-        handler: THandler,
     },
 
     /// An established connection produced an event.

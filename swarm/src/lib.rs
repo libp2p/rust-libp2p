@@ -397,6 +397,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                 }
             }
         }
+        // inject_dial_failure?
         Err(DialError::NoAddresses)
     }
 
@@ -669,43 +670,34 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     if this.banned_peers.contains(&peer_id) {
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
-                        let result = match condition {
-                            DialPeerCondition::Always =>
-                            {
-                                ExpandedSwarm::dial(this, &peer_id)
-                            }
+                        let condition_matched = match condition {
                             DialPeerCondition::Disconnected
-                                if this.network.is_disconnected(&peer_id) =>
-                            {
-                                ExpandedSwarm::dial(this, &peer_id)
-                            }
+                                if this.network.is_disconnected(&peer_id) => true,
                             DialPeerCondition::NotDialing
-                                if !this.network.is_dialing(&peer_id) =>
-                            {
-                                ExpandedSwarm::dial(this, &peer_id)
-                            }
-                            _ => {
-                                log::trace!("Condition {:?} for new dialing attempt to {:?} not met.",
-                                    condition, peer_id);
-                                // Even if the condition for a _new_ dialing attempt is not met,
-                                // we always add any potentially new addresses of the peer to an
-                                // ongoing dialing attempt, if there is one.
-                                if let Some(mut peer) = this.network.peer(peer_id).into_dialing() {
-                                    let addrs = this.behaviour.addresses_of_peer(peer.id());
-                                    let mut attempt = peer.some_attempt();
-                                    for addr in addrs {
-                                        attempt.add_address(addr);
-                                    }
-                                }
-                                continue
-                            }
+                                if !this.network.is_dialing(&peer_id) => true,
+                            _ => false
                         };
-                        match result {
-                            Ok(()) => return Poll::Ready(SwarmEvent::Dialing(peer_id)),
-                            Err(err) => {
-                                log::debug!("Initiating dialing attempt to {:?} failed: {:?}",
-                                    &peer_id, err);
-                                this.behaviour.inject_dial_failure(&peer_id);
+                        if condition_matched {
+                            match ExpandedSwarm::dial(this, &peer_id) {
+                                Ok(()) => return Poll::Ready(SwarmEvent::Dialing(peer_id)),
+                                Err(err) => {
+                                    log::debug!("Initiating dialing attempt to {:?} failed: {:?}",
+                                        &peer_id, err);
+                                    this.behaviour.inject_dial_failure(&peer_id);
+                                }
+                            }
+                        } else {
+                            // Even if the condition for a _new_ dialing attempt is not met,
+                            // we always add any potentially new addresses of the peer to an
+                            // ongoing dialing attempt, if there is one.
+                            log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
+                                peer_id, condition);
+                            if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
+                                let addrs = this.behaviour.addresses_of_peer(peer.id());
+                                let mut attempt = peer.some_attempt();
+                                for addr in addrs {
+                                    attempt.add_address(addr);
+                                }
                             }
                         }
                     }
