@@ -384,21 +384,25 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<(), DialError> {
         let mut addrs = me.behaviour.addresses_of_peer(peer_id).into_iter();
         let peer = me.network.peer(peer_id.clone());
-        if let Some(first) = addrs.next() {
-            let handler = me.behaviour.new_handler().into_node_handler_builder();
-            match peer.dial(first, addrs, handler) {
-                Ok(_) => return Ok(()),
-                Err(error) => {
-                    log::debug!(
-                        "New dialing attempt to peer {:?} failed: {:?}.",
-                        peer_id, error);
-                    me.behaviour.inject_dial_failure(&peer_id);
-                    return Err(DialError::ConnectionLimit(error))
-                }
-            }
+
+        let result =
+            if let Some(first) = addrs.next() {
+                let handler = me.behaviour.new_handler().into_node_handler_builder();
+                peer.dial(first, addrs, handler)
+                    .map(|_| ())
+                    .map_err(DialError::ConnectionLimit)
+            } else {
+                Err(DialError::NoAddresses)
+            };
+
+        if let Err(error) = &result {
+            log::debug!(
+                "New dialing attempt to peer {:?} failed: {:?}.",
+                peer_id, error);
+            me.behaviour.inject_dial_failure(&peer_id);
         }
-        // inject_dial_failure?
-        Err(DialError::NoAddresses)
+
+        result
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
@@ -678,13 +682,8 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             _ => false
                         };
                         if condition_matched {
-                            match ExpandedSwarm::dial(this, &peer_id) {
-                                Ok(()) => return Poll::Ready(SwarmEvent::Dialing(peer_id)),
-                                Err(err) => {
-                                    log::debug!("Initiating dialing attempt to {:?} failed: {:?}",
-                                        &peer_id, err);
-                                    this.behaviour.inject_dial_failure(&peer_id);
-                                }
+                            if ExpandedSwarm::dial(this, &peer_id).is_ok() {
+                                return Poll::Ready(SwarmEvent::Dialing(peer_id))
                             }
                         } else {
                             // Even if the condition for a _new_ dialing attempt is not met,
