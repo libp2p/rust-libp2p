@@ -36,7 +36,7 @@ pub struct ClosestDisjointPeersIter {
     /// which iterator.
     yielded_peers: HashMap<PeerId, usize>,
     /// Index of the iterator last queried.
-    last_quiered: usize,
+    last_queried: usize,
 }
 
 impl ClosestDisjointPeersIter {
@@ -78,7 +78,7 @@ impl ClosestDisjointPeersIter {
             iters,
             yielded_peers: HashMap::new(),
             // Wraps around, thus iterator 0 will be queried first.
-            last_quiered: iters_len - 1,
+            last_queried: iters_len - 1,
         }
     }
 
@@ -109,13 +109,13 @@ impl ClosestDisjointPeersIter {
         // to query the previously queried iterator last.
         let iter_order = {
             let mut all = (0..self.iters.len()).collect::<Vec<_>>();
-            let mut next_up = all.split_off(self.last_quiered + 1);
+            let mut next_up = all.split_off(self.last_queried + 1);
             next_up.append(&mut all);
             next_up
         };
 
         for i in &mut iter_order.into_iter() {
-            self.last_quiered = i;
+            self.last_queried = i;
             let iter = &mut self.iters[i];
 
             loop {
