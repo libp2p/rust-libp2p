@@ -238,11 +238,29 @@ mod tests {
     use rand::{Rng, seq::SliceRandom};
     use std::collections::HashSet;
 
+    #[derive(Debug, Clone)]
+    struct Parallelism(usize);
+
+    impl Arbitrary for Parallelism{
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            Parallelism(g.gen_range(1, 10))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct NumResults(usize);
+
+    impl Arbitrary for NumResults{
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+            NumResults(g.gen_range(1, K_VALUE.get()))
+        }
+    }
+
     impl Arbitrary for ClosestPeersIterConfig {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
             ClosestPeersIterConfig {
-                parallelism: g.gen::<u16>() as usize,
-                num_results: g.gen::<u16>() as usize,
+                parallelism: Parallelism::arbitrary(g).0,
+                num_results: NumResults::arbitrary(g).0,
                 peer_timeout: Duration::from_secs(1),
             }
         }
@@ -423,24 +441,6 @@ mod tests {
     #[derive(Debug, Clone)]
     struct Peer {
         known_peers: Vec<PeerId>,
-    }
-
-    #[derive(Debug, Clone)]
-    struct Parallelism(usize);
-
-    impl Arbitrary for Parallelism{
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            Parallelism(g.gen_range(1, 10))
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    struct NumResults(usize);
-
-    impl Arbitrary for NumResults{
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            NumResults(g.gen_range(1, K_VALUE.get()))
-        }
     }
 
     enum PeerIterator {
