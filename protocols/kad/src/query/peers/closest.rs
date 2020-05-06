@@ -57,7 +57,6 @@ pub struct ClosestPeersIterConfig {
     /// The `α` parameter in the Kademlia paper. The maximum number of peers that
     /// the iterator is allowed to wait for in parallel while iterating towards the closest
     /// nodes to a target. Defaults to `ALPHA_VALUE`.
-    // TODO: Should this be configurable?
     pub parallelism: usize,
 
     /// Number of results (closest peers) to search for.
