@@ -109,7 +109,7 @@ impl ClosestDisjointPeersIter {
     }
 
     pub fn next(&mut self, now: Instant) -> PeersIterState {
-        let mut state = PeersIterState::Finished;
+        let mut state = None;
 
         // Order in which to query the iterators to ensure fairness. Make sure
         // to query the previously queried iterator last.
@@ -128,17 +128,22 @@ impl ClosestDisjointPeersIter {
                 match iter.next(now) {
                     PeersIterState::Waiting(None) => {
                         match state {
-                            PeersIterState::Waiting(Some(_)) => {
+                            Some(PeersIterState::Waiting(Some(_))) => {
                                 // [`ClosestDisjointPeersIter::next`] returns immediately once a
                                 // [`ClosestPeersIter`] yielded a peer. Thus this state is
                                 // unreachable.
                                 unreachable!();
                             },
-                            PeersIterState::Waiting(None) => {}
-                            PeersIterState::WaitingAtCapacity => {
-                                state = PeersIterState::Waiting(None)
+                            Some(PeersIterState::Waiting(None)) => {}
+                            Some(PeersIterState::WaitingAtCapacity) => {
+                                state = Some(PeersIterState::Waiting(None))
                             }
-                            PeersIterState::Finished => state = PeersIterState::Waiting(None),
+                            Some(PeersIterState::Finished) => {
+                                // `state` is never set to `Finished`.
+                                unreachable!();
+                            }
+                            None => state = Some(PeersIterState::Waiting(None)),
+
                         };
 
                         break;
@@ -158,15 +163,19 @@ impl ClosestDisjointPeersIter {
                     }
                     PeersIterState::WaitingAtCapacity => {
                         match state {
-                            PeersIterState::Waiting(Some(_)) => {
+                            Some(PeersIterState::Waiting(Some(_))) => {
                                 // [`ClosestDisjointPeersIter::next`] returns immediately once a
                                 // [`ClosestPeersIter`] yielded a peer. Thus this state is
                                 // unreachable.
                                 unreachable!();
                             },
-                            PeersIterState::Waiting(None) => {}
-                            PeersIterState::WaitingAtCapacity => {}
-                            PeersIterState::Finished => state = PeersIterState::WaitingAtCapacity,
+                            Some(PeersIterState::Waiting(None)) => {}
+                            Some(PeersIterState::WaitingAtCapacity) => {}
+                            Some(PeersIterState::Finished) => {
+                                // `state` is never set to `Finished`.
+                                unreachable!();
+                            },
+                            None => state = Some(PeersIterState::WaitingAtCapacity),
                         };
 
                         break;
@@ -176,7 +185,7 @@ impl ClosestDisjointPeersIter {
             }
         }
 
-        state
+        state.unwrap_or(PeersIterState::Finished)
     }
 
     pub fn finish(&mut self) {
