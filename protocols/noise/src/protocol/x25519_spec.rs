@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! libp2p-spec compliant Noise protocols based on X25519.
+//! [libp2p-noise-spec] compliant Noise protocols based on X25519.
+//!
+//! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use libp2p_core::UpgradeInfo;
@@ -29,6 +31,7 @@ use zeroize::Zeroize;
 
 use super::{*, x25519::X25519};
 
+/// Prefix of static key signatures for domain separation.
 const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
 
 /// A X25519 key.
@@ -75,14 +78,17 @@ impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
     }
 }
 
-/// Noise protocols for libp2p spec-compliant X25519.
+/// Noise protocols for X25519 with libp2p-spec compliant signatures.
+///
+/// **Note**: Only the XX handshake pattern is currently guaranteed to be
+/// interoperable with other libp2p implementations.
 impl Protocol<X25519Spec> for X25519Spec {
     fn params_ik() -> ProtocolParams {
-        unimplemented!("libp2p noise spec does not support IK.")
+        X25519::params_ik()
     }
 
     fn params_ix() -> ProtocolParams {
-        unimplemented!("libp2p noise spec does not support IX.")
+        X25519::params_ix()
     }
 
     fn params_xx() -> ProtocolParams {
@@ -96,10 +102,6 @@ impl Protocol<X25519Spec> for X25519Spec {
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);
         Ok(PublicKey(X25519Spec(pk)))
-    }
-
-    fn linked(_: &identity::PublicKey, _: &PublicKey<X25519Spec>) -> bool {
-        unimplemented!("libp2p noise spec does not support linked keys.")
     }
 
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<X25519Spec>, sig: &Option<Vec<u8>>) -> bool

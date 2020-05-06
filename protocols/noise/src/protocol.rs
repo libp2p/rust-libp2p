@@ -72,6 +72,7 @@ pub trait Protocol<C> {
     ///
     /// The trivial case is when the keys are byte for byte identical.
     #[allow(unused_variables)]
+    #[deprecated]
     fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>) -> bool {
         false
     }
@@ -88,6 +89,7 @@ pub trait Protocol<C> {
     /// without a signature, otherwise a signature over the static DH public key
     /// must be given and is verified with the public identity key, establishing
     /// the authenticity of the static DH public key w.r.t. the public identity key.
+    #[allow(deprecated)]
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
     where
         C: AsRef<[u8]>
