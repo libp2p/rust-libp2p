@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Noise protocols based on X25519.
+//! Legacy Noise protocols based on X25519.
+//!
+//! **Note**: This set of protocols is not interoperable with other
+//! libp2p implementations.
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
@@ -92,7 +95,11 @@ impl<R> UpgradeInfo for NoiseConfig<IK, X25519, R> {
     }
 }
 
-/// Noise protocols for X25519.
+/// Legacy Noise protocol for X25519.
+///
+/// **Note**: This `Protocol` provides no configuration that
+/// is interoperable  with other libp2p implementations.
+/// See [`crate::X25519Spec`] instead.
 impl Protocol<X25519> for X25519 {
     fn params_ik() -> ProtocolParams {
         PARAMS_IK.clone()

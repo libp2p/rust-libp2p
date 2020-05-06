@@ -365,10 +365,10 @@ where
 
     let mut payload_buf = vec![0; len];
     state.io.read_exact(&mut payload_buf).await?;
-    let pb = payload_proto::Identity::decode(&payload_buf[..])?;
+    let pb = payload_proto::NoiseHandshakePayload::decode(&payload_buf[..])?;
 
-    if !pb.pubkey.is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(&pb.pubkey)
+    if !pb.identity_key.is_empty() {
+        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
             .map_err(|_| NoiseError::InvalidKey)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
@@ -377,8 +377,8 @@ where
         }
         state.id_remote_pubkey = Some(pk);
     }
-    if !pb.signature.is_empty() {
-        state.dh_remote_pubkey_sig = Some(pb.signature);
+    if !pb.identity_sig.is_empty() {
+        state.dh_remote_pubkey_sig = Some(pb.identity_sig);
     }
 
     Ok(())
@@ -389,12 +389,12 @@ async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::Identity::default();
+    let mut pb = payload_proto::NoiseHandshakePayload::default();
     if state.send_identity {
-        pb.pubkey = state.identity.public.clone().into_protobuf_encoding()
+        pb.identity_key = state.identity.public.clone().into_protobuf_encoding()
     }
     if let Some(ref sig) = state.identity.signature {
-        pb.signature = sig.clone()
+        pb.identity_sig = sig.clone()
     }
     let mut buf = Vec::with_capacity(pb.encoded_len());
     pb.encode(&mut buf).expect("Vec<u8> provides capacity as needed");

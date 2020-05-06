@@ -1,9 +1,22 @@
 # Version ???
 
+- `libp2p-noise`: Added the `X25519Spec` protocol suite which uses
+  libp2p-noise-spec compliant signatures on static keys as well as the
+  `/noise` protocol upgrade, hence providing a libp2p-noise-spec compliant
+  `XX` handshake. `IK` and `IX` are still supported with `X25519Spec`
+  though not guaranteed to be interoperable with other libp2p
+  implementations as these handshake patterns are not currently
+  included in the libp2p-noise-spec. The `X25519Spec` implementation
+  will eventually replace the current `X25519` implementation, with
+  the former being removed. To upgrade without interruptions, you may
+  temporarily include `NoiseConfig`s for both implementations as
+  alternatives in your transport upgrade pipeline.
+
 - `libp2p-kad`: Consider fixed (K_VALUE) amount of peers at closest query
   initialization. Unless `KademliaConfig::set_replication_factor` is used change
   has no effect.
   [PR 1536](https://github.com/libp2p/rust-libp2p/pull/1536)
+
 - `libp2p-tcp`: On listeners started with an IPv6 multi-address the socket
   option `IPV6_V6ONLY` is set to true. Instead of relying on IPv4-mapped IPv6
   address support, two listeners can be started if IPv4 and IPv6 should both
