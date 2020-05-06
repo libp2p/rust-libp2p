@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn split_num_results_per_disjoint_path_quickcheck() {
+    fn num_results_distribution() {
         fn prop(config: ClosestPeersIterConfig) -> TestResult {
             if config.parallelism == 0 || config.num_results == 0
             {
