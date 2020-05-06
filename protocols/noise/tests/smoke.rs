@@ -22,7 +22,7 @@ use futures::{future::{self, Either}, prelude::*};
 use libp2p_core::identity;
 use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
 use libp2p_core::transport::{Transport, ListenerEvent};
-use libp2p_noise::{Keypair, X25519, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
+use libp2p_noise::{Keypair, X25519, X25519Spec, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
@@ -36,6 +36,37 @@ fn core_upgrade_compat() {
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
     let noise = NoiseConfig::xx(dh_keys).into_authenticated();
     let _ = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
+}
+
+#[test]
+fn xx_spec() {
+    let _ = env_logger::try_init();
+    fn prop(mut messages: Vec<Message>) -> bool {
+        messages.truncate(5);
+        let server_id = identity::Keypair::generate_ed25519();
+        let client_id = identity::Keypair::generate_ed25519();
+
+        let server_id_public = server_id.public();
+        let client_id_public = client_id.public();
+
+        let server_dh = Keypair::<X25519Spec>::new().into_authentic(&server_id).unwrap();
+        let server_transport = TcpConfig::new()
+            .and_then(move |output, endpoint| {
+                upgrade::apply(output, NoiseConfig::xx(server_dh), endpoint, upgrade::Version::V1)
+            })
+            .and_then(move |out, _| expect_identity(out, &client_id_public));
+
+        let client_dh = Keypair::<X25519Spec>::new().into_authentic(&client_id).unwrap();
+        let client_transport = TcpConfig::new()
+            .and_then(move |output, endpoint| {
+                upgrade::apply(output, NoiseConfig::xx(client_dh), endpoint, upgrade::Version::V1)
+            })
+            .and_then(move |out, _| expect_identity(out, &server_id_public));
+
+        run(server_transport, client_transport, messages);
+        true
+    }
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[test]
@@ -144,15 +175,15 @@ fn ik_xx() {
     QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
-type Output = (RemoteIdentity<X25519>, NoiseOutput<Negotiated<TcpTransStream>>);
+type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<TcpTransStream>>);
 
-fn run<T, U, I>(server_transport: T, client_transport: U, messages: I)
+fn run<T, U, I, C>(server_transport: T, client_transport: U, messages: I)
 where
-    T: Transport<Output = Output>,
+    T: Transport<Output = Output<C>>,
     T::Dial: Send + 'static,
     T::Listener: Send + Unpin + 'static,
     T::ListenerUpgrade: Send + 'static,
-    U: Transport<Output = Output>,
+    U: Transport<Output = Output<C>>,
     U::Dial: Send + 'static,
     U::Listener: Send + 'static,
     U::ListenerUpgrade: Send + 'static,
@@ -218,8 +249,8 @@ where
     })
 }
 
-fn expect_identity(output: Output, pk: &identity::PublicKey)
-    -> impl Future<Output = Result<Output, NoiseError>>
+fn expect_identity<C>(output: Output<C>, pk: &identity::PublicKey)
+    -> impl Future<Output = Result<Output<C>, NoiseError>>
 {
     match output.0 {
         RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),

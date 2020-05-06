@@ -21,6 +21,7 @@
 //! Components of a Noise protocol.
 
 pub mod x25519;
+pub mod x25519_spec;
 
 use crate::NoiseError;
 use libp2p_core::identity;
@@ -71,6 +72,7 @@ pub trait Protocol<C> {
     ///
     /// The trivial case is when the keys are byte for byte identical.
     #[allow(unused_variables)]
+    #[deprecated]
     fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>) -> bool {
         false
     }
@@ -87,6 +89,7 @@ pub trait Protocol<C> {
     /// without a signature, otherwise a signature over the static DH public key
     /// must be given and is verified with the public identity key, establishing
     /// the authenticity of the static DH public key w.r.t. the public identity key.
+    #[allow(deprecated)]
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
     where
         C: AsRef<[u8]>
@@ -94,6 +97,13 @@ pub trait Protocol<C> {
         Self::linked(id_pk, dh_pk)
             ||
         sig.as_ref().map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
+    }
+
+    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>) -> Result<Vec<u8>, NoiseError>
+    where
+        C: AsRef<[u8]>
+    {
+        Ok(id_keys.sign(dh_pk.as_ref())?)
     }
 }
 
@@ -151,9 +161,10 @@ impl<T: Zeroize> Keypair<T> {
     /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
     pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, NoiseError>
     where
-        T: AsRef<[u8]>
+        T: AsRef<[u8]>,
+        T: Protocol<T>
     {
-        let sig = id_keys.sign(self.public.as_ref())?;
+        let sig = T::sign(id_keys, &self.public)?;
 
         let identity = KeypairIdentity {
             public: id_keys.public(),

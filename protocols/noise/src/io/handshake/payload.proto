@@ -4,8 +4,8 @@ package payload.proto;
 
 // Payloads for Noise handshake messages.
 
-message Identity {
-	bytes pubkey = 1;
-	bytes signature = 2;
+message NoiseHandshakePayload {
+    bytes identity_key = 1;
+    bytes identity_sig = 2;
+    bytes data         = 3;
 }
-
