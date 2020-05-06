@@ -88,14 +88,6 @@ fn verify_libp2p_signature(
     }
 }
 
-fn get_time() -> Result<u64, TLSError> {
-    use std::time::{SystemTime, SystemTimeError};
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|_: SystemTimeError| TLSError::FailedToGetCurrentTime)
-        .map(|e| e.as_secs())
-}
-
 fn parse_certificate(
     certificate: &[u8],
 ) -> Result<(x509::X509Certificate<'_>, Libp2pExtension<'_>), Error> {
@@ -107,11 +99,10 @@ fn parse_certificate(
         .iterate(&mut |oid, critical, extension| {
             Ok(match oid {
                 crate::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
-                crate::LIBP2P_OID_BYTES => {
-                    libp2p_extension = Some(parse_libp2p_extension(extension)?)
-                }
+                crate::LIBP2P_OID_BYTES =>
+                    libp2p_extension = Some(parse_libp2p_extension(extension)?),
                 _ if critical => return Err(Error::UnsupportedCriticalExtension),
-                _ => {}
+                _ => {},
             })
         })?;
     let libp2p_extension = libp2p_extension.ok_or(Error::UnknownIssuer)?;
@@ -124,9 +115,7 @@ fn verify_presented_certs(presented_certs: &[Certificate]) -> Result<(), TLSErro
     }
     let (certificate, extension) =
         parse_certificate(presented_certs[0].as_ref()).map_err(TLSError::WebPKIError)?;
-    let now = get_time()?;
-    certificate.valid(now)
-        .map_err(TLSError::WebPKIError)?;
+    certificate.valid().map_err(TLSError::WebPKIError)?;
     certificate
         .check_self_issued()
         .map_err(TLSError::WebPKIError)?;
@@ -173,9 +162,7 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
 ///
 /// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
+    fn offer_client_auth(&self) -> bool { true }
 
     fn client_auth_root_subjects(
         &self, _dns_name: Option<&webpki::DNSName>,

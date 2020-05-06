@@ -47,8 +47,8 @@
 mod certificate;
 mod verifier;
 
-use thiserror::Error;
 use std::sync::Arc;
+use thiserror::Error;
 pub use verifier::extract_peerid_or_panic;
 
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
@@ -60,7 +60,11 @@ const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 pub enum ConfigError {
     /// TLS private key or certificate rejected
     #[error("TLS private or certificate key rejected: {0}")]
-    TLSError(#[error(transparent)] #[from] rustls::TLSError),
+    TLSError(
+        #[error(transparent)]
+        #[from]
+        rustls::TLSError,
+    ),
     /// Signing failed
     #[error("Signing failed: {0}")]
     SigningError(#[from] libp2p_core::identity::error::SigningError),

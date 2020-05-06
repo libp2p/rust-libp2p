@@ -18,17 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use thiserror::Error;
 use futures::channel::mpsc::SendError;
 use io::ErrorKind;
 use std::io;
+use thiserror::Error;
 
 /// An error that can be returned by libp2p-quic.
 #[derive(Error, Debug)]
 pub enum Error {
     /// Fatal I/O error
     #[error("Fatal I/O error {0}")]
-    IO(#[error(transparent)] #[from] std::io::Error),
+    IO(
+        #[error(transparent)]
+        #[from]
+        std::io::Error,
+    ),
     /// QUIC protocol error
     #[error("QUIC protocol error: {0}")]
     ConnectionError(#[from] quinn_proto::ConnectionError),
@@ -49,8 +53,10 @@ pub enum Error {
     Reset(quinn_proto::VarInt),
     /// Either an attempt was made to write to a stream that was already shut down,
     /// or a previous operation on this stream failed.
-    #[error("Use of a stream that has is no longer valid. This is a \
-                       bug in the application.")]
+    #[error(
+        "Use of a stream that has is no longer valid. This is a \
+                       bug in the application."
+    )]
     ExpiredStream,
     /// Reading from a stream that has not been written to.
     #[error("Reading from a stream that has not been written to.")]

@@ -730,11 +730,14 @@ impl Transport for Endpoint {
         };
         let Endpoint(endpoint) = self;
         let mut inner = endpoint.reference.inner.lock();
-        let (handle, connection) = inner.inner.connect(
-            endpoint.reference.config.client_config.clone(),
-            socket_addr,
-            "l",
-        ).map_err(|e| TransportError::Other(Error::ConnectError(e)))?;
+        let (handle, connection) = inner
+            .inner
+            .connect(
+                endpoint.reference.config.client_config.clone(),
+                socket_addr,
+                "l",
+            )
+            .map_err(|e| TransportError::Other(Error::ConnectError(e)))?;
         let socket = endpoint.reference.socket.clone();
         let connection = Connection {
             pending: socket::Pending::default(),
