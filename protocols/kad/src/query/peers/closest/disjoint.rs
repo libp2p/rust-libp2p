@@ -95,11 +95,17 @@ impl ClosestDisjointPeersIter {
     where
         I: IntoIterator<Item = PeerId>,
     {
-        self.iters[self.yielded_peers[peer]].on_success(peer, closer_peers);
+        if let Some(index) = self.yielded_peers.get(peer) {
+            self.iters[*index].on_success(peer, closer_peers);
+        }
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
-        self.iters[self.yielded_peers[peer]].is_waiting(peer)
+        if let Some(index) = self.yielded_peers.get(peer) {
+            self.iters[*index].is_waiting(peer)
+        } else {
+            false
+        }
     }
 
     pub fn next(&mut self, now: Instant) -> PeersIterState {
