@@ -24,15 +24,16 @@ use libp2p_core::PeerId;
 use std::collections::HashMap;
 use wasm_timer::Instant;
 
-/// Wraps around a set of `ClosestPeersIter`, enforcing a disjoint discovery path per configured
-/// parallelism according to the S/Kademlia paper.
+/// Wraps around a set of `ClosestPeersIter`, enforcing a disjoint discovery
+/// path per configured parallelism according to the S/Kademlia paper.
 pub struct ClosestDisjointPeersIter {
     iters: Vec<ClosestPeersIter>,
     /// Mapping of yielded peers to iterator that yielded them.
     ///
-    /// More specifically index into the `ClosestDisjointPeersIter::iters` vector. On the one hand
-    /// this is used to link responses from remote peers back to the corresponding iterator, on the
-    /// other hand it is used to track which peers have been contacted in the past.
+    /// More specifically index into `iters`. On the one hand this is used to
+    /// link responses from remote peers back to the corresponding iterator, on
+    /// the other hand it is used to track which peers have been contacted by
+    /// which iterator.
     yielded_peers: HashMap<PeerId, usize>,
     /// Index of the iterator last queried.
     last_quiered: usize,
