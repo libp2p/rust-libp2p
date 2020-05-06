@@ -27,6 +27,9 @@
 //! implementations for various noise handshake patterns (currently `IK`, `IX`, and `XX`)
 //! over a particular choice of Diffie–Hellman key agreement (currently only X25519).
 //!
+//! > **Note**: Only the `XX` handshake pattern is currently guaranteed to provide
+//! >           interoperability with other libp2p implementations.
+//!
 //! All upgrades produce as output a pair, consisting of the remote's static public key
 //! and a `NoiseOutput` which represents the established cryptographic session with the
 //! remote, implementing `futures::io::AsyncRead` and `futures::io::AsyncWrite`.
@@ -38,11 +41,11 @@
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
 //! use libp2p_tcp::TcpConfig;
-//! use libp2p_noise::{Keypair, X25519, NoiseConfig};
+//! use libp2p_noise::{Keypair, X25519Spec, NoiseConfig};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
-//! let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
+//! let dh_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
 //! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
 //! let builder = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
@@ -60,7 +63,8 @@ pub use io::NoiseOutput;
 pub use io::handshake;
 pub use io::handshake::{Handshake, RemoteIdentity, IdentityExchange};
 pub use protocol::{Keypair, AuthenticKeypair, KeypairIdentity, PublicKey, SecretKey};
-pub use protocol::{Protocol, ProtocolParams, x25519::X25519, IX, IK, XX};
+pub use protocol::{Protocol, ProtocolParams, IX, IK, XX};
+pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 
 use futures::prelude::*;
 use libp2p_core::{identity, PeerId, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
