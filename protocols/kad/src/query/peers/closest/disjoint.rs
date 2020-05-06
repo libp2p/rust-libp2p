@@ -136,6 +136,8 @@ impl ClosestDisjointPeersIter {
                             },
                             Some(PeersIterState::Waiting(None)) => {}
                             Some(PeersIterState::WaitingAtCapacity) => {
+                                // At least one ClosestPeersIter is no longer at capacity, thus the
+                                // composite ClosestDisjointPeersIter is no longer at capacity.
                                 state = Some(PeersIterState::Waiting(None))
                             }
                             Some(PeersIterState::Finished) => {
