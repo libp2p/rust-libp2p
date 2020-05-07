@@ -400,7 +400,8 @@ impl QueryStats {
         }
     }
 
-    /// Merges these stats with the given stats of another query.
+    /// Merges these stats with the given stats of another query,
+    /// e.g. to accumulate statistics from a multi-phase query.
     ///
     /// Counters are merged cumulatively while the instants for
     /// start and end of the queries are taken as the minimum and
@@ -410,7 +411,10 @@ impl QueryStats {
             peers: self.peers + other.peers,
             success: self.success + other.success,
             failure: self.failure + other.failure,
-            start: std::cmp::min(self.start, other.start),
+            start: match (self.start, other.start) {
+                (Some(a), Some(b)) => Some(std::cmp::min(a, b)),
+                (a, b) => a.or(b)
+            },
             end: std::cmp::max(self.end, other.end)
         }
     }

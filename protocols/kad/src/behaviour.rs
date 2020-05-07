@@ -1954,7 +1954,6 @@ struct QueryInner {
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
     pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>
-    // stats
 }
 
 impl QueryInner {
