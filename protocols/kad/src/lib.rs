@@ -41,6 +41,10 @@ mod dht_proto {
 pub use addresses::Addresses;
 pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
+    QueryResult,
+    QueryInfo,
+    QueryStats,
+
     BootstrapResult,
     BootstrapOk,
     BootstrapError,
