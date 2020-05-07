@@ -66,21 +66,25 @@ impl FixedPeersIter {
         }
     }
 
-    pub fn on_success(&mut self, peer: &PeerId) {
+    pub fn on_success(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Succeeded;
                 *num_waiting -= 1;
+                return true
             }
         }
+        false
     }
 
-    pub fn on_failure(&mut self, peer: &PeerId) {
+    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { .. } = &self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Failed;
+                return true
             }
         }
+        false
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {

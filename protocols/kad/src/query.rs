@@ -262,11 +262,13 @@ impl<TInner> Query<TInner> {
 
     /// Informs the query that the attempt to contact `peer` failed.
     pub fn on_failure(&mut self, peer: &PeerId) {
-        match &mut self.peer_iter {
+        let expected = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer)
+        };
+        if expected {
+            self.stats.failure += 1;
         }
-        self.stats.failure += 1;
     }
 
     /// Informs the query that the attempt to contact `peer` succeeded,
@@ -276,11 +278,13 @@ impl<TInner> Query<TInner> {
     where
         I: IntoIterator<Item = PeerId>
     {
-        match &mut self.peer_iter {
+        let expected = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer)
+        };
+        if expected {
+            self.stats.success += 1;
         }
-        self.stats.success += 1;
     }
 
     /// Checks whether the query is currently waiting for a result from `peer`.
@@ -299,7 +303,7 @@ impl<TInner> Query<TInner> {
         };
 
         if let PeersIterState::Waiting(Some(_)) = state {
-            self.stats.peers += 1;
+            self.stats.requests += 1;
         }
 
         state
@@ -332,14 +336,14 @@ pub struct QueryResult<TInner, TPeers> {
     pub inner: TInner,
     /// The successfully contacted peers.
     pub peers: TPeers,
-    /// TODO
+    /// The collected query statistics.
     pub stats: QueryStats
 }
 
 /// Execution statistics of a query.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueryStats {
-    peers: u32,
+    requests: u32,
     success: u32,
     failure: u32,
     start: Option<Instant>,
@@ -349,7 +353,7 @@ pub struct QueryStats {
 impl QueryStats {
     pub fn empty() -> Self {
         QueryStats {
-            peers: 0,
+            requests: 0,
             success: 0,
             failure: 0,
             start: None,
@@ -357,28 +361,27 @@ impl QueryStats {
         }
     }
 
-    /// Gets the total number of peers contacted by the query.
-    pub fn num_peers(&self) -> u32 {
-        self.peers
+    /// Gets the total number of requests initiated by the query.
+    pub fn num_requests(&self) -> u32 {
+        self.requests
     }
 
-    /// Gets the number of successful responses from the contacted peers.
+    /// Gets the number of successful requests.
     pub fn num_successes(&self) -> u32 {
         self.success
     }
 
-    /// Gets the number of failures from the contacted peers.
+    /// Gets the number of failed requests.
     pub fn num_failures(&self) -> u32 {
         self.failure
     }
 
-    /// Gets the number of contacted peers for which success or
-    /// failure has not yet been determined.
+    /// Gets the number of pending requests.
     ///
     /// > **Note**: A query can finish while still having pending
-    /// > responses, if the termination conditions are met.
+    /// > requests, if the termination conditions are already met.
     pub fn pending(&self) -> u32 {
-        self.peers - (self.success + self.failure)
+        self.requests - (self.success + self.failure)
     }
 
     /// Gets the duration of the query.
@@ -408,7 +411,7 @@ impl QueryStats {
     /// maximum, respectively.
     pub fn merge(self, other: QueryStats) -> Self {
         QueryStats {
-            peers: self.peers + other.peers,
+            requests: self.requests + other.requests,
             success: self.success + other.success,
             failure: self.failure + other.failure,
             start: match (self.start, other.start) {

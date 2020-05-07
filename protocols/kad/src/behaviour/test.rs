@@ -495,7 +495,7 @@ fn put_record() {
                                 assert!(qids.is_empty() || qids.remove(&id));
                                 assert!(stats.duration() > Duration::from_secs(0));
                                 assert!(stats.num_successes() >= replication_factor.get() as u32);
-                                assert!(stats.num_peers() >= stats.num_successes());
+                                assert!(stats.num_requests() >= stats.num_successes());
                                 assert_eq!(stats.num_failures(), 0);
                                 match res {
                                     Err(e) => panic!("{:?}", e),
