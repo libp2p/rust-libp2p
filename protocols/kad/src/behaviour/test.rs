@@ -493,7 +493,7 @@ fn put_record() {
                                 id, result: QueryResult::RepublishRecord(res), stats
                             })) => {
                                 assert!(qids.is_empty() || qids.remove(&id));
-                                assert!(stats.duration() > Duration::from_secs(0));
+                                assert!(stats.duration().is_some());
                                 assert!(stats.num_successes() >= replication_factor.get() as u32);
                                 assert!(stats.num_requests() >= stats.num_successes());
                                 assert_eq!(stats.num_failures(), 0);

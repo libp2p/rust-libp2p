@@ -44,6 +44,7 @@ use log::{info, debug, warn};
 use smallvec::SmallVec;
 use std::{borrow::{Borrow, Cow}, error, iter, time::Duration};
 use std::collections::{HashSet, VecDeque};
+use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
@@ -291,22 +292,42 @@ where
 
     /// Gets an iterator over immutable references to all running queries.
     pub fn iter_queries<'a>(&'a self) -> impl Iterator<Item = QueryRef<'a>> {
-        self.queries.iter().map(|query| QueryRef { query })
+        self.queries.iter().filter_map(|query|
+            if !query.is_finished() {
+                Some(QueryRef { query })
+            } else {
+                None
+            })
     }
 
     /// Gets an iterator over mutable references to all running queries.
     pub fn iter_queries_mut<'a>(&'a mut self) -> impl Iterator<Item = QueryMut<'a>> {
-        self.queries.iter_mut().map(|query| QueryMut { query })
+        self.queries.iter_mut().filter_map(|query|
+            if !query.is_finished() {
+                Some(QueryMut { query })
+            } else {
+                None
+            })
     }
 
     /// Gets an immutable reference to a running query, if it exists.
     pub fn query<'a>(&'a self, id: &QueryId) -> Option<QueryRef<'a>> {
-        self.queries.get(id).map(|query| QueryRef { query })
+        self.queries.get(id).and_then(|query|
+            if !query.is_finished() {
+                Some(QueryRef { query })
+            } else {
+                None
+            })
     }
 
     /// Gets a mutable reference to a running query, if it exists.
     pub fn query_mut<'a>(&'a mut self, id: &QueryId) -> Option<QueryMut<'a>> {
-        self.queries.get_mut(id).map(|query| QueryMut { query })
+        self.queries.get_mut(id).and_then(|query|
+            if !query.is_finished() {
+                Some(QueryMut { query })
+            } else {
+                None
+            })
     }
 
     /// Adds a known listen address of a peer participating in the DHT to the
@@ -384,7 +405,8 @@ where
 
     /// Initiates an iterative query for the closest peers to the given key.
     ///
-    /// The result of the query is delivered in [`KademliaEvent::GetClosestPeersResult`].
+    /// The result of the query is delivered in a
+    /// [`KademliaEvent::QueryResult{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Borrow<[u8]> + Clone
@@ -398,7 +420,8 @@ where
 
     /// Performs a lookup for a record in the DHT.
     ///
-    /// The result of this operation is delivered in [`KademliaEvent::GetRecordResult`].
+    /// The result of this operation is delivered in a
+    /// [`KademliaEvent::QueryResult{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) -> QueryId {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
@@ -431,7 +454,7 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`KademliaEvent::PutRecordResult`].
+    /// [`KademliaEvent::QueryResult{QueryResult::PutRecord}`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
@@ -494,20 +517,24 @@ where
     /// refreshed by initiating an additional bootstrapping query for each such
     /// bucket with random keys.
     ///
-    /// The result(s) of this operation are delivered in [`KademliaEvent::BootstrapResult`],
-    /// with one event per bootstrapping query.
+    /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
+    /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
+    /// reported via [`KademliaEvent::QueryResult{QueryResult::Bootstrap}`] events,
+    /// with one such event per bootstrapping query.
+    ///
+    /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Kademlia::add_address`].
-    pub fn bootstrap(&mut self) -> Result<QueryId, ()> {
+    pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
             peer: local_key.preimage().clone(),
-            remaining: Vec::new().into_iter()
+            remaining: None
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
         if peers.is_empty() {
-            Err(())
+            Err(NoKnownPeers())
         } else {
             let inner = QueryInner::new(info);
             Ok(self.queries.add_iter_closest(local_key, peers, inner))
@@ -535,7 +562,7 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// delivered in [`AddProviderResult`].
+    /// reported via [`KademliaEvent::QueryResult{QueryResult::AddProvider}`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         self.store.add_provider(record)?;
@@ -562,7 +589,8 @@ where
 
     /// Performs a lookup for providers of a value to the given key.
     ///
-    /// The result of this operation is delivered in [`KademliaEvent::GetProvidersResult`].
+    /// The result of this operation is delivered in a
+    /// reported via [`KademliaEvent::QueryResult{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let info = QueryInfo::GetProviders {
             key: key.clone(),
@@ -736,15 +764,15 @@ where
         log::trace!("Query {:?} finished.", query_id);
         let result = q.into_result();
         match result.inner.info {
-            QueryInfo::Bootstrap { peer, mut remaining } => {
+            QueryInfo::Bootstrap { peer, remaining } => {
                 let local_key = self.kbuckets.local_key().clone();
-                if &peer == local_key.preimage() {
-                    debug_assert_eq!(remaining.len(), 0);
+                let mut remaining = remaining.unwrap_or_else(|| {
+                    debug_assert_eq!(&peer, local_key.preimage());
                     // The lookup for the local key finished. To complete the bootstrap process,
                     // a bucket refresh should be performed for every bucket farther away than
                     // the first non-empty bucket (which are most likely no more than the last
                     // few, i.e. farthest, buckets).
-                    remaining = self.kbuckets.buckets()
+                    self.kbuckets.buckets()
                         .skip_while(|b| b.num_entries() == 0)
                         .skip(1) // Skip the bucket with the closest neighbour.
                         .map(|b| {
@@ -770,16 +798,15 @@ where
                                 target = kbucket::Key::new(PeerId::random());
                             }
                             target
-                        }).collect::<Vec<_>>().into_iter();
+                        }).collect::<Vec<_>>().into_iter()
+                });
 
-                }
-
-                let num_remaining = remaining.len().checked_sub(1).unwrap_or(0) as u32;
+                let num_remaining = remaining.len().saturating_sub(1) as u32;
 
                 if let Some(target) = remaining.next() {
                     let info = QueryInfo::Bootstrap {
                         peer: target.clone().into_preimage(),
-                        remaining
+                        remaining: Some(remaining)
                     };
                     let peers = self.kbuckets.closest_keys(&target);
                     let inner = QueryInner::new(info);
@@ -964,17 +991,19 @@ where
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap { peer, mut remaining } => {
-                let num_remaining = remaining.len().checked_sub(1).unwrap_or(0) as u32;
+                let num_remaining = remaining.as_ref().map(|r| r.len().saturating_sub(1) as u32);
 
-                // Continue with the next bootstrap query if `remaining` is not empty.
-                if let Some(target) = remaining.next() {
-                    let info = QueryInfo::Bootstrap {
-                        peer: target.clone().into_preimage(),
-                        remaining
-                    };
-                    let peers = self.kbuckets.closest_keys(&target);
-                    let inner = QueryInner::new(info);
-                    self.queries.continue_iter_closest(query_id, target.clone(), peers, inner);
+                if let Some(mut remaining) = remaining.take() {
+                    // Continue with the next bootstrap query if `remaining` is not empty.
+                    if let Some(target) = remaining.next() {
+                        let info = QueryInfo::Bootstrap {
+                            peer: target.clone().into_preimage(),
+                            remaining: Some(remaining)
+                        };
+                        let peers = self.kbuckets.closest_keys(&target);
+                        let inner = QueryInner::new(info);
+                        self.queries.continue_iter_closest(query_id, target.clone(), peers, inner);
+                    }
                 }
 
                 Some(KademliaEvent::QueryResult {
@@ -1816,7 +1845,7 @@ pub struct BootstrapOk {
 pub enum BootstrapError {
     Timeout {
         peer: PeerId,
-        num_remaining: u32,
+        num_remaining: Option<u32>,
     }
 }
 
@@ -1991,7 +2020,11 @@ pub enum QueryInfo {
         peer: PeerId,
         /// The remaining random peer IDs to query, one per
         /// bucket that still needs refreshing.
-        remaining: vec::IntoIter<kbucket::Key<PeerId>>
+        ///
+        /// This is `None` if the initial self-lookup has not
+        /// yet completed and `Some` with an exhausted iterator
+        /// if bootstrapping is complete.
+        remaining: Option<vec::IntoIter<kbucket::Key<PeerId>>>
     },
 
     /// A query initiated by [`Kademlia::get_closest_peers`].
@@ -2179,3 +2212,16 @@ impl<'a> QueryRef<'a> {
         self.query.stats()
     }
 }
+
+/// An operation failed to due no known peers in the routing table.
+#[derive(Debug, Clone)]
+pub struct NoKnownPeers();
+
+impl fmt::Display for NoKnownPeers {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "No known peers.")
+    }
+}
+
+impl std::error::Error for NoKnownPeers {}
+

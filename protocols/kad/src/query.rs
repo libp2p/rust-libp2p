@@ -262,11 +262,11 @@ impl<TInner> Query<TInner> {
 
     /// Informs the query that the attempt to contact `peer` failed.
     pub fn on_failure(&mut self, peer: &PeerId) {
-        let expected = match &mut self.peer_iter {
+        let updated = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer)
         };
-        if expected {
+        if updated {
             self.stats.failure += 1;
         }
     }
@@ -278,11 +278,11 @@ impl<TInner> Query<TInner> {
     where
         I: IntoIterator<Item = PeerId>
     {
-        let expected = match &mut self.peer_iter {
+        let updated = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer)
         };
-        if expected {
+        if updated {
             self.stats.success += 1;
         }
     }
@@ -317,6 +317,17 @@ impl<TInner> Query<TInner> {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
             QueryPeerIter::Fixed(iter) => iter.finish()
+        }
+    }
+
+    /// Checks whether the query has finished.
+    ///
+    /// A finished query is eventually reported by `QueryPool::next()` and
+    /// removed from the pool.
+    pub fn is_finished(&self) -> bool {
+        match &self.peer_iter {
+            QueryPeerIter::Closest(iter) => iter.is_finished(),
+            QueryPeerIter::Fixed(iter) => iter.is_finished()
         }
     }
 
@@ -380,7 +391,7 @@ impl QueryStats {
     ///
     /// > **Note**: A query can finish while still having pending
     /// > requests, if the termination conditions are already met.
-    pub fn pending(&self) -> u32 {
+    pub fn num_pending(&self) -> u32 {
         self.requests - (self.success + self.failure)
     }
 
@@ -390,16 +401,16 @@ impl QueryStats {
     /// start of the query to the current instant.
     ///
     /// If the query did not yet start (i.e. yield the first peer to contact),
-    /// the duration is 0.
-    pub fn duration(&self) -> Duration {
+    /// `None` is returned.
+    pub fn duration(&self) -> Option<Duration> {
         if let Some(s) = self.start {
             if let Some(e) = self.end {
-                e - s
+                Some(e - s)
             } else {
-                Instant::now() - s
+                Some(Instant::now() - s)
             }
         } else {
-            Duration::from_secs(0)
+            None
         }
     }
 

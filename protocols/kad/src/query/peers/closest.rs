@@ -122,8 +122,7 @@ impl ClosestPeersIter {
         }
     }
 
-    /// Callback for delivering the result of a successful request to a peer
-    /// that the iterator is waiting on.
+    /// Callback for delivering the result of a successful request to a peer.
     ///
     /// Delivering results of requests back to the iterator allows the iterator to make
     /// progress. The iterator is said to make progress either when the given
@@ -131,12 +130,14 @@ impl ClosestPeersIter {
     /// or when the iterator did not yet accumulate `num_results` closest peers and
     /// `closer_peers` contains a new peer, regardless of its distance to the target.
     ///
-    /// After calling this function, `next` should eventually be called again
-    /// to advance the state of the iterator.
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
     ///
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
-    /// calling this function has no effect.
+    /// calling this function has no effect and `false` is returned.
     pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
         I: IntoIterator<Item = PeerId>
@@ -204,15 +205,16 @@ impl ClosestPeersIter {
         true
     }
 
-    /// Callback for informing the iterator about a failed request to a peer
-    /// that the iterator is waiting on.
+    /// Callback for informing the iterator about a failed request to a peer.
     ///
-    /// After calling this function, `next` should eventually be called again
-    /// to advance the state of the iterator.
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
     ///
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
-    /// calling this function has no effect.
+    /// calling this function has no effect and `false` is returned.
     pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Finished = self.state {
             return false
@@ -232,7 +234,9 @@ impl ClosestPeersIter {
                 PeerState::Unresponsive => {
                     e.get_mut().state = PeerState::Failed
                 }
-                _ => {}
+                PeerState::NotContacted
+                    | PeerState::Failed
+                    | PeerState::Succeeded => return false
             }
         }
 
@@ -347,7 +351,7 @@ impl ClosestPeersIter {
     }
 
     /// Checks whether the iterator has finished.
-    pub fn finished(&self) -> bool {
+    pub fn is_finished(&self) -> bool {
         self.state == State::Finished
     }
 
@@ -679,7 +683,7 @@ mod tests {
                 Peer { state, .. } => panic!("Unexpected peer state: {:?}", state)
             }
 
-            let finished = iter.finished();
+            let finished = iter.is_finished();
             iter.on_success(&peer, iter::empty());
             let closest = iter.into_result().collect::<Vec<_>>();
 
