@@ -24,7 +24,7 @@ use peers::PeersIterState;
 use peers::closest::{ClosestPeersIterConfig, ClosestPeersIter, disjoint::ClosestDisjointPeersIter};
 use peers::fixed::FixedPeersIter;
 
-use crate::K_VALUE;
+use crate::{ALPHA_VALUE, K_VALUE};
 use crate::kbucket::{Key, KeyBytes};
 use either::Either;
 use fnv::FnvHashMap;
@@ -92,7 +92,8 @@ impl<TInner> QueryPool<TInner> {
         I: IntoIterator<Item = Key<PeerId>>
     {
         let peers = peers.into_iter().map(|k| k.into_preimage()).collect::<Vec<_>>();
-        let parallelism = self.config.replication_factor.get();
+        // TODO: Which parallelism should this use?
+        let parallelism = self.config.replication_factor;
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
         self.add(peer_iter, inner)
     }
@@ -105,7 +106,8 @@ impl<TInner> QueryPool<TInner> {
         I: IntoIterator<Item = Key<PeerId>>
     {
         let cfg = ClosestPeersIterConfig {
-            num_results: self.config.replication_factor.get(),
+            num_results: self.config.replication_factor,
+            parallelism: self.config.parallelism,
             .. ClosestPeersIterConfig::default()
         };
 
@@ -206,6 +208,11 @@ pub struct QueryConfig {
     /// See [`crate::behaviour::KademliaConfig::set_replication_factor`] for details.
     pub replication_factor: NonZeroUsize,
 
+    /// Allowed level of parallelism.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::set_parallelism`] for details.
+    pub parallelism: NonZeroUsize,
+
     /// Whether to use disjoint paths on iterative lookups.
     ///
     /// See [`crate::behaviour::KademliaConfig::use_disjoint_path_queries`] for details.
@@ -217,6 +224,7 @@ impl Default for QueryConfig {
         QueryConfig {
             timeout: Duration::from_secs(60),
             replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0"),
+            parallelism: ALPHA_VALUE,
             use_disjoint_paths: false,
         }
     }

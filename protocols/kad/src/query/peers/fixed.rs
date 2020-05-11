@@ -22,12 +22,12 @@ use super::*;
 
 use fnv::FnvHashMap;
 use libp2p_core::PeerId;
-use std::{vec, collections::hash_map::Entry};
+use std::{vec, collections::hash_map::Entry, num::NonZeroUsize};
 
 /// A peer iterator for a fixed set of peers.
 pub struct FixedPeersIter {
     /// Ther permitted parallelism, i.e. number of pending results.
-    parallelism: usize,
+    parallelism: NonZeroUsize,
 
     /// The state of peers emitted by the iterator.
     peers: FnvHashMap<PeerId, PeerState>,
@@ -57,7 +57,7 @@ enum PeerState {
 }
 
 impl FixedPeersIter {
-    pub fn new(peers: Vec<PeerId>, parallelism: usize) -> Self {
+    pub fn new(peers: Vec<PeerId>, parallelism: NonZeroUsize) -> Self {
         Self {
             parallelism,
             peers: FnvHashMap::default(),
@@ -97,7 +97,7 @@ impl FixedPeersIter {
         match &mut self.state {
             State::Finished => return PeersIterState::Finished,
             State::Waiting { num_waiting } => {
-                if *num_waiting >= self.parallelism {
+                if *num_waiting >= self.parallelism.get() {
                     return PeersIterState::WaitingAtCapacity
                 }
                 loop {
@@ -132,4 +132,3 @@ impl FixedPeersIter {
                 })
     }
 }
-

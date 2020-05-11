@@ -150,6 +150,19 @@ impl KademliaConfig {
         self
     }
 
+    /// Sets the allowed level of parallelism.
+    ///
+    /// The `α` parameter in the Kademlia paper. The maximum number of peers that
+    /// the iterator is allowed to wait for in parallel while iterating towards the closest
+    /// nodes to a target. Defaults to `ALPHA_VALUE`.
+    ///
+    /// When used with [`KademliaConfig::use_disjoint_path_queries`] it equals the amount of
+    /// disjoint paths used.
+    pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
+        self.query_config.parallelism = parallelism;
+        self
+    }
+
     /// Enable queries to use disjoint paths when iteratively looking for the
     /// closest node to a target.
     ///

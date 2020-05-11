@@ -67,8 +67,14 @@ impl ClosestDisjointPeersIter {
         I: IntoIterator<Item = Key<PeerId>>,
         T: Into<KeyBytes> + Clone,
     {
+        assert!(
+            config.parallelism <= config.num_results,
+            "In order to uphold S/Kademlia's disjoint paths guarantee one \
+             needs at least one result per disjoint path (parallelism).",
+        );
+
         let peers = known_closest_peers.into_iter().take(K_VALUE.get()).collect::<Vec<_>>();
-        let iters = (0..config.parallelism)
+        let iters = (0..config.parallelism.get())
             // NOTE: All [`ClosestPeersIter`] share the same set of peers at
             // initialization. The [`ClosestDisjointPeersIter.contacted_peers`]
             // mapping ensures that a successful response from a peer is only
@@ -260,7 +266,7 @@ impl ClosestDisjointPeersIter {
                 if let Some(peer) = iter.next() {
                     progress = true;
                     result.insert(peer);
-                    if result.len() == self.config.num_results {
+                    if result.len() == self.config.num_results.get() {
                         break 'outer;
                     }
                 }
@@ -352,20 +358,20 @@ mod tests {
     use std::collections::HashSet;
 
     #[derive(Debug, Clone)]
-    struct Parallelism(usize);
+    struct Parallelism(NonZeroUsize);
 
     impl Arbitrary for Parallelism{
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            Parallelism(g.gen_range(1, 10))
+            Parallelism(NonZeroUsize::new(g.gen_range(1, 10)).unwrap())
         }
     }
 
     #[derive(Debug, Clone)]
-    struct NumResults(usize);
+    struct NumResults(NonZeroUsize);
 
     impl Arbitrary for NumResults{
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            NumResults(g.gen_range(1, K_VALUE.get()))
+            NumResults(NonZeroUsize::new(g.gen_range(1, K_VALUE.get())).unwrap())
         }
     }
 
@@ -409,8 +415,8 @@ mod tests {
         let known_closest_peers = pool.split_off(pool.len() - 3);
 
         let config = ClosestPeersIterConfig {
-            parallelism: 3,
-            num_results: 3,
+            parallelism: NonZeroUsize::new(3).unwrap(),
+            num_results: NonZeroUsize::new(3).unwrap(),
             ..ClosestPeersIterConfig::default()
         };
 
@@ -496,7 +502,7 @@ mod tests {
 
         let final_peers: Vec<_> = peers_iter.into_result().collect();
 
-        assert_eq!(config.num_results, final_peers.len());
+        assert_eq!(config.num_results.get(), final_peers.len());
 
         // Expect final result to contain peer from each disjoint path, even though not all are
         // among the best ones.
