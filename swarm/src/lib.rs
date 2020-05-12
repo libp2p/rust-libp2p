@@ -76,8 +76,10 @@ pub use protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerSelect,
     ProtocolsHandlerUpgrErr,
+    OneShotEvent,
     OneShotHandler,
     OneShotHandlerConfig,
+    OneShotOutboundInfo,
     SubstreamProtocol
 };
 

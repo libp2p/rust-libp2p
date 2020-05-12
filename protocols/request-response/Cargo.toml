@@ -1,0 +1,24 @@
+[package]
+name = "libp2p-request-response"
+edition = "2018"
+description = "Generic Request/Response Protocols"
+version = "0.19.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+bytes = "0.5"
+futures = "0.3.1"
+libp2p-core = { version = "0.19.0", path = "../../core" }
+libp2p-swarm = { version = "0.19.0", path = "../../swarm" }
+smallvec = "1.4"
+
+[dev-dependencies]
+async-std = "< 1.6"
+libp2p-noise = { version = "0.19.0", path = "../noise" }
+libp2p-tcp = { version = "0.19.0", path = "../../transports/tcp", features = ["async-std"] }
+libp2p-yamux = { version = "0.19.0", path = "../../muxers/yamux" }
+rand = "0.7"

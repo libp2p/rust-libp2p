@@ -107,6 +107,7 @@ members = [
     "protocols/noise",
     "protocols/ping",
     "protocols/plaintext",
+    "protocols/request-response",
     "protocols/secio",
     "swarm",
     "transports/dns",

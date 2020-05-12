@@ -63,7 +63,7 @@ pub use dummy::DummyProtocolsHandler;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError};
-pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
+pub use one_shot::{OneShotHandler, OneShotHandlerConfig, OneShotEvent, OneShotOutboundInfo};
 pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
 /// A handler for a set of protocols used on a connection with a remote.
@@ -236,7 +236,7 @@ pub struct SubstreamProtocol<TUpgrade> {
 }
 
 impl<TUpgrade> SubstreamProtocol<TUpgrade> {
-    /// Create a new `ListenProtocol` from the given upgrade.
+    /// Create a new `SubstreamProtocol` from the given upgrade.
     ///
     /// The default timeout for applying the given upgrade on a substream is
     /// 10 seconds.
