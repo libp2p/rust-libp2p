@@ -123,8 +123,9 @@ impl Default for KademliaConfig {
 impl KademliaConfig {
     /// Sets a custom protocol name.
     ///
-    /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
-    /// custom name therefore allows to segregate the DHT from others, if that is desired.
+    /// Kademlia nodes only communicate with other nodes using the same protocol
+    /// name. Using a custom name therefore allows to segregate the DHT from
+    /// others, if that is desired.
     pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
         self.protocol_config.set_protocol_name(name);
         self
@@ -152,12 +153,16 @@ impl KademliaConfig {
 
     /// Sets the allowed level of parallelism.
     ///
-    /// The `α` parameter in the Kademlia paper. The maximum number of peers that
-    /// the iterator is allowed to wait for in parallel while iterating towards the closest
-    /// nodes to a target. Defaults to `ALPHA_VALUE`.
+    /// The `α` parameter in the Kademlia paper. The maximum number of peers
+    /// that an iterative query is allowed to wait for in parallel while
+    /// iterating towards the closest nodes to a target.Defaults to
+    /// `ALPHA_VALUE`.
     ///
-    /// When used with [`KademliaConfig::use_disjoint_path_queries`] it equals the amount of
-    /// disjoint paths used.
+    /// This only controls the level of parallelism of an iterative query, not
+    /// the level of parallelism of a query to a fixed set of peers.
+    ///
+    /// When used with [`KademliaConfig::use_disjoint_path_queries`] it equals
+    /// the amount of disjoint paths used.
     pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
         self.query_config.parallelism = parallelism;
         self
@@ -179,7 +184,8 @@ impl KademliaConfig {
     /// Sets the TTL for stored records.
     ///
     /// The TTL should be significantly longer than the (re-)publication
-    /// interval, to avoid premature expiration of records. The default is 36 hours.
+    /// interval, to avoid premature expiration of records. The default is 36
+    /// hours.
     ///
     /// `None` means records never expire.
     ///
@@ -213,10 +219,10 @@ impl KademliaConfig {
 
     /// Sets the (re-)publication interval of stored records.
     ///
-    /// Records persist in the DHT until they expire. By default, published records
-    /// are re-published in regular intervals for as long as the record exists
-    /// in the local storage of the original publisher, thereby extending the
-    /// records lifetime.
+    /// Records persist in the DHT until they expire. By default, published
+    /// records are re-published in regular intervals for as long as the record
+    /// exists in the local storage of the original publisher, thereby extending
+    /// the records lifetime.
     ///
     /// This interval should be significantly shorter than the record TTL, to
     /// ensure records do not expire prematurely. The default is 24 hours.
@@ -242,7 +248,8 @@ impl KademliaConfig {
     /// Sets the interval at which provider records for keys provided
     /// by the local node are re-published.
     ///
-    /// `None` means that stored provider records are never automatically re-published.
+    /// `None` means that stored provider records are never automatically
+    /// re-published.
     ///
     /// Must be significantly less than the provider record TTL.
     pub fn set_provider_publication_interval(&mut self, interval: Option<Duration>) -> &mut Self {
@@ -258,7 +265,8 @@ impl KademliaConfig {
 
     /// Modifies the maximum allowed size of individual Kademlia packets.
     ///
-    /// It might be necessary to increase this value if trying to put large records.
+    /// It might be necessary to increase this value if trying to put large
+    /// records.
     pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
         self.protocol_config.set_max_packet_size(size);
         self

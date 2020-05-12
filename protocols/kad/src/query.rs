@@ -92,14 +92,12 @@ impl<TInner> QueryPool<TInner> {
         I: IntoIterator<Item = Key<PeerId>>
     {
         let peers = peers.into_iter().map(|k| k.into_preimage()).collect::<Vec<_>>();
-        // TODO: Which parallelism should this use?
         let parallelism = self.config.replication_factor;
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
         self.add(peer_iter, inner)
     }
 
-    /// Adds a query to the pool that iterates towards the closest peers to the target on disjoint
-    /// paths.
+    /// Adds a query to the pool that iterates towards the closest peers to the target.
     pub fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
     where
         T: Into<KeyBytes> + Clone,
