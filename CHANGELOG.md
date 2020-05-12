@@ -27,6 +27,8 @@
   be supported. IPv4 listener addresses are not affected by this change.
   [PR 1555](https://github.com/libp2p/rust-libp2p/pull/1555)
 
+- `libp2p-core`: Updated to multihash 0.11.0.
+
 # Version 0.18.1 (2020-04-17)
 
 - `libp2p-swarm`: Make sure inject_dial_failure is called in all situations.
