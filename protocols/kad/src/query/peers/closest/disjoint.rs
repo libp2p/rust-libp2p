@@ -67,12 +67,6 @@ impl ClosestDisjointPeersIter {
         I: IntoIterator<Item = Key<PeerId>>,
         T: Into<KeyBytes> + Clone,
     {
-        assert!(
-            config.parallelism <= config.num_results,
-            "In order to uphold S/Kademlia's disjoint paths guarantee one \
-             needs at least one result per disjoint path (parallelism).",
-        );
-
         let peers = known_closest_peers.into_iter().take(K_VALUE.get()).collect::<Vec<_>>();
         let iters = (0..config.parallelism.get())
             // NOTE: All [`ClosestPeersIter`] share the same set of peers at
@@ -639,7 +633,6 @@ mod tests {
     #[test]
     fn closest_and_disjoint_closest_yield_same_result() {
         fn prop(graph: Graph, parallelism: Parallelism, num_results: NumResults) -> TestResult {
-            // TODO: Don't enforce this in a test but in the implementation itself as well.
             if parallelism.0 > num_results.0 {
                 return TestResult::discard();
             }
