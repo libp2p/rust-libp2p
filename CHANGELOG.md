@@ -1,5 +1,9 @@
 # Version ???
 
+- `libp2p-core`, `libp2p-swarm`: Added support for multiple dialing
+  attempts per peer, with a configurable limit.
+  [PR 1506](https://github.com/libp2p/rust-libp2p/pull/1506)
+
 - `libp2p-noise`: Added the `X25519Spec` protocol suite which uses
   libp2p-noise-spec compliant signatures on static keys as well as the
   `/noise` protocol upgrade, hence providing a libp2p-noise-spec compliant
@@ -22,6 +26,8 @@
   address support, two listeners can be started if IPv4 and IPv6 should both
   be supported. IPv4 listener addresses are not affected by this change.
   [PR 1555](https://github.com/libp2p/rust-libp2p/pull/1555)
+
+- `libp2p-core`: Updated to multihash 0.11.0.
 
 # Version 0.18.1 (2020-04-17)
 

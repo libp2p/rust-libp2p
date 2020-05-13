@@ -50,6 +50,7 @@ use crate::{
 };
 use fnv::{FnvHashMap};
 use futures::{prelude::*, future};
+use smallvec::SmallVec;
 use std::{
     collections::hash_map,
     convert::TryFrom as _,
@@ -78,21 +79,17 @@ where
 
     /// The ongoing dialing attempts.
     ///
-    /// The `Network` enforces a single ongoing dialing attempt per peer,
-    /// even if multiple (established) connections per peer are allowed.
-    /// However, a single dialing attempt operates on a list of addresses
-    /// to connect to, which can be extended with new addresses while
-    /// the connection attempt is still in progress. Thereby each
-    /// dialing attempt is associated with a new connection and hence a new
-    /// connection ID.
+    /// There may be multiple ongoing dialing attempts to the same peer.
+    /// Each dialing attempt is associated with a new connection and hence
+    /// a new connection ID.
     ///
     /// > **Note**: `dialing` must be consistent with the pending outgoing
     /// > connections in `pool`. That is, for every entry in `dialing`
     /// > there must exist a pending outgoing connection in `pool` with
     /// > the same connection ID. This is ensured by the implementation of
     /// > `Network` (see `dial_peer_impl` and `on_connection_failed`)
-    /// > together with the implementation of `DialingConnection::abort`.
-    dialing: FnvHashMap<TPeerId, peer::DialingAttempt>,
+    /// > together with the implementation of `DialingAttempt::abort`.
+    dialing: FnvHashMap<TPeerId, SmallVec<[peer::DialingState; 10]>>,
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
@@ -381,8 +378,11 @@ where
             Poll::Pending => return Poll::Pending,
             Poll::Ready(PoolEvent::ConnectionEstablished { connection, num_established }) => {
                 match self.dialing.entry(connection.peer_id().clone()) {
-                    hash_map::Entry::Occupied(e) if e.get().id == connection.id() => {
-                        e.remove();
+                    hash_map::Entry::Occupied(mut e) => {
+                        e.get_mut().retain(|s| s.current.0 != connection.id());
+                        if e.get().is_empty() {
+                            e.remove();
+                        }
                     },
                     _ => {}
                 }
@@ -453,7 +453,7 @@ fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TTrans, TConnInfo, TPee
     transport: TTrans,
     pool: &mut Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
         <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
-    dialing: &mut FnvHashMap<TPeerId, peer::DialingAttempt>,
+    dialing: &mut FnvHashMap<TPeerId, SmallVec<[peer::DialingState; 10]>>,
     opts: DialingOpts<TPeerId, THandler>
 ) -> Result<ConnectionId, ConnectionLimit>
 where
@@ -489,14 +489,12 @@ where
     };
 
     if let Ok(id) = &result {
-        let former = dialing.insert(opts.peer,
-            peer::DialingAttempt {
-                id: *id,
-                current: opts.address,
-                next: opts.remaining,
+        dialing.entry(opts.peer).or_default().push(
+            peer::DialingState {
+                current: (*id, opts.address),
+                remaining: opts.remaining,
             },
         );
-        debug_assert!(former.is_none());
     }
 
     result
@@ -508,7 +506,7 @@ where
 /// If the failed connection attempt was a dialing attempt and there
 /// are more addresses to try, new `DialingOpts` are returned.
 fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
-    dialing: &mut FnvHashMap<TPeerId, peer::DialingAttempt>,
+    dialing: &mut FnvHashMap<TPeerId, SmallVec<[peer::DialingState; 10]>>,
     id: ConnectionId,
     endpoint: ConnectedPoint,
     error: PendingConnectionError<TTrans::Error>,
@@ -521,27 +519,34 @@ where
     TPeerId: Eq + Hash + Clone,
 {
     // Check if the failed connection is associated with a dialing attempt.
-    // TODO: could be more optimal than iterating over everything
-    let dialing_peer = dialing.iter() // (1)
-        .find(|(_, a)| a.id == id)
-        .map(|(p, _)| p.clone());
+    let dialing_failed = dialing.iter_mut()
+        .find_map(|(peer, attempts)| {
+            if let Some(pos) = attempts.iter().position(|s| s.current.0 == id) {
+                let attempt = attempts.remove(pos);
+                let last = attempts.is_empty();
+                Some((peer.clone(), attempt, last))
+            } else {
+                None
+            }
+        });
 
-    if let Some(peer_id) = dialing_peer {
-        // A pending outgoing connection to a known peer failed.
-        let mut attempt = dialing.remove(&peer_id).expect("by (1)");
+    if let Some((peer_id, mut attempt, last)) = dialing_failed {
+        if last {
+            dialing.remove(&peer_id);
+        }
 
-        let num_remain = u32::try_from(attempt.next.len()).unwrap();
-        let failed_addr = attempt.current.clone();
+        let num_remain = u32::try_from(attempt.remaining.len()).unwrap();
+        let failed_addr = attempt.current.1.clone();
 
         let (opts, attempts_remaining) =
             if num_remain > 0 {
                 if let Some(handler) = handler {
-                    let next_attempt = attempt.next.remove(0);
+                    let next_attempt = attempt.remaining.remove(0);
                     let opts = DialingOpts {
                         peer: peer_id.clone(),
                         handler,
                         address: next_attempt,
-                        remaining: attempt.next
+                        remaining: attempt.remaining
                     };
                     (Some(opts), num_remain)
                 } else {
@@ -581,9 +586,13 @@ where
 /// Information about the network obtained by [`Network::info()`].
 #[derive(Clone, Debug)]
 pub struct NetworkInfo {
+    /// The total number of connected peers.
     pub num_peers: usize,
+    /// The total number of connections, both established and pending.
     pub num_connections: usize,
+    /// The total number of pending connections, both incoming and outgoing.
     pub num_connections_pending: usize,
+    /// The total number of established connections.
     pub num_connections_established: usize,
 }
 
@@ -631,6 +640,11 @@ impl NetworkConfig {
 
     pub fn set_established_per_peer_limit(&mut self, n: usize) -> &mut Self {
         self.pool_limits.max_established_per_peer = Some(n);
+        self
+    }
+
+    pub fn set_outgoing_per_peer_limit(&mut self, n: usize) -> &mut Self {
+        self.pool_limits.max_outgoing_per_peer = Some(n);
         self
     }
 }

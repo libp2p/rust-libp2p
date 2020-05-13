@@ -56,7 +56,7 @@ tracing = ["libp2p-quic/tracing"]
 bytes = "0.5"
 futures = "0.3.1"
 multiaddr = { package = "parity-multiaddr", version = "0.8.0", path = "misc/multiaddr" }
-multihash = "0.10"
+multihash = "0.11.0"
 lazy_static = "1.2"
 libp2p-mplex = { version = "0.18.0", path = "muxers/mplex", optional = true }
 libp2p-identify = { version = "0.18.0", path = "protocols/identify", optional = true }
