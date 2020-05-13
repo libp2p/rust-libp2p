@@ -57,7 +57,12 @@ enum PeerState {
 }
 
 impl FixedPeersIter {
-    pub fn new(peers: Vec<PeerId>, parallelism: usize) -> Self {
+    pub fn new<I>(peers: I, parallelism: usize) -> Self
+    where
+        I: IntoIterator<Item = PeerId>
+    {
+        let peers = peers.into_iter().collect::<Vec<_>>();
+
         Self {
             parallelism,
             peers: FnvHashMap::default(),

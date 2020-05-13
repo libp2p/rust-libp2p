@@ -89,9 +89,8 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that contacts a fixed set of peers.
     pub fn add_fixed<I>(&mut self, peers: I, inner: TInner) -> QueryId
     where
-        I: IntoIterator<Item = Key<PeerId>>
+        I: IntoIterator<Item = PeerId>
     {
-        let peers = peers.into_iter().map(|k| k.into_preimage()).collect::<Vec<_>>();
         let parallelism = self.config.replication_factor.get();
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
         self.add(peer_iter, inner)
@@ -295,4 +294,3 @@ pub struct QueryResult<TInner, TPeers> {
     /// The successfully contacted peers.
     pub peers: TPeers
 }
-

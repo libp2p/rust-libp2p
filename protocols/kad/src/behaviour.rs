@@ -761,7 +761,6 @@ where
             }
 
             QueryInfo::PrepareAddProvider { key, context } => {
-                let closest_peers = result.peers.map(kbucket::Key::from);
                 let provider_id = params.local_peer_id().clone();
                 let external_addresses = params.external_addresses().collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
@@ -770,7 +769,7 @@ where
                     external_addresses,
                     context,
                 });
-                self.queries.add_fixed(closest_peers, inner);
+                self.queries.add_fixed(result.peers, inner);
                 None
             }
 
@@ -799,7 +798,7 @@ where
                         let context = PutRecordContext::Cache;
                         let info = QueryInfo::PutRecord { record, quorum, context, num_results: 0 };
                         let inner = QueryInner::new(info);
-                        self.queries.add_fixed(iter::once(cache_key), inner);
+                        self.queries.add_fixed(iter::once(cache_key.into_preimage()), inner);
                     }
                     Ok(GetRecordOk { records })
                 } else if records.is_empty() {
@@ -814,10 +813,9 @@ where
             }
 
             QueryInfo::PreparePutRecord { record, quorum, context } => {
-                let closest_peers = result.peers.map(kbucket::Key::from);
                 let info = QueryInfo::PutRecord { record, quorum, context, num_results: 0 };
                 let inner = QueryInner::new(info);
-                self.queries.add_fixed(closest_peers, inner);
+                self.queries.add_fixed(result.peers, inner);
                 None
             }
 
