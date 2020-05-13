@@ -262,8 +262,6 @@ pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 
-use std::{error, io, time::Duration};
-
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
@@ -271,7 +269,7 @@ use std::{error, io, time::Duration};
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_development_transport(keypair: identity::Keypair)
-    -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
      build_tcp_ws_secio_mplex_yamux(keypair)
 }
@@ -285,7 +283,7 @@ pub fn build_development_transport(keypair: identity::Keypair)
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
-    -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     let transport = {
         let tcp = tcp::TcpConfig::new().nodelay(true);
@@ -299,7 +297,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
         .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
-        .timeout(Duration::from_secs(20)))
+        .timeout(std::time::Duration::from_secs(20)))
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
@@ -311,7 +309,7 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))))]
 pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
-    -> io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<io::Error>> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     let transport = {
         let tcp = tcp::TcpConfig::new().nodelay(true);
@@ -326,5 +324,5 @@ pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreS
         .authenticate(secio::SecioConfig::new(keypair))
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
         .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
-        .timeout(Duration::from_secs(20)))
+        .timeout(std::time::Duration::from_secs(20)))
 }
