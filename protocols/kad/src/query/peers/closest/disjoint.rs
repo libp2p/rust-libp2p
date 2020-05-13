@@ -92,13 +92,11 @@ impl ClosestDisjointPeersIter {
         // All peer failures are reported to all queries and thus to all peer
         // iterators. If this iterator never started a request to the given peer
         // ignore the failure.
-        if let Some(PeerState{ initiated_by, additionally_awaited_by, response }) = self.contacted_peers.get_mut(peer) {
+        if let Some(PeerState{ response, .. }) = self.contacted_peers.get_mut(peer) {
             *response = ResponseState::Failed;
 
-            self.iters[*initiated_by].on_failure(peer);
-
-            for i in additionally_awaited_by {
-                self.iters[*i].on_failure(peer);
+            for iter in &mut self.iters {
+                iter.on_failure(peer);
             }
         }
     }
@@ -107,31 +105,29 @@ impl ClosestDisjointPeersIter {
     where
         I: IntoIterator<Item = PeerId>,
     {
-        if let Some(PeerState{ initiated_by, additionally_awaited_by, response }) = self.contacted_peers.get_mut(peer) {
-            // Mark the response as succeeded for future iterators querying this
+        if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
+            // Mark the response as succeeded for future iterators yielding this
             // peer. There is no need to keep the `closer_peers` around, given
             // that they are only passed to the first iterator.
             *response = ResponseState::Succeeded;
 
-            // Pass the new `closer_peers` to the iterator that first contacted
+            // Pass the new `closer_peers` to the iterator that first yielded
             // the peer.
             self.iters[*initiated_by].on_success(peer, closer_peers);
 
-            for i in additionally_awaited_by {
+            for iter in &mut self.iters {
                 // Only report the success to all remaining not-first iterators.
                 // Do not pass the `closer_peers` in order to uphold the
                 // S/Kademlia disjoint paths guarantee.
-                self.iters[*i].on_success(peer, std::iter::empty());
+                iter.on_success(peer, std::iter::empty());
             }
         }
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
-        if let Some(PeerState{ initiated_by, additionally_awaited_by, .. }) = self.contacted_peers.get(peer) {
-            for i in std::iter::once(initiated_by).chain(additionally_awaited_by.iter()) {
-                if self.iters[*i].is_waiting(peer) {
-                    return true;
-                }
+        for iter in &self.iters {
+            if iter.is_waiting(peer) {
+                return true;
             }
         }
 
@@ -182,11 +178,9 @@ impl ClosestDisjointPeersIter {
                     }
                     PeersIterState::Waiting(Some(peer)) => {
                         match self.contacted_peers.get_mut(&*peer) {
-                            Some(PeerState{ additionally_awaited_by, response, .. }) => {
+                            Some(PeerState{ response, .. }) => {
                                 // Another iterator already contacted this peer.
-
                                 let peer = peer.into_owned();
-                                additionally_awaited_by.push(i);
 
                                 match response {
                                     // The iterator will be notified later whether the given node
@@ -313,16 +307,14 @@ impl IndexMut<IteratorIndex> for Vec<ClosestPeersIter> {
     }
 }
 
-/// State tracking the iterators that yielded (i.e. tried to contact) a peer. See
+/// State tracking the iterator that yielded (i.e. tried to contact) a peer. See
 /// [`ClosestDisjointPeersIter::on_success`] for details.
 struct PeerState {
     /// First iterator to yield the peer. Will be notified both of the outcome
     /// (success/failure) as well as the closer peers.
     initiated_by: IteratorIndex,
-    /// Additional iterators only notified of the outcome (success/failure), not
-    /// the closer peers, in order to uphold the S/Kademlia disjoint paths
-    /// guarantee.
-    additionally_awaited_by: Vec<IteratorIndex>,
+    /// Keeping track of the response state. In case other iterators later on
+    /// yield the same peer, they can be notified of the response outcome.
     response: ResponseState,
 }
 
@@ -330,7 +322,6 @@ impl PeerState {
     fn new(initiated_by: IteratorIndex) -> Self {
         PeerState {
             initiated_by,
-            additionally_awaited_by: vec![],
             response: ResponseState::Waiting,
         }
     }
