@@ -291,12 +291,10 @@ pub enum DialPeerCondition {
     /// If there is an ongoing dialing attempt, the addresses reported by
     /// [`NetworkBehaviour::addresses_of_peer`] are added to the ongoing
     /// dialing attempt, ignoring duplicates.
-    ///
-    /// This condition implies [`DialPeerCondition::Disconnected`].
     NotDialing,
-    // TODO: Once multiple dialing attempts per peer are permitted.
-    //       See https://github.com/libp2p/rust-libp2p/pull/1506.
-    // Always,
+    /// A new dialing attempt is always initiated, only subject to the
+    /// configured connection limits.
+    Always,
 }
 
 impl Default for DialPeerCondition {
