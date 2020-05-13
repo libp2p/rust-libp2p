@@ -722,7 +722,7 @@ mod tests {
                         iter.on_success(&peer_id, closest_peers);
                     } ,
                     PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) =>
-                        panic!("There are never more than one requests in flight."),
+                        panic!("There is never more than one request in flight."),
                     PeersIterState::Finished => break,
                 }
             }

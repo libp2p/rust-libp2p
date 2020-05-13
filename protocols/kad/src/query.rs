@@ -206,7 +206,7 @@ pub struct QueryConfig {
     /// See [`crate::behaviour::KademliaConfig::set_replication_factor`] for details.
     pub replication_factor: NonZeroUsize,
 
-    /// Allowed level of parallelism.
+    /// Allowed level of parallelism for iterative queries.
     ///
     /// See [`crate::behaviour::KademliaConfig::set_parallelism`] for details.
     pub parallelism: NonZeroUsize,

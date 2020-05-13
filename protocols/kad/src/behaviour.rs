@@ -151,11 +151,11 @@ impl KademliaConfig {
         self
     }
 
-    /// Sets the allowed level of parallelism.
+    /// Sets the allowed level of parallelism for iterative queries.
     ///
     /// The `α` parameter in the Kademlia paper. The maximum number of peers
     /// that an iterative query is allowed to wait for in parallel while
-    /// iterating towards the closest nodes to a target.Defaults to
+    /// iterating towards the closest nodes to a target. Defaults to
     /// `ALPHA_VALUE`.
     ///
     /// This only controls the level of parallelism of an iterative query, not
@@ -168,10 +168,10 @@ impl KademliaConfig {
         self
     }
 
-    /// Enable queries to use disjoint paths when iteratively looking for the
-    /// closest node to a target.
+    /// Require iterative queries to use disjoint paths for increased resiliency
+    /// in the presence of potentially adversarial nodes.
     ///
-    /// When enabled the amount of disjoint paths used equals the configured
+    /// When enabled the number of disjoint paths used equals the configured
     /// parallelism.
     ///
     /// See the S/Kademlia paper for more information on the high level design
