@@ -459,22 +459,13 @@ mod tests {
     use libp2p_core::PeerId;
     use quickcheck::*;
     use multihash::Multihash;
-    use rand::{Rng, thread_rng};
+    use rand::{Rng, rngs::StdRng, SeedableRng};
     use std::{iter, time::Duration};
 
-    fn random_peers(n: usize) -> impl Iterator<Item = PeerId> + Clone {
-        (0 .. n).map(|_| PeerId::random())
-    }
-
-    fn random_iter<G: Rng>(g: &mut G) -> ClosestPeersIter {
-        let known_closest_peers = random_peers(g.gen_range(1, 60)).map(Key::from);
-        let target = Key::from(Into::<Multihash>::into(PeerId::random()));
-        let config = ClosestPeersIterConfig {
-            parallelism: g.gen_range(1, 10),
-            num_results: g.gen_range(1, 25),
-            peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
-        };
-        ClosestPeersIter::with_config(config, target, known_closest_peers)
+    fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
+        (0 .. n).map(|_| PeerId::from_multihash(
+            multihash::wrap(multihash::Code::Sha2_256, &g.gen::<[u8; 32]>())
+        ).unwrap()).collect()
     }
 
     fn sorted<T: AsRef<KeyBytes>>(target: &T, peers: &Vec<Key<PeerId>>) -> bool {
@@ -483,42 +474,63 @@ mod tests {
 
     impl Arbitrary for ClosestPeersIter {
         fn arbitrary<G: Gen>(g: &mut G) -> ClosestPeersIter {
-            random_iter(g)
+            let known_closest_peers = random_peers(g.gen_range(1, 60), g)
+                .into_iter()
+                .map(Key::from);
+            let target = Key::from(Into::<Multihash>::into(PeerId::random()));
+            let config = ClosestPeersIterConfig {
+                parallelism: g.gen_range(1, 10),
+                num_results: g.gen_range(1, 25),
+                peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+            };
+            ClosestPeersIter::with_config(config, target, known_closest_peers)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct Seed([u8; 32]);
+
+    impl Arbitrary for Seed {
+        fn arbitrary<G: Gen>(g: &mut G) -> Seed {
+            Seed(g.gen())
         }
     }
 
     #[test]
     fn new_iter() {
-        let iter = random_iter(&mut thread_rng());
-        let target = iter.target.clone();
+        fn prop(iter: ClosestPeersIter) {
+            let target = iter.target.clone();
 
-        let (keys, states): (Vec<_>, Vec<_>) = iter.closest_peers
-            .values()
-            .map(|e| (e.key.clone(), &e.state))
-            .unzip();
+            let (keys, states): (Vec<_>, Vec<_>) = iter.closest_peers
+                .values()
+                .map(|e| (e.key.clone(), &e.state))
+                .unzip();
 
-        let none_contacted = states
-            .iter()
-            .all(|s| match s {
-                PeerState::NotContacted => true,
-                _ => false
-            });
+            let none_contacted = states
+                .iter()
+                .all(|s| match s {
+                    PeerState::NotContacted => true,
+                    _ => false
+                });
 
-        assert!(none_contacted,
-            "Unexpected peer state in new iterator.");
-        assert!(sorted(&target, &keys),
-            "Closest peers in new iterator not sorted by distance to target.");
-        assert_eq!(iter.num_waiting(), 0,
-            "Unexpected peers in progress in new iterator.");
-        assert_eq!(iter.into_result().count(), 0,
-            "Unexpected closest peers in new iterator");
+            assert!(none_contacted,
+                    "Unexpected peer state in new iterator.");
+            assert!(sorted(&target, &keys),
+                    "Closest peers in new iterator not sorted by distance to target.");
+            assert_eq!(iter.num_waiting(), 0,
+                       "Unexpected peers in progress in new iterator.");
+            assert_eq!(iter.into_result().count(), 0,
+                       "Unexpected closest peers in new iterator");
+        }
+
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
     }
 
     #[test]
     fn termination_and_parallelism() {
-        fn prop(mut iter: ClosestPeersIter) {
+        fn prop(mut iter: ClosestPeersIter, seed: Seed) {
             let now = Instant::now();
-            let mut rng = thread_rng();
+            let mut rng = StdRng::from_seed(seed.0);
 
             let mut expected = iter.closest_peers
                 .values()
@@ -565,7 +577,7 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0, iter.config.num_results + 1);
-                        let closer_peers = random_peers(num_closer).collect::<Vec<_>>();
+                        let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
@@ -613,14 +625,16 @@ mod tests {
             }
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
     fn no_duplicates() {
-        fn prop(mut iter: ClosestPeersIter) -> bool {
+        fn prop(mut iter: ClosestPeersIter, seed: Seed) -> bool {
             let now = Instant::now();
-            let closer = random_peers(1).collect::<Vec<_>>();
+            let mut rng = StdRng::from_seed(seed.0);
+
+            let closer = random_peers(1, &mut rng);
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
@@ -648,7 +662,7 @@ mod tests {
             true
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
