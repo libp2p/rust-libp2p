@@ -43,6 +43,7 @@ use crate::{
         ListenersStream,
         PendingConnectionError,
         Substream,
+        manager::ManagerConfig,
         pool::{Pool, PoolEvent, PoolLimits},
     },
     muxing::StreamMuxer,
@@ -57,6 +58,7 @@ use std::{
     error,
     fmt,
     hash::Hash,
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -154,7 +156,7 @@ where
         Network {
             local_peer_id,
             listeners: ListenersStream::new(transport),
-            pool: Pool::new(pool_local_id, config.executor, config.pool_limits),
+            pool: Pool::new(pool_local_id, config.manager_config, config.pool_limits),
             dialing: Default::default(),
         }
     }
@@ -598,17 +600,23 @@ pub struct NetworkInfo {
 
 /// The (optional) configuration for a [`Network`].
 ///
-/// The default configuration specifies no dedicated task executor
-/// and no connection limits.
+/// The default configuration specifies no dedicated task executor, no
+/// connection limits, a "from task" extra buffer size of 1, and a
+/// "to task" buffer size of 5.
 #[derive(Default)]
 pub struct NetworkConfig {
-    executor: Option<Box<dyn Executor + Send>>,
+    /// Note that `ManagerConfig` doesn't contain the number of buffered
+    /// events, but rather the size of the channel (which is an
+    /// implementation detail). When it comes to the "to task buffer events"
+    /// configuration option, the size of the channel is the number of
+    /// buffered events minus one.
+    manager_config: ManagerConfig,
     pool_limits: PoolLimits,
 }
 
 impl NetworkConfig {
     pub fn set_executor(&mut self, e: Box<dyn Executor + Send>) -> &mut Self {
-        self.executor = Some(e);
+        self.manager_config.executor = Some(e);
         self
     }
 
@@ -625,7 +633,17 @@ impl NetworkConfig {
     }
 
     pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
-        self.executor.as_ref()
+        self.manager_config.executor.as_ref()
+    }
+
+    pub fn set_to_task_buffered_events(&mut self, n: NonZeroUsize) -> &mut Self {
+        self.manager_config.to_task_channel_size = n.get() - 1;
+        self
+    }
+
+    pub fn set_from_task_extra_buffered_events(&mut self, n: usize) -> &mut Self {
+        self.manager_config.from_task_channel_size = n;
+        self
     }
 
     pub fn set_incoming_limit(&mut self, n: usize) -> &mut Self {

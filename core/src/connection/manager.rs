@@ -99,6 +99,10 @@ pub struct Manager<I, O, H, E, HE, C> {
     /// Next available identifier for a new connection / task.
     next_task_id: TaskId,
 
+    /// Configuration for the size of the channel from the manager to
+    /// newly-created tasks.
+    to_task_channel_size: usize,
+
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
     /// current thread when the manager is polled for new events.
@@ -124,6 +128,32 @@ where
         f.debug_map()
             .entries(self.tasks.iter().map(|(id, task)| (id, &task.state)))
             .finish()
+    }
+}
+
+/// Configuration options when creating a [`Manager`].
+///
+/// The default configuration specifies no dedicated task executor, a
+/// "from task" channel size of 32, and a "to task" channel size of 7.
+#[non_exhaustive]
+pub struct ManagerConfig {
+    /// Executor to use to spawn tasks.
+    pub executor: Option<Box<dyn Executor + Send>>,
+
+    /// Size of the channel from the manager to newly-created tasks.
+    pub to_task_channel_size: usize,
+
+    /// Size of the channel from background tasks to the manager.
+    pub from_task_channel_size: usize,
+}
+
+impl Default for ManagerConfig {
+    fn default() -> Self {
+        ManagerConfig {
+            executor: None,
+            from_task_channel_size: 32,
+            to_task_channel_size: 7,
+        }
     }
 }
 
@@ -196,12 +226,13 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
 
 impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
     /// Creates a new connection manager.
-    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
-        let (tx, rx) = mpsc::channel(1);
+    pub fn new(config: ManagerConfig) -> Self {
+        let (tx, rx) = mpsc::channel(config.from_task_channel_size);
         Self {
             tasks: FnvHashMap::default(),
             next_task_id: TaskId(0),
-            executor,
+            to_task_channel_size: config.to_task_channel_size,
+            executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             events_tx: tx,
             events_rx: rx
@@ -234,7 +265,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
-        let (tx, rx) = mpsc::channel(4);
+        let (tx, rx) = mpsc::channel(self.to_task_channel_size);
         self.tasks.insert(task_id, TaskInfo { sender: tx, state: TaskState::Pending });
 
         let task = Box::pin(Task::pending(task_id, self.events_tx.clone(), rx, future, handler));
@@ -269,7 +300,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
-        let (tx, rx) = mpsc::channel(4);
+        let (tx, rx) = mpsc::channel(self.to_task_channel_size);
         self.tasks.insert(task_id, TaskInfo {
             sender: tx, state: TaskState::Established(info)
         });
