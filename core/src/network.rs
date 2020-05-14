@@ -601,8 +601,8 @@ pub struct NetworkInfo {
 /// The (optional) configuration for a [`Network`].
 ///
 /// The default configuration specifies no dedicated task executor, no
-/// connection limits, a "from task" extra buffer size of 1, and a
-/// "to task" buffer size of 5.
+/// connection limits, a "from task" extra buffer size of 32, and a
+/// "to task" buffer size of 8.
 #[derive(Default)]
 pub struct NetworkConfig {
     /// Note that `ManagerConfig` doesn't contain the number of buffered
