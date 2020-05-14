@@ -121,3 +121,4 @@ members = [
 
 [patch.crates-io]
 rustls = { git = "https://github.com/ctz/rustls" }
+quinn-proto = { git = "https://github.com/djc/quinn" }

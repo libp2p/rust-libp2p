@@ -28,11 +28,7 @@ use thiserror::Error;
 pub enum Error {
     /// Fatal I/O error
     #[error("Fatal I/O error {0}")]
-    IO(
-        #[error(transparent)]
-        #[from]
-        std::io::Error,
-    ),
+    IO(#[from] std::io::Error),
     /// QUIC protocol error
     #[error("QUIC protocol error: {0}")]
     ConnectionError(#[from] quinn_proto::ConnectionError),

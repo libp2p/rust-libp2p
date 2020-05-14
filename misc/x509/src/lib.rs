@@ -60,11 +60,7 @@ const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 pub enum ConfigError {
     /// TLS private key or certificate rejected
     #[error("TLS private or certificate key rejected: {0}")]
-    TLSError(
-        #[error(transparent)]
-        #[from]
-        rustls::TLSError,
-    ),
+    TLSError(#[from] rustls::TLSError),
     /// Signing failed
     #[error("Signing failed: {0}")]
     SigningError(#[from] libp2p_core::identity::error::SigningError),

@@ -158,16 +158,20 @@ impl Streams {
     }
 
     pub(super) fn process_app_events(&mut self) {
-        use quinn_proto::Event;
+        use quinn_proto::{Event as E, StreamEvent as S};
         'a: while let Some(event) = self.connection.poll() {
             match event {
-                Event::StreamOpened { dir: Dir::Uni } | Event::DatagramReceived => {
+                E::Stream(S::Opened { dir: Dir::Uni }) | E::DatagramReceived => {
                     // This should never happen, but if it does, it is better to
                     // log a nasty message and recover than to tear down the
                     // process.
-                    error!("we disabled incoming unidirectional streams and datagrams")
+                    error!(
+                        "We don’t use unidirectional streams or datagrams, but got one \
+                         anyway. This is a libp2p-quic bug; please report it \
+                         at <https://github.com/libp2p/rust-libp2p>."
+                    )
                 }
-                Event::StreamAvailable { dir: Dir::Uni } => {
+                E::Stream(S::Available { dir: Dir::Uni }) => {
                     // Ditto
                     error!(
                         "We don’t use unidirectional streams, but got one \
@@ -175,30 +179,30 @@ impl Streams {
                          at <https://github.com/libp2p/rust-libp2p>."
                     )
                 }
-                Event::StreamReadable { stream } => {
+                E::Stream(S::Readable { id }) => {
                     trace!(
                         "Stream {:?} readable for side {:?}",
-                        stream,
+                        id,
                         self.connection.side()
                     );
                     // Wake up the task waiting on us (if any)
-                    if let Some(stream) = self.map.get_mut(&stream) {
+                    if let Some(stream) = self.map.get_mut(&id) {
                         stream.wake_reader()
                     }
                 }
-                Event::StreamWritable { stream } => {
+                E::Stream(S::Writable { id }) => {
                     trace!(
                         "Stream {:?} writable for side {:?}",
-                        stream,
+                        id,
                         self.connection.side()
                     );
                     // Wake up the task waiting on us (if any).
                     // This will panic if quinn-proto has already emitted a
                     // `StreamFinished` event, but it will never emit
                     // `StreamWritable` after `StreamFinished`.
-                    self.wake_writer(stream)
+                    self.wake_writer(id)
                 }
-                Event::StreamAvailable { dir: Dir::Bi } => {
+                E::Stream(S::Available { dir: Dir::Bi }) => {
                     trace!(
                         "Bidirectional stream available for side {:?}",
                         self.connection.side()
@@ -225,7 +229,7 @@ impl Streams {
                     }
                     self.pending_stream = Some(stream)
                 }
-                Event::ConnectionLost { reason } => {
+                E::ConnectionLost { reason } => {
                     debug!(
                         "lost connection due to {:?} for side {:?}",
                         reason,
@@ -235,30 +239,27 @@ impl Streams {
                     self.wake_closer();
                     self.shutdown(0);
                 }
-                Event::StreamFinished {
-                    stream,
-                    stop_reason,
-                } => {
+                E::Stream(S::Finished { id, stop_reason }) => {
                     trace!(
                         "Stream {:?} finished for side {:?} because of {:?}",
-                        stream,
+                        id,
                         self.connection.side(),
                         stop_reason
                     );
                     // If someone is waiting for this stream to become writable,
                     // wake them up, so that they can find out the stream is
                     // dead.
-                    if let Some(status) = self.map.get_mut(&stream) {
+                    if let Some(status) = self.map.get_mut(&id) {
                         status.finish()
                     }
                     // Connection close could be blocked on this.
                     self.wake_closer()
                 }
-                Event::Connected => {
+                E::Connected => {
                     debug!("connected for side {:?}!", self.connection.side());
                     self.connection.wake();
                 }
-                Event::StreamOpened { dir: Dir::Bi } => {
+                E::Stream(S::Opened { dir: Dir::Bi }) => {
                     debug!("stream opened for side {:?}", self.connection.side());
                     self.connection.wake()
                 }
