@@ -91,7 +91,7 @@ pub struct Kademlia<TStore> {
     /// The record storage.
     store: TStore,
 
-    trust: TrustGraph,
+    pub trust: TrustGraph,
 }
 
 /// The configuration for the `Kademlia` behaviour.
