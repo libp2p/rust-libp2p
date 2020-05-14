@@ -46,14 +46,14 @@ pub struct PeerId {
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("PeerId")
-            .field(&self.to_base58())
+            .field(&self.to_string())
             .finish()
     }
 }
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_base58().fmt(f)
+        bs58::encode(self.as_bytes()).into_string().fmt(f)
     }
 }
 
@@ -160,6 +160,14 @@ impl PeerId {
         let enc = public_key.clone().into_protobuf_encoding();
         Some(alg.hasher()?.digest(&enc) == self.multihash)
     }
+
+    /// Returns public key if it was inlined in this `PeerId`.
+    pub fn as_public_key(&self) -> Option<PublicKey> {
+        match self.multihash.algorithm() {
+            Code::Identity => PublicKey::from_protobuf_encoding(self.multihash.digest()).ok(),
+            _ => None
+        }
+    }
 }
 
 impl hash::Hash for PeerId {
@@ -252,6 +260,13 @@ mod tests {
         let key = identity::Keypair::generate_ed25519().public();
         let peer_id = key.clone().into_peer_id();
         assert_eq!(peer_id.is_public_key(&key), Some(true));
+    }
+
+    #[test]
+    fn peer_id_to_public_key() {
+        let key = identity::Keypair::generate_ed25519().public();
+        let peer_id = key.clone().into_peer_id();
+        assert_eq!(peer_id.as_public_key(), Some(key));
     }
 
     #[test]
