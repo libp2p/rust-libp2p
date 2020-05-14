@@ -99,8 +99,7 @@ pub struct Manager<I, O, H, E, HE, C> {
     /// Next available identifier for a new connection / task.
     next_task_id: TaskId,
 
-    /// Configuration for the size of the channel from the manager to
-    /// newly-created tasks.
+    /// Size of the task command buffer (per task).
     to_task_channel_size: usize,
 
     /// The executor to use for running the background tasks. If `None`,
@@ -140,10 +139,10 @@ pub struct ManagerConfig {
     /// Executor to use to spawn tasks.
     pub executor: Option<Box<dyn Executor + Send>>,
 
-    /// Size of the channel from the manager to newly-created tasks.
+    /// Size of the task command buffer (per task).
     pub to_task_channel_size: usize,
 
-    /// Size of the channel from background tasks to the manager.
+    /// Size of the task event buffer (for all tasks).
     pub from_task_channel_size: usize,
 }
 

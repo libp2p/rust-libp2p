@@ -601,8 +601,8 @@ pub struct NetworkInfo {
 /// The (optional) configuration for a [`Network`].
 ///
 /// The default configuration specifies no dedicated task executor, no
-/// connection limits, a "from task" extra buffer size of 32, and a
-/// "to task" buffer size of 8.
+/// connection limits, a connection event buffer size of 32, and a
+/// `notify_handler` buffer size of 8.
 #[derive(Default)]
 pub struct NetworkConfig {
     /// Note that `ManagerConfig` doesn't contain the number of buffered
@@ -636,12 +636,25 @@ impl NetworkConfig {
         self.manager_config.executor.as_ref()
     }
 
-    pub fn set_to_task_buffered_events(&mut self, n: NonZeroUsize) -> &mut Self {
+    /// Sets the maximum number of events sent to a connection's background task
+    /// that may be buffered, if the task cannot keep up with their consumption and
+    /// delivery to the connection handler.
+    ///
+    /// When the buffer for a particular connection is full, `notify_handler` will no
+    /// longer be able to deliver events to the associated `ConnectionHandler`,
+    /// thus exerting back-pressure on the connection and peer API.
+    pub fn set_notify_handler_buffer_size(&mut self, n: NonZeroUsize) -> &mut Self {
         self.manager_config.to_task_channel_size = n.get() - 1;
         self
     }
 
-    pub fn set_from_task_extra_buffered_events(&mut self, n: usize) -> &mut Self {
+    /// Sets the maximum number of buffered connection events (beyond a guaranteed
+    /// buffer of 1 event per connection).
+    ///
+    /// When the buffer is full, the background tasks of all connections will stall.
+    /// In this way, the consumers of network events exert back-pressure on
+    /// the network connection I/O. 
+    pub fn set_connection_event_buffer_size(&mut self, n: usize) -> &mut Self {
         self.manager_config.from_task_channel_size = n;
         self
     }

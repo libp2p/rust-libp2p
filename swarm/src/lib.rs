@@ -1011,7 +1011,7 @@ where TBehaviour: NetworkBehaviour,
     /// volume of events. If this value is too low, then the [`Swarm`] will
     /// be sleeping more often than necessary. Increasing this value increases
     /// the overall memory usage.
-    pub fn to_task_buffered_events(mut self, n: NonZeroUsize) -> Self {
+    pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.network_config.set_to_task_buffered_events(n);
         self
     }
@@ -1039,7 +1039,7 @@ where TBehaviour: NetworkBehaviour,
     /// usage, and more importantly the latency between the moment when an
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
-    pub fn from_task_extra_buffered_events(mut self, n: usize) -> Self {
+    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
         self.network_config.set_from_task_extra_buffered_events(n);
         self
     }
