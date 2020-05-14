@@ -100,7 +100,7 @@ pub struct Manager<I, O, H, E, HE, C> {
     next_task_id: TaskId,
 
     /// Size of the task command buffer (per task).
-    to_task_channel_size: usize,
+    task_command_buffer_size: usize,
 
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
@@ -140,18 +140,18 @@ pub struct ManagerConfig {
     pub executor: Option<Box<dyn Executor + Send>>,
 
     /// Size of the task command buffer (per task).
-    pub to_task_channel_size: usize,
+    pub task_command_buffer_size: usize,
 
     /// Size of the task event buffer (for all tasks).
-    pub from_task_channel_size: usize,
+    pub task_event_buffer_size: usize,
 }
 
 impl Default for ManagerConfig {
     fn default() -> Self {
         ManagerConfig {
             executor: None,
-            from_task_channel_size: 32,
-            to_task_channel_size: 7,
+            task_event_buffer_size: 32,
+            task_command_buffer_size: 7,
         }
     }
 }
@@ -226,11 +226,11 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
 impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
     /// Creates a new connection manager.
     pub fn new(config: ManagerConfig) -> Self {
-        let (tx, rx) = mpsc::channel(config.from_task_channel_size);
+        let (tx, rx) = mpsc::channel(config.task_event_buffer_size);
         Self {
             tasks: FnvHashMap::default(),
             next_task_id: TaskId(0),
-            to_task_channel_size: config.to_task_channel_size,
+            task_command_buffer_size: config.task_command_buffer_size,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             events_tx: tx,
@@ -264,7 +264,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
-        let (tx, rx) = mpsc::channel(self.to_task_channel_size);
+        let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
         self.tasks.insert(task_id, TaskInfo { sender: tx, state: TaskState::Pending });
 
         let task = Box::pin(Task::pending(task_id, self.events_tx.clone(), rx, future, handler));
@@ -299,7 +299,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
 
-        let (tx, rx) = mpsc::channel(self.to_task_channel_size);
+        let (tx, rx) = mpsc::channel(self.task_command_buffer_size);
         self.tasks.insert(task_id, TaskInfo {
             sender: tx, state: TaskState::Established(info)
         });

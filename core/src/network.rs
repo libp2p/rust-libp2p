@@ -644,7 +644,7 @@ impl NetworkConfig {
     /// longer be able to deliver events to the associated `ConnectionHandler`,
     /// thus exerting back-pressure on the connection and peer API.
     pub fn set_notify_handler_buffer_size(&mut self, n: NonZeroUsize) -> &mut Self {
-        self.manager_config.to_task_channel_size = n.get() - 1;
+        self.manager_config.task_command_buffer_size = n.get() - 1;
         self
     }
 
@@ -653,9 +653,9 @@ impl NetworkConfig {
     ///
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
-    /// the network connection I/O. 
+    /// the network connection I/O.
     pub fn set_connection_event_buffer_size(&mut self, n: usize) -> &mut Self {
-        self.manager_config.from_task_channel_size = n;
+        self.manager_config.task_event_buffer_size = n;
         self
     }
 

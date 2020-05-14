@@ -1012,7 +1012,7 @@ where TBehaviour: NetworkBehaviour,
     /// be sleeping more often than necessary. Increasing this value increases
     /// the overall memory usage.
     pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
-        self.network_config.set_to_task_buffered_events(n);
+        self.network_config.set_notify_handler_buffer_size(n);
         self
     }
 
@@ -1040,7 +1040,7 @@ where TBehaviour: NetworkBehaviour,
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
     pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.network_config.set_from_task_extra_buffered_events(n);
+        self.network_config.set_connection_event_buffer_size(n);
         self
     }
 
