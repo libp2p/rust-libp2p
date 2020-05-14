@@ -1563,12 +1563,14 @@ where
             // Look for a finished query.
             loop {
                 match self.queries.poll(now) {
-                    QueryPoolState::Finished(q) => {
+                    QueryPoolState::Finished(mut q) => {
+                        q.finish();
                         if let Some(event) = self.query_finished(q, parameters) {
                             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
                         }
                     }
-                    QueryPoolState::Timeout(q) => {
+                    QueryPoolState::Timeout(mut q) => {
+                        q.finish();
                         if let Some(event) = self.query_timeout(q) {
                             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
                         }

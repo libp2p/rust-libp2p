@@ -50,7 +50,6 @@ pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use protocol::KadConnectionType;
 pub use query::QueryId;
 pub use record::{store, ProviderRecord, Record};
-pub use dht_proto::{Record as ProtoRecord, Records as ProtoRecords};
 
 use std::num::NonZeroUsize;
 

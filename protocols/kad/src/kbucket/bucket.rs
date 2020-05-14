@@ -233,7 +233,7 @@ where
             self.swamp.insert(node, status)
         };
 
-        println!(
+        log::debug!(
             "Bucket: inserting node {} weight {} -> {}",
             bs58::encode(debug_node.key.as_ref()).into_string(),
             debug_node.weight,

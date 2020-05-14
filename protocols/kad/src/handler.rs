@@ -36,7 +36,7 @@ use libp2p_core::{
     either::EitherOutput,
     upgrade::{self, InboundUpgrade, OutboundUpgrade}
 };
-use log::trace;
+use log::warn;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
@@ -832,11 +832,11 @@ fn advance_substream<TUserData>(
                 false,
             ),
             Poll::Ready(None) => {
-                trace!("Inbound substream: EOF");
+                warn!("Inbound substream id {:?}: EOF", id);
                 (None, None, false)
             }
             Poll::Ready(Some(Err(e))) => {
-                trace!("Inbound substream error: {:?}", e);
+                warn!("Inbound substream error id {:?}: {:?}", id, e);
                 (None, None, false)
             },
         },
