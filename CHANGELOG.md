@@ -8,6 +8,7 @@
   [PR 1566](https://github.com/libp2p/rust-libp2p/pull/1566)
 
 - `libp2p-core`: Make the number of events buffered to/from tasks configurable.
+  [PR 1574](https://github.com/libp2p/rust-libp2p/pull/1574)
 
 - `libp2p-noise`: Added the `X25519Spec` protocol suite which uses
   libp2p-noise-spec compliant signatures on static keys as well as the
