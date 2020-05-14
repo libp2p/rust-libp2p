@@ -4,6 +4,11 @@
   attempts per peer, with a configurable limit.
   [PR 1506](https://github.com/libp2p/rust-libp2p/pull/1506)
 
+- `libp2p-core`: `PeerId`s that use the identity hashing will now be properly
+  displayed using the string representation of an identity multihash, rather
+  than the canonical SHA 256 representation.
+  [PR 1576](https://github.com/libp2p/rust-libp2p/pull/1576)
+
 - `libp2p-noise`: Added the `X25519Spec` protocol suite which uses
   libp2p-noise-spec compliant signatures on static keys as well as the
   `/noise` protocol upgrade, hence providing a libp2p-noise-spec compliant
