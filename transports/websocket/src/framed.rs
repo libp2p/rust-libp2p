@@ -373,7 +373,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
             let mut a = Multiaddr::empty();
             match url.host() {
                 Some(url::Host::Domain(h)) => {
-                    a.push(Protocol::Dns4(h.into()))
+                    a.push(Protocol::Dns(h.into()))
                 }
                 Some(url::Host::Ipv4(ip)) => {
                     a.push(Protocol::Ip4(ip))
