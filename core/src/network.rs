@@ -605,11 +605,9 @@ pub struct NetworkInfo {
 /// `notify_handler` buffer size of 8.
 #[derive(Default)]
 pub struct NetworkConfig {
-    /// Note that `ManagerConfig` doesn't contain the number of buffered
-    /// events, but rather the size of the channel (which is an
-    /// implementation detail). When it comes to the "to task buffer events"
-    /// configuration option, the size of the channel is the number of
-    /// buffered events minus one.
+    /// Note that the `ManagerConfig`s task command buffer always provides
+    /// one "free" slot per task. Thus the given total `notify_handler_buffer_size`
+    /// exposed for configuration on the `Network` is reduced by one.
     manager_config: ManagerConfig,
     pool_limits: PoolLimits,
 }

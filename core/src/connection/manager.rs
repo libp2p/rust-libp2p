@@ -133,7 +133,7 @@ where
 /// Configuration options when creating a [`Manager`].
 ///
 /// The default configuration specifies no dedicated task executor, a
-/// "from task" channel size of 32, and a "to task" channel size of 7.
+/// task event buffer size of 32, and a task command buffer size of 7.
 #[non_exhaustive]
 pub struct ManagerConfig {
     /// Executor to use to spawn tasks.
