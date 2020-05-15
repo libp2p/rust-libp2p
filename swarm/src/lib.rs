@@ -115,7 +115,6 @@ use libp2p_core::{
         NetworkInfo,
         NetworkEvent,
         NetworkConfig,
-        Peer,
         peer::ConnectedPeer,
     },
     upgrade::ProtocolName,
@@ -124,7 +123,7 @@ use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, hash::Hash, io, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use upgrade::UpgradeInfoSend as _;
 
 /// Contains the state of the network, plus the way it should behave.
@@ -379,70 +378,31 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     ///
     /// If a new dialing attempt has been initiated, `Ok(true)` is returned.
     ///
-    /// If there is an ongoing dialing attempt, the current addresses of the
-    /// peer, as reported by [`NetworkBehaviour::addresses_of_peer`] are added
-    /// to the ongoing dialing attempt, ignoring duplicates. In this case no
-    /// new dialing attempt is initiated.
-    ///
     /// If no new dialing attempt has been initiated, meaning there is an ongoing
     /// dialing attempt or `addresses_of_peer` reports no addresses, `Ok(false)`
     /// is returned.
-    pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<bool, ConnectionLimit> {
+    pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<(), DialError> {
         let mut addrs = me.behaviour.addresses_of_peer(peer_id).into_iter();
-        match me.network.peer(peer_id.clone()) {
-            Peer::Disconnected(peer) => {
-                if let Some(first) = addrs.next() {
-                    let handler = me.behaviour.new_handler().into_node_handler_builder();
-                    match peer.connect(first, addrs, handler) {
-                        Ok(_) => return Ok(true),
-                        Err(error) => {
-                            log::debug!(
-                                "New dialing attempt to disconnected peer {:?} failed: {:?}.",
-                                peer_id, error);
-                            me.behaviour.inject_dial_failure(&peer_id);
-                            return Err(error)
-                        }
-                    }
-                } else {
-                    log::debug!(
-                        "New dialing attempt to disconnected peer {:?} failed: no address.",
-                        peer_id
-                    );
-                    me.behaviour.inject_dial_failure(&peer_id);
-                }
-                Ok(false)
-            },
-            Peer::Connected(peer) => {
-                if let Some(first) = addrs.next() {
-                    let handler = me.behaviour.new_handler().into_node_handler_builder();
-                    match peer.connect(first, addrs, handler) {
-                        Ok(_) => return Ok(true),
-                        Err(error) => {
-                            log::debug!(
-                                "New dialing attempt to connected peer {:?} failed: {:?}.",
-                                peer_id, error);
-                            me.behaviour.inject_dial_failure(&peer_id);
-                            return Err(error)
-                        }
-                    }
-                } else {
-                    log::debug!(
-                        "New dialing attempt to disconnected peer {:?} failed: no address.",
-                        peer_id
-                    );
-                    me.behaviour.inject_dial_failure(&peer_id);
-                }
-                Ok(false)
-            }
-            Peer::Dialing(mut peer) => {
-                peer.connection().add_addresses(addrs);
-                Ok(false)
-            },
-            Peer::Local => {
-                me.behaviour.inject_dial_failure(&peer_id);
-                Err(ConnectionLimit { current: 0, limit: 0 })
-            }
+        let peer = me.network.peer(peer_id.clone());
+
+        let result =
+            if let Some(first) = addrs.next() {
+                let handler = me.behaviour.new_handler().into_node_handler_builder();
+                peer.dial(first, addrs, handler)
+                    .map(|_| ())
+                    .map_err(DialError::ConnectionLimit)
+            } else {
+                Err(DialError::NoAddresses)
+            };
+
+        if let Err(error) = &result {
+            log::debug!(
+                "New dialing attempt to peer {:?} failed: {:?}.",
+                peer_id, error);
+            me.behaviour.inject_dial_failure(&peer_id);
         }
+
+        result
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
@@ -721,18 +681,22 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if !this.network.is_dialing(&peer_id) => true,
                             _ => false
                         };
-
                         if condition_matched {
-                            if let Ok(true) = ExpandedSwarm::dial(this, &peer_id) {
-                                return Poll::Ready(SwarmEvent::Dialing(peer_id));
+                            if ExpandedSwarm::dial(this, &peer_id).is_ok() {
+                                return Poll::Ready(SwarmEvent::Dialing(peer_id))
                             }
-
                         } else {
+                            // Even if the condition for a _new_ dialing attempt is not met,
+                            // we always add any potentially new addresses of the peer to an
+                            // ongoing dialing attempt, if there is one.
                             log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
                                 peer_id, condition);
                             if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
                                 let addrs = this.behaviour.addresses_of_peer(peer.id());
-                                peer.connection().add_addresses(addrs);
+                                let mut attempt = peer.some_attempt();
+                                for addr in addrs {
+                                    attempt.add_address(addr);
+                                }
                             }
                         }
                     }
@@ -1038,6 +1002,48 @@ where TBehaviour: NetworkBehaviour,
         self
     }
 
+    /// Configures the number of events from the [`NetworkBehaviour`] in
+    /// destination to the [`ProtocolsHandler`] that can be buffered before
+    /// the [`Swarm`] has to wait. An individual buffer with this number of
+    /// events exists for each individual connection.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, and the
+    /// volume of events. If this value is too low, then the [`Swarm`] will
+    /// be sleeping more often than necessary. Increasing this value increases
+    /// the overall memory usage.
+    pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+        self.network_config.set_notify_handler_buffer_size(n);
+        self
+    }
+
+    /// Configures the number of extra events from the [`ProtocolsHandler`] in
+    /// destination to the [`NetworkBehaviour`] that can be buffered before
+    /// the [`ProtocolsHandler`] has to go to sleep.
+    ///
+    /// There exists a buffer of events received from [`ProtocolsHandler`]s
+    /// that the [`NetworkBehaviour`] has yet to process. This buffer is
+    /// shared between all instances of [`ProtocolsHandler`]. Each instance of
+    /// [`ProtocolsHandler`] is guaranteed one slot in this buffer, meaning
+    /// that delivering an event for the first time is guaranteed to be
+    /// instantaneous. Any extra event delivery, however, must wait for that
+    /// first event to be delivered or for an "extra slot" to be available.
+    ///
+    /// This option configures the number of such "extra slots" in this
+    /// shared buffer. These extra slots are assigned in a first-come,
+    /// first-served basis.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, the
+    /// average number of connections, and the volume of events. If this value
+    /// is too low, then the [`ProtocolsHandler`]s will be sleeping more often
+    /// than necessary. Increasing this value increases the overall memory
+    /// usage, and more importantly the latency between the moment when an
+    /// event is emitted and the moment when it is received by the
+    /// [`NetworkBehaviour`].
+    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.network_config.set_connection_event_buffer_size(n);
+        self
+    }
+
     /// Configures a limit for the number of simultaneous incoming
     /// connection attempts.
     pub fn incoming_connection_limit(mut self, n: usize) -> Self {
@@ -1100,6 +1106,35 @@ where TBehaviour: NetworkBehaviour,
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
             pending_event: None
+        }
+    }
+}
+
+/// The possible failures of [`ExpandedSwarm::dial`].
+#[derive(Debug)]
+pub enum DialError {
+    /// The configured limit for simultaneous outgoing connections
+    /// has been reached.
+    ConnectionLimit(ConnectionLimit),
+    /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
+    /// for the peer to dial.
+    NoAddresses
+}
+
+impl fmt::Display for DialError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
+            DialError::NoAddresses => write!(f, "Dial error: no addresses for peer.")
+        }
+    }
+}
+
+impl error::Error for DialError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            DialError::ConnectionLimit(err) => Some(err),
+            DialError::NoAddresses => None
         }
     }
 }

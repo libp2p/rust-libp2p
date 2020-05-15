@@ -849,7 +849,6 @@ where
                 key,
                 phase: AddProviderPhase::GetClosestPeers
             } => {
-                let closest_peers = result.peers.map(kbucket::Key::from);
                 let provider_id = params.local_peer_id().clone();
                 let external_addresses = params.external_addresses().collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
@@ -861,7 +860,7 @@ where
                         get_closest_peers_stats: result.stats
                     }
                 });
-                self.queries.continue_fixed(query_id, closest_peers, inner);
+                self.queries.continue_fixed(query_id, result.peers, inner);
                 None
             }
 
@@ -906,7 +905,7 @@ where
                             }
                         };
                         let inner = QueryInner::new(info);
-                        self.queries.add_fixed(iter::once(cache_key), inner);
+                        self.queries.add_fixed(iter::once(cache_key.into_preimage()), inner);
                     }
                     Ok(GetRecordOk { records })
                 } else if records.is_empty() {
@@ -930,7 +929,6 @@ where
                 quorum,
                 phase: PutRecordPhase::GetClosestPeers
             } => {
-                let closest_peers = result.peers.map(kbucket::Key::from);
                 let info = QueryInfo::PutRecord {
                     context,
                     record,
@@ -941,7 +939,7 @@ where
                     }
                 };
                 let inner = QueryInner::new(info);
-                self.queries.continue_fixed(query_id, closest_peers, inner);
+                self.queries.continue_fixed(query_id, result.peers, inner);
                 None
             }
 
@@ -2224,4 +2222,3 @@ impl fmt::Display for NoKnownPeers {
 }
 
 impl std::error::Error for NoKnownPeers {}
-

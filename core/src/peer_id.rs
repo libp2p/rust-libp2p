@@ -77,10 +77,9 @@ impl PeerId {
         };
 
         let canonical = canonical_algorithm.map(|alg|
-            alg.hasher().expect("SHA2-256 hasher is always supported").digest(&key_enc));
+            alg.digest(&key_enc));
 
-        let multihash = hash_algorithm.hasher()
-            .expect("Identity and SHA-256 hasher are always supported").digest(&key_enc);
+        let multihash = hash_algorithm.digest(&key_enc);
 
         PeerId { multihash, canonical }
     }
@@ -158,7 +157,7 @@ impl PeerId {
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
         let alg = self.multihash.algorithm();
         let enc = public_key.clone().into_protobuf_encoding();
-        Some(alg.hasher()?.digest(&enc) == self.multihash)
+        Some(alg.digest(&enc) == self.multihash)
     }
 }
 
@@ -321,8 +320,8 @@ mod tests {
         }
 
         fn property(data: Vec<u8>, algo1: HashAlgo, algo2: HashAlgo) -> bool {
-            let a = PeerId::try_from(algo1.0.hasher().unwrap().digest(&data)).unwrap();
-            let b = PeerId::try_from(algo2.0.hasher().unwrap().digest(&data)).unwrap();
+            let a = PeerId::try_from(algo1.0.digest(&data)).unwrap();
+            let b = PeerId::try_from(algo2.0.digest(&data)).unwrap();
 
             if algo1 == algo2 || algo1.0 == Code::Identity || algo2.0 == Code::Identity {
                 a == b

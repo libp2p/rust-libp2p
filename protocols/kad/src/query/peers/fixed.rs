@@ -58,7 +58,12 @@ enum PeerState {
 }
 
 impl FixedPeersIter {
-    pub fn new(peers: Vec<PeerId>, parallelism: usize) -> Self {
+    pub fn new<I>(peers: I, parallelism: usize) -> Self
+    where
+        I: IntoIterator<Item = PeerId>
+    {
+        let peers = peers.into_iter().collect::<Vec<_>>();
+
         Self {
             parallelism,
             peers: FnvHashMap::default(),
@@ -99,9 +104,10 @@ impl FixedPeersIter {
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
     pub fn on_failure(&mut self, peer: &PeerId) -> bool {
-        if let State::Waiting { .. } = &self.state {
+        if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Failed;
+                *num_waiting -= 1;
                 return true
             }
         }
@@ -163,3 +169,30 @@ impl FixedPeersIter {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn decrease_num_waiting_on_failure() {
+        let mut iter = FixedPeersIter::new(vec![PeerId::random(), PeerId::random()], 1);
+
+        match iter.next() {
+            PeersIterState::Waiting(Some(peer)) => {
+                let peer = peer.into_owned();
+                iter.on_failure(&peer);
+            },
+            _ => panic!("Expected iterator to yield peer."),
+        }
+
+        match iter.next() {
+            PeersIterState::Waiting(Some(_)) => {},
+            PeersIterState::WaitingAtCapacity => panic!(
+                "Expected iterator to return another peer given that the \
+                 previous `on_failure` call should have allowed another peer \
+                 to be queried.",
+            ),
+            _ => panic!("Expected iterator to yield peer."),
+        }
+    }
+}
