@@ -137,14 +137,12 @@ impl ClosestDisjointPeersIter {
     pub fn next(&mut self, now: Instant) -> PeersIterState {
         let mut state = None;
 
-        // Order in which to query the iterators to ensure fairness. Make sure
-        // to query the previously queried iterator last.
-        let iter_order = {
-            let mut all = (0..self.iters.len()).map(Into::into).collect::<Vec<_>>();
-            let mut next_up = all.split_off((self.last_queried + 1).into());
-            next_up.append(&mut all);
-            next_up
-        };
+        // Order in which to query the iterators to ensure fairness.
+        let iter_order = (0..self.iters.len()).map(Into::into).cycle()
+            // Make sure to query the previously queried iterator last.
+            .skip(Into::<usize>::into(self.last_queried) + 1)
+            // Query each iterator at most once.
+            .take(self.iters.len());
 
         for i in &mut iter_order.into_iter() {
             self.last_queried = i;
@@ -270,7 +268,7 @@ impl ClosestDisjointPeersIter {
 }
 
 /// Index into the [`ClosestDisjointPeersIter`] `iters` vector.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct IteratorIndex(usize);
 
 impl From<usize> for IteratorIndex {
