@@ -38,7 +38,7 @@ jobs:
     container:
       image: rust
       env:
-        CC: clang-9
+        CC: clang-10
     steps:
     - uses: actions/checkout@v1
     - name: Install Rust
@@ -50,9 +50,9 @@ jobs:
     - name: Install a recent version of clang
       run: |
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" >> /etc/apt/sources.list
+        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" >> /etc/apt/sources.list
         apt-get update
-        apt-get install -y clang-9
+        apt-get install -y clang-10
     - name: Install CMake
       run: apt-get install -y cmake
     - name: Cache cargo registry

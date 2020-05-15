@@ -21,7 +21,7 @@
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
 use libp2p_core::PeerId;
-use std::{collections::{HashMap, HashSet}, iter::{Peekable}, ops::{Add, Index, IndexMut}};
+use std::{collections::HashMap, iter::{Peekable}, ops::{Add, Index, IndexMut}};
 use wasm_timer::Instant;
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
