@@ -277,7 +277,7 @@ impl ClosestDisjointPeersIter {
     ///
     /// `peers` representing the peers that either returned or put a record.
     ///
-    /// See [`Query::may_finish`] for details.
+    /// See [`crate::query::Query::may_finish`] for details.
     pub fn may_finish<I>(&mut self, peers: I)
     where
         I: IntoIterator<Item = PeerId>
