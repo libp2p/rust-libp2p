@@ -855,13 +855,17 @@ mod tests {
     /// Ensure [`ClosestPeersIter`] and [`ClosestDisjointPeersIter`] yield same closest peers.
     #[test]
     fn closest_and_disjoint_closest_yield_same_result() {
-        fn prop(graph: Graph, parallelism: Parallelism, num_results: NumResults) -> TestResult {
+        fn prop(
+            target: Target,
+            graph: Graph,
+            parallelism: Parallelism,
+            num_results: NumResults,
+        ) -> TestResult {
             if parallelism.0 > num_results.0 {
                 return TestResult::discard();
             }
 
-            // TODO: Pass target via prop().
-            let target: KeyBytes = Key::from(PeerId::random()).into();
+            let target: KeyBytes = target.0;
             let closest_peer = graph.get_closest_peer(&target);
 
             let mut known_closest_peers = graph.0.iter()
@@ -959,6 +963,6 @@ mod tests {
             result.into_iter().map(|k| k.into_preimage()).collect()
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _, _) -> _)
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _, _, _) -> _)
     }
 }
