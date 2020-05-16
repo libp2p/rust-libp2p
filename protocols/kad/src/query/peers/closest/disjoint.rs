@@ -236,9 +236,15 @@ impl ClosestDisjointPeersIter {
         state.unwrap_or(PeersIterState::Finished)
     }
 
-    pub fn finish(&mut self) {
-        for iter in &mut self.iters {
-            iter.finish()
+    /// See [`Query::may_finish`] for documentation.
+    pub fn may_finish<I>(&mut self, peers: I)
+    where
+        I: IntoIterator<Item = PeerId>
+    {
+        for peer in peers {
+            if let Some(PeerState{ initiated_by, .. }) = self.contacted_peers.get_mut(&peer) {
+                self.iters[*initiated_by].finish();
+            }
         }
     }
 
@@ -298,6 +304,7 @@ impl IndexMut<IteratorIndex> for Vec<ClosestPeersIter> {
 
 /// State tracking the iterator that yielded (i.e. tried to contact) a peer. See
 /// [`ClosestDisjointPeersIter::on_success`] for details.
+#[derive(Debug)]
 struct PeerState {
     /// First iterator to yield the peer. Will be notified both of the outcome
     /// (success/failure) as well as the closer peers.
@@ -316,6 +323,7 @@ impl PeerState {
     }
 }
 
+#[derive(Debug)]
 enum ResponseState {
     Waiting,
     Succeeded,

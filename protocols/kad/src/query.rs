@@ -299,14 +299,24 @@ impl<TInner> Query<TInner> {
         }
     }
 
-    /// Finishes the query prematurely.
+    /// Offer to finish the query prematurely, providing the peers that
+    /// returned either a record or a set of providers as an argument.
     ///
-    /// A finished query immediately stops yielding new peers to contact and will be
-    /// reported by [`QueryPool::poll`] via [`QueryPoolState::Finished`].
-    pub fn finish(&mut self) {
+    /// It is up to the `QueryPeerIter` to decide whether to finish or continue
+    /// querying other peers. E.g. in the case of using disjoint paths a
+    /// `QueryPeerIter` may decide not yet to finish in case not every path
+    /// has yet yielded a result.
+    ///
+    /// A finished query immediately stops yielding new peers to contact and
+    /// will be reported by [`QueryPool::poll`] via
+    /// [`QueryPoolState::Finished`].
+    pub fn may_finish<I>(&mut self, peers: I)
+    where
+        I: IntoIterator<Item = PeerId>
+    {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
-            QueryPeerIter::ClosestDisjoint(iter) => iter.finish(),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.may_finish(peers),
             QueryPeerIter::Fixed(iter) => iter.finish()
         }
     }

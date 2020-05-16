@@ -24,12 +24,13 @@ use super::*;
 
 use crate::{ALPHA_VALUE, K_VALUE};
 use crate::kbucket::Distance;
-use crate::record::store::MemoryStore;
+use crate::record::{Key, store::MemoryStore};
 use futures::{
     prelude::*,
     executor::block_on,
     future::poll_fn,
 };
+use futures_timer::Delay;
 use libp2p_core::{
     PeerId,
     Transport,
@@ -44,7 +45,7 @@ use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng};
-use std::{collections::{HashSet, HashMap}, io, num::NonZeroUsize, u64};
+use std::{collections::{HashSet, HashMap}, time::Duration, io, num::NonZeroUsize, u64};
 use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
@@ -809,4 +810,96 @@ fn exp_decr_expiration_overflow() {
     prop_no_panic(KademliaConfig::default().record_ttl.unwrap(), 64);
 
     quickcheck(prop_no_panic as fn(_, _))
+}
+
+#[test]
+fn disjoint_query_does_not_finish_before_all_paths_did() {
+    let mut config = KademliaConfig::default();
+    config.use_disjoint_path_queries();
+    // I.e. setting the amount disjoint paths to be explored to 2.
+    config.set_parallelism(NonZeroUsize::new(2).unwrap());
+
+
+    let mut alice = build_node_with_config(config);
+    let mut trudy = build_node(); // Trudy the intrudor, an adversary.
+    let mut bob = build_node();
+
+	let key = Key::new(&multihash::Sha2_256::digest(&vec![1, 2, 3, 4]));
+    let record_bob = Record::new(key.clone(), b"bob".to_vec());
+    let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
+
+    // Make `trudy` and `bob` aware of their version of the record searched by
+    // `alice`.
+    trudy.1.store.put(record_bob.clone()).unwrap();
+    bob.1.store.put(record_trudy.clone()).unwrap();
+
+    // Make `trudy` and `bob` known to `alice`.
+    alice.1.add_address(Swarm::local_peer_id(&trudy.1), trudy.0.clone());
+    alice.1.add_address(Swarm::local_peer_id(&bob.1), bob.0.clone());
+
+    // Have `alice` query the Dht for `key` with a quorum of 1.
+    alice.1.get_record(&key, Quorum::One);
+
+    // The default peer timeout is 10 seconds. Choosing 1 seconds here should
+    // give enough head room to prevent connections to `bob` to time out.
+    let mut before_timeout = Delay::new(Duration::from_secs(1));
+
+    // Poll only `alice` and `trudy` expecting `alice` not yet to return a query
+    // result as it is not able to connect to `bob` just yet.
+    block_on(
+        poll_fn(|ctx| {
+            for (_, swarm) in &mut [&mut alice, &mut trudy] {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(KademliaEvent::GetRecordResult(result))) => {
+                            match result {
+                                Ok(_) => panic!(
+                                    "Expected query not to finish until all \
+                                     disjoint paths have been queried.",
+                                ),
+                                Err(e) => unreachable!("{:?}", e),
+                            }
+                        }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        Poll::Ready(None) => panic!("Expected Kademlia behaviour not to finish."),
+                        Poll::Pending => break,
+                    }
+                }
+            }
+
+            // Make sure not to wait until connections to `bob` time out.
+            before_timeout.poll_unpin(ctx)
+        })
+    );
+
+    // Poll `alice` and `bob` expecting `alice` to return a successful query
+    // result as it is now able to explore the second disjoint path.
+    let records = block_on(
+        poll_fn(|ctx| {
+            for (_, swarm) in &mut [&mut alice, &mut bob] {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(KademliaEvent::GetRecordResult(result))) => {
+                            match result {
+                                Ok(ok) => return Poll::Ready(ok.records),
+                                Err(e) => unreachable!("{:?}", e),
+                            }
+                        }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        Poll::Ready(None) => panic!(
+                            "Expected Kademlia behaviour not to finish.",
+                        ),
+                        Poll::Pending => break,
+                    }
+                }
+            }
+
+            Poll::Pending
+        })
+    );
+
+    assert!(records.contains(&record_bob));
+    assert!(records.contains(&record_trudy));
 }

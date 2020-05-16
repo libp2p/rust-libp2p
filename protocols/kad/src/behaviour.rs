@@ -277,7 +277,7 @@ impl<TStore> Kademlia<TStore>
 where
     for<'a> TStore: RecordStore<'a>
 {
-    /// Creates a new `Kademlia` network behaviour with the given configuration.
+    /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
         Self::with_config(id, store, Default::default())
     }
@@ -418,13 +418,16 @@ where
             if record.is_expired(Instant::now()) {
                 self.store.remove(key)
             } else {
-                records.push(record.into_owned());
                 if quorum.get() == 1 {
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::GetRecordResult(Ok(GetRecordOk { records }))
+                        KademliaEvent::GetRecordResult(Ok(
+                            GetRecordOk { records: vec![record.into_owned()] },
+                        ))
                     ));
                     return;
                 }
+
+                records.push((None, record.into_owned()));
             }
         }
 
@@ -823,6 +826,7 @@ where
             }
 
             QueryInfo::GetRecord { key, records, quorum, cache_at } => {
+                let records = records.into_iter().map(|r| r.1).collect::<Vec<_>>();
                 let result = if records.len() >= quorum.get() { // [not empty]
                     if let Some(cache_key) = cache_at {
                         // Cache the record at the closest node to the key that
@@ -830,7 +834,7 @@ where
                         let record = records.first().expect("[not empty]").clone();
                         let quorum = NonZeroUsize::new(1).expect("1 > 0");
                         let context = PutRecordContext::Cache;
-                        let info = QueryInfo::PutRecord { record, quorum, context, num_results: 0 };
+                        let info = QueryInfo::PutRecord { record: record, quorum, context, successfull_peers: vec![] };
                         let inner = QueryInner::new(info);
                         self.queries.add_fixed(iter::once(cache_key.into_preimage()), inner);
                     }
@@ -847,18 +851,18 @@ where
             }
 
             QueryInfo::PreparePutRecord { record, quorum, context } => {
-                let info = QueryInfo::PutRecord { record, quorum, context, num_results: 0 };
+                let info = QueryInfo::PutRecord { record, quorum, context, successfull_peers: vec![] };
                 let inner = QueryInner::new(info);
                 self.queries.add_fixed(result.peers, inner);
                 None
             }
 
-            QueryInfo::PutRecord { record, quorum, num_results, context } => {
+            QueryInfo::PutRecord { record, quorum, successfull_peers, context } => {
                 let result = |key: record::Key| {
-                    if num_results >= quorum.get() {
+                    if successfull_peers.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
-                        Err(PutRecordError::QuorumFailed { key, quorum, num_results })
+                        Err(PutRecordError::QuorumFailed { key, quorum, num_results: successfull_peers.len() })
                     }
                 };
                 match context {
@@ -939,10 +943,10 @@ where
                 }
             }
 
-            QueryInfo::PutRecord { record, quorum, num_results, context } => {
+            QueryInfo::PutRecord { record, quorum, successfull_peers, context } => {
                 let err = Err(PutRecordError::Timeout {
                     key: record.key,
-                    num_results,
+                    num_results: successfull_peers.len(),
                     quorum
                 });
                 match context {
@@ -963,7 +967,12 @@ where
 
             QueryInfo::GetRecord { key, records, quorum, .. } =>
                 Some(KademliaEvent::GetRecordResult(Err(
-                    GetRecordError::Timeout { key, records, quorum }))),
+                    GetRecordError::Timeout {
+                        key,
+                        records: records.into_iter().map(|r| r.1).collect(),
+                        quorum,
+                    }
+                ))),
 
             QueryInfo::GetProviders { key, providers } =>
                 Some(KademliaEvent::GetProvidersResult(Err(
@@ -1333,9 +1342,16 @@ where
                         key, records, quorum, cache_at
                     } = &mut query.inner.info {
                         if let Some(record) = record {
-                            records.push(record);
-                            if records.len() == quorum.get() {
-                                query.finish()
+                            records.push((Some(source.clone()), record));
+
+                            if records.len() >= quorum.get() {
+                                // Desired quorum reached. The query may finish. See
+                                // [`Query::may_finish`] for details.
+                                let peers = records.iter()
+                                    .filter_map(|(peer, _record)| peer.as_ref())
+                                    .cloned()
+                                    .collect::<Vec<_>>();
+                                query.may_finish(peers)
                             }
                         } else if quorum.get() == 1 {
                             // It is a "standard" Kademlia query, for which the
@@ -1371,11 +1387,12 @@ where
                 if let Some(query) = self.queries.get_mut(&user_data) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
-                        num_results, quorum, ..
+                        successfull_peers, quorum, ..
                     } = &mut query.inner.info {
-                        *num_results += 1;
-                        if *num_results == quorum.get() {
-                            query.finish()
+                        successfull_peers.push(source);
+                        if successfull_peers.len() >= quorum.get() {
+                            let peers = successfull_peers.clone();
+                            query.may_finish(peers)
                         }
                     }
                 }
@@ -1905,7 +1922,8 @@ enum QueryInfo {
     PutRecord {
         record: Record,
         quorum: NonZeroUsize,
-        num_results: usize,
+        /// A list of peers the given record has been replicated to.
+        successfull_peers: Vec<PeerId>,
         context: PutRecordContext,
     },
 
@@ -1913,8 +1931,9 @@ enum QueryInfo {
     GetRecord {
         /// The key to look for.
         key: record::Key,
-        /// The records found.
-        records: Vec<Record>,
+        /// The records with the id of the peer that returned them. `None` when
+        /// the record was found in the local store.
+        records: Vec<(Option<PeerId>, Record)>,
         /// The number of records to look for.
         quorum: NonZeroUsize,
         /// The closest peer to `key` that did not return a record.
