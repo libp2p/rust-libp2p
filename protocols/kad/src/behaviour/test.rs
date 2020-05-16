@@ -437,16 +437,21 @@ fn get_record_not_found() {
     )
 }
 
-/// A node joining a fully connected network via a single bootnode should be able to put a record to
-/// the X closest nodes of the network where X is equal to the configured replication factor.
+/// A node joining a fully connected network via three (ALPHA_VALUE) bootnodes
+/// should be able to put a record to the X closest nodes of the network where X
+/// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(replication_factor: usize, records: Vec<Record>) {
-        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
+    fn prop(records: Vec<Record>, seed: Seed) {
+        let mut rng = StdRng::from_seed(seed.0);
+        let replication_factor = NonZeroUsize::new(rng.gen_range(1, K_VALUE.get() + 1)).unwrap();
         let num_total = replication_factor.get() * 2;
 
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
+        if rng.gen() {
+            config.use_disjoint_path_queries();
+        }
 
         let mut swarms = {
             let mut fully_connected_swarms = build_fully_connected_nodes_with_config(
@@ -455,10 +460,13 @@ fn put_record() {
             );
 
             let mut single_swarm = build_node_with_config(config);
-            single_swarm.1.add_address(
-                Swarm::local_peer_id(&fully_connected_swarms[0].1),
-                fully_connected_swarms[0].0.clone(),
-            );
+            // Connect `single_swarm` to three bootnodes.
+            for i in 0..3 {
+                single_swarm.1.add_address(
+                    Swarm::local_peer_id(&fully_connected_swarms[i].1),
+                    fully_connected_swarms[i].0.clone(),
+                );
+            }
 
             let mut swarms = vec![single_swarm];
             swarms.append(&mut fully_connected_swarms);
@@ -703,17 +711,21 @@ fn get_record_many() {
     )
 }
 
-/// A node joining a fully connected network via a single bootnode should be able to add itself as a
-/// provider to the X closest nodes of the network where X is equal to the configured replication
-/// factor.
+/// A node joining a fully connected network via three (ALPHA_VALUE) bootnodes
+/// should be able to add itself as a provider to the X closest nodes of the
+/// network where X is equal to the configured replication factor.
 #[test]
 fn add_provider() {
-    fn prop(replication_factor: usize, keys: Vec<record::Key>) {
-        let replication_factor = NonZeroUsize::new(replication_factor % (K_VALUE.get() / 2) + 1).unwrap();
+    fn prop(keys: Vec<record::Key>, seed: Seed) {
+        let mut rng = StdRng::from_seed(seed.0);
+        let replication_factor = NonZeroUsize::new(rng.gen_range(1, K_VALUE.get() + 1)).unwrap();
         let num_total = replication_factor.get() * 2;
 
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
+        if rng.gen() {
+            config.use_disjoint_path_queries();
+        }
 
         let mut swarms = {
             let mut fully_connected_swarms = build_fully_connected_nodes_with_config(
@@ -722,10 +734,13 @@ fn add_provider() {
             );
 
             let mut single_swarm = build_node_with_config(config);
-            single_swarm.1.add_address(
-                Swarm::local_peer_id(&fully_connected_swarms[0].1),
-                fully_connected_swarms[0].0.clone(),
-            );
+            // Connect `single_swarm` to three bootnodes.
+            for i in 0..3 {
+                single_swarm.1.add_address(
+                    Swarm::local_peer_id(&fully_connected_swarms[i].1),
+                    fully_connected_swarms[i].0.clone(),
+                );
+            }
 
             let mut swarms = vec![single_swarm];
             swarms.append(&mut fully_connected_swarms);
