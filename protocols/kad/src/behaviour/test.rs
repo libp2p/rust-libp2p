@@ -22,7 +22,7 @@
 
 use super::*;
 
-use crate::{ALPHA_VALUE, K_VALUE};
+use crate::K_VALUE;
 use crate::kbucket::Distance;
 use crate::record::{Key, store::MemoryStore};
 use futures::{
@@ -44,13 +44,11 @@ use libp2p_secio::SecioConfig;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
-use rand::{Rng, random, thread_rng};
+use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
 use std::{collections::{HashSet, HashMap}, time::Duration, io, num::NonZeroUsize, u64};
 use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
-
-// TODO: Have these tests use disjoint paths as well.
 
 fn build_node() -> (Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
@@ -135,21 +133,45 @@ fn random_multihash() -> Multihash {
     wrap(Code::Sha2_256, &thread_rng().gen::<[u8; 32]>())
 }
 
+#[derive(Clone, Debug)]
+struct Seed([u8; 32]);
+
+impl Arbitrary for Seed {
+    fn arbitrary<G: Gen>(g: &mut G) -> Seed {
+        Seed(g.gen())
+    }
+}
+
 #[test]
 fn bootstrap() {
-    fn run(rng: &mut impl Rng) {
-        let num_total = rng.gen_range(2, 20);
-        // When looking for the closest node to a key, Kademlia considers ALPHA_VALUE nodes to query
-        // at initialization. If `num_groups` is larger than ALPHA_VALUE the remaining locally known
-        // nodes will not be considered. Given that no other node is aware of them, they would be
-        // lost entirely. To prevent the above restrict `num_groups` to be equal or smaller than
-        // ALPHA_VALUE.
-        let num_group = rng.gen_range(1, (num_total % ALPHA_VALUE.get()) + 2);
+    fn prop(seed: Seed) {
+        let mut rng = StdRng::from_seed(seed.0);
 
-        let mut swarms = build_connected_nodes(num_total, num_group).into_iter()
+        let num_total = rng.gen_range(2, 20);
+        // When looking for the closest node to a key, Kademlia considers
+        // K_VALUE nodes to query at initialization. If `num_groups` is larger
+        // than K_VALUE the remaining locally known nodes will not be
+        // considered. Given that no other node is aware of them, they would be
+        // lost entirely. To prevent the above restrict `num_groups` to be equal
+        // or smaller than K_VALUE.
+        let num_group = rng.gen_range(1, (num_total % K_VALUE.get()) + 2);
+
+        let mut cfg = KademliaConfig::default();
+        if rng.gen() {
+            cfg.use_disjoint_path_queries();
+        }
+
+        let mut swarms = build_connected_nodes_with_config(
+            num_total,
+            num_group,
+            cfg,
+        ).into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
-        let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
+        let swarm_ids: Vec<_> = swarms.iter()
+            .map(Swarm::local_peer_id)
+            .cloned()
+            .collect();
 
         let qid = swarms[0].bootstrap().unwrap();
 
@@ -193,10 +215,7 @@ fn bootstrap() {
         )
     }
 
-    let mut rng = thread_rng();
-    for _ in 0 .. 10 {
-        run(&mut rng)
-    }
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
 }
 
 #[test]
