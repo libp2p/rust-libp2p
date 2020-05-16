@@ -90,23 +90,57 @@ impl ClosestDisjointPeersIter {
         }
     }
 
-    pub fn on_failure(&mut self, peer: &PeerId) {
+    /// Callback for informing the iterator about a failed request to a peer.
+    ///
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
+    ///
+    /// If the iterator is finished, it is not currently waiting for a
+    /// result from `peer`, or a result for `peer` has already been reported,
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
+        let mut updated = false;
+
         // All peer failures are reported to all queries and thus to all peer
         // iterators. If this iterator never started a request to the given peer
         // ignore the failure.
-        if let Some(PeerState{ response, .. }) = self.contacted_peers.get_mut(peer) {
+        if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
             *response = ResponseState::Failed;
+
+            updated = self.iters[*initiated_by].on_failure(peer);
 
             for iter in &mut self.iters {
                 iter.on_failure(peer);
             }
         }
+
+        updated
     }
 
-    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I)
+    /// Callback for delivering the result of a successful request to a peer.
+    ///
+    /// Delivering results of requests back to the iterator allows the iterator to make
+    /// progress. The iterator is said to make progress either when the given
+    /// `closer_peers` contain a peer closer to the target than any peer seen so far,
+    /// or when the iterator did not yet accumulate `num_results` closest peers and
+    /// `closer_peers` contains a new peer, regardless of its distance to the target.
+    ///
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
+    ///
+    /// If the iterator is finished, it is not currently waiting for a
+    /// result from `peer`, or a result for `peer` has already been reported,
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
         I: IntoIterator<Item = PeerId>,
     {
+        let mut updated = false;
+
         if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
             // Mark the response as succeeded for future iterators yielding this
             // peer. There is no need to keep the `closer_peers` around, given
@@ -115,7 +149,7 @@ impl ClosestDisjointPeersIter {
 
             // Pass the new `closer_peers` to the iterator that first yielded
             // the peer.
-            self.iters[*initiated_by].on_success(peer, closer_peers);
+            updated = self.iters[*initiated_by].on_success(peer, closer_peers);
 
             for iter in &mut self.iters {
                 // Only report the success to all remaining not-first iterators.
@@ -124,6 +158,8 @@ impl ClosestDisjointPeersIter {
                 iter.on_success(peer, std::iter::empty());
             }
         }
+
+        updated
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
@@ -236,7 +272,12 @@ impl ClosestDisjointPeersIter {
         state.unwrap_or(PeersIterState::Finished)
     }
 
-    /// See [`Query::may_finish`] for documentation.
+    /// Only finish the [`ClosestPeersIter`]s that yielded a peer within
+    /// `peers`.
+    ///
+    /// `peers` representing the peers that either returned or put a record.
+    ///
+    /// See [`Query::may_finish`] for details.
     pub fn may_finish<I>(&mut self, peers: I)
     where
         I: IntoIterator<Item = PeerId>
@@ -246,6 +287,24 @@ impl ClosestDisjointPeersIter {
                 self.iters[*initiated_by].finish();
             }
         }
+    }
+
+    /// Immediately transitions the iterator to [`PeersIterState::Finished`].
+    pub fn finish(&mut self) {
+        for iter in &mut self.iters {
+            iter.finish();
+        }
+    }
+
+    /// Checks whether the iterator has finished.
+    pub fn is_finished(&self) -> bool {
+        for iter in &self.iters {
+            if iter.is_finished() {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Note: In the case of no adversarial peers or connectivity issues along
@@ -782,7 +841,7 @@ mod tests {
             match self {
                 PeerIterator::Disjoint(iter) => iter.on_success(peer, closer_peers),
                 PeerIterator::Closest(iter) => iter.on_success(peer, closer_peers),
-            }
+            };
         }
 
         fn into_result(self) -> Vec<PeerId> {
