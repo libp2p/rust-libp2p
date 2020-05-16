@@ -27,6 +27,14 @@
   has no effect.
   [PR 1536](https://github.com/libp2p/rust-libp2p/pull/1536)
 
+- `libp2p-kad`: Provide more insight into, and control of, the execution of
+  queries. All query results are now wrapped in `KademliaEvent::QueryResult`.
+  As a side-effect of these changes and for as long as the record storage
+  API is not asynchronous, local storage errors on `put_record` are reported
+  synchronously in a `Result`, instead of being reported asynchronously by
+  an event.
+  [PR 1567](https://github.com/libp2p/rust-libp2p/pull/1567)
+
 - `libp2p-tcp`: On listeners started with an IPv6 multi-address the socket
   option `IPV6_V6ONLY` is set to true. Instead of relying on IPv4-mapped IPv6
   address support, two listeners can be started if IPv4 and IPv6 should both
