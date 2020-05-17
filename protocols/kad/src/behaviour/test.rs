@@ -444,7 +444,7 @@ fn get_record_not_found() {
 fn put_record() {
     fn prop(records: Vec<Record>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor = NonZeroUsize::new(rng.gen_range(1, K_VALUE.get() + 1)).unwrap();
+        let replication_factor = NonZeroUsize::new(rng.gen_range(4, K_VALUE.get() + 1)).unwrap();
         let num_total = replication_factor.get() * 2;
 
         let mut config = KademliaConfig::default();
@@ -620,6 +620,12 @@ fn put_record() {
             })
         )
     }
+
+    // Past failures.
+    prop(vec![], Seed([
+        28, 84, 29, 227, 26, 164, 229, 32, 162, 130, 83, 64, 58, 253, 14, 211, 3,
+        165, 16, 84, 161, 114, 216, 118, 214, 163, 213, 97, 145, 40, 218, 155,
+    ]));
 
     QuickCheck::new().tests(3).quickcheck(prop as fn(_,_) -> _)
 }
