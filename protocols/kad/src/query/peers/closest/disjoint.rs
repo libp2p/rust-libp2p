@@ -21,7 +21,11 @@
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
 use libp2p_core::PeerId;
-use std::{collections::HashMap, iter::{Peekable}, ops::{Add, Index, IndexMut}};
+use std::{
+    collections::HashMap,
+    iter::{Cycle, Map, Peekable},
+    ops::{Add, Index, IndexMut, Range},
+};
 use wasm_timer::Instant;
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
@@ -32,6 +36,9 @@ pub struct ClosestDisjointPeersIter {
 
     /// The set of wrapped [`ClosestPeersIter`].
     iters: Vec<ClosestPeersIter>,
+    /// Order in which to query the iterators ensuring fairness across
+    /// [`ClosestPeersIterConfig::next`] calls.
+    iter_order: Cycle<Map<Range<usize>, fn(usize) -> IteratorIndex>>,
 
     /// Mapping of contacted peers by their [`PeerId`] to [`PeerState`]
     /// containing the corresponding iterator indices as well as the response
@@ -40,9 +47,6 @@ pub struct ClosestDisjointPeersIter {
     /// Used to track which iterator contacted which peer. See [`PeerState`]
     /// for details.
     contacted_peers: HashMap<PeerId, PeerState>,
-
-    /// Index of the iterator last queried.
-    last_queried: IteratorIndex,
 }
 
 impl ClosestDisjointPeersIter {
@@ -84,9 +88,8 @@ impl ClosestDisjointPeersIter {
             config,
             target: target.into(),
             iters,
+            iter_order: (0..iters_len).map(Into::into as fn(usize) -> IteratorIndex).cycle(),
             contacted_peers: HashMap::new(),
-            // Wraps around, thus iterator 0 will be queried first.
-            last_queried: (iters_len - 1).into(),
         }
     }
 
@@ -173,17 +176,16 @@ impl ClosestDisjointPeersIter {
     }
 
     pub fn next(&mut self, now: Instant) -> PeersIterState {
+        let mut num_iters_querrried = 0;
         let mut state = None;
 
-        // Order in which to query the iterators to ensure fairness.
-        let iter_order = (0..self.iters.len()).map(Into::into).cycle()
-            // Make sure to query the previously queried iterator last.
-            .skip(Into::<usize>::into(self.last_queried) + 1)
-            // Query each iterator at most once.
-            .take(self.iters.len());
+        for i in &mut self.iter_order {
+            // Ensure querying each iterator at most once.
+            num_iters_querrried += 1;
+            if num_iters_querrried > self.iters.len() {
+                break;
+            }
 
-        for i in &mut iter_order.into_iter() {
-            self.last_queried = i;
             let iter = &mut self.iters[i];
 
             loop {
