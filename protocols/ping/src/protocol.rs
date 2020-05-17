@@ -83,7 +83,7 @@ where
     type Future = BoxFuture<'static, Result<Duration, io::Error>>;
 
     fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
-        let payload: [u8; 32] = thread_rng().sample(distributions::Standard);
+        let payload: [u8; PING_SIZE] = thread_rng().sample(distributions::Standard);
         debug!("Preparing ping payload {:?}", payload);
         async move {
             socket.write_all(&payload).await?;
