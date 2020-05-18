@@ -25,7 +25,7 @@ default = [
     "pnet",
     "secio",
     "secp256k1",
-    "tcp",
+    "tcp-async-std",
     "uds",
     "wasm-ext",
     "websocket",
@@ -44,7 +44,8 @@ ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
 secio = ["libp2p-secio"]
-tcp = ["libp2p-tcp"]
+tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
+tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
 uds = ["libp2p-uds"]
 wasm-ext = ["libp2p-wasm-ext"]
 websocket = ["libp2p-websocket"]
