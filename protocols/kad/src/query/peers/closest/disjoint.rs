@@ -37,7 +37,7 @@ pub struct ClosestDisjointPeersIter {
     /// The set of wrapped [`ClosestPeersIter`].
     iters: Vec<ClosestPeersIter>,
     /// Order in which to query the iterators ensuring fairness across
-    /// [`ClosestPeersIterConfig::next`] calls.
+    /// [`ClosestPeersIter::next`] calls.
     iter_order: Cycle<Map<Range<usize>, fn(usize) -> IteratorIndex>>,
 
     /// Mapping of contacted peers by their [`PeerId`] to [`PeerState`]
