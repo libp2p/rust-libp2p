@@ -88,7 +88,7 @@ impl ClosestDisjointPeersIter {
             config,
             target: target.into(),
             iters,
-            iter_order: (0..iters_len).map(Into::into as fn(usize) -> IteratorIndex).cycle(),
+            iter_order: (0..iters_len).map(IteratorIndex as fn(usize) -> IteratorIndex).cycle(),
             contacted_peers: HashMap::new(),
         }
     }
@@ -176,16 +176,11 @@ impl ClosestDisjointPeersIter {
     }
 
     pub fn next(&mut self, now: Instant) -> PeersIterState {
-        let mut num_iters_querrried = 0;
         let mut state = None;
 
-        for i in &mut self.iter_order {
-            // Ensure querying each iterator at most once.
-            num_iters_querrried += 1;
-            if num_iters_querrried > self.iters.len() {
-                break;
-            }
-
+        // Ensure querying each iterator at most once.
+        for _ in 0 .. self.iters.len() {
+            let i = self.iter_order.next().expect("Cycle never ends.");
             let iter = &mut self.iters[i];
 
             loop {
