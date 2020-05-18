@@ -147,7 +147,7 @@ impl PeerId {
 
     /// Returns a base-58 encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
-        bs58::encode(self.borrow() as &[u8]).into_string()
+        bs58::encode(self.as_bytes()).into_string()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.

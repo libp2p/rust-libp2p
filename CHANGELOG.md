@@ -4,6 +4,11 @@
   attempts per peer, with a configurable limit.
   [PR 1506](https://github.com/libp2p/rust-libp2p/pull/1506)
 
+- `libp2p-core`: `PeerId`s that use the identity hashing will now be properly
+  displayed using the string representation of an identity multihash, rather
+  than the canonical SHA 256 representation.
+  [PR 1576](https://github.com/libp2p/rust-libp2p/pull/1576)
+
 - `libp2p-core`: Updated to multihash 0.11.0.
   [PR 1566](https://github.com/libp2p/rust-libp2p/pull/1566)
 
