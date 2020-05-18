@@ -1,5 +1,8 @@
 # Version ???
 
+
+# Version 0.19.0 (2020-05-18)
+
 - `libp2p-core`, `libp2p-swarm`: Added support for multiple dialing
   attempts per peer, with a configurable limit.
   [PR 1506](https://github.com/libp2p/rust-libp2p/pull/1506)
