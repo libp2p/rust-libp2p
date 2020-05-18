@@ -55,6 +55,11 @@ const FINGERPRINT_SIZE: usize = 16;
 pub struct PreSharedKey([u8; KEY_SIZE]);
 
 impl PreSharedKey {
+    /// Create a new pre shared key from raw bytes
+    pub fn new(data: [u8; KEY_SIZE]) -> Self {
+        Self(data)
+    }
+
     /// Compute PreSharedKey fingerprint identical to the go-libp2p fingerprint.
     /// The computation of the fingerprint is not specified in the spec.
     ///

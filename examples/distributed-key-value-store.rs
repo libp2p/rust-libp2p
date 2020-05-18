@@ -32,7 +32,15 @@
 use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{record::Key, Kademlia, KademliaEvent, PutRecordOk, Quorum, Record};
+use libp2p::kad::{
+    record::Key,
+    Kademlia,
+    KademliaEvent,
+    PutRecordOk,
+    QueryResult,
+    Quorum,
+    Record
+};
 use libp2p::{
     NetworkBehaviour,
     PeerId,
@@ -76,26 +84,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Called when `kademlia` produces an event.
         fn inject_event(&mut self, message: KademliaEvent) {
             match message {
-                KademliaEvent::GetRecordResult(Ok(result)) => {
-                    for Record { key, value, .. } in result.records {
+                KademliaEvent::QueryResult { result, .. } => match result {
+                    QueryResult::GetRecord(Ok(ok)) => {
+                        for Record { key, value, .. } in ok.records {
+                            println!(
+                                "Got record {:?} {:?}",
+                                std::str::from_utf8(key.as_ref()).unwrap(),
+                                std::str::from_utf8(&value).unwrap(),
+                            );
+                        }
+                    }
+                    QueryResult::GetRecord(Err(err)) => {
+                        eprintln!("Failed to get record: {:?}", err);
+                    }
+                    QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
                         println!(
-                            "Got record {:?} {:?}",
-                            std::str::from_utf8(key.as_ref()).unwrap(),
-                            std::str::from_utf8(&value).unwrap(),
+                            "Successfully put record {:?}",
+                            std::str::from_utf8(key.as_ref()).unwrap()
                         );
                     }
-                }
-                KademliaEvent::GetRecordResult(Err(err)) => {
-                    eprintln!("Failed to get record: {:?}", err);
-                }
-                KademliaEvent::PutRecordResult(Ok(PutRecordOk { key })) => {
-                    println!(
-                        "Successfully put record {:?}",
-                        std::str::from_utf8(key.as_ref()).unwrap()
-                    );
-                }
-                KademliaEvent::PutRecordResult(Err(err)) => {
-                    eprintln!("Failed to put record: {:?}", err);
+                    QueryResult::PutRecord(Err(err)) => {
+                        eprintln!("Failed to put record: {:?}", err);
+                    }
+                    _ => {}
                 }
                 _ => {}
             }
@@ -188,7 +199,7 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                 publisher: None,
                 expires: None,
             };
-            kademlia.put_record(record, Quorum::One);
+            kademlia.put_record(record, Quorum::One).expect("Failed to store record locally.");
         }
         _ => {
             eprintln!("expected GET or PUT");

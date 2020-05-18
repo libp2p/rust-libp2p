@@ -122,8 +122,7 @@ impl ClosestPeersIter {
         }
     }
 
-    /// Callback for delivering the result of a successful request to a peer
-    /// that the iterator is waiting on.
+    /// Callback for delivering the result of a successful request to a peer.
     ///
     /// Delivering results of requests back to the iterator allows the iterator to make
     /// progress. The iterator is said to make progress either when the given
@@ -131,18 +130,20 @@ impl ClosestPeersIter {
     /// or when the iterator did not yet accumulate `num_results` closest peers and
     /// `closer_peers` contains a new peer, regardless of its distance to the target.
     ///
-    /// After calling this function, `next` should eventually be called again
-    /// to advance the state of the iterator.
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
     ///
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
-    /// calling this function has no effect.
-    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I)
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
         I: IntoIterator<Item = PeerId>
     {
         if let State::Finished = self.state {
-            return
+            return false
         }
 
         let key = Key::from(peer.clone());
@@ -150,7 +151,7 @@ impl ClosestPeersIter {
 
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
-            Entry::Vacant(..) => return,
+            Entry::Vacant(..) => return false,
             Entry::Occupied(mut e) => match e.get().state {
                 PeerState::Waiting(..) => {
                     debug_assert!(self.num_waiting > 0);
@@ -162,7 +163,7 @@ impl ClosestPeersIter {
                 }
                 PeerState::NotContacted
                     | PeerState::Failed
-                    | PeerState::Succeeded => return
+                    | PeerState::Succeeded => return false
             }
         }
 
@@ -199,28 +200,31 @@ impl ClosestPeersIter {
                     State::Stalled
                 }
             State::Finished => State::Finished
-        }
+        };
+
+        true
     }
 
-    /// Callback for informing the iterator about a failed request to a peer
-    /// that the iterator is waiting on.
+    /// Callback for informing the iterator about a failed request to a peer.
     ///
-    /// After calling this function, `next` should eventually be called again
-    /// to advance the state of the iterator.
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
     ///
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
-    /// calling this function has no effect.
-    pub fn on_failure(&mut self, peer: &PeerId) {
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Finished = self.state {
-            return
+            return false
         }
 
         let key = Key::from(peer.clone());
         let distance = key.distance(&self.target);
 
         match self.closest_peers.entry(distance) {
-            Entry::Vacant(_) => return,
+            Entry::Vacant(_) => return false,
             Entry::Occupied(mut e) => match e.get().state {
                 PeerState::Waiting(_) => {
                     debug_assert!(self.num_waiting > 0);
@@ -230,9 +234,13 @@ impl ClosestPeersIter {
                 PeerState::Unresponsive => {
                     e.get_mut().state = PeerState::Failed
                 }
-                _ => {}
+                PeerState::NotContacted
+                    | PeerState::Failed
+                    | PeerState::Succeeded => return false
             }
         }
+
+        true
     }
 
     /// Returns the list of peers for which the iterator is currently waiting
@@ -343,7 +351,7 @@ impl ClosestPeersIter {
     }
 
     /// Checks whether the iterator has finished.
-    pub fn finished(&self) -> bool {
+    pub fn is_finished(&self) -> bool {
         self.state == State::Finished
     }
 
@@ -459,22 +467,13 @@ mod tests {
     use libp2p_core::PeerId;
     use quickcheck::*;
     use multihash::Multihash;
-    use rand::{Rng, thread_rng};
+    use rand::{Rng, rngs::StdRng, SeedableRng};
     use std::{iter, time::Duration};
 
-    fn random_peers(n: usize) -> impl Iterator<Item = PeerId> + Clone {
-        (0 .. n).map(|_| PeerId::random())
-    }
-
-    fn random_iter<G: Rng>(g: &mut G) -> ClosestPeersIter {
-        let known_closest_peers = random_peers(g.gen_range(1, 60)).map(Key::from);
-        let target = Key::from(Into::<Multihash>::into(PeerId::random()));
-        let config = ClosestPeersIterConfig {
-            parallelism: g.gen_range(1, 10),
-            num_results: g.gen_range(1, 25),
-            peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
-        };
-        ClosestPeersIter::with_config(config, target, known_closest_peers)
+    fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
+        (0 .. n).map(|_| PeerId::from_multihash(
+            multihash::wrap(multihash::Code::Sha2_256, &g.gen::<[u8; 32]>())
+        ).unwrap()).collect()
     }
 
     fn sorted<T: AsRef<KeyBytes>>(target: &T, peers: &Vec<Key<PeerId>>) -> bool {
@@ -483,42 +482,63 @@ mod tests {
 
     impl Arbitrary for ClosestPeersIter {
         fn arbitrary<G: Gen>(g: &mut G) -> ClosestPeersIter {
-            random_iter(g)
+            let known_closest_peers = random_peers(g.gen_range(1, 60), g)
+                .into_iter()
+                .map(Key::from);
+            let target = Key::from(Into::<Multihash>::into(PeerId::random()));
+            let config = ClosestPeersIterConfig {
+                parallelism: g.gen_range(1, 10),
+                num_results: g.gen_range(1, 25),
+                peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+            };
+            ClosestPeersIter::with_config(config, target, known_closest_peers)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct Seed([u8; 32]);
+
+    impl Arbitrary for Seed {
+        fn arbitrary<G: Gen>(g: &mut G) -> Seed {
+            Seed(g.gen())
         }
     }
 
     #[test]
     fn new_iter() {
-        let iter = random_iter(&mut thread_rng());
-        let target = iter.target.clone();
+        fn prop(iter: ClosestPeersIter) {
+            let target = iter.target.clone();
 
-        let (keys, states): (Vec<_>, Vec<_>) = iter.closest_peers
-            .values()
-            .map(|e| (e.key.clone(), &e.state))
-            .unzip();
+            let (keys, states): (Vec<_>, Vec<_>) = iter.closest_peers
+                .values()
+                .map(|e| (e.key.clone(), &e.state))
+                .unzip();
 
-        let none_contacted = states
-            .iter()
-            .all(|s| match s {
-                PeerState::NotContacted => true,
-                _ => false
-            });
+            let none_contacted = states
+                .iter()
+                .all(|s| match s {
+                    PeerState::NotContacted => true,
+                    _ => false
+                });
 
-        assert!(none_contacted,
-            "Unexpected peer state in new iterator.");
-        assert!(sorted(&target, &keys),
-            "Closest peers in new iterator not sorted by distance to target.");
-        assert_eq!(iter.num_waiting(), 0,
-            "Unexpected peers in progress in new iterator.");
-        assert_eq!(iter.into_result().count(), 0,
-            "Unexpected closest peers in new iterator");
+            assert!(none_contacted,
+                    "Unexpected peer state in new iterator.");
+            assert!(sorted(&target, &keys),
+                    "Closest peers in new iterator not sorted by distance to target.");
+            assert_eq!(iter.num_waiting(), 0,
+                       "Unexpected peers in progress in new iterator.");
+            assert_eq!(iter.into_result().count(), 0,
+                       "Unexpected closest peers in new iterator");
+        }
+
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
     }
 
     #[test]
     fn termination_and_parallelism() {
-        fn prop(mut iter: ClosestPeersIter) {
+        fn prop(mut iter: ClosestPeersIter, seed: Seed) {
             let now = Instant::now();
-            let mut rng = thread_rng();
+            let mut rng = StdRng::from_seed(seed.0);
 
             let mut expected = iter.closest_peers
                 .values()
@@ -565,7 +585,7 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0, iter.config.num_results + 1);
-                        let closer_peers = random_peers(num_closer).collect::<Vec<_>>();
+                        let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
@@ -613,14 +633,16 @@ mod tests {
             }
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
     fn no_duplicates() {
-        fn prop(mut iter: ClosestPeersIter) -> bool {
+        fn prop(mut iter: ClosestPeersIter, seed: Seed) -> bool {
             let now = Instant::now();
-            let closer = random_peers(1).collect::<Vec<_>>();
+            let mut rng = StdRng::from_seed(seed.0);
+
+            let closer = random_peers(1, &mut rng);
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
@@ -635,7 +657,7 @@ mod tests {
             match iter.next(now) {
                 PeersIterState::Waiting(Some(p)) => {
                     let peer2 = p.into_owned();
-                    iter.on_success(&peer2, closer.clone())
+                    assert!(iter.on_success(&peer2, closer.clone()))
                 }
                 PeersIterState::Finished => {}
                 _ => panic!("Unexpectedly iter state."),
@@ -648,7 +670,7 @@ mod tests {
             true
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
@@ -675,7 +697,7 @@ mod tests {
                 Peer { state, .. } => panic!("Unexpected peer state: {:?}", state)
             }
 
-            let finished = iter.finished();
+            let finished = iter.is_finished();
             iter.on_success(&peer, iter::empty());
             let closest = iter.into_result().collect::<Vec<_>>();
 
