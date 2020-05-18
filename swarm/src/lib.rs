@@ -123,7 +123,7 @@ use registry::{Addresses, AddressIntoIter};
 use smallvec::SmallVec;
 use std::{error, fmt, hash::Hash, io, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
 use std::collections::HashSet;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use upgrade::UpgradeInfoSend as _;
 
 /// Contains the state of the network, plus the way it should behave.
@@ -999,6 +999,48 @@ where TBehaviour: NetworkBehaviour,
     /// [`SwarmBuilder::build`] will try to set up a `ThreadPool`.
     pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
         self.network_config.set_executor(e);
+        self
+    }
+
+    /// Configures the number of events from the [`NetworkBehaviour`] in
+    /// destination to the [`ProtocolsHandler`] that can be buffered before
+    /// the [`Swarm`] has to wait. An individual buffer with this number of
+    /// events exists for each individual connection.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, and the
+    /// volume of events. If this value is too low, then the [`Swarm`] will
+    /// be sleeping more often than necessary. Increasing this value increases
+    /// the overall memory usage.
+    pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+        self.network_config.set_notify_handler_buffer_size(n);
+        self
+    }
+
+    /// Configures the number of extra events from the [`ProtocolsHandler`] in
+    /// destination to the [`NetworkBehaviour`] that can be buffered before
+    /// the [`ProtocolsHandler`] has to go to sleep.
+    ///
+    /// There exists a buffer of events received from [`ProtocolsHandler`]s
+    /// that the [`NetworkBehaviour`] has yet to process. This buffer is
+    /// shared between all instances of [`ProtocolsHandler`]. Each instance of
+    /// [`ProtocolsHandler`] is guaranteed one slot in this buffer, meaning
+    /// that delivering an event for the first time is guaranteed to be
+    /// instantaneous. Any extra event delivery, however, must wait for that
+    /// first event to be delivered or for an "extra slot" to be available.
+    ///
+    /// This option configures the number of such "extra slots" in this
+    /// shared buffer. These extra slots are assigned in a first-come,
+    /// first-served basis.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, the
+    /// average number of connections, and the volume of events. If this value
+    /// is too low, then the [`ProtocolsHandler`]s will be sleeping more often
+    /// than necessary. Increasing this value increases the overall memory
+    /// usage, and more importantly the latency between the moment when an
+    /// event is emitted and the moment when it is received by the
+    /// [`NetworkBehaviour`].
+    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.network_config.set_connection_event_buffer_size(n);
         self
     }
 

@@ -43,6 +43,7 @@ use crate::{
         ListenersStream,
         PendingConnectionError,
         Substream,
+        manager::ManagerConfig,
         pool::{Pool, PoolEvent, PoolLimits},
     },
     muxing::StreamMuxer,
@@ -57,6 +58,7 @@ use std::{
     error,
     fmt,
     hash::Hash,
+    num::NonZeroUsize,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -154,7 +156,7 @@ where
         Network {
             local_peer_id,
             listeners: ListenersStream::new(transport),
-            pool: Pool::new(pool_local_id, config.executor, config.pool_limits),
+            pool: Pool::new(pool_local_id, config.manager_config, config.pool_limits),
             dialing: Default::default(),
         }
     }
@@ -598,17 +600,21 @@ pub struct NetworkInfo {
 
 /// The (optional) configuration for a [`Network`].
 ///
-/// The default configuration specifies no dedicated task executor
-/// and no connection limits.
+/// The default configuration specifies no dedicated task executor, no
+/// connection limits, a connection event buffer size of 32, and a
+/// `notify_handler` buffer size of 8.
 #[derive(Default)]
 pub struct NetworkConfig {
-    executor: Option<Box<dyn Executor + Send>>,
+    /// Note that the `ManagerConfig`s task command buffer always provides
+    /// one "free" slot per task. Thus the given total `notify_handler_buffer_size`
+    /// exposed for configuration on the `Network` is reduced by one.
+    manager_config: ManagerConfig,
     pool_limits: PoolLimits,
 }
 
 impl NetworkConfig {
     pub fn set_executor(&mut self, e: Box<dyn Executor + Send>) -> &mut Self {
-        self.executor = Some(e);
+        self.manager_config.executor = Some(e);
         self
     }
 
@@ -625,7 +631,30 @@ impl NetworkConfig {
     }
 
     pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
-        self.executor.as_ref()
+        self.manager_config.executor.as_ref()
+    }
+
+    /// Sets the maximum number of events sent to a connection's background task
+    /// that may be buffered, if the task cannot keep up with their consumption and
+    /// delivery to the connection handler.
+    ///
+    /// When the buffer for a particular connection is full, `notify_handler` will no
+    /// longer be able to deliver events to the associated `ConnectionHandler`,
+    /// thus exerting back-pressure on the connection and peer API.
+    pub fn set_notify_handler_buffer_size(&mut self, n: NonZeroUsize) -> &mut Self {
+        self.manager_config.task_command_buffer_size = n.get() - 1;
+        self
+    }
+
+    /// Sets the maximum number of buffered connection events (beyond a guaranteed
+    /// buffer of 1 event per connection).
+    ///
+    /// When the buffer is full, the background tasks of all connections will stall.
+    /// In this way, the consumers of network events exert back-pressure on
+    /// the network connection I/O.
+    pub fn set_connection_event_buffer_size(&mut self, n: usize) -> &mut Self {
+        self.manager_config.task_event_buffer_size = n;
+        self
     }
 
     pub fn set_incoming_limit(&mut self, n: usize) -> &mut Self {

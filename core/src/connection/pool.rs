@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    Executor,
     ConnectedPoint,
     PeerId,
     connection::{
@@ -36,7 +35,7 @@ use crate::{
         OutgoingInfo,
         Substream,
         PendingConnectionError,
-        manager::{self, Manager},
+        manager::{self, Manager, ManagerConfig},
     },
     muxing::StreamMuxer,
 };
@@ -175,13 +174,13 @@ where
     /// Creates a new empty `Pool`.
     pub fn new(
         local_id: TPeerId,
-        executor: Option<Box<dyn Executor + Send>>,
+        manager_config: ManagerConfig,
         limits: PoolLimits
     ) -> Self {
         Pool {
             local_id,
             limits,
-            manager: Manager::new(executor),
+            manager: Manager::new(manager_config),
             established: Default::default(),
             pending: Default::default(),
         }
