@@ -15,6 +15,11 @@
 - `libp2p-core`: Make the number of events buffered to/from tasks configurable.
   [PR 1574](https://github.com/libp2p/rust-libp2p/pull/1574)
 
+- `libp2p-dns`, `parity-multiaddr`: Added support for the `/dns` multiaddr
+  protocol. Additionally, the `multiaddr::from_url` function will now use
+  `/dns` instead of `/dns4`.
+  [PR 1575](https://github.com/libp2p/rust-libp2p/pull/1575)
+
 - `libp2p-noise`: Added the `X25519Spec` protocol suite which uses
   libp2p-noise-spec compliant signatures on static keys as well as the
   `/noise` protocol upgrade, hence providing a libp2p-noise-spec compliant
@@ -39,6 +44,11 @@
   synchronously in a `Result`, instead of being reported asynchronously by
   an event.
   [PR 1567](https://github.com/libp2p/rust-libp2p/pull/1567)
+
+- `libp2p-tcp`, `libp2p`: Made the `libp2p-tcp/async-std` feature flag
+  disabled by default, and split the `libp2p/tcp` feature in two:
+  `tcp-async-std` and `tcp-tokio`. `tcp-async-std` is still enabled by default.
+  [PR 1471](https://github.com/libp2p/rust-libp2p/pull/1471)
 
 - `libp2p-tcp`: On listeners started with an IPv6 multi-address the socket
   option `IPV6_V6ONLY` is set to true. Instead of relying on IPv4-mapped IPv6
