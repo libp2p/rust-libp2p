@@ -51,14 +51,14 @@ use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
 use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
-use libp2p::{
-    gossipsub, identity,
-    PeerId,
-};
+use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key)?;
+    let transport = libp2p::build_development_transport(local_key.clone())?;
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net".into());
@@ -90,10 +90,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
             .heartbeat_interval(Duration::from_secs(10))
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
+            .allow_unsigned_messages(false)
+            .sign_messages(true)
             //same content will be propagated.
             .build();
         // build a gossipsub network behaviour
-        let mut gossipsub = gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config);
+        let mut gossipsub = gossipsub::Gossipsub::new(local_key, gossipsub_config);
         gossipsub.subscribe(topic.clone());
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };

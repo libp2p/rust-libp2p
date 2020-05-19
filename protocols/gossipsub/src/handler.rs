@@ -22,6 +22,7 @@ use crate::behaviour::GossipsubRpc;
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use futures::prelude::*;
 use futures_codec::Framed;
+use libp2p_core::identity::Keypair;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
@@ -80,11 +81,18 @@ enum OutboundSubstreamState {
 
 impl GossipsubHandler {
     /// Builds a new `GossipsubHandler`.
-    pub fn new(protocol_id: impl Into<Cow<'static, [u8]>>, max_transmit_size: usize) -> Self {
+    pub fn new(
+        protocol_id: impl Into<Cow<'static, [u8]>>,
+        max_transmit_size: usize,
+        keypair: Option<Keypair>,
+        allow_unsigned: bool,
+    ) -> Self {
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
                 protocol_id,
                 max_transmit_size,
+                keypair,
+                allow_unsigned,
             )),
             inbound_substream: None,
             outbound_substream: None,
@@ -198,9 +206,9 @@ impl ProtocolsHandler for GossipsubHandler {
                             return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(e))) => {
-                            debug!("Inbound substream error while awaiting input: {:?}", e);
+                            warn!("Invalid message received. Error: {}", e);
                             self.inbound_substream =
-                                Some(InboundSubstreamState::Closing(substream));
+                                Some(InboundSubstreamState::WaitingInput(substream));
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {

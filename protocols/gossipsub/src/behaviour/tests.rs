@@ -36,7 +36,7 @@ mod tests {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(Keypair::generate_secp256k1(), gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -53,10 +53,7 @@ mod tests {
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
-            <Gossipsub as NetworkBehaviour>::inject_connected(
-                &mut gs,
-                &peer,
-            );
+            <Gossipsub as NetworkBehaviour>::inject_connected(&mut gs, &peer);
             if to_subscribe {
                 gs.handle_received_subscriptions(
                     &topic_hashes
@@ -345,10 +342,6 @@ mod tests {
             gs.mcache.get(&msg_id).is_some(),
             "Message cache should contain published message"
         );
-        assert!(
-            gs.received.get(&msg_id).is_some(),
-            "Received cache should contain published message"
-        );
     }
 
     /// Test local node publish to unsubscribed topic
@@ -411,10 +404,6 @@ mod tests {
         assert!(
             gs.mcache.get(&msg_id).is_some(),
             "Message cache should contain published message"
-        );
-        assert!(
-            gs.received.get(&msg_id).is_some(),
-            "Received cache should contain published message"
         );
     }
 
@@ -558,8 +547,9 @@ mod tests {
     fn test_get_random_peers() {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
+        let key = Keypair::generate_secp256k1();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(key, gs_config);
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test".into()).no_hash().clone();
@@ -588,10 +578,9 @@ mod tests {
         let random_peers =
             Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
-                |peer| peers.contains(peer)
-            });
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
+            |peer| peers.contains(peer)
+        });
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
     }
 
@@ -731,7 +720,6 @@ mod tests {
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
         let msg_id = MessageId(String::from("known id"));
-        gs.received.put(msg_id.clone(), ());
 
         let events_before = gs.events.len();
         gs.handle_ihave(&peers[7], vec![(topic_hashes[0].clone(), vec![msg_id])]);

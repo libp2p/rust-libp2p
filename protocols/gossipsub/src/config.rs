@@ -73,8 +73,15 @@ pub struct GossipsubConfig {
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
     /// true, the user must manually call `propagate_message()` on the behaviour to forward message
-    /// once validated (default is false).
+    /// once validated (default is `false`).
     pub manual_propagation: bool,
+
+    /// When set to `true` all published messages are signed by the libp2p key (default is `true`).
+    pub sign_messages: bool,
+
+    /// Determines whether unsigned messages will be accepted. If set to false, unsigned messages
+    /// will be dropped. Default value is `true`.
+    pub allow_unsigned_messages: bool,
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
     /// The default value is to concatenate the source peer id with a sequence number. Setting this
@@ -104,6 +111,8 @@ impl Default for GossipsubConfig {
             hash_topics: false, // default compatibility with floodsub
             no_source_id: false,
             manual_propagation: false,
+            sign_messages: true,
+            allow_unsigned_messages: true,
             message_id_fn: |message| {
                 // default message id is: source + sequence number
                 let mut source_string = message.source.to_base58();
@@ -114,6 +123,7 @@ impl Default for GossipsubConfig {
     }
 }
 
+/// The builder struct for constructing a gossipsub configuration.
 pub struct GossipsubConfigBuilder {
     config: GossipsubConfig,
 }
@@ -132,11 +142,13 @@ impl GossipsubConfigBuilder {
         GossipsubConfigBuilder::default()
     }
 
+    /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
     pub fn protocol_id(&mut self, protocol_id: impl Into<Cow<'static, [u8]>>) -> &mut Self {
         self.config.protocol_id = protocol_id.into();
         self
     }
 
+    /// Number of heartbeats to keep in the `memcache` (default is 5).
     pub fn history_length(&mut self, history_length: usize) -> &mut Self {
         assert!(
             history_length >= self.config.history_gossip,
@@ -146,6 +158,7 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Number of past heartbeats to gossip about (default is 3).
     pub fn history_gossip(&mut self, history_gossip: usize) -> &mut Self {
         assert!(
             self.config.history_length >= history_gossip,
@@ -155,6 +168,7 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Target number of peers for the mesh network (D in the spec, default is 6).
     pub fn mesh_n(&mut self, mesh_n: usize) -> &mut Self {
         assert!(
             self.config.mesh_n_low <= mesh_n && mesh_n <= self.config.mesh_n_high,
@@ -164,6 +178,7 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 4).
     pub fn mesh_n_low(&mut self, mesh_n_low: usize) -> &mut Self {
         assert!(
             mesh_n_low <= self.config.mesh_n && self.config.mesh_n <= self.config.mesh_n_high,
@@ -173,6 +188,8 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
+    /// is 12).
     pub fn mesh_n_high(&mut self, mesh_n_high: usize) -> &mut Self {
         assert!(
             self.config.mesh_n_low <= self.config.mesh_n && self.config.mesh_n <= mesh_n_high,
@@ -182,48 +199,84 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec, default is 6).
     pub fn gossip_lazy(&mut self, gossip_lazy: usize) -> &mut Self {
         self.config.gossip_lazy = gossip_lazy;
         self
     }
 
+    /// Initial delay in each heartbeat (default is 5 seconds).
     pub fn heartbeat_initial_delay(&mut self, heartbeat_initial_delay: Duration) -> &mut Self {
         self.config.heartbeat_initial_delay = heartbeat_initial_delay;
         self
     }
+
+    /// Time between each heartbeat (default is 1 second).
     pub fn heartbeat_interval(&mut self, heartbeat_interval: Duration) -> &mut Self {
         self.config.heartbeat_interval = heartbeat_interval;
         self
     }
+
+    /// Time to live for fanout peers (default is 60 seconds).
     pub fn fanout_ttl(&mut self, fanout_ttl: Duration) -> &mut Self {
         self.config.fanout_ttl = fanout_ttl;
         self
     }
+
+    /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.max_transmit_size = max_transmit_size;
         self
     }
 
-    pub fn hash_topics(&mut self) -> &mut Self {
-        self.config.hash_topics = true;
+    /// Flag determining if gossipsub topics are hashed or sent as plain strings (default is false).
+    pub fn hash_topics(&mut self, value: bool) -> &mut Self {
+        self.config.hash_topics = value;
         self
     }
 
-    pub fn no_source_id(&mut self) -> &mut Self {
-        self.config.no_source_id = true;
+    /// When set, all published messages will have a 0 source `PeerId` (default is false).
+    pub fn no_source_id(&mut self, value: bool) -> &mut Self {
+        self.config.no_source_id = value;
         self
     }
 
-    pub fn manual_propagation(&mut self) -> &mut Self {
-        self.config.manual_propagation = true;
+    /// When set to `true`, prevents automatic forwarding of all received messages. This setting
+    /// allows a user to validate the messages before propagating them to their peers. If set to
+    /// true, the user must manually call `propagate_message()` on the behaviour to forward message
+    /// once validated (default is `false`).
+    pub fn manual_propagation(&mut self, value: bool) -> &mut Self {
+        self.config.manual_propagation = value;
         self
     }
 
+    /// When set to `true` all published messages are signed by the libp2p key (default is `true`).
+    pub fn sign_messages(&mut self, value: bool) -> &mut Self {
+        self.config.sign_messages = value;
+        self
+    }
+
+    /// Determines whether unsigned messages will be accepted. If set to false, unsigned messages
+    /// will be dropped. Default value is `true`.
+    pub fn allow_unsigned_messages(&mut self, value: bool) -> &mut Self {
+        self.config.allow_unsigned_messages = value;
+        self
+    }
+
+    /// A user-defined function allowing the user to specify the message id of a gossipsub message.
+    /// The default value is to concatenate the source peer id with a sequence number. Setting this
+    /// parameter allows the user to address packets arbitrarily. One example is content based
+    /// addressing, where this function may be set to `hash(message)`. This would prevent messages
+    /// of the same content from being duplicated.
+    ///
+    /// The function takes a `GossipsubMessage` as input and outputs a String to be interpreted as
+    /// the message id.
     pub fn message_id_fn(&mut self, id_fn: fn(&GossipsubMessage) -> MessageId) -> &mut Self {
         self.config.message_id_fn = id_fn;
         self
     }
 
+    /// Constructs a `GossipsubConfig` from the given configuration.
     pub fn build(&self) -> GossipsubConfig {
         self.config.clone()
     }
@@ -246,6 +299,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("hash_topics", &self.hash_topics);
         let _ = builder.field("no_source_id", &self.no_source_id);
         let _ = builder.field("manual_propagation", &self.manual_propagation);
+        let _ = builder.field("sign_messages", &self.sign_messages);
         builder.finish()
     }
 }

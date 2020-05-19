@@ -30,13 +30,8 @@ use std::{
 };
 
 use libp2p_core::{
-    Multiaddr,
-    Transport,
-    identity,
-    multiaddr::Protocol,
-    muxing::StreamMuxerBox,
-    transport::MemoryTransport,
-    upgrade,
+    identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
+    Multiaddr, Transport,
 };
 use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 use libp2p_plaintext::PlainText2Config;
@@ -150,7 +145,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .boxed();
 
     let peer_id = public_key.clone().into_peer_id();
-    let behaviour = Gossipsub::new(peer_id.clone(), GossipsubConfig::default());
+    let behaviour = Gossipsub::new(key, GossipsubConfig::default());
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
