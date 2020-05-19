@@ -39,6 +39,7 @@ pub struct FixedPeersIter {
     state: State,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum State {
     Waiting { num_waiting: usize },
     Finished
@@ -57,7 +58,12 @@ enum PeerState {
 }
 
 impl FixedPeersIter {
-    pub fn new(peers: Vec<PeerId>, parallelism: usize) -> Self {
+    pub fn new<I>(peers: I, parallelism: usize) -> Self
+    where
+        I: IntoIterator<Item = PeerId>
+    {
+        let peers = peers.into_iter().collect::<Vec<_>>();
+
         Self {
             parallelism,
             peers: FnvHashMap::default(),
@@ -66,21 +72,46 @@ impl FixedPeersIter {
         }
     }
 
-    pub fn on_success(&mut self, peer: &PeerId) {
+    /// Callback for delivering the result of a successful request to a peer.
+    ///
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
+    ///
+    /// If the iterator is finished, it is not currently waiting for a
+    /// result from `peer`, or a result for `peer` has already been reported,
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_success(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Succeeded;
                 *num_waiting -= 1;
+                return true
             }
         }
+        false
     }
 
-    pub fn on_failure(&mut self, peer: &PeerId) {
-        if let State::Waiting { .. } = &self.state {
+    /// Callback for informing the iterator about a failed request to a peer.
+    ///
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
+    ///
+    /// If the iterator is finished, it is not currently waiting for a
+    /// result from `peer`, or a result for `peer` has already been reported,
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
+        if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Failed;
+                *num_waiting -= 1;
+                return true
             }
         }
+        false
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
@@ -91,6 +122,11 @@ impl FixedPeersIter {
         if let State::Waiting { .. } = self.state {
             self.state = State::Finished
         }
+    }
+
+    /// Checks whether the iterator has finished.
+    pub fn is_finished(&self) -> bool {
+        self.state == State::Finished
     }
 
     pub fn next(&mut self) -> PeersIterState {
@@ -133,3 +169,30 @@ impl FixedPeersIter {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn decrease_num_waiting_on_failure() {
+        let mut iter = FixedPeersIter::new(vec![PeerId::random(), PeerId::random()], 1);
+
+        match iter.next() {
+            PeersIterState::Waiting(Some(peer)) => {
+                let peer = peer.into_owned();
+                iter.on_failure(&peer);
+            },
+            _ => panic!("Expected iterator to yield peer."),
+        }
+
+        match iter.next() {
+            PeersIterState::Waiting(Some(_)) => {},
+            PeersIterState::WaitingAtCapacity => panic!(
+                "Expected iterator to return another peer given that the \
+                 previous `on_failure` call should have allowed another peer \
+                 to be queried.",
+            ),
+            _ => panic!("Expected iterator to yield peer."),
+        }
+    }
+}

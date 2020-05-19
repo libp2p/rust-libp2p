@@ -37,9 +37,14 @@ use multiaddr::{Multiaddr, Protocol};
 /// If the first [`Protocol`]s are not IP addresses, `None` is returned instead.
 pub fn address_translation(original: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
     original.replace(0, move |proto| match proto {
-        Protocol::Ip4(_) | Protocol::Ip6(_) | Protocol::Dns4(_) | Protocol::Dns6(_) => match observed.iter().next() {
+        Protocol::Ip4(_)
+        | Protocol::Ip6(_)
+        | Protocol::Dns(_)
+        | Protocol::Dns4(_)
+        | Protocol::Dns6(_) => match observed.iter().next() {
             x @ Some(Protocol::Ip4(_)) => x,
             x @ Some(Protocol::Ip6(_)) => x,
+            x @ Some(Protocol::Dns(_)) => x,
             x @ Some(Protocol::Dns4(_)) => x,
             x @ Some(Protocol::Dns6(_)) => x,
             _ => None,
