@@ -124,3 +124,4 @@ libp2p-core = { path = "core" }
 #       visible via dependency mechanics (i.e., not visible HERE)
 [patch.crates-io]
 libp2p-core = { path = "core" }
+wasm-timer = { git = "https://github.com/fluencelabs/wasm-timer", branch = "saturating_duration_since" }
