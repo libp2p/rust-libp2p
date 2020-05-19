@@ -572,12 +572,14 @@ where
             bs58::encode(target.preimage().as_ref()).into_string(), // peer id
             bs58::encode(target.as_ref()).into_string(), // sha256
         );
+        let provider_key = self.kbuckets.local_public_key();
         let peers = self.kbuckets.closest_keys(&target);
         let context = AddProviderContext::Publish;
         let info = QueryInfo::AddProvider {
             context,
             key,
-            phase: AddProviderPhase::GetClosestPeers
+            phase: AddProviderPhase::GetClosestPeers,
+            provider_key
         };
         let inner = QueryInner::new(info);
         let id = self.queries.add_iter_closest(target.clone(), peers, inner);
@@ -693,10 +695,12 @@ where
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
     fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
+        let provider_key = self.kbuckets.local_public_key();
         let info = QueryInfo::AddProvider {
             context,
             key: key.clone(),
-            phase: AddProviderPhase::GetClosestPeers
+            phase: AddProviderPhase::GetClosestPeers,
+            provider_key
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
@@ -908,7 +912,8 @@ where
             QueryInfo::AddProvider {
                 context,
                 key,
-                phase: AddProviderPhase::GetClosestPeers
+                phase: AddProviderPhase::GetClosestPeers,
+                ..
             } => {
                 let provider_id = params.local_peer_id().clone();
                 let external_addresses = params.external_addresses().collect();
@@ -920,7 +925,7 @@ where
                         provider_id,
                         external_addresses,
                         get_closest_peers_stats: result.stats
-                    }
+                    },
                     provider_key
                 });
                 self.queries.continue_fixed(query_id, result.peers, inner);
@@ -930,7 +935,8 @@ where
             QueryInfo::AddProvider {
                 context,
                 key,
-                phase: AddProviderPhase::AddProvider { get_closest_peers_stats, .. }
+                phase: AddProviderPhase::AddProvider { get_closest_peers_stats, .. },
+                ..
             } => {
                 log::info!("AddProvider finished {:?}!", context);
                 match context {
@@ -2263,16 +2269,16 @@ impl QueryInfo {
                 key: key.clone(),
                 user_data: query_id,
             },
-            QueryInfo::AddProvider { key, phase, .. } => match phase {
+            QueryInfo::AddProvider { key, phase, provider_key, .. } => match phase {
                 AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
                     key: key.to_vec(),
                     user_data: query_id,
                 },
                 AddProviderPhase::AddProvider {
-                provider_id,
-                external_addresses,
-                provider_key,
-                ..} => {
+                    provider_id,
+                    external_addresses,
+                    ..
+                } => {
                     KademliaHandlerIn::AddProvider {
                 key: key.clone(),
                 provider: crate::protocol::KadPeer {
