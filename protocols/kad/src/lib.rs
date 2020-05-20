@@ -41,10 +41,33 @@ mod dht_proto {
 
 pub use addresses::Addresses;
 pub use behaviour::{
-    AddProviderError, AddProviderOk, AddProviderResult, BootstrapError, BootstrapOk,
-    BootstrapResult, GetClosestPeersError, GetClosestPeersOk, GetClosestPeersResult,
-    GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError, GetRecordOk,
-    GetRecordResult, PutRecordError, PutRecordOk, PutRecordResult,
+    QueryResult,
+    QueryInfo,
+    QueryStats,
+
+    BootstrapResult,
+    BootstrapOk,
+    BootstrapError,
+
+    GetRecordResult,
+    GetRecordOk,
+    GetRecordError,
+
+    PutRecordResult,
+    PutRecordOk,
+    PutRecordError,
+
+    GetClosestPeersResult,
+    GetClosestPeersOk,
+    GetClosestPeersError,
+
+    AddProviderResult,
+    AddProviderOk,
+    AddProviderError,
+
+    GetProvidersResult,
+    GetProvidersOk,
+    GetProvidersError,
 };
 pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use protocol::KadConnectionType;

@@ -24,10 +24,20 @@
 // //! peer ID will be generated randomly.
 //
 // use async_std::task;
-// use libp2p::identity::Keypair;
+// use libp2p::{
+//     Swarm,
+//     PeerId,
+//     identity,
+//     build_development_transport
+// };
+// use libp2p::kad::{
+//     Kademlia,
+//     KademliaConfig,
+//     KademliaEvent,
+//     GetClosestPeersError,
+//     QueryResult,
+// };
 // use libp2p::kad::record::store::MemoryStore;
-// use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent};
-// use libp2p::{build_development_transport, identity, PeerId, Swarm};
 // use std::{env, error::Error, time::Duration};
 //
 // fn main() -> Result<(), Box<dyn Error>> {
@@ -38,7 +48,7 @@
 //     let local_peer_id = PeerId::from(local_key.public());
 //
 //     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-//     let transport = build_development_transport(local_key.clone())?;
+//     let transport = build_development_transport(local_key)?;
 //
 //     // Create a swarm to manage peers and events.
 //     let mut swarm = {
@@ -46,7 +56,7 @@
 //         let mut cfg = KademliaConfig::default();
 //         cfg.set_query_timeout(Duration::from_secs(5 * 60));
 //         let store = MemoryStore::new(local_peer_id.clone());
-//         let mut behaviour = Kademlia::with_config(local_key, local_peer_id.clone(), store, cfg);
+//         let mut behaviour = Kademlia::with_config(local_peer_id.clone(), store, cfg);
 //
 //         // TODO: the /dnsaddr/ scheme is not supported (https://github.com/libp2p/rust-libp2p/issues/967)
 //         /*behaviour.add_address(&"QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());
@@ -55,10 +65,7 @@
 //         behaviour.add_address(&"QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());*/
 //
 //         // The only address that currently works.
-//         behaviour.add_address(
-//             &"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse()?,
-//             "/ip4/104.131.131.82/tcp/4001".parse()?,
-//         );
+//         behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse()?, "/ip4/104.131.131.82/tcp/4001".parse()?);
 //
 //         // The following addresses always fail signature verification, possibly due to
 //         // RSA keys with < 2048 bits.
@@ -90,9 +97,12 @@
 //     task::block_on(async move {
 //         loop {
 //             let event = swarm.next().await;
-//             if let KademliaEvent::GetClosestPeersResult(result) = event {
+//             if let KademliaEvent::QueryResult {
+//                 result: QueryResult::GetClosestPeers(result),
+//                 ..
+//             } = event {
 //                 match result {
-//                     Ok(ok) => {
+//                     Ok(ok) =>
 //                         if !ok.peers.is_empty() {
 //                             println!("Query finished with closest peers: {:#?}", ok.peers)
 //                         } else {
@@ -100,8 +110,7 @@
 //                             // should always be at least 1 reachable peer.
 //                             println!("Query finished with no closest peers.")
 //                         }
-//                     }
-//                     Err(GetClosestPeersError::Timeout { peers, .. }) => {
+//                     Err(GetClosestPeersError::Timeout { peers, .. }) =>
 //                         if !peers.is_empty() {
 //                             println!("Query timed out with closest peers: {:#?}", peers)
 //                         } else {
@@ -109,7 +118,6 @@
 //                             // should always be at least 1 reachable peer.
 //                             println!("Query timed out with no closest peers.");
 //                         }
-//                     }
 //                 };
 //
 //                 break;

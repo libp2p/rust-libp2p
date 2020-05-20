@@ -17,6 +17,7 @@ use unsigned_varint::{encode, decode};
 use crate::onion_addr::Onion3Addr;
 
 const DCCP: u32 = 33;
+const DNS: u32 = 53;
 const DNS4: u32 = 54;
 const DNS6: u32 = 55;
 const DNSADDR: u32 = 56;
@@ -66,6 +67,7 @@ const PATH_SEGMENT_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Protocol<'a> {
     Dccp(u16),
+    Dns(Cow<'a, str>),
     Dns4(Cow<'a, str>),
     Dns6(Cow<'a, str>),
     Dnsaddr(Cow<'a, str>),
@@ -124,6 +126,10 @@ impl<'a> Protocol<'a> {
             "ip6" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Ip6(Ipv6Addr::from_str(s)?))
+            }
+            "dns" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                Ok(Protocol::Dns(Cow::Borrowed(s)))
             }
             "dns4" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
@@ -205,6 +211,11 @@ impl<'a> Protocol<'a> {
                 let mut rdr = Cursor::new(data);
                 let num = rdr.read_u16::<BigEndian>()?;
                 Ok((Protocol::Dccp(num), rest))
+            }
+            DNS => {
+                let (n, input) = decode::usize(input)?;
+                let (data, rest) = split_at(n, input)?;
+                Ok((Protocol::Dns(Cow::Borrowed(str::from_utf8(data)?)), rest))
             }
             DNS4 => {
                 let (n, input) = decode::usize(input)?;
@@ -345,6 +356,12 @@ impl<'a> Protocol<'a> {
                 w.write_all(encode::u32(SCTP, &mut buf))?;
                 w.write_u16::<BigEndian>(*port)?
             }
+            Protocol::Dns(s) => {
+                w.write_all(encode::u32(DNS, &mut buf))?;
+                let bytes = s.as_bytes();
+                w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
+                w.write_all(&bytes)?
+            }
             Protocol::Dns4(s) => {
                 w.write_all(encode::u32(DNS4, &mut buf))?;
                 let bytes = s.as_bytes();
@@ -421,6 +438,7 @@ impl<'a> Protocol<'a> {
         use self::Protocol::*;
         match self {
             Dccp(a) => Dccp(a),
+            Dns(cow) => Dns(Cow::Owned(cow.into_owned())),
             Dns4(cow) => Dns4(Cow::Owned(cow.into_owned())),
             Dns6(cow) => Dns6(Cow::Owned(cow.into_owned())),
             Dnsaddr(cow) => Dnsaddr(Cow::Owned(cow.into_owned())),
@@ -454,6 +472,7 @@ impl<'a> fmt::Display for Protocol<'a> {
         use self::Protocol::*;
         match self {
             Dccp(port) => write!(f, "/dccp/{}", port),
+            Dns(s) => write!(f, "/dns/{}", s),
             Dns4(s) => write!(f, "/dns4/{}", s),
             Dns6(s) => write!(f, "/dns6/{}", s),
             Dnsaddr(s) => write!(f, "/dnsaddr/{}", s),

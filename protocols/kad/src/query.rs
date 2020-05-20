@@ -89,16 +89,40 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that contacts a fixed set of peers.
     pub fn add_fixed<I>(&mut self, peers: I, inner: TInner) -> QueryId
     where
-        I: IntoIterator<Item = Key<PeerId>>
+        I: IntoIterator<Item = PeerId>
     {
-        let peers = peers.into_iter().map(|k| k.into_preimage()).collect::<Vec<_>>();
+        let id = self.next_query_id();
+        self.continue_fixed(id, peers, inner);
+        id
+    }
+
+    /// Continues an earlier query with a fixed set of peers, reusing
+    /// the given query ID, which must be from a query that finished
+    /// earlier.
+    pub fn continue_fixed<I>(&mut self, id: QueryId, peers: I, inner: TInner)
+    where
+        I: IntoIterator<Item = PeerId>
+    {
+        assert!(!self.queries.contains_key(&id));
         let parallelism = self.config.replication_factor.get();
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
-        self.add(peer_iter, inner)
+        let query = Query::new(id, peer_iter, inner);
+        self.queries.insert(id, query);
     }
 
     /// Adds a query to the pool that iterates towards the closest peers to the target.
     pub fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
+    where
+        T: Into<KeyBytes>,
+        I: IntoIterator<Item = Key<PeerId>>
+    {
+        let id = self.next_query_id();
+        self.continue_iter_closest(id, target, peers, inner);
+        id
+    }
+
+    /// Adds a query to the pool that iterates towards the closest peers to the target.
+    pub fn continue_iter_closest<T, I>(&mut self, id: QueryId, target: T, peers: I, inner: TInner)
     where
         T: Into<KeyBytes>,
         I: IntoIterator<Item = Key<PeerId>>
@@ -108,14 +132,13 @@ impl<TInner> QueryPool<TInner> {
             .. ClosestPeersIterConfig::default()
         };
         let peer_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers));
-        self.add(peer_iter, inner)
-    }
-
-    fn add(&mut self, peer_iter: QueryPeerIter, inner: TInner) -> QueryId {
-        let id = QueryId(self.next_id);
-        self.next_id = self.next_id.wrapping_add(1);
         let query = Query::new(id, peer_iter, inner);
         self.queries.insert(id, query);
+    }
+
+    fn next_query_id(&mut self) -> QueryId {
+        let id = QueryId(self.next_id);
+        self.next_id = self.next_id.wrapping_add(1);
         id
     }
 
@@ -136,7 +159,7 @@ impl<TInner> QueryPool<TInner> {
         let mut waiting = None;
 
         for (&query_id, query) in self.queries.iter_mut() {
-            query.started = query.started.or(Some(now));
+            query.stats.start = query.stats.start.or(Some(now));
             match query.next(now) {
                 PeersIterState::Finished => {
                     finished = Some(query_id);
@@ -148,7 +171,7 @@ impl<TInner> QueryPool<TInner> {
                     break
                 }
                 PeersIterState::Waiting(None) | PeersIterState::WaitingAtCapacity => {
-                    let elapsed = now - query.started.unwrap_or(now);
+                    let elapsed = now - query.stats.start.unwrap_or(now);
                     if elapsed >= self.config.timeout {
                         timeout = Some(query_id);
                         break
@@ -163,12 +186,14 @@ impl<TInner> QueryPool<TInner> {
         }
 
         if let Some(query_id) = finished {
-            let query = self.queries.remove(&query_id).expect("s.a.");
+            let mut query = self.queries.remove(&query_id).expect("s.a.");
+            query.stats.end = Some(now);
             return QueryPoolState::Finished(query)
         }
 
         if let Some(query_id) = timeout {
-            let query = self.queries.remove(&query_id).expect("s.a.");
+            let mut query = self.queries.remove(&query_id).expect("s.a.");
+            query.stats.end = Some(now);
             return QueryPoolState::Timeout(query)
         }
 
@@ -206,9 +231,8 @@ pub struct Query<TInner> {
     id: QueryId,
     /// The peer iterator that drives the query state.
     peer_iter: QueryPeerIter,
-    /// The instant when the query started (i.e. began waiting for the first
-    /// result from a peer).
-    started: Option<Instant>,
+    /// Execution statistics of the query.
+    stats: QueryStats,
     /// The opaque inner query state.
     pub inner: TInner,
 }
@@ -222,7 +246,7 @@ enum QueryPeerIter {
 impl<TInner> Query<TInner> {
     /// Creates a new query without starting it.
     fn new(id: QueryId, peer_iter: QueryPeerIter, inner: TInner) -> Self {
-        Query { id, inner, peer_iter, started: None }
+        Query { id, inner, peer_iter, stats: QueryStats::empty() }
     }
 
     /// Gets the unique ID of the query.
@@ -230,11 +254,19 @@ impl<TInner> Query<TInner> {
         self.id
     }
 
+    /// Gets the current execution statistics of the query.
+    pub fn stats(&self) -> &QueryStats {
+        &self.stats
+    }
+
     /// Informs the query that the attempt to contact `peer` failed.
     pub fn on_failure(&mut self, peer: &PeerId) {
-        match &mut self.peer_iter {
+        let updated = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer)
+        };
+        if updated {
+            self.stats.failure += 1;
         }
     }
 
@@ -245,9 +277,12 @@ impl<TInner> Query<TInner> {
     where
         I: IntoIterator<Item = PeerId>
     {
-        match &mut self.peer_iter {
+        let updated = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer)
+        };
+        if updated {
+            self.stats.success += 1;
         }
     }
 
@@ -261,10 +296,16 @@ impl<TInner> Query<TInner> {
 
     /// Advances the state of the underlying peer iterator.
     fn next(&mut self, now: Instant) -> PeersIterState {
-        match &mut self.peer_iter {
+        let state = match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
             QueryPeerIter::Fixed(iter) => iter.next()
+        };
+
+        if let PeersIterState::Waiting(Some(_)) = state {
+            self.stats.requests += 1;
         }
+
+        state
     }
 
     /// Finishes the query prematurely.
@@ -278,13 +319,24 @@ impl<TInner> Query<TInner> {
         }
     }
 
+    /// Checks whether the query has finished.
+    ///
+    /// A finished query is eventually reported by `QueryPool::next()` and
+    /// removed from the pool.
+    pub fn is_finished(&self) -> bool {
+        match &self.peer_iter {
+            QueryPeerIter::Closest(iter) => iter.is_finished(),
+            QueryPeerIter::Fixed(iter) => iter.is_finished()
+        }
+    }
+
     /// Consumes the query, producing the final `QueryResult`.
     pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(iter.into_result()),
             QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
         };
-        QueryResult { inner: self.inner, peers }
+        QueryResult { peers, inner: self.inner, stats: self.stats }
     }
 }
 
@@ -293,6 +345,90 @@ pub struct QueryResult<TInner, TPeers> {
     /// The opaque inner query state.
     pub inner: TInner,
     /// The successfully contacted peers.
-    pub peers: TPeers
+    pub peers: TPeers,
+    /// The collected query statistics.
+    pub stats: QueryStats
 }
 
+/// Execution statistics of a query.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QueryStats {
+    requests: u32,
+    success: u32,
+    failure: u32,
+    start: Option<Instant>,
+    end: Option<Instant>
+}
+
+impl QueryStats {
+    pub fn empty() -> Self {
+        QueryStats {
+            requests: 0,
+            success: 0,
+            failure: 0,
+            start: None,
+            end: None,
+        }
+    }
+
+    /// Gets the total number of requests initiated by the query.
+    pub fn num_requests(&self) -> u32 {
+        self.requests
+    }
+
+    /// Gets the number of successful requests.
+    pub fn num_successes(&self) -> u32 {
+        self.success
+    }
+
+    /// Gets the number of failed requests.
+    pub fn num_failures(&self) -> u32 {
+        self.failure
+    }
+
+    /// Gets the number of pending requests.
+    ///
+    /// > **Note**: A query can finish while still having pending
+    /// > requests, if the termination conditions are already met.
+    pub fn num_pending(&self) -> u32 {
+        self.requests - (self.success + self.failure)
+    }
+
+    /// Gets the duration of the query.
+    ///
+    /// If the query has not yet finished, the duration is measured from the
+    /// start of the query to the current instant.
+    ///
+    /// If the query did not yet start (i.e. yield the first peer to contact),
+    /// `None` is returned.
+    pub fn duration(&self) -> Option<Duration> {
+        if let Some(s) = self.start {
+            if let Some(e) = self.end {
+                Some(e - s)
+            } else {
+                Some(Instant::now() - s)
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Merges these stats with the given stats of another query,
+    /// e.g. to accumulate statistics from a multi-phase query.
+    ///
+    /// Counters are merged cumulatively while the instants for
+    /// start and end of the queries are taken as the minimum and
+    /// maximum, respectively.
+    pub fn merge(self, other: QueryStats) -> Self {
+        QueryStats {
+            requests: self.requests + other.requests,
+            success: self.success + other.success,
+            failure: self.failure + other.failure,
+            start: match (self.start, other.start) {
+                (Some(a), Some(b)) => Some(std::cmp::min(a, b)),
+                (a, b) => a.or(b)
+            },
+            end: std::cmp::max(self.end, other.end)
+        }
+    }
+}

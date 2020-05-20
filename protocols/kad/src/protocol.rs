@@ -26,24 +26,22 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-use std::{borrow::Cow, convert::TryFrom, time::Duration};
-use std::{io, iter};
-
 use bytes::BytesMut;
 use codec::UviBytes;
-use futures::prelude::*;
-use futures_codec::Framed;
-use prost::Message;
-use unsigned_varint::codec;
-use derivative::Derivative;
-use std::time::Instant;
-
-use libp2p_core::{Multiaddr, PeerId};
-use libp2p_core::identity::ed25519::PublicKey;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-
 use crate::dht_proto as proto;
 use crate::record::{self, Record};
+use futures::prelude::*;
+use futures_codec::Framed;
+use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use prost::Message;
+use std::{borrow::Cow, convert::TryFrom, time::Duration};
+use std::{io, iter};
+use unsigned_varint::codec;
+use wasm_timer::Instant;
+
+use derivative::Derivative;
+use libp2p_core::identity::ed25519::PublicKey;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";

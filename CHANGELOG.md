@@ -1,9 +1,63 @@
 # Version ???
 
+
+# Version 0.19.0 (2020-05-18)
+
+- `libp2p-core`, `libp2p-swarm`: Added support for multiple dialing
+  attempts per peer, with a configurable limit.
+  [PR 1506](https://github.com/libp2p/rust-libp2p/pull/1506)
+
+- `libp2p-core`: `PeerId`s that use the identity hashing will now be properly
+  displayed using the string representation of an identity multihash, rather
+  than the canonical SHA 256 representation.
+  [PR 1576](https://github.com/libp2p/rust-libp2p/pull/1576)
+
+- `libp2p-core`: Updated to multihash 0.11.0.
+  [PR 1566](https://github.com/libp2p/rust-libp2p/pull/1566)
+
+- `libp2p-core`: Make the number of events buffered to/from tasks configurable.
+  [PR 1574](https://github.com/libp2p/rust-libp2p/pull/1574)
+
+- `libp2p-dns`, `parity-multiaddr`: Added support for the `/dns` multiaddr
+  protocol. Additionally, the `multiaddr::from_url` function will now use
+  `/dns` instead of `/dns4`.
+  [PR 1575](https://github.com/libp2p/rust-libp2p/pull/1575)
+
+- `libp2p-noise`: Added the `X25519Spec` protocol suite which uses
+  libp2p-noise-spec compliant signatures on static keys as well as the
+  `/noise` protocol upgrade, hence providing a libp2p-noise-spec compliant
+  `XX` handshake. `IK` and `IX` are still supported with `X25519Spec`
+  though not guaranteed to be interoperable with other libp2p
+  implementations as these handshake patterns are not currently
+  included in the libp2p-noise-spec. The `X25519Spec` implementation
+  will eventually replace the current `X25519` implementation, with
+  the former being removed. To upgrade without interruptions, you may
+  temporarily include `NoiseConfig`s for both implementations as
+  alternatives in your transport upgrade pipeline.
+
 - `libp2p-kad`: Consider fixed (K_VALUE) amount of peers at closest query
   initialization. Unless `KademliaConfig::set_replication_factor` is used change
   has no effect.
   [PR 1536](https://github.com/libp2p/rust-libp2p/pull/1536)
+
+- `libp2p-kad`: Provide more insight into, and control of, the execution of
+  queries. All query results are now wrapped in `KademliaEvent::QueryResult`.
+  As a side-effect of these changes and for as long as the record storage
+  API is not asynchronous, local storage errors on `put_record` are reported
+  synchronously in a `Result`, instead of being reported asynchronously by
+  an event.
+  [PR 1567](https://github.com/libp2p/rust-libp2p/pull/1567)
+
+- `libp2p-tcp`, `libp2p`: Made the `libp2p-tcp/async-std` feature flag
+  disabled by default, and split the `libp2p/tcp` feature in two:
+  `tcp-async-std` and `tcp-tokio`. `tcp-async-std` is still enabled by default.
+  [PR 1471](https://github.com/libp2p/rust-libp2p/pull/1471)
+
+- `libp2p-tcp`: On listeners started with an IPv6 multi-address the socket
+  option `IPV6_V6ONLY` is set to true. Instead of relying on IPv4-mapped IPv6
+  address support, two listeners can be started if IPv4 and IPv6 should both
+  be supported. IPv4 listener addresses are not affected by this change.
+  [PR 1555](https://github.com/libp2p/rust-libp2p/pull/1555)
 
 # Version 0.18.1 (2020-04-17)
 

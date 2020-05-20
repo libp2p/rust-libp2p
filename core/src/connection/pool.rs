@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    Executor,
     ConnectedPoint,
     PeerId,
     connection::{
@@ -36,7 +35,7 @@ use crate::{
         OutgoingInfo,
         Substream,
         PendingConnectionError,
-        manager::{self, Manager},
+        manager::{self, Manager, ManagerConfig},
     },
     muxing::StreamMuxer,
 };
@@ -175,13 +174,13 @@ where
     /// Creates a new empty `Pool`.
     pub fn new(
         local_id: TPeerId,
-        executor: Option<Box<dyn Executor + Send>>,
+        manager_config: ManagerConfig,
         limits: PoolLimits
     ) -> Self {
         Pool {
             local_id,
             limits,
-            manager: Manager::new(executor),
+            manager: Manager::new(manager_config),
             established: Default::default(),
             pending: Default::default(),
         }
@@ -225,12 +224,7 @@ where
         TPeerId: Clone + Send + 'static,
     {
         let endpoint = info.to_connected_point();
-        if let Some(limit) = self.limits.max_incoming {
-            let current = self.iter_pending_incoming().count();
-            if current >= limit {
-                return Err(ConnectionLimit { limit, current })
-            }
-        }
+        self.limits.check_incoming(|| self.iter_pending_incoming().count())?;
         Ok(self.add_pending(future, handler, endpoint, None))
     }
 
@@ -267,6 +261,11 @@ where
         TPeerId: Clone + Send + 'static,
     {
         self.limits.check_outgoing(|| self.iter_pending_outgoing().count())?;
+
+        if let Some(peer) = &info.peer_id {
+            self.limits.check_outgoing_per_peer(|| self.num_peer_outgoing(peer))?;
+        }
+
         let endpoint = info.to_connected_point();
         Ok(self.add_pending(future, handler, endpoint, info.peer_id.cloned()))
     }
@@ -463,6 +462,13 @@ where
     /// Counts the number of established connections to the given peer.
     pub fn num_peer_established(&self, peer: &TPeerId) -> usize {
         self.established.get(peer).map_or(0, |conns| conns.len())
+    }
+
+    /// Counts the number of pending outgoing connections to the given peer.
+    pub fn num_peer_outgoing(&self, peer: &TPeerId) -> usize {
+        self.iter_pending_outgoing()
+            .filter(|info| info.peer_id == Some(peer))
+            .count()
     }
 
     /// Returns an iterator over all established connections of `peer`.
@@ -837,6 +843,7 @@ pub struct PoolLimits {
     pub max_outgoing: Option<usize>,
     pub max_incoming: Option<usize>,
     pub max_established_per_peer: Option<usize>,
+    pub max_outgoing_per_peer: Option<usize>,
 }
 
 impl PoolLimits {
@@ -852,6 +859,20 @@ impl PoolLimits {
         F: FnOnce() -> usize
     {
         Self::check(current, self.max_outgoing)
+    }
+
+    fn check_incoming<F>(&self, current: F) -> Result<(), ConnectionLimit>
+    where
+        F: FnOnce() -> usize
+    {
+        Self::check(current, self.max_incoming)
+    }
+
+    fn check_outgoing_per_peer<F>(&self, current: F) -> Result<(), ConnectionLimit>
+    where
+        F: FnOnce() -> usize
+    {
+        Self::check(current, self.max_outgoing_per_peer)
     }
 
     fn check<F>(current: F, limit: Option<usize>) -> Result<(), ConnectionLimit>

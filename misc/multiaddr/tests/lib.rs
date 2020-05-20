@@ -76,36 +76,37 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 24) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 25) { // TODO: Add Protocol::Quic
              0 => Proto(Dccp(g.gen())),
-             1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
-             2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
-             3 => Proto(Http),
-             4 => Proto(Https),
-             5 => Proto(Ip4(Ipv4Addr::arbitrary(g))),
-             6 => Proto(Ip6(Ipv6Addr::arbitrary(g))),
-             7 => Proto(P2pWebRtcDirect),
-             8 => Proto(P2pWebRtcStar),
-             9 => Proto(P2pWebSocketStar),
-            10 => Proto(Memory(g.gen())),
+             1 => Proto(Dns(Cow::Owned(SubString::arbitrary(g).0))),
+             2 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
+             3 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
+             4 => Proto(Http),
+             5 => Proto(Https),
+             6 => Proto(Ip4(Ipv4Addr::arbitrary(g))),
+             7 => Proto(Ip6(Ipv6Addr::arbitrary(g))),
+             8 => Proto(P2pWebRtcDirect),
+             9 => Proto(P2pWebRtcStar),
+            10 => Proto(P2pWebSocketStar),
+            11 => Proto(Memory(g.gen())),
             // TODO: impl Arbitrary for Multihash:
-            11 => Proto(P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))),
-            12 => Proto(P2pCircuit),
-            13 => Proto(Quic),
-            14 => Proto(Sctp(g.gen())),
-            15 => Proto(Tcp(g.gen())),
-            16 => Proto(Udp(g.gen())),
-            17 => Proto(Udt),
-            18 => Proto(Unix(Cow::Owned(SubString::arbitrary(g).0))),
-            19 => Proto(Utp),
-            20 => Proto(Ws("/".into())),
-            21 => Proto(Wss("/".into())),
-            22 => {
+            12 => Proto(P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))),
+            13 => Proto(P2pCircuit),
+            14 => Proto(Quic),
+            15 => Proto(Sctp(g.gen())),
+            16 => Proto(Tcp(g.gen())),
+            17 => Proto(Udp(g.gen())),
+            18 => Proto(Udt),
+            19 => Proto(Unix(Cow::Owned(SubString::arbitrary(g).0))),
+            20 => Proto(Utp),
+            21 => Proto(Ws("/".into())),
+            22 => Proto(Wss("/".into())),
+            23 => {
                 let mut a = [0; 10];
                 g.fill(&mut a);
                 Proto(Onion(Cow::Owned(a), g.gen_range(1, std::u16::MAX)))
             },
-            23 => {
+            24 => {
                 let mut a = [0; 35];
                 g.fill_bytes(&mut a);
                 Proto(Onion3((a, g.gen_range(1, std::u16::MAX)).into()))

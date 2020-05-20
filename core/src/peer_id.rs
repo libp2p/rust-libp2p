@@ -77,10 +77,9 @@ impl PeerId {
         };
 
         let canonical = canonical_algorithm.map(|alg|
-            alg.hasher().expect("SHA2-256 hasher is always supported").digest(&key_enc));
+            alg.digest(&key_enc));
 
-        let multihash = hash_algorithm.hasher()
-            .expect("Identity and SHA-256 hasher are always supported").digest(&key_enc);
+        let multihash = hash_algorithm.digest(&key_enc);
 
         PeerId { multihash, canonical }
     }
@@ -148,7 +147,7 @@ impl PeerId {
 
     /// Returns a base-58 encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
-        bs58::encode(self.borrow() as &[u8]).into_string()
+        bs58::encode(self.as_bytes()).into_string()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
@@ -158,7 +157,7 @@ impl PeerId {
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
         let alg = self.multihash.algorithm();
         let enc = public_key.clone().into_protobuf_encoding();
-        Some(alg.hasher()?.digest(&enc) == self.multihash)
+        Some(alg.digest(&enc) == self.multihash)
     }
 
     /// Returns public key if it was inlined in this `PeerId`.
@@ -336,8 +335,8 @@ mod tests {
         }
 
         fn property(data: Vec<u8>, algo1: HashAlgo, algo2: HashAlgo) -> bool {
-            let a = PeerId::try_from(algo1.0.hasher().unwrap().digest(&data)).unwrap();
-            let b = PeerId::try_from(algo2.0.hasher().unwrap().digest(&data)).unwrap();
+            let a = PeerId::try_from(algo1.0.digest(&data)).unwrap();
+            let b = PeerId::try_from(algo2.0.digest(&data)).unwrap();
 
             if algo1 == algo2 || algo1.0 == Code::Identity || algo2.0 == Code::Identity {
                 a == b
