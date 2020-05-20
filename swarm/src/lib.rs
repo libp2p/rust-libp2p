@@ -618,9 +618,36 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
             // After the network had a chance to make progress, try to deliver
             // the pending event emitted by the behaviour in the previous iteration
-            // to the connection handler(s). The pending event must be delivered
-            // before polling the behaviour again. If the targeted peer
-            // meanwhie disconnected, the event is discarded.
+            // to the connection handler(s).
+            //
+            // The pending event must be delivered before polling the behaviour again.
+            // If the targeted peer meanwhile disconnected, the event is discarded.
+            //
+            // If the pending event cannot be delivered because the connection
+            // is busy, continue to poll the network. That means the following
+            // if a single connection (handler) is slow (i.e. does not accept the pending
+            // event):
+            //
+            // 1. All connections are temporarily unable to get new data to send
+            // from the behaviour (since we only buffer a single pending event).
+            // This is a problem that still needs to be resolved by providing
+            // a means for the swarm to exercise connection-specific back-pressure
+            // on the `NetworkBehaviour`.
+            //
+            // 2. New connections continue to get accepted and in general
+            // network I/O progresses as long as the events emitted by
+            // the swarm are consumed, i.e. back-pressure on the network
+            // I/O can only be triggered by the code consuming swarm events.
+            //
+            // 3. All connections can continue to receive data and send the data
+            // they already have. All received data can be continuously fed into
+            // `NetworkBehaviour::inject_event`.
+            //
+            // 4. As a direct consequence of (3.), `NetworkBehaviour::inject_event` can
+            // be called any number of times before `NetworkBehaviour::poll` is
+            // called again, so behaviours need to be aware that they may need
+            // to buffer more data and propagate back-pressure on their own API
+            // if necessary.
             if let Some((peer_id, handler, event)) = this.pending_event.take() {
                 if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                     match handler {
@@ -628,21 +655,21 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             if let Some(mut conn) = peer.connection(conn_id) {
                                 if let Some(event) = notify_one(&mut conn, event, cx) {
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending
+                                    continue
                                 }
                             },
                         PendingNotifyHandler::Any(ids) => {
                             if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::Any(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                return Poll::Pending
+                                continue
                             }
                         }
                         PendingNotifyHandler::All(ids) => {
                             if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::All(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                return Poll::Pending
+                                continue
                             }
                         }
                     }
@@ -709,7 +736,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                     if let Some(event) = notify_one(&mut conn, event, cx) {
                                         let handler = PendingNotifyHandler::One(connection);
                                         this.pending_event = Some((peer_id, handler, event));
-                                        return Poll::Pending
+                                        continue
                                     }
                                 }
                             }
@@ -718,7 +745,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                     let handler = PendingNotifyHandler::Any(ids);
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending
+                                    continue
                                 }
                             }
                             NotifyHandler::All => {
@@ -726,7 +753,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
                                     let handler = PendingNotifyHandler::All(ids);
                                     this.pending_event = Some((peer_id, handler, event));
-                                    return Poll::Pending
+                                    continue
                                 }
                             }
                         }
