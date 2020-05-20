@@ -639,15 +639,16 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             // the swarm are consumed, i.e. back-pressure on the network
             // I/O can only be triggered by the code consuming swarm events.
             //
-            // 3. All connections can continue to receive data and send the data
-            // they already have. All received data can be continuously fed into
-            // `NetworkBehaviour::inject_event`.
+            // 3. All connections can continue to receive data and send data
+            // in the form of events to the `NetworkBehaviour`. All received data
+            // can be continuously fed into `NetworkBehaviour::inject_event`. It
+            // may be desirable in the future to allow `inject_event` to signal
+            // back-pressure via a return value.
             //
             // 4. As a direct consequence of (3.), `NetworkBehaviour::inject_event` can
             // be called any number of times before `NetworkBehaviour::poll` is
-            // called again, so behaviours need to be aware that they may need
-            // to buffer more data and propagate back-pressure on their own API
-            // if necessary.
+            // called again (in the absence of a means for `inject_event` to signal
+            // back-pressure).
             if let Some((peer_id, handler, event)) = this.pending_event.take() {
                 if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                     match handler {
