@@ -444,7 +444,7 @@ fn get_record_not_found() {
 fn put_record() {
     fn prop(records: Vec<Record>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor = NonZeroUsize::new(rng.gen_range(4, K_VALUE.get() + 1)).unwrap();
+        let replication_factor = NonZeroUsize::new(rng.gen_range(2, (K_VALUE.get() / 2) + 1)).unwrap();
         let num_total = replication_factor.get() * 2;
 
         let mut config = KademliaConfig::default();
@@ -724,7 +724,7 @@ fn get_record_many() {
 fn add_provider() {
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor = NonZeroUsize::new(rng.gen_range(1, K_VALUE.get() + 1)).unwrap();
+        let replication_factor = NonZeroUsize::new(rng.gen_range(2, (K_VALUE.get() / 2) + 1)).unwrap();
         let num_total = replication_factor.get() * 2;
 
         let mut config = KademliaConfig::default();
