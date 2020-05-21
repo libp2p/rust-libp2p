@@ -2,7 +2,7 @@
 name = "libp2p-core-derive"
 edition = "2018"
 description = "Procedural macros of libp2p-core"
-version = "0.18.0"
+version = "0.19.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,4 +17,4 @@ syn = { version = "1.0.8", default-features = false, features = ["clone-impls", 
 quote = "1.0"
 
 [dev-dependencies]
-libp2p = { version = "0.18.0", path = "../.." }
+libp2p = { version = "0.19.0", path = "../.." }

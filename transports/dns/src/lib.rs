@@ -124,6 +124,7 @@ where
         // As an optimization, we immediately pass through if no component of the address contain
         // a DNS protocol.
         let contains_dns = addr.iter().any(|cmp| match cmp {
+            Protocol::Dns(_) => true,
             Protocol::Dns4(_) => true,
             Protocol::Dns6(_) => true,
             _ => false,
@@ -139,7 +140,7 @@ where
         trace!("Dialing address with DNS: {}", addr);
         let resolve_futs = addr.iter()
             .map(|cmp| match cmp {
-                Protocol::Dns4(ref name) | Protocol::Dns6(ref name) => {
+                Protocol::Dns(ref name) | Protocol::Dns4(ref name) | Protocol::Dns6(ref name) => {
                     let name = name.to_string();
                     let to_resolve = format!("{}:0", name);
                     let (tx, rx) = oneshot::channel();
@@ -151,7 +152,12 @@ where
                         });
                     });
 
-                    let is_dns4 = if let Protocol::Dns4(_) = cmp { true } else { false };
+                    let (dns4, dns6) = match cmp {
+                        Protocol::Dns(_) => (true, true),
+                        Protocol::Dns4(_) => (true, false),
+                        Protocol::Dns6(_) => (false, true),
+                        _ => unreachable!(),
+                    };
 
                     async move {
                         let list = rx.await
@@ -166,7 +172,7 @@ where
 
                         list.into_iter()
                             .filter_map(|addr| {
-                                if (is_dns4 && addr.is_ipv4()) || (!is_dns4 && addr.is_ipv6()) {
+                                if (dns4 && addr.is_ipv4()) || (dns6 && addr.is_ipv6()) {
                                     Some(Protocol::from(addr))
                                 } else {
                                     None
