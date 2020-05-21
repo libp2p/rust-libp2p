@@ -935,7 +935,7 @@ where
                             record,
                             quorum,
                             phase: PutRecordPhase::PutRecord {
-                                successfull_peers: vec![],
+                                success: vec![],
                                 get_closest_peers_stats: QueryStats::empty()
                             }
                         };
@@ -969,7 +969,7 @@ where
                     record,
                     quorum,
                     phase: PutRecordPhase::PutRecord {
-                        successfull_peers: vec![],
+                        success: vec![],
                         get_closest_peers_stats: result.stats
                     }
                 };
@@ -982,13 +982,13 @@ where
                 context,
                 record,
                 quorum,
-                phase: PutRecordPhase::PutRecord { successfull_peers, get_closest_peers_stats }
+                phase: PutRecordPhase::PutRecord { success, get_closest_peers_stats }
             } => {
                 let mk_result = |key: record::Key| {
-                    if successfull_peers.len() >= quorum.get() {
+                    if success.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
-                        Err(PutRecordError::QuorumFailed { key, quorum, num_results: successfull_peers.len() })
+                        Err(PutRecordError::QuorumFailed { key, quorum, num_results: success.len() })
                     }
                 };
                 match context {
@@ -1087,7 +1087,7 @@ where
                     quorum,
                     num_results: match phase {
                         PutRecordPhase::GetClosestPeers => 0,
-                        PutRecordPhase::PutRecord { ref successfull_peers, .. } => successfull_peers.len(),
+                        PutRecordPhase::PutRecord { ref success, .. } => success.len(),
                     }
                 });
                 match context {
@@ -1559,11 +1559,11 @@ where
                 if let Some(query) = self.queries.get_mut(&user_data) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
-                        phase: PutRecordPhase::PutRecord { successfull_peers, .. }, quorum, ..
+                        phase: PutRecordPhase::PutRecord { success, .. }, quorum, ..
                     } = &mut query.inner.info {
-                        successfull_peers.push(source);
-                        if successfull_peers.len() >= quorum.get() {
-                            let peers = successfull_peers.clone();
+                        success.push(source);
+                        if success.len() >= quorum.get() {
+                            let peers = success.clone();
                             query.may_finish(peers)
                         }
                     }
@@ -2199,7 +2199,7 @@ pub enum PutRecordPhase {
     /// The query is replicating the record to the closest nodes to the key.
     PutRecord {
         /// A list of peers the given record has been successfully replicated to.
-        successfull_peers: Vec<PeerId>,
+        success: Vec<PeerId>,
         /// Query statistics from the finished `GetClosestPeers` phase.
         get_closest_peers_stats: QueryStats,
     },
