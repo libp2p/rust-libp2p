@@ -100,11 +100,7 @@ where
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok(Framed::new(
             socket,
-            GossipsubCodec {
-                length_codec,
-                keypair: self.keypair.clone(),
-                allow_unsigned: self.allow_unsigned,
-            },
+            GossipsubCodec::new(length_codec, self.keypair.clone(), self.allow_unsigned),
         )))
     }
 }
@@ -122,11 +118,7 @@ where
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok(Framed::new(
             socket,
-            GossipsubCodec {
-                length_codec,
-                keypair: self.keypair.clone(),
-                allow_unsigned: self.allow_unsigned,
-            },
+            GossipsubCodec::new(length_codec, self.keypair.clone(), self.allow_unsigned),
         )))
     }
 }
@@ -136,8 +128,46 @@ where
 pub struct GossipsubCodec {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
     length_codec: codec::UviBytes,
+    /// Libp2p Keypair if message signing is required.
     keypair: Option<Keypair>,
+    /// Whether to accept un-signed keypairs.
     allow_unsigned: bool,
+    /// The key to be tagged on to messages if the public key cannot be inlined in the PeerId and
+    /// signing messages is required.
+    key: Option<Vec<u8>>,
+}
+
+impl GossipsubCodec {
+    pub fn new(
+        length_codec: codec::UviBytes,
+        keypair: Option<Keypair>,
+        allow_unsigned: bool,
+    ) -> Self {
+        // determine if the public key needs to be included in each message
+        let key = {
+            if let Some(keypair) = keypair.as_ref() {
+                // signing is required
+                let key_enc = keypair.public().into_protobuf_encoding();
+                if key_enc.len() <= 42 {
+                    // public key can be inlined, so we don't include it in the protobuf
+                    None
+                } else {
+                    // include the protobuf encoding of the public key in the message
+                    Some(key_enc)
+                }
+            } else {
+                // signing is not required, no key needs to be added
+                None
+            }
+        };
+
+        GossipsubCodec {
+            length_codec,
+            keypair,
+            allow_unsigned,
+            key,
+        }
+    }
 }
 
 impl Encoder for GossipsubCodec {
@@ -167,6 +197,8 @@ impl Encoder for GossipsubCodec {
         if let Some(keypair) = self.keypair.as_ref() {
             for message in publish.iter_mut() {
                 sign_message(keypair, message)?;
+                // add the peer_id key if required
+                message.key = self.key.clone();
             }
         }
 
@@ -380,17 +412,6 @@ fn sign_message(keypair: &Keypair, message: &mut rpc_proto::Message) -> Result<(
     match keypair.sign(&signature_bytes) {
         Ok(signature) => {
             message.signature = Some(signature);
-
-            let key = {
-                let key_enc = keypair.public().into_protobuf_encoding();
-                if key_enc.len() <= 42 {
-                    // public key can be inlined, so we don't include it in the protobuf
-                    None
-                } else {
-                    Some(key_enc)
-                }
-            };
-            message.key = key;
             Ok(())
         }
         Err(e) => {
@@ -568,6 +589,8 @@ mod tests {
 
         // sign the message
         sign_message(&source_key, &mut message).unwrap();
+        // key is not inlined
+        message.key = Some(source_key.public().into_protobuf_encoding());
 
         // verify the signed message
         assert!(verify_message(&message).unwrap());
