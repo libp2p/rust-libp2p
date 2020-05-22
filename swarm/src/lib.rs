@@ -494,8 +494,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         let this = &mut *self;
 
         'poll: loop {
-            println!("Event lead: {}", this.event_lead);
-
             let mut network_not_ready = false;
 
             // First let the network make progress, if we are not too far
