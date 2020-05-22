@@ -493,7 +493,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
         // across a `Deref`.
         let this = &mut *self;
 
-        loop {
+        'poll: loop {
             println!("Event lead: {}", this.event_lead);
 
             let mut network_not_ready = false;
@@ -668,7 +668,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 if let Some(event) = notify_one(&mut conn, event, cx) {
                                     this.pending_event = Some((peer_id, handler, event));
                                     if this.event_lead < this.max_event_lead {
-                                        continue
+                                        continue 'poll
                                     } else {
                                         return Poll::Pending
                                     }
@@ -679,7 +679,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 let handler = PendingNotifyHandler::Any(ids);
                                 this.pending_event = Some((peer_id, handler, event));
                                 if this.event_lead < this.max_event_lead {
-                                    continue
+                                    continue 'poll
                                 } else {
                                     return Poll::Pending
                                 }
@@ -690,7 +690,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                                 let handler = PendingNotifyHandler::All(ids);
                                 this.pending_event = Some((peer_id, handler, event));
                                 if this.event_lead < this.max_event_lead {
-                                    continue
+                                    continue 'poll
                                 } else {
                                     return Poll::Pending
                                 }
@@ -702,114 +702,121 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
             debug_assert!(this.pending_event.is_none());
 
-            let behaviour_poll = {
-                let mut parameters = SwarmPollParameters {
-                    local_peer_id: &mut this.network.local_peer_id(),
-                    supported_protocols: &this.supported_protocols,
-                    listened_addrs: &this.listened_addrs,
-                    external_addrs: &this.external_addrs
+            // Try to catch up with polling of the `NetworkBehaviour` by the
+            // number of events given to the behaviour before, but always
+            // poll at least once, since no event may have been given at all.
+            for _ in 0 .. usize::max(1, this.event_lead) {
+                let behaviour_poll = {
+                    let mut parameters = SwarmPollParameters {
+                        local_peer_id: &mut this.network.local_peer_id(),
+                        supported_protocols: &this.supported_protocols,
+                        listened_addrs: &this.listened_addrs,
+                        external_addrs: &this.external_addrs
+                    };
+                    this.event_lead = this.event_lead.saturating_sub(1);
+                    this.behaviour.poll(cx, &mut parameters)
                 };
-                this.event_lead = this.event_lead.saturating_sub(1);
-                this.behaviour.poll(cx, &mut parameters)
-            };
 
-            match behaviour_poll {
-                Poll::Pending => {
-                    // The behaviour has nothing to produce, thus we can
-                    // continue sending it events.
-                    this.event_lead = 0;
-                    if network_not_ready {
-                        return Poll::Pending
-                    }
-                },
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
-                    return Poll::Ready(SwarmEvent::Behaviour(event))
-                },
-                Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
-                    let _ = ExpandedSwarm::dial_addr(&mut *this, address);
-                },
-                Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition }) => {
-                    if this.banned_peers.contains(&peer_id) {
-                        this.behaviour.inject_dial_failure(&peer_id);
-                    } else {
-                        let condition_matched = match condition {
-                            DialPeerCondition::Disconnected
-                                if this.network.is_disconnected(&peer_id) => true,
-                            DialPeerCondition::NotDialing
-                                if !this.network.is_dialing(&peer_id) => true,
-                            _ => false
-                        };
-                        if condition_matched {
-                            if ExpandedSwarm::dial(this, &peer_id).is_ok() {
-                                return Poll::Ready(SwarmEvent::Dialing(peer_id))
-                            }
+                match behaviour_poll {
+                    Poll::Pending => {
+                        // The behaviour has nothing to produce, thus we can
+                        // continue sending it events.
+                        this.event_lead = 0;
+                        if network_not_ready {
+                            return Poll::Pending
                         } else {
-                            // Even if the condition for a _new_ dialing attempt is not met,
-                            // we always add any potentially new addresses of the peer to an
-                            // ongoing dialing attempt, if there is one.
-                            log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
-                                peer_id, condition);
-                            if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
-                                let addrs = this.behaviour.addresses_of_peer(peer.id());
-                                let mut attempt = peer.some_attempt();
-                                for addr in addrs {
-                                    attempt.add_address(addr);
+                            continue 'poll
+                        }
+                    },
+                    Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                        return Poll::Ready(SwarmEvent::Behaviour(event))
+                    },
+                    Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
+                        let _ = ExpandedSwarm::dial_addr(&mut *this, address);
+                    },
+                    Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition }) => {
+                        if this.banned_peers.contains(&peer_id) {
+                            this.behaviour.inject_dial_failure(&peer_id);
+                        } else {
+                            let condition_matched = match condition {
+                                DialPeerCondition::Disconnected
+                                    if this.network.is_disconnected(&peer_id) => true,
+                                DialPeerCondition::NotDialing
+                                    if !this.network.is_dialing(&peer_id) => true,
+                                _ => false
+                            };
+                            if condition_matched {
+                                if ExpandedSwarm::dial(this, &peer_id).is_ok() {
+                                    return Poll::Ready(SwarmEvent::Dialing(peer_id))
+                                }
+                            } else {
+                                // Even if the condition for a _new_ dialing attempt is not met,
+                                // we always add any potentially new addresses of the peer to an
+                                // ongoing dialing attempt, if there is one.
+                                log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
+                                    peer_id, condition);
+                                if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
+                                    let addrs = this.behaviour.addresses_of_peer(peer.id());
+                                    let mut attempt = peer.some_attempt();
+                                    for addr in addrs {
+                                        attempt.add_address(addr);
+                                    }
                                 }
                             }
                         }
-                    }
-                },
-                Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event }) => {
-                    if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
-                        match handler {
-                            NotifyHandler::One(connection) => {
-                                if let Some(mut conn) = peer.connection(connection) {
-                                    if let Some(event) = notify_one(&mut conn, event, cx) {
+                    },
+                    Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event }) => {
+                        if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
+                            match handler {
+                                NotifyHandler::One(connection) => {
+                                    if let Some(mut conn) = peer.connection(connection) {
+                                        if let Some(event) = notify_one(&mut conn, event, cx) {
+                                            if let Err(event) = this.behaviour.inject_connections_busy(
+                                                &peer_id, std::iter::once(connection), event
+                                            ) {
+                                                let handler = PendingNotifyHandler::One(connection);
+                                                this.pending_event = Some((peer_id, handler, event));
+                                                continue 'poll
+                                            }
+                                        }
+                                    }
+                                }
+                                NotifyHandler::Any => {
+                                    let ids = peer.connections().into_ids().collect();
+                                    if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                         if let Err(event) = this.behaviour.inject_connections_busy(
-                                            &peer_id, std::iter::once(connection), event
+                                            &peer_id, ids.iter().copied(), event
                                         ) {
-                                            let handler = PendingNotifyHandler::One(connection);
+                                            let handler = PendingNotifyHandler::Any(ids);
                                             this.pending_event = Some((peer_id, handler, event));
-                                            continue
+                                            continue 'poll
+                                        }
+                                    }
+                                }
+                                NotifyHandler::All => {
+                                    let ids = peer.connections().into_ids().collect();
+                                    if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
+                                        if let Err(event) = this.behaviour.inject_connections_busy(
+                                            &peer_id, ids.iter().copied(), event
+                                        ) {
+                                            let handler = PendingNotifyHandler::All(ids);
+                                            this.pending_event = Some((peer_id, handler, event));
+                                            continue 'poll
                                         }
                                     }
                                 }
                             }
-                            NotifyHandler::Any => {
-                                let ids = peer.connections().into_ids().collect();
-                                if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
-                                    if let Err(event) = this.behaviour.inject_connections_busy(
-                                        &peer_id, ids.iter().copied(), event
-                                    ) {
-                                        let handler = PendingNotifyHandler::Any(ids);
-                                        this.pending_event = Some((peer_id, handler, event));
-                                        continue
-                                    }
-                                }
-                            }
-                            NotifyHandler::All => {
-                                let ids = peer.connections().into_ids().collect();
-                                if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
-                                    if let Err(event) = this.behaviour.inject_connections_busy(
-                                        &peer_id, ids.iter().copied(), event
-                                    ) {
-                                        let handler = PendingNotifyHandler::All(ids);
-                                        this.pending_event = Some((peer_id, handler, event));
-                                        continue
-                                    }
-                                }
-                            }
                         }
-                    }
-                },
-                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    for addr in this.network.address_translation(&address) {
-                        if this.external_addrs.iter().all(|a| *a != addr) {
-                            this.behaviour.inject_new_external_addr(&addr);
+                    },
+                    Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
+                        for addr in this.network.address_translation(&address) {
+                            if this.external_addrs.iter().all(|a| *a != addr) {
+                                this.behaviour.inject_new_external_addr(&addr);
+                            }
+                            this.external_addrs.add(addr);
                         }
-                        this.external_addrs.add(addr);
-                    }
-                },
+                    },
+                }
             }
         }
     }
