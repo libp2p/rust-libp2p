@@ -1017,7 +1017,7 @@ impl NetworkBehaviour for Gossipsub {
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         GossipsubHandler::new(
-            self.config.protocol_id.clone(),
+            self.config.protocol_id_prefix.clone(),
             self.config.max_transmit_size,
             self.keypair.clone(),
             self.config.allow_unsigned_messages,

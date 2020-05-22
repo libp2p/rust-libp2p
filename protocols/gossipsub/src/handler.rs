@@ -31,7 +31,6 @@ use libp2p_swarm::NegotiatedSubstream;
 use log::{debug, error, trace, warn};
 use smallvec::SmallVec;
 use std::{
-    borrow::Cow,
     io,
     pin::Pin,
     task::{Context, Poll},
@@ -82,14 +81,14 @@ enum OutboundSubstreamState {
 impl GossipsubHandler {
     /// Builds a new `GossipsubHandler`.
     pub fn new(
-        protocol_id: impl Into<Cow<'static, [u8]>>,
+        protocol_id_prefix: std::borrow::Cow<'static, str>,
         max_transmit_size: usize,
         keypair: Option<Keypair>,
         allow_unsigned: bool,
     ) -> Self {
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
-                protocol_id,
+                protocol_id_prefix,
                 max_transmit_size,
                 keypair,
                 allow_unsigned,

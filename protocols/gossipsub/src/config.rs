@@ -29,8 +29,12 @@ pub const IDENTITY_SOURCE: [u8; 3] = [0, 1, 0];
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
 pub struct GossipsubConfig {
-    /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
-    pub protocol_id: Cow<'static, [u8]>,
+    /// The protocol id prefix to negotiate this protocol. The protocol id is of the form
+    /// `/<prefix>/<supported-versions>`. As gossipsub supports version 1.0 and 1.1, there are two
+    /// protocol id's supported.
+    ///
+    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
+    pub protocol_id_prefix: Cow<'static, str>,
 
     // Overlay network parameters.
     /// Number of heartbeats to keep in the `memcache` (default is 5).
@@ -97,7 +101,7 @@ pub struct GossipsubConfig {
 impl Default for GossipsubConfig {
     fn default() -> GossipsubConfig {
         GossipsubConfig {
-            protocol_id: Cow::Borrowed(b"/meshsub/1.0.0"),
+            protocol_id_prefix: Cow::Borrowed("meshsub"),
             history_length: 5,
             history_gossip: 3,
             mesh_n: 6,
@@ -143,8 +147,8 @@ impl GossipsubConfigBuilder {
     }
 
     /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
-    pub fn protocol_id(&mut self, protocol_id: impl Into<Cow<'static, [u8]>>) -> &mut Self {
-        self.config.protocol_id = protocol_id.into();
+    pub fn protocol_id_prefix(&mut self, protocol_id: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.config.protocol_id_prefix = protocol_id.into();
         self
     }
 
@@ -285,7 +289,7 @@ impl GossipsubConfigBuilder {
 impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
-        let _ = builder.field("protocol_id", &self.protocol_id);
+        let _ = builder.field("protocol_id_prefix", &self.protocol_id_prefix);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
@@ -301,5 +305,19 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("manual_propagation", &self.manual_propagation);
         let _ = builder.field("sign_messages", &self.sign_messages);
         builder.finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn create_thing() {
+        let builder = GossipsubConfigBuilder::new()
+            .protocol_id_prefix("purple")
+            .build();
+
+        dbg!(builder);
     }
 }

@@ -33,14 +33,14 @@ use libp2p_core::{
 };
 use log::warn;
 use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, io, iter, pin::Pin};
+use std::{borrow::Cow, io, pin::Pin};
 use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
 #[derive(Clone)]
 pub struct ProtocolConfig {
     /// The gossipsub protocol id to listen on.
-    protocol_id: Cow<'static, [u8]>,
+    protocol_ids: Vec<Cow<'static, [u8]>>,
     /// The maximum transmit size for a packet.
     max_transmit_size: usize,
     /// The keypair used to sign messages, if signing is required.
@@ -52,7 +52,10 @@ pub struct ProtocolConfig {
 impl Default for ProtocolConfig {
     fn default() -> Self {
         Self {
-            protocol_id: Cow::Borrowed(b"/meshsub/1.0.0"),
+            protocol_ids: vec![
+                Cow::Borrowed(b"/meshsub/1.0.0"),
+                Cow::Borrowed(b"/meshsub/1.1.0"),
+            ],
             max_transmit_size: 2048,
             keypair: None,
             allow_unsigned: true,
@@ -64,13 +67,17 @@ impl ProtocolConfig {
     /// Builds a new `ProtocolConfig`.
     /// Sets the maximum gossip transmission size.
     pub fn new(
-        protocol_id: impl Into<Cow<'static, [u8]>>,
+        protocol_id_prefix: Cow<'static, str>,
         max_transmit_size: usize,
         keypair: Option<Keypair>,
         allow_unsigned: bool,
     ) -> ProtocolConfig {
+        let generate_id =
+            |version: &str| Cow::Owned(format!("/{}/{}", protocol_id_prefix, version).into_bytes());
+
         ProtocolConfig {
-            protocol_id: protocol_id.into(),
+            // support version 1.1.0 and 1.0.0 with user-customized prefix
+            protocol_ids: vec![generate_id("1.1.0"), generate_id("1.0.0")],
             max_transmit_size,
             keypair,
             allow_unsigned,
@@ -80,10 +87,10 @@ impl ProtocolConfig {
 
 impl UpgradeInfo for ProtocolConfig {
     type Info = Cow<'static, [u8]>;
-    type InfoIter = iter::Once<Self::Info>;
+    type InfoIter = Vec<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol_id.clone())
+        self.protocol_ids.clone()
     }
 }
 
