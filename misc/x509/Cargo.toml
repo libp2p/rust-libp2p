@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-x509"
-version = "0.18.0"
+version = "0.19.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
 description = "X.509 generation and verification for libp2p"
@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking", "tls", "x509"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { path = "../../core", version = "0.18.0" }
+libp2p-core = { path = "../../core", version = "0.19.0" }
 log = "0.4.8"
 rcgen = { version = "0.8.1", default-features = false }
 ring = "0.16.11"

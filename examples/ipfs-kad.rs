@@ -30,7 +30,13 @@ use libp2p::{
     identity,
     build_development_transport
 };
-use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent, GetClosestPeersError};
+use libp2p::kad::{
+    Kademlia,
+    KademliaConfig,
+    KademliaEvent,
+    GetClosestPeersError,
+    QueryResult,
+};
 use libp2p::kad::record::store::MemoryStore;
 use std::{env, error::Error, time::Duration};
 
@@ -91,7 +97,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(async move {
         loop {
             let event = swarm.next().await;
-            if let KademliaEvent::GetClosestPeersResult(result) = event {
+            if let KademliaEvent::QueryResult {
+                result: QueryResult::GetClosestPeers(result),
+                ..
+            } = event {
                 match result {
                     Ok(ok) =>
                         if !ok.peers.is_empty() {

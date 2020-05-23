@@ -122,8 +122,7 @@ impl ClosestPeersIter {
         }
     }
 
-    /// Callback for delivering the result of a successful request to a peer
-    /// that the iterator is waiting on.
+    /// Callback for delivering the result of a successful request to a peer.
     ///
     /// Delivering results of requests back to the iterator allows the iterator to make
     /// progress. The iterator is said to make progress either when the given
@@ -131,18 +130,20 @@ impl ClosestPeersIter {
     /// or when the iterator did not yet accumulate `num_results` closest peers and
     /// `closer_peers` contains a new peer, regardless of its distance to the target.
     ///
-    /// After calling this function, `next` should eventually be called again
-    /// to advance the state of the iterator.
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
     ///
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
-    /// calling this function has no effect.
-    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I)
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
         I: IntoIterator<Item = PeerId>
     {
         if let State::Finished = self.state {
-            return
+            return false
         }
 
         let key = Key::from(peer.clone());
@@ -150,7 +151,7 @@ impl ClosestPeersIter {
 
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
-            Entry::Vacant(..) => return,
+            Entry::Vacant(..) => return false,
             Entry::Occupied(mut e) => match e.get().state {
                 PeerState::Waiting(..) => {
                     debug_assert!(self.num_waiting > 0);
@@ -162,7 +163,7 @@ impl ClosestPeersIter {
                 }
                 PeerState::NotContacted
                     | PeerState::Failed
-                    | PeerState::Succeeded => return
+                    | PeerState::Succeeded => return false
             }
         }
 
@@ -199,28 +200,31 @@ impl ClosestPeersIter {
                     State::Stalled
                 }
             State::Finished => State::Finished
-        }
+        };
+
+        true
     }
 
-    /// Callback for informing the iterator about a failed request to a peer
-    /// that the iterator is waiting on.
+    /// Callback for informing the iterator about a failed request to a peer.
     ///
-    /// After calling this function, `next` should eventually be called again
-    /// to advance the state of the iterator.
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
     ///
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
-    /// calling this function has no effect.
-    pub fn on_failure(&mut self, peer: &PeerId) {
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Finished = self.state {
-            return
+            return false
         }
 
         let key = Key::from(peer.clone());
         let distance = key.distance(&self.target);
 
         match self.closest_peers.entry(distance) {
-            Entry::Vacant(_) => return,
+            Entry::Vacant(_) => return false,
             Entry::Occupied(mut e) => match e.get().state {
                 PeerState::Waiting(_) => {
                     debug_assert!(self.num_waiting > 0);
@@ -230,9 +234,13 @@ impl ClosestPeersIter {
                 PeerState::Unresponsive => {
                     e.get_mut().state = PeerState::Failed
                 }
-                _ => {}
+                PeerState::NotContacted
+                    | PeerState::Failed
+                    | PeerState::Succeeded => return false
             }
         }
+
+        true
     }
 
     /// Returns the list of peers for which the iterator is currently waiting
@@ -343,7 +351,7 @@ impl ClosestPeersIter {
     }
 
     /// Checks whether the iterator has finished.
-    pub fn finished(&self) -> bool {
+    pub fn is_finished(&self) -> bool {
         self.state == State::Finished
     }
 
@@ -649,7 +657,7 @@ mod tests {
             match iter.next(now) {
                 PeersIterState::Waiting(Some(p)) => {
                     let peer2 = p.into_owned();
-                    iter.on_success(&peer2, closer.clone())
+                    assert!(iter.on_success(&peer2, closer.clone()))
                 }
                 PeersIterState::Finished => {}
                 _ => panic!("Unexpectedly iter state."),
@@ -689,7 +697,7 @@ mod tests {
                 Peer { state, .. } => panic!("Unexpected peer state: {:?}", state)
             }
 
-            let finished = iter.finished();
+            let finished = iter.is_finished();
             iter.on_success(&peer, iter::empty());
             let closest = iter.into_result().collect::<Vec<_>>();
 

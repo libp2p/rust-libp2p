@@ -70,7 +70,7 @@ fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Mul
         if let Ok(ip) = hostname.parse::<IpAddr>() {
             Protocol::from(ip)
         } else {
-            Protocol::Dns4(hostname.into())
+            Protocol::Dns(hostname.into())
         }
     } else {
         return Err(FromUrlErr::BadUrl);
@@ -185,31 +185,31 @@ mod tests {
     #[test]
     fn dns_addr_ws() {
         let addr = from_url("ws://example.com").unwrap();
-        assert_eq!(addr, "/dns4/example.com/tcp/80/ws".parse().unwrap());
+        assert_eq!(addr, "/dns/example.com/tcp/80/ws".parse().unwrap());
     }
 
     #[test]
     fn dns_addr_http() {
         let addr = from_url("http://example.com").unwrap();
-        assert_eq!(addr, "/dns4/example.com/tcp/80/http".parse().unwrap());
+        assert_eq!(addr, "/dns/example.com/tcp/80/http".parse().unwrap());
     }
 
     #[test]
     fn dns_addr_wss() {
         let addr = from_url("wss://example.com").unwrap();
-        assert_eq!(addr, "/dns4/example.com/tcp/443/wss".parse().unwrap());
+        assert_eq!(addr, "/dns/example.com/tcp/443/wss".parse().unwrap());
     }
 
     #[test]
     fn dns_addr_https() {
         let addr = from_url("https://example.com").unwrap();
-        assert_eq!(addr, "/dns4/example.com/tcp/443/https".parse().unwrap());
+        assert_eq!(addr, "/dns/example.com/tcp/443/https".parse().unwrap());
     }
 
     #[test]
     fn bad_hostname() {
         let addr = from_url("wss://127.0.0.1x").unwrap();
-        assert_eq!(addr, "/dns4/127.0.0.1x/tcp/443/wss".parse().unwrap());
+        assert_eq!(addr, "/dns/127.0.0.1x/tcp/443/wss".parse().unwrap());
     }
 
     #[test]
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn dns_and_port() {
         let addr = from_url("http://example.com:1000").unwrap();
-        assert_eq!(addr, "/dns4/example.com/tcp/1000/http".parse().unwrap());
+        assert_eq!(addr, "/dns/example.com/tcp/1000/http".parse().unwrap());
     }
 
     #[test]

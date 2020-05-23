@@ -39,6 +39,7 @@ pub struct FixedPeersIter {
     state: State,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum State {
     Waiting { num_waiting: usize },
     Finished
@@ -71,22 +72,46 @@ impl FixedPeersIter {
         }
     }
 
-    pub fn on_success(&mut self, peer: &PeerId) {
+    /// Callback for delivering the result of a successful request to a peer.
+    ///
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
+    ///
+    /// If the iterator is finished, it is not currently waiting for a
+    /// result from `peer`, or a result for `peer` has already been reported,
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_success(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Succeeded;
                 *num_waiting -= 1;
+                return true
             }
         }
+        false
     }
 
-    pub fn on_failure(&mut self, peer: &PeerId) {
+    /// Callback for informing the iterator about a failed request to a peer.
+    ///
+    /// If the iterator is currently waiting for a result from `peer`,
+    /// the iterator state is updated and `true` is returned. In that
+    /// case, after calling this function, `next` should eventually be
+    /// called again to obtain the new state of the iterator.
+    ///
+    /// If the iterator is finished, it is not currently waiting for a
+    /// result from `peer`, or a result for `peer` has already been reported,
+    /// calling this function has no effect and `false` is returned.
+    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Failed;
                 *num_waiting -= 1;
+                return true
             }
         }
+        false
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
@@ -97,6 +122,11 @@ impl FixedPeersIter {
         if let State::Waiting { .. } = self.state {
             self.state = State::Finished
         }
+    }
+
+    /// Checks whether the iterator has finished.
+    pub fn is_finished(&self) -> bool {
+        self.state == State::Finished
     }
 
     pub fn next(&mut self) -> PeersIterState {

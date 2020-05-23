@@ -353,6 +353,8 @@ fn host_and_dnsname<T>(addr: &Multiaddr) -> Result<(String, Option<webpki::DNSNa
             Ok((format!("{}:{}", ip, port), None)),
         (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port))) =>
             Ok((format!("{}:{}", ip, port), None)),
+        (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port))) =>
+            Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
         (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port))) =>
             Ok((format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?.to_owned()))),
         (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) =>
@@ -371,7 +373,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
             let mut a = Multiaddr::empty();
             match url.host() {
                 Some(url::Host::Domain(h)) => {
-                    a.push(Protocol::Dns4(h.into()))
+                    a.push(Protocol::Dns(h.into()))
                 }
                 Some(url::Host::Ipv4(ip)) => {
                     a.push(Protocol::Ip4(ip))

@@ -148,10 +148,11 @@ fn bootstrap() {
             .collect::<Vec<_>>();
         let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
-        swarms[0].bootstrap();
+        let qid = swarms[0].bootstrap().unwrap();
 
         // Expected known peers
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
+        let mut first = true;
 
         // Run test
         block_on(
@@ -159,14 +160,23 @@ fn bootstrap() {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::BootstrapResult(Ok(ok)))) => {
+                            Poll::Ready(Some(KademliaEvent::QueryResult {
+                                id, result: QueryResult::Bootstrap(Ok(ok)), ..
+                            })) => {
+                                assert_eq!(id, qid);
                                 assert_eq!(i, 0);
-                                assert_eq!(ok.peer, swarm_ids[0]);
-                                let known = swarm.kbuckets.iter()
-                                    .map(|e| e.node.key.preimage().clone())
-                                    .collect::<HashSet<_>>();
-                                assert_eq!(expected_known, known);
-                                return Poll::Ready(())
+                                if first {
+                                    // Bootstrapping must start with a self-lookup.
+                                    assert_eq!(ok.peer, swarm_ids[0]);
+                                }
+                                first = false;
+                                if ok.num_remaining == 0 {
+                                    let known = swarm.kbuckets.iter()
+                                        .map(|e| e.node.key.preimage().clone())
+                                        .collect::<HashSet<_>>();
+                                    assert_eq!(expected_known, known);
+                                    return Poll::Ready(())
+                                }
                             }
                             // Ignore any other event.
                             Poll::Ready(Some(_)) => (),
@@ -206,7 +216,17 @@ fn query_iter() {
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
         let search_target_key = kbucket::Key::new(search_target.clone());
-        swarms[0].get_closest_peers(search_target.clone());
+        let qid = swarms[0].get_closest_peers(search_target.clone());
+
+        match swarms[0].query(&qid) {
+            Some(q) => match q.info() {
+                QueryInfo::GetClosestPeers { key } => {
+                    assert_eq!(&key[..], search_target.borrow() as &[u8])
+                },
+                i => panic!("Unexpected query info: {:?}", i)
+            }
+            None => panic!("Query not found: {:?}", qid)
+        }
 
         // Set up expectations.
         let expected_swarm_id = swarm_ids[0].clone();
@@ -220,7 +240,10 @@ fn query_iter() {
                 for (i, swarm) in swarms.iter_mut().enumerate() {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                            Poll::Ready(Some(KademliaEvent::QueryResult {
+                                id, result: QueryResult::GetClosestPeers(Ok(ok)), ..
+                            })) => {
+                                assert_eq!(id, qid);
                                 assert_eq!(&ok.key[..], search_target.as_bytes());
                                 assert_eq!(swarm_ids[i], expected_swarm_id);
                                 assert_eq!(swarm.queries.size(), 0);
@@ -270,7 +293,9 @@ fn unresponsive_not_returned_direct() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            result: QueryResult::GetClosestPeers(Ok(ok)), ..
+                        })) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 0);
                             return Poll::Ready(());
@@ -318,7 +343,9 @@ fn unresponsive_not_returned_indirect() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::GetClosestPeersResult(Ok(ok)))) => {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            result: QueryResult::GetClosestPeers(Ok(ok)), ..
+                        })) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
@@ -354,14 +381,17 @@ fn get_record_not_found() {
     let mut swarms = swarms.into_iter().map(|(_addr, swarm)| swarm).collect::<Vec<_>>();
 
     let target_key = record::Key::from(random_multihash());
-    swarms[0].get_record(&target_key, Quorum::One);
+    let qid = swarms[0].get_record(&target_key, Quorum::One);
 
     block_on(
         poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::GetRecordResult(Err(e)))) => {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::GetRecord(Err(e)), ..
+                        })) => {
+                            assert_eq!(id, qid);
                             if let GetRecordError::NotFound { key, closest_peers, } = e {
                                 assert_eq!(key, target_key);
                                 assert_eq!(closest_peers.len(), 2);
@@ -426,8 +456,23 @@ fn put_record() {
             })
             .collect::<HashMap<_,_>>();
 
+        // Initiate put_record queries.
+        let mut qids = HashSet::new();
         for r in records.values() {
-            swarms[0].put_record(r.clone(), Quorum::All);
+            let qid = swarms[0].put_record(r.clone(), Quorum::All).unwrap();
+            match swarms[0].query(&qid) {
+                Some(q) => match q.info() {
+                    QueryInfo::PutRecord { phase, record, .. } => {
+                        assert_eq!(phase, &PutRecordPhase::GetClosestPeers);
+                        assert_eq!(record.key, r.key);
+                        assert_eq!(record.value, r.value);
+                        assert!(record.expires.is_some());
+                        qids.insert(qid);
+                    },
+                    i => panic!("Unexpected query info: {:?}", i)
+                }
+                None => panic!("Query not found: {:?}", qid)
+            }
         }
 
         // Each test run republishes all records once.
@@ -441,8 +486,17 @@ fn put_record() {
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::PutRecordResult(res))) |
-                            Poll::Ready(Some(KademliaEvent::RepublishRecordResult(res))) => {
+                            Poll::Ready(Some(KademliaEvent::QueryResult {
+                                id, result: QueryResult::PutRecord(res), stats
+                            })) |
+                            Poll::Ready(Some(KademliaEvent::QueryResult {
+                                id, result: QueryResult::RepublishRecord(res), stats
+                            })) => {
+                                assert!(qids.is_empty() || qids.remove(&id));
+                                assert!(stats.duration().is_some());
+                                assert!(stats.num_successes() >= replication_factor.get() as u32);
+                                assert!(stats.num_requests() >= stats.num_successes());
+                                assert_eq!(stats.num_failures(), 0);
                                 match res {
                                     Err(e) => panic!("{:?}", e),
                                     Ok(ok) => {
@@ -541,7 +595,7 @@ fn put_record() {
 }
 
 #[test]
-fn get_value() {
+fn get_record() {
     let mut swarms = build_nodes(3);
 
     // Let first peer know of second peer and second peer know of third peer.
@@ -556,14 +610,17 @@ fn get_value() {
     let record = Record::new(random_multihash(), vec![4,5,6]);
 
     swarms[1].store.put(record.clone()).unwrap();
-    swarms[0].get_record(&record.key, Quorum::One);
+    let qid = swarms[0].get_record(&record.key, Quorum::One);
 
     block_on(
         poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::GetRecord(Ok(ok)), ..
+                        })) => {
+                            assert_eq!(id, qid);
                             assert_eq!(ok.records.len(), 1);
                             assert_eq!(ok.records.first(), Some(&record));
                             return Poll::Ready(());
@@ -582,7 +639,7 @@ fn get_value() {
 }
 
 #[test]
-fn get_value_many() {
+fn get_record_many() {
     // TODO: Randomise
     let num_nodes = 12;
     let mut swarms = build_connected_nodes(num_nodes, 3).into_iter()
@@ -597,14 +654,17 @@ fn get_value_many() {
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
-    swarms[0].get_record(&record.key, quorum);
+    let qid = swarms[0].get_record(&record.key, quorum);
 
     block_on(
         poll_fn(move |ctx| {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::GetRecordResult(Ok(ok)))) => {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::GetRecord(Ok(ok)), ..
+                        })) => {
+                            assert_eq!(id, qid);
                             assert_eq!(ok.records.len(), num_results);
                             assert_eq!(ok.records.first(), Some(&record));
                             return Poll::Ready(());
@@ -661,8 +721,10 @@ fn add_provider() {
         let mut results = Vec::new();
 
         // Initiate the first round of publishing.
+        let mut qids = HashSet::new();
         for k in &keys {
-            swarms[0].start_providing(k.clone());
+            let qid = swarms[0].start_providing(k.clone()).unwrap();
+            qids.insert(qid);
         }
 
         block_on(
@@ -671,8 +733,13 @@ fn add_provider() {
                 for swarm in &mut swarms {
                     loop {
                         match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::StartProvidingResult(res))) |
-                            Poll::Ready(Some(KademliaEvent::RepublishProviderResult(res))) => {
+                            Poll::Ready(Some(KademliaEvent::QueryResult {
+                                id, result: QueryResult::StartProviding(res), ..
+                            })) |
+                            Poll::Ready(Some(KademliaEvent::QueryResult {
+                                id, result: QueryResult::RepublishProvider(res), ..
+                            })) => {
+                                assert!(qids.is_empty() || qids.remove(&id));
                                 match res {
                                     Err(e) => panic!(e),
                                     Ok(ok) => {
@@ -773,7 +840,7 @@ fn exceed_jobs_max_queries() {
     let (_addr, mut swarm) = build_node();
     let num = JOBS_MAX_QUERIES + 1;
     for _ in 0 .. num {
-        swarm.bootstrap();
+        swarm.get_closest_peers(PeerId::random());
     }
 
     assert_eq!(swarm.queries.size(), num);
@@ -783,8 +850,10 @@ fn exceed_jobs_max_queries() {
             for _ in 0 .. num {
                 // There are no other nodes, so the queries finish instantly.
                 if let Poll::Ready(Some(e)) = swarm.poll_next_unpin(ctx) {
-                    if let KademliaEvent::BootstrapResult(r) = e {
-                        assert!(r.is_ok(), "Unexpected error")
+                    if let KademliaEvent::QueryResult {
+                        result: QueryResult::GetClosestPeers(Ok(r)), ..
+                    } = e {
+                        assert!(r.peers.is_empty())
                     } else {
                         panic!("Unexpected event: {:?}", e)
                     }
