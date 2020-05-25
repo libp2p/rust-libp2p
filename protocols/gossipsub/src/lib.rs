@@ -141,6 +141,7 @@ mod behaviour;
 mod config;
 mod handler;
 mod mcache;
+mod peer_score;
 mod topic;
 
 mod rpc_proto {
