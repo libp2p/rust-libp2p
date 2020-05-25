@@ -928,7 +928,6 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
 
-
     let mut alice = build_node_with_config(config);
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
