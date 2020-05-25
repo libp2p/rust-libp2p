@@ -20,5 +20,5 @@ parking_lot = "0.10"
 unsigned-varint = { version = "0.3", features = ["futures-codec"] }
 
 [dev-dependencies]
-async-std = "1.0"
+async-std = "< 1.6"
 libp2p-tcp = { version = "0.19.0", path = "../../transports/tcp" }
