@@ -95,10 +95,10 @@ impl Gossipsub {
             keypair.public().into_peer_id()
         };
 
-        let keypair = if gs_config.sign_messages {
-            Some(keypair)
-        } else {
+        let keypair = if gs_config.disable_message_signing {
             None
+        } else {
+            Some(keypair)
         };
 
         Gossipsub {
@@ -235,13 +235,15 @@ impl Gossipsub {
             // big-endian uint.
             sequence_number: rand::random(),
             topics: topic.into_iter().map(|t| self.topic_hash(t)).collect(),
+            signature: None, // signature will get created when being published
+            key: None,
         };
 
         let msg_id = (self.config.message_id_fn)(&message);
-        // add published message to our received caches
+        // Add published message to our received caches
         if self.mcache.put(message.clone()).is_some() {
-            // this message has already been seen. We don't re-publish messages that have already
-            // been published on the network
+            // This message has already been seen. We don't re-publish messages that have already
+            // been published on the network.
             warn!(
                 "Not publishing a message that has already been published. Msg-id {}",
                 msg_id
@@ -254,17 +256,17 @@ impl Gossipsub {
             (self.config.message_id_fn)(&message)
         );
 
-        // forward the message to mesh peers
+        // Forward the message to mesh peers
         let message_source = &self.message_source_id.clone();
         self.forward_msg(message.clone(), message_source);
 
         let mut recipient_peers = HashSet::new();
         for topic_hash in &message.topics {
-            // if not subscribed to the topic, use fanout peers
+            // If not subscribed to the topic, use fanout peers
             if self.mesh.get(&topic_hash).is_none() {
                 debug!("Topic: {:?} not in the mesh", topic_hash);
-                // build a list of peers to forward the message to
-                // if we have fanout peers add them to the map
+                // Build a list of peers to forward the message to
+                // if we have fanout peers add them to the map.
                 if self.fanout.contains_key(&topic_hash) {
                     for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
                         recipient_peers.insert(peer.clone());
@@ -1018,9 +1020,9 @@ impl NetworkBehaviour for Gossipsub {
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         GossipsubHandler::new(
             self.config.protocol_id_prefix.clone(),
+            self.message_source_id.clone(),
             self.config.max_transmit_size,
             self.keypair.clone(),
-            self.config.allow_unsigned_messages,
         )
     }
 

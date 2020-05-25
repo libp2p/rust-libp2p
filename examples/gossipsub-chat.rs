@@ -90,8 +90,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
             .heartbeat_interval(Duration::from_secs(10))
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
-            .allow_unsigned_messages(false)
-            .sign_messages(true)
             //same content will be propagated.
             .build();
         // build a gossipsub network behaviour

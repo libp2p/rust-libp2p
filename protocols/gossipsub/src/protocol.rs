@@ -31,36 +31,24 @@ use libp2p_core::{
     identity::{Keypair, PublicKey},
     InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo,
 };
-use log::warn;
+use log::{debug, warn};
 use prost::Message as ProtobufMessage;
 use std::{borrow::Cow, io, pin::Pin};
 use unsigned_varint::codec;
 
+const SIGNING_PREFIX: &'static [u8] = b"libp2p-pubsub:";
+
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
 #[derive(Clone)]
 pub struct ProtocolConfig {
+    /// Our local `PeerId`.
+    local_peer_id: PeerId,
     /// The gossipsub protocol id to listen on.
     protocol_ids: Vec<Cow<'static, [u8]>>,
     /// The maximum transmit size for a packet.
     max_transmit_size: usize,
     /// The keypair used to sign messages, if signing is required.
     keypair: Option<Keypair>,
-    /// Whether to allow unsigned incoming messages.
-    allow_unsigned: bool,
-}
-
-impl Default for ProtocolConfig {
-    fn default() -> Self {
-        Self {
-            protocol_ids: vec![
-                Cow::Borrowed(b"/meshsub/1.0.0"),
-                Cow::Borrowed(b"/meshsub/1.1.0"),
-            ],
-            max_transmit_size: 2048,
-            keypair: None,
-            allow_unsigned: true,
-        }
-    }
 }
 
 impl ProtocolConfig {
@@ -68,9 +56,9 @@ impl ProtocolConfig {
     /// Sets the maximum gossip transmission size.
     pub fn new(
         protocol_id_prefix: Cow<'static, str>,
+        local_peer_id: PeerId,
         max_transmit_size: usize,
         keypair: Option<Keypair>,
-        allow_unsigned: bool,
     ) -> ProtocolConfig {
         let generate_id =
             |version: &str| Cow::Owned(format!("/{}/{}", protocol_id_prefix, version).into_bytes());
@@ -78,9 +66,9 @@ impl ProtocolConfig {
         ProtocolConfig {
             // support version 1.1.0 and 1.0.0 with user-customized prefix
             protocol_ids: vec![generate_id("1.1.0"), generate_id("1.0.0")],
+            local_peer_id,
             max_transmit_size,
             keypair,
-            allow_unsigned,
         }
     }
 }
@@ -107,7 +95,7 @@ where
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok(Framed::new(
             socket,
-            GossipsubCodec::new(length_codec, self.keypair.clone(), self.allow_unsigned),
+            GossipsubCodec::new(length_codec, self.keypair.clone(), self.local_peer_id),
         )))
     }
 }
@@ -125,7 +113,7 @@ where
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok(Framed::new(
             socket,
-            GossipsubCodec::new(length_codec, self.keypair.clone(), self.allow_unsigned),
+            GossipsubCodec::new(length_codec, self.keypair.clone(), self.local_peer_id),
         )))
     }
 }
@@ -137,8 +125,9 @@ pub struct GossipsubCodec {
     length_codec: codec::UviBytes,
     /// Libp2p Keypair if message signing is required.
     keypair: Option<Keypair>,
-    /// Whether to accept un-signed keypairs.
-    allow_unsigned: bool,
+    /// Our `PeerId` to determine if outgoing messages are being forwarded or published. This is an
+    /// optimisation to prevent conversion of our keypair for each message.
+    local_peer_id: PeerId,
     /// The key to be tagged on to messages if the public key cannot be inlined in the PeerId and
     /// signing messages is required.
     key: Option<Vec<u8>>,
@@ -148,7 +137,7 @@ impl GossipsubCodec {
     pub fn new(
         length_codec: codec::UviBytes,
         keypair: Option<Keypair>,
-        allow_unsigned: bool,
+        local_peer_id: PeerId,
     ) -> Self {
         // determine if the public key needs to be included in each message
         let key = {
@@ -156,14 +145,15 @@ impl GossipsubCodec {
                 // signing is required
                 let key_enc = keypair.public().into_protobuf_encoding();
                 if key_enc.len() <= 42 {
-                    // public key can be inlined, so we don't include it in the protobuf
+                    // The public key can be inlined in [`rpc_proto::Message::from`], so we don't include it
+                    // specifically in the [`rpc_proto::Message::key`] field.
                     None
                 } else {
-                    // include the protobuf encoding of the public key in the message
+                    // Include the protobuf encoding of the public key in the message
                     Some(key_enc)
                 }
             } else {
-                // signing is not required, no key needs to be added
+                // Signing is not required, no key needs to be added
                 None
             }
         };
@@ -171,9 +161,95 @@ impl GossipsubCodec {
         GossipsubCodec {
             length_codec,
             keypair,
-            allow_unsigned,
+            local_peer_id,
             key,
         }
+    }
+
+    /// Signs a gossipsub message, adding the [`rpc_proto::Message::signature`] field.
+    fn sign_message(&self, message: &mut rpc_proto::Message) -> Result<(), String> {
+        let keypair = self
+            .keypair
+            .as_ref()
+            .ok_or_else(|| "Key signing not enabled")?;
+        let mut buf = Vec::with_capacity(message.encoded_len());
+        message
+            .encode(&mut buf)
+            .expect("Buffer has sufficient capacity");
+        // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
+        let mut signature_bytes = SIGNING_PREFIX.to_vec();
+        signature_bytes.extend_from_slice(&buf);
+        match keypair.sign(&signature_bytes) {
+            Ok(signature) => {
+                message.signature = Some(signature);
+                Ok(())
+            }
+            Err(e) => Err(format!("Signing error: {}", e)),
+        }
+    }
+
+    /// Verifies a gossipsub message. This returns either a success or failure. All errors
+    /// are logged, which prevents error handling in the codec and handler. We simply drop invalid
+    /// messages and log warnings, rather than propagating errors through the codec.
+    fn verify_message(message: &rpc_proto::Message) -> bool {
+        let from = match message.from.as_ref() {
+            Some(v) => v,
+            None => {
+                debug!("Signature verification failed: No source id given");
+                return false;
+            }
+        };
+
+        let source = match PeerId::from_bytes(from.clone()) {
+            Ok(v) => v,
+            Err(_) => {
+                debug!("Signature verification failed: Invalid Peer Id");
+                return false;
+            }
+        };
+
+        let signature = match message.signature.as_ref() {
+            Some(v) => v,
+            None => {
+                debug!("Signature verification failed: No signature provided");
+                return false;
+            }
+        };
+
+        // If there is a key value in the protobuf, use that key otherwise the key must be
+        // obtained from the inlined source peer_id.
+        let public_key = match message
+            .key
+            .as_ref()
+            .map(|key| PublicKey::from_protobuf_encoding(&key))
+        {
+            Some(Ok(key)) => key,
+            _ => match PublicKey::from_protobuf_encoding(&source.as_bytes()[2..]) {
+                Ok(v) => v,
+                Err(_) => {
+                    warn!("Signature verification failed: No valid public key supplied");
+                    return false;
+                }
+            },
+        };
+
+        // The key must match the peer_id
+        if source != public_key.clone().into_peer_id() {
+            warn!("Signature verification failed: Public key doesn't match source peer id");
+            return false;
+        }
+
+        // Construct the signature bytes
+        let mut message_sig = message.clone();
+        message_sig.signature = None;
+        message_sig.key = None;
+        let mut buf = Vec::with_capacity(message_sig.encoded_len());
+        message_sig
+            .encode(&mut buf)
+            .expect("Buffer has sufficient capacity");
+        let mut signature_bytes = SIGNING_PREFIX.to_vec();
+        signature_bytes.extend_from_slice(&buf);
+        public_key.verify(&signature_bytes, signature)
     }
 }
 
@@ -182,11 +258,18 @@ impl Encoder for GossipsubCodec {
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        // messages
-        let mut publish = item
-            .messages
-            .into_iter()
-            .map(|message| rpc_proto::Message {
+        // Messages
+        let mut publish = Vec::new();
+
+        for message in item.messages.into_iter() {
+            // Determine if we need to sign the message; We are the source of the message, signing
+            // messages is enabled and there is not already a signature associated with the
+            // messsage.
+            let sign_message = self.keypair.is_some()
+                && self.local_peer_id == message.source
+                && message.signature.is_none();
+
+            let mut message = rpc_proto::Message {
                 from: Some(message.source.into_bytes()),
                 data: Some(message.data),
                 seqno: Some(message.sequence_number.to_be_bytes().to_vec()),
@@ -195,18 +278,25 @@ impl Encoder for GossipsubCodec {
                     .into_iter()
                     .map(TopicHash::into_string)
                     .collect(),
-                signature: None,
-                key: None,
-            })
-            .collect::<Vec<_>>();
+                signature: message.signature,
+                key: message.key,
+            };
 
-        // sign the messages if required
-        if let Some(keypair) = self.keypair.as_ref() {
-            for message in publish.iter_mut() {
-                sign_message(keypair, message)?;
-                // add the peer_id key if required
+            // Sign the messages if required and we are publishing a message (i.e publish.from ==
+            // our_peer_id).
+            // Note: Duplicates should be filtered so we shouldn't be re-signing any of the
+            // messages we have already published.
+            if sign_message {
+                if let Err(signing_error) = self.sign_message(&mut message) {
+                    // Log the warning and return an error
+                    warn!("{}", signing_error);
+                    return Err(io::Error::new(io::ErrorKind::Other, "Signing failure"));
+                }
+
+                // Add the public key if not already inlined via the peer id in [`rpc_proto::Message::from`]
                 message.key = self.key.clone();
             }
+            publish.push(message);
         }
 
         // subscriptions
@@ -298,15 +388,15 @@ impl Decoder for GossipsubCodec {
         let mut messages = Vec::with_capacity(rpc.publish.len());
         for message in rpc.publish.into_iter() {
             // verify message signatures if required
-            if !self.allow_unsigned {
-                // if a single message is unsigned, we will return an error and drop all of them
+            if self.keypair.is_some() {
+                // If a single message is unsigned, we will drop all of them
                 // Most implementations should not have a list of mixed signed/not-signed messages in a single RPC
-                if !verify_message(&message)? {
+                // NOTE: Invalid messages are simply dropped with a warning log. We don't throw an
+                // error to avoid extra logic to deal with these errors in the handler.
+                if !GossipsubCodec::verify_message(&message) {
                     warn!("Message dropped. Invalid signature");
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Invalid Signature",
-                    ));
+                    // Drop the message
+                    return Ok(None);
                 }
             }
 
@@ -334,6 +424,8 @@ impl Decoder for GossipsubCodec {
                     .into_iter()
                     .map(TopicHash::from_raw)
                     .collect(),
+                signature: message.signature,
+                key: message.key,
             });
         }
 
@@ -407,76 +499,6 @@ impl Decoder for GossipsubCodec {
     }
 }
 
-/// Signs a gossipsub message, adding the key and signature fields.
-fn sign_message(keypair: &Keypair, message: &mut rpc_proto::Message) -> Result<(), io::Error> {
-    let mut buf = Vec::with_capacity(message.encoded_len());
-    message
-        .encode(&mut buf)
-        .expect("Buffer has sufficient capacity");
-    // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
-    let mut signature_bytes = b"libp2p-pubsub:".to_vec();
-    signature_bytes.extend_from_slice(&buf);
-    match keypair.sign(&signature_bytes) {
-        Ok(signature) => {
-            message.signature = Some(signature);
-            Ok(())
-        }
-        Err(e) => {
-            warn!("Could not sign message. Error: {}", e);
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Signing error: {}", e),
-            ))
-        }
-    }
-}
-
-fn verify_message(message: &rpc_proto::Message) -> Result<bool, io::Error> {
-    let from = message
-        .from
-        .as_ref()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "No source id given"))?;
-    let source = PeerId::from_bytes(from.clone())
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id"))?;
-
-    let signature = message
-        .signature
-        .as_ref()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Signature required"))?;
-    // if there is a key value in the protobuf, use that key otherwise the key must be
-    // obtained from the inlined source peer_id.
-    let public_key = match message
-        .key
-        .as_ref()
-        .map(|key| PublicKey::from_protobuf_encoding(&key))
-    {
-        Some(Ok(key)) => key,
-        _ => PublicKey::from_protobuf_encoding(&source.as_bytes()[2..]).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "No valid public key supplied")
-        })?,
-    };
-
-    // the key must match the peer_id
-    if source != public_key.clone().into_peer_id() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Public key doesn't match source peer id",
-        ));
-    }
-
-    // construct the signature bytes
-    let mut message_sig = message.clone();
-    message_sig.signature = None;
-    message_sig.key = None;
-    let mut buf = Vec::with_capacity(message_sig.encoded_len());
-    message_sig
-        .encode(&mut buf)
-        .expect("Buffer has sufficient capacity");
-    let mut signature_bytes = b"libp2p-pubsub:".to_vec();
-    signature_bytes.extend_from_slice(&buf);
-    Ok(public_key.verify(&signature_bytes, signature))
-}
-
 /// A type for gossipsub message ids.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MessageId(pub String);
@@ -509,6 +531,12 @@ pub struct GossipsubMessage {
     ///
     /// Each message can belong to multiple topics at once.
     pub topics: Vec<TopicHash>,
+
+    /// The signature of the message if it's signed.
+    pub signature: Option<Vec<u8>>,
+
+    /// The public key of the message if it is signed and the source `PeerId` cannot be inlined.
+    pub key: Option<Vec<u8>>,
 }
 
 /// A subscription received by the gossipsub system.
@@ -573,11 +601,12 @@ mod tests {
             key: None,
         };
 
-        // sign the message
-        sign_message(&source_key, &mut message).unwrap();
+        let codec = GossipsubCodec::new(codec::UviBytes::default(), Some(source_key), peer_id);
 
+        // sign the message
+        codec.sign_message(&mut message).unwrap();
         // verify the signed message
-        assert!(verify_message(&message).unwrap());
+        assert!(GossipsubCodec::verify_message(&message));
     }
 
     #[test]
@@ -594,12 +623,17 @@ mod tests {
             key: None,
         };
 
+        let codec = GossipsubCodec::new(
+            codec::UviBytes::default(),
+            Some(source_key.clone()),
+            peer_id,
+        );
         // sign the message
-        sign_message(&source_key, &mut message).unwrap();
+        codec.sign_message(&mut message).unwrap();
         // key is not inlined
         message.key = Some(source_key.public().into_protobuf_encoding());
 
         // verify the signed message
-        assert!(verify_message(&message).unwrap());
+        assert!(GossipsubCodec::verify_message(&message));
     }
 }
