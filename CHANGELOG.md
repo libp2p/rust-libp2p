@@ -1,6 +1,14 @@
 # Version ???
 
 
+# Version 0.19.1 (2020-05-25)
+
+- Temporarily pin all `async-std` dependencies to `< 1.6`.
+  [PR 1589](https://github.com/libp2p/rust-libp2p/pull/1589)
+
+- `libp2p-core-derive`: Fully qualified std::result::Result in macro
+  [PR 1587](https://github.com/libp2p/rust-libp2p/pull/1587)
+
 # Version 0.19.0 (2020-05-18)
 
 - `libp2p-core`, `libp2p-swarm`: Added support for multiple dialing
