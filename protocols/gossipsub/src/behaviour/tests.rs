@@ -596,6 +596,8 @@ mod tests {
             data: vec![1, 2, 3, 4],
             sequence_number: 1u64,
             topics: Vec::new(),
+            signature: None,
+            key: None,
         };
         let msg_id = id(&message);
         gs.mcache.put(message.clone());
@@ -635,6 +637,8 @@ mod tests {
                 data: vec![1, 2, 3, 4],
                 sequence_number: shift,
                 topics: Vec::new(),
+                signature: None,
+                key: None,
             };
             let msg_id = id(&message);
             gs.mcache.put(message.clone());

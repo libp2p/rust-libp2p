@@ -84,7 +84,7 @@ impl MessageCache {
 
         let seen_message = self.msgs.insert(message_id, msg);
         if seen_message.is_none() {
-            // don't add duplicates entries to the cache
+            // Don't add duplicate entries to the cache
             self.history[0].push(cache_entry);
         }
         seen_message
@@ -147,6 +147,8 @@ mod tests {
             data,
             sequence_number,
             topics,
+            signature: None,
+            key: None,
         };
         m
     }

@@ -24,6 +24,7 @@ use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::identity::Keypair;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
+use libp2p_core::PeerId;
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
@@ -83,29 +84,17 @@ impl GossipsubHandler {
     /// Builds a new `GossipsubHandler`.
     pub fn new(
         protocol_id: impl Into<Cow<'static, [u8]>>,
+        local_peer_id: PeerId,
         max_transmit_size: usize,
         keypair: Option<Keypair>,
-        allow_unsigned: bool,
     ) -> Self {
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
                 protocol_id,
+                local_peer_id,
                 max_transmit_size,
                 keypair,
-                allow_unsigned,
             )),
-            inbound_substream: None,
-            outbound_substream: None,
-            send_queue: SmallVec::new(),
-            keep_alive: KeepAlive::Yes,
-        }
-    }
-}
-
-impl Default for GossipsubHandler {
-    fn default() -> Self {
-        GossipsubHandler {
-            listen_protocol: SubstreamProtocol::new(ProtocolConfig::default()),
             inbound_substream: None,
             outbound_substream: None,
             send_queue: SmallVec::new(),

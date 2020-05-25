@@ -76,12 +76,9 @@ pub struct GossipsubConfig {
     /// once validated (default is `false`).
     pub manual_propagation: bool,
 
-    /// When set to `true` all published messages are signed by the libp2p key (default is `true`).
-    pub sign_messages: bool,
-
-    /// Determines whether unsigned messages will be accepted. If set to false, unsigned messages
-    /// will be dropped. Default value is `true`.
-    pub allow_unsigned_messages: bool,
+    /// Message signing is on by default.  When this parameter is set,
+    /// published messages are not signed by the libp2p key.
+    pub disable_message_signing: bool,
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
     /// The default value is to concatenate the source peer id with a sequence number. Setting this
@@ -111,8 +108,7 @@ impl Default for GossipsubConfig {
             hash_topics: false, // default compatibility with floodsub
             no_source_id: false,
             manual_propagation: false,
-            sign_messages: true,
-            allow_unsigned_messages: true,
+            disable_message_signing: false,
             message_id_fn: |message| {
                 // default message id is: source + sequence number
                 let mut source_string = message.source.to_base58();
@@ -229,37 +225,34 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Flag determining if gossipsub topics are hashed or sent as plain strings (default is false).
-    pub fn hash_topics(&mut self, value: bool) -> &mut Self {
-        self.config.hash_topics = value;
+    /// When set, gossipsub topics are hashed instead of being sent as plain strings.
+    pub fn hash_topics(&mut self) -> &mut Self {
+        self.config.hash_topics = true;
         self
     }
 
-    /// When set, all published messages will have a 0 source `PeerId` (default is false).
-    pub fn no_source_id(&mut self, value: bool) -> &mut Self {
-        self.config.no_source_id = value;
+    /// When set, all published messages will have a 0 source `PeerId`
+    pub fn no_source_id(&mut self) -> &mut Self {
+        assert!(
+            self.config.disable_message_signing,
+            "Message signing must be disabled in order to mask the source peer id. Cannot sign for the 0 peer_id"
+        );
+        self.config.no_source_id = true;
         self
     }
 
-    /// When set to `true`, prevents automatic forwarding of all received messages. This setting
-    /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call `propagate_message()` on the behaviour to forward message
-    /// once validated (default is `false`).
-    pub fn manual_propagation(&mut self, value: bool) -> &mut Self {
-        self.config.manual_propagation = value;
+    /// When set, prevents automatic forwarding of all received messages. This setting
+    /// allows a user to validate the messages before propagating them to their peers. If set,
+    /// the user must manually call `propagate_message()` on the behaviour to forward a message
+    /// once validated.
+    pub fn manual_propagation(&mut self) -> &mut Self {
+        self.config.manual_propagation = true;
         self
     }
 
-    /// When set to `true` all published messages are signed by the libp2p key (default is `true`).
-    pub fn sign_messages(&mut self, value: bool) -> &mut Self {
-        self.config.sign_messages = value;
-        self
-    }
-
-    /// Determines whether unsigned messages will be accepted. If set to false, unsigned messages
-    /// will be dropped. Default value is `true`.
-    pub fn allow_unsigned_messages(&mut self, value: bool) -> &mut Self {
-        self.config.allow_unsigned_messages = value;
+    /// Disables message signing for all published messages.
+    pub fn disable_message_signing(&mut self) -> &mut Self {
+        self.config.disable_message_signing = true;
         self
     }
 
@@ -299,7 +292,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("hash_topics", &self.hash_topics);
         let _ = builder.field("no_source_id", &self.no_source_id);
         let _ = builder.field("manual_propagation", &self.manual_propagation);
-        let _ = builder.field("sign_messages", &self.sign_messages);
+        let _ = builder.field("disable_message_signing", &self.disable_message_signing);
         builder.finish()
     }
 }
