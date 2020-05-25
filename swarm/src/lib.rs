@@ -728,8 +728,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         // is nothing further to do until the next wakeup.
                         return Poll::Pending
                     } else {
-                        // The network was not polled in this iteration and
-                        // may be able to make progress, so continue.
+                        // The network was either not polled in this iteration
+                        // or emitted a connection event, i.e. may be able to
+                        // make progress, so continue.
                         continue
                     }
                 },
