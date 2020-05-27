@@ -25,7 +25,7 @@ use crate::protocol::{
     GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
     MessageId,
 };
-use crate::topic::{Topic, TopicHash};
+use crate::topic::{Hasher, Topic, TopicHash};
 use futures::prelude::*;
 use libp2p_core::{connection::ConnectionId, identity::Keypair, Multiaddr, PeerId};
 use libp2p_swarm::{
@@ -127,9 +127,9 @@ impl Gossipsub {
     /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
-    pub fn subscribe(&mut self, topic: Topic) -> bool {
+    pub fn subscribe<H: Hasher>(&mut self, topic: Topic<H>) -> bool {
         debug!("Subscribing to topic: {}", topic);
-        let topic_hash = self.topic_hash(topic.clone());
+        let topic_hash = topic.hash();
         if self.mesh.get(&topic_hash).is_some() {
             debug!("Topic: {} is already in the mesh.", topic);
             return false;
@@ -172,9 +172,9 @@ impl Gossipsub {
     /// Unsubscribes from a topic.
     ///
     /// Returns true if we were subscribed to this topic.
-    pub fn unsubscribe(&mut self, topic: Topic) -> bool {
+    pub fn unsubscribe<H: Hasher>(&mut self, topic: Topic<H>) -> bool {
         debug!("Unsubscribing from topic: {}", topic);
-        let topic_hash = &self.topic_hash(topic);
+        let topic_hash = topic.hash();
 
         if self.mesh.get(topic_hash).is_none() {
             debug!("Already unsubscribed from topic: {:?}", topic_hash);
@@ -218,14 +218,14 @@ impl Gossipsub {
     }
 
     /// Publishes a message to the network.
-    pub fn publish(&mut self, topic: &Topic, data: impl Into<Vec<u8>>) {
+    pub fn publish<H: Hasher>(&mut self, topic: &Topic<H>, data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic.clone()), data)
     }
 
     /// Publishes a message with multiple topics to the network.
-    pub fn publish_many(
+    pub fn publish_many<H: Hasher>(
         &mut self,
-        topic: impl IntoIterator<Item = Topic>,
+        topic: impl IntoIterator<Item = Topic<H>>,
         data: impl Into<Vec<u8>>,
     ) {
         let message = GossipsubMessage {
@@ -985,15 +985,6 @@ impl Gossipsub {
             .entry(peer.clone())
             .or_insert_with(Vec::new)
             .push(control);
-    }
-
-    /// Produces a `TopicHash` for a topic given the gossipsub configuration.
-    fn topic_hash(&self, topic: Topic) -> TopicHash {
-        if self.config.hash_topics {
-            topic.sha256_hash()
-        } else {
-            topic.no_hash()
-        }
     }
 
     /// Takes each control action mapping and turns it into a message
