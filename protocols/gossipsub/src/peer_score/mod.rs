@@ -224,7 +224,6 @@ impl PeerScore {
 
                 // P1: time in mesh
                 if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
-                    dbg!(mesh_time.as_millis());
                     let p1 = {
                         let v = mesh_time.as_secs_f64()
                             / topic_params.time_in_mesh_quantum.as_secs_f64();
@@ -593,7 +592,7 @@ impl PeerScore {
         self.deliveries.insert((self.msg_id)(msg), record);
     }
 
-    pub fn duplicate_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
+    pub fn duplicated_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
         let record = self
             .deliveries
             .entry((self.msg_id)(msg))
