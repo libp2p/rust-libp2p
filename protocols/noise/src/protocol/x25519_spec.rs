@@ -78,6 +78,26 @@ impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
     }
 }
 
+/// **Note**: This is not currentlyy a standardised upgrade.
+impl UpgradeInfo for NoiseConfig<IX, X25519Spec> {
+    type Info = &'static [u8];
+    type InfoIter = std::iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        std::iter::once(b"/noise/ix/25519/chachapoly/sha256/0.1.0")
+    }
+}
+
+/// **Note**: This is not currently a standardised upgrade.
+impl<R> UpgradeInfo for NoiseConfig<IK, X25519Spec, R> {
+    type Info = &'static [u8];
+    type InfoIter = std::iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
+    }
+}
+
 /// Noise protocols for X25519 with libp2p-spec compliant signatures.
 ///
 /// **Note**: Only the XX handshake pattern is currently guaranteed to be
