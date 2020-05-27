@@ -2,6 +2,7 @@
 
 use crate::{GossipsubMessage, Topic, TopicHash};
 use libp2p_core::PeerId;
+use log::warn;
 use lru_time_cache::LruCache;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -28,9 +29,7 @@ struct PeerScore {
 /// General statistics for a given gossipsub peer.
 struct PeerStats {
     /// Connection status of the peer.
-    connected: bool,
-    /// Expiration time of the score state for disconnected peers.
-    expire: Instant,
+    status: ConnectionStatus,
     /// Stats per topic.
     topics: HashMap<TopicHash, TopicStats>,
     /// IP tracking for individual peers.
@@ -39,18 +38,39 @@ struct PeerStats {
     behaviour_penalty: f64,
 }
 
+enum ConnectionStatus {
+    /// The peer is connected.
+    Connected,
+    /// The peer is disconnected
+    Disconnected {
+        /// Expiration time of the score state for disconnected peers.
+        expire: Instant,
+    },
+}
+
+impl Default for PeerStats {
+    fn default() -> Self {
+        PeerStats {
+            status: ConnectionStatus::Connected,
+            topics: HashMap::new(),
+            known_ips: Vec::new(),
+            behaviour_penalty: 0f64,
+        }
+    }
+}
+
 impl PeerStats {
     /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied parameters score the
     /// topic, inserts the default stats and returns a reference to those. If neither apply, returns None.
     pub fn stats_or_default_mut(
         &mut self,
-        topic_hash: &TopicHash,
+        topic_hash: TopicHash,
         params: &PeerScoreParams,
     ) -> Option<&mut TopicStats> {
-        if params.topics.get(topic_hash).is_some() {
-            Some(self.topics.entry(topic_hash).or_default().get_mut())
+        if params.topics.get(&topic_hash).is_some() {
+            Some(self.topics.entry(topic_hash).or_default())
         } else {
-            self.topics.get_mut(topic_hash)
+            self.topics.get_mut(&topic_hash)
         }
     }
 }
@@ -115,6 +135,7 @@ impl Default for TopicStats {
     }
 }
 
+#[derive(PartialEq, Debug)]
 struct DeliveryRecord {
     status: DeliveryStatus,
     first_seen: Instant,
@@ -122,6 +143,7 @@ struct DeliveryRecord {
     peers: HashSet<PeerId>,
 }
 
+#[derive(PartialEq, Debug)]
 enum DeliveryStatus {
     /// Don't know (yet) if the message is valid.
     Unknown,
@@ -133,6 +155,17 @@ enum DeliveryStatus {
     Ignored,
     /// Can't tell if the message is valid because validation was throttled.
     Throttled,
+}
+
+impl Default for DeliveryRecord {
+    fn default() -> Self {
+        DeliveryRecord {
+            status: DeliveryStatus::Unknown,
+            first_seen: Instant::now(),
+            validated: Instant::now(),
+            peers: HashSet::new(),
+        }
+    }
 }
 
 impl PeerScore {
@@ -166,10 +199,15 @@ impl PeerScore {
 
                 // P1: time in mesh
                 if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
-                    let p1 = std::cmp::min(
-                        mesh_time.as_secs_f64() / topic_params.time_in_mesh_quantum.as_secs_f64(),
-                        topic_params.time_in_mesh_cap,
-                    );
+                    let p1 = {
+                        let v = mesh_time.as_secs_f64()
+                            / topic_params.time_in_mesh_quantum.as_secs_f64();
+                        if v < topic_params.time_in_mesh_cap {
+                            v
+                        } else {
+                            topic_params.time_in_mesh_cap
+                        }
+                    };
                     topic_score += p1 * topic_params.time_in_mesh_weight;
                 }
 
@@ -250,44 +288,50 @@ impl PeerScore {
 
     pub fn refreshScores(&mut self) {
         let now = Instant::now();
-        for (peer_id, peer_stats) in self.peer_stats.iter() {
-            if !peer_stats.connected {
+        let params_ref = &self.params;
+        let peer_ips_ref = &mut self.peer_ips;
+        self.peer_stats.retain(|peer_id, peer_stats| {
+            if let ConnectionStatus::Disconnected { expire } = peer_stats.status {
                 // has the retention period expired?
-                if now > peer_stats.expire {
+                if now > expire {
                     // yes, throw it away (but clean up the IP tracking first)
-                    self.remove_ips(peer_id, peer_stats.ips);
+                    for ip in peer_stats.known_ips.iter() {
+                        if let Some(peer_set) = peer_ips_ref.get_mut(ip) {
+                            peer_set.remove(peer_id);
+                        }
+                    }
                     // re address this, use retain or entry
-                    self.peer_stats.remove(peer_id);
+                    return false;
                 }
 
                 // we don't decay retained scores, as the peer is not active.
                 // this way the peer cannot reset a negative score by simply disconnecting and reconnecting,
-                // unless the retention period has ellapsed.
+                // unless the retention period has elapsed.
                 // similarly, a well behaved peer does not lose its score by getting disconnected.
-                continue;
+                return true;
             }
 
-            for (topic, topic_stats) in peer_stats.topics.iter() {
+            for (topic, topic_stats) in peer_stats.topics.iter_mut() {
                 // the topic parameters
-                if let Some(topic_params) = self.params.topics.get(topic) {
+                if let Some(topic_params) = params_ref.topics.get(topic) {
                     // decay counters
                     topic_stats.first_message_deliveries *=
                         topic_params.first_message_deliveries_decay;
-                    if topic_stats.first_message_deliveries < self.params.decay_to_zero {
+                    if topic_stats.first_message_deliveries < params_ref.decay_to_zero {
                         topic_stats.first_message_deliveries = 0f64;
                     }
                     topic_stats.mesh_message_deliveries *=
                         topic_params.mesh_message_deliveries_decay;
-                    if topic_stats.mesh_message_deliveries < self.params.decay_to_zero {
+                    if topic_stats.mesh_message_deliveries < params_ref.decay_to_zero {
                         topic_stats.mesh_message_deliveries = 0f64;
                     }
                     topic_stats.mesh_failure_penalty *= topic_params.mesh_failure_penalty_decay;
-                    if topic_stats.mesh_failure_penalty < self.params.decay_to_zero {
+                    if topic_stats.mesh_failure_penalty < params_ref.decay_to_zero {
                         topic_stats.mesh_failure_penalty = 0f64;
                     }
                     topic_stats.invalid_message_deliveries *=
                         topic_params.invalid_message_deliveries_decay;
-                    if topic_stats.invalid_message_deliveries < self.params.decay_to_zero {
+                    if topic_stats.invalid_message_deliveries < params_ref.decay_to_zero {
                         topic_stats.invalid_message_deliveries = 0f64;
                     }
                     // update mesh time and activate mesh message delivery parameter if need be
@@ -296,8 +340,8 @@ impl PeerScore {
                         ref mut graft_time,
                     } = topic_stats.mesh_status
                     {
-                        mesh_time = now.duration_since(graft_time);
-                        if mesh_time > topic_params.mesh_message_deliveries_activation {
+                        *mesh_time = now.duration_since(*graft_time);
+                        if *mesh_time > topic_params.mesh_message_deliveries_activation {
                             topic_stats.mesh_message_deliveries_active = true;
                         }
                     }
@@ -305,26 +349,35 @@ impl PeerScore {
             }
 
             // decay P7 counter
-            peer_stats.behaviour_penalty *= self.params.behaviour_penalty_decay;
-            if peer_stats.behaviour_penalty < self.params.decay_to_zero {
+            peer_stats.behaviour_penalty *= params_ref.behaviour_penalty_decay;
+            if peer_stats.behaviour_penalty < params_ref.decay_to_zero {
                 peer_stats.behaviour_penalty = 0f64;
             }
-        }
+            return true;
+        });
     }
 
     /// Gets a mutable reference to the underlying IPs for a peer, if they exist.
-    pub fn get_ips_mut(&mut self, peer_id: &PeerId, ip: Vec<IpAddr>) -> Option<&mut [IpAddr]> {
+    pub fn get_ips_mut(&mut self, peer_id: &PeerId) -> Option<&mut [IpAddr]> {
         let peer_stats = self.peer_stats.get_mut(peer_id)?;
         Some(&mut peer_stats.known_ips)
     }
 
     /// Adds a connected peer to `PeerScore`, initialising with default stats.
-    pub fn add_peer(&mut self, peer_id: &PeerId, known_ips: Vec<IpAddr>) {
-        let peer_stats = self.peer_stats.entry(peer_id).or_default();
+    pub fn add_peer(&mut self, peer_id: PeerId, known_ips: Vec<IpAddr>) {
+        let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
 
         // mark the peer as connected
-        peer_stats.connected = true;
-        peer_stats.known_ups = known_ips;
+        peer_stats.status = ConnectionStatus::Connected;
+        peer_stats.known_ips = known_ips.clone();
+
+        // add known ips to the peer score tracking map
+        for ip in known_ips {
+            self.peer_ips
+                .entry(ip)
+                .or_insert_with(|| HashSet::new())
+                .insert(peer_id.clone());
+        }
     }
 
     /// Removes a peer from the score table. This retains peer statistics if their score is
@@ -360,22 +413,23 @@ impl PeerScore {
                 topic_stats.mesh_status = MeshStatus::InActive;
             }
 
-            peer_stats.connected = false;
-            peer_stats.expire = Instant::now() + self.params.retain_score;
+            peer_stats.status = ConnectionStatus::Disconnected {
+                expire: Instant::now() + self.params.retain_score,
+            };
         }
     }
 
     /// Handles peer scoring functionality on subscription.
-    pub fn join(&mut self, topic: Topic) {}
+    pub fn join(&mut self, _topic: Topic) {}
 
     /// Handles peer scoring functionality when un-subscribing from a topic.
-    pub fn leave(&mut self, topic: Topic) {}
+    pub fn leave(&mut self, _topic: Topic) {}
 
     /// Handles scoring functionality as a peer GRAFTs to a topic.
-    pub fn graft(&mut self, peer_id: &PeerId, topic: &TopicHash) {
+    pub fn graft(&mut self, peer_id: &PeerId, topic: TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             // if we are scoring the topic, update the mesh status.
-            if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic, self.params) {
+            if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic, &self.params) {
                 topic_stats.mesh_status = MeshStatus::new_active();
                 topic_stats.mesh_message_deliveries_active = false;
             }
@@ -383,15 +437,16 @@ impl PeerScore {
     }
 
     /// Handles scoring functionality as a peer PRUNEs from a topic.
-    pub fn prune(&mut self, peer_id: &PeerId, topic: &TopicHash) {
+    pub fn prune(&mut self, peer_id: &PeerId, topic: TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             // if we are scoring the topic, update the mesh status.
-            if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic, self.params) {
+            if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic.clone(), &self.params)
+            {
                 // sticky mesh delivery rate failure penalty
                 let threshold = self
                     .params
                     .topics
-                    .get(topic)
+                    .get(&topic)
                     .expect("Topic must exist in order for there to be topic stats")
                     .mesh_message_deliveries_threshold;
                 if topic_stats.mesh_message_deliveries_active
@@ -413,22 +468,25 @@ impl PeerScore {
     pub fn deliver_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
         self.mark_first_message_delivery(from, msg);
 
-        let record = self.deliveries.entry((self.msg_id)(msg)).or_default();
+        let record = self
+            .deliveries
+            .entry((self.msg_id)(msg))
+            .or_insert_with(|| DeliveryRecord::default());
 
         // this should be the first delivery trace
         if record.status != DeliveryStatus::Unknown {
-            warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {}", from, record.first_seen.elapsed().as_secs(), record.status);
+            warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
             return;
         }
 
         // mark the message as valid and reward mesh peers that have already forwarded it to us
         record.status = DeliveryStatus::Valid;
         record.validated = Instant::now();
-        for peer in record.peers.iter() {
+        for peer in record.peers.iter().cloned().collect::<Vec<_>>() {
             // this check is to make sure a peer can't send us a message twice and get a double
             // count if it is a first delivery
-            if peer != from {
-                self.mark_duplicate_message_delivery(peer, msg, None);
+            if &peer != from {
+                self.mark_duplicate_message_delivery(&peer, msg, None);
             }
         }
     }
@@ -455,10 +513,14 @@ impl PeerScore {
             _ => {} // the rest are handled after record creation
         }
 
-        let record = self.deliveries.entry((self.msg_id)(msg)).or_default();
+        let mut record = self
+            .deliveries
+            .remove(&(self.msg_id)(msg))
+            .unwrap_or_else(|| DeliveryRecord::default());
         // this should be the first delivery trace
         if record.status != DeliveryStatus::Unknown {
-            warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {}", from, record.first_seen.elapsed().as_secs(), record.status);
+            warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
+            self.deliveries.insert((self.msg_id)(msg), record);
             return;
         }
 
@@ -469,6 +531,7 @@ impl PeerScore {
                 record.status = DeliveryStatus::Throttled;
                 // release the delivery time tracking map to free some memory early
                 record.peers.clear();
+                self.deliveries.insert((self.msg_id)(msg), record);
                 return;
             }
             RejectMsg::ValidationIgnored => {
@@ -476,6 +539,7 @@ impl PeerScore {
                 // the peer
                 record.status = DeliveryStatus::Ignored;
                 record.peers.clear();
+                self.deliveries.insert((self.msg_id)(msg), record);
                 return;
             }
             _ => {}
@@ -491,10 +555,14 @@ impl PeerScore {
 
         // release the delivery time tracking map to free some memory early
         record.peers.clear();
+        self.deliveries.insert((self.msg_id)(msg), record);
     }
 
     pub fn duplicate_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
-        let record = self.deliveries.entry((self.msg_id)(msg)).or_default();
+        let record = self
+            .deliveries
+            .entry((self.msg_id)(msg))
+            .or_insert_with(|| DeliveryRecord::default());
 
         if record.peers.get(from).is_some() {
             // we have already seen this duplicate!
@@ -510,7 +578,8 @@ impl PeerScore {
             DeliveryStatus::Valid => {
                 // mark the peer delivery time to only count a duplicate delivery once.
                 record.peers.remove(from);
-                self.mark_duplicate_message_delivery(from, msg, record.validated);
+                let validated = record.validated.clone();
+                self.mark_duplicate_message_delivery(from, msg, Some(validated));
             }
             DeliveryStatus::Invalid => {
                 // we no longer track delivery time
@@ -525,9 +594,10 @@ impl PeerScore {
     /// Increments the "invalid message deliveries" counter for all scored topics the message
     /// is published in.
     fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, msg: &GossipsubMessage) {
-        if let Some(peer_stats) = self.peer_stats.get(peer_id) {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             for topic_hash in msg.topics.iter() {
-                if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic_hash, self.params)
+                if let Some(topic_stats) =
+                    peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
                 {
                     topic_stats.invalid_message_deliveries += 1f64;
                 }
@@ -539,9 +609,10 @@ impl PeerScore {
     /// published in, as well as the "mesh message deliveries" counter, if the peer is in the
     /// mesh for the topic.
     fn mark_first_message_delivery(&mut self, peer_id: &PeerId, msg: &GossipsubMessage) {
-        if let Some(peer_stats) = self.peer_stats.get(peer_id) {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             for topic_hash in msg.topics.iter() {
-                if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic_hash, self.params)
+                if let Some(topic_stats) =
+                    peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
                 {
                     let cap = self
                         .params
@@ -550,7 +621,11 @@ impl PeerScore {
                         .expect("Topic must exist if there are known topic_stats")
                         .first_message_deliveries_cap;
                     topic_stats.first_message_deliveries =
-                        std::cmp::min(topic_stats.first_message_deliveries + 1, cap);
+                        if topic_stats.first_message_deliveries + 1f64 > cap {
+                            cap
+                        } else {
+                            topic_stats.first_message_deliveries + 1f64
+                        };
 
                     if let MeshStatus::Active { .. } = topic_stats.mesh_status {
                         let cap = self
@@ -561,7 +636,11 @@ impl PeerScore {
                             .mesh_message_deliveries_cap;
 
                         topic_stats.mesh_message_deliveries =
-                            std::cmp::min(topic_stats.mesh_message_deliveries + 1, cap);
+                            if topic_stats.mesh_message_deliveries + 1f64 > cap {
+                                cap
+                            } else {
+                                topic_stats.first_message_deliveries + 1f64
+                            };
                     }
                 }
             }
@@ -576,9 +655,10 @@ impl PeerScore {
         msg: &GossipsubMessage,
         validated_time: Option<Instant>,
     ) {
-        if let Some(peer_stats) = self.peer_stats.get(peer_id) {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             for topic_hash in msg.topics.iter() {
-                if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic_hash, self.params)
+                if let Some(topic_stats) =
+                    peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
                 {
                     if let MeshStatus::Active { .. } = topic_stats.mesh_status {
                         let topic_params = self
@@ -601,10 +681,23 @@ impl PeerScore {
 
                             let cap = topic_params.mesh_message_deliveries_cap;
                             topic_stats.mesh_message_deliveries =
-                                std::cmp::min(topic_stats.mesh_message_deliveries + 1, cap);
+                                if { topic_stats.mesh_message_deliveries + 1f64 > cap } {
+                                    cap
+                                } else {
+                                    topic_stats.mesh_message_deliveries + 1f64
+                                };
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// Removes an IP list from the tracking list for a peer.
+    fn remove_ips(&mut self, peer_id: &PeerId, ips: Vec<IpAddr>) {
+        for ip in ips {
+            if let Some(peer_set) = self.peer_ips.get_mut(&ip) {
+                peer_set.remove(peer_id);
             }
         }
     }

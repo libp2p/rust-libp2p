@@ -167,7 +167,7 @@ impl PeerScoreParams {
     }
 }
 
-struct TopicScoreParams {
+pub(crate) struct TopicScoreParams {
     /// The weight of the topic.
     pub topic_weight: f64,
 
