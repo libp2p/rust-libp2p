@@ -23,6 +23,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use crate::IdentTopic as Topic;
 
     // helper functions for testing
 
@@ -44,7 +45,7 @@ mod tests {
         for t in topics {
             let topic = Topic::new(t);
             gs.subscribe(topic.clone());
-            topic_hashes.push(topic.no_hash().clone());
+            topic_hashes.push(topic.hash().clone());
         }
 
         // build and connect peer_no random peers
@@ -314,7 +315,7 @@ mod tests {
 
         // publish on topic
         let publish_data = vec![0; 42];
-        gs.publish(&Topic::new(publish_topic), publish_data);
+        gs.publish(Topic::new(publish_topic), publish_data);
 
         // Collect all publish messages
         let publishes = gs
@@ -367,7 +368,7 @@ mod tests {
 
         // Publish on unsubscribed topic
         let publish_data = vec![0; 42];
-        gs.publish(&Topic::new(fanout_topic.clone()), publish_data);
+        gs.publish(Topic::new(fanout_topic.clone()), publish_data);
 
         assert_eq!(
             gs.fanout
@@ -552,7 +553,7 @@ mod tests {
         let mut gs: Gossipsub = Gossipsub::new(key, gs_config);
 
         // create a topic and fill it with some peers
-        let topic_hash = Topic::new("Test".into()).no_hash().clone();
+        let topic_hash = Topic::new("Test").hash().clone();
         let mut peers = vec![];
         for _ in 0..20 {
             peers.push(PeerId::random())

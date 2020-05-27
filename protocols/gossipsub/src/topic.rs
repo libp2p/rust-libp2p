@@ -27,10 +27,11 @@ use std::fmt;
 /// A generic trait that can be extended for various hashing types for a topic.
 pub trait Hasher {
     /// The function that takes a topic string and creates a topic hash.
-    fn hash(topic_string: String) -> TopicHash {}
+    fn hash(topic_string: String) -> TopicHash;
 }
 
 /// A type for representing topics who use the identity hash.
+#[derive(Debug, Clone)]
 pub struct IdentityHash {}
 impl Hasher for IdentityHash {
     /// Creates a `TopicHash` as a raw string.
@@ -39,8 +40,9 @@ impl Hasher for IdentityHash {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Sha256Hash {}
-impl Hasher for IdentityHash {
+impl Hasher for Sha256Hash {
     /// Creates a `TopicHash` by SHA256 hashing the topic then base64 encoding the
     /// hash.
     fn hash(topic_string: String) -> TopicHash {
@@ -85,10 +87,17 @@ pub struct Topic<H: Hasher> {
     phantom_data: std::marker::PhantomData<H>,
 }
 
+impl<H: Hasher> From<Topic<H>> for TopicHash {
+    fn from(topic: Topic<H>) -> TopicHash {
+        topic.hash()
+    }
+}
+
 impl<H: Hasher> Topic<H> {
     pub fn new(topic: impl Into<String>) -> Self {
         Topic {
             topic: topic.into(),
+            phantom_data: std::marker::PhantomData,
         }
     }
 
@@ -97,7 +106,7 @@ impl<H: Hasher> Topic<H> {
     }
 }
 
-impl<H> fmt::Display for Topic<H> {
+impl<H: Hasher> fmt::Display for Topic<H> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.topic)
     }

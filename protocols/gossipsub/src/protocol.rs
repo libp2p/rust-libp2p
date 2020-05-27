@@ -500,7 +500,7 @@ impl Decoder for GossipsubCodec {
 }
 
 /// A type for gossipsub message ids.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MessageId(pub String);
 
 impl std::fmt::Display for MessageId {

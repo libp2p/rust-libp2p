@@ -174,7 +174,7 @@ impl Gossipsub {
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe<H: Hasher>(&mut self, topic: Topic<H>) -> bool {
         debug!("Unsubscribing from topic: {}", topic);
-        let topic_hash = topic.hash();
+        let topic_hash = &topic.hash();
 
         if self.mesh.get(topic_hash).is_none() {
             debug!("Already unsubscribed from topic: {:?}", topic_hash);
@@ -218,8 +218,8 @@ impl Gossipsub {
     }
 
     /// Publishes a message to the network.
-    pub fn publish<H: Hasher>(&mut self, topic: &Topic<H>, data: impl Into<Vec<u8>>) {
-        self.publish_many(iter::once(topic.clone()), data)
+    pub fn publish<H: Hasher>(&mut self, topic: Topic<H>, data: impl Into<Vec<u8>>) {
+        self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message with multiple topics to the network.
@@ -234,7 +234,7 @@ impl Gossipsub {
             // To be interoperable with the go-implementation this is treated as a 64-bit
             // big-endian uint.
             sequence_number: rand::random(),
-            topics: topic.into_iter().map(|t| self.topic_hash(t)).collect(),
+            topics: topic.into_iter().map(|t| t.hash()).collect(),
             signature: None, // signature will get created when being published
             key: None,
         };

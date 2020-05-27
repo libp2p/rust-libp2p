@@ -33,7 +33,7 @@ use libp2p_core::{
     identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
     Multiaddr, Transport,
 };
-use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
+use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic as Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
@@ -174,7 +174,7 @@ fn multi_hop_propagation() {
         let number_nodes = graph.nodes.len();
 
         // Subscribe each node to the same topic.
-        let topic = Topic::new("test-net".into());
+        let topic = Topic::new("test-net");
         for (_addr, node) in &mut graph.nodes {
             node.subscribe(topic.clone());
         }
@@ -193,7 +193,7 @@ fn multi_hop_propagation() {
         });
 
         // Publish a single message.
-        graph.nodes[0].1.publish(&topic, vec![1, 2, 3]);
+        graph.nodes[0].1.publish(topic, vec![1, 2, 3]);
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;

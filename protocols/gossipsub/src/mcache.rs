@@ -133,7 +133,7 @@ impl MessageCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Topic, TopicHash};
+    use crate::{IdentTopic as Topic, TopicHash};
     use libp2p_core::PeerId;
 
     fn gen_testm(x: u64, topics: Vec<TopicHash>) -> GossipsubMessage {
@@ -173,8 +173,8 @@ mod tests {
     fn test_put_get_one() {
         let mut mc = MessageCache::new_default(10, 15);
 
-        let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
-        let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
+        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic2_hash = Topic::new("topic2").hash().clone();
 
         let m = gen_testm(10, vec![topic1_hash, topic2_hash]);
 
@@ -199,8 +199,8 @@ mod tests {
     fn test_get_wrong() {
         let mut mc = MessageCache::new_default(10, 15);
 
-        let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
-        let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
+        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic2_hash = Topic::new("topic2").hash().clone();
 
         let m = gen_testm(10, vec![topic1_hash, topic2_hash]);
 
@@ -246,8 +246,8 @@ mod tests {
     fn test_shift() {
         let mut mc = MessageCache::new_default(1, 5);
 
-        let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
-        let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
+        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic2_hash = Topic::new("topic2").hash().clone();
 
         // Build the message
         for i in 0..10 {
@@ -270,8 +270,8 @@ mod tests {
     fn test_empty_shift() {
         let mut mc = MessageCache::new_default(1, 5);
 
-        let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
-        let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
+        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic2_hash = Topic::new("topic2").hash().clone();
         // Build the message
         for i in 0..10 {
             let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
@@ -296,8 +296,8 @@ mod tests {
     fn test_remove_last_from_shift() {
         let mut mc = MessageCache::new_default(4, 5);
 
-        let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
-        let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
+        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic2_hash = Topic::new("topic2").hash().clone();
         // Build the message
         for i in 0..10 {
             let m = gen_testm(i, vec![topic1_hash.clone(), topic2_hash.clone()]);
