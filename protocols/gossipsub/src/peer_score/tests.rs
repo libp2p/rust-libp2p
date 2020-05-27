@@ -1,160 +1,212 @@
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
-/*
+
+use crate::IdentTopic as Topic;
+
+// estimates a value within variance
+fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
+    if expected >= 0.0 {
+        return value > expected * (1.0 - variance) && value < expected * (1.0 + variance);
+    }
+    return value > expected * (1.0 + variance) && value < expected * (1.0 - variance);
+}
+
+// generates a random gossipsub message with sequence number i
+fn make_test_message(seq: u64) -> GossipsubMessage {
+    GossipsubMessage {
+        source: PeerId::random(),
+        data: vec![12, 34, 56],
+        sequence_number: seq,
+        topics: vec![Topic::new("test").hash()],
+        signature: None,
+        key: None,
+    }
+}
+
 #[test]
-func test_score_time_in_mesh() {
+fn test_score_time_in_mesh() {
     // Create parameters with reasonable default values
     let topic = Topic::new("test");
-    let params = PeerScoreParams {
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:       0.5,
-        TimeInMeshWeight:  1,
-        TimeInMeshQuantum: time.Millisecond,
-        TimeInMeshCap:     3600,
-    }
-    params.Topics[mytopic] = topicScoreParams
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
+    params.topic_score_cap = 1000.0;
 
-    peerA := peer.ID("A")
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 0.5;
+    topic_params.time_in_mesh_weight = 1.0;
+    topic_params.time_in_mesh_quantum = Duration::from_millis(1);
+    topic_params.time_in_mesh_cap = 3600.0;
 
+    params.topics.insert(topic_hash, topic_params.clone());
+
+    let peer_id = PeerId::random();
+
+    let mut peer_score = PeerScore::new(params);
     // Peer score should start at 0
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
+    peer_score.add_peer(peer_id.clone(), Vec::new());
 
-    aScore := ps.Score(peerA)
-    if aScore != 0 {
-        t.Fatal("expected score to start at zero")
-    }
+    let score = peer_score.score(&peer_id);
+    assert!(
+        score == 0.0,
+        "expected score to start at zero. Score found: {}",
+        score
+    );
 
     // The time in mesh depends on how long the peer has been grafted
-    ps.Graft(peerA, mytopic)
-    elapsed := topicScoreParams.TimeInMeshQuantum * 200
-    time.Sleep(elapsed)
+    peer_score.graft(&peer_id, topic);
+    let elapsed = topic_params.time_in_mesh_quantum * 200;
+    std::thread::sleep(elapsed);
+    peer_score.refresh_scores();
 
-    ps.refreshScores()
-    aScore = ps.Score(peerA)
-    expected := topicScoreParams.TopicWeight * topicScoreParams.TimeInMeshWeight * float64(elapsed/topicScoreParams.TimeInMeshQuantum)
-    if aScore < expected {
-        t.Fatalf("Score: %f. Expected >= %f", aScore, expected)
-    }
+    let score = peer_score.score(&peer_id);
+    let expected = topic_params.topic_weight
+        * topic_params.time_in_mesh_weight
+        * (elapsed.as_millis() / topic_params.time_in_mesh_quantum.as_millis()) as f64;
+    assert!(
+        score >= expected,
+        "The score: {} should be greater than or equal to: {}",
+        score,
+        expected
+    );
 }
 
-func TestScoreTimeInMeshCap(t *testing.T) {
+#[test]
+fn test_score_time_in_mesh_cap() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:       0.5,
-        TimeInMeshWeight:  1,
-        TimeInMeshQuantum: time.Millisecond,
-        TimeInMeshCap:     10,
-    }
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
-    params.Topics[mytopic] = topicScoreParams
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 0.5;
+    topic_params.time_in_mesh_weight = 1.0;
+    topic_params.time_in_mesh_quantum = Duration::from_millis(1);
+    topic_params.time_in_mesh_cap = 10.0;
 
-    peerA := peer.ID("A")
+    params.topics.insert(topic_hash, topic_params.clone());
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
-    elapsed := topicScoreParams.TimeInMeshQuantum * 40
-    time.Sleep(elapsed)
+    let peer_id = PeerId::random();
 
-    // The time in mesh score has a cap
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    expected := topicScoreParams.TopicWeight * topicScoreParams.TimeInMeshWeight * topicScoreParams.TimeInMeshCap
-    variance := 0.5
-    if !withinVariance(aScore, expected, variance) {
-        t.Fatalf("Score: %f. Expected %f ± %f", aScore, expected, variance*expected)
-    }
+    let mut peer_score = PeerScore::new(params);
+    // Peer score should start at 0
+    peer_score.add_peer(peer_id.clone(), Vec::new());
+
+    let score = peer_score.score(&peer_id);
+    assert!(
+        score == 0.0,
+        "expected score to start at zero. Score found: {}",
+        score
+    );
+
+    // The time in mesh depends on how long the peer has been grafted
+    peer_score.graft(&peer_id, topic);
+    let elapsed = topic_params.time_in_mesh_quantum * 40;
+    std::thread::sleep(elapsed);
+    peer_score.refresh_scores();
+
+    let score = peer_score.score(&peer_id);
+    let expected = topic_params.topic_weight
+        * topic_params.time_in_mesh_weight
+        * topic_params.time_in_mesh_cap;
+    let variance = 0.5;
+    assert!(
+        within_variance(score, expected, variance),
+        "The score: {} should be within {} of {}",
+        score,
+        score * variance,
+        expected
+    );
 }
 
-func TestScoreFirstMessageDeliveries(t *testing.T) {
+#[test]
+fn test_score_first_message_deliveries() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:                  1,
-        FirstMessageDeliveriesWeight: 1,
-        FirstMessageDeliveriesDecay:  1.0, // test without decay for now
-        FirstMessageDeliveriesCap:    2000,
-        TimeInMeshQuantum:            time.Second,
-    }
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
-    params.Topics[mytopic] = topicScoreParams
-    peerA := peer.ID("A")
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.first_message_deliveries_weight = 1.0;
+    topic_params.first_message_deliveries_decay = 1.0;
+    topic_params.first_message_deliveries_cap = 2000.0;
+    topic_params.time_in_mesh_weight = 0.0;
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
+    params.topics.insert(topic_hash, topic_params.clone());
 
-    // deliver a bunch of messages from peer A
-    nMessages := 100
-    for i := 0; i < nMessages; i++ {
-        pbMsg := makeTestMessage(i)
-        pbMsg.TopicIDs = []string{mytopic}
-        msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-        ps.ValidateMessage(&msg)
-        ps.DeliverMessage(&msg)
+    let peer_id = PeerId::random();
+
+    let mut peer_score = PeerScore::new(params);
+    // Peer score should start at 0
+    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.graft(&peer_id, topic);
+
+    // deliver a bunch of messages from the peer
+    let messages = 100;
+    for seq in 0..messages {
+        let msg = make_test_message(seq);
+        peer_score.validate_message(&peer_id, &msg);
+        peer_score.deliver_message(&peer_id, &msg);
     }
 
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    expected := topicScoreParams.TopicWeight * topicScoreParams.FirstMessageDeliveriesWeight * float64(nMessages)
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+
+    let score = peer_score.score(&peer_id);
+    let expected =
+        topic_params.topic_weight * topic_params.first_message_deliveries_weight * messages as f64;
+    assert!(
+        score == expected,
+        "The score: {} should be {}",
+        score,
+        expected
+    );
 }
 
-func TestScoreFirstMessageDeliveriesCap(t *testing.T) {
+#[test]
+fn test_score_first_message_deliveries_cap() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:                  1,
-        FirstMessageDeliveriesWeight: 1,
-        FirstMessageDeliveriesDecay:  1.0, // test without decay for now
-        FirstMessageDeliveriesCap:    50,
-        TimeInMeshQuantum:            time.Second,
-    }
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
-    params.Topics[mytopic] = topicScoreParams
-    peerA := peer.ID("A")
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.first_message_deliveries_weight = 1.0;
+    topic_params.first_message_deliveries_decay = 1.0; // test without decay
+    topic_params.first_message_deliveries_cap = 50.0;
+    topic_params.time_in_mesh_weight = 0.0;
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
+    params.topics.insert(topic_hash, topic_params.clone());
 
-    // deliver a bunch of messages from peer A
-    nMessages := 100
-    for i := 0; i < nMessages; i++ {
-        pbMsg := makeTestMessage(i)
-        pbMsg.TopicIDs = []string{mytopic}
-        msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-        ps.ValidateMessage(&msg)
-        ps.DeliverMessage(&msg)
+    let peer_id = PeerId::random();
+
+    let mut peer_score = PeerScore::new(params);
+    // Peer score should start at 0
+    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.graft(&peer_id, topic);
+
+    // deliver a bunch of messages from the peer
+    let messages = 100;
+    for seq in 0..messages {
+        let msg = make_test_message(seq);
+        peer_score.validate_message(&peer_id, &msg);
+        peer_score.deliver_message(&peer_id, &msg);
     }
 
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    expected := topicScoreParams.TopicWeight * topicScoreParams.FirstMessageDeliveriesWeight * topicScoreParams.FirstMessageDeliveriesCap
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score = peer_score.score(&peer_id);
+    let expected = topic_params.topic_weight
+        * topic_params.first_message_deliveries_weight
+        * topic_params.first_message_deliveries_cap;
+    assert!(
+        score == expected,
+        "The score: {} should be {}",
+        score,
+        expected
+    );
 }
 
+/*
 func TestScoreFirstMessageDeliveriesDecay(t *testing.T) {
     // Create parameters with reasonable default values
     mytopic := "mytopic"
@@ -835,12 +887,6 @@ func TestScoreRetention(t *testing.T) {
     }
 }
 
-func withinVariance(score float64, expected float64, variance float64) bool {
-    if expected >= 0 {
-        return score > expected*(1-variance) && score < expected*(1+variance)
-    }
-    return score > expected*(1+variance) && score < expected*(1-variance)
-}
 
 // hack to set IPs for a peer without having to spin up real hosts with shared IPs
 func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {

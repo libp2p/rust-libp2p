@@ -1,6 +1,6 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
-use crate::{GossipsubMessage, Topic, TopicHash};
+use crate::{GossipsubMessage, Hasher, MessageId, Topic, TopicHash};
 use libp2p_core::PeerId;
 use log::warn;
 use lru_time_cache::LruCache;
@@ -24,9 +24,9 @@ struct PeerScore {
     /// Tracking peers per IP.
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
     /// Message delivery tracking. This is a time-cache of `DeliveryRecord`s.
-    deliveries: LruCache<String, DeliveryRecord>,
+    deliveries: LruCache<MessageId, DeliveryRecord>,
     /// The message id function.
-    msg_id: fn(&GossipsubMessage) -> String,
+    msg_id: fn(&GossipsubMessage) -> MessageId,
 }
 
 /// General statistics for a given gossipsub peer.
@@ -172,7 +172,29 @@ impl Default for DeliveryRecord {
 }
 
 impl PeerScore {
-    pub fn new(params: PeerScoreParams, msg_id: fn(&GossipsubMessage) -> String) -> Self {
+    /// Creates a new `PeerScore` using a given set of peer scoring parameters.
+    pub fn new(params: PeerScoreParams) -> Self {
+        let default_message_id = |message: &GossipsubMessage| {
+            // default message id is: source + sequence number
+            let mut source_string = message.source.to_base58();
+            source_string.push_str(&message.sequence_number.to_string());
+            MessageId(source_string)
+        };
+
+        PeerScore {
+            params,
+            peer_stats: HashMap::new(),
+            peer_ips: HashMap::new(),
+            deliveries: LruCache::with_expiry_duration(Duration::from_secs(TIME_CACHE_DURATION)),
+            msg_id: default_message_id,
+        }
+    }
+
+    /// Creates a new `PeerScore` with a non-default message id function.
+    pub fn new_with_msg_id(
+        params: PeerScoreParams,
+        msg_id: fn(&GossipsubMessage) -> MessageId,
+    ) -> Self {
         PeerScore {
             params,
             peer_stats: HashMap::new(),
@@ -186,10 +208,10 @@ impl PeerScore {
     pub fn score(&self, peer_id: &PeerId) -> f64 {
         let peer_stats = match self.peer_stats.get(peer_id) {
             Some(v) => v,
-            None => return 0f64,
+            None => return 0.0,
         };
 
-        let mut score = 0f64;
+        let mut score = 0.0;
 
         // topic scores
         for (topic, topic_stats) in peer_stats.topics.iter() {
@@ -198,10 +220,11 @@ impl PeerScore {
                 // we are tracking the topic
 
                 // the topic score
-                let mut topic_score = 0f64;
+                let mut topic_score = 0.0;
 
                 // P1: time in mesh
                 if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
+                    dbg!(mesh_time.as_millis());
                     let p1 = {
                         let v = mesh_time.as_secs_f64()
                             / topic_params.time_in_mesh_quantum.as_secs_f64();
@@ -211,12 +234,15 @@ impl PeerScore {
                             topic_params.time_in_mesh_cap
                         }
                     };
+                    dbg!(topic_score);
                     topic_score += p1 * topic_params.time_in_mesh_weight;
+                    dbg!(topic_score);
                 }
 
                 // P2: first message deliveries
                 let p2 = topic_stats.first_message_deliveries as f64;
                 topic_score += p2 * topic_params.first_message_deliveries_weight;
+                dbg!(topic_score);
 
                 // P3: mesh message deliveries
                 if topic_stats.mesh_message_deliveries_active {
@@ -229,6 +255,7 @@ impl PeerScore {
                         topic_score += p3 * topic_params.mesh_message_deliveries_weight;
                     }
                 }
+                dbg!(topic_score);
 
                 // P3b:
                 // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so this detracts.
@@ -240,9 +267,11 @@ impl PeerScore {
                 let p4 =
                     topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
                 topic_score += p4 * topic_params.invalid_message_deliveries_weight;
+                dbg!(topic_score);
 
                 // update score, mixing with topic weight
                 score += topic_score * topic_params.topic_weight;
+                dbg!(topic_score);
             }
         }
 
@@ -250,6 +279,8 @@ impl PeerScore {
         if self.params.topic_score_cap > 0f64 && score > self.params.topic_score_cap {
             score = self.params.topic_score_cap;
         }
+        dbg!("after");
+        dbg!(score);
 
         // P5: application-specific score
         //TODO: Add in
@@ -289,7 +320,7 @@ impl PeerScore {
         }
     }
 
-    pub fn refreshScores(&mut self) {
+    pub fn refresh_scores(&mut self) {
         let now = Instant::now();
         let params_ref = &self.params;
         let peer_ips_ref = &mut self.peer_ips;
@@ -321,21 +352,21 @@ impl PeerScore {
                     topic_stats.first_message_deliveries *=
                         topic_params.first_message_deliveries_decay;
                     if topic_stats.first_message_deliveries < params_ref.decay_to_zero {
-                        topic_stats.first_message_deliveries = 0f64;
+                        topic_stats.first_message_deliveries = 0.0;
                     }
                     topic_stats.mesh_message_deliveries *=
                         topic_params.mesh_message_deliveries_decay;
                     if topic_stats.mesh_message_deliveries < params_ref.decay_to_zero {
-                        topic_stats.mesh_message_deliveries = 0f64;
+                        topic_stats.mesh_message_deliveries = 0.0;
                     }
                     topic_stats.mesh_failure_penalty *= topic_params.mesh_failure_penalty_decay;
                     if topic_stats.mesh_failure_penalty < params_ref.decay_to_zero {
-                        topic_stats.mesh_failure_penalty = 0f64;
+                        topic_stats.mesh_failure_penalty = 0.0;
                     }
                     topic_stats.invalid_message_deliveries *=
                         topic_params.invalid_message_deliveries_decay;
                     if topic_stats.invalid_message_deliveries < params_ref.decay_to_zero {
-                        topic_stats.invalid_message_deliveries = 0f64;
+                        topic_stats.invalid_message_deliveries = 0.0;
                     }
                     // update mesh time and activate mesh message delivery parameter if need be
                     if let MeshStatus::Active {
@@ -354,7 +385,7 @@ impl PeerScore {
             // decay P7 counter
             peer_stats.behaviour_penalty *= params_ref.behaviour_penalty_decay;
             if peer_stats.behaviour_penalty < params_ref.decay_to_zero {
-                peer_stats.behaviour_penalty = 0f64;
+                peer_stats.behaviour_penalty = 0.0;
             }
             return true;
         });
@@ -423,13 +454,14 @@ impl PeerScore {
     }
 
     /// Handles peer scoring functionality on subscription.
-    pub fn join(&mut self, _topic: Topic) {}
+    pub fn join<H: Hasher>(&mut self, _topic: Topic<H>) {}
 
     /// Handles peer scoring functionality when un-subscribing from a topic.
-    pub fn leave(&mut self, _topic: Topic) {}
+    pub fn leave<H: Hasher>(&mut self, _topic: Topic<H>) {}
 
     /// Handles scoring functionality as a peer GRAFTs to a topic.
-    pub fn graft(&mut self, peer_id: &PeerId, topic: TopicHash) {
+    pub fn graft(&mut self, peer_id: &PeerId, topic: impl Into<TopicHash>) {
+        let topic = topic.into();
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             // if we are scoring the topic, update the mesh status.
             if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic, &self.params) {
@@ -464,7 +496,7 @@ impl PeerScore {
     }
 
     //TODO: Required?
-    pub fn validate_message(&mut self, _msg: &GossipsubMessage) {
+    pub fn validate_message(&mut self, _from: &PeerId, _msg: &GossipsubMessage) {
         // adds an empty record with the message id
     }
 
