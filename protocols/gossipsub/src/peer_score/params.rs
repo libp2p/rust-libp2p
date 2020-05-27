@@ -8,6 +8,66 @@ const DEFAULT_DECAY_INTERVAL: u64 = 1;
 /// The default rate to decay to 0.
 const DEFAULT_DECAY_TO_ZERO: f64 = 0.01;
 
+// TODO: Adjust these defaults
+impl Default for TopicScoreParams {
+    fn default() -> Self {
+        TopicScoreParams {
+            topic_weight: 0.5_f64,
+            // P1
+            time_in_mesh_weight: 1_f64,
+            time_in_mesh_quantum: Duration::from_millis(1),
+            time_in_mesh_cap: 3600_f64,
+            // P2
+            first_message_deliveries_weight: 1_f64,
+            first_message_deliveries_decay: 0.5_f64,
+            first_message_deliveries_cap: 2000_f64,
+            // P3
+            mesh_message_deliveries_weight: -1_f64,
+            mesh_message_deliveries_decay: 0.5_f64,
+            mesh_message_deliveries_cap: 100_f64,
+            mesh_message_deliveries_threshold: 20_f64,
+            mesh_message_deliveries_window: Duration::from_millis(10),
+            mesh_message_deliveries_activation: Duration::from_secs(5),
+            // P3b
+            mesh_failure_penalty_weight: -1_f64,
+            mesh_failure_penalty_decay: 0.5_f64,
+            // P4
+            invalid_message_deliveries_weight: 1_f64,
+            invalid_message_deliveries_decay: 0.3_f64,
+        }
+    }
+}
+
+impl Default for PeerScoreThresholds {
+    fn default() -> Self {
+        PeerScoreThresholds {
+            gossip_threshold: -10_f64,
+            publish_threshold: -50_f64,
+            graylist_threshold: -80_f64,
+            accept_px_threshold: 10_f64,
+            opportunistic_graft_threshold: 20_f64,
+        }
+    }
+}
+
+impl Default for PeerScoreParams {
+    fn default() -> Self {
+        PeerScoreParams {
+            topics: HashMap::new(),
+            topic_score_cap: 10_f64,
+            app_specific_weight: 10_f64,
+            ip_colocation_factor_weight: -5_f64,
+            ip_colocation_factor_threshold: 10_f64,
+            ip_colocation_factor_whitelist: HashSet::new(),
+            behaviour_penalty_weight: -10_f64,
+            behaviour_penalty_decay: 0.2_f64,
+            decay_interval: Duration::from_secs(1),
+            decay_to_zero: 0.1_f64,
+            retain_score: Duration::from_secs(3600),
+        }
+    }
+}
+
 /// Computes the decay factor for a parameter, assuming the `decay_interval` is 1s
 /// and that the value decays to zero if it drops below 0.01.
 fn score_parameter_decay(decay: Duration) -> f64 {
@@ -39,11 +99,11 @@ pub struct PeerScoreThresholds {
     /// implementing an effective graylist according to peer score; should be negative and <= `publish_threshold`.
     pub graylist_threshold: f64,
 
-    /// `accept_px_threshold` is the score threshold below which px will be ignored; this should be positive
+    /// The score threshold below which px will be ignored; this should be positive
     /// and limited to scores attainable by bootstrappers and other trusted nodes.
     pub accept_px_threshold: f64,
 
-    /// opportunistic_graft_threshold is the median mesh score threshold before triggering opportunistic
+    /// The median mesh score threshold before triggering opportunistic
     /// grafting; this should have a small positive value.
     pub opportunistic_graft_threshold: f64,
 }
@@ -79,7 +139,7 @@ pub(crate) struct PeerScoreParams {
 
     /// P5: Application-specific peer scoring
     //TODO: Add in
-    // app_specific_score  func(p peer.ID) f64
+    // pub app_specific_score  func(p peer.ID) f64
     pub app_specific_weight: f64,
 
     ///  P6: IP-colocation factor.
@@ -105,13 +165,13 @@ pub(crate) struct PeerScoreParams {
     pub behaviour_penalty_weight: f64,
     pub behaviour_penalty_decay: f64,
 
-    /// the decay interval for parameter counters.
+    /// The decay interval for parameter counters.
     pub decay_interval: Duration,
 
-    /// counter value below which it is considered 0.
+    /// Counter value below which it is considered 0.
     pub decay_to_zero: f64,
 
-    /// time to remember counters for a disconnected peer.
+    /// Time to remember counters for a disconnected peer.
     pub retain_score: Duration,
 }
 
@@ -173,16 +233,16 @@ pub(crate) struct TopicScoreParams {
 
     ///  P1: time in the mesh
     ///  This is the time the peer has been grafted in the mesh.
-    ///  the value of of the parameter is the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`
-    ///  the weight of the parameter must be positive (or zero to disable).
+    ///  The value of of the parameter is the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`
+    ///  The weight of the parameter must be positive (or zero to disable).
     pub time_in_mesh_weight: f64,
     pub time_in_mesh_quantum: Duration,
     pub time_in_mesh_cap: f64,
 
     ///  P2: first message deliveries
     ///  This is the number of message deliveries in the topic.
-    ///  the value of the parameter is a counter, decaying with `first_message_deliveries_decay`, and capped
-    ///  by first_message_deliveries_cap.
+    ///  The value of the parameter is a counter, decaying with `first_message_deliveries_decay`, and capped
+    ///  by `first_message_deliveries_cap`.
     ///  The weight of the parameter MUST be positive (or zero to disable).
     pub first_message_deliveries_weight: f64,
     pub first_message_deliveries_decay: f64,

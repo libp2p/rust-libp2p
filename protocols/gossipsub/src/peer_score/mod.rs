@@ -11,6 +11,9 @@ use std::time::{Duration, Instant};
 mod params;
 use params::*;
 
+#[cfg(test)]
+mod tests;
+
 /// The number of seconds delivery messages are stored in the cache.
 const TIME_CACHE_DURATION: u64 = 120;
 
