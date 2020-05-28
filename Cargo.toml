@@ -116,3 +116,5 @@ members = [
     "transports/wasm-ext"
 ]
 
+[patch.crates-io]
+soketto = { git = "https://github.com/twittner/soketto.git", branch = "safe" }
