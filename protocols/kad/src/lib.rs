@@ -56,6 +56,8 @@ pub use behaviour::{
     GetRecordOk,
     GetRecordError,
 
+    PutRecordPhase,
+    PutRecordContext,
     PutRecordResult,
     PutRecordOk,
     PutRecordError,
@@ -64,6 +66,8 @@ pub use behaviour::{
     GetClosestPeersOk,
     GetClosestPeersError,
 
+    AddProviderPhase,
+    AddProviderContext,
     AddProviderResult,
     AddProviderOk,
     AddProviderError,
