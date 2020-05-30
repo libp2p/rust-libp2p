@@ -29,6 +29,7 @@ use libp2p_swarm::{
     NetworkBehaviourAction,
     PollParameters,
     ProtocolsHandler,
+    OneShotEvent,
     OneShotHandler,
     NotifyHandler,
     DialPeerCondition,
@@ -237,7 +238,7 @@ impl Floodsub {
 }
 
 impl NetworkBehaviour for Floodsub {
-    type ProtocolsHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
+    type ProtocolsHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage, ()>;
     type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -287,12 +288,12 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         propagation_source: PeerId,
         _connection: ConnectionId,
-        event: InnerMessage,
+        event: OneShotEvent<InnerMessage, ()>,
     ) {
-        // We ignore successful sends event.
+        // We ignore successful sends or timeouts.
         let event = match event {
-            InnerMessage::Rx(event) => event,
-            InnerMessage::Sent => return,
+            OneShotEvent::Success(InnerMessage::Rx(event)) => event,
+            OneShotEvent::Success(InnerMessage::Sent) | OneShotEvent::Timeout(()) => return,
         };
 
         // Update connected peers topics
