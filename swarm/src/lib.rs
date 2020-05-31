@@ -287,14 +287,6 @@ where
     /// can be polled again.
     pending_event: Option<(PeerId, PendingNotifyHandler, TInEvent)>,
 
-    /// The current lead of `NetworkBehaviour::inject_event` calls
-    /// as compared to `NetworkBehaviour::poll` calls.
-    event_lead: usize,
-
-    /// The maximum lead of `NetworkBehaviour::inject_event` calls
-    /// as compared to `NetworkBehaviour::poll` calls.
-    max_event_lead: usize,
-
     /// Whether the behaviour is waiting for more network activity.
     behaviour_pending: bool,
 }
@@ -500,16 +492,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             let mut network_pending = false;
 
             // First let the network make progress, if the behaviour is waiting
-            // for progress on the network and we are not too far ahead in terms
-            // of events given to the behaviour before it must be `poll`ed.
-            if this.event_lead < this.max_event_lead && this.behaviour_pending {
+            // for progress on the network.
+            if this.behaviour_pending {
                 match this.network.poll(cx) {
                     Poll::Pending => network_pending = true,
                     Poll::Ready(NetworkEvent::ConnectionEvent { connection, event }) => {
                         let peer = connection.peer_id().clone();
                         let connection = connection.id();
                         this.behaviour.inject_event(peer, connection, event);
-                        this.event_lead += 1;
                     },
                     Poll::Ready(NetworkEvent::ConnectionEstablished { connection, num_established }) => {
                         let peer_id = connection.peer_id().clone();
@@ -641,25 +631,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
             // If the targeted peer meanwhile disconnected, the event is discarded.
             //
             // If the pending event cannot be delivered because the connection
-            // is busy, we continue to poll the network until `max_event_lead` is
-            // reached, at which point we must wait for the wakeup that the
-            // connection can receive another event so that the pending event
-            // can be consumed.
-            //
-            // That results in the following behaviour if the pending event
-            // cannot be delivered:
-            //
-            // 1. All connections are temporarily unable to get new data to send
-            // from the behaviour (since we only buffer a single pending event,
-            // `NetworkBehaviour::poll` is not called again until the event is
-            // consumed).
-            //
-            // 2. New connections continue to get accepted and in general
-            // network I/O progresses until `max_event_lead` is reached.
-            //
-            // 3. All connections can continue to receive data and send data
-            // in the form of events to `NetworkBehaviour::inject_event` until
-            // `max_event_lead` is reached.
+            // is busy and `NetworkBehaviour::inject_connections_busy` returns
+            // `Err`, we must wait for the wakeup that the connection can receive
+            // another event so that the pending event can be consumed.
             if let Some((peer_id, handler, event)) = this.pending_event.take() {
                 if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                     match handler {
@@ -667,33 +641,21 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             if let Some(mut conn) = peer.connection(conn_id) {
                                 if let Some(event) = notify_one(&mut conn, event, cx) {
                                     this.pending_event = Some((peer_id, handler, event));
-                                    if this.event_lead < this.max_event_lead {
-                                        continue
-                                    } else {
-                                        return Poll::Pending
-                                    }
+                                    return Poll::Pending
                                 }
                             },
                         PendingNotifyHandler::Any(ids) => {
                             if let Some((event, ids)) = notify_any(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::Any(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                if this.event_lead < this.max_event_lead {
-                                    continue
-                                } else {
-                                    return Poll::Pending
-                                }
+                                return Poll::Pending
                             }
                         }
                         PendingNotifyHandler::All(ids) => {
                             if let Some((event, ids)) = notify_all(ids, &mut peer, event, cx) {
                                 let handler = PendingNotifyHandler::All(ids);
                                 this.pending_event = Some((peer_id, handler, event));
-                                if this.event_lead < this.max_event_lead {
-                                    continue
-                                } else {
-                                    return Poll::Pending
-                                }
+                                return Poll::Pending
                             }
                         }
                     }
@@ -712,7 +674,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     listened_addrs: &this.listened_addrs,
                     external_addrs: &this.external_addrs
                 };
-                this.event_lead = this.event_lead.saturating_sub(1);
                 this.behaviour.poll(cx, &mut parameters)
             };
 
@@ -721,7 +682,6 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     // The behaviour has nothing to produce, thus it is
                     // waiting for more network activity and events.
                     this.behaviour_pending = true;
-                    this.event_lead = 0;
                     if network_pending {
                         // The network was polled before polling the
                         // behaviour and is waiting for I/O, hence there
@@ -1058,7 +1018,6 @@ pub struct SwarmBuilder<TBehaviour, TConnInfo> {
     transport: BoxTransport<(TConnInfo, StreamMuxerBox), io::Error>,
     behaviour: TBehaviour,
     network_config: NetworkConfig,
-    max_event_lead: usize,
 }
 
 impl<TBehaviour, TConnInfo> SwarmBuilder<TBehaviour, TConnInfo>
@@ -1090,7 +1049,6 @@ where TBehaviour: NetworkBehaviour,
             transport,
             behaviour,
             network_config: Default::default(),
-            max_event_lead: 1,
         }
     }
 
@@ -1142,34 +1100,6 @@ where TBehaviour: NetworkBehaviour,
     /// [`NetworkBehaviour`].
     pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
         self.network_config.set_connection_event_buffer_size(n);
-        self
-    }
-
-    /// Configures the maximum lead in terms of number of connection events
-    /// that may be given to `NetworkBehaviour::inject_event` before a
-    /// call to `NetworkBehaviour::poll` must be made. Intuitively,
-    /// this setting determines how quickly back-pressure it exerted
-    /// on the underlying `Network` - the larger the permitted event
-    /// lead, the later back-pressure kicks in if a connection is busy.
-    ///
-    /// The `Swarm` always tries to `poll` after each call to `inject_event`
-    /// but may fail to do so if an event emitted by the behaviour cannot
-    /// currently be delivered to a connection and the behaviour does
-    /// not itself implement back-pressure via
-    /// `NetworkBehaviour::inject_connections_busy`, in which case the
-    /// `Swarm` will simply exert back-pressure on the entire `Network`
-    /// by waiting until the event can be delivered (or dropped).
-    ///
-    /// A configured event lead it > 1 allows the underlying `Network`
-    /// and the `NetworkBehaviour` to make a limited amount of progress
-    /// before the next call to `NetworkBehaviour::poll`, even in the
-    /// case where the behaviour itself does not implement back-pressure.
-    /// It thus indirectly limits the sizes of buffers in the `NetworkBehaviour`
-    /// that grow with calls to `NetworkBehaviour::inject_event`, if any.
-    ///
-    /// The default value is `1`, i.e. very conservative.
-    pub fn max_event_lead(mut self, n: usize) -> Self {
-        self.max_event_lead = n;
         self
     }
 
@@ -1235,8 +1165,6 @@ where TBehaviour: NetworkBehaviour,
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
             pending_event: None,
-            max_event_lead: self.max_event_lead,
-            event_lead: 0,
             behaviour_pending: false,
         }
     }
@@ -1290,11 +1218,7 @@ impl NetworkBehaviour for DummyBehaviour {
 
     fn inject_connected(&mut self, _: &PeerId) {}
 
-    fn inject_connection_established(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
-
     fn inject_disconnected(&mut self, _: &PeerId) {}
-
-    fn inject_connection_closed(&mut self, _: &PeerId, _: &ConnectionId, _: &ConnectedPoint) {}
 
     fn inject_event(&mut self, _: PeerId, _: ConnectionId,
         _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
