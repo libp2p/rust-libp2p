@@ -35,10 +35,6 @@ impl TopicHash {
         TopicHash { hash: hash.into() }
     }
 
-    pub fn into_string(self) -> String {
-        self.hash
-    }
-
     pub fn as_str(&self) -> &str {
         &self.hash
     }
@@ -77,6 +73,12 @@ impl Topic {
         TopicHash {
             hash: self.topic.clone(),
         }
+    }
+}
+
+impl Into<String> for TopicHash {
+    fn into(self) -> String {
+        self.hash
     }
 }
 
