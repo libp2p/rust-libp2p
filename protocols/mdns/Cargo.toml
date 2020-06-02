@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = "< 1.6"
+async-std = "~1.5.0"
 data-encoding = "2.0"
 dns-parser = "0.8"
 either = "1.5.3"
