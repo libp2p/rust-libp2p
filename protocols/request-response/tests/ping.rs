@@ -17,7 +17,8 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-//! Integration tests for the `Ping` network behaviour.
+
+//! Integration tests for the `RequestResponse` network behaviour.
 
 use libp2p_core::{
     Multiaddr,
@@ -33,24 +34,25 @@ use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc, future::BoxFuture};
 use rand::{self, Rng};
-use std::io;
+use std::{io, iter};
 
-/// Sends a ping and expects a pong response.
+/// Exercises a simple ping protocol.
 #[test]
-fn ping() {
+fn ping_protocol() {
     let num_pings: u8 = rand::thread_rng().gen_range(1, 100);
 
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
 
-    let cfg = RequestResponseConfig::new("/ping/1".to_string());
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::new(cfg.clone(), PingCodec());
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
     let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
 
     let (peer2_id, trans) = mk_transport();
-    let ping_proto2 = RequestResponse::new(cfg, PingCodec());
+    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
     let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id.clone());
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
@@ -77,7 +79,7 @@ fn ping() {
                     assert_eq!(&peer, &peer2_id);
                     swarm1.send_response(channel, pong.clone());
                 },
-                e => panic!("Unexpected event: {:?}", e)
+                e => panic!("Peer1: Unexpected event: {:?}", e)
             }
         }
     };
@@ -104,7 +106,7 @@ fn ping() {
                         req_id = swarm2.send_request(&peer1_id, ping.clone());
                     }
                 },
-                e => panic!("Unexpected event: {:?}", e)
+                e => panic!("Peer2: Unexpected event: {:?}", e)
             }
         }
     };
@@ -130,6 +132,8 @@ fn mk_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox), io::Error>) {
 
 // Simple Ping-Pong Protocol
 
+#[derive(Debug, Clone)]
+struct PingProtocol();
 #[derive(Clone)]
 struct PingCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,11 +141,19 @@ struct Ping(Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Pong(Vec<u8>);
 
+impl ProtocolName for PingProtocol {
+    fn protocol_name(&self) -> &[u8] {
+        "/ping/1".as_bytes()
+    }
+}
+
 impl RequestResponseCodec for PingCodec {
+    type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;
 
-    fn read_request<'a, T>(&mut self, io: &'a mut T) -> BoxFuture<'a, Result<Self::Request, io::Error>>
+    fn read_request<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T)
+        -> BoxFuture<'a, Result<Self::Request, io::Error>>
     where
         T: AsyncRead + Unpin + Send
     {
@@ -151,7 +163,7 @@ impl RequestResponseCodec for PingCodec {
             .boxed()
     }
 
-    fn read_response<'a, T>(&mut self, io: &'a mut T)
+    fn read_response<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T)
         -> BoxFuture<'a, Result<Self::Response, io::Error>>
     where
         T: AsyncRead + Unpin + Send
@@ -162,7 +174,7 @@ impl RequestResponseCodec for PingCodec {
             .boxed()
     }
 
-    fn write_request<'a, T>(&mut self, io: &'a mut T, Ping(data): Ping)
+    fn write_request<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T, Ping(data): Ping)
         -> BoxFuture<'a, Result<(), io::Error>>
     where
         T: AsyncWrite + Unpin + Send
@@ -170,7 +182,7 @@ impl RequestResponseCodec for PingCodec {
         write_one(io, data).boxed()
     }
 
-    fn write_response<'a, T>(&mut self, io: &'a mut T, Pong(data): Pong)
+    fn write_response<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T, Pong(data): Pong)
         -> BoxFuture<'a, Result<(), io::Error>>
     where
         T: AsyncWrite + Unpin + Send

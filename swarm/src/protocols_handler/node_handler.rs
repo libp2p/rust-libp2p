@@ -228,15 +228,26 @@ where
         for n in (0..self.negotiating_in.len()).rev() {
             let (mut in_progress, mut timeout) = self.negotiating_in.swap_remove(n);
             match Future::poll(Pin::new(&mut timeout), cx) {
-                Poll::Ready(_) => continue,
+                Poll::Ready(Ok(_)) => {
+                    let err = ProtocolsHandlerUpgrErr::Timeout;
+                    self.handler.inject_listen_upgrade_error(err);
+                    continue
+                }
+                Poll::Ready(Err(_)) => {
+                    let err = ProtocolsHandlerUpgrErr::Timer;
+                    self.handler.inject_listen_upgrade_error(err);
+                    continue;
+                }
                 Poll::Pending => {},
             }
             match Future::poll(Pin::new(&mut in_progress), cx) {
                 Poll::Ready(Ok(upgrade)) =>
                     self.handler.inject_fully_negotiated_inbound(upgrade),
                 Poll::Pending => self.negotiating_in.push((in_progress, timeout)),
-                // TODO: return a diagnostic event?
-                Poll::Ready(Err(_err)) => {}
+                Poll::Ready(Err(err)) => {
+                    let err = ProtocolsHandlerUpgrErr::Upgrade(err);
+                    self.handler.inject_listen_upgrade_error(err);
+                }
             }
         }
 

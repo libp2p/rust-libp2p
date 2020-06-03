@@ -10,11 +10,11 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.5"
 futures = "0.3.1"
 libp2p-core = { version = "0.19.0", path = "../../core" }
 libp2p-swarm = { version = "0.19.0", path = "../../swarm" }
 smallvec = "1.4"
+wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "< 1.6"

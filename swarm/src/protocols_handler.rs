@@ -140,7 +140,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Injects an event coming from the outside in the handler.
     fn inject_event(&mut self, event: Self::InEvent);
 
-    /// Indicates to the handler that upgrading a substream to the given protocol has failed.
+    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
@@ -148,6 +148,14 @@ pub trait ProtocolsHandler: Send + 'static {
             <Self::OutboundProtocol as OutboundUpgradeSend>::Error
         >
     );
+
+    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::InboundProtocol as InboundUpgradeSend>::Error
+        >
+    ) {}
 
     /// Returns until when the connection should be kept alive.
     ///

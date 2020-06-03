@@ -23,13 +23,13 @@
 //! ## General Usage
 //!
 //! [`RequestResponse`] is a `NetworkBehaviour` that implements a generic
-//! request/response protocol whereby each request is sent over a new
-//! substream on a connection. `RequestResponse` is generic over the
-//! actual messages being sent, which are defined in terms of a
+//! request/response protocol or protocol family, whereby each request is
+//! sent over a new substream on a connection. `RequestResponse` is generic
+//! over the actual messages being sent, which are defined in terms of a
 //! [`RequestResponseCodec`]. Creating a request/response protocol thus amounts
-//! to providing an implementation of this trait that can be
-//! given to [`RequestResponse::new`]. Further configuration is available
-//! via the [`RequestResponseConfig`].
+//! to providing an implementation of this trait which can then be
+//! given to [`RequestResponse::new`]. Further configuration options are
+//! available via the [`RequestResponseConfig`].
 //!
 //! Requests are sent using [`RequestResponse::send_request`] and the
 //! responses received as [`RequestResponseMessage::Response`] via
@@ -38,6 +38,13 @@
 //! Responses are sent using [`RequestResponse::send_response`] upon
 //! receiving a [`RequestResponseMessage::Request`] via
 //! [`RequestResponseEvent::Message`].
+//!
+//! ## Protocol Families
+//!
+//! A single [`RequestResponse`] instance can be used with an entire
+//! protocol family that share the same request and response types.
+//! For that purpose, [`RequestResponseCodec::Protocol`] is typically
+//! instantiated with a sum type.
 //!
 //! ## One-Way Protocols
 //!
@@ -49,39 +56,47 @@
 //! immediately after the request has been sent, since `RequestResponseCodec::read_response`
 //! will not actually read anything from the given I/O stream.
 //! [`RequestResponse::send_response`] need not be called for one-way protocols.
+//!
+//! ## Limited Protocol Support
+//!
+//! It is possible to only support inbound or outbound requests for
+//! a particular protocol. This is achieved by instantiating `RequestResponse`
+//! with protocols using [`ProtocolSupport::Inbound`] or
+//! [`ProtocolSupport::Outbound`]. Any subset of protocols of a protocol
+//! family can be configured in this way. Such protocols will not be
+//! advertised during inbound respectively outbound protocol negotiation
+//! on the substreams.
 
-use bytes::Bytes;
+pub mod codec;
+pub mod handler;
+
+pub use codec::{RequestResponseCodec, ProtocolName};
+pub use handler::ProtocolSupport;
+
 use futures::{
-    future::BoxFuture,
-    prelude::*,
-    stream::FuturesUnordered
+    channel::oneshot,
+};
+use handler::{
+    RequestProtocol,
+    RequestResponseHandler,
+    RequestResponseHandlerEvent,
 };
 use libp2p_core::{
     ConnectedPoint,
     Multiaddr,
     PeerId,
-    ProtocolName,
     connection::ConnectionId,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use libp2p_swarm::{
     DialPeerCondition,
-    NegotiatedSubstream,
     NetworkBehaviour,
     NetworkBehaviourAction,
     NotifyHandler,
-    OneShotEvent,
-    OneShotHandler,
-    OneShotHandlerConfig,
-    OneShotOutboundInfo,
     PollParameters,
-    SubstreamProtocol
 };
 use smallvec::SmallVec;
 use std::{
     collections::{VecDeque, HashMap},
-    io,
-    iter,
     time::Duration,
     task::{Context, Poll}
 };
@@ -96,10 +111,10 @@ pub enum RequestResponseMessage<TRequest, TResponse> {
         /// The sender of the request who is awaiting a response.
         ///
         /// See [`RequestResponse::send_response`].
-        channel: ResponseChannel,
+        channel: ResponseChannel<TResponse>,
     },
     /// A response message.
-	Response {
+    Response {
         /// The ID of the request that produced this response.
         ///
         /// See [`RequestResponse::send_request`].
@@ -120,74 +135,95 @@ pub enum RequestResponseEvent<TRequest, TResponse> {
         message: RequestResponseMessage<TRequest, TResponse>
     },
     /// An outbound request failed.
-    RequestFailure {
+    OutboundFailure {
         /// The peer to whom the request was sent.
         peer: PeerId,
         /// The (local) ID of the failed request.
         request_id: RequestId,
         /// The error that occurred.
-        error: RequestFailure
+        error: OutboundFailure,
     },
-    /// Sending of a response to an incoming request failed.
-    ///
-    /// See [`RequestResponse::send_response`].
-    ResponseFailure {
+    /// An inbound request failed.
+    InboundFailure {
+        /// The peer from whom the request was received.
+        peer: PeerId,
         /// The error that occurred.
-        error: io::Error
+        error: InboundFailure,
     },
 }
 
-/// Possible request failures.
+/// Possible failures occurring in the context of sending
+/// an outbound request and receiving the response.
 #[derive(Debug)]
-pub enum RequestFailure {
+pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
-    /// The request timed out before receiving a response.
+    /// The request timed out before a response was received.
+    ///
+    /// It is not known whether the request may have been
+    /// received (and processed) by the remote peer.
     Timeout,
     /// The connection closed before a response was received.
     ///
     /// It is not known whether the request may have been
     /// received (and processed) by the remote peer.
     ConnectionClosed,
+    /// The remote supports none of the requested protocols.
+    UnsupportedProtocols,
+}
+
+/// Possible failures occurring in the context of receiving an
+/// inbound request and sending a response.
+#[derive(Debug)]
+pub enum InboundFailure {
+    /// The inbound request timed out, either while reading the
+    /// incoming request or before a response is sent, i.e. if
+    /// [`RequestResponse::send_response`] is not called in a
+    /// timely manner.
+    Timeout,
+    /// The local peer supports none of the requested protocols.
+    UnsupportedProtocols,
 }
 
 /// A channel for sending a response to an inbound request.
 ///
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
-pub struct ResponseChannel(NegotiatedSubstream);
+pub struct ResponseChannel<TResponse> {
+    peer: PeerId,
+    sender: oneshot::Sender<TResponse>,
+}
 
-/// The ID of an outgoing request.
+/// The (local) ID of an outgoing request.
 ///
 /// See [`RequestResponse::send_request`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 
-/// The configuration for an `RequestResponse`.
+/// The configuration for a `RequestResponse` protocol.
 #[derive(Debug, Clone)]
 pub struct RequestResponseConfig {
-    protocol: Bytes,
     request_timeout: Duration,
     connection_keep_alive: Duration,
 }
 
-impl RequestResponseConfig {
-    /// Creates a new `RequestResponseConfig` for the given protocol.
-    pub fn new(protocol: impl ProtocolName) -> Self {
+impl Default for RequestResponseConfig {
+    fn default() -> Self {
         Self {
-            protocol: Bytes::copy_from_slice(protocol.protocol_name()),
             connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
         }
     }
+}
 
+impl RequestResponseConfig {
     /// Sets the keep-alive timeout of idle connections.
     pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
         self.connection_keep_alive = v;
         self
     }
 
-    /// Sets the request timeout for outbound requests.
+    /// Sets the timeout for inbound and outbound requests.
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
         self
@@ -199,14 +235,16 @@ pub struct RequestResponse<TCodec>
 where
     TCodec: RequestResponseCodec,
 {
+    /// The supported inbound protocols.
+    inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    /// The supported outbound protocols.
+    outbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The next (local) request ID.
     next_request_id: RequestId,
     /// The protocol configuration.
     config: RequestResponseConfig,
     /// The protocol codec for reading and writing requests and responses.
     codec: TCodec,
-    /// Pending futures for outgoing responses.
-    responding: FuturesUnordered<BoxFuture<'static, Result<(), io::Error>>>,
     /// Pending events to return from `poll`.
     pending_events: VecDeque<
         NetworkBehaviourAction<
@@ -227,13 +265,28 @@ impl<TCodec> RequestResponse<TCodec>
 where
     TCodec: RequestResponseCodec + Clone,
 {
-    /// Creates a new `RequestResponse` protocol for the given codec and configuration.
-    pub fn new(cfg: RequestResponseConfig, codec: TCodec) -> Self {
+    /// Creates a new `RequestResponse` behaviour for the given
+    /// protocols, codec and configuration.
+    pub fn new<I>(codec: TCodec, protocols: I, cfg: RequestResponseConfig) -> Self
+    where
+        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>
+    {
+        let mut inbound_protocols = SmallVec::new();
+        let mut outbound_protocols = SmallVec::new();
+        for (p, s) in protocols {
+            if s.inbound() {
+                inbound_protocols.push(p.clone());
+            }
+            if s.outbound() {
+                outbound_protocols.push(p.clone());
+            }
+        }
         RequestResponse {
+            inbound_protocols,
+            outbound_protocols,
             next_request_id: RequestId(1),
             config: cfg,
             codec,
-            responding: FuturesUnordered::new(),
             pending_events: VecDeque::new(),
             connected: HashMap::new(),
             pending_requests: HashMap::new(),
@@ -259,7 +312,7 @@ where
         let request = RequestProtocol {
             request_id,
             codec: self.codec.clone(),
-            protocol: self.config.protocol.clone(),
+            protocols: self.outbound_protocols.clone(),
             request,
         };
 
@@ -278,15 +331,11 @@ where
     ///
     /// The provided `ResponseChannel` is obtained from a
     /// [`RequestResponseMessage::Request`].
-    pub fn send_response(&mut self, mut channel: ResponseChannel, response: TCodec::Response)
-    where
-        TCodec: RequestResponseCodec + Send + Sync + 'static,
-        TCodec::Response: Send + 'static,
-    {
-        let mut codec = self.codec.clone();
-        self.responding.push(async move {
-            codec.write_response(&mut channel.0, response).await
-        }.boxed());
+    pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response) {
+        // Fails only if the inbound upgrade timed out waiting for the response,
+        // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
+        // which in turn results in `RequestResponseEvent::InboundFailure`.
+        let _ = ch.sender.send(rs);
     }
 
     /// Adds a known address for a peer that can be used for
@@ -347,27 +396,17 @@ where
 impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Sync + Clone + 'static,
-    TCodec::Response: Send,
-    TCodec::Request: Send,
 {
-    type ProtocolsHandler = OneShotHandler<
-        ResponseProtocol<TCodec>,
-        RequestProtocol<TCodec>,
-        RequestResponseMessage<TCodec::Request, TCodec::Response>,
-        RequestId,
-    >;
-
+    type ProtocolsHandler = RequestResponseHandler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        let inbound = SubstreamProtocol::new(ResponseProtocol {
-            protocol: self.config.protocol.clone(),
-            codec: self.codec.clone(),
-        }).with_timeout(self.config.request_timeout);
-        OneShotHandler::new(inbound, OneShotHandlerConfig {
-            keep_alive_timeout: self.config.connection_keep_alive,
-            outbound_substream_timeout: self.config.request_timeout,
-        })
+        RequestResponseHandler::new(
+            self.inbound_protocols.clone(),
+            self.codec.clone(),
+            self.config.connection_keep_alive,
+            self.config.request_timeout,
+        )
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
@@ -420,10 +459,10 @@ where
         for (peer, request_id) in failed {
             self.pending_responses.remove(&request_id);
             self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                RequestResponseEvent::RequestFailure {
+                RequestResponseEvent::OutboundFailure {
                     peer,
                     request_id,
-                    error: RequestFailure::ConnectionClosed
+                    error: OutboundFailure::ConnectionClosed
                 }
             ));
         }
@@ -443,10 +482,10 @@ where
         if let Some(pending) = self.pending_requests.remove(peer) {
             for request in pending {
                 self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::RequestFailure {
+                    RequestResponseEvent::OutboundFailure {
                         peer: peer.clone(),
                         request_id: request.request_id,
-                        error: RequestFailure::DialFailure
+                        error: OutboundFailure::DialFailure
                     }
                 ));
             }
@@ -456,33 +495,64 @@ where
     fn inject_event(
         &mut self,
         peer: PeerId,
-        _conn: ConnectionId,
-        event: OneShotEvent<RequestResponseMessage<TCodec::Request, TCodec::Response>, RequestId>
+        _: ConnectionId,
+        event: RequestResponseHandlerEvent<TCodec>,
     ) {
         match event {
-            OneShotEvent::Success(message) => {
-                if let RequestResponseMessage::Response { request_id, .. } = &message {
-                    self.pending_responses.remove(request_id);
-                }
+            RequestResponseHandlerEvent::Response { request_id, response } => {
+                self.pending_responses.remove(&request_id);
+                let message = RequestResponseMessage::Response { request_id, response };
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::Message { peer, message }));
             }
-            OneShotEvent::Timeout(request_id) => {
+            RequestResponseHandlerEvent::Request { request, sender } => {
+                let channel = ResponseChannel { peer: peer.clone(), sender };
+                let message = RequestResponseMessage::Request { request, channel };
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::Message { peer, message }));
+            }
+            RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
                 if let Some((peer, _conn)) = self.pending_responses.remove(&request_id) {
                     self.pending_events.push_back(
                         NetworkBehaviourAction::GenerateEvent(
-                            RequestResponseEvent::RequestFailure {
+                            RequestResponseEvent::OutboundFailure {
                                 peer,
                                 request_id,
-                                error: RequestFailure::Timeout,
+                                error: OutboundFailure::Timeout,
                             }));
                 }
+            }
+            RequestResponseHandlerEvent::InboundTimeout => {
+                    self.pending_events.push_back(
+                        NetworkBehaviourAction::GenerateEvent(
+                            RequestResponseEvent::InboundFailure {
+                                peer,
+                                error: InboundFailure::Timeout,
+                            }));
+            }
+            RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::OutboundFailure {
+                            peer,
+                            request_id,
+                            error: OutboundFailure::UnsupportedProtocols,
+                        }));
+            }
+            RequestResponseHandlerEvent::InboundUnsupportedProtocols => {
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::InboundFailure {
+                            peer,
+                            error: InboundFailure::UnsupportedProtocols,
+                        }));
             }
         }
     }
 
-    fn poll(&mut self, cx: &mut Context, _: &mut impl PollParameters)
+    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<
             RequestProtocol<TCodec>,
             RequestResponseEvent<TCodec::Request, TCodec::Response>
@@ -490,133 +560,23 @@ where
     {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
-        }
-
-        while let Poll::Ready(Some(result)) = self.responding.poll_next_unpin(cx) {
-            if let Err(error) = result {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::ResponseFailure { error }
-                ));
-            }
+        } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
+            self.pending_events.shrink_to_fit();
         }
 
         Poll::Pending
     }
 }
 
-/// Response substream upgrade protocol.
-#[derive(Debug, Clone)]
-pub struct ResponseProtocol<TCodec> {
-    protocol: Bytes,
-    codec: TCodec,
-}
-
-impl<TCodec> UpgradeInfo for ResponseProtocol<TCodec> {
-    type Info = Bytes;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol.clone())
-    }
-}
-
-impl<TCodec> InboundUpgrade<NegotiatedSubstream> for ResponseProtocol<TCodec>
-where
-    TCodec: RequestResponseCodec + Send + Sync + 'static,
-{
-    type Output = RequestResponseMessage<TCodec::Request, TCodec::Response>;
-    type Error = io::Error;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(mut self, mut io: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        async move {
-            let request = self.codec.read_request(&mut io).await?;
-            Ok(RequestResponseMessage::Request { request, channel: ResponseChannel(io) })
-        }.boxed()
-    }
-}
-
-/// Request substream upgrade protocol.
-#[derive(Debug, Clone)]
-pub struct RequestProtocol<TCodec>
-where
-    TCodec: RequestResponseCodec
-{
-    codec: TCodec,
-    protocol: Bytes,
-    request: TCodec::Request,
-    request_id: RequestId,
-}
-
-impl<TCodec> OneShotOutboundInfo<RequestId> for RequestProtocol<TCodec>
-where
-    TCodec: RequestResponseCodec
-{
-    fn info(&self) -> RequestId {
-        self.request_id
-    }
-}
-
-impl<TCodec> UpgradeInfo for RequestProtocol<TCodec>
-where
-    TCodec: RequestResponseCodec
-{
-    type Info = Bytes;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol.clone())
-    }
-}
-
-impl<TCodec> OutboundUpgrade<NegotiatedSubstream> for RequestProtocol<TCodec>
-where
-    TCodec: RequestResponseCodec + Send + Sync + 'static,
-    TCodec::Request: Send + 'static,
-{
-    type Output = RequestResponseMessage<TCodec::Request, TCodec::Response>;
-    type Error = io::Error;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(mut self, mut io: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        async move {
-            self.codec.write_request(&mut io, self.request).await?;
-            let response = self.codec.read_response(&mut io).await?;
-            Ok(RequestResponseMessage::Response { request_id: self.request_id, response })
-        }.boxed()
-    }
-}
-
-/// An `RequestResponseCodec` defines the request and response types
-/// for a [`RequestResponse`] protocol and how they are encoded / decoded
-/// to / from an I/O stream.
-pub trait RequestResponseCodec {
-    type Request;
-    type Response;
-
-    fn read_request<'a, T>(&mut self, io: &'a mut T)
-        -> BoxFuture<'a, Result<Self::Request, io::Error>>
-    where
-        T: AsyncRead + Unpin + Send;
-
-    fn read_response<'a, T>(&mut self, io: &'a mut T)
-        -> BoxFuture<'a, Result<Self::Response, io::Error>>
-    where
-        T: AsyncRead + Unpin + Send;
-
-    fn write_request<'a, T>(&mut self, io: &'a mut T, req: Self::Request)
-        -> BoxFuture<'a, Result<(), io::Error>>
-    where
-        T: AsyncWrite + Unpin + Send;
-
-    fn write_response<'a, T>(&mut self, io: &'a mut T, res: Self::Response)
-        -> BoxFuture<'a, Result<(), io::Error>>
-    where
-        T: AsyncWrite + Unpin + Send;
-}
+/// Internal threshold for when to shrink the capacity
+/// of empty queues. If the capacity of an empty queue
+/// exceeds this threshold, the associated memory is
+/// released.
+const EMPTY_QUEUE_SHRINK_THRESHOLD: usize = 100;
 
 /// Internal information tracked for an established connection.
 struct Connection {
     id: ConnectionId,
     address: Option<Multiaddr>,
 }
+
