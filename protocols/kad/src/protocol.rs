@@ -42,6 +42,7 @@ use wasm_timer::Instant;
 
 use derivative::Derivative;
 use libp2p_core::identity::ed25519::PublicKey;
+use trust_graph::{Certificate, Trust};
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
@@ -95,6 +96,7 @@ pub struct KadPeer {
     pub multiaddrs: Vec<Multiaddr>,
     /// How the sender is connected to that remote.
     pub connection_ty: KadConnectionType,
+    pub certificates: Vec<Certificate>,
 }
 
 // Builds a `KadPeer` from a corresponding protobuf message.
@@ -123,17 +125,50 @@ impl TryFrom<proto::message::Peer> for KadPeer {
                 invalid_data(format!("invalid public key: {}", e).as_str())
             )?;
 
+
+        let mut certificates = Vec::with_capacity(peer.certificates.len());
+        for cert in peer.certificates.into_iter() {
+            let mut chain = Vec::with_capacity(cert.chain.len());
+            for trust in cert.chain.into_iter() {
+                let issued_for = PublicKey::decode(trust.issued_for.as_slice())
+                    .map_err(|e|
+                        invalid_data(format!("invalid issued_for: {}", e).as_str())
+                    )?;
+                let expires_at: Duration = Duration::from_secs(trust.expires_at_secs);
+                let issued_at: Duration = Duration::from_secs(trust.issued_at_secs);
+                let signature: Vec<u8> = trust.signature;
+
+                let trust = Trust::new(issued_for, expires_at, issued_at, signature);
+                chain.push(trust);
+            }
+            certificates.push(Certificate::new_unverified(chain));
+        }
+
         Ok(KadPeer {
             public_key,
             node_id,
             multiaddrs: addrs,
-            connection_ty
+            connection_ty,
+            certificates
         })
     }
 }
 
 impl Into<proto::message::Peer> for KadPeer {
     fn into(self) -> proto::message::Peer {
+        let certificates = self.certificates.into_iter().map(|cert|
+            proto::Certificate {
+                chain: cert.chain.into_iter().map(|trust| {
+                    proto::Trust {
+                        issued_for: trust.issued_for.encode().to_vec(),
+                        expires_at_secs: trust.expires_at.as_secs(),
+                        signature: trust.signature,
+                        issued_at_secs: trust.issued_at.as_secs(),
+                    }
+                }).collect(),
+            }
+        ).collect();
+
         proto::message::Peer {
             id: self.node_id.into_bytes(),
             addrs: self.multiaddrs.into_iter().map(|a| a.to_vec()).collect(),
@@ -141,7 +176,8 @@ impl Into<proto::message::Peer> for KadPeer {
                 let ct: proto::message::ConnectionType = self.connection_ty.into();
                 ct as i32
             },
-            public_key: self.public_key.encode().to_vec()
+            public_key: self.public_key.encode().to_vec(),
+            certificates
         }
     }
 }

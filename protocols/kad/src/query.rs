@@ -32,6 +32,14 @@ use libp2p_core::PeerId;
 use std::{time::Duration, num::NonZeroUsize};
 use wasm_timer::Instant;
 
+/// Peer along with its weight
+pub struct WeightedPeer {
+    /// Kademlia key & id of the peer
+    pub peer_id: Key<PeerId>,
+    /// Weight, calculated locally
+    pub weight: u32
+}
+
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
@@ -89,7 +97,7 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that contacts a fixed set of peers.
     pub fn add_fixed<I>(&mut self, peers: I, inner: TInner) -> QueryId
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = WeightedPeer>
     {
         let id = self.next_query_id();
         self.continue_fixed(id, peers, inner);
@@ -101,20 +109,27 @@ impl<TInner> QueryPool<TInner> {
     /// earlier.
     pub fn continue_fixed<I>(&mut self, id: QueryId, peers: I, inner: TInner)
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = WeightedPeer>
     {
         assert!(!self.queries.contains_key(&id));
+        // TODO: why not alpha?
         let parallelism = self.config.replication_factor.get();
-        let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
-        let query = Query::new(id, peer_iter, inner);
+
+        let (swamp, weighted) = peers.into_iter().partition::<Vec<_>, _>(|p| p.weight == 0);
+        let swamp = swamp.into_iter().map(|p| p.peer_id.into_preimage());
+        let weighted = weighted.into_iter().map(|p| p.peer_id.into_preimage());
+
+        let weighted_iter = QueryPeerIter::Fixed(FixedPeersIter::new(weighted, parallelism));
+        let swamp_iter = QueryPeerIter::Fixed(FixedPeersIter::new(swamp, parallelism));
+        let query = Query::new(id, weighted_iter, swamp_iter, inner);
         self.queries.insert(id, query);
     }
 
     /// Adds a query to the pool that iterates towards the closest peers to the target.
     pub fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
     where
-        T: Into<KeyBytes>,
-        I: IntoIterator<Item = Key<PeerId>>
+        T: Into<KeyBytes> + Clone,
+        I: IntoIterator<Item = WeightedPeer>
     {
         let id = self.next_query_id();
         self.continue_iter_closest(id, target, peers, inner);
@@ -124,15 +139,21 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that iterates towards the closest peers to the target.
     pub fn continue_iter_closest<T, I>(&mut self, id: QueryId, target: T, peers: I, inner: TInner)
     where
-        T: Into<KeyBytes>,
-        I: IntoIterator<Item = Key<PeerId>>
+        T: Into<KeyBytes> + Clone,
+        I: IntoIterator<Item = WeightedPeer>
     {
         let cfg = ClosestPeersIterConfig {
             num_results: self.config.replication_factor.get(),
             .. ClosestPeersIterConfig::default()
         };
-        let peer_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers));
-        let query = Query::new(id, peer_iter, inner);
+
+        let (swamp, weighted) = peers.into_iter().partition::<Vec<_>, _>(|p| p.weight == 0);
+        let swamp = swamp.into_iter().map(|p| p.peer_id);
+        let weighted = weighted.into_iter().map(|p| p.peer_id);
+
+        let weighted_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg.clone(), target.clone(), weighted));
+        let swamp_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, swamp));
+        let query = Query::new(id, weighted_iter, swamp_iter, inner);
         self.queries.insert(id, query);
     }
 
@@ -230,7 +251,9 @@ pub struct Query<TInner> {
     /// The unique ID of the query.
     id: QueryId,
     /// The peer iterator that drives the query state.
-    peer_iter: QueryPeerIter,
+    weighted_iter: QueryPeerIter,
+    /// The peer iterator that drives the query state.
+    swamp_iter: QueryPeerIter,
     /// Execution statistics of the query.
     stats: QueryStats,
     /// The opaque inner query state.
@@ -245,8 +268,8 @@ enum QueryPeerIter {
 
 impl<TInner> Query<TInner> {
     /// Creates a new query without starting it.
-    fn new(id: QueryId, peer_iter: QueryPeerIter, inner: TInner) -> Self {
-        Query { id, inner, peer_iter, stats: QueryStats::empty() }
+    fn new(id: QueryId, weighted_iter: QueryPeerIter, swamp_iter: QueryPeerIter, inner: TInner) -> Self {
+        Query { id, inner, weighted_iter, swamp_iter, stats: QueryStats::empty() }
     }
 
     /// Gets the unique ID of the query.
@@ -261,11 +284,17 @@ impl<TInner> Query<TInner> {
 
     /// Informs the query that the attempt to contact `peer` failed.
     pub fn on_failure(&mut self, peer: &PeerId) {
-        let updated = match &mut self.peer_iter {
+        let updated_swamp = match &mut self.swamp_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
-            QueryPeerIter::Fixed(iter) => iter.on_failure(peer)
+            QueryPeerIter::Fixed(iter) => iter.on_failure(peer),
         };
-        if updated {
+
+        let updated_weighted = match &mut self.weighted_iter {
+            QueryPeerIter::Closest(iter) => iter.on_failure(peer),
+            QueryPeerIter::Fixed(iter) => iter.on_failure(peer),
+        };
+
+        if updated_swamp || updated_weighted {
             self.stats.failure += 1;
         }
     }
@@ -275,37 +304,77 @@ impl<TInner> Query<TInner> {
     /// the query, if applicable.
     pub fn on_success<I>(&mut self, peer: &PeerId, new_peers: I)
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = WeightedPeer>
     {
-        let updated = match &mut self.peer_iter {
-            QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),
-            QueryPeerIter::Fixed(iter) => iter.on_success(peer)
+        let (swamp, weighted) = new_peers.into_iter().partition::<Vec<_>, _>(|p| p.weight == 0);
+
+        let updated_swamp = match &mut self.swamp_iter {
+            QueryPeerIter::Closest(iter) => iter.on_success(peer, swamp.into_iter().map(|p| p.peer_id)),
+            QueryPeerIter::Fixed(iter) => iter.on_success(peer),
         };
-        if updated {
+
+        let updated_weighted = match &mut self.weighted_iter {
+            QueryPeerIter::Closest(iter) => iter.on_success(peer, weighted.into_iter().map(|p| p.peer_id)),
+            QueryPeerIter::Fixed(iter) => iter.on_success(peer),
+        };
+
+        if updated_swamp || updated_weighted {
             self.stats.success += 1;
         }
     }
 
     /// Checks whether the query is currently waiting for a result from `peer`.
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
-        match &self.peer_iter {
+        let weighted_waiting = match &self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
             QueryPeerIter::Fixed(iter) => iter.is_waiting(peer)
-        }
+        };
+
+        let swamp_waiting = match &self.swamp_iter {
+            QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
+            QueryPeerIter::Fixed(iter) => iter.is_waiting(peer)
+        };
+
+        debug_assert_ne!(weighted_waiting, swamp_waiting);
+
+        weighted_waiting || swamp_waiting
     }
 
     /// Advances the state of the underlying peer iterator.
     fn next(&mut self, now: Instant) -> PeersIterState {
-        let state = match &mut self.peer_iter {
+        use PeersIterState::*;
+
+        // First query weighted iter
+        let weighted_state = match &mut self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
             QueryPeerIter::Fixed(iter) => iter.next()
         };
 
-        if let PeersIterState::Waiting(Some(_)) = state {
+        // If there's a new weighted peer to send rpc to, return it
+        if let Waiting(Some(_)) = weighted_state {
             self.stats.requests += 1;
+            return weighted_state;
         }
 
-        state
+        // If there was no new weighted peer, check swamp
+        let swamp_state = match &mut self.swamp_iter {
+            QueryPeerIter::Closest(iter) => iter.next(now),
+            QueryPeerIter::Fixed(iter) => iter.next()
+        };
+
+        // If there's a new swamp peer to send rpc to, return it
+        if let Waiting(Some(_)) = swamp_state {
+            self.stats.requests += 1;
+            return swamp_state;
+        }
+
+        // Return remaining state: weighted has higher priority
+        match (weighted_state, swamp_state) {
+            // If weighted finished, return swamp state
+            (Finished, swamp) => swamp,
+            // Otherwise, return weighted state first
+            (weighted, _) => weighted
+        }
     }
 
     /// Finishes the query prematurely.
@@ -313,10 +382,15 @@ impl<TInner> Query<TInner> {
     /// A finished query immediately stops yielding new peers to contact and will be
     /// reported by [`QueryPool::poll`] via [`QueryPoolState::Finished`].
     pub fn finish(&mut self) {
-        match &mut self.peer_iter {
+        match &mut self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
             QueryPeerIter::Fixed(iter) => iter.finish()
-        }
+        };
+
+        match &mut self.swamp_iter {
+            QueryPeerIter::Closest(iter) => iter.finish(),
+            QueryPeerIter::Fixed(iter) => iter.finish()
+        };
     }
 
     /// Checks whether the query has finished.
@@ -324,18 +398,32 @@ impl<TInner> Query<TInner> {
     /// A finished query is eventually reported by `QueryPool::next()` and
     /// removed from the pool.
     pub fn is_finished(&self) -> bool {
-        match &self.peer_iter {
+        let weighted_finished = match &self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.is_finished(),
             QueryPeerIter::Fixed(iter) => iter.is_finished()
-        }
+        };
+
+        let swamp_finished = match &self.swamp_iter {
+            QueryPeerIter::Closest(iter) => iter.is_finished(),
+            QueryPeerIter::Fixed(iter) => iter.is_finished()
+        };
+
+        weighted_finished && swamp_finished
     }
 
     /// Consumes the query, producing the final `QueryResult`.
     pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
-        let peers = match self.peer_iter {
+        let weighted = match self.weighted_iter {
             QueryPeerIter::Closest(iter) => Either::Left(iter.into_result()),
             QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
         };
+
+        let swamp = match self.swamp_iter {
+            QueryPeerIter::Closest(iter) => Either::Left(iter.into_result()),
+            QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
+        };
+
+        let peers = weighted.chain(swamp);
         QueryResult { peers, inner: self.inner, stats: self.stats }
     }
 }

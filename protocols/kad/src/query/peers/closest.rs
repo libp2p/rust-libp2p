@@ -117,7 +117,8 @@ impl ClosestPeersIter {
                     let log = vec![(Instant::now(), state.clone())];
                     (distance, Peer { key, state, log })
                 })
-                .take(K_VALUE.into()));
+                .take(K_VALUE.into())
+        );
 
         // The iterator initially makes progress by iterating towards the target.
         let state = State::Iterating { no_progress : 0 };
@@ -150,7 +151,7 @@ impl ClosestPeersIter {
     /// calling this function has no effect and `false` is returned.
     pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = Key<PeerId>>
     {
         if let State::Finished = self.state {
             return false
@@ -161,7 +162,10 @@ impl ClosestPeersIter {
 
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
-            Entry::Vacant(..) => return false,
+            Entry::Vacant(..) => {
+                log::warn!("peer {} not found in closest_peers, ignoring result", peer);
+                return false
+            },
             Entry::Occupied(mut e) => match e.get().state {
                 PeerState::Waiting(..) => {
                     debug_assert!(self.num_waiting > 0);
@@ -173,7 +177,10 @@ impl ClosestPeersIter {
                 }
                 PeerState::NotContacted
                     | PeerState::Failed
-                    | PeerState::Succeeded => return false
+                    | PeerState::Succeeded => {
+                    log::warn!("peer {} is incorrect state {:?}, ignoring result", peer, e.get().state);
+                    return false
+                }
             }
         }
 
@@ -181,8 +188,7 @@ impl ClosestPeersIter {
         let mut progress = false;
 
         // Incorporate the reported closer peers into the iterator.
-        for peer in closer_peers {
-            let key = peer.into();
+        for key in closer_peers {
             let distance = self.target.distance(&key);
             let peer = Peer { key, state: PeerState::NotContacted, log: vec![(Instant::now(), PeerState::NotContacted)] };
             self.closest_peers.entry(distance).or_insert(peer);
@@ -470,6 +476,8 @@ enum State {
     /// results is increased to `num_results` in an attempt to finish the iterator.
     /// If the iterator can make progress again upon receiving the remaining
     /// results, it switches back to `Iterating`. Otherwise it will be finished.
+    ///
+    /// // TODO: is it used?
     Stalled,
 
     /// The iterator is finished.
@@ -652,8 +660,11 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0, iter.config.num_results + 1);
-                        let closer_peers = random_peers(num_closer, &mut rng);
-                        remaining.extend(closer_peers.iter().cloned().map(Key::from));
+                        let closer_peers = random_peers(num_closer, &mut rng)
+                            .into_iter()
+                            .map(|p| p.into())
+                            .collect::<Vec<_>>();
+                        remaining.extend(closer_peers.clone());
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
                         num_failures += 1;
@@ -709,7 +720,10 @@ mod tests {
             let now = Instant::now();
             let mut rng = StdRng::from_seed(seed.0);
 
-            let closer = random_peers(1, &mut rng);
+            let closer = random_peers(1, &mut rng)
+                .into_iter()
+                .map(|p| p.into())
+                .collect::<Vec<_>>();
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
@@ -731,7 +745,7 @@ mod tests {
             };
 
             // The "closer" peer must only be in the iterator once.
-            let n = iter.closest_peers.values().filter(|e| e.key.preimage() == &closer[0]).count();
+            let n = iter.closest_peers.values().filter(|e| e.key == closer[0]).count();
             assert_eq!(n, 1);
 
             true

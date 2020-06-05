@@ -72,17 +72,19 @@ mod key;
 mod sub_bucket;
 mod swamp;
 mod weighted;
+mod weighted_iter;
 
 pub use entry::*;
 pub use sub_bucket::*;
 
+use crate::kbucket::weighted_iter::WeightedIter;
 use bucket::KBucket;
+use libp2p_core::identity::ed25519;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
-use std::collections::{VecDeque};
+use log::debug;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::time::Duration;
-use libp2p_core::identity::ed25519;
-use log::debug;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -94,7 +96,7 @@ pub struct KBucketsTable<TKey, TVal> {
     /// The key identifying the local peer that owns the routing table.
     local_key: TKey,
     /// The buckets comprising the routing table.
-    buckets: Vec<KBucket<TKey, TVal>>,
+    pub(super) buckets: Vec<KBucket<TKey, TVal>>,
     /// The list of evicted entries that have been replaced with pending
     /// entries since the last call to [`KBucketsTable::take_applied_pending`].
     applied_pending: VecDeque<AppliedPending<TKey, TVal>>,
@@ -114,6 +116,9 @@ impl BucketIndex {
     /// `local_key` is the `local_key` itself, which does not belong in any
     /// bucket.
     fn new(d: &Distance) -> Option<BucketIndex> {
+        // local  = 101010101010;
+        // target = 101010101011;
+        // xor    = 000000000001;
         (NUM_BUCKETS - d.0.leading_zeros() as usize)
             .checked_sub(1)
             .map(BucketIndex)
@@ -175,7 +180,11 @@ where
     pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
         let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
         if let Some(i) = index {
-            debug!("Node {} belongs to bucket {}", bs58::encode(key.as_ref()).into_string(), i.get());
+            debug!(
+                "Node {} belongs to bucket {}",
+                bs58::encode(key.as_ref()).into_string(),
+                i.get()
+            );
             let bucket = &mut self.buckets[i.get()];
             self.applied_pending.extend(bucket.apply_pending());
             Entry::new(bucket, key)
@@ -238,15 +247,7 @@ where
         T: Clone + AsRef<KeyBytes>,
     {
         let distance = self.local_key.as_ref().distance(target);
-        ClosestIter {
-            target,
-            iter: None,
-            table: self,
-            buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, _>| -> Vec<_> {
-                b.iter().map(|(n, _)| n.key.clone()).collect()
-            },
-        }
+        WeightedIter::new(self, distance, target.as_ref()).map(|(n, _)| n.key.clone())
     }
 
     /// Returns an iterator over the nodes closest to the `target` key, ordered by
@@ -260,20 +261,10 @@ where
         TVal: Clone,
     {
         let distance = self.local_key.as_ref().distance(target);
-        ClosestIter {
-            target,
-            iter: None,
-            table: self,
-            buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<_, TVal>| -> Vec<_> {
-                b.iter()
-                    .map(|(n, status)| EntryView {
-                        node: n.clone(),
-                        status,
-                    })
-                    .collect()
-            },
-        }
+        WeightedIter::new(self, distance, target.as_ref()).map(|(n, status)| EntryView {
+            node: n.clone(),
+            status,
+        })
     }
 
     /// Counts the number of nodes between the local node and the node
@@ -331,7 +322,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
 /// An iterator over the bucket indices, in the order determined by the `Distance` of
 /// a target from the `local_key`, such that the entries in the buckets are incrementally
 /// further away from the target, starting with the bucket covering the target.
-struct ClosestBucketsIter {
+pub(super) struct ClosestBucketsIter {
     /// The distance to the `local_key`.
     distance: Distance,
     /// The current state of the iterator.
@@ -339,11 +330,12 @@ struct ClosestBucketsIter {
 }
 
 /// Operating states of a `ClosestBucketsIter`.
+#[derive(Debug)]
 enum ClosestBucketsIterState {
     /// The starting state of the iterator yields the first bucket index and
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
-    /// The iterator "zooms in" to to yield the next bucket cotaining nodes that
+    /// The iterator "zooms in" to to yield the next bucket containing nodes that
     /// are incrementally closer to the local node but further from the `target`.
     /// These buckets are identified by a `1` in the corresponding bit position
     /// of the distance bit string. When bucket `0` is reached, the iterator
@@ -360,17 +352,20 @@ enum ClosestBucketsIterState {
 }
 
 impl ClosestBucketsIter {
-    fn new(distance: Distance) -> Self {
+    pub(super) fn new(distance: Distance) -> Self {
         let state = match BucketIndex::new(&distance) {
             Some(i) => ClosestBucketsIterState::Start(i),
             None => ClosestBucketsIterState::Start(BucketIndex(0)),
         };
+        // println!("ClosestBucketsIter new: distance {} {}, state {:?}", Self::u256_binary(&distance.0, 256), distance.0.leading_zeros(), state);
         Self { distance, state }
     }
 
-    fn next_in(&self, i: BucketIndex) -> Option<BucketIndex> {
-        (0..i.get()).rev().find_map(|i| {
-            if self.distance.0.bit(i) {
+    fn next_in(&self, idx: BucketIndex) -> Option<BucketIndex> {
+        (0..idx.get()).rev().find_map(|i| {
+            let bit = self.distance.0.bit(i);
+            if bit {
+                // println!("next_in  {} [{}th = {}] bucket_idx: {:?}", Self::u256_binary(&self.distance.0, i), i, (bit as usize), idx);
                 Some(BucketIndex(i))
             } else {
                 None
@@ -378,14 +373,34 @@ impl ClosestBucketsIter {
         })
     }
 
-    fn next_out(&self, i: BucketIndex) -> Option<BucketIndex> {
-        (i.get() + 1..NUM_BUCKETS).find_map(|i| {
-            if !self.distance.0.bit(i) {
+    fn next_out(&self, idx: BucketIndex) -> Option<BucketIndex> {
+        (idx.get() + 1..NUM_BUCKETS).find_map(|i| {
+            let bit = self.distance.0.bit(i);
+            if !bit {
+                // println!("next_out {} [{}th = !{}] bucket_idx: {:?}", Self::u256_binary(&self.distance.0, i), i, (bit as usize), idx);
                 Some(BucketIndex(i))
             } else {
                 None
             }
         })
+    }
+
+    fn u256_binary(u: &U256, highlight: usize) -> String {
+        let mut arr: [u8; 256] = [0; 256];
+        for i in 0..256 {
+            arr[i] = u.bit(i) as u8;
+        }
+
+        arr.iter()
+            .enumerate()
+            .map(|(i, u)| {
+                if i == highlight {
+                    format!("-[{}]-", u)
+                } else {
+                    u.to_string()
+                }
+            })
+            .collect()
     }
 }
 
@@ -395,57 +410,29 @@ impl Iterator for ClosestBucketsIter {
     fn next(&mut self) -> Option<Self::Item> {
         match self.state {
             ClosestBucketsIterState::Start(i) => {
-                debug!(
-                    "ClosestBucketsIter: distance = {}; Start({}) -> ZoomIn({})",
-                    BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, i.0, i.0
-                );
                 self.state = ClosestBucketsIterState::ZoomIn(i);
                 Some(i)
             }
             ClosestBucketsIterState::ZoomIn(i) => {
-                let old_i = i.0;
                 if let Some(i) = self.next_in(i) {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomIn({})",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, old_i, i.0
-                    );
                     self.state = ClosestBucketsIterState::ZoomIn(i);
                     Some(i)
                 } else {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomOut(0)",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, i.0
-                    );
                     let i = BucketIndex(0);
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 }
             }
             ClosestBucketsIterState::ZoomOut(i) => {
-                let old_i = i.0;
                 if let Some(i) = self.next_out(i) {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomOut({}) -> ZoomOut({})",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, old_i, i.0
-                    );
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 } else {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomOut({}) -> Done",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, i.0
-                    );
                     self.state = ClosestBucketsIterState::Done;
                     None
                 }
             }
-            ClosestBucketsIterState::Done => {
-                debug!(
-                    "ClosestBucketsIter: distance = {}; Done",
-                    BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0
-                );
-                None
-            },
+            ClosestBucketsIterState::Done => None,
         }
     }
 }
@@ -470,8 +457,8 @@ where
                             bs58::encode(&self.target.as_ref()).into_string(),
                             bs58::encode(k.as_ref()).into_string()
                         );
-                        return Some(k)
-                    },
+                        return Some(k);
+                    }
                     None => self.iter = None,
                 },
                 None => {
@@ -482,13 +469,14 @@ where
                         v.sort_by(|a, b| {
                             Ord::cmp(
                                 &self.target.as_ref().distance(a.as_ref()),
-                                &self.target.as_ref().distance(b.as_ref())
+                                &self.target.as_ref().distance(b.as_ref()),
                             )
                         });
                         debug!(
                             "ClosestIter: target = {}; next bucket {} with {} nodes",
                             bs58::encode(&self.target.as_ref()).into_string(),
-                            i.0, v.len()
+                            i.0,
+                            v.len()
                         );
                         self.iter = Some(v.into_iter());
                     } else {
@@ -544,10 +532,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libp2p_core::identity;
     use libp2p_core::PeerId;
     use quickcheck::*;
     use rand::Rng;
-    use libp2p_core::identity;
     use std::time::Instant;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
@@ -565,14 +553,18 @@ mod tests {
                 let ix = BucketIndex(i);
                 let num = g.gen_range(0, usize::min(K_VALUE.get(), num_total) + 1);
                 num_total -= num;
-                for _ in 0 .. num {
+                for _ in 0..num {
                     let distance = ix.rand_distance(g);
                     let key = local_key.for_distance(distance);
-                    let node = Node { key: key.clone(), value: (), weight: 0 }; // TODO: arbitrary weight
+                    let node = Node {
+                        key: key.clone(),
+                        value: (),
+                        weight: 0,
+                    }; // TODO: arbitrary weight
                     let status = NodeStatus::arbitrary(g);
                     match b.insert(node, status) {
                         InsertResult::Inserted => {}
-                        _ => panic!()
+                        _ => panic!(),
                     }
                 }
             }
@@ -606,7 +598,7 @@ mod tests {
         if let Entry::Absent(entry) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected, other_weight) {
                 InsertResult::Inserted => (),
-                _ => panic!()
+                _ => panic!(),
             }
         } else {
             panic!()
@@ -622,7 +614,8 @@ mod tests {
         let keypair = ed25519::Keypair::generate();
         let public_key = identity::PublicKey::Ed25519(keypair.public());
         let local_key = Key::from(PeerId::from(public_key));
-        let mut table = KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
+        let mut table =
+            KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
         match table.entry(&local_key) {
             Entry::SelfEntry => (),
             _ => panic!(),
@@ -637,10 +630,13 @@ mod tests {
         let mut table = KBucketsTable::<_, ()>::new(keypair, local_key, Duration::from_secs(5));
         let mut count = 0;
         loop {
-            if count == 100 { break; }
+            if count == 100 {
+                break;
+            }
             let key = Key::from(PeerId::random());
             if let Entry::Absent(e) = table.entry(&key) {
-                match e.insert((), NodeStatus::Connected, 0) { // TODO: random weight
+                match e.insert((), NodeStatus::Connected, 0) {
+                    // TODO: random weight
                     InsertResult::Inserted => count += 1,
                     _ => continue,
                 }
@@ -649,12 +645,13 @@ mod tests {
             }
         }
 
-        let mut expected_keys: Vec<_> = table.buckets
+        let mut expected_keys: Vec<_> = table
+            .buckets
             .iter()
-            .flat_map(|t| t.iter().map(|(n,_)| n.key.clone()))
+            .flat_map(|t| t.iter().map(|(n, _)| n.key.clone()))
             .collect();
 
-        for _ in 0 .. 10 {
+        for _ in 0..10 {
             let target_key = Key::from(PeerId::random());
             let keys = table.closest_keys(&target_key).collect::<Vec<_>>();
             // The list of keys is expected to match the result of a full-table scan.
@@ -668,33 +665,48 @@ mod tests {
         let keypair = ed25519::Keypair::generate();
         let public_key = identity::PublicKey::Ed25519(keypair.public());
         let local_key = Key::from(PeerId::from(public_key));
-        let mut table = KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_millis(1));
+        let mut table =
+            KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_millis(1));
 
         let expected_applied;
         let full_bucket_index;
         loop {
             let key = Key::from(PeerId::random()); // generate random peer_id
-            if let Entry::Absent(e) = table.entry(&key) { // check it's not yet in any bucket
+            if let Entry::Absent(e) = table.entry(&key) {
+                // check it's not yet in any bucket
                 // TODO: random weight
-                match e.insert((), NodeStatus::Disconnected, 0) { // insert it into some bucket (node Disconnected status)
-                    InsertResult::Full => { // keep inserting until some random bucket is full (see continue below)
-                        if let Entry::Absent(e) = table.entry(&key) { // insertion didn't succeeded => no such key in a table
+                match e.insert((), NodeStatus::Disconnected, 0) {
+                    // insert it into some bucket (node Disconnected status)
+                    InsertResult::Full => {
+                        // keep inserting until some random bucket is full (see continue below)
+                        if let Entry::Absent(e) = table.entry(&key) {
+                            // insertion didn't succeeded => no such key in a table
                             // TODO: random weight
-                            match e.insert((), NodeStatus::Connected, 0) { // insert it but now with Connected status
-                                InsertResult::Pending { disconnected } => { // insertion of a connected node into full bucket should produce Pending
+                            match e.insert((), NodeStatus::Connected, 0) {
+                                // insert it but now with Connected status
+                                InsertResult::Pending { disconnected } => {
+                                    // insertion of a connected node into full bucket should produce Pending
                                     expected_applied = AppliedPending {
-                                        inserted: Node { key: key.clone(), value: (), weight: 0 }, // TODO: random weight
-                                        evicted: Some(Node { key: disconnected, value: (), weight: 0 }) // TODO: random weight
+                                        inserted: Node {
+                                            key: key.clone(),
+                                            value: (),
+                                            weight: 0,
+                                        }, // TODO: random weight
+                                        evicted: Some(Node {
+                                            key: disconnected,
+                                            value: (),
+                                            weight: 0,
+                                        }), // TODO: random weight
                                     };
                                     full_bucket_index = BucketIndex::new(&key.distance(&local_key));
-                                    break
-                                },
-                                _ => panic!()
+                                    break;
+                                }
+                                _ => panic!(),
                             }
                         } else {
                             panic!()
                         }
-                    },
+                    }
                     _ => continue,
                 }
             } else {
@@ -705,17 +717,20 @@ mod tests {
         // Expire the timeout for the pending entry on the full bucket.`
         let full_bucket = &mut table.buckets[full_bucket_index.unwrap().get()];
         let elapsed = Instant::now() - Duration::from_secs(1);
-        full_bucket.pending_mut(&expected_applied.inserted.key).unwrap().set_ready_at(elapsed);
+        full_bucket
+            .pending_mut(&expected_applied.inserted.key)
+            .unwrap()
+            .set_ready_at(elapsed);
 
         // Calling table.entry() has a side-effect of applying pending nodes
         match table.entry(&expected_applied.inserted.key) {
             Entry::Present(_, NodeStatus::Connected) => {}
-            x => panic!("Unexpected entry: {:?}", x)
+            x => panic!("Unexpected entry: {:?}", x),
         }
 
         match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
             Entry::Absent(_) => {}
-            x => panic!("Unexpected entry: {:?}", x)
+            x => panic!("Unexpected entry: {:?}", x),
         }
 
         assert_eq!(Some(expected_applied), table.take_applied_pending());
@@ -743,6 +758,8 @@ mod tests {
             })
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_,_) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _) -> _)
     }
 }

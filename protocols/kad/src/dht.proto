@@ -28,6 +28,21 @@ message Record {
     uint32 ttl = 777;
 };
 
+message Certificate {
+	repeated Trust chain = 1;
+}
+
+message Trust {
+	// For whom this certificate is issued
+	bytes issuedFor = 1;
+	// Expiration date of a trust
+	uint64 expires_at_secs = 2;
+	// Signature of a previous trust in a chain
+	bytes signature = 3;
+	// Signature is self-signed if it is a root trust
+	uint64 issued_at_secs = 4;
+}
+
 message Message {
 	enum MessageType {
 		PUT_VALUE = 0;
@@ -63,7 +78,11 @@ message Message {
 		// used to signal the sender's connection capabilities to the peer
 		ConnectionType connection = 3;
 
+		// public key of the peer
 		bytes publicKey = 4;
+
+		// known certificates of the peer
+		repeated Certificate certificates = 5;
 	}
 
 	// defines what type of message it is.

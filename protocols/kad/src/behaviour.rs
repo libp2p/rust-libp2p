@@ -1,5 +1,4 @@
 // Copyright 2018 Parity Technologies (UK) Ltd.
-#![allow(clippy::needless_lifetimes)]
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -21,15 +20,17 @@
 
 //! Implementation of the `Kademlia` network behaviour.
 
+#![allow(clippy::needless_lifetimes)]
+
 mod test;
 
 use crate::K_VALUE;
 use crate::addresses::{Addresses, Remove};
 use crate::handler::{KademliaHandler, KademliaHandlerConfig, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
-use crate::kbucket::{self, KBucketsTable, NodeStatus, KBucketRef};
+use crate::kbucket::{self, KBucketsTable, NodeStatus, KBucketRef, KeyBytes};
 use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
-use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
+use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState, WeightedPeer};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
@@ -52,7 +53,7 @@ use std::task::{Context, Poll};
 use std::vec;
 use wasm_timer::Instant;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
-use trust_graph::TrustGraph;
+use trust_graph::{TrustGraph, Certificate};
 use derivative::Derivative;
 
 pub use crate::query::QueryStats;
@@ -412,7 +413,7 @@ where
     {
         let info = QueryInfo::GetClosestPeers { key: key.borrow().to_vec() };
         let target = kbucket::Key::new(key);
-        let peers = self.kbuckets.closest_keys(&target);
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
     }
@@ -436,7 +437,7 @@ where
         let done = records.len() >= quorum.get();
         let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord { key: key.clone(), records, quorum, cache_at: None };
-        let peers = self.kbuckets.closest_keys(&target);
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let inner = QueryInner::new(info);
         let id = self.queries.add_iter_closest(target.clone(), peers, inner); // (*)
 
@@ -472,7 +473,8 @@ where
             self.record_ttl.map(|ttl| Instant::now() + ttl));
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
-        let peers = self.kbuckets.closest_keys(&target);
+
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let context = PutRecordContext::Publish;
         let info = QueryInfo::PutRecord {
             context,
@@ -531,7 +533,7 @@ where
             peer: local_key.preimage().clone(),
             remaining: None
         };
-        let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
+        let peers = Self::closest_keys(&mut self.kbuckets, &local_key).collect::<Vec<_>>();
         if peers.is_empty() {
             Err(NoKnownPeers())
         } else {
@@ -574,13 +576,15 @@ where
             bs58::encode(target.as_ref()).into_string(), // sha256
         );
         let provider_key = self.kbuckets.local_public_key();
-        let peers = self.kbuckets.closest_keys(&target);
+        let certificates = self.trust.get_all_certs(&provider_key, &[]);
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let context = AddProviderContext::Publish;
         let info = QueryInfo::AddProvider {
             context,
             key,
             phase: AddProviderPhase::GetClosestPeers,
-            provider_key
+            provider_key,
+            certificates
         };
         let inner = QueryInner::new(info);
         let id = self.queries.add_iter_closest(target.clone(), peers, inner);
@@ -617,7 +621,7 @@ where
             bs58::encode(target.preimage().as_ref()).into_string(), // peer id
             bs58::encode(target.as_ref()).into_string(), // sha256
         );
-        let peers = self.kbuckets.closest_keys(&target);
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
     }
@@ -627,6 +631,16 @@ where
     where
         I: Iterator<Item = &'a KadPeer> + Clone
     {
+        // Add certificates to trust graph
+        let cur_time = trust_graph::current_time();
+        for peer in peers.clone() {
+            for cert in peer.certificates.iter() {
+                self.trust.add(cert, cur_time).unwrap_or_else(|err| {
+                    log::warn!("Unable to add certificate for peer {}: {}", peer.node_id, err);
+                })
+            }
+        }
+
         let local_id = self.kbuckets.local_key().preimage().clone();
         let others_iter = peers.filter(|p| p.node_id != local_id);
 
@@ -641,6 +655,8 @@ where
             ));
         }
 
+        let trust = &self.trust;
+
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
@@ -648,7 +664,10 @@ where
                             peer, source, query_id);
                 query.inner.contacts.insert(peer.node_id.clone(), peer.clone().into());
             }
-            query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
+            query.on_success(source, others_iter.map(|kp| WeightedPeer {
+                peer_id: kp.node_id.clone().into(),
+                weight: trust.weight(&kp.public_key).unwrap_or_default()
+            }))
         }
     }
 
@@ -659,23 +678,26 @@ where
         if target == self.kbuckets.local_key() {
             Vec::new()
         } else {
-            self.kbuckets
+            let mut peers: Vec<_> = self.kbuckets
                 .closest(target)
                 .filter(|e| e.node.key.preimage() != source)
                 .take(self.queries.config().replication_factor.get())
                 .map(KadPeer::from)
-                .collect()
+                .collect();
+            peers.iter_mut().for_each(|mut peer|
+                peer.certificates = self.trust.get_all_certs(&peer.public_key, &[])
+            );
+            peers
         }
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
-        self.store.providers(key)
+        let mut peers = self.store.providers(key)
             .into_iter()
             .filter_map(move |p| {
-
-                let entry = if &p.provider != source {
+                let kad_peer = if &p.provider != source {
                     let key = kbucket::Key::new(p.provider.clone());
                     kbuckets.entry(&key).view().map(|e| KadPeer::from(e))
                 } else {
@@ -686,25 +708,33 @@ where
                     bs58::encode(key).into_string(),
                     p.provider,
                     source,
-                    entry.is_some()
+                    kad_peer.is_some()
                 );
-                entry
+                kad_peer
             })
             .take(self.queries.config().replication_factor.get())
-            .collect()
+            .collect::<Vec<_>>();
+
+        peers.iter_mut().for_each(|peer|
+            peer.certificates = self.trust.get_all_certs(&peer.public_key, &[])
+        );
+
+        peers
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
     fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
         let provider_key = self.kbuckets.local_public_key();
+        let certificates = self.trust.get_all_certs(&provider_key, &[]);
         let info = QueryInfo::AddProvider {
             context,
             key: key.clone(),
             phase: AddProviderPhase::GetClosestPeers,
-            provider_key
+            provider_key,
+            certificates
         };
         let target = kbucket::Key::new(key);
-        let peers = self.kbuckets.closest_keys(&target);
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner);
     }
@@ -713,7 +743,7 @@ where
     fn start_put_record(&mut self, record: Record, quorum: Quorum, context: PutRecordContext) {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
-        let peers = self.kbuckets.closest_keys(&target);
+        let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let info = QueryInfo::PutRecord {
             record, quorum, context, phase: PutRecordPhase::GetClosestPeers
         };
@@ -874,7 +904,7 @@ where
                         peer: target.clone().into_preimage(),
                         remaining: Some(remaining)
                     };
-                    let peers = self.kbuckets.closest_keys(&target);
+                    let peers = Self::closest_keys(&mut self.kbuckets, &target);
                     let inner = QueryInner::new(info);
                     self.queries.continue_iter_closest(query_id, target.clone(), peers, inner);
                 }
@@ -919,6 +949,7 @@ where
                 let provider_id = params.local_peer_id().clone();
                 let external_addresses = params.external_addresses().collect();
                 let provider_key = self.kbuckets.local_public_key();
+                let certificates = self.trust.get_all_certs(&provider_key, &[]);
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
                     key,
@@ -927,9 +958,22 @@ where
                         external_addresses,
                         get_closest_peers_stats: result.stats
                     },
-                    provider_key
+                    provider_key,
+                    certificates
                 });
-                self.queries.continue_fixed(query_id, result.peers, inner);
+                let contacts = &result.inner.contacts;
+                let trust = &self.trust;
+                let peers = result.peers.into_iter().map(|peer_id| {
+                    let weight = contacts
+                        .get(&peer_id)
+                        .and_then(|c| trust.weight(&c.public_key))
+                        .unwrap_or_default();
+                    WeightedPeer {
+                        peer_id: peer_id.into(),
+                        weight,
+                    }
+                });
+                self.queries.continue_fixed(query_id, peers, inner);
                 None
             }
 
@@ -976,7 +1020,16 @@ where
                             }
                         };
                         let inner = QueryInner::new(info);
-                        self.queries.add_fixed(iter::once(cache_key.into_preimage()), inner);
+                        let peer_id = cache_key.preimage();
+                        let trust = &self.trust;
+                        let weight =
+                            result.inner.contacts.get(peer_id)
+                                .and_then(|c| trust.weight(&c.public_key)).unwrap_or_default();
+                        let peer = WeightedPeer {
+                            weight,
+                            peer_id: cache_key
+                        };
+                        self.queries.add_fixed(iter::once(peer), inner);
                     }
                     Ok(GetRecordOk { records })
                 } else if records.is_empty() {
@@ -1010,7 +1063,20 @@ where
                     }
                 };
                 let inner = QueryInner::new(info);
-                self.queries.continue_fixed(query_id, result.peers, inner);
+                let contacts = &result.inner.contacts;
+                let trust = &self.trust;
+                let peers = result.peers.into_iter().map(|peer_id| {
+                    let weight =
+                        contacts.get(&peer_id).and_then(|c|
+                            trust.weight(&c.public_key)
+                        ).unwrap_or_default();
+
+                    WeightedPeer {
+                        peer_id: peer_id.into(),
+                        weight,
+                    }
+                });
+                self.queries.continue_fixed(query_id, peers, inner);
                 None
             }
 
@@ -1069,7 +1135,7 @@ where
                             peer: target.clone().into_preimage(),
                             remaining: Some(remaining)
                         };
-                        let peers = self.kbuckets.closest_keys(&target);
+                        let peers = Self::closest_keys(&mut self.kbuckets, &target);
                         let inner = QueryInner::new(info);
                         self.queries.continue_iter_closest(query_id, target.clone(), peers, inner);
                     }
@@ -1282,8 +1348,28 @@ where
         })
     }
 
+    fn closest_keys<'a, T>(table: &'a mut KBucketsTable<kbucket::Key<PeerId>, Contact>, target: &'a T)
+        -> impl Iterator<Item = WeightedPeer> + 'a
+        where
+            T: Clone + AsRef<KeyBytes>,
+    {
+        table.closest(target).map(|e| WeightedPeer {
+            peer_id: e.node.key,
+            // TODO: is node weight up to date?
+            weight: e.node.weight
+        })
+    }
+
     /// Processes a provider record received from a peer.
     fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
+        // Add certificates to trust graph
+        let cur_time = trust_graph::current_time();
+        for cert in provider.certificates.iter() {
+            self.trust.add(cert, cur_time).unwrap_or_else(|err| {
+                log::warn!("unable to add certificate for peer {}: {}", provider.node_id, err);
+            });
+        }
+
         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
             KademliaEvent::Discovered {
                 peer_id: provider.node_id.clone(),
@@ -2127,7 +2213,8 @@ impl From<kbucket::EntryRefView<'_, kbucket::Key<PeerId>, Contact>> for KadPeer 
             connection_ty: match e.status {
                 NodeStatus::Connected => KadConnectionType::Connected,
                 NodeStatus::Disconnected => KadConnectionType::NotConnected
-            }
+            },
+            certificates: vec![]
         }
     }
 }
@@ -2142,7 +2229,8 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Contact>> for KadPeer {
             connection_ty: match e.status {
                 NodeStatus::Connected => KadConnectionType::Connected,
                 NodeStatus::Disconnected => KadConnectionType::NotConnected
-            }
+            },
+            certificates: vec![]
         }
     }
 }
@@ -2223,7 +2311,10 @@ pub enum QueryInfo {
         phase: AddProviderPhase,
         /// The execution context of the query.
         context: AddProviderContext,
-        provider_key: PublicKey
+        /// Public key of the provider
+        provider_key: PublicKey,
+        /// Certificates known for the provider
+        certificates: Vec<Certificate>,
     },
 
     /// A (repeated) query initiated by [`Kademlia::put_record`].
@@ -2270,7 +2361,7 @@ impl QueryInfo {
                 key: key.clone(),
                 user_data: query_id,
             },
-            QueryInfo::AddProvider { key, phase, provider_key, .. } => match phase {
+            QueryInfo::AddProvider { key, phase, provider_key, certificates, .. } => match phase {
                 AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
                     key: key.to_vec(),
                     user_data: query_id,
@@ -2281,12 +2372,13 @@ impl QueryInfo {
                     ..
                 } => {
                     KademliaHandlerIn::AddProvider {
-                key: key.clone(),
-                provider: crate::protocol::KadPeer {
-                    public_key: provider_key.clone(),
+                        key: key.clone(),
+                        provider: crate::protocol::KadPeer {
+                            public_key: provider_key.clone(),
                             node_id: provider_id.clone(),
                             multiaddrs: external_addresses.clone(),
                             connection_ty: crate::protocol::KadConnectionType::Connected,
+                            certificates: certificates.clone(),
                         }
                     }
                 }

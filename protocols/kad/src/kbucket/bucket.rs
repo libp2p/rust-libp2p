@@ -180,7 +180,17 @@ where
 
     /// Returns an iterator over the nodes in the bucket, together with their status.
     pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
-        Iterator::chain(self.weighted.iter(), self.swamp.iter())
+        Iterator::chain(self.weighted(), self.swamp())
+    }
+
+    /// Returns an iterator over the weighted nodes in the bucket, together with their status.
+    pub fn weighted(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
+        self.weighted.iter()
+    }
+
+    /// Returns an iterator over the swamp nodes in the bucket, together with their status.
+    pub fn swamp(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
+        self.swamp.iter()
     }
 
     /// Inserts the pending node into the bucket, if its timeout has elapsed,
