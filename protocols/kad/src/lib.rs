@@ -29,6 +29,7 @@ pub mod kbucket;
 pub mod protocol;
 pub mod record;
 
+mod metrics;
 mod addresses;
 mod behaviour;
 mod contact;

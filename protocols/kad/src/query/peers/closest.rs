@@ -117,8 +117,7 @@ impl ClosestPeersIter {
                     let log = vec![(Instant::now(), state.clone())];
                     (distance, Peer { key, state, log })
                 })
-                .take(K_VALUE.into())
-        );
+                .take(K_VALUE.into()));
 
         // The iterator initially makes progress by iterating towards the target.
         let state = State::Iterating { no_progress : 0 };
@@ -163,7 +162,7 @@ impl ClosestPeersIter {
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
             Entry::Vacant(..) => {
-                log::warn!("peer {} not found in closest_peers, ignoring result", peer);
+                log::debug!("peer {} not found in closest_peers, ignoring result", peer);
                 return false
             },
             Entry::Occupied(mut e) => match e.get().state {
@@ -178,7 +177,7 @@ impl ClosestPeersIter {
                 PeerState::NotContacted
                     | PeerState::Failed
                     | PeerState::Succeeded => {
-                    log::warn!("peer {} is incorrect state {:?}, ignoring result", peer, e.get().state);
+                    log::debug!("peer {} is incorrect state {:?}, ignoring result", peer, e.get().state);
                     return false
                 }
             }

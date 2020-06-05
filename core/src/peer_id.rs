@@ -167,6 +167,11 @@ impl PeerId {
             _ => None
         }
     }
+
+    /// Returns true if this peer id is inlining (usually means it stores public key)
+    pub fn is_inlining(&self) -> bool {
+        matches!(self.multihash.algorithm(), Code::Identity)
+    }
 }
 
 impl hash::Hash for PeerId {

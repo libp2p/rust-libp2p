@@ -32,6 +32,7 @@ bs58 = "0.3.0"
 derivative = "2.0.2"
 
 trust-graph = { git = "https://github.com/fluencelabs/fluence", branch = "weighted_routing" }
+prometheus = "0.9.0"
 
 [dev-dependencies]
 libp2p-secio = { version = "0.19.0", path = "../secio" }

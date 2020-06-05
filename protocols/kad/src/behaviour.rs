@@ -55,6 +55,7 @@ use wasm_timer::Instant;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
 use trust_graph::{TrustGraph, Certificate};
 use derivative::Derivative;
+use crate::metrics::Metrics;
 
 pub use crate::query::QueryStats;
 
@@ -98,6 +99,11 @@ pub struct Kademlia<TStore> {
     store: TStore,
 
     pub trust: TrustGraph,
+    pub metrics: Metrics,
+
+    // TODO: maintenance job (periodic bootstrap) (first time: after a minute or less)
+    // TODO: "small" bootstrap function: lookup yourself
+    // TODO: how substrate uses bootstrap? is there a periodic maintenance job?
 }
 
 /// The configuration for the `Kademlia` behaviour.
@@ -296,7 +302,13 @@ where
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
             trust,
+            metrics: Metrics::disabled(),
         }
+    }
+
+    /// Enables metrics collection
+    pub fn enable_metrics(&mut self, registry: &prometheus::Registry) {
+        self.metrics = Metrics::enabled(registry, self.kbuckets.local_key().preimage());
     }
 
     /// Gets an iterator over immutable references to all running queries.
@@ -428,7 +440,8 @@ where
 
         if let Some(record) = self.store.get(key) {
             if record.is_expired(Instant::now()) {
-                self.store.remove(key)
+                self.store.remove(key);
+                self.metrics.record_removed();
             } else {
                 records.push(record.into_owned());
             }
@@ -498,7 +511,8 @@ where
     pub fn remove_record(&mut self, key: &record::Key) {
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-                self.store.remove(key)
+                self.store.remove(key);
+                self.metrics.record_removed();
             }
         }
     }
@@ -624,6 +638,17 @@ where
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
+    }
+
+    /// Forces replication of a single record
+    pub fn replicate_record(&mut self, key: record::Key) {
+        if let Some(rec) = self.store.get(&key).map(|r| r.into_owned()) {
+            self.start_put_record(rec, Quorum::All, PutRecordContext::Replicate);
+            if let Some(job) = self.put_record_job.as_mut() {
+                // Skip replication for this key next time
+                job.skip(key)
+            }
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -1538,6 +1563,7 @@ where
         }
 
         self.connected_peers.insert(peer.clone());
+        self.metrics.node_connected();
     }
 
     fn inject_addr_reach_failure(
@@ -1602,6 +1628,7 @@ where
         connection: ConnectionId,
         event: KademliaHandlerEvent<QueryId>
     ) {
+        self.metrics.received(&event);
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 self.print_bucket_table();
@@ -1685,6 +1712,7 @@ where
                     Some(record) => {
                         if record.is_expired(Instant::now()) {
                             self.store.remove(&key);
+                            self.metrics.record_removed();
                             None
                         } else {
                             Some(record.into_owned())
@@ -1812,6 +1840,7 @@ where
         loop {
             // Drain queued events first.
             if let Some(event) = self.queued_events.pop_front() {
+                self.metrics.polled_event(&event);
                 return Poll::Ready(event);
             }
 
@@ -1824,7 +1853,9 @@ where
                     addresses: value.into(),
                     old_peer: entry.evicted.map(|n| n.key.into_preimage())
                 };
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
+                let event = NetworkBehaviourAction::GenerateEvent(event);
+                self.metrics.polled_event(&event);
+                return Poll::Ready(event);
             }
 
             // Look for a finished query.
@@ -1833,13 +1864,17 @@ where
                     QueryPoolState::Finished(mut q) => {
                         q.finish();
                         if let Some(event) = self.query_finished(q, parameters) {
-                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
+                            let event = NetworkBehaviourAction::GenerateEvent(event);
+                            self.metrics.polled_event(&event);
+                            return Poll::Ready(event);
                         }
                     }
                     QueryPoolState::Timeout(mut q) => {
                         q.finish();
                         if let Some(event) = self.query_timeout(q) {
-                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event))
+                            let event = NetworkBehaviourAction::GenerateEvent(event);
+                            self.metrics.polled_event(&event);
+                            return Poll::Ready(event);
                         }
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
