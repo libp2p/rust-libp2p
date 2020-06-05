@@ -157,6 +157,12 @@ where
     fn poll(&mut self, cx: &mut Context)
         -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>>
     {
+        // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
+        // that situation.
+        if self.handlers.is_empty() {
+            return Poll::Pending;
+        }
+
         // Not always polling handlers in the same order should give anyone the chance to make progress.
         let pos = rand::thread_rng().gen_range(0, self.handlers.len());
 
