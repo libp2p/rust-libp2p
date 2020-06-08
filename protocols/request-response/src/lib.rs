@@ -55,7 +55,8 @@
 //! Note that `RequestResponseMessage::Response` will still be emitted,
 //! immediately after the request has been sent, since `RequestResponseCodec::read_response`
 //! will not actually read anything from the given I/O stream.
-//! [`RequestResponse::send_response`] need not be called for one-way protocols.
+//! [`RequestResponse::send_response`] need not be called for one-way protocols,
+//! i.e. the [`ResponseChannel`] may just be dropped.
 //!
 //! ## Limited Protocol Support
 //!
