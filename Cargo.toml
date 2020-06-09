@@ -23,6 +23,7 @@ default = [
     "ping",
     "plaintext",
     "pnet",
+    "quic",
     "secio",
     "secp256k1",
     "tcp-async-std",
@@ -43,6 +44,7 @@ noise = ["libp2p-noise"]
 ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
+quic = ["libp2p-quic"]
 secio = ["libp2p-secio"]
 tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
@@ -122,4 +124,4 @@ members = [
 
 [patch.crates-io]
 rustls = { git = "https://github.com/ctz/rustls" }
-quinn-proto = { git = "https://github.com/djc/quinn" }
+quinn-proto = { git = "https://github.com/djc/quinn", rev = "6e9f7e8063926f8bdab56bbc1615277ff0bdece5" }
