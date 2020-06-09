@@ -99,7 +99,7 @@ pub struct Kademlia<TStore> {
     store: TStore,
 
     pub trust: TrustGraph,
-    pub metrics: Metrics,
+    pub(super) metrics: Metrics,
 
     // TODO: maintenance job (periodic bootstrap) (first time: after a minute or less)
     // TODO: "small" bootstrap function: lookup yourself
@@ -482,6 +482,7 @@ where
     pub fn put_record(&mut self, mut record: Record, quorum: Quorum) -> Result<QueryId, store::Error> {
         record.publisher = Some(self.kbuckets.local_key().preimage().clone());
         self.store.put(record.clone())?;
+        self.metrics.store_put();
         record.expires = record.expires.or_else(||
             self.record_ttl.map(|ttl| Instant::now() + ttl));
         let quorum = quorum.eval(self.queries.config().replication_factor);
@@ -1341,7 +1342,10 @@ where
             // requirement to send back the value in the response, although this
             // is a waste of resources.
             match self.store.put(record.clone()) {
-                Ok(()) => debug!("Record stored: {:?}; {} bytes", record.key, record.value.len()),
+                Ok(()) => {
+                    self.metrics.store_put();
+                    debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
+                },
                 Err(e) => {
                     info!("Record not stored: {:?}", e);
                     self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
@@ -1417,11 +1421,14 @@ where
     }
 
     fn print_bucket_table(&mut self) {
+        let mut size = 0;
         let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
             use multiaddr::Protocol::{Ip4, Ip6, Tcp};
             let elems = bucket.iter().collect::<Vec<_>>();
             if elems.len() == 0 {
                 return None
+            } else {
+                size += elems.len();
             }
 
             let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
@@ -1474,7 +1481,9 @@ where
             Some(format!("[bcktdbg] {}\n{}\n", header, elems))
         }).collect::<String>();
 
-        if buckets.trim().is_empty() {
+        self.metrics.report_routing_table_size(size);
+
+        if size == 0 {
             log::info!("[bcktdbg] Bucket table is empty.")
         } else {
             log::info!("\n{}", buckets);

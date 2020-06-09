@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#![deny(dead_code)]
+
 use prometheus::{IntCounterVec, IntGauge, Opts, Registry};
 
 use libp2p_core::PeerId;
@@ -22,7 +24,7 @@ use libp2p_swarm::NetworkBehaviourAction;
 use crate::handler::{KademliaHandlerEvent, KademliaHandlerIn};
 use crate::{KademliaEvent, QueryId};
 
-pub enum Kind {
+pub(super) enum Kind {
     Request,
     Response,
     Error,
@@ -51,18 +53,18 @@ enum Inner {
     Enabled(InnerMetrics),
 }
 
-pub struct Metrics {
+pub(super) struct Metrics {
     inner: Inner,
 }
 
 impl Metrics {
-    pub fn disabled() -> Self {
+    pub(super) fn disabled() -> Self {
         Self {
             inner: Inner::Disabled,
         }
     }
 
-    pub fn enabled(registry: &Registry, peer_id: &PeerId) -> Self {
+    pub(super) fn enabled(registry: &Registry, peer_id: &PeerId) -> Self {
         let peer_id = bs58::encode(peer_id).into_string();
         let opts = |name: &str| -> Opts {
             let mut opts = Opts::new(name, name)
@@ -140,11 +142,11 @@ impl Metrics {
         }
     }
 
-    pub fn node_connected(&self) {
+    pub(super) fn node_connected(&self) {
         self.with_metrics(|m| m.connected_nodes.inc());
     }
 
-    pub fn received(&self, event: &KademliaHandlerEvent<QueryId>) {
+    pub(super) fn received(&self, event: &KademliaHandlerEvent<QueryId>) {
         use Kind::*;
 
         let (name, kind) = match event {
@@ -176,7 +178,7 @@ impl Metrics {
         });
     }
 
-    pub fn sent(&self, event: &KademliaHandlerIn<QueryId>) {
+    pub(super) fn sent(&self, event: &KademliaHandlerIn<QueryId>) {
         use Kind::*;
 
         let (name, kind) = match event {
@@ -208,7 +210,7 @@ impl Metrics {
         });
     }
 
-    pub fn generated_event_name(event: &KademliaEvent) -> &str {
+    pub(super) fn generated_event_name(event: &KademliaEvent) -> &str {
         match event {
             KademliaEvent::QueryResult { .. } => "query_result",
             KademliaEvent::Discovered { .. } => "discovered",
@@ -217,7 +219,7 @@ impl Metrics {
         }
     }
 
-    pub fn polled_event(
+    pub(super) fn polled_event(
         &self,
         event: &NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>,
     ) {
@@ -235,15 +237,15 @@ impl Metrics {
         self.with_metrics(|m| Self::inc_by_name(name, &m.kademlia_events));
     }
 
-    pub fn store_put(&self) {
+    pub(super) fn store_put(&self) {
         self.with_metrics(|m| m.records_stored.inc())
     }
 
-    pub fn record_removed(&self) {
+    pub(super) fn record_removed(&self) {
         self.with_metrics(|m| m.records_stored.dec())
     }
 
-    pub fn report_routing_table_size(&self, size: usize) {
+    pub(super) fn report_routing_table_size(&self, size: usize) {
         self.with_metrics(|m| m.routing_table_size.set(size as i64))
     }
 }
