@@ -220,8 +220,8 @@ pub use libp2p_quic as quic;
 pub use libp2p_secio as secio;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
-#[cfg(any(feature = "tcp-async-std", feature = "tcp-tokio-std"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-async-std", feature = "tcp-tokio-std"))))]
+#[cfg(any(feature = "tcp-async-std", feature = "tcp-tokio"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-async-std", feature = "tcp-tokio"))))]
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
@@ -269,8 +269,8 @@ pub use self::transport_ext::TransportExt;
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp-async-std", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp-async-std", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_development_transport(keypair: identity::Keypair)
     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
@@ -283,13 +283,16 @@ pub fn build_development_transport(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp-async-std", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp-async-std", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))))]
 pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     let transport = {
+        #[cfg(feature = "tcp-async-std")]
         let tcp = tcp::TcpConfig::new().nodelay(true);
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
         let transport = dns::DnsConfig::new(tcp)?;
         let trans_clone = transport.clone();
         transport.or_transport(websocket::WsConfig::new(trans_clone))
@@ -309,13 +312,16 @@ pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp-async-std", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))]
-#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "tcp-async-std", feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))))]
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux", feature = "pnet"))))]
 pub fn build_tcp_ws_pnet_secio_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     let transport = {
+        #[cfg(feature = "tcp-async-std")]
         let tcp = tcp::TcpConfig::new().nodelay(true);
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
         let transport = dns::DnsConfig::new(tcp)?;
         let trans_clone = transport.clone();
         transport.or_transport(websocket::WsConfig::new(trans_clone))

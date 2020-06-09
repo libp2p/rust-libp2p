@@ -32,3 +32,4 @@ Where to ask questions?
 - https://github.com/sigp/lighthouse
 - https://github.com/golemfactory/golem-libp2p
 - https://github.com/comit-network/comit-rs
+- https://github.com/rs-ipfs/rust-ipfs
