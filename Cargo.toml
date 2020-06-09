@@ -75,7 +75,7 @@ libp2p-wasm-ext = { version = "0.19.0", path = "transports/wasm-ext", optional =
 libp2p-yamux = { version = "0.19.0", path = "muxers/yamux", optional = true }
 libp2p-noise = { version = "0.19.0", path = "protocols/noise", optional = true }
 parking_lot = "0.10.0"
-pin-project = "0.4.6"
+pin-project = "0.4.17"
 smallvec = "1.0"
 wasm-timer = "0.2.4"
 
@@ -115,4 +115,3 @@ members = [
     "transports/websocket",
     "transports/wasm-ext"
 ]
-
