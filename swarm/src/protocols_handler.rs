@@ -137,7 +137,11 @@ pub trait ProtocolsHandler: Send + 'static {
         info: Self::OutboundOpenInfo
     );
 
-    /// Injects an event coming from the outside in the handler.
+    /// Notifies the handler about an event emitted by the `NetworkBehaviour`.
+    ///
+    /// The events are delivered in the order emitted by the `NetworkBehaviour`.
+    ///
+    /// See also [`crate::NetworkBehaviourAction::NotifyHandler`].
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.

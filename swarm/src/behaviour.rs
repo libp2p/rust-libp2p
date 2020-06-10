@@ -290,10 +290,11 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
     ///
-    /// If the `Swarm` is connected to the peer, the message is delivered to the
+    /// If the `Swarm` is connected to the peer, the event is delivered to the
     /// `ProtocolsHandler` instance identified by the peer ID and connection ID.
-    ///
-    /// If the specified connection no longer exists, the event is silently dropped.
+    /// Events emitted via `NotifyHandler` for a  connection are always received
+    /// by the `ProtocolsHandler` for that connection in the same order. If the
+    /// specified connection no longer exists, the event is silently dropped.
     ///
     /// Typically the connection ID given is the same as the one passed to
     /// [`NetworkBehaviour::inject_event`], i.e. whenever the behaviour wishes to
