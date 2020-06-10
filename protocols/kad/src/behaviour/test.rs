@@ -149,16 +149,16 @@ fn bootstrap() {
 
         let num_total = rng.gen_range(2, 20);
         // When looking for the closest node to a key, Kademlia considers
-        // K_VALUE nodes to query at initialization. If `num_groups` is larger
+        // K_VALUE nodes to query at initialization. If `num_group` is larger
         // than K_VALUE the remaining locally known nodes will not be
         // considered. Given that no other node is aware of them, they would be
-        // lost entirely. To prevent the above restrict `num_groups` to be equal
+        // lost entirely. To prevent the above restrict `num_group` to be equal
         // or smaller than K_VALUE.
         let num_group = rng.gen_range(1, (num_total % K_VALUE.get()) + 2);
 
         let mut cfg = KademliaConfig::default();
         if rng.gen() {
-            cfg.use_disjoint_path_queries();
+            cfg.disjoint_query_paths(true);
         }
 
         let mut swarms = build_connected_nodes_with_config(
@@ -444,13 +444,14 @@ fn get_record_not_found() {
 fn put_record() {
     fn prop(records: Vec<Record>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor = NonZeroUsize::new(rng.gen_range(2, (K_VALUE.get() / 2) + 1)).unwrap();
-        let num_total = replication_factor.get() * 2;
+        let replication_factor = NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
+        // At least 4 nodes, 1 under test + 3 bootnodes.
+        let num_total = usize::max(4, replication_factor.get() * 2);
 
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
         if rng.gen() {
-            config.use_disjoint_path_queries();
+            config.disjoint_query_paths(true);
         }
 
         let mut swarms = {
@@ -621,12 +622,6 @@ fn put_record() {
         )
     }
 
-    // Past failures.
-    prop(vec![], Seed([
-        28, 84, 29, 227, 26, 164, 229, 32, 162, 130, 83, 64, 58, 253, 14, 211, 3,
-        165, 16, 84, 161, 114, 216, 118, 214, 163, 213, 97, 145, 40, 218, 155,
-    ]));
-
     QuickCheck::new().tests(3).quickcheck(prop as fn(_,_) -> _)
 }
 
@@ -729,7 +724,8 @@ fn add_provider() {
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor = NonZeroUsize::new(rng.gen_range(2, (K_VALUE.get() / 2) + 1)).unwrap();
-        let num_total = replication_factor.get() * 2;
+        // At least 4 nodes, 1 under test + 3 bootnodes.
+        let num_total = usize::max(4, replication_factor.get() * 2);
 
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
@@ -936,21 +932,24 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
 
-	let key = Key::new(&multihash::Sha2_256::digest(&vec![1, 2, 3, 4]));
+    let key = Key::new(&multihash::Sha2_256::digest(&thread_rng().gen::<[u8; 32]>()));
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
     let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
 
-    // Make `trudy` and `bob` aware of their version of the record searched by
+    // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.
-    trudy.1.store.put(record_bob.clone()).unwrap();
-    bob.1.store.put(record_trudy.clone()).unwrap();
+    bob.1.store.put(record_bob.clone()).unwrap();
+    trudy.1.store.put(record_trudy.clone()).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
     alice.1.add_address(Swarm::local_peer_id(&trudy.1), trudy.0.clone());
     alice.1.add_address(Swarm::local_peer_id(&bob.1), bob.0.clone());
 
+    // Drop the swarm addresses.
+    let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
+
     // Have `alice` query the Dht for `key` with a quorum of 1.
-    alice.1.get_record(&key, Quorum::One);
+    alice.get_record(&key, Quorum::One);
 
     // The default peer timeout is 10 seconds. Choosing 1 seconds here should
     // give enough head room to prevent connections to `bob` to time out.
@@ -960,19 +959,23 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // result as it is not able to connect to `bob` just yet.
     block_on(
         poll_fn(|ctx| {
-            for (_, swarm) in &mut [&mut alice, &mut trudy] {
+            for (i, swarm) in [&mut alice, &mut trudy].iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult{
                             result: QueryResult::GetRecord(result),
                              ..
                         })) => {
+                            if i != 0 {
+                                panic!("Expected `QueryResult` from Alice.")
+                            }
+
                             match result {
                                 Ok(_) => panic!(
                                     "Expected query not to finish until all \
-                                     disjoint paths have been queried.",
+                                     disjoint paths have been explored.",
                                 ),
-                                Err(e) => unreachable!("{:?}", e),
+                                Err(e) => panic!("{:?}", e),
                             }
                         }
                         // Ignore any other event.
@@ -988,17 +991,38 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         })
     );
 
+    // Make sure `alice` has exactly one query with `trudy`'s record only.
+    assert_eq!(1, alice.queries.iter().count());
+    alice.queries.iter().for_each(|q| {
+        match &q.inner.info {
+            QueryInfo::GetRecord{ records, .. }  => {
+                assert_eq!(
+                    *records,
+                    vec![PeerRecord {
+                        peer: Some(Swarm::local_peer_id(&trudy).clone()),
+                        record: record_trudy.clone(),
+                    }],
+                );
+            },
+            i @ _ => panic!("Unexpected query info: {:?}", i),
+        }
+    });
+
     // Poll `alice` and `bob` expecting `alice` to return a successful query
     // result as it is now able to explore the second disjoint path.
     let records = block_on(
         poll_fn(|ctx| {
-            for (_, swarm) in &mut [&mut alice, &mut bob] {
+            for (i, swarm) in [&mut alice, &mut bob].iter_mut().enumerate() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult{
                             result: QueryResult::GetRecord(result),
                             ..
                         })) => {
+                            if i != 0 {
+                                panic!("Expected `QueryResult` from Alice.")
+                            }
+
                             match result {
                                 Ok(ok) => return Poll::Ready(ok.records),
                                 Err(e) => unreachable!("{:?}", e),
