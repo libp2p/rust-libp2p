@@ -723,7 +723,7 @@ fn get_record_many() {
 fn add_provider() {
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
-        let replication_factor = NonZeroUsize::new(rng.gen_range(2, (K_VALUE.get() / 2) + 1)).unwrap();
+        let replication_factor = NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
