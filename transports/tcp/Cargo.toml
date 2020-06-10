@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = { version = "< 1.6", optional = true }
+async-std = { version = "~1.5.0", optional = true }
 futures = "0.3.1"
 futures-timer = "3.0"
 get_if_addrs = "0.5.3"
