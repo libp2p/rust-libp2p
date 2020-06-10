@@ -464,7 +464,7 @@ where
             if record.is_expired(Instant::now()) {
                 self.store.remove(key)
             } else {
-                records.push((None, record.into_owned()));
+                records.push(PeerRecord{ peer: None, record: record.into_owned()});
             }
         }
 
@@ -922,7 +922,7 @@ where
             }
 
             QueryInfo::GetRecord { key, records, quorum, cache_at } => {
-                let records = records.into_iter().map(|r| r.1).collect::<Vec<_>>();
+                let records = records.into_iter().map(|r| r.record).collect::<Vec<_>>();
                 let results = if records.len() >= quorum.get() { // [not empty]
                     if let Some(cache_key) = cache_at {
                         // Cache the record at the closest node to the key that
@@ -1135,7 +1135,7 @@ where
                     result: QueryResult::GetRecord(Err(
                         GetRecordError::Timeout {
                             key,
-                            records: records.into_iter().map(|r| r.1).collect(),
+                            records: records.into_iter().map(|r| r.record).collect(),
                             quorum,
                         }
                     ))
@@ -1514,13 +1514,13 @@ where
                         key, records, quorum, cache_at
                     } = &mut query.inner.info {
                         if let Some(record) = record {
-                            records.push((Some(source.clone()), record));
+                            records.push(PeerRecord{ peer: Some(source.clone()), record });
 
                             if records.len() >= quorum.get() {
                                 // Desired quorum reached. The query may finish. See
                                 // [`Query::may_finish`] for details.
                                 let peers = records.iter()
-                                    .filter_map(|(peer, _record)| peer.as_ref())
+                                    .filter_map(|PeerRecord{ peer, .. }| peer.as_ref())
                                     .cloned()
                                     .collect::<Vec<_>>();
                                 query.may_finish(peers)
@@ -1704,6 +1704,12 @@ impl Quorum {
             Quorum::N(n) => NonZeroUsize::min(total, *n)
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerRecord {
+    pub peer: Option<PeerId>,
+    pub record: Record,
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2110,7 +2116,7 @@ pub enum QueryInfo {
         key: record::Key,
         /// The records with the id of the peer that returned them. `None` when
         /// the record was found in the local store.
-        records: Vec<(Option<PeerId>, Record)>,
+        records: Vec<PeerRecord>,
         /// The number of records to look for.
         quorum: NonZeroUsize,
         /// The closest peer to `key` that did not return a record.
