@@ -730,7 +730,7 @@ fn add_provider() {
         let mut config = KademliaConfig::default();
         config.set_replication_factor(replication_factor);
         if rng.gen() {
-            config.use_disjoint_path_queries();
+            config.disjoint_query_paths(true);
         }
 
         let mut swarms = {
@@ -924,7 +924,7 @@ fn exp_decr_expiration_overflow() {
 #[test]
 fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut config = KademliaConfig::default();
-    config.use_disjoint_path_queries();
+    config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
 

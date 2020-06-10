@@ -165,7 +165,7 @@ impl KademliaConfig {
     /// This only controls the level of parallelism of an iterative query, not
     /// the level of parallelism of a query to a fixed set of peers.
     ///
-    /// When used with [`KademliaConfig::use_disjoint_path_queries`] it equals
+    /// When used with [`KademliaConfig::disjoint_query_paths`] it equals
     /// the amount of disjoint paths used.
     pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
         self.query_config.parallelism = parallelism;
@@ -180,8 +180,8 @@ impl KademliaConfig {
     ///
     /// See the S/Kademlia paper for more information on the high level design
     /// as well as its security improvements.
-    pub fn use_disjoint_path_queries(&mut self) -> &mut Self {
-        self.query_config.use_disjoint_paths = true;
+    pub fn disjoint_query_paths(&mut self, enabled: bool) -> &mut Self {
+        self.query_config.use_disjoint_paths = enabled;
         self
     }
 
