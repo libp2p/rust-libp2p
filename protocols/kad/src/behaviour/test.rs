@@ -654,11 +654,13 @@ fn get_record() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
-                            id, result: QueryResult::GetRecord(Ok(ok)), ..
+                            id,
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            ..
                         })) => {
                             assert_eq!(id, qid);
-                            assert_eq!(ok.records.len(), 1);
-                            assert_eq!(ok.records.first(), Some(&record));
+                            assert_eq!(records.len(), 1);
+                            assert_eq!(records.first().unwrap().record, record);
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -698,11 +700,13 @@ fn get_record_many() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(KademliaEvent::QueryResult {
-                            id, result: QueryResult::GetRecord(Ok(ok)), ..
+                            id,
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                            ..
                         })) => {
                             assert_eq!(id, qid);
-                            assert_eq!(ok.records.len(), num_results);
-                            assert_eq!(ok.records.first(), Some(&record));
+                            assert_eq!(records.len(), num_results);
+                            assert_eq!(records.first().unwrap().record, record);
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -1014,6 +1018,13 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         })
     );
 
-    assert!(records.contains(&record_bob));
-    assert!(records.contains(&record_trudy));
+    assert_eq!(2, records.len());
+    assert!(records.contains(&PeerRecord {
+        peer: Some(Swarm::local_peer_id(&bob).clone()),
+        record: record_bob,
+    }));
+    assert!(records.contains(&PeerRecord {
+        peer: Some(Swarm::local_peer_id(&trudy).clone()),
+        record: record_trudy,
+    }));
 }

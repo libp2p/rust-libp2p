@@ -922,12 +922,11 @@ where
             }
 
             QueryInfo::GetRecord { key, records, quorum, cache_at } => {
-                let records = records.into_iter().map(|r| r.record).collect::<Vec<_>>();
                 let results = if records.len() >= quorum.get() { // [not empty]
                     if let Some(cache_key) = cache_at {
                         // Cache the record at the closest node to the key that
                         // did not return the record.
-                        let record = records.first().expect("[not empty]").clone();
+                        let record = records.first().expect("[not empty]").record.clone();
                         let quorum = NonZeroUsize::new(1).expect("1 > 0");
                         let context = PutRecordContext::Cache;
                         let info = QueryInfo::PutRecord {
@@ -1133,11 +1132,7 @@ where
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(Err(
-                        GetRecordError::Timeout {
-                            key,
-                            records: records.into_iter().map(|r| r.record).collect(),
-                            quorum,
-                        }
+                        GetRecordError::Timeout { key, records, quorum },
                     ))
                 }),
 
@@ -1706,6 +1701,8 @@ impl Quorum {
     }
 }
 
+/// A record either received by the given peer or retrieved from the local
+/// record store.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerRecord {
     pub peer: Option<PeerId>,
@@ -1795,7 +1792,7 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 /// The successful result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
 pub struct GetRecordOk {
-    pub records: Vec<Record>
+    pub records: Vec<PeerRecord>
 }
 
 /// The error result of [`Kademlia::get_record`].
@@ -1807,12 +1804,12 @@ pub enum GetRecordError {
     },
     QuorumFailed {
         key: record::Key,
-        records: Vec<Record>,
+        records: Vec<PeerRecord>,
         quorum: NonZeroUsize
     },
     Timeout {
         key: record::Key,
-        records: Vec<Record>,
+        records: Vec<PeerRecord>,
         quorum: NonZeroUsize
     }
 }
