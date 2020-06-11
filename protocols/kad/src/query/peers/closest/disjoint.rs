@@ -172,13 +172,7 @@ impl ClosestDisjointPeersIter {
     }
 
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
-        for iter in &self.iters {
-            if iter.is_waiting(peer) {
-                return true;
-            }
-        }
-
-        false
+        self.iters.iter().any(|i| i.is_waiting(peer))
     }
 
     pub fn next(&mut self, now: Instant) -> PeersIterState {
@@ -275,13 +269,10 @@ impl ClosestDisjointPeersIter {
         state.unwrap_or(PeersIterState::Finished)
     }
 
-    /// Only finish the [`ClosestPeersIter`]s that yielded a peer within
-    /// `peers`.
+    /// Finishes all paths containing one of the given peers.
     ///
-    /// `peers` representing the peers that either returned or put a record.
-    ///
-    /// See [`crate::query::Query::may_finish`] for details.
-    pub fn may_finish<I>(&mut self, peers: I)
+    /// See [`crate::query::Query::try_finish`] for details.
+    pub fn finish_paths<I>(&mut self, peers: I)
     where
         I: IntoIterator<Item = PeerId>
     {

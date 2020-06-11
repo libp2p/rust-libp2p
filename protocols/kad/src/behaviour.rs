@@ -1513,12 +1513,12 @@ where
 
                             if records.len() >= quorum.get() {
                                 // Desired quorum reached. The query may finish. See
-                                // [`Query::may_finish`] for details.
+                                // [`Query::try_finish`] for details.
                                 let peers = records.iter()
                                     .filter_map(|PeerRecord{ peer, .. }| peer.as_ref())
                                     .cloned()
                                     .collect::<Vec<_>>();
-                                query.may_finish(peers)
+                                query.try_finish(peers)
                             }
                         } else if quorum.get() == 1 {
                             // It is a "standard" Kademlia query, for which the
@@ -1559,7 +1559,7 @@ where
                         success.push(source);
                         if success.len() >= quorum.get() {
                             let peers = success.clone();
-                            query.may_finish(peers)
+                            query.try_finish(peers)
                         }
                     }
                 }
