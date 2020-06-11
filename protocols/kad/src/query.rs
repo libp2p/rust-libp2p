@@ -133,7 +133,7 @@ impl<TInner> QueryPool<TInner> {
             .. ClosestPeersIterConfig::default()
         };
 
-        let peer_iter = if self.config.use_disjoint_paths {
+        let peer_iter = if self.config.disjoint_query_paths {
             QueryPeerIter::ClosestDisjoint(
                 ClosestDisjointPeersIter::with_config(cfg, target, peers),
             )
@@ -238,8 +238,8 @@ pub struct QueryConfig {
 
     /// Whether to use disjoint paths on iterative lookups.
     ///
-    /// See [`crate::behaviour::KademliaConfig::use_disjoint_path_queries`] for details.
-    pub use_disjoint_paths: bool,
+    /// See [`crate::behaviour::KademliaConfig::disjoint_query_paths`] for details.
+    pub disjoint_query_paths: bool,
 }
 
 impl Default for QueryConfig {
@@ -248,7 +248,7 @@ impl Default for QueryConfig {
             timeout: Duration::from_secs(60),
             replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0"),
             parallelism: ALPHA_VALUE,
-            use_disjoint_paths: false,
+            disjoint_query_paths: false,
         }
     }
 }

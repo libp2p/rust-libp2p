@@ -181,7 +181,7 @@ impl KademliaConfig {
     /// See the S/Kademlia paper for more information on the high level design
     /// as well as its security improvements.
     pub fn disjoint_query_paths(&mut self, enabled: bool) -> &mut Self {
-        self.query_config.use_disjoint_paths = enabled;
+        self.query_config.disjoint_query_paths = enabled;
         self
     }
 
