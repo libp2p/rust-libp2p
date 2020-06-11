@@ -469,7 +469,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_listener_error_stmts);*
             }
 
-            fn inject_listener_closed(&mut self, id: #listener_id, reason: Result<(), &std::io::Error>) {
+            fn inject_listener_closed(&mut self, id: #listener_id, reason: std::result::Result<(), &std::io::Error>) {
                 #(#inject_listener_closed_stmts);*
             }
 

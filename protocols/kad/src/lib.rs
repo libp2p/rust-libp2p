@@ -41,6 +41,9 @@ mod dht_proto {
 pub use addresses::Addresses;
 pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
+    QueryRef,
+    QueryMut,
+
     QueryResult,
     QueryInfo,
     QueryStats,
@@ -55,6 +58,8 @@ pub use behaviour::{
     GetRecordOk,
     GetRecordError,
 
+    PutRecordPhase,
+    PutRecordContext,
     PutRecordResult,
     PutRecordOk,
     PutRecordError,
@@ -63,6 +68,8 @@ pub use behaviour::{
     GetClosestPeersOk,
     GetClosestPeersError,
 
+    AddProviderPhase,
+    AddProviderContext,
     AddProviderResult,
     AddProviderOk,
     AddProviderError,
