@@ -301,13 +301,7 @@ impl ClosestDisjointPeersIter {
 
     /// Checks whether the iterator has finished.
     pub fn is_finished(&self) -> bool {
-        for iter in &self.iters {
-            if iter.is_finished() {
-                return true;
-            }
-        }
-
-        false
+        self.iters.iter().all(|i| i.is_finished())
     }
 
     /// Note: In the case of no adversarial peers or connectivity issues along
