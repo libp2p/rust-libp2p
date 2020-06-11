@@ -341,8 +341,8 @@ impl<TInner> Query<TInner> {
         state
     }
 
-    /// Offer to finish the query prematurely, providing the peers that
-    /// returned either a record or a set of providers as an argument.
+    /// Tries to (gracefully) finish the query prematurely, providing the peers
+    /// that are no longer of interest for further progress of the query.
     ///
     /// It is up to the `QueryPeerIter` to decide whether to finish or continue
     /// querying other peers. E.g. in the case of using disjoint paths a
