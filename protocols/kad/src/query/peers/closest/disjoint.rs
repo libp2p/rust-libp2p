@@ -110,9 +110,11 @@ impl ClosestDisjointPeersIter {
         // iterators. If this iterator never started a request to the given peer
         // ignore the failure.
         if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
-            *response = ResponseState::Failed;
-
             updated = self.iters[*initiated_by].on_failure(peer);
+
+            if updated {
+                *response = ResponseState::Failed;
+            }
 
             for iter in &mut self.iters {
                 iter.on_failure(peer);
@@ -124,11 +126,12 @@ impl ClosestDisjointPeersIter {
 
     /// Callback for delivering the result of a successful request to a peer.
     ///
-    /// Delivering results of requests back to the iterator allows the iterator to make
-    /// progress. The iterator is said to make progress either when the given
-    /// `closer_peers` contain a peer closer to the target than any peer seen so far,
-    /// or when the iterator did not yet accumulate `num_results` closest peers and
-    /// `closer_peers` contains a new peer, regardless of its distance to the target.
+    /// Delivering results of requests back to the iterator allows the iterator
+    /// to make progress. The iterator is said to make progress either when the
+    /// given `closer_peers` contain a peer closer to the target than any peer
+    /// seen so far, or when the iterator did not yet accumulate `num_results`
+    /// closest peers and `closer_peers` contains a new peer, regardless of its
+    /// distance to the target.
     ///
     /// If the iterator is currently waiting for a result from `peer`,
     /// the iterator state is updated and `true` is returned. In that
@@ -145,14 +148,17 @@ impl ClosestDisjointPeersIter {
         let mut updated = false;
 
         if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
-            // Mark the response as succeeded for future iterators yielding this
-            // peer. There is no need to keep the `closer_peers` around, given
-            // that they are only passed to the first iterator.
-            *response = ResponseState::Succeeded;
-
             // Pass the new `closer_peers` to the iterator that first yielded
             // the peer.
             updated = self.iters[*initiated_by].on_success(peer, closer_peers);
+
+            if updated {
+                // Mark the response as succeeded for future iterators yielding
+                // this peer. There is no need to keep the `closer_peers`
+                // around, given that they are only passed to the first
+                // iterator.
+                *response = ResponseState::Succeeded;
+            }
 
             for iter in &mut self.iters {
                 // Only report the success to all remaining not-first iterators.
@@ -321,7 +327,7 @@ impl ClosestDisjointPeersIter {
 }
 
 /// Index into the [`ClosestDisjointPeersIter`] `iters` vector.
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct IteratorIndex(usize);
 
 impl From<usize> for IteratorIndex {
@@ -360,7 +366,7 @@ impl IndexMut<IteratorIndex> for Vec<ClosestPeersIter> {
 
 /// State tracking the iterator that yielded (i.e. tried to contact) a peer. See
 /// [`ClosestDisjointPeersIter::on_success`] for details.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct PeerState {
     /// First iterator to yield the peer. Will be notified both of the outcome
     /// (success/failure) as well as the closer peers.
@@ -379,7 +385,7 @@ impl PeerState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum ResponseState {
     Waiting,
     Succeeded,
@@ -456,6 +462,7 @@ mod tests {
     use quickcheck::*;
     use rand::{Rng, seq::SliceRandom};
     use std::collections::HashSet;
+    use std::iter;
 
     impl Arbitrary for ResultIter<std::vec::IntoIter<Key<PeerId>>> {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
@@ -961,5 +968,31 @@ mod tests {
         }
 
         QuickCheck::new().tests(10).quickcheck(prop as fn(_, _, _, _) -> _)
+    }
+
+    #[test]
+    fn failure_can_not_overwrite_previous_success() {
+        let now = Instant::now();
+        let peer = PeerId::random();
+        let mut iter = ClosestDisjointPeersIter::new(
+            Key::from(PeerId::random()).into(),
+            iter::once(Key::from(peer.clone())),
+        );
+
+        assert!(matches!(iter.next(now), PeersIterState::Waiting(Some(_))));
+
+        // Expect peer to be marked as succeeded.
+        assert!(iter.on_success(&peer, iter::empty()));
+        assert_eq!(iter.contacted_peers.get(&peer), Some(&PeerState {
+            initiated_by: IteratorIndex(0),
+            response: ResponseState::Succeeded,
+        }));
+
+        // Expect peer to stay marked as succeeded.
+        assert!(!iter.on_failure(&peer));
+        assert_eq!(iter.contacted_peers.get(&peer), Some(&PeerState {
+            initiated_by: IteratorIndex(0),
+            response: ResponseState::Succeeded,
+        }));
     }
 }
