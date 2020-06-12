@@ -53,7 +53,6 @@ wasm-ext = ["libp2p-wasm-ext"]
 websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
-tracing = ["libp2p-quic/tracing"]
 
 [dependencies]
 bytes = "0.5"
@@ -101,7 +100,6 @@ members = [
     "misc/multiaddr",
     "misc/multistream-select",
     "misc/peer-id-generator",
-    "misc/x509",
     "muxers/mplex",
     "muxers/yamux",
     "protocols/floodsub",
@@ -123,5 +121,8 @@ members = [
 ]
 
 [patch.crates-io]
-rustls = { git = "https://github.com/ctz/rustls" }
+# TODO: waiting for a release
+rustls = { git = "https://github.com/ctz/rustls", rev = "cac66a8c184f3ef8510bb62b390f241c2760f51d" }
+# TODO: overwrite necessary because quinn-proto 0.6.1 is incompatible with the rustls overwrite above
+# TODO: UUUUUUUGHHHHHH
 quinn-proto = { git = "https://github.com/djc/quinn", rev = "6e9f7e8063926f8bdab56bbc1615277ff0bdece5" }
