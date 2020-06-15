@@ -22,7 +22,7 @@ use crate::protocol::{Protocol, MessageReader, Message, Version, ProtocolError};
 
 use bytes::{BytesMut, Buf};
 use futures::{prelude::*, io::{IoSlice, IoSliceMut}, ready};
-use pin_project::{pin_project, project};
+use pin_project::pin_project;
 use std::{error::Error, fmt, io, mem, pin::Pin, task::{Context, Poll}};
 
 /// An I/O stream that has settled on an (application-layer) protocol to use.
@@ -87,7 +87,6 @@ impl<TInner> Negotiated<TInner> {
     }
 
     /// Polls the `Negotiated` for completion.
-    #[project]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), NegotiationError>>
     where
         TInner: AsyncRead + AsyncWrite + Unpin
@@ -107,9 +106,8 @@ impl<TInner> Negotiated<TInner> {
 
         let mut this = self.project();
 
-        #[project]
         match this.state.as_mut().project() {
-            State::Completed { remaining, .. } => {
+            StateProj::Completed { remaining, .. } => {
                 debug_assert!(remaining.is_empty());
                 return Poll::Ready(Ok(()))
             }
@@ -163,7 +161,7 @@ impl<TInner> Negotiated<TInner> {
 }
 
 /// The states of a `Negotiated` I/O stream.
-#[pin_project]
+#[pin_project(project = StateProj)]
 #[derive(Debug)]
 enum State<R> {
     /// In this state, a `Negotiated` is still expecting to
@@ -193,14 +191,12 @@ impl<TInner> AsyncRead for Negotiated<TInner>
 where
     TInner: AsyncRead + AsyncWrite + Unpin
 {
-    #[project]
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
         loop {
-            #[project]
             match self.as_mut().project().state.project() {
-                State::Completed { io, remaining } => {
+                StateProj::Completed { io, remaining } => {
                     // If protocol negotiation is complete and there is no
                     // remaining data to be flushed, commence with reading.
                     if remaining.is_empty() {
@@ -229,14 +225,12 @@ where
         }
     }*/
 
-    #[project]
     fn poll_read_vectored(mut self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut])
         -> Poll<Result<usize, io::Error>>
     {
         loop {
-            #[project]
             match self.as_mut().project().state.project() {
-                State::Completed { io, remaining } => {
+                StateProj::Completed { io, remaining } => {
                     // If protocol negotiation is complete and there is no
                     // remaining data to be flushed, commence with reading.
                     if remaining.is_empty() {
@@ -261,11 +255,9 @@ impl<TInner> AsyncWrite for Negotiated<TInner>
 where
     TInner: AsyncWrite + AsyncRead + Unpin
 {
-    #[project]
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        #[project]
         match self.project().state.project() {
-            State::Completed { mut io, remaining } => {
+            StateProj::Completed { mut io, remaining } => {
                 while !remaining.is_empty() {
                     let n = ready!(io.as_mut().poll_write(cx, &remaining)?);
                     if n == 0 {
@@ -275,16 +267,14 @@ where
                 }
                 io.poll_write(cx, buf)
             },
-            State::Expecting { io, .. } => io.poll_write(cx, buf),
-            State::Invalid => panic!("Negotiated: Invalid state"),
+            StateProj::Expecting { io, .. } => io.poll_write(cx, buf),
+            StateProj::Invalid => panic!("Negotiated: Invalid state"),
         }
     }
 
-    #[project]
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        #[project]
         match self.project().state.project() {
-            State::Completed { mut io, remaining } => {
+            StateProj::Completed { mut io, remaining } => {
                 while !remaining.is_empty() {
                     let n = ready!(io.as_mut().poll_write(cx, &remaining)?);
                     if n == 0 {
@@ -294,12 +284,11 @@ where
                 }
                 io.poll_flush(cx)
             },
-            State::Expecting { io, .. } => io.poll_flush(cx),
-            State::Invalid => panic!("Negotiated: Invalid state"),
+            StateProj::Expecting { io, .. } => io.poll_flush(cx),
+            StateProj::Invalid => panic!("Negotiated: Invalid state"),
         }
     }
 
-    #[project]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         // Ensure all data has been flushed and expected negotiation messages
         // have been received.
@@ -307,21 +296,18 @@ where
         ready!(self.as_mut().poll_flush(cx).map_err(Into::<io::Error>::into)?);
 
         // Continue with the shutdown of the underlying I/O stream.
-        #[project]
         match self.project().state.project() {
-            State::Completed { io, .. } => io.poll_close(cx),
-            State::Expecting { io, .. } => io.poll_close(cx),
-            State::Invalid => panic!("Negotiated: Invalid state"),
+            StateProj::Completed { io, .. } => io.poll_close(cx),
+            StateProj::Expecting { io, .. } => io.poll_close(cx),
+            StateProj::Invalid => panic!("Negotiated: Invalid state"),
         }
     }
 
-    #[project]
     fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice])
         -> Poll<Result<usize, io::Error>>
     {
-        #[project]
         match self.project().state.project() {
-            State::Completed { mut io, remaining } => {
+            StateProj::Completed { mut io, remaining } => {
                 while !remaining.is_empty() {
                     let n = ready!(io.as_mut().poll_write(cx, &remaining)?);
                     if n == 0 {
@@ -331,8 +317,8 @@ where
                 }
                 io.poll_write_vectored(cx, bufs)
             },
-            State::Expecting { io, .. } => io.poll_write_vectored(cx, bufs),
-            State::Invalid => panic!("Negotiated: Invalid state"),
+            StateProj::Expecting { io, .. } => io.poll_write_vectored(cx, bufs),
+            StateProj::Invalid => panic!("Negotiated: Invalid state"),
         }
     }
 }
@@ -460,4 +446,3 @@ mod tests {
         quickcheck(prop as fn(_,_,_,_) -> _)
     }
 }
-
