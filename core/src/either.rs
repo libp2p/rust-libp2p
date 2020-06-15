@@ -25,7 +25,7 @@ use crate::{
     Multiaddr
 };
 use futures::{prelude::*, io::{IoSlice, IoSliceMut}};
-use pin_project::{pin_project, project};
+use pin_project::pin_project;
 use std::{fmt, io::{Error as IoError}, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
@@ -62,7 +62,7 @@ where
 
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
 /// either `First` or `Second`.
-#[pin_project]
+#[pin_project(project = EitherOutputProj)]
 #[derive(Debug, Copy, Clone)]
 pub enum EitherOutput<A, B> {
     First(#[pin] A),
@@ -74,23 +74,19 @@ where
     A: AsyncRead,
     B: AsyncRead,
 {
-    #[project]
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, IoError>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => AsyncRead::poll_read(a, cx, buf),
-            EitherOutput::Second(b) => AsyncRead::poll_read(b, cx, buf),
+            EitherOutputProj::First(a) => AsyncRead::poll_read(a, cx, buf),
+            EitherOutputProj::Second(b) => AsyncRead::poll_read(b, cx, buf),
         }
     }
 
-    #[project]
     fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut])
         -> Poll<Result<usize, IoError>>
     {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => AsyncRead::poll_read_vectored(a, cx, bufs),
-            EitherOutput::Second(b) => AsyncRead::poll_read_vectored(b, cx, bufs),
+            EitherOutputProj::First(a) => AsyncRead::poll_read_vectored(a, cx, bufs),
+            EitherOutputProj::Second(b) => AsyncRead::poll_read_vectored(b, cx, bufs),
         }
     }
 }
@@ -100,41 +96,33 @@ where
     A: AsyncWrite,
     B: AsyncWrite,
 {
-    #[project]
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, IoError>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => AsyncWrite::poll_write(a, cx, buf),
-            EitherOutput::Second(b) => AsyncWrite::poll_write(b, cx, buf),
+            EitherOutputProj::First(a) => AsyncWrite::poll_write(a, cx, buf),
+            EitherOutputProj::Second(b) => AsyncWrite::poll_write(b, cx, buf),
         }
     }
 
-    #[project]
     fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice])
         -> Poll<Result<usize, IoError>>
     {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => AsyncWrite::poll_write_vectored(a, cx, bufs),
-            EitherOutput::Second(b) => AsyncWrite::poll_write_vectored(b, cx, bufs),
+            EitherOutputProj::First(a) => AsyncWrite::poll_write_vectored(a, cx, bufs),
+            EitherOutputProj::Second(b) => AsyncWrite::poll_write_vectored(b, cx, bufs),
         }
     }
 
-    #[project]
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), IoError>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => AsyncWrite::poll_flush(a, cx),
-            EitherOutput::Second(b) => AsyncWrite::poll_flush(b, cx),
+            EitherOutputProj::First(a) => AsyncWrite::poll_flush(a, cx),
+            EitherOutputProj::Second(b) => AsyncWrite::poll_flush(b, cx),
         }
     }
 
-    #[project]
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), IoError>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => AsyncWrite::poll_close(a, cx),
-            EitherOutput::Second(b) => AsyncWrite::poll_close(b, cx),
+            EitherOutputProj::First(a) => AsyncWrite::poll_close(a, cx),
+            EitherOutputProj::Second(b) => AsyncWrite::poll_close(b, cx),
         }
     }
 }
@@ -146,13 +134,11 @@ where
 {
     type Item = Result<I, EitherError<A::Error, B::Error>>;
 
-    #[project]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => TryStream::try_poll_next(a, cx)
+            EitherOutputProj::First(a) => TryStream::try_poll_next(a, cx)
                 .map(|v| v.map(|r| r.map_err(EitherError::A))),
-            EitherOutput::Second(b) => TryStream::try_poll_next(b, cx)
+            EitherOutputProj::Second(b) => TryStream::try_poll_next(b, cx)
                 .map(|v| v.map(|r| r.map_err(EitherError::B))),
         }
     }
@@ -165,39 +151,31 @@ where
 {
     type Error = EitherError<A::Error, B::Error>;
 
-    #[project]
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => Sink::poll_ready(a, cx).map_err(EitherError::A),
-            EitherOutput::Second(b) => Sink::poll_ready(b, cx).map_err(EitherError::B),
+            EitherOutputProj::First(a) => Sink::poll_ready(a, cx).map_err(EitherError::A),
+            EitherOutputProj::Second(b) => Sink::poll_ready(b, cx).map_err(EitherError::B),
         }
     }
 
-    #[project]
     fn start_send(self: Pin<&mut Self>, item: I) -> Result<(), Self::Error> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => Sink::start_send(a, item).map_err(EitherError::A),
-            EitherOutput::Second(b) => Sink::start_send(b, item).map_err(EitherError::B),
+            EitherOutputProj::First(a) => Sink::start_send(a, item).map_err(EitherError::A),
+            EitherOutputProj::Second(b) => Sink::start_send(b, item).map_err(EitherError::B),
         }
     }
 
-    #[project]
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => Sink::poll_flush(a, cx).map_err(EitherError::A),
-            EitherOutput::Second(b) => Sink::poll_flush(b, cx).map_err(EitherError::B),
+            EitherOutputProj::First(a) => Sink::poll_flush(a, cx).map_err(EitherError::A),
+            EitherOutputProj::Second(b) => Sink::poll_flush(b, cx).map_err(EitherError::B),
         }
     }
 
-    #[project]
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        #[project]
         match self.project() {
-            EitherOutput::First(a) => Sink::poll_close(a, cx).map_err(EitherError::A),
-            EitherOutput::Second(b) => Sink::poll_close(b, cx).map_err(EitherError::B),
+            EitherOutputProj::First(a) => Sink::poll_close(a, cx).map_err(EitherError::A),
+            EitherOutputProj::Second(b) => Sink::poll_close(b, cx).map_err(EitherError::B),
         }
     }
 }
@@ -349,7 +327,7 @@ pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
 }
 
 /// Implements `Stream` and dispatches all method calls to either `First` or `Second`.
-#[pin_project]
+#[pin_project(project = EitherListenStreamProj)]
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherListenStream<A, B> {
@@ -364,17 +342,15 @@ where
 {
     type Item = Result<ListenerEvent<EitherFuture<AInner, BInner>, EitherError<AError, BError>>, EitherError<AError, BError>>;
 
-    #[project]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        #[project]
         match self.project() {
-            EitherListenStream::First(a) => match TryStream::try_poll_next(a, cx) {
+            EitherListenStreamProj::First(a) => match TryStream::try_poll_next(a, cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(None) => Poll::Ready(None),
                 Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::First).map_err(EitherError::A)))),
                 Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::A(err)))),
             },
-            EitherListenStream::Second(a) => match TryStream::try_poll_next(a, cx) {
+            EitherListenStreamProj::Second(a) => match TryStream::try_poll_next(a, cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(None) => Poll::Ready(None),
                 Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le.map(EitherFuture::Second).map_err(EitherError::B)))),
@@ -385,7 +361,7 @@ where
 }
 
 /// Implements `Future` and dispatches all method calls to either `First` or `Second`.
-#[pin_project]
+#[pin_project(project = EitherFutureProj)]
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture<A, B> {
@@ -400,19 +376,17 @@ where
 {
     type Output = Result<EitherOutput<AInner, BInner>, EitherError<AFuture::Error, BFuture::Error>>;
 
-    #[project]
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        #[project]
         match self.project() {
-            EitherFuture::First(a) => TryFuture::try_poll(a, cx)
+            EitherFutureProj::First(a) => TryFuture::try_poll(a, cx)
                 .map_ok(EitherOutput::First).map_err(EitherError::A),
-            EitherFuture::Second(a) => TryFuture::try_poll(a, cx)
+            EitherFutureProj::Second(a) => TryFuture::try_poll(a, cx)
                 .map_ok(EitherOutput::Second).map_err(EitherError::B),
         }
     }
 }
 
-#[pin_project]
+#[pin_project(project = EitherFuture2Proj)]
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture2<A, B> { A(#[pin] A), B(#[pin] B) }
@@ -424,13 +398,11 @@ where
 {
     type Output = Result<EitherOutput<AItem, BItem>, EitherError<AError, BError>>;
 
-    #[project]
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        #[project]
         match self.project() {
-            EitherFuture2::A(a) => TryFuture::try_poll(a, cx)
+            EitherFuture2Proj::A(a) => TryFuture::try_poll(a, cx)
                 .map_ok(EitherOutput::First).map_err(EitherError::A),
-            EitherFuture2::B(a) => TryFuture::try_poll(a, cx)
+            EitherFuture2Proj::B(a) => TryFuture::try_poll(a, cx)
                 .map_ok(EitherOutput::Second).map_err(EitherError::B),
         }
     }

@@ -15,7 +15,7 @@ log = "0.4.8"
 salsa20 = "0.3.0"
 sha3 = "0.8"
 rand = "0.7"
-pin-project = "0.4.6"
+pin-project = "0.4.17"
 
 [dev-dependencies]
 quickcheck = "0.9.0"
