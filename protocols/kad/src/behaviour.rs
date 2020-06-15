@@ -1518,7 +1518,7 @@ where
                                     .filter_map(|PeerRecord{ peer, .. }| peer.as_ref())
                                     .cloned()
                                     .collect::<Vec<_>>();
-                                query.try_finish(peers)
+                                query.try_finish(peers.iter())
                             }
                         } else if quorum.get() == 1 {
                             // It is a "standard" Kademlia query, for which the
@@ -1559,7 +1559,7 @@ where
                         success.push(source);
                         if success.len() >= quorum.get() {
                             let peers = success.clone();
-                            query.try_finish(peers)
+                            query.try_finish(peers.iter())
                         }
                     }
                 }
