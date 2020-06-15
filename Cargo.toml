@@ -89,6 +89,9 @@ libp2p-websocket = { version = "0.19.0", path = "transports/websocket", optional
 [dev-dependencies]
 async-std = "~1.5.0"
 env_logger = "0.7.1"
+libp2p = { path = "." }
+rand = "0.7"
+void = "1"
 
 [workspace]
 members = [
