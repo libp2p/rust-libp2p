@@ -1705,6 +1705,8 @@ impl Quorum {
 /// record store.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerRecord {
+    /// The peer from whom the record was received. `None` if the record was
+    /// retrieved from local storage.
     pub peer: Option<PeerId>,
     pub record: Record,
 }
