@@ -987,7 +987,7 @@ where
                     if success.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
-                        Err(PutRecordError::QuorumFailed { key, quorum, num_results: success.len() })
+                        Err(PutRecordError::QuorumFailed { key, quorum, success })
                     }
                 };
                 match context {
@@ -1084,9 +1084,9 @@ where
                 let err = Err(PutRecordError::Timeout {
                     key: record.key,
                     quorum,
-                    num_results: match phase {
-                        PutRecordPhase::GetClosestPeers => 0,
-                        PutRecordPhase::PutRecord { ref success, .. } => success.len(),
+                    success: match phase {
+                        PutRecordPhase::GetClosestPeers => vec![],
+                        PutRecordPhase::PutRecord { ref success, .. } => success.clone(),
                     }
                 });
                 match context {
@@ -1849,12 +1849,14 @@ pub struct PutRecordOk {
 pub enum PutRecordError {
     QuorumFailed {
         key: record::Key,
-        num_results: usize,
+        /// [`PeerId`]s of the peers the record was successfully stored on.
+        success: Vec<PeerId>,
         quorum: NonZeroUsize
     },
     Timeout {
         key: record::Key,
-        num_results: usize,
+        /// [`PeerId`]s of the peers the record was successfully stored on.
+        success: Vec<PeerId>,
         quorum: NonZeroUsize
     },
 }
