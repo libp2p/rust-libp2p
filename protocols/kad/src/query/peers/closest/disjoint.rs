@@ -107,9 +107,6 @@ impl ClosestDisjointPeersIter {
     pub fn on_failure(&mut self, peer: &PeerId) -> bool {
         let mut updated = false;
 
-        // All peer failures are reported to all queries and thus to all peer
-        // iterators. If this iterator never started a request to the given peer
-        // ignore the failure.
         if let Some(PeerState{ initiated_by, response }) = self.contacted_peers.get_mut(peer) {
             updated = self.iters[*initiated_by].on_failure(peer);
 
@@ -117,8 +114,12 @@ impl ClosestDisjointPeersIter {
                 *response = ResponseState::Failed;
             }
 
-            for iter in &mut self.iters {
-                iter.on_failure(peer);
+            for (i, iter) in &mut self.iters.iter_mut().enumerate() {
+                if i != (*initiated_by).into() {
+                    // This iterator never triggered an actual request to the
+                    // given peer - thus ignore the returned boolean.
+                    iter.on_failure(peer);
+                }
             }
         }
 
@@ -161,11 +162,16 @@ impl ClosestDisjointPeersIter {
                 *response = ResponseState::Succeeded;
             }
 
-            for iter in &mut self.iters {
-                // Only report the success to all remaining not-first iterators.
-                // Do not pass the `closer_peers` in order to uphold the
-                // S/Kademlia disjoint paths guarantee.
-                iter.on_success(peer, std::iter::empty());
+            for (i, iter) in &mut self.iters.iter_mut().enumerate() {
+                if i != (*initiated_by).into() {
+                    // Only report the success to all remaining not-first
+                    // iterators. Do not pass the `closer_peers` in order to
+                    // uphold the S/Kademlia disjoint paths guarantee.
+                    //
+                    // This iterator never triggered an actual request to the
+                    // given peer - thus ignore the returned boolean.
+                    iter.on_success(peer, std::iter::empty());
+                }
             }
         }
 
