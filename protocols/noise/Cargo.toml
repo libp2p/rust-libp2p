@@ -21,10 +21,10 @@ x25519-dalek = "0.6.0"
 zeroize = "1"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
-snow = { version = "0.6.1", features = ["ring-resolver"], default-features = false }
+snow = { version = "0.7.0", features = ["ring-resolver"], default-features = false }
 
 [target.'cfg(target_os = "unknown")'.dependencies]
-snow = { version = "0.6.1", features = ["default-resolver"], default-features = false }
+snow = { version = "0.7.0", features = ["default-resolver"], default-features = false }
 
 [dev-dependencies]
 env_logger = "0.7.1"
