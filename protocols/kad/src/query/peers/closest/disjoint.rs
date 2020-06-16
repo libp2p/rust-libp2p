@@ -21,7 +21,6 @@
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
 use libp2p_core::PeerId;
-use log::debug;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
@@ -283,18 +282,10 @@ impl ClosestDisjointPeersIter {
     where
         I: IntoIterator<Item = &'a PeerId>
     {
-        let mut count = 0;
-
         for peer in peers {
-            count += 1;
             if let Some(PeerState{ initiated_by, .. }) = self.contacted_peers.get_mut(peer) {
                 self.iters[*initiated_by].finish();
             }
-        }
-
-        debug!("Finished {} out of {} paths.", count, self.iters.len());
-        if self.is_finished() {
-            debug!("All paths finished.");
         }
     }
 
