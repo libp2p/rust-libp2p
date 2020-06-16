@@ -52,16 +52,13 @@ impl Future for Upgrade {
     type Output = Result<(PeerId, QuicMuxer), transport::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut connection = match self.connection.as_mut() {
+        let connection = match self.connection.as_mut() {
             Some(c) => c,
             None => panic!("Future polled after it has ended"),
         };
 
         loop {
-            if !connection.is_handshaking() {
-                let mut certificates = connection
-                    .peer_certificates()
-                    .expect("peer_certificates always returns Some if !is_handshaking; qed");
+            if let Some(mut certificates) = connection.peer_certificates() {
                 let peer_id = x509::extract_peerid_or_panic(certificates.next().unwrap().as_der()); // TODO: bad API
                 let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                 return Poll::Ready(Ok((peer_id, muxer)));

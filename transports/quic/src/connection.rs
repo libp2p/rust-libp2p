@@ -20,7 +20,10 @@
 
 //! A single QUIC connection.
 //!
-//!
+//! The [`Connection`] struct of this module contains, amongst other things, a
+//! [`quinn_proto::Connection`] state machine and an `Arc<Endpoint>`. This struct is responsible
+//! for communication between quinn_proto's connection and its associated endpoint.
+//! All interactions with a QUIC connection should be done through this struct.
 // TODO: docs
 
 use crate::endpoint::Endpoint;
@@ -63,6 +66,21 @@ pub(crate) struct Connection {
     ///
     /// In other words, this flag indicates whether a "connected" hasn't been received yet.
     is_handshaking: bool,
+    /// Contains a `Some` if the connection is closed, with the reason of the closure.
+    /// Contains `None` if it is still open.
+    /// Contains `Some` if and only if a `ConnectionLost` event has been emitted.
+    closed: Option<Error>,
+}
+
+/// Error on the connection as a whole.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum Error {
+    /// Endpoint has force-killed this connection because it was too busy.
+    #[error("Endpoint has force-killed our connection")]
+    ClosedChannel,
+    /// Error in the inner state machine.
+    #[error("{0}")]
+    Quinn(#[from] quinn_proto::ConnectionError),
 }
 
 impl Connection {
@@ -99,15 +117,17 @@ impl Connection {
             endpoint,
             pending_to_endpoint: None,
             connection,
-            is_handshaking,
             next_timeout: None,
             from_endpoint,
             connection_id,
+            is_handshaking,
+            closed: None,
         }
     }
 
     /// Returns the certificates send by the remote through the underlying TLS session.
     /// Returns `None` if the connection is still handshaking.
+    // TODO: it seems to happen that is_handshaking is false but this returns None
     pub(crate) fn peer_certificates(
         &self,
     ) -> Option<impl Iterator<Item = quinn_proto::Certificate>> {
@@ -156,32 +176,48 @@ impl Connection {
         self.connection.open(quinn_proto::Dir::Bi)
     }
 
-    // TODO:
-    /*pub(crate) fn read_substream(&mut self, id: quinn_proto::StreamId, buf: &mut [u8]) -> Poll<()> {
-        match self.connection.read(id, buf) {
-            quinn_proto::ReadError::Blocked => Poll::Pending,
-        }
-    }*/
+    // TODO: better API
+    pub(crate) fn read_substream(
+        &mut self,
+        id: quinn_proto::StreamId,
+        buf: &mut [u8],
+    ) -> Result<usize, quinn_proto::ReadError> {
+        self.connection.read(id, buf).map(|n| n.unwrap_or(0))
+    }
 
-    /*pub(crate) fn write_substream(&mut self, id: quinn_proto::StreamId, buf: &mut [u8]) -> Poll<()> {
-        match self.connection.read(id, buf) {
-            quinn_proto::ReadError::Blocked => Poll::Pending,
-        }
-    }*/
+    pub(crate) fn write_substream(
+        &mut self,
+        id: quinn_proto::StreamId,
+        buf: &[u8],
+    ) -> Result<usize, quinn_proto::WriteError> {
+        self.connection.write(id, buf)
+    }
 
-    /*pub(crate) fn shutdown_substream(&mut self, id: quinn_proto::StreamId) {
-        match self.connection.read(id, buf) {
-            quinn_proto::ReadError::Blocked => Poll::Pending,
-        }
-    }*/
+    pub(crate) fn shutdown_substream(
+        &mut self,
+        id: quinn_proto::StreamId,
+    ) -> Result<(), quinn_proto::FinishError> {
+        self.connection.finish(id)
+    }
 
     /// Polls the connection for an event that happend on it.
     pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
+        // Nothing more can be done if the connection is closed.
+        // Return `Pending` without registering the waker, essentially freezing the task forever.
+        if self.closed.is_some() {
+            return Poll::Pending;
+        }
+
         // Process events that the endpoint has sent to us.
         loop {
             match Pin::new(&mut self.from_endpoint).poll_next(cx) {
                 Poll::Ready(Some(event)) => self.connection.handle_event(event),
-                Poll::Ready(None) => break, // TODO: error
+                Poll::Ready(None) => {
+                    debug_assert!(self.closed.is_none());
+                    let err = Error::ClosedChannel;
+                    self.closed = Some(err.clone());
+                    return Poll::Ready(ConnectionEvent::ConnectionLost(err));
+                }
                 Poll::Pending => break,
             }
         }
@@ -289,7 +325,10 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::StreamOpened);
                     }
                     quinn_proto::Event::ConnectionLost { reason } => {
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(reason));
+                        debug_assert!(self.closed.is_none());
+                        let err = Error::Quinn(reason);
+                        self.closed = Some(err.clone());
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(err));
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished {
                         id,
@@ -334,7 +373,7 @@ pub(crate) enum ConnectionEvent {
     Connected,
 
     /// Connection has been closed and can no longer be used.
-    ConnectionLost(quinn_proto::ConnectionError),
+    ConnectionLost(Error),
 
     /// Generated after [`Connection::pop_incoming_substream`] has been called and has returned
     /// `None`. After this event has been generated, this method is guaranteed to return `Some`.

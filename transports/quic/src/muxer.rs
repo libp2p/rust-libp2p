@@ -192,26 +192,31 @@ impl StreamMuxer for QuicMuxer {
         substream: &mut Self::Substream,
         buf: &[u8],
     ) -> Poll<Result<usize, Self::Error>> {
-        unimplemented!()
-        /*use quinn_proto::WriteError;
-        let mut inner = self.0.lock();
-        inner.wake_driver();
-        match inner.write(cx, &substream.id, buf) {
+        let mut inner = self.inner.lock();
+
+        match inner.connection.write_substream(*substream, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(WriteError::Blocked) => Poll::Pending,
-            Err(WriteError::UnknownStream) => {
-                error!(
+            Err(quinn_proto::WriteError::Stopped(_)) => Poll::Ready(Ok(0)), // EOF
+            Err(quinn_proto::WriteError::Blocked) => {
+                if let Some(substream) = inner.substreams.get_mut(substream) {
+                    if !substream
+                        .write_waker
+                        .as_ref()
+                        .map_or(false, |w| w.will_wake(cx.waker()))
+                    {
+                        substream.write_waker = Some(cx.waker().clone());
+                    }
+                }
+                Poll::Pending
+            }
+            Err(quinn_proto::WriteError::UnknownStream) => {
+                log::error!(
                     "The application used a connection that is already being \
                     closed. This is a bug in the application or in libp2p."
                 );
-                inner.close_reason()?;
-                Poll::Ready(Err(Error::ExpiredStream))
+                Poll::Pending
             }
-            Err(WriteError::Stopped(e)) => {
-                substream.status = SubstreamStatus::Finished;
-                Poll::Ready(Err(Error::Stopped(e)))
-            }
-        }*/
+        }
     }
 
     /// Try to read from a substream. This will return an error if the substream has
@@ -222,32 +227,31 @@ impl StreamMuxer for QuicMuxer {
         substream: &mut Self::Substream,
         buf: &mut [u8],
     ) -> Poll<Result<usize, Self::Error>> {
-        unimplemented!()
-        /*use quinn_proto::ReadError;
-        let mut inner = self.0.lock();
-        match inner.read(cx, &substream.id, buf) {
+        let mut inner = self.inner.lock();
+
+        match inner.connection.read_substream(*substream, buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(ReadError::Blocked) => {
-                inner.close_reason()?;
-                if let SubstreamStatus::Unwritten = substream.status {
-                    Poll::Ready(Err(Error::CannotReadFromUnwrittenStream))
-                } else {
-                    trace!(
-                        "Blocked on reading stream {:?} with side {:?}",
-                        substream.id,
-                        inner.side()
-                    );
-                    Poll::Pending
+            Err(quinn_proto::ReadError::Reset(_)) => Poll::Ready(Ok(0)), // EOF
+            Err(quinn_proto::ReadError::Blocked) => {
+                if let Some(substream) = inner.substreams.get_mut(substream) {
+                    if !substream
+                        .read_waker
+                        .as_ref()
+                        .map_or(false, |w| w.will_wake(cx.waker()))
+                    {
+                        substream.read_waker = Some(cx.waker().clone());
+                    }
                 }
+                Poll::Pending
             }
-            Err(ReadError::UnknownStream) => {
-                error!(
-                    "The application used a stream that has already been closed. This is a bug."
+            Err(quinn_proto::ReadError::UnknownStream) => {
+                log::error!(
+                    "The application used a connection that is already being \
+                    closed. This is a bug in the application or in libp2p."
                 );
-                Poll::Ready(Err(Error::ExpiredStream))
+                Poll::Pending
             }
-            Err(ReadError::Reset(e)) => Poll::Ready(Err(Error::Reset(e))),
-        }*/
+        }
     }
 
     fn shutdown_substream(
@@ -255,25 +259,11 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
-        unimplemented!()
-        /*match substream.status {
-            SubstreamStatus::Finished => return Poll::Ready(Ok(())),
-            SubstreamStatus::Finishing(ref mut channel) => {
-                self.0.lock().wake_driver();
-                ready!(channel.poll_unpin(cx)).map_err(|_| Error::NetworkFailure)?;
-                return Poll::Ready(Ok(()));
-            }
-            SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
-        }
-        let mut inner = self.0.lock();
-        match inner.shutdown_stream(cx, &substream.id) {
-            Ok(receiver) => {
-                substream.status = SubstreamStatus::Finishing(receiver);
-                Poll::Pending
-            }
-            Err(quinn_proto::FinishError::Stopped(e)) => Poll::Ready(Err(Error::Stopped(e))),
-            Err(quinn_proto::FinishError::UnknownStream) => Poll::Ready(Err(Error::ExpiredStream)),
-        }*/
+        let mut inner = self.inner.lock();
+
+        // TODO: needs more work
+        inner.connection.shutdown_substream(*substream);
+        Poll::Ready(Ok(()))
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {

@@ -41,7 +41,7 @@ use libp2p_core::{
     Transport,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fmt, io,
     sync::{Arc, Weak},
     task::{Context, Poll},
@@ -131,7 +131,7 @@ impl Endpoint {
         }*/
 
         let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
-        let (new_connections_tx, new_connections_rx) = mpsc::channel(8);
+        let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
 
         let endpoint = Arc::new(Endpoint {
             to_endpoint: to_endpoint_tx,
@@ -204,11 +204,12 @@ impl Endpoint {
         addr: SocketAddr,
     ) -> Result<Connection, quinn_proto::ConnectError> {
         // The two `expect`s below can panic if the background task has stopped. The background
-        // task can stop only if it itself panics. In other words, we panic here iff a panic
-        // has already happened somewhere else, which is a reasonable thing to do.
+        // task can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
+        // words, we panic here iff a panic has already happened somewhere else, which is a
+        // reasonable thing to do.
         let (tx, rx) = oneshot::channel();
         self.to_endpoint
-            .clone()
+            .clone() // TODO: no
             .send(ToEndpoint::Dial { addr, result: tx })
             .await
             .expect("background task has crashed");
@@ -217,8 +218,11 @@ impl Endpoint {
 
     /// Tries to pop a new incoming connection from the queue.
     pub(crate) async fn next_incoming(&self) -> Connection {
+        // The `expect` below can panic if the background task has stopped. The background task
+        // can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
+        // words, we panic here iff a panic has already happened somewhere else, which is a
+        // reasonable thing to do.
         let mut new_connections = self.new_connections.lock().await;
-        // TODO: write docs about panic possibility
         new_connections
             .next()
             .await
@@ -237,7 +241,7 @@ impl Endpoint {
     ) {
         let _ = self
             .to_endpoint
-            .clone()
+            .clone() // TODO: no
             .send(ToEndpoint::SendUdpPacket {
                 destination,
                 data: data.into(),
@@ -256,7 +260,7 @@ impl Endpoint {
         event: quinn_proto::EndpointEvent,
     ) {
         self.to_endpoint
-            .clone()
+            .clone() // TODO: no
             .send(ToEndpoint::ProcessConnectionEvent {
                 connection_id,
                 event,
@@ -365,7 +369,6 @@ enum ToEndpoint {
 /// We handle this tricky situation by simply killing connections as soon as their associated
 /// channel is full.
 ///
-// TODO: actually implement the listener thing
 // TODO: actually implement the killing of connections if channel is full, at the moment we just
 // wait
 /// # Shutdown
@@ -384,6 +387,7 @@ async fn background_task(
     mut new_connections: mpsc::Sender<Connection>,
     mut receiver: stream::Fuse<mpsc::Receiver<ToEndpoint>>,
 ) {
+    // The actual QUIC state machine.
     let mut endpoint = quinn_proto::Endpoint::new(
         config.endpoint_config.clone(),
         Some(config.server_config.clone()),
@@ -395,8 +399,12 @@ async fn background_task(
     // Buffer where we write packets received from the UDP socket.
     let mut socket_recv_buffer = vec![0; 65536];
 
-    // Channel where to send new incoming connections.
-    let mut active_listener: Option<mpsc::Sender<Connection>> = None;
+    // The quinn_proto endpoint can give us new connections for as long as its accept buffer
+    // isn't full. This buffer is used to push these new connections while we are waiting to
+    // send them on the `new_connections` channel. We only call `endpoint.accept()` when we remove
+    // an element from this list, which guarantees that it doesn't grow unbounded.
+    // TODO: with_capacity?
+    let mut queued_new_connections = VecDeque::new();
 
     // Next packet waiting to be transmitted on the UDP socket, if any.
     // Note that this variable isn't strictly necessary, but it reduces code duplication in the
@@ -443,28 +451,34 @@ async fn background_task(
                     None => return,
 
                     Some(ToEndpoint::Dial { addr, result }) => {
-                        // TODO: "l"?!
-                        let outcome = endpoint.connect(config.client_config.clone(),addr, "l");
-                        let outcome = match outcome {
-                            Ok((connection_id, connection)) => {
-                                debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
-                                let (tx, rx) = mpsc::channel(16);
-                                alive_connections.insert(connection_id, tx);
-                                let endpoint_arc = match endpoint_weak.upgrade() {
-                                    Some(ep) => ep,
-                                    None => return, // Shut down the task if the endpoint is dead.
-                                };
-                                Ok(Connection::from_quinn_connection(endpoint_arc, connection, connection_id, rx))
-                            },
-                            Err(err) => Err(err),
+                        // This `"l"` seems necessary because an empty string is an invalid domain
+                        // name. While we don't use domain names, the underlying rustls library
+                        // is based upon the assumption that we do.
+                        let (connection_id, connection) =
+                            match endpoint.connect(config.client_config.clone(), addr, "l") {
+                                Ok(c) => c,
+                                Err(err) => {
+                                    let _ = result.send(Err(err));
+                                    continue;
+                                }
+                            };
+
+                        let endpoint_arc = match endpoint_weak.upgrade() {
+                            Some(ep) => ep,
+                            None => return, // Shut down the task if the endpoint is dead.
                         };
-                        let _ = result.send(outcome);
+
+                        debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
+                        let (tx, rx) = mpsc::channel(16);
+                        let connection = Connection::from_quinn_connection(endpoint_arc, connection, connection_id, rx);
+                        alive_connections.insert(connection_id, tx);
+                        let _ = result.send(Ok(connection));
                     }
 
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
                         debug_assert!(alive_connections.contains_key(&connection_id));
-                        if event.is_drained() {
+                        if event.is_drained() {  // TODO: is this correct?
                             alive_connections.remove(&connection_id);
                         }
                         if let Some(event_back) = endpoint.handle_event(connection_id, event) {
@@ -480,6 +494,34 @@ async fn background_task(
                         continue;
                     }
                 }
+            }
+
+            // The future we create here wakes up if two conditions are fulfilled:
+            //
+            // - The `new_connections` channel is ready to accept a new element.
+            // - `queued_new_connections` is not empty.
+            //
+            // When this happens, we pop an element from `queued_new_connections`, put it on the
+            // channel, and call `endpoint.accept()`, thereby allowing the QUIC state machine to
+            // feed a new incoming connection to us.
+            readiness = {
+                let active = !queued_new_connections.is_empty();
+                let new_connections = &mut new_connections;
+                future::poll_fn(move |cx| {
+                    if active { new_connections.poll_ready(cx) } else { Poll::Pending }
+                }).fuse()
+            } => {
+                if readiness.is_err() {
+                    // new_connections channel has been dropped, meaning that the endpoint has
+                    // been destroyed.
+                    return;
+                }
+
+                let elem = queued_new_connections.pop_front()
+                    .expect("if queue is empty, the future above is always Pending; qed");
+                new_connections.start_send(elem)
+                    .expect("future is waken up only if poll_ready returned Ready; qed");
+                endpoint.accept();
             }
 
             result = udp_socket.recv_from(&mut socket_recv_buffer).fuse() => {
@@ -518,12 +560,12 @@ async fn background_task(
                             None => return, // Shut down the task if the endpoint is dead.
                         };
                         let connection = Connection::from_quinn_connection(endpoint_arc, connec, connec_id, rx);
-                        // TODO: don't await here /!\ implement the thing described in the docs
-                        if new_connections.send(connection).await.is_err() {
-                            // Shut down the task if the endpoint is dead.
-                            return;
-                        }
-                        endpoint.accept();
+
+                        // As explained in the documentation, we put this new connection in an
+                        // intermediary buffer. At the next loop iteration we will try to move it
+                        // to the `new_connections` channel. We call `endpoint.accept()` only once
+                        // the element has successfully been sent on `new_connections`.
+                        queued_new_connections.push_back(connection);
                     },
                 }
             }

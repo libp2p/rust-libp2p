@@ -34,6 +34,7 @@ use std::{net::SocketAddr, pin::Pin, sync::Arc};
 
 // We reexport the errors that are exposed in the API.
 // All of these types use one another.
+pub use crate::connection::Error as Libp2pQuicConnectionError;
 pub use quinn_proto::{
     ApplicationClose, ConfigError, ConnectError, ConnectionClose, ConnectionError,
     TransportError as QuinnTransportError, TransportErrorCode,
@@ -54,7 +55,7 @@ pub enum Error {
     Reach(ConnectError),
     /// Error after the remote has been reached.
     #[error("{0}")]
-    Established(ConnectionError),
+    Established(Libp2pQuicConnectionError),
 }
 
 impl Transport for QuicTransport {
@@ -76,15 +77,7 @@ impl Transport for QuicTransport {
             let addr = addr.clone();
             async move {
                 let connec = endpoint.next_incoming().await;
-
-                let remote_addr = {
-                    let socket_addr = connec.remote_addr();
-                    Multiaddr::empty()
-                        .with(socket_addr.ip().into())
-                        .with(Protocol::Udp(socket_addr.port()))
-                        .with(Protocol::Quic)
-                };
-
+                let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
                 let event = Ok(ListenerEvent::Upgrade {
                     upgrade: Upgrade::from_connection(connec),
                     local_addr: addr.clone(), // TODO: hack
@@ -136,6 +129,14 @@ pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()
         }
         _ => Err(()),
     }
+}
+
+/// Turns an IP address and port into the corresponding QUIC multiaddr.
+pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
+    Multiaddr::empty()
+        .with(socket_addr.ip().into())
+        .with(Protocol::Udp(socket_addr.port()))
+        .with(Protocol::Quic)
 }
 
 #[cfg(test)]
