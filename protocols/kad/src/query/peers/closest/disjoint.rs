@@ -278,7 +278,7 @@ impl ClosestDisjointPeersIter {
     /// Finishes all paths containing one of the given peers.
     ///
     /// See [`crate::query::Query::try_finish`] for details.
-    pub fn finish_paths<'a, I>(&mut self, peers: I)
+    pub fn finish_paths<'a, I>(&mut self, peers: I) -> bool
     where
         I: IntoIterator<Item = &'a PeerId>
     {
@@ -287,6 +287,8 @@ impl ClosestDisjointPeersIter {
                 self.iters[*initiated_by].finish();
             }
         }
+
+        self.is_finished()
     }
 
     /// Immediately transitions the iterator to [`PeersIterState::Finished`].

@@ -354,15 +354,17 @@ impl<TInner> Query<TInner> {
     /// A finished query immediately stops yielding new peers to contact and
     /// will be reported by [`QueryPool::poll`] via
     /// [`QueryPoolState::Finished`].
-    pub fn try_finish<'a, I>(&mut self, peers: I)
+    pub fn try_finish<'a, I>(&mut self, peers: I) -> bool
     where
         I: IntoIterator<Item = &'a PeerId>
     {
         match &mut self.peer_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
-            QueryPeerIter::ClosestDisjoint(iter) => iter.finish_paths(peers),
+            QueryPeerIter::ClosestDisjoint(iter) => return iter.finish_paths(peers),
             QueryPeerIter::Fixed(iter) => iter.finish()
-        }
+        };
+
+        true
     }
 
     /// Finishes the query prematurely.

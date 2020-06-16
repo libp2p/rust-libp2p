@@ -1518,7 +1518,17 @@ where
                                     .filter_map(|PeerRecord{ peer, .. }| peer.as_ref())
                                     .cloned()
                                     .collect::<Vec<_>>();
-                                query.try_finish(peers.iter())
+                                let is_finished = query.try_finish(peers.iter());
+
+                                debug!(
+                                    "GetRecord query with id {:?} reached the quorum {} finished \
+                                     with recent response from peer {}, counting {} successful \
+                                     responses total.",
+                                    user_data,
+                                    if is_finished { "and is" } else { "but is not yet" },
+                                    source,
+                                    peers.len(),
+                                );
                             }
                         } else if quorum.get() == 1 {
                             // It is a "standard" Kademlia query, for which the
@@ -1556,10 +1566,20 @@ where
                     if let QueryInfo::PutRecord {
                         phase: PutRecordPhase::PutRecord { success, .. }, quorum, ..
                     } = &mut query.inner.info {
-                        success.push(source);
+                        success.push(source.clone());
                         if success.len() >= quorum.get() {
                             let peers = success.clone();
-                            query.try_finish(peers.iter())
+                            let is_finished = query.try_finish(peers.iter());
+
+                            debug!(
+                                "PutRecord query with id {:?} reached the quorum {} finished \
+                                 with recent response from peer {}, counting {} successful \
+                                 responses total.",
+                                user_data,
+                                if is_finished { "and is" } else { "but is not yet" },
+                                source,
+                                peers.len(),
+                            );
                         }
                     }
                 }
