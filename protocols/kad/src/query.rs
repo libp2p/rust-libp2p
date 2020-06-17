@@ -351,6 +351,10 @@ impl<TInner> Query<TInner> {
     /// which this is considered to be the case, i.e. for which a termination
     /// condition is satisfied.
     ///
+    /// Returns `true` if the query did indeed finish, `false` otherwise. In the
+    /// latter case, a new attempt at finishing the query may be made with new
+    /// `peers`.
+    ///
     /// A finished query immediately stops yielding new peers to contact and
     /// will be reported by [`QueryPool::poll`] via
     /// [`QueryPoolState::Finished`].
@@ -359,12 +363,10 @@ impl<TInner> Query<TInner> {
         I: IntoIterator<Item = &'a PeerId>
     {
         match &mut self.peer_iter {
-            QueryPeerIter::Closest(iter) => iter.finish(),
-            QueryPeerIter::ClosestDisjoint(iter) => return iter.finish_paths(peers),
-            QueryPeerIter::Fixed(iter) => iter.finish()
-        };
-
-        true
+            QueryPeerIter::Closest(iter) => { iter.finish(); true },
+            QueryPeerIter::ClosestDisjoint(iter) => iter.finish_paths(peers),
+            QueryPeerIter::Fixed(iter) => { iter.finish(); true }
+        }
     }
 
     /// Finishes the query prematurely.

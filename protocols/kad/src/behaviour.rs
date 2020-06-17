@@ -1511,24 +1511,22 @@ where
                         if let Some(record) = record {
                             records.push(PeerRecord{ peer: Some(source.clone()), record });
 
-                            if records.len() >= quorum.get() {
+                            let quorum = quorum.get();
+                            if records.len() >= quorum {
                                 // Desired quorum reached. The query may finish. See
                                 // [`Query::try_finish`] for details.
                                 let peers = records.iter()
                                     .filter_map(|PeerRecord{ peer, .. }| peer.as_ref())
                                     .cloned()
                                     .collect::<Vec<_>>();
-                                let is_finished = query.try_finish(peers.iter());
-
-                                debug!(
-                                    "GetRecord query with id {:?} reached the quorum {} finished \
-                                     with recent response from peer {}, counting {} successful \
-                                     responses total.",
-                                    user_data,
-                                    if is_finished { "and is" } else { "but is not yet" },
-                                    source,
-                                    peers.len(),
-                                );
+                                let finished = query.try_finish(peers.iter());
+                                if !finished {
+                                    debug!(
+                                        "GetRecord query ({:?}) reached quorum ({}/{}) with \
+                                         response from peer {} but could not yet finish.",
+                                        user_data, peers.len(), quorum, source,
+                                    );
+                                }
                             }
                         } else if quorum.get() == 1 {
                             // It is a "standard" Kademlia query, for which the
@@ -1567,19 +1565,18 @@ where
                         phase: PutRecordPhase::PutRecord { success, .. }, quorum, ..
                     } = &mut query.inner.info {
                         success.push(source.clone());
-                        if success.len() >= quorum.get() {
-                            let peers = success.clone();
-                            let is_finished = query.try_finish(peers.iter());
 
-                            debug!(
-                                "PutRecord query with id {:?} reached the quorum {} finished \
-                                 with recent response from peer {}, counting {} successful \
-                                 responses total.",
-                                user_data,
-                                if is_finished { "and is" } else { "but is not yet" },
-                                source,
-                                peers.len(),
-                            );
+                        let quorum = quorum.get();
+                        if success.len() >= quorum {
+                            let peers = success.clone();
+                            let finished = query.try_finish(peers.iter());
+                            if !finished {
+                                debug!(
+                                    "PutRecord query ({:?}) reached quorum ({}/{}) with response \
+                                     from peer {} but could not yet finish.",
+                                    user_data, peers.len(), quorum, source,
+                                );
+                            }
                         }
                     }
                 }
