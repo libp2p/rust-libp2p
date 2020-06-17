@@ -94,13 +94,20 @@ impl Config {
 // TODO: remove useless fields
 pub struct Endpoint {
     /// Channel to the background of the endpoint.
-    to_endpoint: mpsc::Sender<ToEndpoint>,
+    /// See [`Endpoint::new_connections`] (just below) for a commentary about the mutex.
+    to_endpoint: Mutex<mpsc::Sender<ToEndpoint>>,
+
     /// Channel where new connections are being sent.
     /// This is protected by a futures-friendly `Mutex`, meaning that receiving a connection is
     /// done in two steps: locking this mutex, and grabbing the next element on the `Receiver`.
     /// The only consequence of this `Mutex` is that multiple simultaneous calls to
     /// [`Endpoint::next_incoming`] are serialized.
     new_connections: Mutex<mpsc::Receiver<Connection>>,
+
+    /// Copy of [`to_endpoint`], except not behind a `Mutex`. Used if we want to be guaranteed a
+    /// slot in the messages buffer.
+    to_endpoint2: mpsc::Sender<ToEndpoint>,
+
     /// Configuration passed at initialization.
     // TODO: remove?
     config: Config,
@@ -131,10 +138,12 @@ impl Endpoint {
         }*/
 
         let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
+        let to_endpoint2 = to_endpoint_tx.clone();
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
 
         let endpoint = Arc::new(Endpoint {
-            to_endpoint: to_endpoint_tx,
+            to_endpoint: Mutex::new(to_endpoint_tx),
+            to_endpoint2,
             new_connections: Mutex::new(new_connections_rx),
             config: config.clone(),
             local_multiaddr: config.multiaddr.clone(), // TODO: no
@@ -209,7 +218,7 @@ impl Endpoint {
         // reasonable thing to do.
         let (tx, rx) = oneshot::channel();
         self.to_endpoint
-            .clone() // TODO: no
+            .lock().await
             .send(ToEndpoint::Dial { addr, result: tx })
             .await
             .expect("background task has crashed");
@@ -241,7 +250,7 @@ impl Endpoint {
     ) {
         let _ = self
             .to_endpoint
-            .clone() // TODO: no
+            .lock().await
             .send(ToEndpoint::SendUdpPacket {
                 destination,
                 data: data.into(),
@@ -252,21 +261,43 @@ impl Endpoint {
     /// Report to the endpoint an event on a [`quinn_proto::Connection`].
     ///
     /// This is typically called by a [`Connection`].
-    // TODO: bad API?
-    // TODO: talk about lifetime of connections
+    ///
+    /// If `event.is_drained()` is true, the event indicates that the connection no longer exists.
+    /// This must therefore be the last event sent using this [`quinn_proto::ConnectionHandle`].
     pub(crate) async fn report_quinn_event(
         &self,
         connection_id: quinn_proto::ConnectionHandle,
         event: quinn_proto::EndpointEvent,
     ) {
         self.to_endpoint
-            .clone() // TODO: no
+            .lock().await
             .send(ToEndpoint::ProcessConnectionEvent {
                 connection_id,
                 event,
             })
             .await
             .expect("background task has crashed");
+    }
+
+    /// Similar to [`Endpoint::report_quinn_event`], except that the message sending is guaranteed
+    /// to be instantaneous and to succeed.
+    ///
+    /// This method bypasses back-pressure mechanisms and is meant to be called only from
+    /// destructors, where waiting is not advisable.
+    pub(crate) fn report_quinn_event_non_block(
+        &self,
+        connection_id: quinn_proto::ConnectionHandle,
+        event: quinn_proto::EndpointEvent,
+    ) {
+        // We implement this by cloning the `mpsc::Sender`. Since each sender is guaranteed a slot
+        // in the buffer, cloning the sender reserves the slot and sending thus always succeeds.
+        let result = self.to_endpoint2
+            .clone()
+            .try_send(ToEndpoint::ProcessConnectionEvent {
+                connection_id,
+                event,
+            });
+        assert!(result.is_ok());
     }
 }
 
@@ -478,10 +509,14 @@ async fn background_task(
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
                         debug_assert!(alive_connections.contains_key(&connection_id));
-                        if event.is_drained() {  // TODO: is this correct?
+                        // We "drained" event indicates that the connection no longer exists and
+                        // its ID can be reclaimed.
+                        let is_drained_event = event.is_drained();
+                        if is_drained_event {
                             alive_connections.remove(&connection_id);
                         }
                         if let Some(event_back) = endpoint.handle_event(connection_id, event) {
+                            debug_assert!(!is_drained_event);
                             // TODO: don't await here /!\
                             alive_connections.get_mut(&connection_id).unwrap().send(event_back).await;
                         }

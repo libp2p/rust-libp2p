@@ -125,7 +125,7 @@ impl Connection {
         }
     }
 
-    /// Returns the certificates send by the remote through the underlying TLS session.
+    /// Returns the certificates sent by the remote through the underlying TLS session.
     /// Returns `None` if the connection is still handshaking.
     // TODO: it seems to happen that is_handshaking is false but this returns None
     pub(crate) fn peer_certificates(
@@ -138,19 +138,29 @@ impl Connection {
     }
 
     /// Returns the address of the node we're connected to.
+    // TODO: can change /!\
     pub(crate) fn remote_addr(&self) -> SocketAddr {
         self.connection.remote_address()
     }
 
-    /// Returns `true` if this connection is still pending and not actually connected to the
-    /// remote.
+    /// Returns `true` if this connection is still pending. Returns `false` if we are connected to
+    /// the remote or if the connection is closed.
     pub(crate) fn is_handshaking(&self) -> bool {
         self.is_handshaking
+    }
+
+    /// If the connection is closed, returns why. If the connection is open, returns `None`.
+    ///
+    /// > **Note**: This method is also the main way to determine whether a connection is closed.
+    pub(crate) fn close_reason(&self) -> Option<&Error> {
+        debug_assert!(!self.is_handshaking);
+        self.closed.as_ref()
     }
 
     /// Start closing the connection. A [`ConnectionEvent::ConnectionLost`] event will be
     /// produced in the future.
     pub(crate) fn close(&mut self) {
+        // TODO: what if the user calls this multiple times?
         // We send a dummy `0` error code with no message, as the API of StreamMuxer doesn't
         // support this.
         self.connection
@@ -306,7 +316,8 @@ impl Connection {
                     | quinn_proto::Event::DatagramReceived => {
                         // We don't use datagrams or unidirectional streams. If these events
                         // happen, it is by some code not compatible with libp2p-quic.
-                        // TODO: kill the connection
+                        self.connection
+                        .close(Instant::now(), From::from(0u32), Default::default());
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
                         return Poll::Ready(ConnectionEvent::StreamReadable(id));
@@ -326,6 +337,7 @@ impl Connection {
                     }
                     quinn_proto::Event::ConnectionLost { reason } => {
                         debug_assert!(self.closed.is_none());
+                        self.is_handshaking = false;
                         let err = Error::Quinn(reason);
                         self.closed = Some(err.clone());
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));
@@ -361,7 +373,9 @@ impl fmt::Debug for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        // TODO: send a quinn_proto::EndpointEvent::drained()
+        // TODO: don't do that if already drained
+        // We send a message to the endpoint.
+        self.endpoint.report_quinn_event_non_block(self.connection_id, quinn_proto::EndpointEvent::drained());
     }
 }
 
