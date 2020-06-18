@@ -89,21 +89,19 @@ impl MemoryStore {
     /// Retains the records satisfying a predicate.
     pub fn retain<F>(&mut self, f: F)
     where
-        F: FnMut(&Key, &mut Record) -> bool
+        F: FnMut(&Key, &mut Record) -> bool,
     {
         self.records.retain(f);
     }
 }
 
 impl<'a> RecordStore<'a> for MemoryStore {
-    type RecordsIter = iter::Map<
-        hash_map::Values<'a, Key, Record>,
-        fn(&'a Record) -> Cow<'a, Record>
-    >;
+    type RecordsIter =
+        iter::Map<hash_map::Values<'a, Key, Record>, fn(&'a Record) -> Cow<'a, Record>>;
 
     type ProvidedIter = iter::Map<
         hash_set::Iter<'a, ProviderRecord>,
-        fn(&'a ProviderRecord) -> Cow<'a, ProviderRecord>
+        fn(&'a ProviderRecord) -> Cow<'a, ProviderRecord>,
     >;
 
     fn get(&'a self, k: &Key) -> Option<Cow<Record>> {
@@ -112,7 +110,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
 
     fn put(&'a mut self, r: Record) -> Result<()> {
         if r.value.len() >= self.config.max_value_bytes {
-            return Err(Error::ValueTooLarge)
+            return Err(Error::ValueTooLarge);
         }
 
         let num_records = self.records.len();
@@ -123,7 +121,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
             }
             hash_map::Entry::Vacant(e) => {
                 if num_records >= self.config.max_records {
-                    return Err(Error::MaxRecords)
+                    return Err(Error::MaxRecords);
                 }
                 e.insert(r);
             }
@@ -145,14 +143,15 @@ impl<'a> RecordStore<'a> for MemoryStore {
 
         // Obtain the entry
         let providers = match self.providers.entry(record.key.clone()) {
-            e@hash_map::Entry::Occupied(_) => e,
-            e@hash_map::Entry::Vacant(_) => {
+            e @ hash_map::Entry::Occupied(_) => e,
+            e @ hash_map::Entry::Vacant(_) => {
                 if self.config.max_provided_keys == num_keys {
-                    return Err(Error::MaxProvidedKeys)
+                    return Err(Error::MaxProvidedKeys);
                 }
                 e
             }
-        }.or_insert_with(Default::default);
+        }
+        .or_insert_with(Default::default);
 
         if let Some(i) = providers.iter().position(|p| p.provider == record.provider) {
             // In-place update of an existing provider record.
@@ -177,8 +176,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
                         self.provided.remove(&p);
                     }
                 }
-            }
-            else if providers.len() < self.config.max_providers_per_key {
+            } else if providers.len() < self.config.max_providers_per_key {
                 // The distance of the new provider to the key is larger than
                 // the distance of any existing provider, but there is still room.
                 if local_key.preimage() == &record.provider {
@@ -191,7 +189,9 @@ impl<'a> RecordStore<'a> for MemoryStore {
     }
 
     fn providers(&'a self, key: &Key) -> Vec<ProviderRecord> {
-        self.providers.get(key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
+        self.providers
+            .get(key)
+            .map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
     fn provided(&'a self) -> Self::ProvidedIter {
@@ -224,8 +224,7 @@ mod tests {
     }
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {
-        kbucket::Key::new(r.key.clone())
-            .distance(&kbucket::Key::new(r.provider.clone()))
+        kbucket::Key::new(r.key.clone()).distance(&kbucket::Key::new(r.provider.clone()))
     }
 
     #[test]
@@ -258,9 +257,10 @@ mod tests {
             let mut store = MemoryStore::new(PeerId::random());
             let key = Key::from(random_multihash());
 
-            let mut records = providers.into_iter().map(|p| {
-                ProviderRecord::new(key.clone(), p.into_preimage())
-            }).collect::<Vec<_>>();
+            let mut records = providers
+                .into_iter()
+                .map(|p| ProviderRecord::new(key.clone(), p.into_preimage()))
+                .collect::<Vec<_>>();
 
             for r in &records {
                 assert!(store.add_provider(r.clone()).is_ok());
@@ -282,7 +282,10 @@ mod tests {
         let key = random_multihash();
         let rec = ProviderRecord::new(key, id.clone());
         assert!(store.add_provider(rec.clone()).is_ok());
-        assert_eq!(vec![Cow::Borrowed(&rec)], store.provided().collect::<Vec<_>>());
+        assert_eq!(
+            vec![Cow::Borrowed(&rec)],
+            store.provided().collect::<Vec<_>>()
+        );
         store.remove_provider(&rec.key, &id);
         assert_eq!(store.provided().count(), 0);
     }
@@ -303,7 +306,7 @@ mod tests {
     #[test]
     fn max_provided_keys() {
         let mut store = MemoryStore::new(PeerId::random());
-        for _ in 0 .. store.config.max_provided_keys {
+        for _ in 0..store.config.max_provided_keys {
             let key = random_multihash();
             let prv = PeerId::random();
             let rec = ProviderRecord::new(key, prv);
@@ -318,4 +321,3 @@ mod tests {
         }
     }
 }
-

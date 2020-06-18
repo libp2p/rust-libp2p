@@ -23,13 +23,13 @@
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
-use libp2p_core::UpgradeInfo;
 use libp2p_core::identity;
+use libp2p_core::UpgradeInfo;
 use rand::Rng;
-use x25519_dalek::{X25519_BASEPOINT_BYTES, x25519};
+use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
 
-use super::{*, x25519::X25519};
+use super::{x25519::X25519, *};
 
 /// Prefix of static key signatures for domain separation.
 const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
@@ -117,32 +117,48 @@ impl Protocol<X25519Spec> for X25519Spec {
 
     fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, NoiseError> {
         if bytes.len() != 32 {
-            return Err(NoiseError::InvalidKey)
+            return Err(NoiseError::InvalidKey);
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);
         Ok(PublicKey(X25519Spec(pk)))
     }
 
-    fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<X25519Spec>, sig: &Option<Vec<u8>>) -> bool
-    {
+    fn verify(
+        id_pk: &identity::PublicKey,
+        dh_pk: &PublicKey<X25519Spec>,
+        sig: &Option<Vec<u8>>,
+    ) -> bool {
         sig.as_ref().map_or(false, |s| {
             id_pk.verify(&[STATIC_KEY_DOMAIN.as_bytes(), dh_pk.as_ref()].concat(), s)
         })
     }
 
-    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<X25519Spec>) -> Result<Vec<u8>, NoiseError> {
+    fn sign(
+        id_keys: &identity::Keypair,
+        dh_pk: &PublicKey<X25519Spec>,
+    ) -> Result<Vec<u8>, NoiseError> {
         Ok(id_keys.sign(&[STATIC_KEY_DOMAIN.as_bytes(), dh_pk.as_ref()].concat())?)
     }
 }
 
 #[doc(hidden)]
 impl snow::types::Dh for Keypair<X25519Spec> {
-    fn name(&self) -> &'static str { "25519" }
-    fn pub_len(&self) -> usize { 32 }
-    fn priv_len(&self) -> usize { 32 }
-    fn pubkey(&self) -> &[u8] { self.public.as_ref() }
-    fn privkey(&self) -> &[u8] { self.secret.as_ref() }
+    fn name(&self) -> &'static str {
+        "25519"
+    }
+    fn pub_len(&self) -> usize {
+        32
+    }
+    fn priv_len(&self) -> usize {
+        32
+    }
+    fn pubkey(&self) -> &[u8] {
+        self.public.as_ref()
+    }
+    fn privkey(&self) -> &[u8] {
+        self.secret.as_ref()
+    }
 
     fn set(&mut self, sk: &[u8]) {
         let mut secret = [0u8; 32];
@@ -162,9 +178,9 @@ impl snow::types::Dh for Keypair<X25519Spec> {
 
     fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), ()> {
         let mut p = [0; 32];
-        p.copy_from_slice(&pk[.. 32]);
+        p.copy_from_slice(&pk[..32]);
         let ss = x25519((self.secret.0).0, p);
-        shared_secret[.. 32].copy_from_slice(&ss[..]);
+        shared_secret[..32].copy_from_slice(&ss[..]);
         Ok(())
     }
 }

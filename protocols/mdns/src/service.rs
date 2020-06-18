@@ -18,23 +18,31 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
+use crate::{dns, META_QUERY_SERVICE, SERVICE_NAME};
 use async_std::net::UdpSocket;
 use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
-use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
-use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
-use wasm_timer::Interval;
 use lazy_static::lazy_static;
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    PeerId,
+};
+use std::{
+    convert::TryFrom as _,
+    fmt, io,
+    net::Ipv4Addr,
+    net::SocketAddr,
+    str,
+    time::{Duration, Instant},
+};
+use wasm_timer::Interval;
 
-pub use dns::{MdnsResponseError, build_query_response, build_service_discovery_response};
+pub use dns::{build_query_response, build_service_discovery_response, MdnsResponseError};
 
 lazy_static! {
-    static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr = SocketAddr::from((
-        Ipv4Addr::new(224, 0, 0, 251),
-        5353,
-    ));
+    static ref IPV4_MDNS_MULTICAST_ADDRESS: SocketAddr =
+        SocketAddr::from((Ipv4Addr::new(224, 0, 0, 251), 5353,));
 }
 
 /// A running service that discovers libp2p peers and responds to other libp2p peers' queries on
@@ -141,7 +149,9 @@ impl MdnsService {
                 Ok(())
             }
             #[cfg(not(unix))]
-            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> { Ok(()) }
+            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> {
+                Ok(())
+            }
             let builder = net2::UdpBuilder::new_v4()?;
             builder.reuse_address(true)?;
             platform_specific(&builder)?;
@@ -199,7 +209,11 @@ impl MdnsService {
             while !self.send_buffers.is_empty() {
                 let to_send = self.send_buffers.remove(0);
 
-                match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                match self
+                    .socket
+                    .send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS)
+                    .await
+                {
                     Ok(bytes_written) => {
                         debug_assert_eq!(bytes_written, to_send.len());
                     }
@@ -216,7 +230,11 @@ impl MdnsService {
             while !self.query_send_buffers.is_empty() {
                 let to_send = self.query_send_buffers.remove(0);
 
-                match self.query_socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                match self
+                    .query_socket
+                    .send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS)
+                    .await
+                {
                     Ok(bytes_written) => {
                         debug_assert_eq!(bytes_written, to_send.len());
                     }
@@ -234,7 +252,9 @@ impl MdnsService {
             let selected_output = match futures::future::select(
                 Box::pin(self.socket.recv_from(&mut self.recv_buffer)),
                 Box::pin(self.query_interval.next()),
-            ).await {
+            )
+            .await
+            {
                 future::Either::Left((recved, _)) => Left(recved),
                 future::Either::Right(_) => Right(()),
             };
@@ -244,17 +264,17 @@ impl MdnsService {
                     Ok((len, from)) => {
                         match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
                             Some(packet) => return (self, packet),
-                            None => {},
+                            None => {}
                         }
-                    },
+                    }
                     Err(_) => {
                         // Errors are non-fatal and can happen if we get disconnected from the network.
                         // The query interval will wake up the task at some point so that we can try again.
-                    },
+                    }
                 },
                 Right(_) => {
                     // Ensure underlying task is woken up on the next interval tick.
-                    while let Some(_) = self.query_interval.next().now_or_never() {};
+                    while let Some(_) = self.query_interval.next().now_or_never() {}
 
                     if !self.silent {
                         let query = dns::build_query();
@@ -306,21 +326,16 @@ impl MdnsPacket {
                         .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
                     {
                         // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                        let discovery = MdnsPacket::ServiceDiscovery(
-                            MdnsServiceDiscovery {
-                                from,
-                                query_id: packet.header.id,
-                            },
-                        );
+                        let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
+                            from,
+                            query_id: packet.header.id,
+                        });
                         return Some(discovery);
                     } else {
                         return None;
                     }
                 } else {
-                    let resp = MdnsPacket::Response(MdnsResponse::new (
-                        packet,
-                        from,
-                    ));
+                    let resp = MdnsPacket::Response(MdnsResponse::new(packet, from));
                     return Some(resp);
                 }
             }
@@ -398,44 +413,40 @@ pub struct MdnsResponse {
 impl MdnsResponse {
     /// Creates a new `MdnsResponse` based on the provided `Packet`.
     fn new(packet: Packet, from: SocketAddr) -> MdnsResponse {
-        let peers = packet.answers.iter().filter_map(|record| {
-            if record.name.to_string().as_bytes() != SERVICE_NAME {
-                return None;
-            }
+        let peers = packet
+            .answers
+            .iter()
+            .filter_map(|record| {
+                if record.name.to_string().as_bytes() != SERVICE_NAME {
+                    return None;
+                }
 
-            let record_value = match record.data {
-                RData::PTR(record) => record.0.to_string(),
-                _ => return None,
-            };
+                let record_value = match record.data {
+                    RData::PTR(record) => record.0.to_string(),
+                    _ => return None,
+                };
 
-            let mut peer_name = match record_value.rsplitn(4, |c| c == '.').last() {
-                Some(n) => n.to_owned(),
-                None => return None,
-            };
+                let mut peer_name = match record_value.rsplitn(4, |c| c == '.').last() {
+                    Some(n) => n.to_owned(),
+                    None => return None,
+                };
 
-            // if we have a segmented name, remove the '.'
-            peer_name.retain(|c| c != '.');
+                // if we have a segmented name, remove the '.'
+                peer_name.retain(|c| c != '.');
 
-            let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
-                Ok(bytes) => match PeerId::from_bytes(bytes) {
-                    Ok(id) => id,
+                let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
+                    Ok(bytes) => match PeerId::from_bytes(bytes) {
+                        Ok(id) => id,
+                        Err(_) => return None,
+                    },
                     Err(_) => return None,
-                },
-                Err(_) => return None,
-            };
+                };
 
-            Some(MdnsPeer::new (
-                &packet,
-                record_value,
-                peer_id,
-                record.ttl,
-            ))
-        }).collect();
+                Some(MdnsPeer::new(&packet, record_value, peer_id, record.ttl))
+            })
+            .collect();
 
-        MdnsResponse {
-            peers,
-            from,
-        }
+        MdnsResponse { peers, from }
     }
 
     /// Returns the list of peers that have been reported in this packet.
@@ -513,11 +524,12 @@ impl MdnsPeer {
                         } else {
                             return None;
                         }
-                    },
+                    }
                     _ => return None,
                 };
                 Some(addr)
-            }).collect();
+            })
+            .collect();
 
         MdnsPeer {
             addrs,
@@ -556,11 +568,14 @@ impl fmt::Debug for MdnsPeer {
 
 #[cfg(test)]
 mod tests {
-    use futures::executor::block_on;
-    use libp2p_core::{PeerId, multiaddr::multihash};
-    use std::{io::{Error, ErrorKind}, time::Duration};
-    use wasm_timer::ext::TryFutureExt;
     use crate::service::{MdnsPacket, MdnsService};
+    use futures::executor::block_on;
+    use libp2p_core::{multiaddr::multihash, PeerId};
+    use std::{
+        io::{Error, ErrorKind},
+        time::Duration,
+    };
+    use wasm_timer::ext::TryFutureExt;
 
     fn discover(peer_id: PeerId) {
         block_on(async {
@@ -576,7 +591,8 @@ mod tests {
                             peer_id.clone(),
                             vec![].into_iter(),
                             Duration::from_secs(120),
-                        ).unwrap();
+                        )
+                        .unwrap();
                         service.enqueue_response(resp);
                     }
                     MdnsPacket::Response(response) => {
@@ -586,7 +602,9 @@ mod tests {
                             }
                         }
                     }
-                    MdnsPacket::ServiceDiscovery(_) => panic!("did not expect a service discovery packet")
+                    MdnsPacket::ServiceDiscovery(_) => {
+                        panic!("did not expect a service discovery packet")
+                    }
                 }
             }
         })
@@ -596,7 +614,8 @@ mod tests {
     // unit tests inter fear with it. Test needs to be run in sequence to ensure test properties.
     #[test]
     fn respect_query_interval() {
-        let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
+        let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs()
+            .unwrap()
             .into_iter()
             .map(|i| i.addr.ip())
             .collect();
@@ -620,16 +639,19 @@ mod tests {
                         sent_queries.push(query);
 
                         if sent_queries.len() > 1 {
-                            return Ok(())
+                            return Ok(());
                         }
                     }
                     // Ignore response packets. We don't stub out the UDP socket, thus this is
                     // either random noise from the network, or noise from other unit tests running
                     // in parallel.
-                    MdnsPacket::Response(_) => {},
+                    MdnsPacket::Response(_) => {}
                     MdnsPacket::ServiceDiscovery(_) => {
-                        return Err(Error::new(ErrorKind::Other, "did not expect a service discovery packet"));
-                    },
+                        return Err(Error::new(
+                            ErrorKind::Other,
+                            "did not expect a service discovery packet",
+                        ));
+                    }
                 }
             }
         };

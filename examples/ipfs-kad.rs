@@ -24,20 +24,9 @@
 //! peer ID will be generated randomly.
 
 use async_std::task;
-use libp2p::{
-    Swarm,
-    PeerId,
-    identity,
-    build_development_transport
-};
-use libp2p::kad::{
-    Kademlia,
-    KademliaConfig,
-    KademliaEvent,
-    GetClosestPeersError,
-    QueryResult,
-};
 use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
+use libp2p::{build_development_transport, identity, PeerId, Swarm};
 use std::{env, error::Error, time::Duration};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -65,7 +54,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         behaviour.add_address(&"QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt".parse().unwrap(), "/dnsaddr/bootstrap.libp2p.io".parse().unwrap());*/
 
         // The only address that currently works.
-        behaviour.add_address(&"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse()?, "/ip4/104.131.131.82/tcp/4001".parse()?);
+        behaviour.add_address(
+            &"QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse()?,
+            "/ip4/104.131.131.82/tcp/4001".parse()?,
+        );
 
         // The following addresses always fail signature verification, possibly due to
         // RSA keys with < 2048 bits.
@@ -100,9 +92,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let KademliaEvent::QueryResult {
                 result: QueryResult::GetClosestPeers(result),
                 ..
-            } = event {
+            } = event
+            {
                 match result {
-                    Ok(ok) =>
+                    Ok(ok) => {
                         if !ok.peers.is_empty() {
                             println!("Query finished with closest peers: {:#?}", ok.peers)
                         } else {
@@ -110,7 +103,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                             // should always be at least 1 reachable peer.
                             println!("Query finished with no closest peers.")
                         }
-                    Err(GetClosestPeersError::Timeout { peers, .. }) =>
+                    }
+                    Err(GetClosestPeersError::Timeout { peers, .. }) => {
                         if !peers.is_empty() {
                             println!("Query timed out with closest peers: {:#?}", peers)
                         } else {
@@ -118,6 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             // should always be at least 1 reachable peer.
                             println!("Query timed out with no closest peers.");
                         }
+                    }
                 };
 
                 break;

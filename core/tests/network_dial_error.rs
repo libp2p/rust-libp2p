@@ -24,18 +24,14 @@ use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::multiaddr::{multiaddr, Multiaddr};
 use libp2p_core::{
-    Network,
-    PeerId,
-    Transport,
     connection::PendingConnectionError,
     muxing::StreamMuxerBox,
-    network::{NetworkEvent, NetworkConfig},
-    transport,
-    upgrade,
+    network::{NetworkConfig, NetworkEvent},
+    transport, upgrade, Network, PeerId, Transport,
 };
-use rand::Rng;
 use rand::seq::SliceRandom;
-use std::{io, error::Error, fmt, task::Poll};
+use rand::Rng;
+use std::{error::Error, fmt, io, task::Poll};
 use util::TestHandler;
 
 type TestNetwork = Network<TestTransport, (), (), TestHandler>;
@@ -77,7 +73,9 @@ fn deny_incoming_connec() {
     let mut swarm1 = new_network(NetworkConfig::default());
     let mut swarm2 = new_network(NetworkConfig::default());
 
-    swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+    swarm1
+        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+        .unwrap();
 
     let address = async_std::task::block_on(future::poll_fn(|cx| {
         if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
@@ -104,23 +102,23 @@ fn deny_incoming_connec() {
                 attempts_remaining: 0,
                 peer_id,
                 multiaddr,
-                error: PendingConnectionError::Transport(_)
+                error: PendingConnectionError::Transport(_),
             }) => {
                 assert_eq!(peer_id, *swarm1.local_peer_id());
                 assert_eq!(multiaddr, address);
                 return Poll::Ready(Ok(()));
-            },
+            }
             Poll::Ready(_) => unreachable!(),
             Poll::Pending => (),
         }
 
         Poll::Pending
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 #[test]
 fn dial_self() {
-
     // Check whether dialing ourselves correctly fails.
     //
     // Dialing the same address we're listening should result in three events:
@@ -132,17 +130,18 @@ fn dial_self() {
     // The last two can happen in any order.
 
     let mut swarm = new_network(NetworkConfig::default());
-    swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-
-    let (local_address, mut swarm) = async_std::task::block_on(
-        future::lazy(move |cx| {
-            if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll(cx) {
-                Ok::<_, void::Void>((listen_addr, swarm))
-            } else {
-                panic!("Was expecting the listen address to be reported")
-            }
-        }))
+    swarm
+        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
         .unwrap();
+
+    let (local_address, mut swarm) = async_std::task::block_on(future::lazy(move |cx| {
+        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll(cx) {
+            Ok::<_, void::Void>((listen_addr, swarm))
+        } else {
+            panic!("Was expecting the listen address to be reported")
+        }
+    }))
+    .unwrap();
 
     swarm.dial(&local_address, TestHandler()).unwrap();
 
@@ -160,30 +159,27 @@ fn dial_self() {
                     assert_eq!(multiaddr, local_address);
                     got_dial_err = true;
                     if got_inc_err {
-                        return Poll::Ready(Ok(()))
+                        return Poll::Ready(Ok(()));
                     }
-                },
-                Poll::Ready(NetworkEvent::IncomingConnectionError {
-                    local_addr, ..
-                }) => {
+                }
+                Poll::Ready(NetworkEvent::IncomingConnectionError { local_addr, .. }) => {
                     assert!(!got_inc_err);
                     assert_eq!(local_addr, local_address);
                     got_inc_err = true;
                     if got_dial_err {
-                       return Poll::Ready(Ok(()))
+                        return Poll::Ready(Ok(()));
                     }
-                },
+                }
                 Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
                     assert_eq!(*inc.local_addr(), local_address);
                     inc.accept(TestHandler()).unwrap();
-                },
-                Poll::Ready(ev) => {
-                    panic!("Unexpected event: {:?}", ev)
                 }
+                Poll::Ready(ev) => panic!("Unexpected event: {:?}", ev),
                 Poll::Pending => break Poll::Pending,
             }
         }
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 #[test]
@@ -202,10 +198,10 @@ fn multiple_addresses_err() {
     let mut swarm = new_network(NetworkConfig::default());
 
     let mut addresses = Vec::new();
-    for _ in 0 .. 3 {
+    for _ in 0..3 {
         addresses.push(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
     }
-    for _ in 0 .. 5 {
+    for _ in 0..5 {
         addresses.push(multiaddr![Udp(rand::random::<u16>())]);
     }
     addresses.shuffle(&mut rand::thread_rng());
@@ -214,7 +210,8 @@ fn multiple_addresses_err() {
     let rest = (&addresses[1..]).iter().cloned();
 
     let target = PeerId::random();
-    swarm.peer(target.clone())
+    swarm
+        .peer(target.clone())
         .dial(first, rest, TestHandler())
         .unwrap();
 
@@ -225,7 +222,7 @@ fn multiple_addresses_err() {
                     attempts_remaining,
                     peer_id,
                     multiaddr,
-                    error: PendingConnectionError::Transport(_)
+                    error: PendingConnectionError::Transport(_),
                 }) => {
                     assert_eq!(peer_id, target);
                     let expected = addresses.remove(0);
@@ -236,12 +233,13 @@ fn multiple_addresses_err() {
                     } else {
                         assert_eq!(attempts_remaining, addresses.len() as u32);
                     }
-                },
+                }
                 Poll::Ready(_) => unreachable!(),
                 Poll::Pending => break Poll::Pending,
             }
         }
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 #[test]
@@ -255,14 +253,16 @@ fn connection_limit() {
     let mut network = new_network(cfg);
 
     let target = PeerId::random();
-    for _ in 0 .. outgoing_per_peer_limit {
-        network.peer(target.clone())
+    for _ in 0..outgoing_per_peer_limit {
+        network
+            .peer(target.clone())
             .dial(Multiaddr::empty(), Vec::new(), TestHandler())
             .ok()
             .expect("Unexpected connection limit.");
     }
 
-    let err = network.peer(target)
+    let err = network
+        .peer(target)
         .dial(Multiaddr::empty(), Vec::new(), TestHandler())
         .expect_err("Unexpected dialing success.");
 
@@ -270,14 +270,16 @@ fn connection_limit() {
     assert_eq!(err.limit, outgoing_per_peer_limit);
 
     let target2 = PeerId::random();
-    for _ in outgoing_per_peer_limit .. outgoing_limit {
-        network.peer(target2.clone())
+    for _ in outgoing_per_peer_limit..outgoing_limit {
+        network
+            .peer(target2.clone())
             .dial(Multiaddr::empty(), Vec::new(), TestHandler())
             .ok()
             .expect("Unexpected connection limit.");
     }
 
-    let err = network.peer(target2)
+    let err = network
+        .peer(target2)
         .dial(Multiaddr::empty(), Vec::new(), TestHandler())
         .expect_err("Unexpected dialing success.");
 

@@ -20,19 +20,19 @@
 
 //! Secp256k1 keys.
 
-use asn1_der::{FromDerObject, DerObject};
-use rand::RngCore;
-use sha2::{Digest as ShaDigestTrait, Sha256};
-use secp256k1::{Message, Signature};
 use super::error::{DecodingError, SigningError};
-use zeroize::Zeroize;
+use asn1_der::{DerObject, FromDerObject};
 use core::fmt;
+use rand::RngCore;
+use secp256k1::{Message, Signature};
+use sha2::{Digest as ShaDigestTrait, Sha256};
+use zeroize::Zeroize;
 
 /// A Secp256k1 keypair.
 #[derive(Clone)]
 pub struct Keypair {
     secret: SecretKey,
-    public: PublicKey
+    public: PublicKey,
 }
 
 impl Keypair {
@@ -54,7 +54,9 @@ impl Keypair {
 
 impl fmt::Debug for Keypair {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Keypair").field("public", &self.public).finish()
+        f.debug_struct("Keypair")
+            .field("public", &self.public)
+            .finish()
     }
 }
 
@@ -93,7 +95,7 @@ impl SecretKey {
         loop {
             r.fill_bytes(&mut b);
             if let Ok(k) = secp256k1::SecretKey::parse(&b) {
-                return SecretKey(k)
+                return SecretKey(k);
             }
         }
     }
@@ -119,10 +121,12 @@ impl SecretKey {
         let obj: Vec<DerObject> = FromDerObject::deserialize((&*der_obj).iter())
             .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey").source(e))?;
         der_obj.zeroize();
-        let sk_obj = obj.into_iter().nth(1)
+        let sk_obj = obj
+            .into_iter()
+            .nth(1)
             .ok_or_else(|| DecodingError::new("Not enough elements in DER"))?;
-        let mut sk_bytes: Vec<u8> = FromDerObject::from_der_object(sk_obj)
-            .map_err(DecodingError::new)?;
+        let mut sk_bytes: Vec<u8> =
+            FromDerObject::from_der_object(sk_obj).map_err(DecodingError::new)?;
         let sk = SecretKey::from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
         Ok(sk)
@@ -146,7 +150,11 @@ impl SecretKey {
     pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         let m = Message::parse_slice(msg)
             .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
-        Ok(secp256k1::sign(&m, &self.0).0.serialize_der().as_ref().into())
+        Ok(secp256k1::sign(&m, &self.0)
+            .0
+            .serialize_der()
+            .as_ref()
+            .into())
     }
 }
 

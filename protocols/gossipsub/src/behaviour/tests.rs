@@ -53,10 +53,7 @@ mod tests {
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
-            <Gossipsub as NetworkBehaviour>::inject_connected(
-                &mut gs,
-                &peer,
-            );
+            <Gossipsub as NetworkBehaviour>::inject_connected(&mut gs, &peer);
             if to_subscribe {
                 gs.handle_received_subscriptions(
                     &topic_hashes
@@ -588,10 +585,9 @@ mod tests {
         let random_peers =
             Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
-                |peer| peers.contains(peer)
-            });
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
+            |peer| peers.contains(peer)
+        });
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
     }
 

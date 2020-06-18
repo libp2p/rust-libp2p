@@ -18,20 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{RemoteInfo, IdentifyProtocolConfig, ReplySubstream};
+use crate::protocol::{IdentifyProtocolConfig, RemoteInfo, ReplySubstream};
 use futures::prelude::*;
-use libp2p_core::upgrade::{
-    InboundUpgrade,
-    OutboundUpgrade,
-    ReadOneError
-};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, ReadOneError};
 use libp2p_swarm::{
-    NegotiatedSubstream,
-    KeepAlive,
-    SubstreamProtocol,
-    ProtocolsHandler,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr
+    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use smallvec::SmallVec;
 use std::{pin::Pin, task::Context, task::Poll, time::Duration};
@@ -100,7 +92,7 @@ impl ProtocolsHandler for IdentifyHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
     ) {
         self.events.push(IdentifyHandlerEvent::Identify(protocol))
     }
@@ -120,10 +112,11 @@ impl ProtocolsHandler for IdentifyHandler {
         &mut self,
         _info: Self::OutboundOpenInfo,
         err: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error
-        >
+            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
+        >,
     ) {
-        self.events.push(IdentifyHandlerEvent::IdentificationError(err));
+        self.events
+            .push(IdentifyHandlerEvent::IdentificationError(err));
         self.keep_alive = KeepAlive::No;
         self.next_id.reset(TRY_AGAIN_ON_ERR);
     }
@@ -132,7 +125,10 @@ impl ProtocolsHandler for IdentifyHandler {
         self.keep_alive
     }
 
-    fn poll(&mut self, cx: &mut Context) -> Poll<
+    fn poll(
+        &mut self,
+        cx: &mut Context,
+    ) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
@@ -141,9 +137,7 @@ impl ProtocolsHandler for IdentifyHandler {
         >,
     > {
         if !self.events.is_empty() {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                self.events.remove(0),
-            ));
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(self.events.remove(0)));
         }
 
         // Poll the future that fires when we need to identify the node again.
@@ -157,7 +151,7 @@ impl ProtocolsHandler for IdentifyHandler {
                 };
                 Poll::Ready(ev)
             }
-            Poll::Ready(Err(err)) => Poll::Ready(ProtocolsHandlerEvent::Close(err.into()))
+            Poll::Ready(Err(err)) => Poll::Ready(ProtocolsHandlerEvent::Close(err.into())),
         }
     }
 }

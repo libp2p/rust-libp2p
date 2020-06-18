@@ -71,7 +71,7 @@ pub enum SecioError {
     InvalidProposition(&'static str),
 
     #[doc(hidden)]
-    __Nonexhaustive
+    __Nonexhaustive,
 }
 
 impl error::Error for SecioError {
@@ -91,36 +91,35 @@ impl error::Error for SecioError {
 impl fmt::Display for SecioError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            SecioError::IoError(e) =>
-                write!(f, "I/O error: {}", e),
-            SecioError::ProtobufError(e) =>
-                write!(f, "Protobuf error: {}", e),
-            SecioError::HandshakeParsingFailure =>
-                f.write_str("Failed to parse one of the handshake protobuf messages"),
-            SecioError::NoSupportIntersection =>
-                f.write_str("There is no protocol supported by both the local and remote hosts"),
-            SecioError::NonceGenerationFailed =>
-                f.write_str("Failed to generate nonce"),
-            SecioError::EphemeralKeyGenerationFailed =>
-                f.write_str("Failed to generate ephemeral key"),
-            SecioError::SigningFailure =>
-                f.write_str("Failed to sign a message with our local private key"),
-            SecioError::SignatureVerificationFailed =>
-                f.write_str("The signature of the exchange packet doesn't verify the remote public key"),
-            SecioError::SecretGenerationFailed =>
-                f.write_str("Failed to generate the secret shared key from the ephemeral key"),
-            SecioError::NonceVerificationFailed =>
-                f.write_str("The final check of the handshake failed"),
-            SecioError::CipherError(e) =>
-                write!(f, "Error while decoding/encoding data: {:?}", e),
-            SecioError::FrameTooShort =>
-                f.write_str("The received frame was of invalid length"),
-            SecioError::HmacNotMatching =>
-                f.write_str("The hashes of the message didn't match"),
-            SecioError::InvalidProposition(msg) =>
-                write!(f, "invalid proposition: {}", msg),
-            SecioError::__Nonexhaustive =>
-                f.write_str("__Nonexhaustive")
+            SecioError::IoError(e) => write!(f, "I/O error: {}", e),
+            SecioError::ProtobufError(e) => write!(f, "Protobuf error: {}", e),
+            SecioError::HandshakeParsingFailure => {
+                f.write_str("Failed to parse one of the handshake protobuf messages")
+            }
+            SecioError::NoSupportIntersection => {
+                f.write_str("There is no protocol supported by both the local and remote hosts")
+            }
+            SecioError::NonceGenerationFailed => f.write_str("Failed to generate nonce"),
+            SecioError::EphemeralKeyGenerationFailed => {
+                f.write_str("Failed to generate ephemeral key")
+            }
+            SecioError::SigningFailure => {
+                f.write_str("Failed to sign a message with our local private key")
+            }
+            SecioError::SignatureVerificationFailed => f.write_str(
+                "The signature of the exchange packet doesn't verify the remote public key",
+            ),
+            SecioError::SecretGenerationFailed => {
+                f.write_str("Failed to generate the secret shared key from the ephemeral key")
+            }
+            SecioError::NonceVerificationFailed => {
+                f.write_str("The final check of the handshake failed")
+            }
+            SecioError::CipherError(e) => write!(f, "Error while decoding/encoding data: {:?}", e),
+            SecioError::FrameTooShort => f.write_str("The received frame was of invalid length"),
+            SecioError::HmacNotMatching => f.write_str("The hashes of the message didn't match"),
+            SecioError::InvalidProposition(msg) => write!(f, "invalid proposition: {}", msg),
+            SecioError::__Nonexhaustive => f.write_str("__Nonexhaustive"),
         }
     }
 }

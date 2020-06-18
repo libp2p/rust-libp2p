@@ -20,13 +20,17 @@
 
 use futures::{prelude::*, stream::BoxStream};
 use quicksink::Action;
-use std::{fmt, io, pin::Pin, task::{Context, Poll}};
+use std::{
+    fmt, io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// `Stream` & `Sink` that reads and writes a length prefix in front of the actual data.
 pub struct LenPrefixCodec<T> {
     stream: BoxStream<'static, io::Result<Vec<u8>>>,
     sink: Pin<Box<dyn Sink<Vec<u8>, Error = io::Error> + Send>>,
-    _mark: std::marker::PhantomData<T>
+    _mark: std::marker::PhantomData<T>,
 }
 
 impl<T> fmt::Debug for LenPrefixCodec<T> {
@@ -41,7 +45,7 @@ static_assertions::const_assert! {
 
 impl<T> LenPrefixCodec<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     pub fn new(socket: T, max_len: usize) -> Self {
         let (r, w) = socket.split();
@@ -50,18 +54,18 @@ where
             let mut len = [0; 4];
             if let Err(e) = r.read_exact(&mut len).await {
                 if e.kind() == io::ErrorKind::UnexpectedEof {
-                    return None
+                    return None;
                 }
-                return Some((Err(e), r))
+                return Some((Err(e), r));
             }
             let n = u32::from_be_bytes(len) as usize;
             if n > max_len {
                 let msg = format!("data length {} exceeds allowed maximum {}", n, max_len);
-                return Some((Err(io::Error::new(io::ErrorKind::PermissionDenied, msg)), r))
+                return Some((Err(io::Error::new(io::ErrorKind::PermissionDenied, msg)), r));
             }
             let mut v = vec![0; n];
             if let Err(e) = r.read_exact(&mut v).await {
-                return Some((Err(e), r))
+                return Some((Err(e), r));
             }
             Some((Ok(v), r))
         });
@@ -70,13 +74,17 @@ where
             match action {
                 Action::Send(data) => {
                     if data.len() > max_len {
-                        log::error!("data length {} exceeds allowed maximum {}", data.len(), max_len)
+                        log::error!(
+                            "data length {} exceeds allowed maximum {}",
+                            data.len(),
+                            max_len
+                        )
                     }
                     w.write_all(&(data.len() as u32).to_be_bytes()).await?;
                     w.write_all(&data).await?
                 }
                 Action::Flush => w.flush().await?,
-                Action::Close => w.close().await?
+                Action::Close => w.close().await?,
             }
             Ok(w)
         });
@@ -84,14 +92,14 @@ where
         LenPrefixCodec {
             stream: stream.boxed(),
             sink: Box::pin(sink),
-            _mark: std::marker::PhantomData
+            _mark: std::marker::PhantomData,
         }
     }
 }
 
 impl<T> Stream for LenPrefixCodec<T>
 where
-    T: AsyncRead + AsyncWrite + Send + 'static
+    T: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Item = io::Result<Vec<u8>>;
 
@@ -102,7 +110,7 @@ where
 
 impl<T> Sink<Vec<u8>> for LenPrefixCodec<T>
 where
-    T: AsyncRead + AsyncWrite + Send + 'static
+    T: AsyncRead + AsyncWrite + Send + 'static,
 {
     type Error = io::Error;
 
@@ -123,5 +131,4 @@ where
     }
 }
 
-impl<T> Unpin for LenPrefixCodec<T> {
-}
+impl<T> Unpin for LenPrefixCodec<T> {}

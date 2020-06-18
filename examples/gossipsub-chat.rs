@@ -51,14 +51,14 @@ use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
 use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
-use libp2p::{
-    gossipsub, identity,
-    PeerId,
-};
+use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();

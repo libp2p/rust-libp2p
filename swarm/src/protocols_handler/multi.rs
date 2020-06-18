@@ -21,42 +21,33 @@
 //! A [`ProtocolsHandler`] implementation that combines multiple other `ProtocolsHandler`s
 //! indexed by some key.
 
-use crate::NegotiatedSubstream;
 use crate::protocols_handler::{
-    KeepAlive,
-    IntoProtocolsHandler,
-    ProtocolsHandler,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr,
-    SubstreamProtocol
+    IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use crate::upgrade::{
-    InboundUpgradeSend,
-    OutboundUpgradeSend,
-    UpgradeInfoSend
-};
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
+use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{ConnectedPoint, PeerId, upgrade::ProtocolName};
+use libp2p_core::{upgrade::ProtocolName, ConnectedPoint, PeerId};
 use rand::Rng;
 use std::{
     collections::{HashMap, HashSet},
-    error,
-    fmt,
+    error, fmt,
     hash::Hash,
     iter::{self, FromIterator},
-    task::{Context, Poll}
+    task::{Context, Poll},
 };
 
 /// A [`ProtocolsHandler`] for multiple other `ProtocolsHandler`s.
 #[derive(Clone)]
 pub struct MultiHandler<K, H> {
-    handlers: HashMap<K, H>
+    handlers: HashMap<K, H>,
 }
 
 impl<K, H> fmt::Debug for MultiHandler<K, H>
 where
     K: fmt::Debug + Eq + Hash,
-    H: fmt::Debug
+    H: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MultiHandler")
@@ -68,17 +59,23 @@ where
 impl<K, H> MultiHandler<K, H>
 where
     K: Hash + Eq,
-    H: ProtocolsHandler
+    H: ProtocolsHandler,
 {
     /// Create and populate a `MultiHandler` from the given handler iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
-        I: IntoIterator<Item = (K, H)>
+        I: IntoIterator<Item = (K, H)>,
     {
-        let m = MultiHandler { handlers: HashMap::from_iter(iter) };
-        uniq_proto_names(m.handlers.values().map(|h| h.listen_protocol().into_upgrade().1))?;
+        let m = MultiHandler {
+            handlers: HashMap::from_iter(iter),
+        };
+        uniq_proto_names(
+            m.handlers
+                .values()
+                .map(|h| h.listen_protocol().into_upgrade().1),
+        )?;
         Ok(m)
     }
 }
@@ -88,7 +85,7 @@ where
     K: Clone + Hash + Eq + Send + 'static,
     H: ProtocolsHandler,
     H::InboundProtocol: InboundUpgradeSend,
-    H::OutboundProtocol: OutboundUpgradeSend
+    H::OutboundProtocol: OutboundUpgradeSend,
 {
     type InEvent = (K, <H as ProtocolsHandler>::InEvent);
     type OutEvent = (K, <H as ProtocolsHandler>::OutEvent);
@@ -98,16 +95,18 @@ where
     type OutboundOpenInfo = (K, <H as ProtocolsHandler>::OutboundOpenInfo);
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        let upgrades = self.handlers.iter()
+        let upgrades = self
+            .handlers
+            .iter()
             .map(|(k, h)| (k.clone(), h.listen_protocol().into_upgrade().1))
             .collect();
         SubstreamProtocol::new(Upgrade { upgrades })
     }
 
-    fn inject_fully_negotiated_outbound (
+    fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        (key, arg): Self::OutboundOpenInfo
+        (key, arg): Self::OutboundOpenInfo,
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_fully_negotiated_outbound(protocol, arg)
@@ -116,9 +115,9 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound (
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output
+        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output,
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_fully_negotiated_inbound(arg)
@@ -135,10 +134,10 @@ where
         }
     }
 
-    fn inject_dial_upgrade_error (
+    fn inject_dial_upgrade_error(
         &mut self,
         (key, arg): Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>
+        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.inject_dial_upgrade_error(arg, error)
@@ -148,15 +147,24 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.handlers.values()
+        self.handlers
+            .values()
             .map(|h| h.connection_keep_alive())
             .max()
             .unwrap_or(KeepAlive::No)
     }
 
-    fn poll(&mut self, cx: &mut Context)
-        -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context,
+    ) -> Poll<
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
+    > {
         // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
         // that situation.
         if self.handlers.is_empty() {
@@ -168,15 +176,19 @@ where
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {
             if let Poll::Ready(e) = h.poll(cx) {
-                let e = e.map_outbound_open_info(|i| (k.clone(), i)).map_custom(|p| (k.clone(), p));
-                return Poll::Ready(e)
+                let e = e
+                    .map_outbound_open_info(|i| (k.clone(), i))
+                    .map_custom(|p| (k.clone(), p));
+                return Poll::Ready(e);
             }
         }
 
         for (k, h) in self.handlers.iter_mut().take(pos) {
             if let Poll::Ready(e) = h.poll(cx) {
-                let e = e.map_outbound_open_info(|i| (k.clone(), i)).map_custom(|p| (k.clone(), p));
-                return Poll::Ready(e)
+                let e = e
+                    .map_outbound_open_info(|i| (k.clone(), i))
+                    .map_custom(|p| (k.clone(), p));
+                return Poll::Ready(e);
             }
         }
 
@@ -187,13 +199,13 @@ where
 /// A [`IntoProtocolsHandler`] for multiple other `IntoProtocolsHandler`s.
 #[derive(Clone)]
 pub struct IntoMultiHandler<K, H> {
-    handlers: HashMap<K, H>
+    handlers: HashMap<K, H>,
 }
 
 impl<K, H> fmt::Debug for IntoMultiHandler<K, H>
 where
     K: fmt::Debug + Eq + Hash,
-    H: fmt::Debug
+    H: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("IntoMultiHandler")
@@ -202,20 +214,21 @@ where
     }
 }
 
-
 impl<K, H> IntoMultiHandler<K, H>
 where
     K: Hash + Eq,
-    H: IntoProtocolsHandler
+    H: IntoProtocolsHandler,
 {
     /// Create and populate an `IntoMultiHandler` from the given iterator.
     ///
     /// It is an error for any two protocols handlers to share the same protocol name.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
-        I: IntoIterator<Item = (K, H)>
+        I: IntoIterator<Item = (K, H)>,
     {
-        let m = IntoMultiHandler { handlers: HashMap::from_iter(iter) };
+        let m = IntoMultiHandler {
+            handlers: HashMap::from_iter(iter),
+        };
         uniq_proto_names(m.handlers.values().map(|h| h.inbound_protocol()))?;
         Ok(m)
     }
@@ -224,23 +237,27 @@ where
 impl<K, H> IntoProtocolsHandler for IntoMultiHandler<K, H>
 where
     K: Clone + Eq + Hash + Send + 'static,
-    H: IntoProtocolsHandler
+    H: IntoProtocolsHandler,
 {
     type Handler = MultiHandler<K, H::Handler>;
 
     fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
         MultiHandler {
-            handlers: self.handlers.into_iter()
+            handlers: self
+                .handlers
+                .into_iter()
                 .map(|(k, h)| (k, h.into_handler(p, c)))
-                .collect()
+                .collect(),
         }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
         Upgrade {
-            upgrades: self.handlers.iter()
+            upgrades: self
+                .handlers
+                .iter()
                 .map(|(k, h)| (k.clone(), h.inbound_protocol()))
-                .collect()
+                .collect(),
         }
     }
 }
@@ -258,13 +275,13 @@ impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
 /// Inbound and outbound upgrade for all `ProtocolsHandler`s.
 #[derive(Clone)]
 pub struct Upgrade<K, H> {
-    upgrades: Vec<(K, H)>
+    upgrades: Vec<(K, H)>,
 }
 
 impl<K, H> fmt::Debug for Upgrade<K, H>
 where
     K: fmt::Debug + Eq + Hash,
-    H: fmt::Debug
+    H: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Upgrade")
@@ -276,13 +293,15 @@ where
 impl<K, H> UpgradeInfoSend for Upgrade<K, H>
 where
     H: UpgradeInfoSend,
-    K: Send + 'static
+    K: Send + 'static,
 {
     type Info = IndexedProtoName<H::Info>;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.upgrades.iter().enumerate()
+        self.upgrades
+            .iter()
+            .enumerate()
             .map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info()))
             .flatten()
             .map(|(i, h)| IndexedProtoName(i, h))
@@ -294,21 +313,20 @@ where
 impl<K, H> InboundUpgradeSend for Upgrade<K, H>
 where
     H: InboundUpgradeSend,
-    K: Send + 'static
+    K: Send + 'static,
 {
     type Output = (K, <H as InboundUpgradeSend>::Output);
-    type Error  = (K, <H as InboundUpgradeSend>::Error);
+    type Error = (K, <H as InboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
-        upgrade.upgrade_inbound(resource, info)
-            .map(move |out| {
-                match out {
-                    Ok(o) => Ok((key, o)),
-                    Err(e) => Err((key, e))
-                }
+        upgrade
+            .upgrade_inbound(resource, info)
+            .map(move |out| match out {
+                Ok(o) => Ok((key, o)),
+                Err(e) => Err((key, e)),
             })
             .boxed()
     }
@@ -317,21 +335,20 @@ where
 impl<K, H> OutboundUpgradeSend for Upgrade<K, H>
 where
     H: OutboundUpgradeSend,
-    K: Send + 'static
+    K: Send + 'static,
 {
     type Output = (K, <H as OutboundUpgradeSend>::Output);
-    type Error  = (K, <H as OutboundUpgradeSend>::Error);
+    type Error = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
-        upgrade.upgrade_outbound(resource, info)
-            .map(move |out| {
-                match out {
-                    Ok(o) => Ok((key, o)),
-                    Err(e) => Err((key, e))
-                }
+        upgrade
+            .upgrade_outbound(resource, info)
+            .map(move |out| match out {
+                Ok(o) => Ok((key, o)),
+                Err(e) => Err((key, e)),
             })
             .boxed()
     }
@@ -341,14 +358,14 @@ where
 fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtonameError>
 where
     I: Iterator<Item = T>,
-    T: UpgradeInfoSend
+    T: UpgradeInfoSend,
 {
     let mut set = HashSet::new();
     for infos in iter {
         for i in infos.protocol_info() {
             let v = Vec::from(i.protocol_name());
             if set.contains(&v) {
-                return Err(DuplicateProtonameError(v))
+                return Err(DuplicateProtonameError(v));
             } else {
                 set.insert(v);
             }
@@ -379,4 +396,3 @@ impl fmt::Display for DuplicateProtonameError {
 }
 
 impl error::Error for DuplicateProtonameError {}
-

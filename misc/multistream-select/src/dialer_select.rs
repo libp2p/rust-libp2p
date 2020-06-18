@@ -20,11 +20,16 @@
 
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
+use crate::protocol::{Message, MessageIO, Protocol, ProtocolError, Version};
 use crate::{Negotiated, NegotiationError};
-use crate::protocol::{Protocol, ProtocolError, MessageIO, Message, Version};
 
 use futures::{future::Either, prelude::*};
-use std::{convert::TryFrom as _, io, iter, mem, pin::Pin, task::{Context, Poll}};
+use std::{
+    convert::TryFrom as _,
+    io, iter, mem,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
 /// for a peer acting as the _dialer_ (or _initiator_).
@@ -49,12 +54,12 @@ use std::{convert::TryFrom as _, io, iter, mem, pin::Pin, task::{Context, Poll}}
 pub fn dialer_select_proto<R, I>(
     inner: R,
     protocols: I,
-    version: Version
+    version: Version,
 ) -> DialerSelectFuture<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     let iter = protocols.into_iter();
     // We choose between the "serial" and "parallel" strategies based on the number of protocols.
@@ -80,12 +85,12 @@ pub type DialerSelectFuture<R, I> = Either<DialerSelectSeq<R, I>, DialerSelectPa
 pub fn dialer_select_proto_serial<R, I>(
     inner: R,
     protocols: I,
-    version: Version
+    version: Version,
 ) -> DialerSelectSeq<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     let protocols = protocols.into_iter().peekable();
     DialerSelectSeq {
@@ -93,7 +98,7 @@ where
         protocols,
         state: SeqState::SendHeader {
             io: MessageIO::new(inner),
-        }
+        },
     }
 }
 
@@ -109,20 +114,20 @@ where
 pub fn dialer_select_proto_parallel<R, I>(
     inner: R,
     protocols: I,
-    version: Version
+    version: Version,
 ) -> DialerSelectPar<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     let protocols = protocols.into_iter();
     DialerSelectPar {
         version,
         protocols,
         state: ParState::SendHeader {
-            io: MessageIO::new(inner)
-        }
+            io: MessageIO::new(inner),
+        },
     }
 }
 
@@ -133,7 +138,7 @@ pub struct DialerSelectSeq<R, I>
 where
     R: AsyncRead + AsyncWrite,
     I: Iterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     // TODO: It would be nice if eventually N = I::Item = Protocol.
     protocols: iter::Peekable<I>,
@@ -144,13 +149,13 @@ where
 enum SeqState<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
+    N: AsRef<[u8]>,
 {
-    SendHeader { io: MessageIO<R>, },
+    SendHeader { io: MessageIO<R> },
     SendProtocol { io: MessageIO<R>, protocol: N },
     FlushProtocol { io: MessageIO<R>, protocol: N },
     AwaitProtocol { io: MessageIO<R>, protocol: N },
-    Done
+    Done,
 }
 
 impl<R, I> Future for DialerSelectSeq<R, I>
@@ -159,7 +164,7 @@ where
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     type Output = Result<(I::Item, Negotiated<R>), NegotiationError>;
 
@@ -170,11 +175,11 @@ where
             match mem::replace(this.state, SeqState::Done) {
                 SeqState::SendHeader { mut io } => {
                     match Pin::new(&mut io).poll_ready(cx)? {
-                        Poll::Ready(()) => {},
+                        Poll::Ready(()) => {}
                         Poll::Pending => {
                             *this.state = SeqState::SendHeader { io };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                     }
 
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Header(*this.version)) {
@@ -187,11 +192,11 @@ where
 
                 SeqState::SendProtocol { mut io, protocol } => {
                     match Pin::new(&mut io).poll_ready(cx)? {
-                        Poll::Ready(()) => {},
+                        Poll::Ready(()) => {}
                         Poll::Pending => {
                             *this.state = SeqState::SendProtocol { io, protocol };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                     }
 
                     let p = Protocol::try_from(protocol.as_ref())?;
@@ -208,7 +213,7 @@ where
                             Version::V1Lazy => {
                                 log::debug!("Dialer: Expecting proposed protocol: {}", p);
                                 let io = Negotiated::expecting(io.into_reader(), p, *this.version);
-                                return Poll::Ready(Ok((protocol, io)))
+                                return Poll::Ready(Ok((protocol, io)));
                             }
                         }
                     }
@@ -219,8 +224,8 @@ where
                         Poll::Ready(()) => *this.state = SeqState::AwaitProtocol { io, protocol },
                         Poll::Pending => {
                             *this.state = SeqState::FlushProtocol { io, protocol };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                     }
                 }
 
@@ -229,11 +234,13 @@ where
                         Poll::Ready(Some(msg)) => msg,
                         Poll::Pending => {
                             *this.state = SeqState::AwaitProtocol { io, protocol };
-                            return Poll::Pending
+                            return Poll::Pending;
                         }
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                io::Error::from(io::ErrorKind::UnexpectedEof)))),
+                        Poll::Ready(None) => {
+                            return Poll::Ready(Err(NegotiationError::from(io::Error::from(
+                                io::ErrorKind::UnexpectedEof,
+                            ))))
+                        }
                     };
 
                     match msg {
@@ -247,8 +254,10 @@ where
                             return Poll::Ready(Ok((protocol, io)));
                         }
                         Message::NotAvailable => {
-                            log::debug!("Dialer: Received rejection of protocol: {}",
-                                String::from_utf8_lossy(protocol.as_ref()));
+                            log::debug!(
+                                "Dialer: Received rejection of protocol: {}",
+                                String::from_utf8_lossy(protocol.as_ref())
+                            );
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = SeqState::SendProtocol { io, protocol }
                         }
@@ -256,7 +265,7 @@ where
                     }
                 }
 
-                SeqState::Done => panic!("SeqState::poll called after completion")
+                SeqState::Done => panic!("SeqState::poll called after completion"),
             }
         }
     }
@@ -270,7 +279,7 @@ pub struct DialerSelectPar<R, I>
 where
     R: AsyncRead + AsyncWrite,
     I: Iterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     protocols: I,
     state: ParState<R, I::Item>,
@@ -280,14 +289,14 @@ where
 enum ParState<R, N>
 where
     R: AsyncRead + AsyncWrite,
-    N: AsRef<[u8]>
+    N: AsRef<[u8]>,
 {
     SendHeader { io: MessageIO<R> },
     SendProtocolsRequest { io: MessageIO<R> },
     Flush { io: MessageIO<R> },
     RecvProtocols { io: MessageIO<R> },
     SendProtocol { io: MessageIO<R>, protocol: N },
-    Done
+    Done,
 }
 
 impl<R, I> Future for DialerSelectPar<R, I>
@@ -296,7 +305,7 @@ where
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
-    I::Item: AsRef<[u8]>
+    I::Item: AsRef<[u8]>,
 {
     type Output = Result<(I::Item, Negotiated<R>), NegotiationError>;
 
@@ -307,11 +316,11 @@ where
             match mem::replace(this.state, ParState::Done) {
                 ParState::SendHeader { mut io } => {
                     match Pin::new(&mut io).poll_ready(cx)? {
-                        Poll::Ready(()) => {},
+                        Poll::Ready(()) => {}
                         Poll::Pending => {
                             *this.state = ParState::SendHeader { io };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                     }
 
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Header(*this.version)) {
@@ -323,11 +332,11 @@ where
 
                 ParState::SendProtocolsRequest { mut io } => {
                     match Pin::new(&mut io).poll_ready(cx)? {
-                        Poll::Ready(()) => {},
+                        Poll::Ready(()) => {}
                         Poll::Pending => {
                             *this.state = ParState::SendProtocolsRequest { io };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                     }
 
                     if let Err(err) = Pin::new(&mut io).start_send(Message::ListProtocols) {
@@ -338,26 +347,26 @@ where
                     *this.state = ParState::Flush { io }
                 }
 
-                ParState::Flush { mut io } => {
-                    match Pin::new(&mut io).poll_flush(cx)? {
-                        Poll::Ready(()) => *this.state = ParState::RecvProtocols { io },
-                        Poll::Pending => {
-                            *this.state = ParState::Flush { io };
-                            return Poll::Pending
-                        },
+                ParState::Flush { mut io } => match Pin::new(&mut io).poll_flush(cx)? {
+                    Poll::Ready(()) => *this.state = ParState::RecvProtocols { io },
+                    Poll::Pending => {
+                        *this.state = ParState::Flush { io };
+                        return Poll::Pending;
                     }
-                }
+                },
 
                 ParState::RecvProtocols { mut io } => {
                     let msg = match Pin::new(&mut io).poll_next(cx)? {
                         Poll::Ready(Some(msg)) => msg,
                         Poll::Pending => {
                             *this.state = ParState::RecvProtocols { io };
-                            return Poll::Pending
+                            return Poll::Pending;
                         }
-                        Poll::Ready(None) =>
-                            return Poll::Ready(Err(NegotiationError::from(
-                                io::Error::from(io::ErrorKind::UnexpectedEof)))),
+                        Poll::Ready(None) => {
+                            return Poll::Ready(Err(NegotiationError::from(io::Error::from(
+                                io::ErrorKind::UnexpectedEof,
+                            ))))
+                        }
                     };
 
                     match &msg {
@@ -365,12 +374,15 @@ where
                             *this.state = ParState::RecvProtocols { io }
                         }
                         Message::Protocols(supported) => {
-                            let protocol = this.protocols.by_ref()
-                                .find(|p| supported.iter().any(|s|
-                                    s.as_ref() == p.as_ref()))
+                            let protocol = this
+                                .protocols
+                                .by_ref()
+                                .find(|p| supported.iter().any(|s| s.as_ref() == p.as_ref()))
                                 .ok_or(NegotiationError::Failed)?;
-                            log::debug!("Dialer: Found supported protocol: {}",
-                                String::from_utf8_lossy(protocol.as_ref()));
+                            log::debug!(
+                                "Dialer: Found supported protocol: {}",
+                                String::from_utf8_lossy(protocol.as_ref())
+                            );
                             *this.state = ParState::SendProtocol { io, protocol };
                         }
                         _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into())),
@@ -379,11 +391,11 @@ where
 
                 ParState::SendProtocol { mut io, protocol } => {
                     match Pin::new(&mut io).poll_ready(cx)? {
-                        Poll::Ready(()) => {},
+                        Poll::Ready(()) => {}
                         Poll::Pending => {
                             *this.state = ParState::SendProtocol { io, protocol };
-                            return Poll::Pending
-                        },
+                            return Poll::Pending;
+                        }
                     }
 
                     let p = Protocol::try_from(protocol.as_ref())?;
@@ -393,12 +405,11 @@ where
                     log::debug!("Dialer: Expecting proposed protocol: {}", p);
 
                     let io = Negotiated::expecting(io.into_reader(), p, *this.version);
-                    return Poll::Ready(Ok((protocol, io)))
+                    return Poll::Ready(Ok((protocol, io)));
                 }
 
-                ParState::Done => panic!("ParState::poll called after completion")
+                ParState::Done => panic!("ParState::poll called after completion"),
             }
         }
     }
 }
-

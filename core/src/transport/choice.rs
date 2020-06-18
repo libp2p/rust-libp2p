@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::{EitherListenStream, EitherOutput, EitherError, EitherFuture};
+use crate::either::{EitherError, EitherFuture, EitherListenStream, EitherOutput};
 use crate::transport::{Transport, TransportError};
 use multiaddr::Multiaddr;
 
@@ -47,13 +47,17 @@ where
         let addr = match self.0.listen_on(addr) {
             Ok(listener) => return Ok(EitherListenStream::First(listener)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(EitherError::A(err)))
+            }
         };
 
         let addr = match self.1.listen_on(addr) {
             Ok(listener) => return Ok(EitherListenStream::Second(listener)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(EitherError::B(err)))
+            }
         };
 
         Err(TransportError::MultiaddrNotSupported(addr))
@@ -63,13 +67,17 @@ where
         let addr = match self.0.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(EitherError::A(err)))
+            }
         };
 
         let addr = match self.1.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(EitherError::B(err)))
+            }
         };
 
         Err(TransportError::MultiaddrNotSupported(addr))

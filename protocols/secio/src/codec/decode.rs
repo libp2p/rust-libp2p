@@ -41,7 +41,7 @@ pub struct DecoderMiddleware<S> {
     hmac: Hmac,
     #[pin]
     raw_stream: S,
-    nonce: Vec<u8>
+    nonce: Vec<u8>,
 }
 
 impl<S> DecoderMiddleware<S> {
@@ -49,12 +49,17 @@ impl<S> DecoderMiddleware<S> {
     ///
     /// The `nonce` parameter denotes a sequence of bytes which are expected to be found at the
     /// beginning of the stream and are checked for equality.
-    pub fn new(raw_stream: S, cipher: StreamCipher, hmac: Hmac, nonce: Vec<u8>) -> DecoderMiddleware<S> {
+    pub fn new(
+        raw_stream: S,
+        cipher: StreamCipher,
+        hmac: Hmac,
+        nonce: Vec<u8>,
+    ) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
             hmac,
             raw_stream,
-            nonce
+            nonce,
         }
     }
 }
@@ -97,11 +102,11 @@ where
 
         if !this.nonce.is_empty() {
             let n = min(data_buf.len(), this.nonce.len());
-            if data_buf[.. n] != this.nonce[.. n] {
-                return Poll::Ready(Some(Err(SecioError::NonceVerificationFailed)))
+            if data_buf[..n] != this.nonce[..n] {
+                return Poll::Ready(Some(Err(SecioError::NonceVerificationFailed)));
             }
-            this.nonce.drain(.. n);
-            data_buf.drain(.. n);
+            this.nonce.drain(..n);
+            data_buf.drain(..n);
         }
 
         Poll::Ready(Some(Ok(data_buf)))

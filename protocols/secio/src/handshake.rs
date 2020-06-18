@@ -18,21 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::SecioConfig;
 use crate::algo_support;
 use crate::codec::{full_codec, FullCodec, Hmac, LenPrefixCodec};
 use crate::error::SecioError;
 use crate::exchange;
 use crate::stream_cipher::ctr;
 use crate::structs_proto::{Exchange, Propose};
+use crate::SecioConfig;
 use futures::prelude::*;
 use libp2p_core::PublicKey;
 use log::{debug, trace};
 use prost::Message;
 use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
-use std::{cmp::{self, Ordering}, io};
-
+use std::{
+    cmp::{self, Ordering},
+    io,
+};
 
 /// Performs a handshake on the given socket.
 ///
@@ -43,10 +45,12 @@ use std::{cmp::{self, Ordering}, io};
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
 /// negotiation.
-pub async fn handshake<S>(socket: S, config: SecioConfig)
-    -> Result<(FullCodec<S>, PublicKey, Vec<u8>), SecioError>
+pub async fn handshake<S>(
+    socket: S,
+    config: SecioConfig,
+) -> Result<(FullCodec<S>, PublicKey, Vec<u8>), SecioError>
 where
-    S: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     let mut socket = LenPrefixCodec::new(socket, config.max_frame_len);
 
@@ -68,14 +72,20 @@ where
             trace!("agreements proposition: {}", p);
             Some(p.clone())
         } else {
-            trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+            trace!(
+                "agreements proposition: {}",
+                algo_support::DEFAULT_AGREEMENTS_PROPOSITION
+            );
             Some(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
         },
         ciphers: if let Some(ref p) = config.ciphers_prop {
             trace!("ciphers proposition: {}", p);
             Some(p.clone())
         } else {
-            trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
+            trace!(
+                "ciphers proposition: {}",
+                algo_support::DEFAULT_CIPHERS_PROPOSITION
+            );
             Some(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
         },
         hashes: if let Some(ref p) = config.digests_prop {
@@ -83,12 +93,14 @@ where
             Some(p.clone())
         } else {
             Some(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
-        }
+        },
     };
 
     let local_proposition_bytes = {
         let mut buf = Vec::with_capacity(local_proposition.encoded_len());
-        local_proposition.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        local_proposition
+            .encode(&mut buf)
+            .expect("Vec<u8> provides capacity as needed");
         buf
     };
     trace!("starting handshake; local nonce = {:?}", local_nonce);
@@ -101,8 +113,8 @@ where
         Some(b) => b?,
         None => {
             debug!("unexpected eof while waiting for remote's proposition");
-            return Err(SecioError::IoError(io::ErrorKind::UnexpectedEof.into()))
-        },
+            return Err(SecioError::IoError(io::ErrorKind::UnexpectedEof.into()));
+        }
     };
 
     let remote_proposition = match Propose::decode(&remote_proposition_bytes[..]) {
@@ -121,10 +133,13 @@ where
         Err(_) => {
             debug!("failed to parse remote's proposition's pubkey protobuf");
             return Err(SecioError::HandshakeParsingFailure);
-        },
+        }
     };
-    trace!("received proposition from remote; pubkey = {:?}; nonce = {:?}",
-        remote_public_key, remote_nonce);
+    trace!(
+        "received proposition from remote; pubkey = {:?}; nonce = {:?}",
+        remote_public_key,
+        remote_nonce
+    );
 
     // In order to determine which protocols to use, we compute two hashes and choose
     // based on which hash is larger.
@@ -147,7 +162,9 @@ where
     };
 
     let chosen_exchange = {
-        let ours = config.agreements_prop.as_ref()
+        let ours = config
+            .agreements_prop
+            .as_ref()
             .map(|s| s.as_ref())
             .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
         let theirs = &remote_proposition.exchanges.unwrap_or_default();
@@ -161,7 +178,9 @@ where
     };
 
     let chosen_cipher = {
-        let ours = config.ciphers_prop.as_ref()
+        let ours = config
+            .ciphers_prop
+            .as_ref()
             .map(|s| s.as_ref())
             .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
         let theirs = &remote_proposition.ciphers.unwrap_or_default();
@@ -178,7 +197,9 @@ where
     };
 
     let chosen_hash = {
-        let ours = config.digests_prop.as_ref()
+        let ours = config
+            .digests_prop
+            .as_ref()
             .map(|s| s.as_ref())
             .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
         let theirs = &remote_proposition.hashes.unwrap_or_default();
@@ -208,13 +229,15 @@ where
             epubkey: Some(tmp_pub_key.clone()),
             signature: match config.key.sign(&data_to_sign) {
                 Ok(sig) => Some(sig),
-                Err(_) => return Err(SecioError::SigningFailure)
-            }
+                Err(_) => return Err(SecioError::SigningFailure),
+            },
         }
     };
     let local_exch = {
         let mut buf = Vec::with_capacity(local_exchange.encoded_len());
-        local_exchange.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
+        local_exchange
+            .encode(&mut buf)
+            .expect("Vec<u8> provides capacity as needed");
         buf
     };
 
@@ -228,15 +251,15 @@ where
             Some(r) => r?,
             None => {
                 debug!("unexpected eof while waiting for remote's exchange");
-                return Err(SecioError::IoError(io::ErrorKind::UnexpectedEof.into()))
-            },
+                return Err(SecioError::IoError(io::ErrorKind::UnexpectedEof.into()));
+            }
         };
 
         match Exchange::decode(&raw[..]) {
             Ok(e) => {
                 trace!("received and decoded the remote's exchange");
                 e
-            },
+            }
             Err(err) => {
                 debug!("failed to parse remote's exchange protobuf; {:?}", err);
                 return Err(SecioError::HandshakeParsingFailure);
@@ -253,7 +276,7 @@ where
         data_to_verify.extend_from_slice(remote_exch.epubkey.as_deref().unwrap_or_default());
 
         if !remote_public_key.verify(&data_to_verify, &remote_exch.signature.unwrap_or_default()) {
-            return Err(SecioError::SignatureVerificationFailed)
+            return Err(SecioError::SignatureVerificationFailed);
         }
 
         trace!("successfully verified the remote's signature");
@@ -265,8 +288,9 @@ where
         chosen_exchange,
         tmp_priv_key,
         &remote_exch.epubkey.unwrap_or_default(),
-        chosen_hash.num_bytes()
-    ).await?;
+        chosen_hash.num_bytes(),
+    )
+    .await?;
 
     // Generate a key from the local ephemeral private key and the remote ephemeral public key,
     // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
@@ -283,7 +307,7 @@ where
             match hashes_ordering {
                 Ordering::Equal => {
                     let msg = "equal digest of public key and nonce for local and remote";
-                    return Err(SecioError::InvalidProposition(msg))
+                    return Err(SecioError::InvalidProposition(msg));
                 }
                 Ordering::Less => (second_half, first_half),
                 Ordering::Greater => (first_half, second_half),
@@ -312,7 +336,7 @@ where
             encoding_hmac,
             decoding_cipher,
             decoding_hmac,
-            local_nonce.to_vec()
+            local_nonce.to_vec(),
         )
     };
 
@@ -333,9 +357,14 @@ fn stretch_key(hmac: Hmac, result: &mut [u8]) {
 }
 
 fn stretch_key_inner<D>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
-where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
-          ::hmac::digest::FixedOutput + ::hmac::digest::Reset + Default + Clone,
-    ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac
+where
+    D: ::hmac::digest::Input
+        + ::hmac::digest::BlockInput
+        + ::hmac::digest::FixedOutput
+        + ::hmac::digest::Reset
+        + Default
+        + Clone,
+    ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac,
 {
     use ::hmac::Mac;
     const SEED: &[u8] = b"key expansion";
@@ -367,8 +396,8 @@ where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
 mod tests {
     use super::{handshake, stretch_key};
     use crate::{algo_support::Digest, codec::Hmac, SecioConfig};
+    use futures::{channel::oneshot, prelude::*};
     use libp2p_core::identity;
-    use futures::{prelude::*, channel::oneshot};
 
     #[test]
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
@@ -413,7 +442,9 @@ mod tests {
         let (l_a_tx, l_a_rx) = oneshot::channel();
 
         async_std::task::spawn(async move {
-            let listener = async_std::net::TcpListener::bind(&"127.0.0.1:0").await.unwrap();
+            let listener = async_std::net::TcpListener::bind(&"127.0.0.1:0")
+                .await
+                .unwrap();
             l_a_tx.send(listener.local_addr().unwrap()).unwrap();
             let connec = listener.accept().await.unwrap().0;
             let mut codec = handshake(connec, key1).await.unwrap().0;
@@ -427,10 +458,13 @@ mod tests {
 
         async_std::task::block_on(async move {
             let listen_addr = l_a_rx.await.unwrap();
-            let connec = async_std::net::TcpStream::connect(&listen_addr).await.unwrap();
+            let connec = async_std::net::TcpStream::connect(&listen_addr)
+                .await
+                .unwrap();
             let mut codec = handshake(connec, key2).await.unwrap().0;
             codec.send(b"hello".to_vec().into()).await.unwrap();
-            let mut packets_stream = codec.filter(|p| future::ready(!p.as_ref().unwrap().is_empty()));
+            let mut packets_stream =
+                codec.filter(|p| future::ready(!p.as_ref().unwrap().is_empty()));
             let packet = packets_stream.next().await.unwrap();
             assert_eq!(packet.unwrap(), b"hello");
         });

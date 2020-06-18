@@ -31,9 +31,12 @@ pub trait TransportExt: Transport {
     ///
     /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the bandwidth
     /// values.
-    fn with_bandwidth_logging(self, period: Duration) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
+    fn with_bandwidth_logging(
+        self,
+        period: Duration,
+    ) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
     where
-        Self: Sized
+        Self: Sized,
     {
         BandwidthLogging::new(self, period)
     }

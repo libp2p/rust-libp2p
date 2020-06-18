@@ -1,8 +1,8 @@
-
+use crate::onion_addr::Onion3Addr;
+use crate::{Error, Result};
 use arrayref::array_ref;
 use bs58;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
-use crate::{Result, Error};
 use data_encoding::BASE32;
 use multihash::Multihash;
 use std::{
@@ -11,10 +11,9 @@ use std::{
     fmt,
     io::{Cursor, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    str::{self, FromStr}
+    str::{self, FromStr},
 };
-use unsigned_varint::{encode, decode};
-use crate::onion_addr::Onion3Addr;
+use unsigned_varint::{decode, encode};
 
 const DCCP: u32 = 33;
 const DNS: u32 = 53;
@@ -41,9 +40,9 @@ const UDT: u32 = 301;
 const UNIX: u32 = 400;
 const UTP: u32 = 302;
 const WS: u32 = 477;
-const WS_WITH_PATH: u32 = 4770;         // Note: not standard
+const WS_WITH_PATH: u32 = 4770; // Note: not standard
 const WSS: u32 = 478;
-const WSS_WITH_PATH: u32 = 4780;        // Note: not standard
+const WSS_WITH_PATH: u32 = 4780; // Note: not standard
 
 const PATH_SEGMENT_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
     .add(b'%')
@@ -104,7 +103,7 @@ impl<'a> Protocol<'a> {
     /// that iteration has finished whenever appropriate.
     pub fn from_str_parts<I>(mut iter: I) -> Result<Self>
     where
-        I: Iterator<Item=&'a str>
+        I: Iterator<Item = &'a str>,
     {
         match iter.next().ok_or(Error::InvalidProtocolString)? {
             "ip4" => {
@@ -160,16 +159,16 @@ impl<'a> Protocol<'a> {
             }
             "http" => Ok(Protocol::Http),
             "https" => Ok(Protocol::Https),
-            "onion" =>
-                iter.next()
-                    .ok_or(Error::InvalidProtocolString)
-                    .and_then(|s| read_onion(&s.to_uppercase()))
-                    .map(|(a, p)| Protocol::Onion(Cow::Owned(a), p)),
-            "onion3" =>
-                iter.next()
-                    .ok_or(Error::InvalidProtocolString)
-                    .and_then(|s| read_onion3(&s.to_uppercase()))
-                    .map(|(a, p)| Protocol::Onion3((a, p).into())),
+            "onion" => iter
+                .next()
+                .ok_or(Error::InvalidProtocolString)
+                .and_then(|s| read_onion(&s.to_uppercase()))
+                .map(|(a, p)| Protocol::Onion(Cow::Owned(a), p)),
+            "onion3" => iter
+                .next()
+                .ok_or(Error::InvalidProtocolString)
+                .and_then(|s| read_onion3(&s.to_uppercase()))
+                .map(|(a, p)| Protocol::Onion3((a, p).into())),
             "quic" => Ok(Protocol::Quic),
             "ws" => Ok(Protocol::Ws(Cow::Borrowed("/"))),
             "wss" => Ok(Protocol::Wss(Cow::Borrowed("/"))),
@@ -191,7 +190,7 @@ impl<'a> Protocol<'a> {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
                 Ok(Protocol::Memory(s.parse()?))
             }
-            unknown => Err(Error::UnknownProtocolString(unknown.to_string()))
+            unknown => Err(Error::UnknownProtocolString(unknown.to_string())),
         }
     }
 
@@ -200,7 +199,7 @@ impl<'a> Protocol<'a> {
     pub fn from_bytes(input: &'a [u8]) -> Result<(Self, &'a [u8])> {
         fn split_at(n: usize, input: &[u8]) -> Result<(&[u8], &[u8])> {
             if input.len() < n {
-                return Err(Error::DataLessThanLen)
+                return Err(Error::DataLessThanLen);
             }
             Ok(input.split_at(n))
         }
@@ -230,13 +229,19 @@ impl<'a> Protocol<'a> {
             DNSADDR => {
                 let (n, input) = decode::usize(input)?;
                 let (data, rest) = split_at(n, input)?;
-                Ok((Protocol::Dnsaddr(Cow::Borrowed(str::from_utf8(data)?)), rest))
+                Ok((
+                    Protocol::Dnsaddr(Cow::Borrowed(str::from_utf8(data)?)),
+                    rest,
+                ))
             }
             HTTP => Ok((Protocol::Http, input)),
             HTTPS => Ok((Protocol::Https, input)),
             IP4 => {
                 let (data, rest) = split_at(4, input)?;
-                Ok((Protocol::Ip4(Ipv4Addr::new(data[0], data[1], data[2], data[3])), rest))
+                Ok((
+                    Protocol::Ip4(Ipv4Addr::new(data[0], data[1], data[2], data[3])),
+                    rest,
+                ))
             }
             IP6 => {
                 let (data, rest) = split_at(16, input)?;
@@ -247,14 +252,9 @@ impl<'a> Protocol<'a> {
                     *x = rdr.read_u16::<BigEndian>()?;
                 }
 
-                let addr = Ipv6Addr::new(seg[0],
-                                         seg[1],
-                                         seg[2],
-                                         seg[3],
-                                         seg[4],
-                                         seg[5],
-                                         seg[6],
-                                         seg[7]);
+                let addr = Ipv6Addr::new(
+                    seg[0], seg[1], seg[2], seg[3], seg[4], seg[5], seg[6], seg[7],
+                );
 
                 Ok((Protocol::Ip6(addr), rest))
             }
@@ -269,13 +269,19 @@ impl<'a> Protocol<'a> {
             }
             ONION => {
                 let (data, rest) = split_at(12, input)?;
-                let port = BigEndian::read_u16(&data[10 ..]);
-                Ok((Protocol::Onion(Cow::Borrowed(array_ref!(data, 0, 10)), port), rest))
+                let port = BigEndian::read_u16(&data[10..]);
+                Ok((
+                    Protocol::Onion(Cow::Borrowed(array_ref!(data, 0, 10)), port),
+                    rest,
+                ))
             }
             ONION3 => {
                 let (data, rest) = split_at(37, input)?;
-                let port = BigEndian::read_u16(&data[35 ..]);
-                Ok((Protocol::Onion3((array_ref!(data, 0, 35), port).into()), rest))
+                let port = BigEndian::read_u16(&data[35..]);
+                Ok((
+                    Protocol::Onion3((array_ref!(data, 0, 35), port).into()),
+                    rest,
+                ))
             }
             P2P => {
                 let (n, input) = decode::usize(input)?;
@@ -321,7 +327,7 @@ impl<'a> Protocol<'a> {
                 let (data, rest) = split_at(n, input)?;
                 Ok((Protocol::Wss(Cow::Borrowed(str::from_utf8(data)?)), rest))
             }
-            _ => Err(Error::UnknownProtocolId(id))
+            _ => Err(Error::UnknownProtocolId(id)),
         }
     }
 
@@ -413,14 +419,14 @@ impl<'a> Protocol<'a> {
                 let bytes = s.as_bytes();
                 w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 w.write_all(&bytes)?
-            },
+            }
             Protocol::Wss(ref s) if s == "/" => w.write_all(encode::u32(WSS, &mut buf))?,
             Protocol::Wss(s) => {
                 w.write_all(encode::u32(WSS_WITH_PATH, &mut buf))?;
                 let bytes = s.as_bytes();
                 w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 w.write_all(&bytes)?
-            },
+            }
             Protocol::P2pWebSocketStar => w.write_all(encode::u32(P2P_WEBSOCKET_STAR, &mut buf))?,
             Protocol::P2pWebRtcStar => w.write_all(encode::u32(P2P_WEBRTC_STAR, &mut buf))?,
             Protocol::P2pWebRtcDirect => w.write_all(encode::u32(P2P_WEBRTC_DIRECT, &mut buf))?,
@@ -488,7 +494,7 @@ impl<'a> fmt::Display for Protocol<'a> {
                 let s = BASE32.encode(addr.as_ref());
                 write!(f, "/onion/{}:{}", s.to_lowercase(), port)
             }
-            Onion3(addr ) => {
+            Onion3(addr) => {
                 let s = BASE32.encode(addr.hash());
                 write!(f, "/onion3/{}:{}", s.to_lowercase(), addr.port())
             }
@@ -503,14 +509,16 @@ impl<'a> fmt::Display for Protocol<'a> {
             Utp => f.write_str("/utp"),
             Ws(ref s) if s == "/" => f.write_str("/ws"),
             Ws(s) => {
-                let encoded = percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
+                let encoded =
+                    percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
                 write!(f, "/x-parity-ws/{}", encoded)
-            },
+            }
             Wss(ref s) if s == "/" => f.write_str("/wss"),
             Wss(s) => {
-                let encoded = percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
+                let encoded =
+                    percent_encoding::percent_encode(s.as_bytes(), PATH_SEGMENT_ENCODE_SET);
                 write!(f, "/x-parity-wss/{}", encoded)
-            },
+            }
         }
     }
 }
@@ -547,11 +555,12 @@ macro_rules! read_onion_impl {
             // address part (without ".onion")
             let b32 = parts.next().ok_or(Error::InvalidMultiaddr)?;
             if b32.len() != $encoded_len {
-                return Err(Error::InvalidMultiaddr)
+                return Err(Error::InvalidMultiaddr);
             }
 
             // port number
-            let port = parts.next()
+            let port = parts
+                .next()
                 .ok_or(Error::InvalidMultiaddr)
                 .and_then(|p| str::parse(p).map_err(From::from))?;
 
@@ -562,19 +571,25 @@ macro_rules! read_onion_impl {
 
             // nothing else expected
             if parts.next().is_some() {
-                return Err(Error::InvalidMultiaddr)
+                return Err(Error::InvalidMultiaddr);
             }
 
-            if $len != BASE32.decode_len(b32.len()).map_err(|_| Error::InvalidMultiaddr)? {
-                return Err(Error::InvalidMultiaddr)
+            if $len
+                != BASE32
+                    .decode_len(b32.len())
+                    .map_err(|_| Error::InvalidMultiaddr)?
+            {
+                return Err(Error::InvalidMultiaddr);
             }
 
             let mut buf = [0u8; $len];
-            BASE32.decode_mut(b32.as_bytes(), &mut buf).map_err(|_| Error::InvalidMultiaddr)?;
+            BASE32
+                .decode_mut(b32.as_bytes(), &mut buf)
+                .map_err(|_| Error::InvalidMultiaddr)?;
 
             Ok((buf, port))
         }
-    }
+    };
 }
 
 // Parse a version 2 onion address and return its binary representation.

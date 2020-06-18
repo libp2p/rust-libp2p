@@ -24,11 +24,11 @@
 //! helps you with.
 
 use crate::error::SecioError;
+use crate::stream_cipher::Cipher;
+use crate::KeyAgreement;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use ring::digest;
 use std::cmp::Ordering;
-use crate::stream_cipher::Cipher;
-use crate::KeyAgreement;
 
 const ECDH_P256: &str = "P-256";
 const ECDH_P384: &str = "P-384";
@@ -48,7 +48,7 @@ pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
 /// Return a proposition string from the given sequence of `KeyAgreement` values.
 pub fn key_agreements_proposition<'a, I>(xchgs: I) -> String
 where
-    I: IntoIterator<Item=&'a KeyAgreement>
+    I: IntoIterator<Item = &'a KeyAgreement>,
 {
     let mut s = String::new();
     for x in xchgs {
@@ -74,25 +74,24 @@ where
 pub fn select_agreement(r: Ordering, ours: &str, theirs: &str) -> Result<KeyAgreement, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
-        Ordering::Greater =>  (ours, theirs)
+        Ordering::Greater => (ours, theirs),
     };
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
                 ECDH_P256 => return Ok(KeyAgreement::EcdhP256),
                 ECDH_P384 => return Ok(KeyAgreement::EcdhP384),
-                _ => continue
+                _ => continue,
             }
         }
     }
     Err(SecioError::NoSupportIntersection)
 }
 
-
 /// Return a proposition string from the given sequence of `Cipher` values.
 pub fn ciphers_proposition<'a, I>(ciphers: I) -> String
 where
-    I: IntoIterator<Item=&'a Cipher>
+    I: IntoIterator<Item = &'a Cipher>,
 {
     let mut s = String::new();
     for c in ciphers {
@@ -126,7 +125,7 @@ where
 pub fn select_cipher(r: Ordering, ours: &str, theirs: &str) -> Result<Cipher, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
-        Ordering::Greater =>  (ours, theirs)
+        Ordering::Greater => (ours, theirs),
     };
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
@@ -135,19 +134,18 @@ pub fn select_cipher(r: Ordering, ours: &str, theirs: &str) -> Result<Cipher, Se
                 AES_256 => return Ok(Cipher::Aes256),
                 TWOFISH_CTR => return Ok(Cipher::TwofishCtr),
                 NULL => return Ok(Cipher::Null),
-                _ => continue
+                _ => continue,
             }
         }
     }
     Err(SecioError::NoSupportIntersection)
 }
 
-
 /// Possible digest algorithms.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Digest {
     Sha256,
-    Sha512
+    Sha512,
 }
 
 impl Digest {
@@ -164,7 +162,7 @@ impl Digest {
 /// Return a proposition string from the given sequence of `Digest` values.
 pub fn digests_proposition<'a, I>(digests: I) -> String
 where
-    I: IntoIterator<Item=&'a Digest>
+    I: IntoIterator<Item = &'a Digest>,
 {
     let mut s = String::new();
     for d in digests {
@@ -190,14 +188,14 @@ where
 pub fn select_digest(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
-        Ordering::Greater =>  (ours, theirs)
+        Ordering::Greater => (ours, theirs),
     };
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
                 SHA_256 => return Ok(Digest::Sha256),
                 SHA_512 => return Ok(Digest::Sha512),
-                _ => continue
+                _ => continue,
             }
         }
     }

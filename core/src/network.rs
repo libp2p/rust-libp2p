@@ -21,42 +21,29 @@
 mod event;
 pub mod peer;
 
-pub use event::{NetworkEvent, IncomingConnectionEvent};
+pub use event::{IncomingConnectionEvent, NetworkEvent};
 pub use peer::Peer;
 
 use crate::{
-    ConnectedPoint,
-    Executor,
-    Multiaddr,
-    PeerId,
     address_translation,
     connection::{
-        ConnectionId,
-        ConnectionLimit,
-        ConnectionHandler,
-        ConnectionInfo,
-        IntoConnectionHandler,
-        IncomingInfo,
-        OutgoingInfo,
-        ListenersEvent,
-        ListenerId,
-        ListenersStream,
-        PendingConnectionError,
-        Substream,
         manager::ManagerConfig,
         pool::{Pool, PoolEvent, PoolLimits},
+        ConnectionHandler, ConnectionId, ConnectionInfo, ConnectionLimit, IncomingInfo,
+        IntoConnectionHandler, ListenerId, ListenersEvent, ListenersStream, OutgoingInfo,
+        PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
+    ConnectedPoint, Executor, Multiaddr, PeerId,
 };
-use fnv::{FnvHashMap};
-use futures::{prelude::*, future};
+use fnv::FnvHashMap;
+use futures::{future, prelude::*};
 use smallvec::SmallVec;
 use std::{
     collections::hash_map,
     convert::TryFrom as _,
-    error,
-    fmt,
+    error, fmt,
     hash::Hash,
     num::NonZeroUsize,
     pin::Pin,
@@ -76,8 +63,15 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    pool: Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
+    pool: Pool<
+        TInEvent,
+        TOutEvent,
+        THandler,
+        TTrans::Error,
+        <THandler::Handler as ConnectionHandler>::Error,
+        TConnInfo,
+        TPeerId,
+    >,
 
     /// The ongoing dialing attempts.
     ///
@@ -94,8 +88,8 @@ where
     dialing: FnvHashMap<TPeerId, SmallVec<[peer::DialingState; 10]>>,
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug
+    for Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: fmt::Debug + Transport,
     THandler: fmt::Debug + ConnectionHandler,
@@ -112,8 +106,8 @@ where
     }
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> Unpin for
-    Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> Unpin
+    for Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
@@ -140,18 +134,16 @@ where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
     THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>
+        + Send
+        + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
     TPeerId: Eq + Hash + Clone,
 {
     /// Creates a new node events stream.
-    pub fn new(
-        transport: TTrans,
-        local_peer_id: TPeerId,
-        config: NetworkConfig,
-    ) -> Self {
+    pub fn new(transport: TTrans, local_peer_id: TPeerId, config: NetworkConfig) -> Self {
         let pool_local_id = local_peer_id.clone();
         Network {
             local_peer_id,
@@ -167,7 +159,10 @@ where
     }
 
     /// Start listening on the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<TTrans::Error>> {
+    pub fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<ListenerId, TransportError<TTrans::Error>> {
         self.listeners.listen_on(addr)
     }
 
@@ -199,13 +194,16 @@ where
     /// * `observed_addr` - should be an address a remote observes you as, which can be obtained for
     /// example with the identify protocol.
     ///
-    pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
-        -> impl Iterator<Item = Multiaddr> + 'a
+    pub fn address_translation<'a>(
+        &'a self,
+        observed_addr: &'a Multiaddr,
+    ) -> impl Iterator<Item = Multiaddr> + 'a
     where
         TMuxer: 'a,
         THandler: 'a,
     {
-        self.listen_addrs().flat_map(move |server| address_translation(server, observed_addr))
+        self.listen_addrs()
+            .flat_map(move |server| address_translation(server, observed_addr))
     }
 
     /// Returns the peer id of the local node.
@@ -218,8 +216,11 @@ where
     /// The given `handler` will be used to create the
     /// [`Connection`](crate::connection::Connection) upon success and the
     /// connection ID is returned.
-    pub fn dial(&mut self, address: &Multiaddr, handler: THandler)
-        -> Result<ConnectionId, ConnectionLimit>
+    pub fn dial(
+        &mut self,
+        address: &Multiaddr,
+        handler: THandler,
+    ) -> Result<ConnectionId, ConnectionLimit>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -231,10 +232,14 @@ where
         TConnInfo: Send + 'static,
         TPeerId: Send + 'static,
     {
-        let info = OutgoingInfo { address, peer_id: None };
+        let info = OutgoingInfo {
+            address,
+            peer_id: None,
+        };
         match self.transport().clone().dial(address.clone()) {
             Ok(f) => {
-                let f = f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
+                let f =
+                    f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
                 self.pool.add_outgoing(f, handler, info)
             }
             Err(err) => {
@@ -265,14 +270,13 @@ where
 
     /// Returns the list of addresses we're currently dialing without knowing the `PeerId` of.
     pub fn unknown_dials(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.pool.iter_pending_outgoing()
-            .filter_map(|info| {
-                if info.peer_id.is_none() {
-                    Some(info.address)
-                } else {
-                    None
-                }
-            })
+        self.pool.iter_pending_outgoing().filter_map(|info| {
+            if info.peer_id.is_none() {
+                Some(info.address)
+            } else {
+                None
+            }
+        })
     }
 
     /// Returns a list of all connected peers, i.e. peers to whom the `Network`
@@ -320,14 +324,18 @@ where
     }
 
     /// Obtains a view of a [`Peer`] with the given ID in the network.
-    pub fn peer(&mut self, peer_id: TPeerId)
-        -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    {
+    pub fn peer(
+        &mut self,
+        peer_id: TPeerId,
+    ) -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> {
         Peer::new(self, peer_id)
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
+    pub fn poll<'a>(
+        &'a mut self,
+        cx: &mut Context,
+    ) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -338,7 +346,12 @@ where
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
         THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        THandler::Handler: ConnectionHandler<
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+            > + Send
+            + 'static,
         <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
         TConnInfo: Clone,
         TPeerId: Send + 'static,
@@ -350,25 +363,44 @@ where
                 listener_id,
                 upgrade,
                 local_addr,
-                send_back_addr
+                send_back_addr,
             }) => {
-                return Poll::Ready(NetworkEvent::IncomingConnection(
-                    IncomingConnectionEvent {
-                        listener_id,
-                        upgrade,
-                        local_addr,
-                        send_back_addr,
-                        pool: &mut self.pool,
-                    }))
+                return Poll::Ready(NetworkEvent::IncomingConnection(IncomingConnectionEvent {
+                    listener_id,
+                    upgrade,
+                    local_addr,
+                    send_back_addr,
+                    pool: &mut self.pool,
+                }))
             }
-            Poll::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
-                return Poll::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr })
+            Poll::Ready(ListenersEvent::NewAddress {
+                listener_id,
+                listen_addr,
+            }) => {
+                return Poll::Ready(NetworkEvent::NewListenerAddress {
+                    listener_id,
+                    listen_addr,
+                })
             }
-            Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
-                return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
+            Poll::Ready(ListenersEvent::AddressExpired {
+                listener_id,
+                listen_addr,
+            }) => {
+                return Poll::Ready(NetworkEvent::ExpiredListenerAddress {
+                    listener_id,
+                    listen_addr,
+                })
             }
-            Poll::Ready(ListenersEvent::Closed { listener_id, addresses, reason }) => {
-                return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason })
+            Poll::Ready(ListenersEvent::Closed {
+                listener_id,
+                addresses,
+                reason,
+            }) => {
+                return Poll::Ready(NetworkEvent::ListenerClosed {
+                    listener_id,
+                    addresses,
+                    reason,
+                })
             }
             Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
                 return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })
@@ -378,14 +410,17 @@ where
         // Poll the known peers.
         let event = match self.pool.poll(cx) {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(PoolEvent::ConnectionEstablished { connection, num_established }) => {
+            Poll::Ready(PoolEvent::ConnectionEstablished {
+                connection,
+                num_established,
+            }) => {
                 match self.dialing.entry(connection.peer_id().clone()) {
                     hash_map::Entry::Occupied(mut e) => {
                         e.get_mut().retain(|s| s.current.0 != connection.id());
                         if e.get().is_empty() {
                             e.remove();
                         }
-                    },
+                    }
                     _ => {}
                 }
 
@@ -394,7 +429,14 @@ where
                     num_established,
                 }
             }
-            Poll::Ready(PoolEvent::PendingConnectionError { id, endpoint, error, handler, pool, .. }) => {
+            Poll::Ready(PoolEvent::PendingConnectionError {
+                id,
+                endpoint,
+                error,
+                handler,
+                pool,
+                ..
+            }) => {
                 let dialing = &mut self.dialing;
                 let (next, event) = on_connection_failed(dialing, id, endpoint, error, handler);
                 if let Some(dial) = next {
@@ -405,19 +447,20 @@ where
                 }
                 event
             }
-            Poll::Ready(PoolEvent::ConnectionError { id, connected, error, num_established, .. }) => {
-                NetworkEvent::ConnectionError {
-                    id,
-                    connected,
-                    error,
-                    num_established,
-                }
-            }
+            Poll::Ready(PoolEvent::ConnectionError {
+                id,
+                connected,
+                error,
+                num_established,
+                ..
+            }) => NetworkEvent::ConnectionError {
+                id,
+                connected,
+                error,
+                num_established,
+            },
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
-                NetworkEvent::ConnectionEvent {
-                    connection,
-                    event
-                }
+                NetworkEvent::ConnectionEvent { connection, event }
             }
         };
 
@@ -425,8 +468,10 @@ where
     }
 
     /// Initiates a connection attempt to a known peer.
-    fn dial_peer(&mut self, opts: DialingOpts<TPeerId, THandler>)
-        -> Result<ConnectionId, ConnectionLimit>
+    fn dial_peer(
+        &mut self,
+        opts: DialingOpts<TPeerId, THandler>,
+    ) -> Result<ConnectionId, ConnectionLimit>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Dial: Send + 'static,
@@ -437,7 +482,12 @@ where
         TOutEvent: Send + 'static,
         TPeerId: Send + 'static,
     {
-        dial_peer_impl(self.transport().clone(), &mut self.pool, &mut self.dialing, opts)
+        dial_peer_impl(
+            self.transport().clone(),
+            &mut self.pool,
+            &mut self.dialing,
+            opts,
+        )
     }
 }
 
@@ -453,20 +503,25 @@ struct DialingOpts<TPeerId, THandler> {
 /// Standalone implementation of `Network::dial_peer` for more granular borrowing.
 fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TTrans, TConnInfo, TPeerId>(
     transport: TTrans,
-    pool: &mut Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
+    pool: &mut Pool<
+        TInEvent,
+        TOutEvent,
+        THandler,
+        TTrans::Error,
+        <THandler::Handler as ConnectionHandler>::Error,
+        TConnInfo,
+        TPeerId,
+    >,
     dialing: &mut FnvHashMap<TPeerId, SmallVec<[peer::DialingState; 10]>>,
-    opts: DialingOpts<TPeerId, THandler>
+    opts: DialingOpts<TPeerId, THandler>,
 ) -> Result<ConnectionId, ConnectionLimit>
 where
     THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static,
-    THandler::Handler: ConnectionHandler<
-        Substream = Substream<TMuxer>,
-        InEvent = TInEvent,
-        OutEvent = TOutEvent,
-    > + Send + 'static,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>
+        + Send
+        + 'static,
     TTrans: Transport<Output = (TConnInfo, TMuxer)>,
     TTrans::Dial: Send + 'static,
     TTrans::Error: error::Error + Send + 'static,
@@ -480,23 +535,30 @@ where
     let result = match transport.dial(opts.address.clone()) {
         Ok(fut) => {
             let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
-            let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
+            let info = OutgoingInfo {
+                address: &opts.address,
+                peer_id: Some(&opts.peer),
+            };
             pool.add_outgoing(fut, opts.handler, info)
-        },
+        }
         Err(err) => {
             let fut = future::err(PendingConnectionError::Transport(err));
-            let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
+            let info = OutgoingInfo {
+                address: &opts.address,
+                peer_id: Some(&opts.peer),
+            };
             pool.add_outgoing(fut, opts.handler, info)
-        },
+        }
     };
 
     if let Ok(id) = &result {
-        dialing.entry(opts.peer).or_default().push(
-            peer::DialingState {
+        dialing
+            .entry(opts.peer)
+            .or_default()
+            .push(peer::DialingState {
                 current: (*id, opts.address),
                 remaining: opts.remaining,
-            },
-        );
+            });
     }
 
     result
@@ -513,7 +575,10 @@ fn on_connection_failed<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TP
     endpoint: ConnectedPoint,
     error: PendingConnectionError<TTrans::Error>,
     handler: Option<THandler>,
-) -> (Option<DialingOpts<TPeerId, THandler>>, NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>)
+) -> (
+    Option<DialingOpts<TPeerId, THandler>>,
+    NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
+)
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
@@ -521,16 +586,15 @@ where
     TPeerId: Eq + Hash + Clone,
 {
     // Check if the failed connection is associated with a dialing attempt.
-    let dialing_failed = dialing.iter_mut()
-        .find_map(|(peer, attempts)| {
-            if let Some(pos) = attempts.iter().position(|s| s.current.0 == id) {
-                let attempt = attempts.remove(pos);
-                let last = attempts.is_empty();
-                Some((peer.clone(), attempt, last))
-            } else {
-                None
-            }
-        });
+    let dialing_failed = dialing.iter_mut().find_map(|(peer, attempts)| {
+        if let Some(pos) = attempts.iter().position(|s| s.current.0 == id) {
+            let attempt = attempts.remove(pos);
+            let last = attempts.is_empty();
+            Some((peer.clone(), attempt, last))
+        } else {
+            None
+        }
+    });
 
     if let Some((peer_id, mut attempt, last)) = dialing_failed {
         if last {
@@ -540,47 +604,56 @@ where
         let num_remain = u32::try_from(attempt.remaining.len()).unwrap();
         let failed_addr = attempt.current.1.clone();
 
-        let (opts, attempts_remaining) =
-            if num_remain > 0 {
-                if let Some(handler) = handler {
-                    let next_attempt = attempt.remaining.remove(0);
-                    let opts = DialingOpts {
-                        peer: peer_id.clone(),
-                        handler,
-                        address: next_attempt,
-                        remaining: attempt.remaining
-                    };
-                    (Some(opts), num_remain)
-                } else {
-                    // The error is "fatal" for the dialing attempt, since
-                    // the handler was already consumed. All potential
-                    // remaining connection attempts are thus void.
-                    (None, 0)
-                }
+        let (opts, attempts_remaining) = if num_remain > 0 {
+            if let Some(handler) = handler {
+                let next_attempt = attempt.remaining.remove(0);
+                let opts = DialingOpts {
+                    peer: peer_id.clone(),
+                    handler,
+                    address: next_attempt,
+                    remaining: attempt.remaining,
+                };
+                (Some(opts), num_remain)
             } else {
+                // The error is "fatal" for the dialing attempt, since
+                // the handler was already consumed. All potential
+                // remaining connection attempts are thus void.
                 (None, 0)
-            };
+            }
+        } else {
+            (None, 0)
+        };
 
-        (opts, NetworkEvent::DialError {
-            attempts_remaining,
-            peer_id,
-            multiaddr: failed_addr,
-            error,
-        })
+        (
+            opts,
+            NetworkEvent::DialError {
+                attempts_remaining,
+                peer_id,
+                multiaddr: failed_addr,
+                error,
+            },
+        )
     } else {
         // A pending incoming connection or outgoing connection to an unknown peer failed.
         match endpoint {
-            ConnectedPoint::Dialer { address } =>
-                (None, NetworkEvent::UnknownPeerDialError {
+            ConnectedPoint::Dialer { address } => (
+                None,
+                NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
-                }),
-            ConnectedPoint::Listener { local_addr, send_back_addr } =>
-                (None, NetworkEvent::IncomingConnectionError {
+                },
+            ),
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => (
+                None,
+                NetworkEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,
-                    error
-                })
+                    error,
+                },
+            ),
         }
     }
 }
@@ -619,7 +692,10 @@ impl NetworkConfig {
     }
 
     /// Shortcut for calling `executor` with an object that calls the given closure.
-    pub fn set_executor_fn(mut self, f: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + 'static) -> Self {
+    pub fn set_executor_fn(
+        mut self,
+        f: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + 'static,
+    ) -> Self {
         struct SpawnImpl<F>(F);
         impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
             fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {

@@ -32,25 +32,17 @@
 use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{
-    record::Key,
-    Kademlia,
-    KademliaEvent,
-    PutRecordOk,
-    QueryResult,
-    Quorum,
-    Record
-};
+use libp2p::kad::{record::Key, Kademlia, KademliaEvent, PutRecordOk, QueryResult, Quorum, Record};
 use libp2p::{
-    NetworkBehaviour,
-    PeerId,
-    Swarm,
-    build_development_transport,
-    identity,
+    build_development_transport, identity,
     mdns::{Mdns, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    swarm::NetworkBehaviourEventProcess,
+    NetworkBehaviour, PeerId, Swarm,
 };
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -66,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour {
         kademlia: Kademlia<MemoryStore>,
-        mdns: Mdns
+        mdns: Mdns,
     }
 
     impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
@@ -107,7 +99,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         eprintln!("Failed to put record: {:?}", err);
                     }
                     _ => {}
-                }
+                },
                 _ => {}
             }
         }
@@ -136,7 +128,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => handle_input_line(&mut swarm.kademlia, line),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break
+                Poll::Pending => break,
             }
         }
         loop {
@@ -150,7 +142,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             listening = true;
                         }
                     }
-                    break
+                    break;
                 }
             }
         }
@@ -199,7 +191,9 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                 publisher: None,
                 expires: None,
             };
-            kademlia.put_record(record, Quorum::One).expect("Failed to store record locally.");
+            kademlia
+                .put_record(record, Quorum::One)
+                .expect("Failed to store record locally.");
         }
         _ => {
             eprintln!("expected GET or PUT");

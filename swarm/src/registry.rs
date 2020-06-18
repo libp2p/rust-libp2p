@@ -42,7 +42,7 @@ pub struct Addresses {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Record {
     score: u32,
-    addr: Multiaddr
+    addr: Multiaddr,
 }
 
 impl Default for Addresses {
@@ -66,7 +66,6 @@ impl Addresses {
     /// Adding an existing address is interpreted as additional
     /// confirmation and thus increases its score.
     pub fn add(&mut self, a: Multiaddr) {
-
         let oldest = if self.reports.len() == self.limit.get() {
             self.reports.pop_front()
         } else {
@@ -91,7 +90,7 @@ impl Addresses {
             if r.addr == a {
                 r.score = r.score.saturating_add(1);
                 isort(&mut self.registry);
-                return
+                return;
             }
         }
 
@@ -103,14 +102,19 @@ impl Addresses {
     ///
     /// The iteration is ordered by descending score.
     pub fn iter(&self) -> AddressIter<'_> {
-        AddressIter { items: &self.registry, offset: 0 }
+        AddressIter {
+            items: &self.registry,
+            offset: 0,
+        }
     }
 
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
     pub fn into_iter(self) -> AddressIntoIter {
-        AddressIntoIter { items: self.registry }
+        AddressIntoIter {
+            items: self.registry,
+        }
     }
 }
 
@@ -118,7 +122,7 @@ impl Addresses {
 #[derive(Clone)]
 pub struct AddressIter<'a> {
     items: &'a [Record],
-    offset: usize
+    offset: usize,
 }
 
 impl<'a> Iterator for AddressIter<'a> {
@@ -126,7 +130,7 @@ impl<'a> Iterator for AddressIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset == self.items.len() {
-            return None
+            return None;
         }
         let item = &self.items[self.offset];
         self.offset += 1;
@@ -168,10 +172,10 @@ impl ExactSizeIterator for AddressIntoIter {}
 
 // Reverse insertion sort.
 fn isort(xs: &mut [Record]) {
-    for i in 1 .. xs.len() {
-        for j in (1 ..= i).rev() {
+    for i in 1..xs.len() {
+        for j in (1..=i).rev() {
             if xs[j].score <= xs[j - 1].score {
-                break
+                break;
             }
             xs.swap(j, j - 1)
         }
@@ -180,22 +184,26 @@ fn isort(xs: &mut [Record]) {
 
 #[cfg(test)]
 mod tests {
+    use super::{isort, Addresses, Record};
     use libp2p_core::multiaddr::{Multiaddr, Protocol};
     use quickcheck::{Arbitrary, Gen, QuickCheck};
     use rand::Rng;
     use std::num::NonZeroUsize;
-    use super::{isort, Addresses, Record};
 
     #[test]
     fn isort_sorts() {
         fn property(xs: Vec<u32>) -> bool {
-            let mut xs = xs.into_iter()
-                .map(|s| Record { score: s, addr: Multiaddr::empty() })
+            let mut xs = xs
+                .into_iter()
+                .map(|s| Record {
+                    score: s,
+                    addr: Multiaddr::empty(),
+                })
                 .collect::<Vec<_>>();
 
             isort(&mut xs);
 
-            for i in 1 .. xs.len() {
+            for i in 1..xs.len() {
                 assert!(xs[i - 1].score >= xs[i].score)
             }
 
@@ -215,7 +223,7 @@ mod tests {
 
         // Then fill `addresses` with random stuff.
         let other: Multiaddr = "/tcp/120".parse().unwrap();
-        for _ in 0 .. 2000 {
+        for _ in 0..2000 {
             addresses.add(other.clone());
         }
 
@@ -241,13 +249,14 @@ mod tests {
                 addresses.add(a.clone())
             }
             for r in &addresses.registry {
-                let count = xs.iter()
+                let count = xs
+                    .iter()
                     .rev()
                     .take(usize::from(n))
                     .filter(|Ma(x)| x == &r.addr)
                     .count();
                 if r.score as usize != count {
-                    return false
+                    return false;
                 }
             }
             true

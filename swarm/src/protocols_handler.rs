@@ -40,21 +40,16 @@
 mod dummy;
 mod map_in;
 mod map_out;
+pub mod multi;
 mod node_handler;
 mod one_shot;
 mod select;
-pub mod multi;
 
-pub use crate::upgrade::{
-    InboundUpgradeSend,
-    OutboundUpgradeSend,
-    UpgradeInfoSend,
-};
+pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 
 use libp2p_core::{
-    ConnectedPoint,
-    PeerId,
     upgrade::{self, UpgradeError},
+    ConnectedPoint, PeerId,
 };
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
@@ -124,7 +119,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Injects the output of a successful upgrade on a new inbound substream.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output
+        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
     );
 
     /// Injects the output of a successful upgrade on a new outbound substream.
@@ -134,7 +129,7 @@ pub trait ProtocolsHandler: Send + 'static {
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo
+        info: Self::OutboundOpenInfo,
     );
 
     /// Injects an event coming from the outside in the handler.
@@ -144,9 +139,7 @@ pub trait ProtocolsHandler: Send + 'static {
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgradeSend>::Error
-        >
+        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     );
 
     /// Returns until when the connection should be kept alive.
@@ -172,8 +165,16 @@ pub trait ProtocolsHandler: Send + 'static {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
-    fn poll(&mut self, cx: &mut Context) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
+    fn poll(
+        &mut self,
+        cx: &mut Context,
+    ) -> Poll<
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
     >;
 
     /// Adds a closure that turns the input event into something else.
@@ -417,10 +418,8 @@ where
         match self {
             ProtocolsHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
-            },
-            ProtocolsHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
-            },
+            }
+            ProtocolsHandlerUpgrErr::Timer => write!(f, "Timer error while opening a substream"),
             ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
         }
     }
@@ -428,7 +427,7 @@ where
 
 impl<TUpgrErr> error::Error for ProtocolsHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: error::Error + 'static
+    TUpgrErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -447,7 +446,11 @@ pub trait IntoProtocolsHandler: Send + 'static {
     /// Builds the protocols handler.
     ///
     /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(self, remote_peer_id: &PeerId, connected_point: &ConnectedPoint) -> Self::Handler;
+    fn into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::Handler;
 
     /// Return the handler's inbound protocol.
     fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol;
@@ -472,7 +475,8 @@ pub trait IntoProtocolsHandler: Send + 'static {
 }
 
 impl<T> IntoProtocolsHandler for T
-where T: ProtocolsHandler
+where
+    T: ProtocolsHandler,
 {
     type Handler = Self;
 
@@ -517,9 +521,9 @@ impl Ord for KeepAlive {
         use self::KeepAlive::*;
 
         match (self, other) {
-            (No, No) | (Yes, Yes)  => Ordering::Equal,
-            (No,  _) | (_,   Yes)  => Ordering::Less,
-            (_,  No) | (Yes,   _)  => Ordering::Greater,
+            (No, No) | (Yes, Yes) => Ordering::Equal,
+            (No, _) | (_, Yes) => Ordering::Less,
+            (_, No) | (Yes, _) => Ordering::Greater,
             (Until(t1), Until(t2)) => t1.cmp(t2),
         }
     }

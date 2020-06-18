@@ -18,22 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    muxing::StreamMuxer,
-    connection::{
-        Close,
-        Connected,
-        Connection,
-        ConnectionError,
-        ConnectionHandler,
-        IntoConnectionHandler,
-        PendingConnectionError,
-        Substream,
-    },
-};
-use futures::{prelude::*, channel::mpsc, stream};
-use std::{pin::Pin, task::Context, task::Poll};
 use super::ConnectResult;
+use crate::{
+    connection::{
+        Close, Connected, Connection, ConnectionError, ConnectionHandler, IntoConnectionHandler,
+        PendingConnectionError, Substream,
+    },
+    muxing::StreamMuxer,
+};
+use futures::{channel::mpsc, prelude::*, stream};
+use std::{pin::Pin, task::Context, task::Poll};
 
 /// Identifier of a [`Task`] in a [`Manager`](super::Manager).
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -52,11 +46,18 @@ pub enum Event<T, H, TE, HE, C> {
     /// A connection to a node has succeeded.
     Established { id: TaskId, info: Connected<C> },
     /// An established connection produced an error.
-    Error { id: TaskId, error: ConnectionError<HE> },
+    Error {
+        id: TaskId,
+        error: ConnectionError<HE>,
+    },
     /// A pending connection failed.
-    Failed { id: TaskId, error: PendingConnectionError<TE>, handler: H },
+    Failed {
+        id: TaskId,
+        error: PendingConnectionError<TE>,
+        handler: H,
+    },
     /// Notify the manager of an event from the connection.
-    Notify { id: TaskId, event: T }
+    Notify { id: TaskId, event: T },
 }
 
 impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
@@ -75,7 +76,7 @@ pub struct Task<F, M, H, I, O, E, C>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler<C>,
-    H::Handler: ConnectionHandler<Substream = Substream<M>>
+    H::Handler: ConnectionHandler<Substream = Substream<M>>,
 {
     /// The ID of this task.
     id: TaskId,
@@ -94,7 +95,7 @@ impl<F, M, H, I, O, E, C> Task<F, M, H, I, O, E, C>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler<C>,
-    H::Handler: ConnectionHandler<Substream = Substream<M>>
+    H::Handler: ConnectionHandler<Substream = Substream<M>>,
 {
     /// Create a new task to connect and handle some node.
     pub fn pending(
@@ -102,7 +103,7 @@ where
         events: mpsc::Sender<Event<O, H, E, <H::Handler as ConnectionHandler>::Error, C>>,
         commands: mpsc::Receiver<Command<I>>,
         future: F,
-        handler: H
+        handler: H,
     ) -> Self {
         Task {
             id,
@@ -120,7 +121,7 @@ where
         id: TaskId,
         events: mpsc::Sender<Event<O, H, E, <H::Handler as ConnectionHandler>::Error, C>>,
         commands: mpsc::Receiver<Command<I>>,
-        connection: Connection<M, H::Handler>
+        connection: Connection<M, H::Handler>,
     ) -> Self {
         Task {
             id,
@@ -136,7 +137,7 @@ enum State<F, M, H, O, E, C>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler<C>,
-    H::Handler: ConnectionHandler<Substream = Substream<M>>
+    H::Handler: ConnectionHandler<Substream = Substream<M>>,
 {
     /// The task is waiting for the connection to be established.
     Pending {
@@ -152,7 +153,7 @@ where
         /// The node, if available.
         connection: Option<Connection<M, H::Handler>>,
         /// The actual event message to send.
-        event: Event<O, H, E, <H::Handler as ConnectionHandler>::Error, C>
+        event: Event<O, H, E, <H::Handler as ConnectionHandler>::Error, C>,
     },
 
     /// The connection is established and pending a new event to occur.
@@ -162,14 +163,14 @@ where
     Closing(Close<M>),
 
     /// The task has finished.
-    Done
+    Done,
 }
 
 impl<F, M, H, I, O, E, C> Unpin for Task<F, M, H, I, O, E, C>
 where
     M: StreamMuxer,
     H: IntoConnectionHandler<C>,
-    H::Handler: ConnectionHandler<Substream = Substream<M>>
+    H::Handler: ConnectionHandler<Substream = Substream<M>>,
 {
 }
 
@@ -178,7 +179,7 @@ where
     M: StreamMuxer,
     F: Future<Output = ConnectResult<C, M, E>>,
     H: IntoConnectionHandler<C>,
-    H::Handler: ConnectionHandler<Substream = Substream<M>, InEvent = I, OutEvent = O>
+    H::Handler: ConnectionHandler<Substream = Substream<M>, InEvent = I, OutEvent = O>,
 {
     type Output = ();
 
@@ -191,15 +192,18 @@ where
 
         'poll: loop {
             match std::mem::replace(&mut this.state, State::Done) {
-                State::Pending { mut future, handler } => {
+                State::Pending {
+                    mut future,
+                    handler,
+                } => {
                     // Check if the manager aborted this task by dropping the `commands`
                     // channel sender side.
                     match Stream::poll_next(Pin::new(&mut this.commands), cx) {
-                        Poll::Pending => {},
+                        Poll::Pending => {}
                         Poll::Ready(None) => return Poll::Ready(()),
                         Poll::Ready(Some(Command::NotifyHandler(_))) => unreachable!(
                             "Manager does not allow sending commands to pending tasks.",
-                        )
+                        ),
                     }
                     // Check if the connection succeeded.
                     match Future::poll(Pin::new(&mut future), cx) {
@@ -209,16 +213,19 @@ where
                                     muxer,
                                     handler.into_handler(&info),
                                 )),
-                                event: Event::Established { id, info }
+                                event: Event::Established { id, info },
                             }
                         }
                         Poll::Pending => {
                             this.state = State::Pending { future, handler };
-                            return Poll::Pending
+                            return Poll::Pending;
                         }
                         Poll::Ready(Err(error)) => {
                             let event = Event::Failed { id, handler, error };
-                            this.state = State::EstablishedReady { connection: None, event }
+                            this.state = State::EstablishedReady {
+                                connection: None,
+                                event,
+                            }
                         }
                     }
                 }
@@ -228,13 +235,14 @@ where
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.commands), cx) {
                             Poll::Pending => break,
-                            Poll::Ready(Some(Command::NotifyHandler(event))) =>
-                                connection.inject_event(event),
+                            Poll::Ready(Some(Command::NotifyHandler(event))) => {
+                                connection.inject_event(event)
+                            }
                             Poll::Ready(None) => {
                                 // The manager has dropped the task, thus initiate a
                                 // graceful shutdown of the connection.
                                 this.state = State::Closing(connection.close());
-                                continue 'poll
+                                continue 'poll;
                             }
                         }
                     }
@@ -243,52 +251,61 @@ where
                         match Connection::poll(Pin::new(&mut connection), cx) {
                             Poll::Pending => {
                                 this.state = State::EstablishedPending(connection);
-                                return Poll::Pending
+                                return Poll::Pending;
                             }
                             Poll::Ready(Ok(event)) => {
                                 this.state = State::EstablishedReady {
                                     connection: Some(connection),
-                                    event: Event::Notify { id, event }
+                                    event: Event::Notify { id, event },
                                 };
-                                continue 'poll
+                                continue 'poll;
                             }
                             Poll::Ready(Err(error)) => {
                                 // Notify the manager of the error via an event,
                                 // dropping the connection.
                                 let event = Event::Error { id, error };
-                                this.state = State::EstablishedReady { connection: None, event };
-                                continue 'poll
+                                this.state = State::EstablishedReady {
+                                    connection: None,
+                                    event,
+                                };
+                                continue 'poll;
                             }
                         }
                     }
                 }
 
                 // Deliver an event to the manager.
-                State::EstablishedReady { mut connection, event } => {
+                State::EstablishedReady {
+                    mut connection,
+                    event,
+                } => {
                     // Process commands received from the manager, if any.
                     loop {
                         match Stream::poll_next(Pin::new(&mut this.commands), cx) {
                             Poll::Pending => break,
-                            Poll::Ready(Some(Command::NotifyHandler(event))) =>
+                            Poll::Ready(Some(Command::NotifyHandler(event))) => {
                                 if let Some(ref mut c) = connection {
                                     c.inject_event(event)
                                 }
+                            }
                             Poll::Ready(None) =>
-                                // The manager has dropped the task, thus initiate a
-                                // graceful shutdown of the connection, if given.
+                            // The manager has dropped the task, thus initiate a
+                            // graceful shutdown of the connection, if given.
+                            {
                                 if let Some(c) = connection {
                                     this.state = State::Closing(c.close());
-                                    continue 'poll
+                                    continue 'poll;
                                 } else {
-                                    return Poll::Ready(())
+                                    return Poll::Ready(());
                                 }
+                            }
                         }
                     }
                     // Send the event to the manager.
                     match this.events.poll_ready(cx) {
                         Poll::Pending => {
                             self.state = State::EstablishedReady { connection, event };
-                            return Poll::Pending
+                            return Poll::Pending;
                         }
                         Poll::Ready(Ok(())) => {
                             // We assume that if `poll_ready` has succeeded, then sending the event
@@ -300,32 +317,31 @@ where
                             } else {
                                 // The connection has been dropped, thus this was the last event
                                 // to send to the manager and the task is done.
-                                return Poll::Ready(())
+                                return Poll::Ready(());
                             }
-                        },
+                        }
                         Poll::Ready(Err(_)) => {
                             // The manager is no longer reachable, maybe due to
                             // application shutdown. Try a graceful shutdown of the
                             // connection, if available, and end the task.
                             if let Some(c) = connection {
                                 this.state = State::Closing(c.close());
-                                continue 'poll
+                                continue 'poll;
                             }
-                            return Poll::Ready(())
+                            return Poll::Ready(());
                         }
                     }
                 }
 
-                State::Closing(mut closing) =>
-                    match Future::poll(Pin::new(&mut closing), cx) {
-                        Poll::Ready(_) => return Poll::Ready(()), // end task
-                        Poll::Pending => {
-                            this.state = State::Closing(closing);
-                            return Poll::Pending
-                        }
+                State::Closing(mut closing) => match Future::poll(Pin::new(&mut closing), cx) {
+                    Poll::Ready(_) => return Poll::Ready(()), // end task
+                    Poll::Pending => {
+                        this.state = State::Closing(closing);
+                        return Poll::Pending;
                     }
+                },
 
-                State::Done => panic!("`Task::poll()` called after completion.")
+                State::Done => panic!("`Task::poll()` called after completion."),
             }
         }
     }

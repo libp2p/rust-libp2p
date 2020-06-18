@@ -25,8 +25,8 @@ mod decode;
 mod encode;
 mod len_prefix;
 
-use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
+use aes_ctr::stream_cipher;
 use decode::DecoderMiddleware;
 use encode::EncoderMiddleware;
 use futures::prelude::*;
@@ -61,10 +61,12 @@ impl Hmac {
         // TODO: it would be nice to tweak the hmac crate to add an equivalent to new_varkey that
         //       never errors
         match algorithm {
-            Digest::Sha256 => Hmac::Sha256(Mac::new_varkey(key)
-                .expect("Hmac::new_varkey accepts any key length")),
-            Digest::Sha512 => Hmac::Sha512(Mac::new_varkey(key)
-                .expect("Hmac::new_varkey accepts any key length")),
+            Digest::Sha256 => {
+                Hmac::Sha256(Mac::new_varkey(key).expect("Hmac::new_varkey accepts any key length"))
+            }
+            Digest::Sha512 => {
+                Hmac::Sha512(Mac::new_varkey(key).expect("Hmac::new_varkey accepts any key length"))
+            }
         }
     }
 
@@ -76,12 +78,12 @@ impl Hmac {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
-            },
+            }
             Hmac::Sha512(ref hmac) => {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
-            },
+            }
         }
     }
 
@@ -93,12 +95,12 @@ impl Hmac {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
-            },
+            }
             Hmac::Sha512(ref hmac) => {
                 let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
-            },
+            }
         }
     }
 }
@@ -114,26 +116,25 @@ pub fn full_codec<S>(
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
     decoding_hmac: Hmac,
-    remote_nonce: Vec<u8>
+    remote_nonce: Vec<u8>,
 ) -> FullCodec<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
     DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{full_codec, DecoderMiddleware, EncoderMiddleware, Hmac, LenPrefixCodec};
     use crate::algo_support::Digest;
-    use crate::stream_cipher::{ctr, Cipher};
     use crate::error::SecioError;
+    use crate::stream_cipher::{ctr, Cipher};
     use async_std::net::{TcpListener, TcpStream};
-    use futures::{prelude::*, channel::mpsc, channel::oneshot};
+    use futures::{channel::mpsc, channel::oneshot, prelude::*};
 
-    const NULL_IV : [u8; 16] = [0; 16];
+    const NULL_IV: [u8; 16] = [0; 16];
 
     #[test]
     fn raw_encode_then_decode() {
@@ -152,7 +153,7 @@ mod tests {
             data_rx.map(|v| Ok::<_, SecioError>(v)),
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
-            Vec::new()
+            Vec::new(),
         );
 
         let data = b"hello world";
@@ -187,7 +188,7 @@ mod tests {
                 Hmac::from_key(Digest::Sha256, &hmac_key),
                 ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key),
-                nonce2.clone()
+                nonce2.clone(),
             );
 
             let outcome = codec.map(|v| v.unwrap()).concat().await;
@@ -203,7 +204,7 @@ mod tests {
                 Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                 ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                 Hmac::from_key(Digest::Sha256, &hmac_key_clone),
-                Vec::new()
+                Vec::new(),
             );
             codec.send(nonce.into()).await.unwrap();
             codec.send(data.to_vec().into()).await.unwrap();

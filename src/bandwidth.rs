@@ -18,12 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
-use futures::{prelude::*, io::{IoSlice, IoSliceMut}, ready};
+use crate::{
+    core::{
+        transport::{ListenerEvent, TransportError},
+        Transport,
+    },
+    Multiaddr,
+};
+use futures::{
+    io::{IoSlice, IoSliceMut},
+    prelude::*,
+    ready,
+};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use smallvec::{smallvec, SmallVec};
-use std::{cmp, io, pin::Pin, sync::Arc, task::{Context, Poll}, time::Duration};
+use std::{
+    cmp, io,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 use wasm_timer::Instant;
 
 /// Wraps around a `Transport` and logs the bandwidth that goes through all the opened connections.
@@ -91,19 +107,18 @@ pub struct BandwidthListener<TInner> {
 
 impl<TInner, TConn, TErr> Stream for BandwidthListener<TInner>
 where
-    TInner: TryStream<Ok = ListenerEvent<TConn, TErr>, Error = TErr>
+    TInner: TryStream<Ok = ListenerEvent<TConn, TErr>, Error = TErr>,
 {
     type Item = Result<ListenerEvent<BandwidthFuture<TConn>, TErr>, TErr>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
-        let event =
-            if let Some(event) = ready!(this.inner.try_poll_next(cx)?) {
-                event
-            } else {
-                return Poll::Ready(None)
-            };
+        let event = if let Some(event) = ready!(this.inner.try_poll_next(cx)?) {
+            event
+        } else {
+            return Poll::Ready(None);
+        };
 
         let event = event.map({
             let sinks = this.sinks.clone();
@@ -129,7 +144,10 @@ impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.project();
         let inner = ready!(this.inner.try_poll(cx)?);
-        let logged = BandwidthConnecLogging { inner, sinks: this.sinks.clone() };
+        let logged = BandwidthConnecLogging {
+            inner,
+            sinks: this.sinks.clone(),
+        };
         Poll::Ready(Ok(logged))
     }
 }
@@ -161,14 +179,22 @@ pub struct BandwidthConnecLogging<TInner> {
 }
 
 impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
         this.sinks.download.lock().inject(num_bytes);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
+    fn poll_read_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+        bufs: &mut [IoSliceMut],
+    ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
         this.sinks.download.lock().inject(num_bytes);
@@ -184,7 +210,11 @@ impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<io::Result<usize>> {
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+        bufs: &[IoSlice],
+    ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
         this.sinks.upload.lock().inject(num_bytes);
@@ -239,9 +269,11 @@ impl BandwidthSink {
     fn get(&mut self) -> u64 {
         self.update();
         let seconds = self.bytes.len() - 1;
-        self.bytes.iter()
+        self.bytes
+            .iter()
             .take(seconds)
-            .fold(0u64, |a, &b| a.saturating_add(b)) / seconds as u64
+            .fold(0u64, |a, &b| a.saturating_add(b))
+            / seconds as u64
     }
 
     /// Notifies the `BandwidthSink` that a certain number of bytes have been transmitted at this
@@ -269,8 +301,8 @@ impl BandwidthSink {
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
     use super::*;
+    use std::{thread, time::Duration};
 
     #[test]
     fn sink_works() {

@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::{channel::oneshot, prelude::*};
 use libp2p_core::{muxing, upgrade, Transport};
 use libp2p_tcp::TcpConfig;
-use futures::{channel::oneshot, prelude::*};
 use std::sync::Arc;
 
 #[test]
@@ -32,14 +32,16 @@ fn client_to_server_outbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new().and_then(move |c, e|
-            upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let transport = TcpConfig::new()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener.next().await
+        let addr = listener
+            .next()
+            .await
             .expect("some event")
             .expect("no error")
             .into_new_address()
@@ -48,12 +50,19 @@ fn client_to_server_outbound() {
         tx.send(addr).unwrap();
 
         let client = listener
-            .next().await
+            .next()
+            .await
             .unwrap()
             .unwrap()
-            .into_upgrade().unwrap().0.await.unwrap();
-        
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+            .into_upgrade()
+            .unwrap()
+            .0
+            .await
+            .unwrap();
+
+        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+            .await
+            .unwrap();
 
         let mut buf = Vec::new();
         outbound.read_to_end(&mut buf).await.unwrap();
@@ -62,11 +71,13 @@ fn client_to_server_outbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new().and_then(move |c, e|
-            upgrade::apply(c, mplex, e, upgrade::Version::V1));
-    
+        let transport = TcpConfig::new()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client))
+            .await
+            .unwrap();
         inbound.write_all(b"hello world").await.unwrap();
         inbound.close().await.unwrap();
 
@@ -83,14 +94,16 @@ fn client_to_server_inbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new().and_then(move |c, e|
-            upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let transport = TcpConfig::new()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener.next().await
+        let addr = listener
+            .next()
+            .await
             .expect("some event")
             .expect("no error")
             .into_new_address()
@@ -99,12 +112,19 @@ fn client_to_server_inbound() {
         tx.send(addr).unwrap();
 
         let client = listener
-            .next().await
+            .next()
+            .await
             .unwrap()
             .unwrap()
-            .into_upgrade().unwrap().0.await.unwrap();
-        
-        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+            .into_upgrade()
+            .unwrap()
+            .0
+            .await
+            .unwrap();
+
+        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client))
+            .await
+            .unwrap();
 
         let mut buf = Vec::new();
         inbound.read_to_end(&mut buf).await.unwrap();
@@ -113,11 +133,13 @@ fn client_to_server_inbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new().and_then(move |c, e|
-            upgrade::apply(c, mplex, e, upgrade::Version::V1));
-    
+        let transport = TcpConfig::new()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+            .await
+            .unwrap();
         outbound.write_all(b"hello world").await.unwrap();
         outbound.close().await.unwrap();
 

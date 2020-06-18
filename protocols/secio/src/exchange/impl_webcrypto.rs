@@ -35,7 +35,9 @@ pub type AgreementPrivateKey = SendSyncHack<(JsValue, web_sys::SubtleCrypto)>;
 pub struct SendSyncHack<T>(SendWrapper<T>);
 
 impl<T> Future for SendSyncHack<T>
-where T: Future + Unpin {
+where
+    T: Future + Unpin,
+{
     type Output = T::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -46,9 +48,9 @@ where T: Future + Unpin {
 /// Generates a new key pair as part of the exchange.
 ///
 /// Returns the opaque private key and the corresponding public key.
-pub fn generate_agreement(algorithm: KeyAgreement)
-    -> impl Future<Output = Result<(AgreementPrivateKey, Vec<u8>), SecioError>>
-{
+pub fn generate_agreement(
+    algorithm: KeyAgreement,
+) -> impl Future<Output = Result<(AgreementPrivateKey, Vec<u8>), SecioError>> {
     let future = async move {
         // First step is to create the `SubtleCrypto` object.
         let crypto = build_crypto_future().await?;
@@ -87,20 +89,25 @@ pub fn generate_agreement(algorithm: KeyAgreement)
         let public = js_sys::Uint8Array::new(&public);
         let mut public_buf = vec![0; public.length() as usize];
         public.copy_to(&mut public_buf);
-        Ok((SendSyncHack(SendWrapper::new((private, crypto))), public_buf))
+        Ok((
+            SendSyncHack(SendWrapper::new((private, crypto))),
+            public_buf,
+        ))
     };
 
-    let future = future
-        .map_err(|err| {
-            SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
-        });
+    let future = future.map_err(|err| {
+        SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
+    });
     SendSyncHack(SendWrapper::new(Box::pin(future)))
 }
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
-pub fn agree(algorithm: KeyAgreement, key: AgreementPrivateKey, other_public_key: &[u8], out_size: usize)
-    -> impl Future<Output = Result<Vec<u8>, SecioError>>
-{
+pub fn agree(
+    algorithm: KeyAgreement,
+    key: AgreementPrivateKey,
+    other_public_key: &[u8],
+    out_size: usize,
+) -> impl Future<Output = Result<Vec<u8>, SecioError>> {
     let other_public_key = {
         // This unsafe is here because the lifetime of `other_public_key` must not outlive the
         // `tmp_view`. This is guaranteed by the fact that we clone this array right below.
@@ -115,24 +122,29 @@ pub fn agree(algorithm: KeyAgreement, key: AgreementPrivateKey, other_public_key
         // We start by importing the remote's public key into the WebCrypto world.
         let public_key = {
             // Note: contrary to what one might think, we shouldn't add the "deriveBits" usage.
-            let promise = crypto
-                .import_key_with_object(
-                    "raw", &js_sys::Object::from(other_public_key.buffer()),
-                    &build_curve_obj(algorithm), false, &js_sys::Array::new()
-                )?;
+            let promise = crypto.import_key_with_object(
+                "raw",
+                &js_sys::Object::from(other_public_key.buffer()),
+                &build_curve_obj(algorithm),
+                false,
+                &js_sys::Array::new(),
+            )?;
             wasm_bindgen_futures::JsFuture::from(promise).await?
         };
 
         // We then derive the final private key.
         let bytes = {
             let derive_params = build_curve_obj(algorithm);
-            let _ = js_sys::Reflect::set(derive_params.as_ref(), &JsValue::from_str("public"), &public_key);
-            let promise = crypto
-                .derive_bits_with_object(
-                    &derive_params,
-                    &web_sys::CryptoKey::from(private_key),
-                    8 * out_size as u32
-                )?;
+            let _ = js_sys::Reflect::set(
+                derive_params.as_ref(),
+                &JsValue::from_str("public"),
+                &public_key,
+            );
+            let promise = crypto.derive_bits_with_object(
+                &derive_params,
+                &web_sys::CryptoKey::from(private_key),
+                8 * out_size as u32,
+            )?;
             wasm_bindgen_futures::JsFuture::from(promise).await?
         };
 
@@ -142,10 +154,9 @@ pub fn agree(algorithm: KeyAgreement, key: AgreementPrivateKey, other_public_key
         Ok(buf)
     };
 
-    let future = future
-        .map_err(|err: JsValue| {
-            SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
-        });
+    let future = future.map_err(|err: JsValue| {
+        SecioError::IoError(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))
+    });
     SendSyncHack(SendWrapper::new(Box::pin(future)))
 }
 
@@ -161,10 +172,18 @@ async fn build_crypto_future() -> Result<web_sys::SubtleCrypto, JsValue> {
 /// See https://developer.mozilla.org/en-US/docs/Web/API/EcKeyGenParams
 fn build_curve_obj(algorithm: KeyAgreement) -> js_sys::Object {
     let obj = js_sys::Object::new();
-    let _ = js_sys::Reflect::set(obj.as_ref(), &JsValue::from_str("name"), &JsValue::from_str("ECDH"));
-    let _ = js_sys::Reflect::set(obj.as_ref(), &JsValue::from_str("namedCurve"), &JsValue::from_str(match algorithm {
-        KeyAgreement::EcdhP256 => "P-256",
-        KeyAgreement::EcdhP384 => "P-384",
-    }));
+    let _ = js_sys::Reflect::set(
+        obj.as_ref(),
+        &JsValue::from_str("name"),
+        &JsValue::from_str("ECDH"),
+    );
+    let _ = js_sys::Reflect::set(
+        obj.as_ref(),
+        &JsValue::from_str("namedCurve"),
+        &JsValue::from_str(match algorithm {
+            KeyAgreement::EcdhP256 => "P-256",
+            KeyAgreement::EcdhP384 => "P-384",
+        }),
+    );
     obj
 }

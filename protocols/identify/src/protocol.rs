@@ -21,9 +21,8 @@
 use crate::structs_proto;
 use futures::prelude::*;
 use libp2p_core::{
-    Multiaddr,
-    PublicKey,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    Multiaddr, PublicKey,
 };
 use log::{debug, trace};
 use prost::Message;
@@ -41,7 +40,7 @@ pub struct RemoteInfo {
     /// Address the remote sees for us.
     pub observed_addr: Multiaddr,
 
-    _priv: ()
+    _priv: (),
 }
 
 /// The substream on which a reply is expected to be sent.
@@ -57,19 +56,22 @@ impl<T> fmt::Debug for ReplySubstream<T> {
 
 impl<T> ReplySubstream<T>
 where
-    T: AsyncWrite + Unpin
+    T: AsyncWrite + Unpin,
 {
     /// Sends back the requested information on the substream.
     ///
     /// Consumes the substream, returning a `ReplyFuture` that resolves
     /// when the reply has been sent on the underlying connection.
-    pub fn send(mut self, info: IdentifyInfo, observed_addr: &Multiaddr)
-        -> impl Future<Output = Result<(), io::Error>>
-    {
+    pub fn send(
+        mut self,
+        info: IdentifyInfo,
+        observed_addr: &Multiaddr,
+    ) -> impl Future<Output = Result<(), io::Error>> {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
-        let listen_addrs = info.listen_addrs
+        let listen_addrs = info
+            .listen_addrs
             .into_iter()
             .map(|addr| addr.to_vec())
             .collect();
@@ -82,12 +84,14 @@ where
             public_key: Some(pubkey_bytes),
             listen_addrs: listen_addrs,
             observed_addr: Some(observed_addr.to_vec()),
-            protocols: info.protocols
+            protocols: info.protocols,
         };
 
         async move {
             let mut bytes = Vec::with_capacity(message.encoded_len());
-            message.encode(&mut bytes).expect("Vec<u8> provides capacity as needed");
+            message
+                .encode(&mut bytes)
+                .expect("Vec<u8> provides capacity as needed");
             upgrade::write_one(&mut self.inner, &bytes).await
         }
     }
@@ -149,7 +153,7 @@ where
                 Ok(v) => v,
                 Err(err) => {
                     debug!("Failed to parse protobuf message; error = {:?}", err);
-                    return Err(err.into())
+                    return Err(err.into());
                 }
             };
 
@@ -159,7 +163,7 @@ where
             Ok(RemoteInfo {
                 info,
                 observed_addr: observed_addr.clone(),
-                _priv: ()
+                _priv: (),
             })
         })
     }
@@ -194,7 +198,7 @@ fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<(IdentifyInfo, Multiaddr), i
                 protocol_version: msg.protocol_version.unwrap_or_default(),
                 agent_version: msg.agent_version.unwrap_or_default(),
                 listen_addrs,
-                protocols: msg.protocols
+                protocols: msg.protocols,
             };
 
             Ok((info, observed_addr))
@@ -206,14 +210,14 @@ fn parse_proto_msg(msg: impl AsRef<[u8]>) -> Result<(IdentifyInfo, Multiaddr), i
 
 #[cfg(test)]
 mod tests {
-    use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use libp2p_tcp::TcpConfig;
-    use futures::{prelude::*, channel::oneshot};
+    use crate::protocol::{IdentifyInfo, IdentifyProtocolConfig, RemoteInfo};
+    use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         identity,
+        upgrade::{self, apply_inbound, apply_outbound},
         Transport,
-        upgrade::{self, apply_outbound, apply_inbound}
     };
+    use libp2p_tcp::TcpConfig;
 
     #[test]
     fn correct_transfer() {
@@ -231,44 +235,73 @@ mod tests {
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let addr = listener.next().await
+            let addr = listener
+                .next()
+                .await
                 .expect("some event")
                 .expect("no error")
                 .into_new_address()
                 .expect("listen address");
             tx.send(addr).unwrap();
 
-            let socket = listener.next().await.unwrap().unwrap().into_upgrade().unwrap().0.await.unwrap();
+            let socket = listener
+                .next()
+                .await
+                .unwrap()
+                .unwrap()
+                .into_upgrade()
+                .unwrap()
+                .0
+                .await
+                .unwrap();
             let sender = apply_inbound(socket, IdentifyProtocolConfig).await.unwrap();
-            sender.send(
-                IdentifyInfo {
-                    public_key: send_pubkey,
-                    protocol_version: "proto_version".to_owned(),
-                    agent_version: "agent_version".to_owned(),
-                    listen_addrs: vec![
-                        "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                        "/ip6/::1/udp/1000".parse().unwrap(),
-                    ],
-                    protocols: vec!["proto1".to_string(), "proto2".to_string()],
-                },
-                &"/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-            ).await.unwrap();
+            sender
+                .send(
+                    IdentifyInfo {
+                        public_key: send_pubkey,
+                        protocol_version: "proto_version".to_owned(),
+                        agent_version: "agent_version".to_owned(),
+                        listen_addrs: vec![
+                            "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                            "/ip6/::1/udp/1000".parse().unwrap(),
+                        ],
+                        protocols: vec!["proto1".to_string(), "proto2".to_string()],
+                    },
+                    &"/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
+                )
+                .await
+                .unwrap();
         });
 
         async_std::task::block_on(async move {
             let transport = TcpConfig::new();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let RemoteInfo { info, observed_addr, .. } =
-                apply_outbound(socket, IdentifyProtocolConfig, upgrade::Version::V1).await.unwrap();
-            assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
+            let RemoteInfo {
+                info,
+                observed_addr,
+                ..
+            } = apply_outbound(socket, IdentifyProtocolConfig, upgrade::Version::V1)
+                .await
+                .unwrap();
+            assert_eq!(
+                observed_addr,
+                "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
+            );
             assert_eq!(info.public_key, recv_pubkey);
             assert_eq!(info.protocol_version, "proto_version");
             assert_eq!(info.agent_version, "agent_version");
-            assert_eq!(info.listen_addrs,
-                &["/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                "/ip6/::1/udp/1000".parse().unwrap()]);
-            assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
+            assert_eq!(
+                info.listen_addrs,
+                &[
+                    "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                    "/ip6/::1/udp/1000".parse().unwrap()
+                ]
+            );
+            assert_eq!(
+                info.protocols,
+                &["proto1".to_string(), "proto2".to_string()]
+            );
 
             bg_task.await;
         });

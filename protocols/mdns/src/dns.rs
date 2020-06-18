@@ -210,7 +210,9 @@ fn append_u16(out: &mut Vec<u8>, value: u16) {
 /// be compatible with RFC 1035.
 fn segment_peer_id(peer_id: String) -> String {
     // Guard for the most common case
-    if peer_id.len() <= MAX_LABEL_LENGTH { return peer_id }
+    if peer_id.len() <= MAX_LABEL_LENGTH {
+        return peer_id;
+    }
 
     // This will only perform one allocation except in extreme circumstances.
     let mut out = String::with_capacity(peer_id.len() + 8);
@@ -226,7 +228,7 @@ fn segment_peer_id(peer_id: String) -> String {
 
 /// Combines and encodes a `PeerId` and service name for a DNS query.
 fn encode_peer_id(peer_id: &PeerId) -> Vec<u8> {
-    // DNS-safe encoding for the Peer ID 
+    // DNS-safe encoding for the Peer ID
     let raw_peer_id = data_encoding::BASE32_DNSCURVE.encode(&peer_id.as_bytes());
     // ensure we don't have any labels over 63 bytes long
     let encoded_peer_id = segment_peer_id(raw_peer_id);
@@ -306,7 +308,7 @@ fn append_txt_record<'a>(
 
     // Flags.
     out.push(0x00);
-    out.push(0x10);     // TXT record.
+    out.push(0x10); // TXT record.
     out.push(0x80);
     out.push(0x01);
 
@@ -377,7 +379,9 @@ mod tests {
 
     #[test]
     fn build_query_response_correct() {
-        let my_peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let my_peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
         let query = build_query_response(
@@ -408,7 +412,10 @@ mod tests {
         assert_eq!(segment_peer_id(str_63.clone()), str_63);
 
         assert_eq!(segment_peer_id(str_64), [&str_63, "x"].join("."));
-        assert_eq!(segment_peer_id(str_126), [&str_63, str_63.as_str()].join("."));
+        assert_eq!(
+            segment_peer_id(str_126),
+            [&str_63, str_63.as_str()].join(".")
+        );
         assert_eq!(segment_peer_id(str_127), [&str_63, &str_63, "x"].join("."));
     }
 

@@ -18,25 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::service::{MdnsService, MdnsPacket, build_query_response, build_service_discovery_response};
+use crate::service::{
+    build_query_response, build_service_discovery_response, MdnsPacket, MdnsService,
+};
 use futures::prelude::*;
 use libp2p_core::{
-    Multiaddr,
-    PeerId,
-    address_translation,
-    connection::ConnectionId,
-    multiaddr::Protocol
+    address_translation, connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    NetworkBehaviour,
-    NetworkBehaviourAction,
-    PollParameters,
-    ProtocolsHandler,
-    protocols_handler::DummyProtocolsHandler
+    protocols_handler::DummyProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters, ProtocolsHandler,
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, mem, pin::Pin, time::Duration, task::Context, task::Poll};
+use std::{cmp, fmt, io, iter, mem, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::{Delay, Instant};
 
 const MDNS_RESPONSE_TTL: std::time::Duration = Duration::from_secs(5 * 60);
@@ -72,18 +67,15 @@ enum MaybeBusyMdnsService {
 impl fmt::Debug for MaybeBusyMdnsService {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MaybeBusyMdnsService::Free(service) => {
-                fmt.debug_struct("MaybeBusyMdnsService::Free")
-                    .field("service", service)
-                    .finish()
-            },
+            MaybeBusyMdnsService::Free(service) => fmt
+                .debug_struct("MaybeBusyMdnsService::Free")
+                .field("service", service)
+                .finish(),
             MaybeBusyMdnsService::Busy(_) => {
-                fmt.debug_struct("MaybeBusyMdnsService::Busy")
-                    .finish()
+                fmt.debug_struct("MaybeBusyMdnsService::Busy").finish()
             }
             MaybeBusyMdnsService::Poisoned => {
-                fmt.debug_struct("MaybeBusyMdnsService::Poisoned")
-                    .finish()
+                fmt.debug_struct("MaybeBusyMdnsService::Poisoned").finish()
             }
         }
     }
@@ -125,7 +117,7 @@ pub enum MdnsEvent {
 
 /// Iterator that produces the list of addresses that have been discovered.
 pub struct DiscoveredAddrsIter {
-    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }
 
 impl Iterator for DiscoveredAddrsIter {
@@ -142,19 +134,17 @@ impl Iterator for DiscoveredAddrsIter {
     }
 }
 
-impl ExactSizeIterator for DiscoveredAddrsIter {
-}
+impl ExactSizeIterator for DiscoveredAddrsIter {}
 
 impl fmt::Debug for DiscoveredAddrsIter {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("DiscoveredAddrsIter")
-            .finish()
+        fmt.debug_struct("DiscoveredAddrsIter").finish()
     }
 }
 
 /// Iterator that produces the list of addresses that have expired.
 pub struct ExpiredAddrsIter {
-    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }
 
 impl Iterator for ExpiredAddrsIter {
@@ -171,13 +161,11 @@ impl Iterator for ExpiredAddrsIter {
     }
 }
 
-impl ExactSizeIterator for ExpiredAddrsIter {
-}
+impl ExactSizeIterator for ExpiredAddrsIter {}
 
 impl fmt::Debug for ExpiredAddrsIter {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("ExpiredAddrsIter")
-            .finish()
+        fmt.debug_struct("ExpiredAddrsIter").finish()
     }
 }
 
@@ -227,7 +215,11 @@ impl NetworkBehaviour for Mdns {
                 Poll::Ready(Ok(())) => {
                     let now = Instant::now();
                     let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
-                    while let Some(pos) = self.discovered_nodes.iter().position(|(_, _, exp)| *exp < now) {
+                    while let Some(pos) = self
+                        .discovered_nodes
+                        .iter()
+                        .position(|(_, _, exp)| *exp < now)
+                    {
                         let (peer_id, addr, _) = self.discovered_nodes.remove(pos);
                         expired.push((peer_id, addr));
                     }
@@ -239,7 +231,7 @@ impl NetworkBehaviour for Mdns {
 
                         return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                     }
-                },
+                }
                 Poll::Pending => (),
                 Poll::Ready(Err(err)) => warn!("timer has errored: {:?}", err),
             }
@@ -253,17 +245,15 @@ impl NetworkBehaviour for Mdns {
                 MaybeBusyMdnsService::Free(service) => {
                     self.service = MaybeBusyMdnsService::Busy(Box::pin(service.next()));
                     continue;
-                },
-                MaybeBusyMdnsService::Busy(mut fut) => {
-                    match fut.as_mut().poll(cx) {
-                        Poll::Ready((service, packet)) => {
-                            self.service = MaybeBusyMdnsService::Free(service);
-                            packet
-                        },
-                        Poll::Pending => {
-                            self.service = MaybeBusyMdnsService::Busy(fut);
-                            return Poll::Pending;
-                        }
+                }
+                MaybeBusyMdnsService::Busy(mut fut) => match fut.as_mut().poll(cx) {
+                    Poll::Ready((service, packet)) => {
+                        self.service = MaybeBusyMdnsService::Free(service);
+                        packet
+                    }
+                    Poll::Pending => {
+                        self.service = MaybeBusyMdnsService::Busy(fut);
+                        return Poll::Pending;
                     }
                 },
                 MaybeBusyMdnsService::Poisoned => panic!("Mdns poisoned"),
@@ -280,16 +270,17 @@ impl NetworkBehaviour for Mdns {
                             MDNS_RESPONSE_TTL,
                         );
                         service.enqueue_response(resp.unwrap());
-                    } else { debug_assert!(false); }
-                },
+                    } else {
+                        debug_assert!(false);
+                    }
+                }
                 MdnsPacket::Response(response) => {
                     // We replace the IP address with the address we observe the
                     // remote as and the address they listen on.
                     let obs_ip = Protocol::from(response.remote_addr().ip());
                     let obs_port = Protocol::Udp(response.remote_addr().port());
-                    let observed: Multiaddr = iter::once(obs_ip)
-                        .chain(iter::once(obs_port))
-                        .collect();
+                    let observed: Multiaddr =
+                        iter::once(obs_ip).chain(iter::once(obs_port)).collect();
 
                     let mut discovered: SmallVec<[_; 4]> = SmallVec::new();
                     for peer in response.discovered_peers() {
@@ -308,12 +299,18 @@ impl NetworkBehaviour for Mdns {
                         }
 
                         for addr in addrs {
-                            if let Some((_, _, cur_expires)) = self.discovered_nodes.iter_mut()
+                            if let Some((_, _, cur_expires)) = self
+                                .discovered_nodes
+                                .iter_mut()
                                 .find(|(p, a, _)| p == peer.id() && *a == addr)
                             {
                                 *cur_expires = cmp::max(*cur_expires, new_expiration);
                             } else {
-                                self.discovered_nodes.push((peer.id().clone(), addr.clone(), new_expiration));
+                                self.discovered_nodes.push((
+                                    peer.id().clone(),
+                                    addr.clone(),
+                                    new_expiration,
+                                ));
                             }
 
                             discovered.push((peer.id().clone(), addr));
@@ -321,31 +318,35 @@ impl NetworkBehaviour for Mdns {
                     }
 
                     break discovered;
-                },
+                }
                 MdnsPacket::ServiceDiscovery(disc) => {
                     // MaybeBusyMdnsService should always be Free.
                     if let MaybeBusyMdnsService::Free(ref mut service) = self.service {
-                        let resp = build_service_discovery_response(
-                            disc.query_id(),
-                            MDNS_RESPONSE_TTL,
-                        );
+                        let resp =
+                            build_service_discovery_response(disc.query_id(), MDNS_RESPONSE_TTL);
                         service.enqueue_response(resp);
-                    } else { debug_assert!(false); }
-                },
+                    } else {
+                        debug_assert!(false);
+                    }
+                }
             }
         };
 
         // Getting this far implies that we discovered new nodes. As the final step, we need to
         // refresh `closest_expiration`.
-        self.closest_expiration = self.discovered_nodes.iter()
+        self.closest_expiration = self
+            .discovered_nodes
+            .iter()
             .fold(None, |exp, &(_, _, elem_exp)| {
                 Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
             })
             .map(Delay::new_at);
 
-        Poll::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
-            inner: discovered.into_iter(),
-        })))
+        Poll::Ready(NetworkBehaviourAction::GenerateEvent(
+            MdnsEvent::Discovered(DiscoveredAddrsIter {
+                inner: discovered.into_iter(),
+            }),
+        ))
     }
 }
 

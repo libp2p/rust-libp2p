@@ -51,18 +51,21 @@ fn from_url_inner(url: &str, lossy: bool) -> std::result::Result<Multiaddr, From
         // Note: if you add support for a new scheme, please update the documentation as well.
         "ws" | "wss" | "http" | "https" => from_url_inner_http_ws(url, lossy),
         "unix" => from_url_inner_path(url, lossy),
-        _ => Err(FromUrlErr::UnsupportedScheme)
+        _ => Err(FromUrlErr::UnsupportedScheme),
     }
 }
 
 /// Called when `url.scheme()` is an Internet-like URL.
-fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Multiaddr, FromUrlErr> {
+fn from_url_inner_http_ws(
+    url: url::Url,
+    lossy: bool,
+) -> std::result::Result<Multiaddr, FromUrlErr> {
     let (protocol, lost_path, default_port) = match url.scheme() {
         "ws" => (Protocol::Ws(url.path().to_owned().into()), false, 80),
         "wss" => (Protocol::Wss(url.path().to_owned().into()), false, 443),
         "http" => (Protocol::Http, true, 80),
         "https" => (Protocol::Https, true, 443),
-        _ => unreachable!("We only call this function for one of the given schemes; qed")
+        _ => unreachable!("We only call this function for one of the given schemes; qed"),
     };
 
     let port = Protocol::Tcp(url.port().unwrap_or(default_port));
@@ -77,9 +80,11 @@ fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Mul
     };
 
     if !lossy {
-        if !url.username().is_empty() || url.password().is_some() ||
-            (lost_path && url.path() != "/" && !url.path().is_empty()) ||
-            url.query().is_some() || url.fragment().is_some()
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || (lost_path && url.path() != "/" && !url.path().is_empty())
+            || url.query().is_some()
+            || url.fragment().is_some()
         {
             return Err(FromUrlErr::InformationLoss);
         }
@@ -95,12 +100,14 @@ fn from_url_inner_http_ws(url: url::Url, lossy: bool) -> std::result::Result<Mul
 fn from_url_inner_path(url: url::Url, lossy: bool) -> std::result::Result<Multiaddr, FromUrlErr> {
     let protocol = match url.scheme() {
         "unix" => Protocol::Unix(url.path().to_owned().into()),
-        _ => unreachable!("We only call this function for one of the given schemes; qed")
+        _ => unreachable!("We only call this function for one of the given schemes; qed"),
     };
 
     if !lossy {
-        if !url.username().is_empty() || url.password().is_some() ||
-            url.query().is_some() || url.fragment().is_some()
+        if !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
         {
             return Err(FromUrlErr::InformationLoss);
         }
@@ -130,8 +137,7 @@ impl fmt::Display for FromUrlErr {
     }
 }
 
-impl error::Error for FromUrlErr {
-}
+impl error::Error for FromUrlErr {}
 
 #[cfg(test)]
 mod tests {
@@ -139,7 +145,7 @@ mod tests {
 
     #[test]
     fn parse_garbage_doesnt_panic() {
-        for _ in 0 .. 50 {
+        for _ in 0..50 {
             let url = (0..16).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
             let url = String::from_utf8_lossy(&url);
             assert!(from_url(&url).is_err());
@@ -216,7 +222,7 @@ mod tests {
     fn wrong_scheme() {
         match from_url("foo://127.0.0.1") {
             Err(FromUrlErr::UnsupportedScheme) => {}
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -264,13 +270,23 @@ mod tests {
     #[test]
     fn ws_path() {
         let addr = from_url("ws://1.2.3.4:1000/foo/bar").unwrap();
-        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/x-parity-ws/%2ffoo%2fbar".parse().unwrap());
+        assert_eq!(
+            addr,
+            "/ip4/1.2.3.4/tcp/1000/x-parity-ws/%2ffoo%2fbar"
+                .parse()
+                .unwrap()
+        );
 
         let addr = from_url("ws://1.2.3.4:1000/").unwrap();
         assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/ws".parse().unwrap());
 
         let addr = from_url("wss://1.2.3.4:1000/foo/bar").unwrap();
-        assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/x-parity-wss/%2ffoo%2fbar".parse().unwrap());
+        assert_eq!(
+            addr,
+            "/ip4/1.2.3.4/tcp/1000/x-parity-wss/%2ffoo%2fbar"
+                .parse()
+                .unwrap()
+        );
 
         let addr = from_url("wss://1.2.3.4:1000").unwrap();
         assert_eq!(addr, "/ip4/1.2.3.4/tcp/1000/wss".parse().unwrap());

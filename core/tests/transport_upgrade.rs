@@ -22,8 +22,8 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::identity;
-use libp2p_core::transport::{Transport, MemoryTransport};
-use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::transport::{MemoryTransport, Transport};
+use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_mplex::MplexConfig;
 use libp2p_secio::SecioConfig;
 use multiaddr::{Multiaddr, Protocol};
@@ -44,7 +44,7 @@ impl UpgradeInfo for HelloUpgrade {
 
 impl<C> InboundUpgrade<C> for HelloUpgrade
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = C;
     type Error = io::Error;
@@ -119,7 +119,7 @@ fn upgrade_pipeline() {
             let (upgrade, _remote_addr) =
                 match listener.next().await.unwrap().unwrap().into_upgrade() {
                     Some(u) => u,
-                    None => continue
+                    None => continue,
                 };
             let (peer, _mplex) = upgrade.await.unwrap();
             assert_eq!(peer, dialer_id);
@@ -134,4 +134,3 @@ fn upgrade_pipeline() {
     async_std::task::spawn(server);
     async_std::task::block_on(client);
 }
-

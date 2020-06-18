@@ -178,18 +178,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         ping: Ping,
     }
 
-    impl NetworkBehaviourEventProcess<IdentifyEvent>
-        for MyBehaviour
-    {
+    impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
         // Called when `identify` produces an event.
         fn inject_event(&mut self, event: IdentifyEvent) {
             println!("identify: {:?}", event);
         }
     }
 
-    impl NetworkBehaviourEventProcess<GossipsubEvent>
-        for MyBehaviour
-    {
+    impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
         // Called when `gossipsub` produces an event.
         fn inject_event(&mut self, event: GossipsubEvent) {
             match event {
@@ -204,9 +200,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl NetworkBehaviourEventProcess<PingEvent>
-        for MyBehaviour
-    {
+    impl NetworkBehaviourEventProcess<PingEvent> for MyBehaviour {
         // Called when `ping` produces an event.
         fn inject_event(&mut self, event: PingEvent) {
             use ping::handler::{PingFailure, PingSuccess};

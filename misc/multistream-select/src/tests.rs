@@ -22,9 +22,9 @@
 
 #![cfg(test)]
 
-use crate::{Version, NegotiationError};
 use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use crate::{dialer_select_proto, listener_select_proto};
+use crate::{NegotiationError, Version};
 
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
@@ -54,7 +54,8 @@ fn select_proto_basic() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
 
             io.write_all(b"ping").await.unwrap();
@@ -90,7 +91,7 @@ fn no_protocol_found() {
                 Err(_) => return,
             };
             match io.complete().await {
-                Err(NegotiationError::Failed) => {},
+                Err(NegotiationError::Failed) => {}
                 _ => panic!(),
             }
         });
@@ -101,10 +102,10 @@ fn no_protocol_found() {
             let io = match dialer_select_proto(connec, protos.into_iter(), version).await {
                 Err(NegotiationError::Failed) => return,
                 Ok((_, io)) => io,
-                Err(_) => panic!()
+                Err(_) => panic!(),
             };
             match io.complete().await {
-                Err(NegotiationError::Failed) => {},
+                Err(NegotiationError::Failed) => {}
                 _ => panic!(),
             }
         });
@@ -135,7 +136,8 @@ fn select_proto_parallel() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, io) = dialer_select_proto_parallel(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         });
@@ -166,7 +168,8 @@ fn select_proto_serial() {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec![b"/proto3", b"/proto2"];
             let (proto, io) = dialer_select_proto_serial(connec, protos.into_iter(), version)
-                .await.unwrap();
+                .await
+                .unwrap();
             assert_eq!(proto, b"/proto2");
             io.complete().await.unwrap();
         });

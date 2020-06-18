@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::Endpoint;
+use bytes::{BufMut, Bytes, BytesMut};
 use futures_codec::{Decoder, Encoder};
+use libp2p_core::Endpoint;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
-use bytes::{BufMut, Bytes, BytesMut};
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.
@@ -32,10 +32,22 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum Elem {
-    Open { substream_id: u32 },
-    Data { substream_id: u32, endpoint: Endpoint, data: Bytes },
-    Close { substream_id: u32, endpoint: Endpoint },
-    Reset { substream_id: u32, endpoint: Endpoint },
+    Open {
+        substream_id: u32,
+    },
+    Data {
+        substream_id: u32,
+        endpoint: Endpoint,
+        data: Bytes,
+    },
+    Close {
+        substream_id: u32,
+        endpoint: Endpoint,
+    },
+    Reset {
+        substream_id: u32,
+        endpoint: Endpoint,
+    },
 }
 
 impl Elem {
@@ -54,7 +66,7 @@ impl Elem {
             Elem::Open { .. } => None,
             Elem::Data { endpoint, .. } => Some(endpoint),
             Elem::Close { endpoint, .. } => Some(endpoint),
-            Elem::Reset { endpoint, .. } => Some(endpoint)
+            Elem::Reset { endpoint, .. } => Some(endpoint),
         }
     }
 
@@ -107,31 +119,28 @@ impl Decoder for Codec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
             match mem::replace(&mut self.decoder_state, CodecDecodeState::Poisoned) {
-                CodecDecodeState::Begin => {
-                    match self.varint_decoder.decode(src)? {
-                        Some(header) => {
-                            self.decoder_state = CodecDecodeState::HasHeader(header);
-                        },
-                        None => {
-                            self.decoder_state = CodecDecodeState::Begin;
-                            return Ok(None);
-                        },
+                CodecDecodeState::Begin => match self.varint_decoder.decode(src)? {
+                    Some(header) => {
+                        self.decoder_state = CodecDecodeState::HasHeader(header);
+                    }
+                    None => {
+                        self.decoder_state = CodecDecodeState::Begin;
+                        return Ok(None);
                     }
                 },
-                CodecDecodeState::HasHeader(header) => {
-                    match self.varint_decoder.decode(src)? {
-                        Some(len) => {
-                            if len as usize > MAX_FRAME_SIZE {
-                                let msg = format!("Mplex frame length {} exceeds maximum", len);
-                                return Err(IoError::new(IoErrorKind::InvalidData, msg));
-                            }
+                CodecDecodeState::HasHeader(header) => match self.varint_decoder.decode(src)? {
+                    Some(len) => {
+                        if len as usize > MAX_FRAME_SIZE {
+                            let msg = format!("Mplex frame length {} exceeds maximum", len);
+                            return Err(IoError::new(IoErrorKind::InvalidData, msg));
+                        }
 
-                            self.decoder_state = CodecDecodeState::HasHeaderAndLen(header, len as usize);
-                        },
-                        None => {
-                            self.decoder_state = CodecDecodeState::HasHeader(header);
-                            return Ok(None);
-                        },
+                        self.decoder_state =
+                            CodecDecodeState::HasHeaderAndLen(header, len as usize);
+                    }
+                    None => {
+                        self.decoder_state = CodecDecodeState::HasHeader(header);
+                        return Ok(None);
                     }
                 },
                 CodecDecodeState::HasHeaderAndLen(header, len) => {
@@ -146,24 +155,47 @@ impl Decoder for Codec {
                     let substream_id = (header >> 3) as u32;
                     let out = match header & 7 {
                         0 => Elem::Open { substream_id },
-                        1 => Elem::Data { substream_id, endpoint: Endpoint::Listener, data: buf.freeze() },
-                        2 => Elem::Data { substream_id, endpoint: Endpoint::Dialer, data: buf.freeze() },
-                        3 => Elem::Close { substream_id, endpoint: Endpoint::Listener },
-                        4 => Elem::Close { substream_id, endpoint: Endpoint::Dialer },
-                        5 => Elem::Reset { substream_id, endpoint: Endpoint::Listener },
-                        6 => Elem::Reset { substream_id, endpoint: Endpoint::Dialer },
+                        1 => Elem::Data {
+                            substream_id,
+                            endpoint: Endpoint::Listener,
+                            data: buf.freeze(),
+                        },
+                        2 => Elem::Data {
+                            substream_id,
+                            endpoint: Endpoint::Dialer,
+                            data: buf.freeze(),
+                        },
+                        3 => Elem::Close {
+                            substream_id,
+                            endpoint: Endpoint::Listener,
+                        },
+                        4 => Elem::Close {
+                            substream_id,
+                            endpoint: Endpoint::Dialer,
+                        },
+                        5 => Elem::Reset {
+                            substream_id,
+                            endpoint: Endpoint::Listener,
+                        },
+                        6 => Elem::Reset {
+                            substream_id,
+                            endpoint: Endpoint::Dialer,
+                        },
                         _ => {
                             let msg = format!("Invalid mplex header value 0x{:x}", header);
                             return Err(IoError::new(IoErrorKind::InvalidData, msg));
-                        },
+                        }
                     };
 
                     self.decoder_state = CodecDecodeState::Begin;
                     return Ok(Some(out));
-                },
+                }
 
                 CodecDecodeState::Poisoned => {
-                    return Err(IoError::new(IoErrorKind::InvalidData, "Mplex codec poisoned"));
+                    return Err(IoError::new(
+                        IoErrorKind::InvalidData,
+                        "Mplex codec poisoned",
+                    ));
                 }
             }
         }
@@ -176,27 +208,33 @@ impl Encoder for Codec {
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
-            Elem::Open { substream_id } => {
-                (u64::from(substream_id) << 3, Bytes::new())
-            },
-            Elem::Data { substream_id, endpoint: Endpoint::Listener, data } => {
-                (u64::from(substream_id) << 3 | 1, data)
-            },
-            Elem::Data { substream_id, endpoint: Endpoint::Dialer, data } => {
-                (u64::from(substream_id) << 3 | 2, data)
-            },
-            Elem::Close { substream_id, endpoint: Endpoint::Listener } => {
-                (u64::from(substream_id) << 3 | 3, Bytes::new())
-            },
-            Elem::Close { substream_id, endpoint: Endpoint::Dialer } => {
-                (u64::from(substream_id) << 3 | 4, Bytes::new())
-            },
-            Elem::Reset { substream_id, endpoint: Endpoint::Listener } => {
-                (u64::from(substream_id) << 3 | 5, Bytes::new())
-            },
-            Elem::Reset { substream_id, endpoint: Endpoint::Dialer } => {
-                (u64::from(substream_id) << 3 | 6, Bytes::new())
-            },
+            Elem::Open { substream_id } => (u64::from(substream_id) << 3, Bytes::new()),
+            Elem::Data {
+                substream_id,
+                endpoint: Endpoint::Listener,
+                data,
+            } => (u64::from(substream_id) << 3 | 1, data),
+            Elem::Data {
+                substream_id,
+                endpoint: Endpoint::Dialer,
+                data,
+            } => (u64::from(substream_id) << 3 | 2, data),
+            Elem::Close {
+                substream_id,
+                endpoint: Endpoint::Listener,
+            } => (u64::from(substream_id) << 3 | 3, Bytes::new()),
+            Elem::Close {
+                substream_id,
+                endpoint: Endpoint::Dialer,
+            } => (u64::from(substream_id) << 3 | 4, Bytes::new()),
+            Elem::Reset {
+                substream_id,
+                endpoint: Endpoint::Listener,
+            } => (u64::from(substream_id) << 3 | 5, Bytes::new()),
+            Elem::Reset {
+                substream_id,
+                endpoint: Endpoint::Dialer,
+            } => (u64::from(substream_id) << 3 | 6, Bytes::new()),
         };
 
         let mut header_buf = encode::u64_buffer();
@@ -207,7 +245,10 @@ impl Encoder for Codec {
         let data_len_bytes = encode::usize(data_len, &mut data_buf);
 
         if data_len > MAX_FRAME_SIZE {
-            return Err(IoError::new(IoErrorKind::InvalidData, "data size exceed maximum"));
+            return Err(IoError::new(
+                IoErrorKind::InvalidData,
+                "data size exceed maximum",
+            ));
         }
 
         dst.reserve(header_bytes.len() + data_len_bytes.len() + data_len);
@@ -227,15 +268,23 @@ mod tests {
         let mut enc = Codec::new();
         let endpoint = Endpoint::Dialer;
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE + 1][..]);
-        let bad_msg = Elem::Data{ substream_id: 123, endpoint, data };
+        let bad_msg = Elem::Data {
+            substream_id: 123,
+            endpoint,
+            data,
+        };
         let mut out = BytesMut::new();
         match enc.encode(bad_msg, &mut out) {
             Err(e) => assert_eq!(e.to_string(), "data size exceed maximum"),
-            _ => panic!("Can't send a message bigger than MAX_FRAME_SIZE")
+            _ => panic!("Can't send a message bigger than MAX_FRAME_SIZE"),
         }
 
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE][..]);
-        let ok_msg = Elem::Data{ substream_id: 123, endpoint, data };
+        let ok_msg = Elem::Data {
+            substream_id: 123,
+            endpoint,
+            data,
+        };
         assert!(enc.encode(ok_msg, &mut out).is_ok());
     }
 }

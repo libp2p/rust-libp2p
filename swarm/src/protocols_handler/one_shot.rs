@@ -18,14 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::protocols_handler::{
-    KeepAlive,
-    ProtocolsHandler,
-    ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr,
-    SubstreamProtocol
+    KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 
 use smallvec::SmallVec;
 use std::{error, task::Context, task::Poll, time::Duration};
@@ -42,8 +38,7 @@ where
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInProto>,
     /// If `Some`, something bad happened and we should shut down the handler with an error.
-    pending_error:
-        Option<ProtocolsHandlerUpgrErr<<TOutProto as OutboundUpgradeSend>::Error>>,
+    pending_error: Option<ProtocolsHandlerUpgrErr<<TOutProto as OutboundUpgradeSend>::Error>>,
     /// Queue of events to produce in `poll()`.
     events_out: SmallVec<[TOutEvent; 4]>,
     /// Queue of outbound substreams to open.
@@ -58,17 +53,13 @@ where
     config: OneShotHandlerConfig,
 }
 
-impl<TInProto, TOutProto, TOutEvent>
-    OneShotHandler<TInProto, TOutProto, TOutEvent>
+impl<TInProto, TOutProto, TOutEvent> OneShotHandler<TInProto, TOutProto, TOutEvent>
 where
     TOutProto: OutboundUpgradeSend,
 {
     /// Creates a `OneShotHandler`.
     #[inline]
-    pub fn new(
-        listen_protocol: SubstreamProtocol<TInProto>,
-        config: OneShotHandlerConfig,
-    ) -> Self {
+    pub fn new(listen_protocol: SubstreamProtocol<TInProto>, config: OneShotHandlerConfig) -> Self {
         OneShotHandler {
             listen_protocol,
             pending_error: None,
@@ -77,7 +68,7 @@ where
             dial_negotiated: 0,
             max_dial_negotiated: 8,
             keep_alive: KeepAlive::Yes,
-            config
+            config,
         }
     }
 
@@ -113,8 +104,7 @@ where
     }
 }
 
-impl<TInProto, TOutProto, TOutEvent> Default
-    for OneShotHandler<TInProto, TOutProto, TOutEvent>
+impl<TInProto, TOutProto, TOutEvent> Default for OneShotHandler<TInProto, TOutProto, TOutEvent>
 where
     TOutProto: OutboundUpgradeSend,
     TInProto: InboundUpgradeSend + Default,
@@ -123,7 +113,7 @@ where
     fn default() -> Self {
         OneShotHandler::new(
             SubstreamProtocol::new(Default::default()),
-            OneShotHandlerConfig::default()
+            OneShotHandlerConfig::default(),
         )
     }
 }
@@ -141,9 +131,7 @@ where
 {
     type InEvent = TOutProto;
     type OutEvent = TOutEvent;
-    type Error = ProtocolsHandlerUpgrErr<
-        <Self::OutboundProtocol as OutboundUpgradeSend>::Error,
-    >;
+    type Error = ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
     type InboundProtocol = TInProto;
     type OutboundProtocol = TOutProto;
     type OutboundOpenInfo = ();
@@ -190,9 +178,7 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgradeSend>::Error,
-        >,
+        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         if self.pending_error.is_none() {
             self.pending_error = Some(error);
@@ -208,16 +194,19 @@ where
         &mut self,
         _: &mut Context,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
     > {
         if let Some(err) = self.pending_error.take() {
             return Poll::Ready(ProtocolsHandlerEvent::Close(err));
         }
 
         if !self.events_out.is_empty() {
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                self.events_out.remove(0),
-            ));
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(self.events_out.remove(0)));
         } else {
             self.events_out.shrink_to_fit();
         }
@@ -225,13 +214,11 @@ where
         if !self.dial_queue.is_empty() {
             if self.dial_negotiated < self.max_dial_negotiated {
                 self.dial_negotiated += 1;
-                return Poll::Ready(
-                    ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(self.dial_queue.remove(0))
-                            .with_timeout(self.config.substream_timeout),
-                        info: (),
-                    },
-                );
+                return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(self.dial_queue.remove(0))
+                        .with_timeout(self.config.substream_timeout),
+                    info: (),
+                });
             }
         } else {
             self.dial_queue.shrink_to_fit();
@@ -254,7 +241,9 @@ impl Default for OneShotHandlerConfig {
     fn default() -> Self {
         let inactive_timeout = Duration::from_secs(10);
         let substream_timeout = Duration::from_secs(10);
-        OneShotHandlerConfig { inactive_timeout, substream_timeout }
+        OneShotHandlerConfig {
+            inactive_timeout,
+            substream_timeout,
+        }
     }
 }
-

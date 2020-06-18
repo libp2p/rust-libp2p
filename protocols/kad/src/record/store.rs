@@ -22,8 +22,8 @@ mod memory;
 
 pub use memory::{MemoryStore, MemoryStoreConfig};
 
-use crate::K_VALUE;
 use super::*;
+use crate::K_VALUE;
 use std::borrow::Cow;
 
 /// The result of an operation on a `RecordStore`.
@@ -92,4 +92,3 @@ pub trait RecordStore<'a> {
     /// Removes a provider record from the store.
     fn remove_provider(&'a mut self, k: &Key, p: &PeerId);
 }
-

@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Endpoint, upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo}};
+use crate::{
+    upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo},
+    Endpoint,
+};
 
 use futures::prelude::*;
 use std::iter;

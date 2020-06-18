@@ -52,16 +52,16 @@
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
-    Multiaddr,
-    PeerId,
-    Swarm,
-    NetworkBehaviour,
-    identity,
     floodsub::{self, Floodsub, FloodsubEvent},
+    identity,
     mdns::{Mdns, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    swarm::NetworkBehaviourEventProcess,
+    Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -96,7 +96,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Called when `floodsub` produces an event.
         fn inject_event(&mut self, message: FloodsubEvent) {
             if let FloodsubEvent::Message(message) = message {
-                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+                println!(
+                    "Received: '{:?}' from {:?}",
+                    String::from_utf8_lossy(&message.data),
+                    message.source
+                );
             }
         }
     }
@@ -105,16 +109,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Called when `mdns` produces an event.
         fn inject_event(&mut self, event: MdnsEvent) {
             match event {
-                MdnsEvent::Discovered(list) =>
+                MdnsEvent::Discovered(list) => {
                     for (peer, _) in list {
                         self.floodsub.add_node_to_partial_view(peer);
                     }
-                MdnsEvent::Expired(list) =>
+                }
+                MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
                         if !self.mdns.has_node(&peer) {
                             self.floodsub.remove_node_from_partial_view(&peer);
                         }
                     }
+                }
             }
         }
     }
@@ -150,9 +156,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.floodsub.publish(floodsub_topic.clone(), line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm
+                    .floodsub
+                    .publish(floodsub_topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
-                Poll::Pending => break
+                Poll::Pending => break,
             }
         }
         loop {
@@ -166,7 +174,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             listening = true;
                         }
                     }
-                    break
+                    break;
                 }
             }
         }

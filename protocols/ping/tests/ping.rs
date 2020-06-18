@@ -20,19 +20,17 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
+use futures::{channel::mpsc, prelude::*};
 use libp2p_core::{
-    Multiaddr,
-    PeerId,
     identity,
     muxing::StreamMuxerBox,
-    transport::{Transport, boxed::Boxed},
-    upgrade
+    transport::{boxed::Boxed, Transport},
+    upgrade, Multiaddr, PeerId,
 };
 use libp2p_ping::*;
 use libp2p_secio::SecioConfig;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
-use futures::{prelude::*, channel::mpsc};
 use std::{io, time::Duration};
 
 #[test]
@@ -60,9 +58,10 @@ fn ping() {
 
         loop {
             match swarm1.next().await {
-                PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
-                    return (pid1.clone(), peer, rtt)
-                },
+                PingEvent {
+                    peer,
+                    result: Ok(PingSuccess::Ping { rtt }),
+                } => return (pid1.clone(), peer, rtt),
                 _ => {}
             }
         }
@@ -74,9 +73,10 @@ fn ping() {
 
         loop {
             match swarm2.next().await {
-                PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
-                    return (pid2.clone(), peer, rtt)
-                },
+                PingEvent {
+                    peer,
+                    result: Ok(PingSuccess::Ping { rtt }),
+                } => return (pid2.clone(), peer, rtt),
                 _ => {}
             }
         }
@@ -88,13 +88,7 @@ fn ping() {
     assert!(rtt < Duration::from_millis(50));
 }
 
-fn mk_transport() -> (
-    PeerId,
-    Boxed<
-        (PeerId, StreamMuxerBox),
-        io::Error
-    >
-) {
+fn mk_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox), io::Error>) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let transport = TcpConfig::new()

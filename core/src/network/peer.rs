@@ -18,35 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use super::{DialingOpts, Network};
 use crate::{
-    Multiaddr,
-    Transport,
-    StreamMuxer,
     connection::{
-        Connected,
-        ConnectedPoint,
-        ConnectionHandler,
-        ConnectionInfo,
-        Connection,
-        ConnectionId,
-        ConnectionLimit,
-        EstablishedConnection,
-        EstablishedConnectionIter,
-        IntoConnectionHandler,
-        PendingConnection,
-        Substream,
-        pool::Pool,
+        pool::Pool, Connected, ConnectedPoint, Connection, ConnectionHandler, ConnectionId,
+        ConnectionInfo, ConnectionLimit, EstablishedConnection, EstablishedConnectionIter,
+        IntoConnectionHandler, PendingConnection, Substream,
     },
+    Multiaddr, StreamMuxer, Transport,
 };
 use fnv::FnvHashMap;
 use smallvec::SmallVec;
-use std::{
-    collections::hash_map,
-    error,
-    fmt,
-    hash::Hash,
-};
-use super::{Network, DialingOpts};
+use std::{collections::hash_map, error, fmt, hash::Hash};
 
 /// The possible representations of a peer in a [`Network`], as
 /// seen by the local node.
@@ -57,7 +40,7 @@ use super::{Network, DialingOpts};
 pub enum Peer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>
+    THandler: IntoConnectionHandler<TConnInfo>,
 {
     /// At least one established connection exists to the peer.
     Connected(ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>),
@@ -76,8 +59,8 @@ where
     Local,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    Peer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug
+    for Peer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
@@ -86,25 +69,10 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            Peer::Connected(p) => {
-                f.debug_struct("Connected")
-                    .field("peer", &p)
-                    .finish()
-            }
-            Peer::Dialing(p) => {
-                f.debug_struct("Dialing")
-                    .field("peer", &p)
-                    .finish()
-            }
-            Peer::Disconnected(p) => {
-                f.debug_struct("Disconnected")
-                    .field("peer", &p)
-                    .finish()
-            }
-            Peer::Local => {
-                f.debug_struct("Local")
-                    .finish()
-            }
+            Peer::Connected(p) => f.debug_struct("Connected").field("peer", &p).finish(),
+            Peer::Dialing(p) => f.debug_struct("Dialing").field("peer", &p).finish(),
+            Peer::Disconnected(p) => f.debug_struct("Disconnected").field("peer", &p).finish(),
+            Peer::Local => f.debug_struct("Local").finish(),
         }
     }
 }
@@ -115,18 +83,18 @@ where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
     TPeerId: Eq + Hash,
-    TConnInfo: ConnectionInfo<PeerId = TPeerId>
+    TConnInfo: ConnectionInfo<PeerId = TPeerId>,
 {
     pub(super) fn new(
         network: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
-        peer_id: TPeerId
+        peer_id: TPeerId,
     ) -> Self {
         if peer_id == network.local_peer_id {
             return Peer::Local;
         }
 
         if network.pool.is_connected(&peer_id) {
-            return Self::connected(network, peer_id)
+            return Self::connected(network, peer_id);
         }
 
         if network.dialing.get_mut(&peer_id).is_some() {
@@ -136,24 +104,23 @@ where
         Self::disconnected(network, peer_id)
     }
 
-
     fn disconnected(
         network: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
-        peer_id: TPeerId
+        peer_id: TPeerId,
     ) -> Self {
         Peer::Disconnected(DisconnectedPeer { network, peer_id })
     }
 
     fn connected(
         network: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
-        peer_id: TPeerId
+        peer_id: TPeerId,
     ) -> Self {
         Peer::Connected(ConnectedPeer { network, peer_id })
     }
 
     fn dialing(
         network: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
-        peer_id: TPeerId
+        peer_id: TPeerId,
     ) -> Self {
         Peer::Dialing(DialingPeer { network, peer_id })
     }
@@ -170,7 +137,8 @@ where
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
     THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>
+        + Send,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
@@ -184,7 +152,7 @@ where
             Peer::Connected(..) => true,
             Peer::Dialing(peer) => peer.is_connected(),
             Peer::Disconnected(..) => false,
-            Peer::Local => false
+            Peer::Local => false,
         }
     }
 
@@ -196,7 +164,7 @@ where
             Peer::Dialing(_) => true,
             Peer::Connected(peer) => peer.is_dialing(),
             Peer::Disconnected(..) => false,
-            Peer::Local => false
+            Peer::Local => false,
         }
     }
 
@@ -206,7 +174,7 @@ where
     pub fn is_disconnected(&self) -> bool {
         match self {
             Peer::Disconnected(..) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -217,11 +185,18 @@ where
     /// `remaining` addresses are tried in order in subsequent connection
     /// attempts in the context of the same dialing attempt, if the connection
     /// attempt to the first address fails.
-    pub fn dial<I>(self, address: Multiaddr, remaining: I, handler: THandler)
-        -> Result<
-            (ConnectionId, DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>),
-            ConnectionLimit
-        >
+    pub fn dial<I>(
+        self,
+        address: Multiaddr,
+        remaining: I,
+        handler: THandler,
+    ) -> Result<
+        (
+            ConnectionId,
+            DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
+        ),
+        ConnectionLimit,
+    >
     where
         I: IntoIterator<Item = Multiaddr>,
     {
@@ -229,7 +204,12 @@ where
             Peer::Connected(p) => (p.peer_id, p.network),
             Peer::Dialing(p) => (p.peer_id, p.network),
             Peer::Disconnected(p) => (p.peer_id, p.network),
-            Peer::Local => return Err(ConnectionLimit { current: 0, limit: 0 })
+            Peer::Local => {
+                return Err(ConnectionLimit {
+                    current: 0,
+                    limit: 0,
+                })
+            }
         };
 
         let id = network.dial_peer(DialingOpts {
@@ -245,9 +225,9 @@ where
     /// Converts the peer into a `ConnectedPeer`, if an established connection exists.
     ///
     /// Succeeds if the there is at least one established connection to the peer.
-    pub fn into_connected(self) -> Option<
-        ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    > {
+    pub fn into_connected(
+        self,
+    ) -> Option<ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>> {
         match self {
             Peer::Connected(peer) => Some(peer),
             Peer::Dialing(peer) => peer.into_connected(),
@@ -259,22 +239,23 @@ where
     /// Converts the peer into a `DialingPeer`, if a dialing attempt exists.
     ///
     /// Succeeds if the there is at least one pending outgoing connection to the peer.
-    pub fn into_dialing(self) -> Option<
-        DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    > {
+    pub fn into_dialing(
+        self,
+    ) -> Option<DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>> {
         match self {
             Peer::Dialing(peer) => Some(peer),
             Peer::Connected(peer) => peer.into_dialing(),
             Peer::Disconnected(..) => None,
-            Peer::Local => None
+            Peer::Local => None,
         }
     }
 
     /// Converts the peer into a `DisconnectedPeer`, if neither an established connection
     /// nor a dialing attempt exists.
-    pub fn into_disconnected(self) -> Option<
-        DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    > {
+    pub fn into_disconnected(
+        self,
+    ) -> Option<DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
+    {
         match self {
             Peer::Disconnected(peer) => Some(peer),
             _ => None,
@@ -312,9 +293,10 @@ where
     }
 
     /// Obtains an established connection to the peer by ID.
-    pub fn connection<'b>(&'b mut self, id: ConnectionId)
-        -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>>
-    {
+    pub fn connection<'b>(
+        &'b mut self,
+        id: ConnectionId,
+    ) -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>> {
         self.network.pool.get_established(id)
     }
 
@@ -332,51 +314,59 @@ where
 
     /// Converts this peer into a [`DialingPeer`], if there is an ongoing
     /// dialing attempt, `None` otherwise.
-    pub fn into_dialing(self) -> Option<
-        DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    > {
+    pub fn into_dialing(
+        self,
+    ) -> Option<DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>> {
         if self.network.dialing.contains_key(&self.peer_id) {
-            Some(DialingPeer { network: self.network, peer_id: self.peer_id })
+            Some(DialingPeer {
+                network: self.network,
+                peer_id: self.peer_id,
+            })
         } else {
             None
         }
     }
 
     /// Gets an iterator over all established connections to the peer.
-    pub fn connections<'b>(&'b mut self) ->
-        EstablishedConnectionIter<'b,
-            impl Iterator<Item = ConnectionId>,
-            TInEvent,
-            TOutEvent,
-            THandler,
-            TTrans::Error,
-            <THandler::Handler as ConnectionHandler>::Error,
-            TConnInfo,
-            TPeerId>
-    {
+    pub fn connections<'b>(
+        &'b mut self,
+    ) -> EstablishedConnectionIter<
+        'b,
+        impl Iterator<Item = ConnectionId>,
+        TInEvent,
+        TOutEvent,
+        THandler,
+        TTrans::Error,
+        <THandler::Handler as ConnectionHandler>::Error,
+        TConnInfo,
+        TPeerId,
+    > {
         self.network.pool.iter_peer_established(&self.peer_id)
     }
 
     /// Obtains some established connection to the peer.
-    pub fn some_connection<'b>(&'b mut self)
-        -> EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>
-    {
+    pub fn some_connection<'b>(
+        &'b mut self,
+    ) -> EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId> {
         self.connections()
             .into_first()
             .expect("By `Peer::new` and the definition of `ConnectedPeer`.")
     }
 
     /// Disconnects from the peer, closing all connections.
-    pub fn disconnect(self)
-        -> DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    {
+    pub fn disconnect(
+        self,
+    ) -> DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> {
         self.network.disconnect(&self.peer_id);
-        DisconnectedPeer { network: self.network, peer_id: self.peer_id }
+        DisconnectedPeer {
+            network: self.network,
+            peer_id: self.peer_id,
+        }
     }
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug
+    for ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
@@ -385,7 +375,10 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("ConnectedPeer")
             .field("peer_id", &self.peer_id)
-            .field("established", &self.network.pool.iter_peer_established_info(&self.peer_id))
+            .field(
+                "established",
+                &self.network.pool.iter_peer_established_info(&self.peer_id),
+            )
             .field("attempts", &self.network.dialing.get(&self.peer_id))
             .finish()
     }
@@ -422,11 +415,14 @@ where
 
     /// Disconnects from this peer, closing all established connections and
     /// aborting all dialing attempts.
-    pub fn disconnect(self)
-        -> DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    {
+    pub fn disconnect(
+        self,
+    ) -> DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> {
         self.network.disconnect(&self.peer_id);
-        DisconnectedPeer { network: self.network, peer_id: self.peer_id }
+        DisconnectedPeer {
+            network: self.network,
+            peer_id: self.peer_id,
+        }
     }
 
     /// Checks whether there is an established connection to the peer.
@@ -437,11 +433,14 @@ where
     }
 
     /// Converts the peer into a `ConnectedPeer`, if an established connection exists.
-    pub fn into_connected(self)
-        -> Option<ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
-    {
+    pub fn into_connected(
+        self,
+    ) -> Option<ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>> {
         if self.is_connected() {
-            Some(ConnectedPeer { peer_id: self.peer_id, network: self.network })
+            Some(ConnectedPeer {
+                peer_id: self.peer_id,
+                network: self.network,
+            })
         } else {
             None
         }
@@ -449,13 +448,20 @@ where
 
     /// Obtains a dialing attempt to the peer by connection ID of
     /// the current connection attempt.
-    pub fn attempt<'b>(&'b mut self, id: ConnectionId)
-        -> Option<DialingAttempt<'b, TInEvent, TConnInfo, TPeerId>>
-    {
-        if let hash_map::Entry::Occupied(attempts) = self.network.dialing.entry(self.peer_id.clone()) {
+    pub fn attempt<'b>(
+        &'b mut self,
+        id: ConnectionId,
+    ) -> Option<DialingAttempt<'b, TInEvent, TConnInfo, TPeerId>> {
+        if let hash_map::Entry::Occupied(attempts) =
+            self.network.dialing.entry(self.peer_id.clone())
+        {
             if let Some(pos) = attempts.get().iter().position(|s| s.current.0 == id) {
                 if let Some(inner) = self.network.pool.get_outgoing(id) {
-                    return Some(DialingAttempt { pos, inner, attempts })
+                    return Some(DialingAttempt {
+                        pos,
+                        inner,
+                        attempts,
+                    });
                 }
             }
         }
@@ -469,33 +475,37 @@ where
     }
 
     /// Gets an iterator over all dialing (i.e. pending outgoing) connections to the peer.
-    pub fn attempts<'b>(&'b mut self)
-        -> DialingAttemptIter<'b,
-            TInEvent,
-            TOutEvent,
-            THandler,
-            TTrans::Error,
-            <THandler::Handler as ConnectionHandler>::Error,
-            TConnInfo,
-            TPeerId>
-    {
-        DialingAttemptIter::new(&self.peer_id, &mut self.network.pool, &mut self.network.dialing)
+    pub fn attempts<'b>(
+        &'b mut self,
+    ) -> DialingAttemptIter<
+        'b,
+        TInEvent,
+        TOutEvent,
+        THandler,
+        TTrans::Error,
+        <THandler::Handler as ConnectionHandler>::Error,
+        TConnInfo,
+        TPeerId,
+    > {
+        DialingAttemptIter::new(
+            &self.peer_id,
+            &mut self.network.pool,
+            &mut self.network.dialing,
+        )
     }
 
     /// Obtains some dialing connection to the peer.
     ///
     /// At least one dialing connection is guaranteed to exist on a `DialingPeer`.
-    pub fn some_attempt<'b>(&'b mut self)
-        -> DialingAttempt<'b, TInEvent, TConnInfo, TPeerId>
-    {
+    pub fn some_attempt<'b>(&'b mut self) -> DialingAttempt<'b, TInEvent, TConnInfo, TPeerId> {
         self.attempts()
             .into_first()
             .expect("By `Peer::new` and the definition of `DialingPeer`.")
     }
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug
+    for DialingPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
@@ -504,7 +514,10 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("DialingPeer")
             .field("peer_id", &self.peer_id)
-            .field("established", &self.network.pool.iter_peer_established_info(&self.peer_id))
+            .field(
+                "established",
+                &self.network.pool.iter_peer_established_info(&self.peer_id),
+            )
             .field("attempts", &self.network.dialing.get(&self.peer_id))
             .finish()
     }
@@ -522,8 +535,8 @@ where
     network: &'a mut Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug
+    for DisconnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TTrans: Transport,
     THandler: IntoConnectionHandler<TConnInfo>,
@@ -565,13 +578,18 @@ where
         connection: Connection<TMuxer, THandler::Handler>,
     ) -> Result<
         ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
-        ConnectionLimit
-    > where
+        ConnectionLimit,
+    >
+    where
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
         THandler: Send + 'static,
         TTrans::Error: Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send,
+        THandler::Handler: ConnectionHandler<
+                Substream = Substream<TMuxer>,
+                InEvent = TInEvent,
+                OutEvent = TOutEvent,
+            > + Send,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
         <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
         TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Clone + Send + 'static,
@@ -580,10 +598,16 @@ where
         TMuxer::OutboundSubstream: Send,
     {
         if connected.peer_id() != &self.peer_id {
-            panic!("Invalid peer ID given: {:?}. Expected: {:?}", connected.peer_id(), self.peer_id)
+            panic!(
+                "Invalid peer ID given: {:?}. Expected: {:?}",
+                connected.peer_id(),
+                self.peer_id
+            )
         }
 
-        self.network.pool.add(connection, connected)
+        self.network
+            .pool
+            .add(connection, connected)
             .map(|_id| ConnectedPeer {
                 network: self.network,
                 peer_id: self.peer_id,
@@ -613,9 +637,7 @@ pub struct DialingAttempt<'a, TInEvent, TConnInfo, TPeerId> {
     pos: usize,
 }
 
-impl<'a, TInEvent, TConnInfo, TPeerId>
-    DialingAttempt<'a, TInEvent, TConnInfo, TPeerId>
-{
+impl<'a, TInEvent, TConnInfo, TPeerId> DialingAttempt<'a, TInEvent, TConnInfo, TPeerId> {
     /// Returns the ID of the current connection attempt.
     pub fn id(&self) -> ConnectionId {
         self.inner.id()
@@ -630,7 +652,7 @@ impl<'a, TInEvent, TConnInfo, TPeerId>
     pub fn address(&self) -> &Multiaddr {
         match self.inner.endpoint() {
             ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { .. } => unreachable!("by definition of a `DialingAttempt`.")
+            ConnectedPoint::Listener { .. } => unreachable!("by definition of a `DialingAttempt`."),
         }
     }
 
@@ -658,7 +680,16 @@ impl<'a, TInEvent, TConnInfo, TPeerId>
 }
 
 /// An iterator over the ongoing dialing attempts to a peer.
-pub struct DialingAttemptIter<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId> {
+pub struct DialingAttemptIter<
+    'a,
+    TInEvent,
+    TOutEvent,
+    THandler,
+    TTransErr,
+    THandlerErr,
+    TConnInfo,
+    TPeerId,
+> {
     /// The peer whose dialing attempts are being iterated.
     peer_id: &'a TPeerId,
     /// The underlying connection `Pool` of the `Network`.
@@ -679,32 +710,59 @@ pub struct DialingAttemptIter<'a, TInEvent, TOutEvent, THandler, TTransErr, THan
 // requires GATs (cf. https://github.com/rust-lang/rust/issues/44265) and
 // a different definition of `Iterator`.
 impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
-    DialingAttemptIter<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
+    DialingAttemptIter<
+        'a,
+        TInEvent,
+        TOutEvent,
+        THandler,
+        TTransErr,
+        THandlerErr,
+        TConnInfo,
+        TPeerId,
+    >
 where
     TConnInfo: ConnectionInfo<PeerId = TPeerId>,
     TPeerId: Eq + Hash + Clone,
 {
     fn new(
         peer_id: &'a TPeerId,
-        pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>,
+        pool: &'a mut Pool<
+            TInEvent,
+            TOutEvent,
+            THandler,
+            TTransErr,
+            THandlerErr,
+            TConnInfo,
+            TPeerId,
+        >,
         dialing: &'a mut FnvHashMap<TPeerId, SmallVec<[DialingState; 10]>>,
     ) -> Self {
         let end = dialing.get(peer_id).map_or(0, |conns| conns.len());
-        Self { pos: 0, end, pool, dialing, peer_id }
+        Self {
+            pos: 0,
+            end,
+            pool,
+            dialing,
+            peer_id,
+        }
     }
 
     /// Obtains the next dialing connection, if any.
     pub fn next<'b>(&'b mut self) -> Option<DialingAttempt<'b, TInEvent, TConnInfo, TPeerId>> {
         if self.pos == self.end {
-            return None
+            return None;
         }
 
         if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(self.peer_id.clone()) {
             let id = attempts.get()[self.pos].current.0;
             if let Some(inner) = self.pool.get_outgoing(id) {
-                let conn = DialingAttempt { pos: self.pos, inner, attempts };
+                let conn = DialingAttempt {
+                    pos: self.pos,
+                    inner,
+                    attempts,
+                };
                 self.pos += 1;
-                return Some(conn)
+                return Some(conn);
             }
         }
 
@@ -712,18 +770,22 @@ where
     }
 
     /// Returns the first connection, if any, consuming the iterator.
-    pub fn into_first<'b>(self)
-        -> Option<DialingAttempt<'b, TInEvent, TConnInfo, TPeerId>>
-    where 'a: 'b
+    pub fn into_first<'b>(self) -> Option<DialingAttempt<'b, TInEvent, TConnInfo, TPeerId>>
+    where
+        'a: 'b,
     {
         if self.pos == self.end {
-            return None
+            return None;
         }
 
         if let hash_map::Entry::Occupied(attempts) = self.dialing.entry(self.peer_id.clone()) {
             let id = attempts.get()[self.pos].current.0;
             if let Some(inner) = self.pool.get_outgoing(id) {
-                return Some(DialingAttempt { pos: self.pos, inner, attempts })
+                return Some(DialingAttempt {
+                    pos: self.pos,
+                    inner,
+                    attempts,
+                });
             }
         }
 

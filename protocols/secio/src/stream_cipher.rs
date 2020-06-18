@@ -20,7 +20,7 @@
 
 use super::codec::StreamCipher;
 use aes_ctr::stream_cipher::generic_array::GenericArray;
-use aes_ctr::stream_cipher::{NewStreamCipher, LoopError, SyncStreamCipher};
+use aes_ctr::stream_cipher::{LoopError, NewStreamCipher, SyncStreamCipher};
 use aes_ctr::{Aes128Ctr, Aes256Ctr};
 use ctr::Ctr128;
 use twofish::Twofish;
@@ -50,7 +50,7 @@ impl Cipher {
     pub fn iv_size(&self) -> usize {
         match self {
             Cipher::Aes128 | Cipher::Aes256 | Cipher::TwofishCtr => 16,
-            Cipher::Null => 0
+            Cipher::Null => 0,
         }
     }
 }
@@ -82,24 +82,22 @@ pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
     }
 }
 
-
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 mod aes_alt {
+    use super::{Cipher, NullCipher};
     use crate::codec::StreamCipher;
-    use ctr::Ctr128;
     use aesni::{Aes128, Aes256};
-    use ctr::stream_cipher::NewStreamCipher;
     use ctr::stream_cipher::generic_array::GenericArray;
+    use ctr::stream_cipher::NewStreamCipher;
+    use ctr::Ctr128;
     use lazy_static::lazy_static;
     use twofish::Twofish;
-    use super::{Cipher, NullCipher};
 
     lazy_static! {
         pub static ref AES_NI: bool = is_x86_feature_detected!("aes")
             && is_x86_feature_detected!("sse2")
             && is_x86_feature_detected!("sse3");
-
-   }
+    }
 
     /// AES-128 in CTR mode
     pub type Aes128Ctr = Ctr128<Aes128>;
@@ -124,7 +122,6 @@ mod aes_alt {
             Cipher::Null => Box::new(NullCipher),
         }
     }
-
 }
 
 #[inline]
@@ -146,24 +143,20 @@ fn ctr_int(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
     }
 }
 
-#[cfg(all(
-        feature = "aes-all",
-        any(target_arch = "x86_64", target_arch = "x86"),
-))]
+#[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86"),))]
 #[cfg(test)]
 mod tests {
-    use super::{Cipher, ctr};
+    use super::{ctr, Cipher};
 
     #[test]
     fn assert_non_native_run() {
         // this test is for asserting aes unsuported opcode does not break on old cpu
-        let key = [0;16];
-        let iv = [0;16];
+        let key = [0; 16];
+        let iv = [0; 16];
 
         let mut aes = ctr(Cipher::Aes128, &key, &iv);
-        let mut content = [0;16];
+        let mut content = [0; 16];
         aes.encrypt(&mut content);
-
     }
 }
 

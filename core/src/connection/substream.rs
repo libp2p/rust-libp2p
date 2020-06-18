@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::muxing::{StreamMuxer, SubstreamRef, substream_from_ref};
+use crate::muxing::{substream_from_ref, StreamMuxer, SubstreamRef};
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::sync::Arc;
@@ -135,7 +135,9 @@ where
     #[must_use]
     pub fn close(mut self) -> (Close<TMuxer>, Vec<TUserData>) {
         let substreams = self.cancel_outgoing();
-        let close = Close { muxer: self.inner.clone() };
+        let close = Close {
+            muxer: self.inner.clone(),
+        };
         (close, substreams)
     }
 
@@ -150,14 +152,15 @@ where
     }
 
     /// Provides an API similar to `Future`.
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
+    pub fn poll(
+        &mut self,
+        cx: &mut Context,
+    ) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
         // Polling inbound substream.
         match self.inner.poll_inbound(cx) {
             Poll::Ready(Ok(substream)) => {
                 let substream = substream_from_ref(self.inner.clone(), substream);
-                return Poll::Ready(Ok(SubstreamEvent::InboundSubstream {
-                    substream,
-                }));
+                return Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream }));
             }
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
             Poll::Pending => {}
@@ -236,8 +239,7 @@ where
     TMuxer: StreamMuxer,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("Close")
-            .finish()
+        f.debug_struct("Close").finish()
     }
 }
 
@@ -249,17 +251,18 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SubstreamEvent::InboundSubstream { substream } => {
-                f.debug_struct("SubstreamEvent::OutboundClosed")
-                    .field("substream", substream)
-                    .finish()
-            },
-            SubstreamEvent::OutboundSubstream { user_data, substream } => {
-                f.debug_struct("SubstreamEvent::OutboundSubstream")
-                    .field("user_data", user_data)
-                    .field("substream", substream)
-                    .finish()
-            },
+            SubstreamEvent::InboundSubstream { substream } => f
+                .debug_struct("SubstreamEvent::OutboundClosed")
+                .field("substream", substream)
+                .finish(),
+            SubstreamEvent::OutboundSubstream {
+                user_data,
+                substream,
+            } => f
+                .debug_struct("SubstreamEvent::OutboundSubstream")
+                .field("user_data", user_data)
+                .field("substream", substream)
+                .finish(),
         }
     }
 }

@@ -40,8 +40,15 @@
 
 use async_std::task;
 use futures::{future, prelude::*};
-use libp2p::{identity, PeerId, ping::{Ping, PingConfig}, Swarm};
-use std::{error::Error, task::{Context, Poll}};
+use libp2p::{
+    identity,
+    ping::{Ping, PingConfig},
+    PeerId, Swarm,
+};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -77,20 +84,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     let mut listening = false;
-    task::block_on(future::poll_fn(move |cx: &mut Context| {
-        loop {
-            match swarm.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => println!("{:?}", event),
-                Poll::Ready(None) => return Poll::Ready(()),
-                Poll::Pending => {
-                    if !listening {
-                        for addr in Swarm::listeners(&swarm) {
-                            println!("Listening on {}", addr);
-                            listening = true;
-                        }
+    task::block_on(future::poll_fn(move |cx: &mut Context| loop {
+        match swarm.poll_next_unpin(cx) {
+            Poll::Ready(Some(event)) => println!("{:?}", event),
+            Poll::Ready(None) => return Poll::Ready(()),
+            Poll::Pending => {
+                if !listening {
+                    for addr in Swarm::listeners(&swarm) {
+                        println!("Listening on {}", addr);
+                        listening = true;
                     }
-                    return Poll::Pending
                 }
+                return Poll::Pending;
             }
         }
     }));

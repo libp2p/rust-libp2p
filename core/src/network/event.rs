@@ -21,25 +21,14 @@
 //! Network events and associated information.
 
 use crate::{
-    Multiaddr,
     connection::{
-        ConnectionId,
-        ConnectedPoint,
-        ConnectionError,
-        ConnectionHandler,
-        ConnectionInfo,
-        ConnectionLimit,
-        Connected,
-        EstablishedConnection,
-        IncomingInfo,
-        IntoConnectionHandler,
-        ListenerId,
-        PendingConnectionError,
-        Substream,
-        pool::Pool,
+        pool::Pool, Connected, ConnectedPoint, ConnectionError, ConnectionHandler, ConnectionId,
+        ConnectionInfo, ConnectionLimit, EstablishedConnection, IncomingInfo,
+        IntoConnectionHandler, ListenerId, PendingConnectionError, Substream,
     },
     muxing::StreamMuxer,
     transport::{Transport, TransportError},
+    Multiaddr,
 };
 use futures::prelude::*;
 use std::{error, fmt, hash::Hash, num::NonZeroU32};
@@ -66,7 +55,7 @@ where
         /// The listener that errored.
         listener_id: ListenerId,
         /// The listener error.
-        error: TTrans::Error
+        error: TTrans::Error,
     },
 
     /// One of the listeners is now listening on an additional address.
@@ -74,7 +63,7 @@ where
         /// The listener that is listening on the new address.
         listener_id: ListenerId,
         /// The new address the listener is now also listening on.
-        listen_addr: Multiaddr
+        listen_addr: Multiaddr,
     },
 
     /// One of the listeners is no longer listening on some address.
@@ -82,11 +71,13 @@ where
         /// The listener that is no longer listening on some address.
         listener_id: ListenerId,
         /// The expired address.
-        listen_addr: Multiaddr
+        listen_addr: Multiaddr,
     },
 
     /// A new connection arrived on a listener.
-    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>),
+    IncomingConnection(
+        IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
+    ),
 
     /// An error happened on a connection during its initial handshake.
     ///
@@ -157,8 +148,8 @@ where
     },
 }
 
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
-    NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
+impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug
+    for NetworkEvent<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
     TInEvent: fmt::Debug,
     TOutEvent: fmt::Debug,
@@ -171,75 +162,87 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            NetworkEvent::NewListenerAddress { listener_id, listen_addr } => {
-                f.debug_struct("NewListenerAddress")
-                    .field("listener_id", listener_id)
-                    .field("listen_addr", listen_addr)
-                    .finish()
-            }
-            NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr } => {
-                f.debug_struct("ExpiredListenerAddress")
-                    .field("listener_id", listener_id)
-                    .field("listen_addr", listen_addr)
-                    .finish()
-            }
-            NetworkEvent::ListenerClosed { listener_id, addresses, reason } => {
-                f.debug_struct("ListenerClosed")
-                    .field("listener_id", listener_id)
-                    .field("addresses", addresses)
-                    .field("reason", reason)
-                    .finish()
-            }
-            NetworkEvent::ListenerError { listener_id, error } => {
-                f.debug_struct("ListenerError")
-                    .field("listener_id", listener_id)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::IncomingConnection(event) => {
-                f.debug_struct("IncomingConnection")
-                    .field("local_addr", &event.local_addr)
-                    .field("send_back_addr", &event.send_back_addr)
-                    .finish()
-            }
-            NetworkEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
-                f.debug_struct("IncomingConnectionError")
-                    .field("local_addr", local_addr)
-                    .field("send_back_addr", send_back_addr)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::ConnectionEstablished { connection, .. } => {
-                f.debug_struct("ConnectionEstablished")
-                    .field("connection", connection)
-                    .finish()
-            }
-            NetworkEvent::ConnectionError { connected, error, .. } => {
-                f.debug_struct("ConnectionError")
-                    .field("connected", connected)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::DialError { attempts_remaining, peer_id, multiaddr, error } => {
-                f.debug_struct("DialError")
-                    .field("attempts_remaining", attempts_remaining)
-                    .field("peer_id", peer_id)
-                    .field("multiaddr", multiaddr)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::UnknownPeerDialError { multiaddr, error, .. } => {
-                f.debug_struct("UnknownPeerDialError")
-                    .field("multiaddr", multiaddr)
-                    .field("error", error)
-                    .finish()
-            }
-            NetworkEvent::ConnectionEvent { connection, event } => {
-                f.debug_struct("ConnectionEvent")
-                    .field("connection", connection)
-                    .field("event", event)
-                    .finish()
-            }
+            NetworkEvent::NewListenerAddress {
+                listener_id,
+                listen_addr,
+            } => f
+                .debug_struct("NewListenerAddress")
+                .field("listener_id", listener_id)
+                .field("listen_addr", listen_addr)
+                .finish(),
+            NetworkEvent::ExpiredListenerAddress {
+                listener_id,
+                listen_addr,
+            } => f
+                .debug_struct("ExpiredListenerAddress")
+                .field("listener_id", listener_id)
+                .field("listen_addr", listen_addr)
+                .finish(),
+            NetworkEvent::ListenerClosed {
+                listener_id,
+                addresses,
+                reason,
+            } => f
+                .debug_struct("ListenerClosed")
+                .field("listener_id", listener_id)
+                .field("addresses", addresses)
+                .field("reason", reason)
+                .finish(),
+            NetworkEvent::ListenerError { listener_id, error } => f
+                .debug_struct("ListenerError")
+                .field("listener_id", listener_id)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::IncomingConnection(event) => f
+                .debug_struct("IncomingConnection")
+                .field("local_addr", &event.local_addr)
+                .field("send_back_addr", &event.send_back_addr)
+                .finish(),
+            NetworkEvent::IncomingConnectionError {
+                local_addr,
+                send_back_addr,
+                error,
+            } => f
+                .debug_struct("IncomingConnectionError")
+                .field("local_addr", local_addr)
+                .field("send_back_addr", send_back_addr)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::ConnectionEstablished { connection, .. } => f
+                .debug_struct("ConnectionEstablished")
+                .field("connection", connection)
+                .finish(),
+            NetworkEvent::ConnectionError {
+                connected, error, ..
+            } => f
+                .debug_struct("ConnectionError")
+                .field("connected", connected)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::DialError {
+                attempts_remaining,
+                peer_id,
+                multiaddr,
+                error,
+            } => f
+                .debug_struct("DialError")
+                .field("attempts_remaining", attempts_remaining)
+                .field("peer_id", peer_id)
+                .field("multiaddr", multiaddr)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::UnknownPeerDialError {
+                multiaddr, error, ..
+            } => f
+                .debug_struct("UnknownPeerDialError")
+                .field("multiaddr", multiaddr)
+                .field("error", error)
+                .finish(),
+            NetworkEvent::ConnectionEvent { connection, event } => f
+                .debug_struct("ConnectionEvent")
+                .field("connection", connection)
+                .field("event", event)
+                .finish(),
         }
     }
 }
@@ -266,7 +269,7 @@ where
         TTrans::Error,
         <THandler::Handler as ConnectionHandler>::Error,
         TConnInfo,
-        TPeerId
+        TPeerId,
     >,
 }
 
@@ -277,7 +280,9 @@ where
     TTrans::Error: Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
     THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>
+        + Send
+        + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
@@ -299,13 +304,16 @@ where
     }
 
     /// Same as `accept`, but accepts a closure that turns a `IncomingInfo` into a handler.
-    pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
-        -> Result<ConnectionId, ConnectionLimit>
+    pub fn accept_with_builder<TBuilder>(
+        self,
+        builder: TBuilder,
+    ) -> Result<ConnectionId, ConnectionLimit>
     where
-        TBuilder: FnOnce(IncomingInfo<'_>) -> THandler
+        TBuilder: FnOnce(IncomingInfo<'_>) -> THandler,
     {
         let handler = builder(self.info());
-        let upgrade = self.upgrade
+        let upgrade = self
+            .upgrade
             .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
         let info = IncomingInfo {
             local_addr: &self.local_addr,

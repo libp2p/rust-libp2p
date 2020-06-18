@@ -20,10 +20,10 @@
 
 use crate::PublicKey;
 use bs58;
-use thiserror::Error;
 use multihash::{self, Code, Sha2_256};
 use rand::Rng;
-use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr, cmp};
+use std::{borrow::Borrow, cmp, convert::TryFrom, fmt, hash, str::FromStr};
+use thiserror::Error;
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -45,9 +45,7 @@ pub struct PeerId {
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("PeerId")
-            .field(&self.to_base58())
-            .finish()
+        f.debug_tuple("PeerId").field(&self.to_base58()).finish()
     }
 }
 
@@ -91,12 +89,14 @@ impl PeerId {
             (Code::Sha2_256, None)
         };
 
-        let canonical = canonical_algorithm.map(|alg|
-            alg.digest(&key_enc));
+        let canonical = canonical_algorithm.map(|alg| alg.digest(&key_enc));
 
         let multihash = hash_algorithm.digest(&key_enc);
 
-        PeerId { multihash, canonical }
+        PeerId {
+            multihash,
+            canonical,
+        }
     }
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
@@ -105,11 +105,16 @@ impl PeerId {
         match multihash::Multihash::from_bytes(data) {
             Ok(multihash) => {
                 if multihash.algorithm() == multihash::Code::Sha2_256 {
-                    Ok(PeerId { multihash, canonical: None })
-                }
-                else if multihash.algorithm() == multihash::Code::Identity {
+                    Ok(PeerId {
+                        multihash,
+                        canonical: None,
+                    })
+                } else if multihash.algorithm() == multihash::Code::Identity {
                     let canonical = Sha2_256::digest(&multihash.digest());
-                    Ok(PeerId { multihash, canonical: Some(canonical) })
+                    Ok(PeerId {
+                        multihash,
+                        canonical: Some(canonical),
+                    })
                 } else {
                     Err(multihash.into_bytes())
                 }
@@ -122,10 +127,16 @@ impl PeerId {
     /// returns back the data as an error.
     pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
         if data.algorithm() == multihash::Code::Sha2_256 {
-            Ok(PeerId { multihash: data, canonical: None })
+            Ok(PeerId {
+                multihash: data,
+                canonical: None,
+            })
         } else if data.algorithm() == multihash::Code::Identity {
             let canonical = Sha2_256::digest(data.digest());
-            Ok(PeerId { multihash: data, canonical: Some(canonical) })
+            Ok(PeerId {
+                multihash: data,
+                canonical: Some(canonical),
+            })
         } else {
             Err(data)
         }
@@ -179,7 +190,7 @@ impl PeerId {
 impl hash::Hash for PeerId {
     fn hash<H>(&self, state: &mut H)
     where
-        H: hash::Hasher
+        H: hash::Hasher,
     {
         let digest = self.borrow() as &[u8];
         hash::Hash::hash(digest, state)
@@ -219,7 +230,9 @@ impl PartialEq<PeerId> for PeerId {
 
 impl Borrow<[u8]> for PeerId {
     fn borrow(&self) -> &[u8] {
-        self.canonical.as_ref().map_or(self.multihash.as_bytes(), |c| c.as_bytes())
+        self.canonical
+            .as_ref()
+            .map_or(self.multihash.as_bytes(), |c| c.as_bytes())
     }
 }
 
@@ -258,8 +271,11 @@ impl FromStr for PeerId {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PeerId, identity};
-    use std::{convert::TryFrom as _, hash::{self, Hasher as _}};
+    use crate::{identity, PeerId};
+    use std::{
+        convert::TryFrom as _,
+        hash::{self, Hasher as _},
+    };
 
     #[test]
     fn peer_id_is_public_key() {
@@ -270,23 +286,30 @@ mod tests {
 
     #[test]
     fn peer_id_into_bytes_then_from_bytes() {
-        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let second = PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn peer_id_to_base58_then_back() {
-        let peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
+        let peer_id = identity::Keypair::generate_ed25519()
+            .public()
+            .into_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn random_peer_id_is_valid() {
-        for _ in 0 .. 5000 {
+        for _ in 0..5000 {
             let peer_id = PeerId::random();
-            assert_eq!(peer_id, PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap());
+            assert_eq!(
+                peer_id,
+                PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap()
+            );
         }
     }
 
@@ -327,9 +350,10 @@ mod tests {
 
         impl Arbitrary for HashAlgo {
             fn arbitrary<G: Gen>(g: &mut G) -> Self {
-                match g.next_u32() % 4 { // make Hash::Identity more likely
+                match g.next_u32() % 4 {
+                    // make Hash::Identity more likely
                     0 => HashAlgo(Code::Sha2_256),
-                    _ => HashAlgo(Code::Identity)
+                    _ => HashAlgo(Code::Identity),
                 }
             }
         }

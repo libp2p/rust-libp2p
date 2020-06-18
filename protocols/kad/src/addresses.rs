@@ -64,9 +64,9 @@ impl Addresses {
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
-    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(),()> {
+    pub fn remove(&mut self, addr: &Multiaddr) -> Result<(), ()> {
         if self.addrs.len() == 1 {
-            return Err(())
+            return Err(());
         }
 
         if let Some(pos) = self.addrs.iter().position(|a| a == addr) {
@@ -95,8 +95,6 @@ impl Addresses {
 
 impl fmt::Debug for Addresses {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_list()
-            .entries(self.addrs.iter())
-            .finish()
+        f.debug_list().entries(self.addrs.iter()).finish()
     }
 }
