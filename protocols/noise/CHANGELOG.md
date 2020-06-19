@@ -4,4 +4,3 @@
   ([PR 1580](https://github.com/libp2p/rust-libp2p/pull/1580)).
 
 - Updated dependencies.
-
