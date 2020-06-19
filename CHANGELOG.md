@@ -1,3 +1,10 @@
+# Version ???
+
+- `libp2p-kad`: Optionally require iterative queries to use disjoint paths based
+  on S/Kademlia for increased resiliency in the presence of potentially
+  adversarial nodes.
+  [PR 1473](https://github.com/libp2p/rust-libp2p/pull/1473)
+
 # Version 0.19.2 (2020-06-19)
 
 - Update `libp2p-ping` to version 0.19.2.
