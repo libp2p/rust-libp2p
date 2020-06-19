@@ -297,13 +297,6 @@ where
         }
     }
 
-    fn is_remote_acknowledged(&self) -> bool {
-        match self {
-            EitherOutput::First(inner) => inner.is_remote_acknowledged(),
-            EitherOutput::Second(inner) => inner.is_remote_acknowledged()
-        }
-    }
-
     fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         match self {
             EitherOutput::First(inner) => inner.close(cx).map_err(|e| e.into()),

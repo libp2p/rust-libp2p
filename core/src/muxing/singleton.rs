@@ -35,8 +35,6 @@ pub struct SingletonMuxer<TSocket> {
     substream_extracted: AtomicBool,
     /// Our local endpoint. Always the same value as was passed to `new`.
     endpoint: Endpoint,
-    /// If true, we have received data from the remote.
-    remote_acknowledged: AtomicBool,
 }
 
 impl<TSocket> SingletonMuxer<TSocket> {
@@ -49,7 +47,6 @@ impl<TSocket> SingletonMuxer<TSocket> {
             inner: Mutex::new(inner),
             substream_extracted: AtomicBool::new(false),
             endpoint,
-            remote_acknowledged: AtomicBool::new(false),
         }
     }
 }
@@ -101,11 +98,7 @@ where
     }
 
     fn read_substream(&self, cx: &mut Context, _: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
-        let res = AsyncRead::poll_read(Pin::new(&mut *self.inner.lock()), cx, buf);
-        if let Poll::Ready(Ok(_)) = res {
-            self.remote_acknowledged.store(true, Ordering::Release);
-        }
-        res
+        AsyncRead::poll_read(Pin::new(&mut *self.inner.lock()), cx, buf)
     }
 
     fn write_substream(&self, cx: &mut Context, _: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
@@ -121,10 +114,6 @@ where
     }
 
     fn destroy_substream(&self, _: Self::Substream) {
-    }
-
-    fn is_remote_acknowledged(&self) -> bool {
-        self.remote_acknowledged.load(Ordering::Acquire)
     }
 
     fn close(&self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
