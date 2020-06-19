@@ -29,6 +29,7 @@ use crate::protocols_handler::{
 
 use futures::prelude::*;
 use libp2p_core::{
+    Multiaddr,
     PeerId,
     ConnectionInfo,
     Connected,
@@ -218,6 +219,10 @@ where
 
     fn inject_event(&mut self, event: Self::InEvent) {
         self.handler.inject_event(event);
+    }
+
+    fn inject_address_change(&mut self, new_address: &Multiaddr) {
+        self.handler.inject_address_change(new_address);
     }
 
     fn poll(&mut self, cx: &mut Context) -> Poll<

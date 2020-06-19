@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Multiaddr,
     muxing::StreamMuxer,
     connection::{
+        self,
         Close,
         Connected,
         Connection,
@@ -55,8 +57,10 @@ pub enum Event<T, H, TE, HE, C> {
     Error { id: TaskId, error: ConnectionError<HE> },
     /// A pending connection failed.
     Failed { id: TaskId, error: PendingConnectionError<TE>, handler: H },
+    /// A node we are connected to has changed its address.
+    AddressChange { id: TaskId, new_address: Multiaddr },
     /// Notify the manager of an event from the connection.
-    Notify { id: TaskId, event: T }
+    Notify { id: TaskId, event: T },
 }
 
 impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
@@ -64,8 +68,9 @@ impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
         match self {
             Event::Established { id, .. } => id,
             Event::Error { id, .. } => id,
-            Event::Notify { id, .. } => id,
             Event::Failed { id, .. } => id,
+            Event::AddressChange { id, .. } => id,
+            Event::Notify { id, .. } => id,
         }
     }
 }
@@ -245,10 +250,17 @@ where
                                 this.state = State::EstablishedPending(connection);
                                 return Poll::Pending
                             }
-                            Poll::Ready(Ok(event)) => {
+                            Poll::Ready(Ok(connection::Event::Handler(event))) => {
                                 this.state = State::EstablishedReady {
                                     connection: Some(connection),
                                     event: Event::Notify { id, event }
+                                };
+                                continue 'poll
+                            }
+                            Poll::Ready(Ok(connection::Event::AddressChange(new_address))) => {
+                                this.state = State::EstablishedReady {
+                                    connection: Some(connection),
+                                    event: Event::AddressChange { id, new_address }
                                 };
                                 continue 'poll
                             }

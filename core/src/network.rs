@@ -416,7 +416,14 @@ where
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
                 NetworkEvent::ConnectionEvent {
                     connection,
-                    event
+                    event,
+                }
+            }
+            Poll::Ready(PoolEvent::AddressChange { connection, new_endpoint, old_endpoint }) => {
+                NetworkEvent::AddressChange {
+                    connection,
+                    new_endpoint,
+                    old_endpoint,
                 }
             }
         };
@@ -652,7 +659,7 @@ impl NetworkConfig {
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
-    pub fn set_connection_event_buffer_size(&mut self, n: usize) -> &mut Self {
+    pub fn set_poll_event_buffer_size(&mut self, n: usize) -> &mut Self {
         self.manager_config.task_event_buffer_size = n;
         self
     }

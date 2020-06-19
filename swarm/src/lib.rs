@@ -496,6 +496,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     let connection = connection.id();
                     this.behaviour.inject_event(peer, connection, event);
                 },
+                Poll::Ready(NetworkEvent::AddressChange { connection, new_endpoint, old_endpoint }) => {
+                    let peer = connection.peer_id();
+                    let connection = connection.id();
+                    this.behaviour.inject_address_change(&peer, &connection, &old_endpoint, &new_endpoint);
+                },
                 Poll::Ready(NetworkEvent::ConnectionEstablished { connection, num_established }) => {
                     let peer_id = connection.peer_id().clone();
                     let endpoint = connection.endpoint().clone();
@@ -1039,8 +1044,8 @@ where TBehaviour: NetworkBehaviour,
     /// usage, and more importantly the latency between the moment when an
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
-    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.network_config.set_connection_event_buffer_size(n);
+    pub fn poll_event_buffer_size(mut self, n: usize) -> Self {
+        self.network_config.set_poll_event_buffer_size(n);
         self
     }
 
