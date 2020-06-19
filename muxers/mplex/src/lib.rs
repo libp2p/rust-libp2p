@@ -110,7 +110,6 @@ impl MplexConfig {
                     to_wake: Mutex::new(Default::default()),
                 }),
                 is_shutdown: false,
-                is_acknowledged: false,
             })
         }
     }
@@ -203,8 +202,6 @@ struct MultiplexInner<C> {
     /// If true, the connection has been shut down. We need to be careful not to accidentally
     /// call `Sink::poll_complete` or `Sink::start_send` after `Sink::close`.
     is_shutdown: bool,
-    /// If true, the remote has sent data to us.
-    is_acknowledged: bool,
 }
 
 struct Notifier {
@@ -295,7 +292,6 @@ where C: AsyncRead + AsyncWrite + Unpin,
         };
 
         trace!("Received message: {:?}", elem);
-        inner.is_acknowledged = true;
 
         // Handle substreams opening/closing.
         match elem {
@@ -585,10 +581,6 @@ where C: AsyncRead + AsyncWrite + Unpin
         self.inner.lock().buffer.retain(|elem| {
             elem.substream_id() != sub.num || elem.endpoint() == Some(sub.endpoint)
         })
-    }
-
-    fn is_remote_acknowledged(&self) -> bool {
-        self.inner.lock().is_acknowledged
     }
 
     fn close(&self, cx: &mut Context) -> Poll<Result<(), IoError>> {

@@ -64,8 +64,7 @@ mod singleton;
 ///
 /// The state of a muxer, as exposed by this API, is the following:
 ///
-/// - A connection to the remote. The `is_remote_acknowledged`, `flush_all` and `close` methods
-///   operate on this.
+/// - A connection to the remote. The `flush_all` and `close` methods operate on this.
 /// - A list of substreams that are open. The `poll_inbound`, `poll_outbound`, `read_substream`,
 ///   `write_substream`, `flush_substream`, `shutdown_substream` and `destroy_substream` methods
 ///   allow controlling these entries.
@@ -180,7 +179,10 @@ pub trait StreamMuxer {
     /// allowed to assume that the handshake has succeeded when it didn't in fact succeed. This
     /// method can be called in order to determine whether the remote has accepted our handshake or
     /// has potentially not received it yet.
-    fn is_remote_acknowledged(&self) -> bool;
+    #[deprecated(note = "This method is unused and will be removed in the future")]
+    fn is_remote_acknowledged(&self) -> bool {
+        true
+    }
 
     /// Closes this `StreamMuxer`.
     ///
@@ -526,11 +528,6 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn is_remote_acknowledged(&self) -> bool {
-        self.inner.is_remote_acknowledged()
-    }
-
-    #[inline]
     fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.inner.flush_all(cx)
     }
@@ -629,11 +626,6 @@ where
     #[inline]
     fn close(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.inner.close(cx).map_err(|e| e.into())
-    }
-
-    #[inline]
-    fn is_remote_acknowledged(&self) -> bool {
-        self.inner.is_remote_acknowledged()
     }
 
     #[inline]
