@@ -48,6 +48,8 @@ pub use behaviour::{
     QueryInfo,
     QueryStats,
 
+    PeerRecord,
+
     BootstrapResult,
     BootstrapOk,
     BootstrapError,
@@ -107,4 +109,3 @@ pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 ///
 /// The current value is `3`.
 pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
-

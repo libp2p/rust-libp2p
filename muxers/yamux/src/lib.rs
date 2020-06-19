@@ -43,8 +43,6 @@ struct Inner<S> {
     incoming: S,
     /// Handle to control the connection.
     control: yamux::Control,
-    /// True, once we have received an inbound substream.
-    acknowledged: bool
 }
 
 /// A token to poll for an outbound substream.
@@ -66,7 +64,6 @@ where
                 _marker: std::marker::PhantomData
             },
             control: ctrl,
-            acknowledged: false
         };
         Yamux(Mutex::new(inner))
     }
@@ -87,7 +84,6 @@ where
                 _marker: std::marker::PhantomData
             },
             control: ctrl,
-            acknowledged: false
         };
         Yamux(Mutex::new(inner))
     }
@@ -106,10 +102,7 @@ where
     fn poll_inbound(&self, c: &mut Context) -> Poll<Self::Substream> {
         let mut inner = self.0.lock();
         match ready!(inner.incoming.poll_next_unpin(c)) {
-            Some(Ok(s)) => {
-                inner.acknowledged = true;
-                Poll::Ready(Ok(s))
-            }
+            Some(Ok(s)) => Poll::Ready(Ok(s)),
             Some(Err(e)) => Poll::Ready(Err(e)),
             None => Poll::Ready(Err(yamux::ConnectionError::Closed.into()))
         }
@@ -145,10 +138,6 @@ where
     }
 
     fn destroy_substream(&self, _: Self::Substream) { }
-
-    fn is_remote_acknowledged(&self) -> bool {
-        self.0.lock().acknowledged
-    }
 
     fn close(&self, c: &mut Context) -> Poll<()> {
         let mut inner = self.0.lock();
