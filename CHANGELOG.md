@@ -1,5 +1,6 @@
-# Version ???
+# Version 0.19.2 (2020-06-19)
 
+- Update `libp2p-ping` to version 0.19.2.
 
 # Version 0.19.1 (2020-05-25)
 
