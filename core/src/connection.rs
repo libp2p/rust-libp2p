@@ -230,14 +230,6 @@ where
         self.handler.inject_event(event);
     }
 
-    /// Returns `true` if the remote has shown any sign of activity
-    /// since the connection has been established.
-    ///
-    /// See also [`StreamMuxer::is_remote_acknowledged`].
-    pub fn is_remote_acknowledged(&self) -> bool {
-        self.muxing.is_remote_acknowledged()
-    }
-
     /// Begins an orderly shutdown of the connection, returning a
     /// `Future` that resolves when connection shutdown is complete.
     pub fn close(self) -> Close<TMuxer> {
