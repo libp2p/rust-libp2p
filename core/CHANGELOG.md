@@ -1,4 +1,4 @@
-# 0.19.2 [2020-06-19]
+# 0.19.2 [2020-06-22]
 
 - Add PartialOrd and Ord for PeerId
   ([PR 1594](https://github.com/libp2p/rust-libp2p/pull/1594)).

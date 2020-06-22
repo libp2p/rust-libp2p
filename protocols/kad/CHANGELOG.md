@@ -1,4 +1,4 @@
-# 0.20.0 [2020-06-19]
+# 0.20.0 [2020-06-22]
 
 - Optionally require iterative queries to use disjoint paths based
   on S/Kademlia for increased resiliency in the presence of potentially
