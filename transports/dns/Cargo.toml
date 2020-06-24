@@ -10,6 +10,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { path = "../../core" }
+libp2p-core = { version = "0.19.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
