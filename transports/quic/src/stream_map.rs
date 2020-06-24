@@ -190,6 +190,19 @@ impl Streams {
                         stream.wake_reader()
                     }
                 }
+                E::Stream(S::Stopped { id, error_code }) => {
+                    trace!(
+                        "Stream {:?} stopped for side {:?} due to {:?}",
+                        id,
+                        self.connection.side(),
+                        error_code,
+                    );
+                    // Wake up the task waiting on us (if any).
+                    // This will panic if quinn-proto has already emitted a
+                    // `StreamFinished` event, but it will never emit
+                    // `StreamStopped` after `StreamFinished`.
+                    self.wake_writer(id)
+                }
                 E::Stream(S::Writable { id }) => {
                     trace!(
                         "Stream {:?} writable for side {:?}",
@@ -239,12 +252,11 @@ impl Streams {
                     self.wake_closer();
                     self.shutdown(0);
                 }
-                E::Stream(S::Finished { id, stop_reason }) => {
+                E::Stream(S::Finished { id }) => {
                     trace!(
-                        "Stream {:?} finished for side {:?} because of {:?}",
+                        "Stream {:?} finished for side {:?}",
                         id,
                         self.connection.side(),
-                        stop_reason
                     );
                     // If someone is waiting for this stream to become writable,
                     // wake them up, so that they can find out the stream is
@@ -255,7 +267,7 @@ impl Streams {
                     // Connection close could be blocked on this.
                     self.wake_closer()
                 }
-                E::Connected => {
+                E::Connected | E::HandshakeDataReady => {
                     debug!("connected for side {:?}!", self.connection.side());
                     self.connection.wake();
                 }

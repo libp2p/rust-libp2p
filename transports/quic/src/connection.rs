@@ -257,6 +257,9 @@ impl StreamMuxer for QuicMuxer {
                 Poll::Ready(Err(Error::ExpiredStream))
             }
             Err(ReadError::Reset(e)) => Poll::Ready(Err(Error::Reset(e))),
+            Err(ReadError::IllegalOrderedRead) => {
+                unreachable!("We do not use unordered reads; qed")
+            }
         }
     }
 

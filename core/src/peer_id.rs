@@ -23,7 +23,7 @@ use bs58;
 use thiserror::Error;
 use multihash::{self, Code, Sha2_256};
 use rand::Rng;
-use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr};
+use std::{convert::TryFrom, borrow::Borrow, fmt, hash, str::FromStr, cmp};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
@@ -54,6 +54,21 @@ impl fmt::Debug for PeerId {
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.to_base58().fmt(f)
+    }
+}
+
+impl cmp::PartialOrd for PeerId {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(Ord::cmp(self, other))
+    }
+}
+
+impl cmp::Ord for PeerId {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        // must use borrow, because as_bytes is not consistent with equality
+        let lhs: &[u8] = self.borrow();
+        let rhs: &[u8] = other.borrow();
+        lhs.cmp(rhs)
     }
 }
 

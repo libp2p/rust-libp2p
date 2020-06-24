@@ -329,7 +329,7 @@ impl Connection {
         // just ignore it. That said, an error here should never happen unless
         // the connection is closed.
         let _ = self.connection.finish(id);
-        let _ = self.connection.stop_sending(id, Default::default());
+        // let _ = self.connection.stop_sending(id, Default::default());
     }
 
     pub(crate) fn poll_transmit_pending(
