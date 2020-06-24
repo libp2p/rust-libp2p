@@ -1,13 +1,23 @@
-# Version ???
-
-- `libp2p-kad`: Optionally require iterative queries to use disjoint paths based
-  on S/Kademlia for increased resiliency in the presence of potentially
-  adversarial nodes.
-  [PR 1473](https://github.com/libp2p/rust-libp2p/pull/1473)
-
-# Version 0.19.2 (2020-06-19)
-
-- Update `libp2p-ping` to version 0.19.2.
+- [`libp2p-core` CHANGELOG](core/CHANGELOG.md)
+- [`libp2p-deflate` CHANGELOG](protocols/deflate/CHANGELOG.md)
+- [`libp2p-floodsub` CHANGELOG](protocols/floodsub/CHANGELOG.md)
+- [`libp2p-gossipsub` CHANGELOG](protocols/gossipsub/CHANGELOG.md)
+- [`libp2p-identity` CHANGELOG](protocols/identity/CHANGELOG.md)
+- [`libp2p-kad` CHANGELOG](protocols/kad/CHANGELOG.md)
+- [`libp2p-mdns` CHANGELOG](protocols/mdns/CHANGELOG.md)
+- [`libp2p-mplex` CHANGELOG](muxers/mplex/CHANGELOG.md)
+- [`libp2p-noise` CHANGELOG](protocols/noise/CHANGELOG.md)
+- [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
+- [`libp2p-plaintext` CHANGELOG](protocols/plaintext/CHANGELOG.md)
+- [`libp2p-pnet` CHANGELOG](protocols/pnet/CHANGELOG.md)
+- [`libp2p-secio` CHANGELOG](protocols/secio/CHANGELOG.md)
+- [`libp2p-swarm` CHANGELOG](swarm/CHANGELOG.md)
+- [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
+- [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
+- [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
+- [`libp2p-yamux` CHANGELOG](muxers/yamux/CHANGELOG.md)
+- [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
+- [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 
 # Version 0.19.1 (2020-05-25)
 
