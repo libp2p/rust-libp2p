@@ -136,7 +136,7 @@ where
 
 impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Sync + Clone + 'static,
+    TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
     type InEvent = RequestProtocol<TCodec>;
     type OutEvent = RequestResponseHandlerEvent<TCodec>;

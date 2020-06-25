@@ -97,7 +97,7 @@ where
 
 impl<TCodec> InboundUpgrade<NegotiatedSubstream> for ResponseProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Sync + 'static,
+    TCodec: RequestResponseCodec + Send + 'static,
 {
     type Output = ();
     type Error = io::Error;
@@ -144,7 +144,7 @@ where
 
 impl<TCodec> OutboundUpgrade<NegotiatedSubstream> for RequestProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Sync + 'static,
+    TCodec: RequestResponseCodec + Send + 'static,
 {
     type Output = TCodec::Response;
     type Error = io::Error;

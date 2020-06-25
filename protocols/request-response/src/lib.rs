@@ -396,7 +396,7 @@ where
 
 impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Sync + Clone + 'static,
+    TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
     type ProtocolsHandler = RequestResponseHandler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
