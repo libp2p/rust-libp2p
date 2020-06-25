@@ -30,7 +30,7 @@ pub trait RequestResponseCodec {
     /// The type of protocol(s) or protocol versions being negotiated.
     type Protocol: ProtocolName + Send + Sync + Clone;
     /// The type of inbound and outbound requests.
-    type Request: Send + Clone;
+    type Request: Send;
     /// The type of inbound and outbound responses.
     type Response: Send;
 
