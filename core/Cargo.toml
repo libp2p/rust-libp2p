@@ -34,6 +34,7 @@ thiserror = "1.0"
 unsigned-varint = "0.3"
 void = "1"
 zeroize = "1"
+serde = { version = "1.0.114", default-features = false }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false }

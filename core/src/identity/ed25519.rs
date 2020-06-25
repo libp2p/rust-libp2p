@@ -84,6 +84,13 @@ impl Clone for Keypair {
     }
 }
 
+/// Build keypair from existing ed25519 keypair
+impl From<ed25519::Keypair> for Keypair {
+    fn from(kp: ed25519::Keypair) -> Self {
+        Keypair(kp)
+    }
+}
+
 /// Demote an Ed25519 keypair to a secret key.
 impl From<Keypair> for SecretKey {
     fn from(kp: Keypair) -> SecretKey {
@@ -121,6 +128,46 @@ impl PublicKey {
         ed25519::PublicKey::from_bytes(k)
             .map_err(|e| DecodingError::new("Ed25519 public key").source(e))
             .map(PublicKey)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<PublicKey, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, Visitor};
+
+        struct PKVisitor;
+
+        impl<'de> Visitor<'de> for PKVisitor {
+            type Value = PublicKey;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("byte array or base58 string")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+                where
+                    E: Error,
+            {
+                bs58::decode(s)
+                    .into_vec()
+                    .map_err(|err| Error::custom(format!("Invalid string '{}': {}", s, err)))
+                    .and_then(|v| self.visit_bytes(v.as_slice()))
+                    .map_err(|err: E| Error::custom(format!("Parsed string '{}' as base58, but {}", s, err)))
+            }
+
+            fn visit_bytes<E>(self, b: &[u8]) -> Result<Self::Value, E>
+                where
+                    E: Error,
+            {
+                PublicKey::decode(b)
+                    .map_err(|err| Error::custom(format!("Invalid bytes {:?}: {}", b, err)))
+            }
+        }
+
+        deserializer.deserialize_str(PKVisitor)
     }
 }
 
