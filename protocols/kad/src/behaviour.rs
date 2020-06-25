@@ -895,7 +895,7 @@ where
                                 debug!("Bucket full. Peer not added to routing table: {}", peer);
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                                    KademliaEvent::PendingRoutablePeer { peer, address }
+                                    KademliaEvent::RoutablePeer { peer, address }
                                 ));
                             },
                             kbucket::InsertResult::Pending { disconnected } => {
