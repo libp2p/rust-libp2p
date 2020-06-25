@@ -106,7 +106,7 @@ pub enum KademliaBucketInserts {
     /// in the routing table, it is inserted as long as there
     /// is a free slot in the corresponding k-bucket. If the
     /// k-bucket is full but still has a free pending slot,
-    /// it may be inserted at a later time if an unresponsive
+    /// it may be inserted into the routing table at a later time if an unresponsive
     /// disconnected peer is evicted from the bucket.
     OnConnected,
     /// New peers and addresses are only added to the routing table via
