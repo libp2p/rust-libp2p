@@ -105,10 +105,12 @@ where
 
     fn upgrade_inbound(mut self, mut io: NegotiatedSubstream, protocol: Self::Info) -> Self::Future {
         async move {
-            let request = self.codec.read_request(&protocol, &mut io).await?;
+            let read = self.codec.read_request(&protocol, &mut io);
+            let request = read.await?;
             if let Ok(()) = self.request_sender.send(request) {
                 if let Ok(response) = self.response_receiver.await {
-                    self.codec.write_response(&protocol, &mut io, response).await?;
+                    let write = self.codec.write_response(&protocol, &mut io, response);
+                    write.await?;
                 }
             }
             Ok(())
@@ -152,8 +154,10 @@ where
 
     fn upgrade_outbound(mut self, mut io: NegotiatedSubstream, protocol: Self::Info) -> Self::Future {
         async move {
-            self.codec.write_request(&protocol, &mut io, self.request).await?;
-            let response = self.codec.read_response(&protocol, &mut io).await?;
+            let write = self.codec.write_request(&protocol, &mut io, self.request);
+            write.await?;
+            let read = self.codec.read_response(&protocol, &mut io);
+            let response = read.await?;
             Ok(response)
         }.boxed()
     }

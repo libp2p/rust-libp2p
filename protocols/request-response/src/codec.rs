@@ -28,7 +28,7 @@ use std::io;
 /// protocol family and how they are encoded / decoded on an I/O stream.
 pub trait RequestResponseCodec {
     /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol: ProtocolName + Send + Sync + Clone;
+    type Protocol: ProtocolName + Send + Clone;
     /// The type of inbound and outbound requests.
     type Request: Send;
     /// The type of inbound and outbound responses.
