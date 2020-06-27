@@ -214,22 +214,16 @@ impl Endpoint {
     }
 
     /// Tries to pop a new incoming connection from the queue.
-    pub(crate) async fn next_incoming(&self) -> Connection {
+    pub(crate) async fn next_incoming(&self) -> Either<Connection, Multiaddr> {
         // The `expect` below can panic if the background task has stopped. The background task
         // can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
         // words, we panic here iff a panic has already happened somewhere else, which is a
         // reasonable thing to do.
         let mut new_connections = self.new_connections.lock().await;
-        loop {
-            match new_connections
-                .next()
-                .await
-                .expect("background task has crashed")
-            {
-                Either::Right(_addr) => continue,
-                Either::Left(connection) => break connection,
-            }
-        }
+        new_connections
+            .next()
+            .await
+            .expect("background task has crashed")
     }
 
     /// Asks the endpoint to send a UDP packet.

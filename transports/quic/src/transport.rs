@@ -24,6 +24,7 @@
 
 use crate::{endpoint::Endpoint, muxer::QuicMuxer, upgrade::Upgrade};
 
+use either::{Left, Right};
 use futures::prelude::*;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -76,13 +77,17 @@ impl Transport for QuicTransport {
             let endpoint = self.0.clone();
             let addr = addr.clone();
             async move {
-                let connec = endpoint.next_incoming().await;
-                let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
-                let event = Ok(ListenerEvent::Upgrade {
-                    upgrade: Upgrade::from_connection(connec),
-                    local_addr: addr.clone(), // TODO: hack
-                    remote_addr,
-                });
+                let event = match endpoint.next_incoming().await {
+                    Left(connec) => {
+                        let remote_addr = socketaddr_to_multiaddr(&connec.remote_addr());
+                        Ok(ListenerEvent::Upgrade {
+                            upgrade: Upgrade::from_connection(connec),
+                            local_addr: addr.clone(), // TODO: hack
+                            remote_addr,
+                        })
+                    }
+                    Right(multiaddr) => Ok(ListenerEvent::NewAddress(multiaddr)),
+                };
                 Some((event, ()))
             }
         })
