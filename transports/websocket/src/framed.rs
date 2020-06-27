@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use async_tls::{client, server};
-use bytes::BytesMut;
 use crate::{error::Error, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
@@ -30,8 +29,8 @@ use libp2p_core::{
     transport::{ListenerEvent, TransportError}
 };
 use log::{debug, trace};
-use soketto::{connection, data, extension::deflate::Deflate, handshake};
-use std::{convert::TryInto, fmt, io, pin::Pin, task::Context, task::Poll};
+use soketto::{connection, extension::deflate::Deflate, handshake};
+use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
 /// Max. number of payload bytes of a single frame.
@@ -406,36 +405,55 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 
 /// The websocket connection.
 pub struct Connection<T> {
-    receiver: BoxStream<'static, Result<data::Incoming, connection::Error>>,
+    receiver: BoxStream<'static, Result<IncomingData, connection::Error>>,
     sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
     _marker: std::marker::PhantomData<T>
 }
 
 /// Data received over the websocket connection.
 #[derive(Debug, Clone)]
-pub struct IncomingData(data::Incoming);
+pub enum IncomingData {
+    /// Binary application data.
+    Binary(Vec<u8>),
+    /// UTF-8 encoded application data.
+    Text(Vec<u8>),
+    /// PONG control frame data.
+    Pong(Vec<u8>)
+}
 
 impl IncomingData {
+    pub fn is_data(&self) -> bool {
+        self.is_binary() || self.is_text()
+    }
+
     pub fn is_binary(&self) -> bool {
-        self.0.is_binary()
+        if let IncomingData::Binary(_) = self { true } else { false }
     }
 
     pub fn is_text(&self) -> bool {
-        self.0.is_text()
-    }
-
-    pub fn is_data(&self) -> bool {
-        self.0.is_data()
+        if let IncomingData::Text(_) = self { true } else { false }
     }
 
     pub fn is_pong(&self) -> bool {
-        self.0.is_pong()
+        if let IncomingData::Pong(_) = self { true } else { false }
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            IncomingData::Binary(d) => d,
+            IncomingData::Text(d) => d,
+            IncomingData::Pong(d) => d
+        }
     }
 }
 
 impl AsRef<[u8]> for IncomingData {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        match self {
+            IncomingData::Binary(d) => d,
+            IncomingData::Text(d) => d,
+            IncomingData::Pong(d) => d
+        }
     }
 }
 
@@ -443,12 +461,12 @@ impl AsRef<[u8]> for IncomingData {
 #[derive(Debug, Clone)]
 pub enum OutgoingData {
     /// Send some bytes.
-    Binary(BytesMut),
+    Binary(Vec<u8>),
     /// Send a PING message.
-    Ping(BytesMut),
+    Ping(Vec<u8>),
     /// Send an unsolicited PONG message.
     /// (Incoming PINGs are answered automatically.)
-    Pong(BytesMut)
+    Pong(Vec<u8>)
 }
 
 impl<T> fmt::Debug for Connection<T> {
@@ -469,13 +487,13 @@ where
                     sender.send_binary_mut(x).await?
                 }
                 quicksink::Action::Send(OutgoingData::Ping(x)) => {
-                    let data = x.as_ref().try_into().map_err(|_| {
+                    let data = x[..].try_into().map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidInput, "PING data must be < 126 bytes")
                     })?;
                     sender.send_ping(data).await?
                 }
                 quicksink::Action::Send(OutgoingData::Pong(x)) => {
-                    let data = x.as_ref().try_into().map_err(|_| {
+                    let data = x[..].try_into().map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidInput, "PONG data must be < 126 bytes")
                     })?;
                     sender.send_pong(data).await?
@@ -485,26 +503,41 @@ where
             }
             Ok(sender)
         });
+        let stream = stream::unfold((Vec::new(), receiver), |(mut data, mut receiver)| async {
+            match receiver.receive(&mut data).await {
+                Ok(soketto::Incoming::Data(soketto::Data::Text(_))) => {
+                    Some((Ok(IncomingData::Text(mem::take(&mut data))), (data, receiver)))
+                }
+                Ok(soketto::Incoming::Data(soketto::Data::Binary(_))) => {
+                    Some((Ok(IncomingData::Binary(mem::take(&mut data))), (data, receiver)))
+                }
+                Ok(soketto::Incoming::Pong(pong)) => {
+                    Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
+                }
+                Err(connection::Error::Closed) => None,
+                Err(e) => Some((Err(e), (data, receiver)))
+            }
+        });
         Connection {
-            receiver: connection::into_stream(receiver).boxed(),
+            receiver: stream.boxed(),
             sender: Box::pin(sink),
             _marker: std::marker::PhantomData
         }
     }
 
     /// Send binary application data to the remote.
-    pub fn send_data(&mut self, data: impl Into<BytesMut>) -> sink::Send<'_, Self, OutgoingData> {
-        self.send(OutgoingData::Binary(data.into()))
+    pub fn send_data(&mut self, data: Vec<u8>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Binary(data))
     }
 
     /// Send a PING to the remote.
-    pub fn send_ping(&mut self, data: impl Into<BytesMut>) -> sink::Send<'_, Self, OutgoingData> {
-        self.send(OutgoingData::Ping(data.into()))
+    pub fn send_ping(&mut self, data: Vec<u8>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Ping(data))
     }
 
     /// Send an unsolicited PONG to the remote.
-    pub fn send_pong(&mut self, data: impl Into<BytesMut>) -> sink::Send<'_, Self, OutgoingData> {
-        self.send(OutgoingData::Pong(data.into()))
+    pub fn send_pong(&mut self, data: Vec<u8>) -> sink::Send<'_, Self, OutgoingData> {
+        self.send(OutgoingData::Pong(data))
     }
 }
 
@@ -517,7 +550,7 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));
         let item = item.map(|result| {
-            result.map(IncomingData).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+            result.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
         });
         Poll::Ready(item)
     }

@@ -363,7 +363,7 @@ impl Gossipsub {
                 &self.topic_peers,
                 topic_hash,
                 self.config.mesh_n - added_peers.len(),
-                { |_| true },
+                |_| true,
             );
             added_peers.extend_from_slice(&new_peers);
             // add them to the mesh

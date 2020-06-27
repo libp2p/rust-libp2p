@@ -123,13 +123,6 @@ where
         self.outbound_substreams.push((user_data, raw));
     }
 
-    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
-    ///
-    /// See `StreamMuxer::is_remote_acknowledged`.
-    pub fn is_remote_acknowledged(&self) -> bool {
-        self.inner.is_remote_acknowledged()
-    }
-
     /// Destroys the node stream and returns all the pending outbound substreams, plus an object
     /// that signals the remote that we shut down the connection.
     #[must_use]
