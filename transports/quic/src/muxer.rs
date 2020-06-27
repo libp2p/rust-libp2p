@@ -23,13 +23,10 @@ use crate::error::Error;
 
 use futures::prelude::*;
 use libp2p_core::StreamMuxer;
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
     fmt,
-    mem::replace,
-    pin::Pin,
-    sync::Arc,
     task::{Context, Poll, Waker},
 };
 
@@ -149,9 +146,7 @@ impl StreamMuxer for QuicMuxer {
         }
     }
 
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        ()
-    }
+    fn open_outbound(&self) -> Self::OutboundSubstream {}
 
     fn poll_outbound(
         &self,

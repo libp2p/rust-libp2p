@@ -317,7 +317,7 @@ impl Connection {
                         // We don't use datagrams or unidirectional streams. If these events
                         // happen, it is by some code not compatible with libp2p-quic.
                         self.connection
-                        .close(Instant::now(), From::from(0u32), Default::default());
+                            .close(Instant::now(), From::from(0u32), Default::default());
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
                         return Poll::Ready(ConnectionEvent::StreamReadable(id));
@@ -375,7 +375,10 @@ impl Drop for Connection {
     fn drop(&mut self) {
         // TODO: don't do that if already drained
         // We send a message to the endpoint.
-        self.endpoint.report_quinn_event_non_block(self.connection_id, quinn_proto::EndpointEvent::drained());
+        self.endpoint.report_quinn_event_non_block(
+            self.connection_id,
+            quinn_proto::EndpointEvent::drained(),
+        );
     }
 }
 
