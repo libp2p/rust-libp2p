@@ -753,17 +753,6 @@ where
     {
         let local_id = self.kbuckets.local_key().preimage().clone();
         let others_iter = peers.filter(|p| p.node_id != local_id);
-
-        for peer in others_iter.clone() {
-            self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                KademliaEvent::Discovered {
-                    peer_id: peer.node_id.clone(),
-                    addresses: peer.multiaddrs.clone(),
-                    ty: peer.connection_ty,
-                }
-            ));
-        }
-
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
@@ -1374,13 +1363,6 @@ where
 
     /// Processes a provider record received from a peer.
     fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
-        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-            KademliaEvent::Discovered {
-                peer_id: provider.node_id.clone(),
-                addresses: provider.multiaddrs.clone(),
-                ty: provider.connection_ty,
-            }));
-
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
                 key,
@@ -1873,22 +1855,12 @@ pub enum KademliaEvent {
         stats: QueryStats
     },
 
-    /// A peer has been discovered during a query.
-    Discovered {
-        /// The ID of the discovered peer.
-        peer_id: PeerId,
-        /// The known addresses of the discovered peer.
-        addresses: Vec<Multiaddr>,
-        /// The connection status reported by the discovered peer
-        /// towards the local peer.
-        ty: KadConnectionType,
-    },
-
-    /// The routing table has been updated.
+    /// The routing table has been updated with a new peer and / or
+    /// address, thereby possibly evicting another peer.
     RoutingUpdated {
         /// The ID of the peer that was added or updated.
         peer: PeerId,
-        /// The list of known addresses of `peer`.
+        /// The full list of known addresses of `peer`.
         addresses: Addresses,
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
