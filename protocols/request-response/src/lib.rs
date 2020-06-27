@@ -195,6 +195,19 @@ pub struct ResponseChannel<TResponse> {
     sender: oneshot::Sender<TResponse>,
 }
 
+impl<TResponse> ResponseChannel<TResponse> {
+    /// Checks whether the response channel is still open, i.e.
+    /// the `RequestResponse` behaviour is still waiting for a
+    /// a response to be sent via [`RequestResponse::send_response`]
+    /// and this response channel.
+    ///
+    /// If the response channel is no longer open then the inbound
+    /// request timed out waiting for the response.
+    pub fn is_open(&self) -> bool {
+        !self.sender.is_canceled()
+    }
+}
+
 /// The (local) ID of an outgoing request.
 ///
 /// See [`RequestResponse::send_request`].
@@ -329,6 +342,10 @@ where
     }
 
     /// Initiates sending a response to an inbound request.
+    ///
+    /// If the `ResponseChannel` is already closed due to a timeout,
+    /// the response is discarded and eventually [`RequestResponseEvent::InboundFailure`]
+    /// is emitted by `RequestResponse::poll`.
     ///
     /// The provided `ResponseChannel` is obtained from a
     /// [`RequestResponseMessage::Request`].
