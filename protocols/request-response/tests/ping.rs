@@ -20,6 +20,7 @@
 
 //! Integration tests for the `RequestResponse` network behaviour.
 
+use async_trait::async_trait;
 use libp2p_core::{
     Multiaddr,
     PeerId,
@@ -32,7 +33,7 @@ use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
-use futures::{prelude::*, channel::mpsc, future::BoxFuture};
+use futures::{prelude::*, channel::mpsc};
 use rand::{self, Rng};
 use std::{io, iter};
 
@@ -147,47 +148,48 @@ impl ProtocolName for PingProtocol {
     }
 }
 
+#[async_trait]
 impl RequestResponseCodec for PingCodec {
     type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;
 
-    fn read_request<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T)
-        -> BoxFuture<'a, Result<Self::Request, io::Error>>
+    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T)
+        -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send
     {
         read_one(io, 1024)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .and_then(|data| future::ready(Ok(Ping(data))))
-            .boxed()
+            .map_ok(Ping)
+            .await
     }
 
-    fn read_response<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T)
-        -> BoxFuture<'a, Result<Self::Response, io::Error>>
+    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T)
+        -> io::Result<Self::Response>
     where
         T: AsyncRead + Unpin + Send
     {
         read_one(io, 1024)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .and_then(|data| future::ready(Ok(Pong(data))))
-            .boxed()
+            .map_ok(Pong)
+            .await
     }
 
-    fn write_request<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T, Ping(data): Ping)
-        -> BoxFuture<'a, Result<(), io::Error>>
+    async fn write_request<T>(&mut self, _: &PingProtocol, io: &mut T, Ping(data): Ping)
+        -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).boxed()
+        write_one(io, data).await
     }
 
-    fn write_response<'a, T>(&mut self, _: &PingProtocol, io: &'a mut T, Pong(data): Pong)
-        -> BoxFuture<'a, Result<(), io::Error>>
+    async fn write_response<T>(&mut self, _: &PingProtocol, io: &mut T, Pong(data): Pong)
+        -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send
     {
-        write_one(io, data).boxed()
+        write_one(io, data).await
     }
 }
 
