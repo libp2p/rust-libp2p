@@ -35,7 +35,7 @@ unsigned-varint = "0.4"
 void = "1"
 zeroize = "1"
 
-[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false }
 
 [dev-dependencies]
