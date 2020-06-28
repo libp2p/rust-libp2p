@@ -18,43 +18,54 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{debug, info, trace};
-use crate::{error::Error, socket, stream_map::Streams, Upgrade};
-use async_macros::ready;
-use async_std::{net::SocketAddr, task::spawn};
-use futures::{channel::mpsc, prelude::*};
+//! Background task dedicated to manage the QUIC state machine.
+//!
+//! Considering that all QUIC communications happen over a single UDP socket, one needs to
+//! maintain a unique synchronization point that holds the state of all the active connections.
+//!
+//! The [`Endpoint`] object represents this synchronization point. It maintains a background task
+//! whose role is to interface with the UDP socket. Communication between the background task and
+//! the rest of the code only happens through channels. See the documentation of the
+//! [`background_task`] for a thorough description.
+
+use crate::{connection::Connection, x509};
+
+use crate::error::Error;
+use async_std::net::SocketAddr;
+use either::Either;
+use futures::{
+    channel::{mpsc, oneshot},
+    lock::Mutex,
+    prelude::*,
+};
 use libp2p_core::{
     multiaddr::{host_addresses, Multiaddr, Protocol},
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use parking_lot::Mutex;
-use quinn_proto::ConnectionHandle;
 use std::{
-    collections::{hash_map::Entry, HashMap},
-    pin::Pin,
-    sync::Arc,
+    collections::{HashMap, VecDeque},
+    fmt, io,
+    sync::{Arc, Weak},
     task::{Context, Poll},
     time::{Duration, Instant},
 };
 
-use channel_ref::Channel;
-
-/// Represents the configuration for a QUIC transport capability for libp2p.
+/// Represents the configuration for the [`Endpoint`].
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The client configuration
+    /// The client configuration to pass to `quinn_proto`.
     client_config: quinn_proto::ClientConfig,
-    /// The server configuration
+    /// The server configuration to pass to `quinn_proto`.
     server_config: Arc<quinn_proto::ServerConfig>,
-    /// The endpoint configuration
+    /// The endpoint configuration to pass to `quinn_proto`.
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
-    /// The [`Multiaddr`]
+    /// The [`Multiaddr`] to use to spawn the UDP socket.
     multiaddr: Multiaddr,
 }
 
 impl Config {
-    /// Creates a new configuration object for QUIC.
+    /// Creates a new configuration object with default values.
     pub fn new(
         keypair: &libp2p_core::identity::Keypair,
         multiaddr: Multiaddr,
@@ -80,754 +91,518 @@ impl Config {
     }
 }
 
-#[derive(Debug)]
-enum EndpointMessage {
-    Dummy,
-    ConnectionAccepted,
-    EndpointEvent {
-        handle: ConnectionHandle,
+/// Object containing all the QUIC resources shared between all connections.
+// TODO: expand docs
+// TODO: Debug trait
+// TODO: remove useless fields
+pub struct Endpoint {
+    /// Channel to the background of the endpoint.
+    /// See [`Endpoint::new_connections`] (just below) for a commentary about the mutex.
+    to_endpoint: Mutex<mpsc::Sender<ToEndpoint>>,
+
+    /// Channel where new connections are being sent.
+    /// This is protected by a futures-friendly `Mutex`, meaning that receiving a connection is
+    /// done in two steps: locking this mutex, and grabbing the next element on the `Receiver`.
+    /// The only consequence of this `Mutex` is that multiple simultaneous calls to
+    /// [`Endpoint::next_incoming`] are serialized.
+    new_connections: Mutex<mpsc::Receiver<Either<Connection, Multiaddr>>>,
+
+    /// Copy of [`to_endpoint`], except not behind a `Mutex`. Used if we want to be guaranteed a
+    /// slot in the messages buffer.
+    to_endpoint2: mpsc::Sender<ToEndpoint>,
+
+    /// Configuration passed at initialization.
+    // TODO: remove?
+    config: Config,
+    /// Multiaddr of the local UDP socket passed in the configuration at initialization after it
+    /// has potentially been modified to handle port number `0`.
+    local_multiaddr: Multiaddr,
+}
+
+impl Endpoint {
+    /// Builds a new `Endpoint`.
+    pub fn new(config: Config) -> Result<Arc<Endpoint>, TransportError<io::Error>> {
+        let mut multiaddr = config.multiaddr.clone();
+        let local_socket_addr = match crate::transport::multiaddr_to_socketaddr(&config.multiaddr) {
+            Ok(a) => a,
+            Err(()) => return Err(TransportError::MultiaddrNotSupported(multiaddr)),
+        };
+
+        // NOT blocking, as per man:bind(2), as we pass an IP address.
+        let socket =
+            std::net::UdpSocket::bind(&local_socket_addr).map_err(TransportError::Other)?;
+        // TODO:
+        let port_is_zero = local_socket_addr.port() == 0;
+        let local_socket_addr = socket.local_addr().map_err(TransportError::Other)?;
+        if port_is_zero {
+            assert_ne!(local_socket_addr.port(), 0);
+            assert_eq!(multiaddr.pop(), Some(Protocol::Quic));
+            assert_eq!(multiaddr.pop(), Some(Protocol::Udp(0)));
+            multiaddr.push(Protocol::Udp(local_socket_addr.port()));
+            multiaddr.push(Protocol::Quic);
+        }
+
+        let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
+        let to_endpoint2 = to_endpoint_tx.clone();
+        let (new_connections_tx, new_connections_rx) = mpsc::channel(500);
+
+        let endpoint = Arc::new(Endpoint {
+            to_endpoint: Mutex::new(to_endpoint_tx),
+            to_endpoint2,
+            new_connections: Mutex::new(new_connections_rx),
+            config: config.clone(),
+            local_multiaddr: config.multiaddr.clone(), // TODO: no
+        });
+
+        let send_addr = |e| {
+            new_connections_tx
+                .clone()
+                .try_send(Either::Right(e))
+                .expect("we just cloned this, so we have capacity; qed")
+        };
+
+        // TODO: IP address stuff
+        if local_socket_addr.ip().is_unspecified() {
+            log::info!("returning all local IPs for unspecified address");
+            let suffixes = [Protocol::Udp(local_socket_addr.port()), Protocol::Quic];
+            let local_addresses = host_addresses(&suffixes).map_err(TransportError::Other)?;
+            for (_, _, address) in local_addresses {
+                log::info!("sending address {:?}", address);
+                send_addr(address)
+            }
+        } else {
+            log::info!("sending address {:?}", multiaddr);
+            send_addr(multiaddr)
+        }
+
+        // TODO: just for testing, do proper task spawning
+        async_std::task::spawn(background_task(
+            config.clone(),
+            Arc::downgrade(&endpoint),
+            async_std::net::UdpSocket::from(socket),
+            new_connections_tx,
+            to_endpoint_rx.fuse(),
+        ));
+
+        // let endpoint = EndpointRef { reference, channel };
+        // let join_handle = spawn(endpoint.clone());
+        // Ok((Self(endpoint), join_handle))
+
+        Ok(endpoint)
+    }
+
+    /// Asks the endpoint to start dialing the given address.
+    ///
+    /// Note that this method only *starts* the dialing. `Ok` is returned as soon as possible, even
+    /// when the remote might end up being unreachable.
+    pub(crate) async fn dial(
+        &self,
+        addr: SocketAddr,
+    ) -> Result<Connection, quinn_proto::ConnectError> {
+        // The two `expect`s below can panic if the background task has stopped. The background
+        // task can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
+        // words, we panic here iff a panic has already happened somewhere else, which is a
+        // reasonable thing to do.
+        let (tx, rx) = oneshot::channel();
+        self.to_endpoint
+            .lock()
+            .await
+            .send(ToEndpoint::Dial { addr, result: tx })
+            .await
+            .expect("background task has crashed");
+        rx.await.expect("background task has crashed")
+    }
+
+    /// Tries to pop a new incoming connection from the queue.
+    pub(crate) async fn next_incoming(&self) -> Either<Connection, Multiaddr> {
+        // The `expect` below can panic if the background task has stopped. The background task
+        // can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
+        // words, we panic here iff a panic has already happened somewhere else, which is a
+        // reasonable thing to do.
+        let mut new_connections = self.new_connections.lock().await;
+        new_connections
+            .next()
+            .await
+            .expect("background task has crashed")
+    }
+
+    /// Asks the endpoint to send a UDP packet.
+    ///
+    /// Note that this method only queues the packet and returns as soon as the packet is in queue.
+    /// There is no guarantee that the packet will actually be sent, but considering that this is
+    /// a UDP packet, you cannot rely on the packet being delivered anyway.
+    pub(crate) async fn send_udp_packet(
+        &self,
+        destination: SocketAddr,
+        data: impl Into<Box<[u8]>>,
+    ) {
+        let _ = self
+            .to_endpoint
+            .lock()
+            .await
+            .send(ToEndpoint::SendUdpPacket {
+                destination,
+                data: data.into(),
+            })
+            .await;
+    }
+
+    /// Report to the endpoint an event on a [`quinn_proto::Connection`].
+    ///
+    /// This is typically called by a [`Connection`].
+    ///
+    /// If `event.is_drained()` is true, the event indicates that the connection no longer exists.
+    /// This must therefore be the last event sent using this [`quinn_proto::ConnectionHandle`].
+    pub(crate) async fn report_quinn_event(
+        &self,
+        connection_id: quinn_proto::ConnectionHandle,
         event: quinn_proto::EndpointEvent,
+    ) {
+        self.to_endpoint
+            .lock()
+            .await
+            .send(ToEndpoint::ProcessConnectionEvent {
+                connection_id,
+                event,
+            })
+            .await
+            .expect("background task has crashed");
+    }
+
+    /// Similar to [`Endpoint::report_quinn_event`], except that the message sending is guaranteed
+    /// to be instantaneous and to succeed.
+    ///
+    /// This method bypasses back-pressure mechanisms and is meant to be called only from
+    /// destructors, where waiting is not advisable.
+    pub(crate) fn report_quinn_event_non_block(
+        &self,
+        connection_id: quinn_proto::ConnectionHandle,
+        event: quinn_proto::EndpointEvent,
+    ) {
+        // We implement this by cloning the `mpsc::Sender`. Since each sender is guaranteed a slot
+        // in the buffer, cloning the sender reserves the slot and sending thus always succeeds.
+        let result = self
+            .to_endpoint2
+            .clone()
+            .try_send(ToEndpoint::ProcessConnectionEvent {
+                connection_id,
+                event,
+            });
+        assert!(result.is_ok());
+    }
+}
+
+/// Message sent to the endpoint background task.
+#[derive(Debug)]
+enum ToEndpoint {
+    /// Instruct the endpoint to start connecting to the given address.
+    Dial {
+        /// UDP address to connect to.
+        addr: SocketAddr,
+        /// Channel to return the result of the dialing to.
+        result: oneshot::Sender<Result<Connection, quinn_proto::ConnectError>>,
+    },
+    /// Sent by a `quinn_proto` connection when the endpoint needs to process an event generated
+    /// by a connection. The event itself is opaque to us. Only `quinn_proto` knows what is in
+    /// there.
+    ProcessConnectionEvent {
+        connection_id: quinn_proto::ConnectionHandle,
+        event: quinn_proto::EndpointEvent,
+    },
+    /// Instruct the endpoint to send a packet of data on its UDP socket.
+    SendUdpPacket {
+        /// Destination of the UDP packet.
+        destination: SocketAddr,
+        /// Packet of data to send.
+        data: Box<[u8]>,
     },
 }
 
-#[derive(Debug)]
-pub(super) struct EndpointInner {
-    inner: quinn_proto::Endpoint,
-    muxers: HashMap<ConnectionHandle, Arc<Mutex<Streams>>>,
-    pending: socket::Pending,
-    /// Used to receive events from connections
-    event_receiver: mpsc::Receiver<EndpointMessage>,
-    buffer: Vec<u8>,
-}
+/// Task that runs in the background for as long as the endpont is alive. Responsible for
+/// processing messages and the UDP socket.
+///
+/// The `receiver` parameter must be the receiving side of the `Endpoint::to_endpoint` sender.
+///
+/// # Behaviour
+///
+/// This background task is responsible for the following:
+///
+/// - Sending packets on the UDP socket.
+/// - Receiving packets from the UDP socket and feed them to the [`quinn_proto::Endpoint`] state
+///   machine.
+/// - Transmitting events generated by the [`quinn_proto::Endpoint`] to the corresponding
+///   [`Connection`].
+/// - Receiving messages from the `receiver` and processing the requested actions. This includes
+///   UDP packets to send and events emitted by the [`Connection`] objects.
+/// - Sending new connections on `new_connections`.
+///
+/// When it comes to channels, there exists three main multi-producer-single-consumer channels
+/// in play:
+///
+/// - One channel, represented by `Endpoint::to_endpoint` and `receiver`, that communicates
+///   messages from [`Endpoint`] to the background task and from the [`Connection`] to the
+///   background task.
+/// - One channel per each existing connection that communicates messages from the background
+///   task to that [`Connection`].
+/// - One channel for the background task to send newly-opened connections to. The receiving
+///   side is normally processed by a "listener" as defined by the [`libp2p_core::Transport`]
+///   trait.
+///
+/// In order to avoid an unbounded buffering of events, we prioritize sending data on the UDP
+/// socket over everything else. If the network interface is too busy to process our packets,
+/// everything comes to a freeze (including receiving UDP packets) until it is ready to accept
+/// more.
+///
+/// Apart from freezing when the network interface is too busy, the background task should sleep
+/// as little as possible. It is in particular important for the `receiver` to be drained as
+/// quickly as possible in order to avoid unnecessary back-pressure on the [`Connection`] objects.
+///
+/// ## Back-pressure on `new_connections`
+///
+/// The [`quinn_proto::Endpoint`] object contains an accept buffer, in other words a buffer of the
+/// incoming connections waiting to be accepted. When a new connection is signalled, we send this
+/// new connection on the `new_connections` channel in an asynchronous way, and we only free a slot
+/// in the accept buffer once the element has actually been enqueued on `new_connections`. There
+/// are therefore in total three buffers in play: the `new_connections` channel itself, the queue
+/// of elements being sent on `new_connections`, and the accept buffer of the
+/// [`quinn_proto::Endpoint`].
+///
+/// Unfortunately, this design has the consequence that, on the network layer, we will accept a
+/// certain number of incoming connections even if [`Endpoint::next_incoming`] is never even
+/// called. The `quinn-proto` library doesn't provide any way to not accept incoming connections
+/// apart from filling the accept buffer.
+///
+/// ## Back-pressure on connections
+///
+/// Because connections are processed by the user at a rate of their choice, we cannot properly
+/// handle the situation where the channel from the background task to individual connections is
+/// full. Sleeping the task while waiting for the connection to be processed by the user could
+/// even lead to a deadlock if this processing is also sleeping waiting for some other action that
+/// itself depends on the background task (e.g. if processing the connection is waiting for a
+/// message arriving on a different connection).
+///
+/// In an ideal world, we would handle a background-task-to-connection channel being full by
+/// dropping UDP packets destined to this connection, as a way to back-pressure the remote.
+/// Unfortunately, the `quinn-proto` library doesn't provide any way for us to know which
+/// connection a UDP packet is destined for before it has been turned into a [`ConnectionEvent`],
+/// and because these [`ConnectionEvent`]s are sometimes used to synchronize the states of the
+/// endpoint and connection, it would be a logic error to silently drop them.
+///
+/// We handle this tricky situation by simply killing connections as soon as their associated
+/// channel is full.
+///
+// TODO: actually implement the killing of connections if channel is full, at the moment we just
+// wait
+/// # Shutdown
+///
+/// The background task shuts down if `endpoint_weak`, `receiver` or `new_connections` become
+/// disconnected/invalid. This corresponds to the lifetime of the associated [`Endpoint`].
+///
+/// Keep in mind that we pass an `Arc<Endpoint>` whenever we create a new connection, which
+/// guarantees that the [`Endpoint`], and therefore the background task, is properly kept alive
+/// for as long as any QUIC connection is open.
 
-impl EndpointInner {
-    fn handle_event(
-        &mut self,
-        handle: ConnectionHandle,
-        event: quinn_proto::EndpointEvent,
-    ) -> Option<quinn_proto::ConnectionEvent> {
-        if event.is_drained() {
-            let res = self.inner.handle_event(handle, event);
-            self.muxers.remove(&handle);
-            res
-        } else {
-            self.inner.handle_event(handle, event)
+#[derive(Copy, Clone, Debug)]
+enum Void {}
+async fn background_task(
+    config: Config,
+    endpoint_weak: Weak<Endpoint>,
+    udp_socket: async_std::net::UdpSocket,
+    mut new_connections: mpsc::Sender<Either<Connection, Multiaddr>>,
+    mut receiver: stream::Fuse<mpsc::Receiver<ToEndpoint>>,
+) {
+    // The actual QUIC state machine.
+    let mut endpoint = quinn_proto::Endpoint::new(
+        config.endpoint_config.clone(),
+        Some(config.server_config.clone()),
+    );
+
+    // List of all active connections, with a sender to notify them of events.
+    let mut alive_connections = HashMap::<quinn_proto::ConnectionHandle, mpsc::Sender<_>>::new();
+
+    // Buffer where we write packets received from the UDP socket.
+    let mut socket_recv_buffer = vec![0; 65536];
+
+    // The quinn_proto endpoint can give us new connections for as long as its accept buffer
+    // isn't full. This buffer is used to push these new connections while we are waiting to
+    // send them on the `new_connections` channel. We only call `endpoint.accept()` when we remove
+    // an element from this list, which guarantees that it doesn't grow unbounded.
+    // TODO: with_capacity?
+    let mut queued_new_connections = VecDeque::new();
+
+    // Next packet waiting to be transmitted on the UDP socket, if any.
+    // Note that this variable isn't strictly necessary, but it reduces code duplication in the
+    // code below.
+    let mut next_packet_out: Option<(SocketAddr, Box<[u8]>)> = None;
+
+    // Main loop of the task.
+    loop {
+        // Start by flushing `next_packet_out`.
+        if let Some((destination, data)) = next_packet_out.take() {
+            // We block the current task until the packet is sent. This way, if the
+            // network interface is too busy, we back-pressure all of our internal
+            // channels.
+            // TODO: set ECN bits; there is no support for them in the ecosystem right now
+            match udp_socket.send_to(&data, destination).await {
+                Ok(n) if n == data.len() => {}
+                Ok(_) => log::error!(
+                    "QUIC UDP socket violated expectation that packets are always fully \
+                    transferred"
+                ),
+
+                // Errors on the socket are expected to never happen, and we handle them by simply
+                // printing a log message. The packet gets discarded in case of error, but we are
+                // robust to packet losses and it is consequently not a logic error to process with
+                // normal operations.
+                Err(err) => log::error!("Error while sending on QUIC UDP socket: {:?}", err),
+            }
         }
-    }
 
-    fn drive_events(&mut self, cx: &mut Context<'_>) {
-        while let Poll::Ready(e) = self.event_receiver.poll_next_unpin(cx).map(|e| e.unwrap()) {
-            match e {
-                EndpointMessage::ConnectionAccepted => {
-                    debug!("accepting connection!");
-                    self.inner.accept();
-                }
-                EndpointMessage::EndpointEvent { handle, event } => {
-                    debug!("we have event {:?} from connection {:?}", event, handle);
-                    if let Some(event) = self.handle_event(handle, event) {
-                        self.send_connection_event(handle, event)
+        // The endpoint might request packets to be sent out. This is handled in priority to avoid
+        // buffering up packets.
+        if let Some(packet) = endpoint.poll_transmit() {
+            debug_assert!(next_packet_out.is_none());
+            next_packet_out = Some((packet.destination, packet.contents));
+            continue;
+        }
+
+        futures::select! {
+            message = receiver.next() => {
+                // Received a message from a different part of the code requesting us to
+                // do something.
+                match message {
+                    // Shut down if the endpoint has shut down.
+                    None => return,
+
+                    Some(ToEndpoint::Dial { addr, result }) => {
+                        // This `"l"` seems necessary because an empty string is an invalid domain
+                        // name. While we don't use domain names, the underlying rustls library
+                        // is based upon the assumption that we do.
+                        let (connection_id, connection) =
+                            match endpoint.connect(config.client_config.clone(), addr, "l") {
+                                Ok(c) => c,
+                                Err(err) => {
+                                    let _ = result.send(Err(err));
+                                    continue;
+                                }
+                            };
+
+                        let endpoint_arc = match endpoint_weak.upgrade() {
+                            Some(ep) => ep,
+                            None => return, // Shut down the task if the endpoint is dead.
+                        };
+
+                        debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
+                        let (tx, rx) = mpsc::channel(16);
+                        let connection = Connection::from_quinn_connection(endpoint_arc, connection, connection_id, rx);
+                        alive_connections.insert(connection_id, tx);
+                        let _ = result.send(Ok(connection));
+                    }
+
+                    // A connection wants to notify the endpoint of something.
+                    Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
+                        debug_assert!(alive_connections.contains_key(&connection_id));
+                        // We "drained" event indicates that the connection no longer exists and
+                        // its ID can be reclaimed.
+                        let is_drained_event = event.is_drained();
+                        if is_drained_event {
+                            alive_connections.remove(&connection_id);
+                        }
+                        if let Some(event_back) = endpoint.handle_event(connection_id, event) {
+                            debug_assert!(!is_drained_event);
+                            // TODO: don't await here /!\
+                            alive_connections.get_mut(&connection_id).unwrap().send(event_back).await;
+                        }
+                    }
+
+                    // Data needs to be sent on the UDP socket.
+                    Some(ToEndpoint::SendUdpPacket { destination, data }) => {
+                        debug_assert!(next_packet_out.is_none());
+                        next_packet_out = Some((destination, data));
+                        continue;
                     }
                 }
-                EndpointMessage::Dummy => {}
             }
-        }
-    }
 
-    /// Send the given `ConnectionEvent` to the appropriate connection,
-    /// and process any events it sends back.
-    fn send_connection_event(
-        &mut self,
-        handle: ConnectionHandle,
-        mut event: quinn_proto::ConnectionEvent,
-    ) {
-        let Self { inner, muxers, .. } = self;
-        let entry = match muxers.entry(handle) {
-            Entry::Vacant(_) => return,
-            Entry::Occupied(occupied) => occupied,
-        };
-        let mut connection = entry.get().lock();
-        let mut is_drained = false;
-        loop {
-            let endpoint_event = match connection.handle_event(event) {
-                None => break,
-                Some(endpoint_event) => endpoint_event,
-            };
-            is_drained |= endpoint_event.is_drained();
-            event = match inner.handle_event(handle, endpoint_event) {
-                Some(event) => event,
-                None => break,
+            // The future we create here wakes up if two conditions are fulfilled:
+            //
+            // - The `new_connections` channel is ready to accept a new element.
+            // - `queued_new_connections` is not empty.
+            //
+            // When this happens, we pop an element from `queued_new_connections`, put it on the
+            // channel, and call `endpoint.accept()`, thereby allowing the QUIC state machine to
+            // feed a new incoming connection to us.
+            readiness = {
+                let active = !queued_new_connections.is_empty();
+                let new_connections = &mut new_connections;
+                future::poll_fn(move |cx| {
+                    if active { new_connections.poll_ready(cx) } else { Poll::Pending }
+                }).fuse()
+            } => {
+                if readiness.is_err() {
+                    // new_connections channel has been dropped, meaning that the endpoint has
+                    // been destroyed.
+                    return;
+                }
+
+                let elem = queued_new_connections.pop_front()
+                    .expect("if queue is empty, the future above is always Pending; qed");
+                new_connections.start_send(elem)
+                    .expect("future is waken up only if poll_ready returned Ready; qed");
+                endpoint.accept();
             }
-        }
-        connection.process_app_events();
-        connection.wake_driver();
-        if is_drained {
-            drop(connection);
-            entry.remove();
-        }
-    }
 
-    fn drive_receive(
-        &mut self,
-        socket: &socket::Socket,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(ConnectionHandle, quinn_proto::Connection), Error>> {
-        use quinn_proto::DatagramEvent;
-        loop {
-            let (bytes, peer) = ready!(socket.recv_from(cx, &mut self.buffer[..])?);
-            let (handle, event) =
-                match self
-                    .inner
-                    .handle(Instant::now(), peer, None, self.buffer[..bytes].into())
-                {
-                    Some(e) => e,
-                    None => continue,
+            result = udp_socket.recv_from(&mut socket_recv_buffer).fuse() => {
+                let (packet_len, packet_src) = match result {
+                    Ok(v) => v,
+                    // Errors on the socket are expected to never happen, and we handle them by
+                    // simply printing a log message.
+                    Err(err) => {
+                        log::error!("Error while receive on QUIC UDP socket: {:?}", err);
+                        continue;
+                    },
                 };
-            trace!("have an event!");
-            match event {
-                DatagramEvent::ConnectionEvent(event) => {
-                    self.send_connection_event(handle, event);
-                    continue;
-                }
-                DatagramEvent::NewConnection(connection) => {
-                    debug!("new connection detected!");
-                    break Poll::Ready(Ok((handle, connection)));
-                }
-            }
-        }
-    }
 
-    fn poll_transmit_pending(
-        &mut self,
-        socket: &socket::Socket,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Error>> {
-        let Self { inner, pending, .. } = self;
-        socket
-            .send_packets(cx, pending, &mut || inner.poll_transmit())
-            .map_err(Error::IO)
-    }
-}
+                // Received a UDP packet from the socket.
+                debug_assert!(packet_len <= socket_recv_buffer.len());
+                let packet = From::from(&socket_recv_buffer[..packet_len]);
+                // TODO: ECN bits aren't handled
+                match endpoint.handle(Instant::now(), packet_src, None, packet) {
+                    None => {},
+                    Some((connec_id, quinn_proto::DatagramEvent::ConnectionEvent(event))) => {
+                        // Event to send to an existing connection.
+                        if let Some(sender) = alive_connections.get_mut(&connec_id) {
+                            let _ = sender.send(event).await; // TODO: don't await here /!\
+                        } else {
+                            log::error!("State mismatch: event for closed connection");
+                        }
+                    },
+                    Some((connec_id, quinn_proto::DatagramEvent::NewConnection(connec))) => {
+                        // A new connection has been received. `connec_id` is a newly-allocated
+                        // identifier.
+                        debug_assert_eq!(connec.side(), quinn_proto::Side::Server);
+                        let (tx, rx) = mpsc::channel(16);
+                        alive_connections.insert(connec_id, tx);
+                        let endpoint_arc = match endpoint_weak.upgrade() {
+                            Some(ep) => ep,
+                            None => return, // Shut down the task if the endpoint is dead.
+                        };
+                        let connection = Connection::from_quinn_connection(endpoint_arc, connec, connec_id, rx);
 
-type ListenerResult = ListenerEvent<Upgrade, Error>;
-
-#[derive(Debug)]
-pub(super) struct EndpointData {
-    /// The single UDP socket used for I/O
-    socket: Arc<socket::Socket>,
-    /// A `Mutex` protecting the QUIC state machine.
-    inner: Mutex<EndpointInner>,
-    /// The channel on which new connections are sent.  This is bounded in practice by the accept
-    /// backlog.
-    new_connections: mpsc::UnboundedSender<ListenerResult>,
-    /// The channel used to receive new connections.
-    receive_connections: Mutex<Option<mpsc::UnboundedReceiver<ListenerResult>>>,
-    /// The `Multiaddr`
-    address: Multiaddr,
-    /// The configuration
-    config: Config,
-}
-
-type Sender = mpsc::Sender<EndpointMessage>;
-
-#[derive(Debug)]
-pub(crate) struct Connection {
-    pending: socket::Pending,
-    connection: quinn_proto::Connection,
-    handle: ConnectionHandle,
-    channel: Channel,
-    waker: Option<std::task::Waker>,
-}
-
-impl Connection {
-    /// Notify the endpoint that the handshake has completed,
-    /// and get the certificates from it.
-    ///
-    /// If this returns [`Poll::Pending`], the current task can be awoken by
-    /// a call to [`Connection::wake`].
-    ///
-    /// Calling this after it has returned `Ready` is erroneous.
-    pub(crate) fn notify_handshake_complete(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<libp2p_core::PeerId, Error>> {
-        if self.connection.is_handshaking() {
-            self.set_waker(cx);
-            return Poll::Pending;
-        }
-        if self.connection.is_closed() {
-            return Poll::Ready(Err(Error::ConnectionLost));
-        }
-        let side = self.connection.side();
-        if side.is_server() {
-            ready!(self.channel.poll_ready(cx))?;
-            self.channel
-                .start_send(EndpointMessage::ConnectionAccepted)?
-        }
-
-        assert!(
-            !self.connection.crypto_session().is_handshaking(),
-            "QUIC handshake cannot complete before TLS handshake"
-        );
-        let certificate = self
-            .connection
-            .crypto_session()
-            .get_peer_certificates()
-            .expect("we always require the peer to present a certificate; qed");
-        // we have already verified that there is (exactly) one peer certificate,
-        // and that it has a valid libp2p extension.
-        Poll::Ready(Ok(x509::extract_peerid_or_panic(certificate[0].as_ref())))
-    }
-
-    /// Wake up the last task registered by
-    /// [`Connection::notify_handshake_complete`] or
-    /// [`Connection::set_waker`].
-    pub(crate) fn wake(&mut self) {
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
-        }
-    }
-
-    fn set_waker(&mut self, cx: &mut Context<'_>) {
-        self.waker = Some(cx.waker().clone())
-    }
-
-    /// Send as many endpoint events as possible. If this returns `Err`, the connection is dead.
-    pub(crate) fn send_endpoint_events(&mut self, cx: &mut Context<'_>) -> Result<(), Error> {
-        loop {
-            match self.channel.poll_ready(cx) {
-                Poll::Pending => break Ok(()),
-                Poll::Ready(token) => token?,
-            }
-            if let Some(event) = self.connection.poll_endpoint_events() {
-                self.channel.start_send(EndpointMessage::EndpointEvent {
-                    handle: self.handle,
-                    event,
-                })?
-            } else {
-                break Ok(());
-            }
-        }
-    }
-
-    /// Poll for the timeout
-    pub(crate) fn poll_timeout(&mut self) -> Option<Instant> {
-        self.connection.poll_timeout()
-    }
-
-    /// Handle a timeout
-    pub(crate) fn handle_timeout(&mut self, now: Instant) {
-        self.connection.handle_timeout(now)
-    }
-
-    pub(crate) fn send_streams(&self) -> usize {
-        self.connection.send_streams()
-    }
-
-    /// Destroy a substream
-    pub(crate) fn destroy_stream(&mut self, id: quinn_proto::StreamId) {
-        // if either of these returns an error, there is nothing we can do, so
-        // just ignore it. That said, an error here should never happen unless
-        // the connection is closed.
-        let _ = self.connection.finish(id);
-        // let _ = self.connection.stop_sending(id, Default::default());
-    }
-
-    pub(crate) fn poll_transmit_pending(
-        &mut self,
-        now: Instant,
-        cx: &mut Context<'_>,
-        socket: &socket::Socket,
-    ) -> Result<(), Error> {
-        let connection = &mut self.connection;
-        match socket.send_packets(cx, &mut self.pending, &mut || connection.poll_transmit(now)) {
-            Poll::Ready(Ok(())) | Poll::Pending => Ok(()),
-            Poll::Ready(Err(e)) => Err(Error::IO(e)),
-        }
-    }
-
-    pub(crate) fn handle_event(
-        &mut self,
-        event: quinn_proto::ConnectionEvent,
-    ) -> Option<quinn_proto::EndpointEvent> {
-        self.connection.handle_event(event);
-        self.connection.poll_endpoint_events()
-    }
-
-    /// Check if this connection is drained.
-    pub(crate) fn is_drained(&self) -> bool {
-        self.connection.is_drained()
-    }
-
-    /// Accept an incoming stream, if possible.
-    pub(crate) fn accept(&mut self, cx: &mut Context<'_>) -> Poll<quinn_proto::StreamId> {
-        match self.connection.accept(quinn_proto::Dir::Bi) {
-            None => {
-                self.set_waker(cx);
-                Poll::Pending
-            }
-            Some(e) => Poll::Ready(e),
-        }
-    }
-
-    /// Open an outgoing stream if it is possible to do so.
-    pub(crate) fn open(&mut self) -> Option<quinn_proto::StreamId> {
-        self.connection.open(quinn_proto::Dir::Bi)
-    }
-
-    /// Write to a stream.
-    pub(crate) fn write(
-        &mut self,
-        id: quinn_proto::StreamId,
-        buffer: &[u8],
-    ) -> Result<usize, quinn_proto::WriteError> {
-        self.connection.write(id, buffer)
-    }
-
-    /// Shut down the writing side of a stream.
-    pub(crate) fn finish(
-        &mut self,
-        id: quinn_proto::StreamId,
-    ) -> Result<(), quinn_proto::FinishError> {
-        self.connection.finish(id)
-    }
-
-    /// Get application-facing events
-    pub(crate) fn poll(&mut self) -> Option<quinn_proto::Event> {
-        self.connection.poll()
-    }
-
-    /// Get the side of the stream
-    pub(crate) fn side(&self) -> quinn_proto::Side {
-        self.connection.side()
-    }
-
-    /// Read from a stream
-    pub(crate) fn read(
-        &mut self,
-        id: quinn_proto::StreamId,
-        buf: &mut [u8],
-    ) -> Result<usize, quinn_proto::ReadError> {
-        self.connection.read(id, buf).map(|size| size.unwrap_or(0))
-    }
-
-    /// Close the stream, if it is not closed already
-    pub(crate) fn close(&mut self, status: u32) {
-        if self.connection.is_closed() {
-            return;
-        }
-        self.connection.close(
-            std::time::Instant::now(),
-            quinn_proto::VarInt::from_u32(status),
-            Default::default(),
-        )
-    }
-}
-
-mod channel_ref {
-    use super::{Arc, EndpointData, EndpointMessage::Dummy, Sender};
-    #[derive(Debug, Clone)]
-    pub(super) struct Channel(Sender);
-
-    impl Channel {
-        pub(super) fn new(s: Sender) -> Self {
-            Self(s)
-        }
-    }
-
-    impl std::ops::Deref for Channel {
-        type Target = Sender;
-        fn deref(&self) -> &Sender {
-            &self.0
-        }
-    }
-
-    impl std::ops::DerefMut for Channel {
-        fn deref_mut(&mut self) -> &mut Sender {
-            &mut self.0
-        }
-    }
-
-    impl Drop for Channel {
-        fn drop(&mut self) {
-            // Wake up the endpoint task, to avoid deadlocks.
-            let _ = self.0.start_send(Dummy);
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    pub(crate) struct EndpointRef {
-        pub(super) reference: Arc<EndpointData>,
-        // MUST COME LATER so that the endpoint driver gets notified *after* its reference count is
-        // dropped.
-        pub(super) channel: Channel,
-    }
-}
-
-pub(crate) use channel_ref::EndpointRef;
-
-/// A QUIC endpoint. Each endpoint has its own configuration and listening socket.
-///
-/// You generally need at most one of these per thread. Endpoints are [`Send`] and [`Sync`], so you
-/// can share them among as many threads as you like. However, performance may be better if you
-/// have one per CPU core, as this reduces lock contention. Most applications will not need to
-/// worry about this. [`Endpoint`] tries to use fine-grained locking to reduce the overhead.
-///
-/// [`Endpoint`] wraps the underlying data structure in an [`Arc`], so cloning it just bumps the
-/// reference count. All state is shared between the clones. For example, you can pass different
-/// clones to [`<Endpoint as Transport>::listen_on`]. Each incoming connection will be received by
-/// exactly one of them.
-///
-/// The **only** valid [`Multiaddr`] to pass to [`<Endpoint as Transport>::listen_on`] is the one
-/// used to create the [`Endpoint`]. If you pass a different one, you will get
-/// [`TransportError::MultiaddrNotSupported`].
-#[derive(Debug, Clone)]
-pub struct Endpoint(EndpointRef);
-
-/// A handle that can be used to wait for the endpoint driver to finish.
-pub type JoinHandle = async_std::task::JoinHandle<Result<(), Error>>;
-
-#[derive(Debug)]
-pub(crate) struct SendToken(());
-
-impl Endpoint {
-    /// Construct a [`Endpoint`] with the given `Config`.
-    pub fn new(
-        config: Config,
-    ) -> Result<(Self, JoinHandle), TransportError<<Self as Transport>::Error>> {
-        let Config {
-            mut multiaddr,
-            client_config,
-            server_config,
-            endpoint_config,
-        } = config;
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&multiaddr) {
-            sa
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(multiaddr));
-        };
-        // NOT blocking, as per man:bind(2), as we pass an IP address.
-        let socket = std::net::UdpSocket::bind(&socket_addr)
-            .map_err(|e| TransportError::Other(Error::IO(e)))?;
-        let port_is_zero = socket_addr.port() == 0;
-        let socket_addr = socket.local_addr().expect("this socket is bound; qed");
-        info!("bound socket to {:?}", socket_addr);
-        if port_is_zero {
-            assert_ne!(socket_addr.port(), 0);
-            assert_eq!(multiaddr.pop(), Some(Protocol::Quic));
-            assert_eq!(multiaddr.pop(), Some(Protocol::Udp(0)));
-            multiaddr.push(Protocol::Udp(socket_addr.port()));
-            multiaddr.push(Protocol::Quic);
-        }
-        let (new_connections, receive_connections) = mpsc::unbounded();
-        let (event_sender, event_receiver) = mpsc::channel(0);
-        if socket_addr.ip().is_unspecified() {
-            info!("returning all local IPs for unspecified address");
-            let suffixes = [Protocol::Udp(socket_addr.port()), Protocol::Quic];
-            let local_addresses =
-                host_addresses(&suffixes).map_err(|e| TransportError::Other(Error::IO(e)))?;
-            for (_, _, address) in local_addresses {
-                info!("sending address {:?}", address);
-                new_connections
-                    .unbounded_send(ListenerEvent::NewAddress(address))
-                    .expect("we have a reference to the peer, so this will not fail; qed")
-            }
-        } else {
-            info!("sending address {:?}", multiaddr);
-            new_connections
-                .unbounded_send(ListenerEvent::NewAddress(multiaddr.clone()))
-                .expect("we have a reference to the peer, so this will not fail; qed");
-        }
-        let reference = Arc::new(EndpointData {
-            socket: Arc::new(socket::Socket::new(socket.into())),
-            inner: Mutex::new(EndpointInner {
-                inner: quinn_proto::Endpoint::new(
-                    endpoint_config.clone(),
-                    Some(server_config.clone()),
-                ),
-                muxers: HashMap::new(),
-                event_receiver,
-                pending: Default::default(),
-                buffer: vec![0; 0xFFFF],
-            }),
-            address: multiaddr.clone(),
-            receive_connections: Mutex::new(Some(receive_connections)),
-            new_connections,
-            config: Config {
-                endpoint_config,
-                client_config,
-                server_config,
-                multiaddr: multiaddr.clone(),
-            },
-        });
-        let channel = Channel::new(event_sender);
-        if socket_addr.ip().is_unspecified() {
-            debug!("returning all local IPs for unspecified address");
-            let local_addresses =
-                host_addresses(&[Protocol::Udp(socket_addr.port()), Protocol::Quic])
-                    .map_err(|e| TransportError::Other(Error::IO(e)))?;
-            for i in local_addresses {
-                info!("sending address {:?}", i.2);
-                reference
-                    .new_connections
-                    .unbounded_send(ListenerEvent::NewAddress(i.2))
-                    .expect("we have a reference to the peer, so this will not fail; qed")
-            }
-        } else {
-            info!("sending address {:?}", multiaddr);
-            reference
-                .new_connections
-                .unbounded_send(ListenerEvent::NewAddress(multiaddr))
-                .expect("we have a reference to the peer, so this will not fail; qed");
-        }
-        let endpoint = EndpointRef { reference, channel };
-        let join_handle = spawn(endpoint.clone());
-        Ok((Self(endpoint), join_handle))
-    }
-}
-
-fn accept_muxer(
-    endpoint: &Arc<EndpointData>,
-    connection: quinn_proto::Connection,
-    handle: ConnectionHandle,
-    inner: &mut EndpointInner,
-    channel: Channel,
-) {
-    let connection = Connection {
-        pending: socket::Pending::default(),
-        connection,
-        handle,
-        channel,
-        waker: None,
-    };
-
-    let socket = endpoint.socket.clone();
-
-    let streams = Arc::new(Mutex::new(Streams::new(connection)));
-    inner.muxers.insert(handle, streams.clone());
-    let upgrade = crate::Upgrade::spawn(streams, socket);
-    if endpoint
-        .new_connections
-        .unbounded_send(ListenerEvent::Upgrade {
-            upgrade,
-            local_addr: endpoint.address.clone(),
-            remote_addr: endpoint.address.clone(),
-        })
-        .is_err()
-    {
-        inner.inner.accept();
-        inner.inner.reject_new_connections();
-    }
-}
-
-impl Future for EndpointRef {
-    type Output = Result<(), Error>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        let Self { reference, channel } = self.get_mut();
-        let mut inner = reference.inner.lock();
-        #[cfg(feature = "tracing")]
-        let span = tracing::trace_span!("Endpoint", address = display(&reference.address));
-        #[cfg(feature = "tracing")]
-        let _guard = span.enter();
-        trace!("driving events");
-        inner.drive_events(cx);
-        trace!("driving incoming packets");
-        match inner.drive_receive(&reference.socket, cx) {
-            Poll::Pending => {}
-            Poll::Ready(Ok((handle, connection))) => {
-                trace!("have a new connection");
-                accept_muxer(reference, connection, handle, &mut *inner, channel.clone());
-                trace!("connection accepted");
-            }
-            Poll::Ready(Err(e)) => {
-                if reference
-                    .new_connections
-                    .unbounded_send(ListenerEvent::Error(e))
-                    .is_err()
-                {
-                    inner.inner.reject_new_connections()
+                        // As explained in the documentation, we put this new connection in an
+                        // intermediary buffer. At the next loop iteration we will try to move it
+                        // to the `new_connections` channel. We call `endpoint.accept()` only once
+                        // the element has successfully been sent on `new_connections`.
+                        queued_new_connections.push_back(Either::Left(connection));
+                    },
                 }
             }
         }
-        match inner.poll_transmit_pending(&reference.socket, cx)? {
-            Poll::Pending | Poll::Ready(()) => {}
-        }
-
-        if !inner.muxers.is_empty() {
-            Poll::Pending
-        } else if Arc::strong_count(&reference) == 1 {
-            debug!("All connections have closed. Closing QUIC endpoint driver.");
-            Poll::Ready(Ok(()))
-        } else {
-            Poll::Pending
-        }
     }
 }
 
-/// A QUIC listener
-#[derive(Debug)]
-pub struct Listener {
-    reference: Arc<EndpointData>,
-    /// MUST COME AFTER `reference`!
-    drop_notifier: Channel,
-    channel: mpsc::UnboundedReceiver<ListenerResult>,
-}
-
-impl Stream for Listener {
-    type Item = Result<ListenerResult, Error>;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.get_mut()
-            .channel
-            .poll_next_unpin(cx)
-            .map(|e| e.map(Ok))
+impl fmt::Debug for Endpoint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Endpoint").finish()
     }
-}
-
-impl Transport for Endpoint {
-    type Output = (libp2p_core::PeerId, super::Muxer);
-    type Error = Error;
-    type Listener = Listener;
-    type ListenerUpgrade = Upgrade;
-    type Dial = Upgrade;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let Endpoint(EndpointRef {
-            reference,
-            channel: drop_notifier,
-        }) = self;
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
-            sa
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
-        let own_socket_addr =
-            multiaddr_to_socketaddr(&reference.address).expect("our own Multiaddr is valid; qed");
-        if socket_addr.ip() != own_socket_addr.ip()
-            || (socket_addr.port() != 0 && socket_addr.port() != own_socket_addr.port())
-        {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-        let channel = reference
-            .receive_connections
-            .lock()
-            .take()
-            .ok_or_else(|| TransportError::Other(Error::AlreadyListening))?;
-        Ok(Listener {
-            reference,
-            drop_notifier,
-            channel,
-        })
-    }
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-                debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                return Err(TransportError::MultiaddrNotSupported(addr));
-            }
-            socket_addr
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
-        let Endpoint(endpoint) = self;
-        let mut inner = endpoint.reference.inner.lock();
-        let (handle, connection) = inner
-            .inner
-            .connect(
-                endpoint.reference.config.client_config.clone(),
-                socket_addr,
-                "l",
-            )
-            .map_err(|e| TransportError::Other(Error::ConnectError(e)))?;
-        let socket = endpoint.reference.socket.clone();
-        let connection = Connection {
-            pending: socket::Pending::default(),
-            connection,
-            handle,
-            channel: endpoint.channel,
-            waker: None,
-        };
-        let streams = Arc::new(Mutex::new(Streams::new(connection)));
-        inner.muxers.insert(handle, streams.clone());
-        Ok(crate::Upgrade::spawn(streams.clone(), socket))
-    }
-}
-
-// This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
-    let mut iter = addr.iter();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
-    let proto3 = iter.next().ok_or(())?;
-
-    if iter.next().is_some() {
-        return Err(());
-    }
-
-    match (proto1, proto2, proto3) {
-        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok(SocketAddr::new(ip.into(), port))
-        }
-        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::Quic) => {
-            Ok(SocketAddr::new(ip.into(), port))
-        }
-        _ => Err(()),
-    }
-}
-
-#[cfg(test)]
-#[test]
-fn multiaddr_to_udp_conversion() {
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    #[cfg(feature = "tracing")]
-    use tracing_subscriber::{fmt::Subscriber, EnvFilter};
-    #[cfg(feature = "tracing")]
-    let _ = Subscriber::builder()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-    assert!(
-        multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err()
-    );
-
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/12345/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Ok(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            12345,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/255.255.255.255/udp/8080/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Ok(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-            8080,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
-        Ok(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-            12345,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Ok(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(
-                65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-            )),
-            8080,
-        ))
-    );
 }

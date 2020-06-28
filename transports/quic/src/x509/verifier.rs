@@ -39,33 +39,97 @@ pub(crate) struct Libp2pCertificateVerifier;
 ///
 /// The check that the [`PeerId`] matches the expected `PeerId` must be done by
 /// the caller.
-///
-/// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     fn verify_server_cert(
-        &self, _roots: &rustls::RootCertStore, presented_certs: &[rustls::Certificate],
-        _dns_name: webpki::DNSNameRef<'_>, _ocsp_response: &[u8],
+        &self,
+        _roots: &rustls::RootCertStore,
+        presented_certs: &[rustls::Certificate],
+        _dns_name: webpki::DNSNameRef<'_>,
+        _ocsp_response: &[u8],
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         verify_presented_certs(presented_certs).map(|()| ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
-        &self, _message: &[u8], _cert: &Certificate, _dss: &DigitallySignedStruct,
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         panic!("got asked to verify a TLS1.2 signature, but TLS1.2 was disabled")
     }
 
     fn verify_tls13_signature(
-        &self, message: &[u8], cert: &Certificate, dss: &DigitallySignedStruct,
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
         verify_tls13_signature(message, cert, dss)
     }
 }
 
+/// libp2p requires the following of X.509 client certificate chains:
+///
+/// * Exactly one certificate must be presented. In particular, client
+///   authentication is mandatory in libp2p.
+/// * The certificate must be self-signed.
+/// * The certificate must have a valid libp2p extension that includes a
+///   signature of its public key.
+///
+/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
+/// the caller.
+///
+/// [`PeerId`]: libp2p_core::PeerId
+impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+
+    fn client_auth_root_subjects(
+        &self,
+        _dns_name: Option<&webpki::DNSName>,
+    ) -> Option<rustls::DistinguishedNames> {
+        Some(vec![])
+    }
+
+    fn verify_client_cert(
+        &self,
+        presented_certs: &[Certificate],
+        _dns_name: Option<&webpki::DNSName>,
+    ) -> Result<ClientCertVerified, rustls::TLSError> {
+        verify_presented_certs(presented_certs).map(|()| ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        panic!("got asked to verify a TLS1.2 signature, but TLS1.2 was disabled")
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TLSError> {
+        x509_signature::parse_certificate(cert.as_ref())
+            .map_err(rustls::TLSError::WebPKIError)?
+            .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
+            .map_err(rustls::TLSError::WebPKIError)
+            .map(|()| rustls::HandshakeSignatureValid::assertion())
+    }
+}
+
 fn verify_tls13_signature(
-    message: &[u8], cert: &Certificate, dss: &DigitallySignedStruct,
+    message: &[u8],
+    cert: &Certificate,
+    dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, TLSError> {
-    x509::parse_certificate(cert.as_ref())
+    x509_signature::parse_certificate(cert.as_ref())
         .map_err(rustls::TLSError::WebPKIError)?
         .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
         .map_err(rustls::TLSError::WebPKIError)
@@ -73,10 +137,11 @@ fn verify_tls13_signature(
 }
 
 fn verify_libp2p_signature(
-    libp2p_extension: &Libp2pExtension<'_>, x509_pkey_bytes: &[u8],
+    libp2p_extension: &Libp2pExtension<'_>,
+    x509_pkey_bytes: &[u8],
 ) -> Result<(), Error> {
-    let mut v = Vec::with_capacity(crate::LIBP2P_SIGNING_PREFIX_LENGTH + x509_pkey_bytes.len());
-    v.extend_from_slice(&crate::LIBP2P_SIGNING_PREFIX[..]);
+    let mut v = Vec::with_capacity(super::LIBP2P_SIGNING_PREFIX_LENGTH + x509_pkey_bytes.len());
+    v.extend_from_slice(&super::LIBP2P_SIGNING_PREFIX[..]);
     v.extend_from_slice(x509_pkey_bytes);
     if libp2p_extension
         .peer_key
@@ -90,19 +155,20 @@ fn verify_libp2p_signature(
 
 fn parse_certificate(
     certificate: &[u8],
-) -> Result<(x509::X509Certificate<'_>, Libp2pExtension<'_>), Error> {
-    let parsed = x509::parse_certificate(certificate)?;
+) -> Result<(x509_signature::X509Certificate<'_>, Libp2pExtension<'_>), Error> {
+    let parsed = x509_signature::parse_certificate(certificate)?;
     let mut libp2p_extension = None;
 
     parsed
         .extensions()
         .iterate(&mut |oid, critical, extension| {
             Ok(match oid {
-                crate::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
-                crate::LIBP2P_OID_BYTES =>
-                    libp2p_extension = Some(parse_libp2p_extension(extension)?),
+                super::LIBP2P_OID_BYTES if libp2p_extension.is_some() => return Err(Error::BadDER),
+                super::LIBP2P_OID_BYTES => {
+                    libp2p_extension = Some(parse_libp2p_extension(extension)?)
+                }
                 _ if critical => return Err(Error::UnsupportedCriticalExtension),
-                _ => {},
+                _ => {}
             })
         })?;
     let libp2p_extension = libp2p_extension.ok_or(Error::UnknownIssuer)?;
@@ -128,12 +194,11 @@ struct Libp2pExtension<'a> {
     signature: &'a [u8],
 }
 
-#[inline(always)]
-fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Error> {
-    der::bit_string_with_no_unused_bits(input).map_err(|_| e)
-}
-
 fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a>, Error> {
+    fn read_bit_string<'a>(input: &mut Reader<'a>, e: Error) -> Result<Input<'a>, Error> {
+        der::bit_string_with_no_unused_bits(input).map_err(|_| e)
+    }
+
     let e = Error::ExtensionValueInvalid;
     Input::read_all(&extension, e, |input| {
         der::nested(input, der::Tag::Sequence, e, |input| {
@@ -148,49 +213,6 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
             })
         })
     })
-}
-/// libp2p requires the following of X.509 client certificate chains:
-///
-/// * Exactly one certificate must be presented. In particular, client
-///   authentication is mandatory in libp2p.
-/// * The certificate must be self-signed.
-/// * The certificate must have a valid libp2p extension that includes a
-///   signature of its public key.
-///
-/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
-/// the caller.
-///
-/// [`PeerId`]: libp2p_core::PeerId
-impl rustls::ClientCertVerifier for Libp2pCertificateVerifier {
-    fn offer_client_auth(&self) -> bool { true }
-
-    fn client_auth_root_subjects(
-        &self, _dns_name: Option<&webpki::DNSName>,
-    ) -> Option<rustls::DistinguishedNames> {
-        Some(vec![])
-    }
-
-    fn verify_client_cert(
-        &self, presented_certs: &[Certificate], _dns_name: Option<&webpki::DNSName>,
-    ) -> Result<ClientCertVerified, rustls::TLSError> {
-        verify_presented_certs(presented_certs).map(|()| ClientCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self, _message: &[u8], _cert: &Certificate, _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
-        panic!("got asked to verify a TLS1.2 signature, but TLS1.2 was disabled")
-    }
-
-    fn verify_tls13_signature(
-        &self, message: &[u8], cert: &Certificate, dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
-        x509::parse_certificate(cert.as_ref())
-            .map_err(rustls::TLSError::WebPKIError)?
-            .check_tls13_signature(dss.scheme, message, dss.sig.0.as_ref())
-            .map_err(rustls::TLSError::WebPKIError)
-            .map(|()| rustls::HandshakeSignatureValid::assertion())
-    }
 }
 
 /// Extracts the `PeerId` from a certificate’s libp2p extension. It is erroneous

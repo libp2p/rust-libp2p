@@ -18,296 +18,388 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{error::Error, stream_map};
-use crate::{error, trace};
-use async_macros::ready;
-use either::Either;
-use futures::{channel::oneshot, prelude::*};
+//! A single QUIC connection.
+//!
+//! The [`Connection`] struct of this module contains, amongst other things, a
+//! [`quinn_proto::Connection`] state machine and an `Arc<Endpoint>`. This struct is responsible
+//! for communication between quinn_proto's connection and its associated endpoint.
+//! All interactions with a QUIC connection should be done through this struct.
+// TODO: docs
+
+use crate::endpoint::Endpoint;
+
+use futures::{channel::mpsc, prelude::*};
 use libp2p_core::StreamMuxer;
-use parking_lot::{Mutex, MutexGuard};
 use std::{
-    mem::replace,
+    fmt,
+    net::SocketAddr,
+    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 
-/// A QUIC substream
-#[derive(Debug)]
-pub struct Substream {
-    id: stream_map::StreamId,
-    status: SubstreamStatus,
-}
-
-/// The status of a QUIC substream
-#[derive(Debug)]
-enum SubstreamStatus {
-    /// The stream has not been written to yet.  Reading from such a stream will
-    /// return an error.
-    Unwritten,
-    /// The stream is live, and can be read from or written to.
-    Live,
-    /// The stream is being shut down.  It can be read from, but not written to.
-    /// The `oneshot::Receiver` is used to wait for the peer to acknowledge the
-    /// shutdown.
-    Finishing(oneshot::Receiver<()>),
-    /// The stream has been shut down.  Reads are still permissible.  Writes
-    /// will return an error.
-    Finished,
-}
-
-impl Substream {
-    /// Construct an unwritten stream. Such a stream must be written to before
-    /// it can be read from.
-    fn unwritten(id: stream_map::StreamId) -> Self {
-        let status = SubstreamStatus::Unwritten;
-        Self { id, status }
-    }
-
-    /// Construct a live stream, which can be read from or written to.
-    fn live(id: stream_map::StreamId) -> Self {
-        let status = SubstreamStatus::Live;
-        Self { id, status }
-    }
-}
-
-/// A QUIC connection, either client or server.
+/// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Upgrade`].
 ///
-/// QUIC opens streams lazily, so the peer is not notified that a stream has
-/// been opened until data is written (either on this stream, or a
-/// higher-numbered one). Therefore, reading on a stream that has not been
-/// written to will deadlock, unless another stream is opened and written to
-/// before the first read returns. Because this is not needed in practice, and
-/// to ease debugging, [`<QuicMuxer as StreamMuxer>::read_substream`] returns an
-/// error in this case.
-#[derive(Debug, Clone)]
-pub struct QuicMuxer(pub(crate) Arc<Mutex<stream_map::Streams>>);
+/// Contains everything needed to process a connection with a remote.
+/// Tied to a specific [`crate::Endpoint`].
+pub(crate) struct Connection {
+    /// Endpoint this connection belongs to.
+    endpoint: Arc<Endpoint>,
+    /// Future whose job is to send a message to the endpoint. Only one at a time.
+    pending_to_endpoint: Option<Pin<Box<dyn Future<Output = ()> + Send + Sync>>>,
+    /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
+    /// Passed at initialization.
+    from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
 
-impl QuicMuxer {
-    /// Returns the underlying data structure, including all state.
-    fn inner(&self) -> MutexGuard<'_, stream_map::Streams> {
-        self.0.lock()
-    }
+    /// The QUIC state machine for this specific connection.
+    connection: quinn_proto::Connection,
+    /// Identifier for this connection according to the endpoint. Used when sending messages to
+    /// the endpoint.
+    connection_id: quinn_proto::ConnectionHandle,
+    /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
+    next_timeout: Option<futures_timer::Delay>,
+
+    /// In other to avoid race conditions where a "connected" event happens if we were not
+    /// handshaking, we cache whether the connection is handshaking and only set this to true
+    /// after a "connected" event has been received.
+    ///
+    /// In other words, this flag indicates whether a "connected" hasn't been received yet.
+    is_handshaking: bool,
+    /// Contains a `Some` if the connection is closed, with the reason of the closure.
+    /// Contains `None` if it is still open.
+    /// Contains `Some` if and only if a `ConnectionLost` event has been emitted.
+    closed: Option<Error>,
 }
 
-#[derive(Debug)]
-enum OutboundInner {
-    /// The substream is fully set up
-    Complete(Result<stream_map::StreamId, Error>),
-    /// We are waiting on a stream to become available
-    Pending(oneshot::Receiver<stream_map::StreamId>),
-    /// We have already returned our substream
-    Done,
+/// Error on the connection as a whole.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum Error {
+    /// Endpoint has force-killed this connection because it was too busy.
+    #[error("Endpoint has force-killed our connection")]
+    ClosedChannel,
+    /// Error in the inner state machine.
+    #[error("{0}")]
+    Quinn(#[from] quinn_proto::ConnectionError),
 }
 
-#[cfg(feature = "tracing")]
-macro_rules! span {
-    ($name:expr, side = $e:expr) => {
-        let span = tracing::trace_span!($name, side = $e);
-        let _guard = span.enter();
-    };
-    ($name:expr, $inner:expr, $id:expr) => {
-        let span = tracing::trace_span!($name, side = debug($inner.side()), id = debug(&$id.id));
-        let _guard = span.enter();
-    };
-}
-#[cfg(not(feature = "tracing"))]
-macro_rules! span {
-    ($name:expr, $($id:ident = $e:expr),*) => {};
-    ($name:expr, $inner:expr, $id:expr) => {};
-}
+impl Connection {
+    /// Crate-internal function that builds a [`Connection`] from raw components.
+    ///
+    /// This function assumes that there exists a background task that will process the messages
+    /// sent to `to_endpoint` and send us messages on `from_endpoint`.
+    ///
+    /// The `from_endpoint` can be purposefully closed by the endpoint if the connection is too
+    /// slow to process.
+    // TODO: is this necessary ^? figure out if quinn_proto doesn't forbid that situation in the first place
+    ///
+    /// `connection_id` is used to identify the local connection in the messages sent to
+    /// `to_endpoint`.
+    ///
+    /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
+    /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
+    // TODO: maybe abstract `to_endpoint` more and make it generic? dunno
+    pub(crate) fn from_quinn_connection(
+        endpoint: Arc<Endpoint>,
+        connection: quinn_proto::Connection,
+        connection_id: quinn_proto::ConnectionHandle,
+        from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
+    ) -> Self {
+        // As the documentation mention, one is not supposed to call any of the methods on the
+        // `quinn_proto::Connection` before entering this function, and consequently, even if the
+        // connection has already been closed, there is no way for it to know that it has been
+        // closed.
+        assert!(!connection.is_closed());
 
-/// An outbound QUIC substream. This will eventually resolve to either a
-/// [`Substream`] or an [`Error`].
-#[derive(Debug)]
-pub struct Outbound(OutboundInner);
+        let is_handshaking = connection.is_handshaking();
 
-impl StreamMuxer for QuicMuxer {
-    type OutboundSubstream = Outbound;
-    type Substream = Substream;
-    type Error = Error;
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        let mut inner = self.inner();
-        Outbound(if let Err(e) = inner.close_reason() {
-            OutboundInner::Complete(Err(e))
-        } else {
-            match inner.get_pending_stream() {
-                Either::Left(id) => OutboundInner::Complete(Ok(id)),
-                Either::Right(receiver) => OutboundInner::Pending(receiver),
-            }
-        })
-    }
-
-    fn destroy_outbound(&self, outbound: Outbound) {
-        let mut inner = self.inner();
-        let id = match outbound.0 {
-            OutboundInner::Complete(Err(_)) => return,
-            OutboundInner::Complete(Ok(id)) => id,
-            // try_recv is race-free, because the lock on `self` prevents
-            // other tasks from sending on the other end of the channel.
-            OutboundInner::Pending(mut channel) => match channel.try_recv() {
-                Ok(Some(id)) => id,
-                Err(oneshot::Canceled) | Ok(None) => return,
-            },
-            OutboundInner::Done => return,
-        };
-        inner.destroy_stream(id)
-    }
-
-    fn destroy_substream(&self, substream: Self::Substream) {
-        let mut inner = self.inner();
-        span!("destroy", inner, substream);
-        inner.destroy_stream(substream.id)
-    }
-
-    fn is_remote_acknowledged(&self) -> bool {
-        // we do not allow 0RTT traffic, for security reasons, so this is
-        // always true.
-        true
-    }
-
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut inner = self.inner();
-        span!("inbound", side = debug(inner.side()));
-        trace!("being polled for inbound connections!");
-        inner.close_reason()?;
-        inner.wake_driver();
-        let stream = ready!(inner.accept(cx));
-        Poll::Ready(Ok(Substream::live(stream)))
-    }
-
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        use quinn_proto::WriteError;
-        let mut inner = self.inner();
-        span!("write", inner, substream);
-        inner.wake_driver();
-        match inner.write(cx, &substream.id, buf) {
-            Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(WriteError::Blocked) => Poll::Pending,
-            Err(WriteError::UnknownStream) => {
-                error!(
-                    "The application used a connection that is already being \
-                    closed. This is a bug in the application or in libp2p."
-                );
-                inner.close_reason()?;
-                Poll::Ready(Err(Error::ExpiredStream))
-            }
-            Err(WriteError::Stopped(e)) => {
-                substream.status = SubstreamStatus::Finished;
-                Poll::Ready(Err(Error::Stopped(e)))
-            }
+        Connection {
+            endpoint,
+            pending_to_endpoint: None,
+            connection,
+            next_timeout: None,
+            from_endpoint,
+            connection_id,
+            is_handshaking,
+            closed: None,
         }
     }
 
-    fn poll_outbound(
+    /// Returns the certificates sent by the remote through the underlying TLS session.
+    /// Returns `None` if the connection is still handshaking.
+    // TODO: it seems to happen that is_handshaking is false but this returns None
+    pub(crate) fn peer_certificates(
         &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let stream = match substream.0 {
-            OutboundInner::Complete(_) => match replace(&mut substream.0, OutboundInner::Done) {
-                OutboundInner::Complete(e) => e?,
-                _ => unreachable!(),
-            },
-            OutboundInner::Pending(ref mut receiver) => {
-                let result = ready!(receiver.poll_unpin(cx))
-                    .map_err(|oneshot::Canceled| Error::ConnectionLost)?;
-                substream.0 = OutboundInner::Done;
-                result
-            }
-            OutboundInner::Done => panic!("polled after yielding Ready"),
-        };
-        Poll::Ready(Ok(Substream::unwritten(stream)))
+    ) -> Option<impl Iterator<Item = quinn_proto::Certificate>> {
+        self.connection
+            .crypto_session()
+            .get_peer_certificates()
+            .map(|l| l.into_iter().map(|l| l.into()))
     }
 
-    /// Try to read from a substream. This will return an error if the substream has
-    /// not yet been written to.
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
+    /// Returns the address of the node we're connected to.
+    // TODO: can change /!\
+    pub(crate) fn remote_addr(&self) -> SocketAddr {
+        self.connection.remote_address()
+    }
+
+    /// Returns `true` if this connection is still pending. Returns `false` if we are connected to
+    /// the remote or if the connection is closed.
+    pub(crate) fn is_handshaking(&self) -> bool {
+        self.is_handshaking
+    }
+
+    /// If the connection is closed, returns why. If the connection is open, returns `None`.
+    ///
+    /// > **Note**: This method is also the main way to determine whether a connection is closed.
+    pub(crate) fn close_reason(&self) -> Option<&Error> {
+        debug_assert!(!self.is_handshaking);
+        self.closed.as_ref()
+    }
+
+    /// Start closing the connection. A [`ConnectionEvent::ConnectionLost`] event will be
+    /// produced in the future.
+    pub(crate) fn close(&mut self) {
+        // TODO: what if the user calls this multiple times?
+        // We send a dummy `0` error code with no message, as the API of StreamMuxer doesn't
+        // support this.
+        self.connection
+            .close(Instant::now(), From::from(0u32), Default::default());
+    }
+
+    /// Pops a new substream opened by the remote.
+    ///
+    /// If `None` is returned, then a [`ConnectionEvent::StreamAvailable`] event will later be
+    /// produced when a substream is available.
+    pub(crate) fn pop_incoming_substream(&mut self) -> Option<quinn_proto::StreamId> {
+        self.connection.accept(quinn_proto::Dir::Bi)
+    }
+
+    /// Pops a new substream opened locally.
+    ///
+    /// The API can be thought as if outgoing substreams were automatically opened by the local
+    /// QUIC connection and were added to a queue for availability.
+    ///
+    /// If `None` is returned, then a [`ConnectionEvent::StreamOpened`] event will later be
+    /// produced when a substream is available.
+    pub(crate) fn pop_outgoing_substream(&mut self) -> Option<quinn_proto::StreamId> {
+        self.connection.open(quinn_proto::Dir::Bi)
+    }
+
+    // TODO: better API
+    pub(crate) fn read_substream(
+        &mut self,
+        id: quinn_proto::StreamId,
         buf: &mut [u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        use quinn_proto::ReadError;
-        let mut inner = self.inner();
-        span!("read", inner, substream);
-        match inner.read(cx, &substream.id, buf) {
-            Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(ReadError::Blocked) => {
-                inner.close_reason()?;
-                if let SubstreamStatus::Unwritten = substream.status {
-                    Poll::Ready(Err(Error::CannotReadFromUnwrittenStream))
-                } else {
-                    trace!(
-                        "Blocked on reading stream {:?} with side {:?}",
-                        substream.id,
-                        inner.side()
-                    );
-                    Poll::Pending
+    ) -> Result<usize, quinn_proto::ReadError> {
+        self.connection.read(id, buf).map(|n| n.unwrap_or(0))
+    }
+
+    pub(crate) fn write_substream(
+        &mut self,
+        id: quinn_proto::StreamId,
+        buf: &[u8],
+    ) -> Result<usize, quinn_proto::WriteError> {
+        self.connection.write(id, buf)
+    }
+
+    pub(crate) fn shutdown_substream(
+        &mut self,
+        id: quinn_proto::StreamId,
+    ) -> Result<(), quinn_proto::FinishError> {
+        self.connection.finish(id)
+    }
+
+    /// Polls the connection for an event that happend on it.
+    pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
+        // Nothing more can be done if the connection is closed.
+        // Return `Pending` without registering the waker, essentially freezing the task forever.
+        if self.closed.is_some() {
+            return Poll::Pending;
+        }
+
+        // Process events that the endpoint has sent to us.
+        loop {
+            match Pin::new(&mut self.from_endpoint).poll_next(cx) {
+                Poll::Ready(Some(event)) => self.connection.handle_event(event),
+                Poll::Ready(None) => {
+                    debug_assert!(self.closed.is_none());
+                    let err = Error::ClosedChannel;
+                    self.closed = Some(err.clone());
+                    return Poll::Ready(ConnectionEvent::ConnectionLost(err));
+                }
+                Poll::Pending => break,
+            }
+        }
+
+        'send_pending: loop {
+            // Sending the pending event to the endpoint. If the endpoint is too busy, we just
+            // stop the processing here.
+            // There is a bit of a question in play here: should be continue to accept events
+            // through `from_endpoint` if `to_endpoint` is busy?
+            // We need to be careful to avoid a potential deadlock if both `from_endpoint` and
+            // `to_endpoint` are full. As such, we continue to transfer data from `from_endpoint`
+            // to the `quinn_proto::Connection` (see above).
+            // However we don't deliver substream-related events to the user as long as
+            // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
+            // being full to the user.
+            if let Some(pending_to_endpoint) = &mut self.pending_to_endpoint {
+                match Future::poll(Pin::new(pending_to_endpoint), cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(()) => self.pending_to_endpoint = None,
                 }
             }
-            Err(ReadError::UnknownStream) => {
-                error!(
-                    "The application used a stream that has already been closed. This is a bug."
-                );
-                Poll::Ready(Err(Error::ExpiredStream))
+
+            let now = Instant::now();
+
+            // Poll the connection for packets to send on the UDP socket and try to send them on
+            // `to_endpoint`.
+            while let Some(transmit) = self.connection.poll_transmit(now) {
+                let endpoint = self.endpoint.clone();
+                debug_assert!(self.pending_to_endpoint.is_none());
+                self.pending_to_endpoint = Some(Box::pin(async move {
+                    // TODO: ECN bits not handled
+                    endpoint
+                        .send_udp_packet(transmit.destination, transmit.contents)
+                        .await;
+                }));
+                continue 'send_pending;
             }
-            Err(ReadError::Reset(e)) => Poll::Ready(Err(Error::Reset(e))),
-            Err(ReadError::IllegalOrderedRead) => {
-                unreachable!("We do not use unordered reads; qed")
+
+            // The connection also needs to be able to send control messages to the endpoint. This is
+            // handled here, and we try to send them on `to_endpoint` as well.
+            while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
+                let endpoint = self.endpoint.clone();
+                let connection_id = self.connection_id;
+                debug_assert!(self.pending_to_endpoint.is_none());
+                self.pending_to_endpoint = Some(Box::pin(async move {
+                    endpoint
+                        .report_quinn_event(connection_id, endpoint_event)
+                        .await;
+                }));
+                continue 'send_pending;
             }
+
+            // Timeout system.
+            // We break out of the following loop until if `poll_timeout()` returns `None` or if
+            // polling `self.next_timeout` returns `Poll::Pending`.
+            loop {
+                if let Some(next_timeout) = &mut self.next_timeout {
+                    match Future::poll(Pin::new(next_timeout), cx) {
+                        Poll::Ready(()) => {
+                            self.connection.handle_timeout(now);
+                            self.next_timeout = None;
+                        }
+                        Poll::Pending => break,
+                    }
+                } else if let Some(when) = self.connection.poll_timeout() {
+                    if when <= now {
+                        self.connection.handle_timeout(now);
+                    } else {
+                        let delay = when - now;
+                        self.next_timeout = Some(futures_timer::Delay::new(delay));
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // The final step consists in handling the events related to the various substreams.
+            while let Some(event) = self.connection.poll() {
+                match event {
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                        dir: quinn_proto::Dir::Uni,
+                    })
+                    | quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                        dir: quinn_proto::Dir::Uni,
+                    })
+                    | quinn_proto::Event::DatagramReceived => {
+                        // We don't use datagrams or unidirectional streams. If these events
+                        // happen, it is by some code not compatible with libp2p-quic.
+                        self.connection
+                            .close(Instant::now(), From::from(0u32), Default::default());
+                    }
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
+                        return Poll::Ready(ConnectionEvent::StreamReadable(id));
+                    }
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
+                        return Poll::Ready(ConnectionEvent::StreamWritable(id));
+                    }
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                        dir: quinn_proto::Dir::Bi,
+                    }) => {
+                        return Poll::Ready(ConnectionEvent::StreamAvailable);
+                    }
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                        dir: quinn_proto::Dir::Bi,
+                    }) => {
+                        return Poll::Ready(ConnectionEvent::StreamOpened);
+                    }
+                    quinn_proto::Event::ConnectionLost { reason } => {
+                        debug_assert!(self.closed.is_none());
+                        self.is_handshaking = false;
+                        let err = Error::Quinn(reason);
+                        self.closed = Some(err.clone());
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(err));
+                    }
+                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished {
+                        id,
+                        stop_reason,
+                    }) => {
+                        // TODO: transmit `stop_reason`
+                        return Poll::Ready(ConnectionEvent::StreamFinished(id));
+                    }
+                    quinn_proto::Event::Connected => {
+                        debug_assert!(self.is_handshaking);
+                        debug_assert!(!self.connection.is_handshaking());
+                        self.is_handshaking = false;
+                        return Poll::Ready(ConnectionEvent::Connected);
+                    }
+                }
+            }
+
+            break;
         }
-    }
 
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        match substream.status {
-            SubstreamStatus::Finished => return Poll::Ready(Ok(())),
-            SubstreamStatus::Finishing(ref mut channel) => {
-                self.inner().wake_driver();
-                ready!(channel.poll_unpin(cx)).map_err(|_| Error::NetworkFailure)?;
-                return Poll::Ready(Ok(()));
-            }
-            SubstreamStatus::Unwritten | SubstreamStatus::Live => {}
-        }
-        let mut inner = self.inner();
-        span!("shutdown", inner, substream);
-        match inner.shutdown_stream(cx, &substream.id) {
-            Ok(receiver) => {
-                substream.status = SubstreamStatus::Finishing(receiver);
-                Poll::Pending
-            }
-            Err(quinn_proto::FinishError::Stopped(e)) => Poll::Ready(Err(Error::Stopped(e))),
-            Err(quinn_proto::FinishError::UnknownStream) => Poll::Ready(Err(Error::ExpiredStream)),
-        }
+        Poll::Pending
     }
+}
 
-    /// Flush pending data on this stream. libp2p-quic sends out data as soon as
-    /// possible, so this method does nothing.
-    fn flush_substream(
-        &self,
-        _cx: &mut Context<'_>,
-        _substream: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+impl fmt::Debug for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Connection").finish()
     }
+}
 
-    /// Flush all pending data to the peer. libp2p-quic sends out data as soon
-    /// as possible, so this method does nothing.
-    fn flush_all(&self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+impl Drop for Connection {
+    fn drop(&mut self) {
+        // TODO: don't do that if already drained
+        // We send a message to the endpoint.
+        self.endpoint.report_quinn_event_non_block(
+            self.connection_id,
+            quinn_proto::EndpointEvent::drained(),
+        );
     }
+}
 
-    /// Close the connection. Once this function is called, it is a logic error
-    /// to call other methods on this object.
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner().close(cx)
-    }
+/// Event generated by the [`Connection`].
+#[derive(Debug)]
+pub(crate) enum ConnectionEvent {
+    /// Now connected to the remote. Can only happen if [`Connection::is_handshaking`] was
+    /// returning `true`.
+    Connected,
+
+    /// Connection has been closed and can no longer be used.
+    ConnectionLost(Error),
+
+    /// Generated after [`Connection::pop_incoming_substream`] has been called and has returned
+    /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
+    StreamAvailable,
+    /// Generated after [`Connection::pop_outgoing_substream`] has been called and has returned
+    /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
+    StreamOpened,
+
+    StreamReadable(quinn_proto::StreamId),
+    StreamWritable(quinn_proto::StreamId),
+    StreamFinished(quinn_proto::StreamId),
 }

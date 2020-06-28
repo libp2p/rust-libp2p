@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![recursion_limit = "1024"]
+
 //! Implementation of the libp2p `Transport` and `StreamMuxer` traits for QUIC.
 //!
 //! # Usage
@@ -49,44 +51,19 @@
 //! `Endpoint` manages a background task that processes all incoming packets.  Each
 //! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
-#![deny(
-    const_err,
-    deprecated,
-    improper_ctypes,
-    non_shorthand_field_patterns,
-    nonstandard_style,
-    no_mangle_generic_items,
-    renamed_and_removed_lints,
-    unknown_lints,
-    type_alias_bounds,
-    unconditional_recursion,
-    while_true,
-    elided_lifetimes_in_paths,
-    missing_copy_implementations,
-    missing_debug_implementations,
-    missing_docs,
-    single_use_lifetimes,
-    trivial_casts,
-    trivial_numeric_casts,
-    rust_2018_idioms,
-    unused,
-    future_incompatible,
-    clippy::all
-)]
-#![forbid(unsafe_code, intra_doc_link_resolution_failure)]
-
-#[cfg(not(feature = "tracing"))]
-use log::{debug, error, info, trace, warn};
-#[cfg(feature = "tracing")]
-use tracing::{debug, error, info, trace, warn};
+#![deny(unsafe_code)]
 
 mod connection;
 mod endpoint;
 mod error;
-mod socket;
-mod stream;
-mod stream_map;
-pub use connection::{Outbound, QuicMuxer as Muxer, Substream};
-pub use endpoint::{Config, Endpoint, JoinHandle, Listener};
+mod muxer;
+mod upgrade;
+mod x509;
+
+pub mod transport;
+
+pub use endpoint::{Config, Endpoint};
 pub use error::Error;
-pub use stream_map::Upgrade;
+pub use muxer::QuicMuxer;
+pub use transport::QuicTransport;
+pub use upgrade::Upgrade;

@@ -19,36 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! TLS configuration for `libp2p-quic`.
-#![deny(
-    const_err,
-    improper_ctypes,
-    non_shorthand_field_patterns,
-    nonstandard_style,
-    no_mangle_generic_items,
-    renamed_and_removed_lints,
-    unknown_lints,
-    type_alias_bounds,
-    unconditional_recursion,
-    while_true,
-    elided_lifetimes_in_paths,
-    missing_copy_implementations,
-    missing_debug_implementations,
-    missing_docs,
-    single_use_lifetimes,
-    trivial_casts,
-    trivial_numeric_casts,
-    rust_2018_idioms,
-    unused,
-    future_incompatible,
-    clippy::all
-)]
-#![forbid(unsafe_code)]
 
 mod certificate;
 mod verifier;
 
 use std::sync::Arc;
 use thiserror::Error;
+
 pub use verifier::extract_peerid_or_panic;
 
 const LIBP2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
@@ -56,6 +33,7 @@ const LIBP2P_SIGNING_PREFIX_LENGTH: usize = LIBP2P_SIGNING_PREFIX.len();
 const LIBP2P_OID_BYTES: &[u8] = &[43, 6, 1, 4, 1, 131, 162, 90, 1, 1];
 
 /// Error creating a configuration
+// TODO: remove this; what is the user supposed to do with this error?
 #[derive(Debug, Error)]
 pub enum ConfigError {
     /// TLS private key or certificate rejected
@@ -70,7 +48,8 @@ pub enum ConfigError {
 }
 
 fn make_client_config(
-    certificate: rustls::Certificate, key: rustls::PrivateKey,
+    certificate: rustls::Certificate,
+    key: rustls::PrivateKey,
     verifier: Arc<verifier::Libp2pCertificateVerifier>,
 ) -> Result<rustls::ClientConfig, rustls::TLSError> {
     let mut crypto = rustls::ClientConfig::new();
@@ -83,7 +62,8 @@ fn make_client_config(
 }
 
 fn make_server_config(
-    certificate: rustls::Certificate, key: rustls::PrivateKey,
+    certificate: rustls::Certificate,
+    key: rustls::PrivateKey,
     verifier: Arc<verifier::Libp2pCertificateVerifier>,
 ) -> Result<rustls::ServerConfig, rustls::TLSError> {
     let mut crypto = rustls::ServerConfig::new(verifier);
