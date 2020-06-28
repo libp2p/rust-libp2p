@@ -50,6 +50,7 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+use tracing::{debug, error, info, trace, warn};
 
 /// Represents the configuration for the [`Endpoint`].
 #[derive(Debug, Clone)]
@@ -163,15 +164,15 @@ impl Endpoint {
 
         // TODO: IP address stuff
         if local_socket_addr.ip().is_unspecified() {
-            log::info!("returning all local IPs for unspecified address");
+            tracing::info!("returning all local IPs for unspecified address");
             let suffixes = [Protocol::Udp(local_socket_addr.port()), Protocol::Quic];
             let local_addresses = host_addresses(&suffixes).map_err(TransportError::Other)?;
             for (_, _, address) in local_addresses {
-                log::info!("sending address {:?}", address);
+                tracing::info!("sending address {:?}", address);
                 send_addr(address)
             }
         } else {
-            log::info!("sending address {:?}", multiaddr);
+            tracing::info!("sending address {:?}", multiaddr);
             send_addr(multiaddr)
         }
 
@@ -210,6 +211,7 @@ impl Endpoint {
             .send(ToEndpoint::Dial { addr, result: tx })
             .await
             .expect("background task has crashed");
+        info!("Sent dial message, awaiting response");
         rx.await.expect("background task has crashed")
     }
 
@@ -439,13 +441,15 @@ async fn background_task(
     loop {
         // Start by flushing `next_packet_out`.
         if let Some((destination, data)) = next_packet_out.take() {
+            tracing::trace!("sending {} bytes to {}", data.len(), destination);
             // We block the current task until the packet is sent. This way, if the
             // network interface is too busy, we back-pressure all of our internal
             // channels.
             // TODO: set ECN bits; there is no support for them in the ecosystem right now
+            // TODO: use a circular buffer instead.
             match udp_socket.send_to(&data, destination).await {
                 Ok(n) if n == data.len() => {}
-                Ok(_) => log::error!(
+                Ok(_) => tracing::error!(
                     "QUIC UDP socket violated expectation that packets are always fully \
                     transferred"
                 ),
@@ -454,14 +458,15 @@ async fn background_task(
                 // printing a log message. The packet gets discarded in case of error, but we are
                 // robust to packet losses and it is consequently not a logic error to process with
                 // normal operations.
-                Err(err) => log::error!("Error while sending on QUIC UDP socket: {:?}", err),
+                Err(err) => tracing::error!("Error while sending on QUIC UDP socket: {:?}", err),
             }
         }
 
         // The endpoint might request packets to be sent out. This is handled in priority to avoid
         // buffering up packets.
         if let Some(packet) = endpoint.poll_transmit() {
-            debug_assert!(next_packet_out.is_none());
+            tracing::trace!("Got a new packet to send");
+            assert!(next_packet_out.is_none());
             next_packet_out = Some((packet.destination, packet.contents));
             continue;
         }
@@ -470,11 +475,14 @@ async fn background_task(
             message = receiver.next() => {
                 // Received a message from a different part of the code requesting us to
                 // do something.
+                span!("message received");
                 match message {
                     // Shut down if the endpoint has shut down.
                     None => return,
 
                     Some(ToEndpoint::Dial { addr, result }) => {
+                        span!("dialing", addr = display(addr), side = debug(quinn_proto::Side::Client));
+                        info!("received dialout request");
                         // This `"l"` seems necessary because an empty string is an invalid domain
                         // name. While we don't use domain names, the underlying rustls library
                         // is based upon the assumption that we do.
@@ -483,25 +491,32 @@ async fn background_task(
                                 Ok(c) => c,
                                 Err(err) => {
                                     let _ = result.send(Err(err));
+                                    warn!("QUIC connection failure");
                                     continue;
                                 }
                             };
 
+                        info!("received connection ID: {:?}", connection_id);
                         let endpoint_arc = match endpoint_weak.upgrade() {
                             Some(ep) => ep,
                             None => return, // Shut down the task if the endpoint is dead.
                         };
 
-                        debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
+                        info!("endpoint is alive");
+
+                        assert_eq!(connection.side(), quinn_proto::Side::Client);
                         let (tx, rx) = mpsc::channel(16);
                         let connection = Connection::from_quinn_connection(endpoint_arc, connection, connection_id, rx);
                         alive_connections.insert(connection_id, tx);
                         let _ = result.send(Ok(connection));
+                        info!("sent reply to dialer");
                     }
 
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
-                        debug_assert!(alive_connections.contains_key(&connection_id));
+                        if !alive_connections.contains_key(&connection_id) {
+                            continue
+                        }
                         // We "drained" event indicates that the connection no longer exists and
                         // its ID can be reclaimed.
                         let is_drained_event = event.is_drained();
@@ -509,15 +524,15 @@ async fn background_task(
                             alive_connections.remove(&connection_id);
                         }
                         if let Some(event_back) = endpoint.handle_event(connection_id, event) {
-                            debug_assert!(!is_drained_event);
+                            assert!(!is_drained_event);
                             // TODO: don't await here /!\
-                            alive_connections.get_mut(&connection_id).unwrap().send(event_back).await;
+                            let _ =  alive_connections.get_mut(&connection_id).unwrap().clone().try_send(event_back);
                         }
                     }
 
                     // Data needs to be sent on the UDP socket.
                     Some(ToEndpoint::SendUdpPacket { destination, data }) => {
-                        debug_assert!(next_packet_out.is_none());
+                        assert!(next_packet_out.is_none());
                         next_packet_out = Some((destination, data));
                         continue;
                     }
@@ -539,6 +554,7 @@ async fn background_task(
                     if active { new_connections.poll_ready(cx) } else { Poll::Pending }
                 }).fuse()
             } => {
+                span!("time to accept connection");
                 if readiness.is_err() {
                     // new_connections channel has been dropped, meaning that the endpoint has
                     // been destroyed.
@@ -558,13 +574,15 @@ async fn background_task(
                     // Errors on the socket are expected to never happen, and we handle them by
                     // simply printing a log message.
                     Err(err) => {
-                        log::error!("Error while receive on QUIC UDP socket: {:?}", err);
+                        tracing::error!("Error while receive on QUIC UDP socket: {:?}", err);
                         continue;
                     },
                 };
+                span!("received packet", len = display(packet_len), src = display(packet_src));
+                tracing::trace!("processing");
 
                 // Received a UDP packet from the socket.
-                debug_assert!(packet_len <= socket_recv_buffer.len());
+                assert!(packet_len <= socket_recv_buffer.len());
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
                 // TODO: ECN bits aren't handled
                 match endpoint.handle(Instant::now(), packet_src, None, packet) {
@@ -572,20 +590,23 @@ async fn background_task(
                     Some((connec_id, quinn_proto::DatagramEvent::ConnectionEvent(event))) => {
                         // Event to send to an existing connection.
                         if let Some(sender) = alive_connections.get_mut(&connec_id) {
-                            let _ = sender.send(event).await; // TODO: don't await here /!\
+                            let _ = sender.clone().try_send(event);
                         } else {
-                            log::error!("State mismatch: event for closed connection");
+                            tracing::error!("State mismatch: event for closed connection");
                         }
                     },
                     Some((connec_id, quinn_proto::DatagramEvent::NewConnection(connec))) => {
                         // A new connection has been received. `connec_id` is a newly-allocated
                         // identifier.
-                        debug_assert_eq!(connec.side(), quinn_proto::Side::Server);
+                        assert_eq!(connec.side(), quinn_proto::Side::Server);
                         let (tx, rx) = mpsc::channel(16);
                         alive_connections.insert(connec_id, tx);
                         let endpoint_arc = match endpoint_weak.upgrade() {
                             Some(ep) => ep,
-                            None => return, // Shut down the task if the endpoint is dead.
+                            None => {
+                                tracing::trace!("endpoint is dead, exiting");
+                                return // Shut down the task if the endpoint is dead.
+                            }
                         };
                         let connection = Connection::from_quinn_connection(endpoint_arc, connec, connec_id, rx);
 
@@ -594,8 +615,10 @@ async fn background_task(
                         // to the `new_connections` channel. We call `endpoint.accept()` only once
                         // the element has successfully been sent on `new_connections`.
                         queued_new_connections.push_back(Either::Left(connection));
+                        tracing::trace!("connection queued");
                     },
                 }
+                tracing::trace!("receive processing complete");
             }
         }
     }

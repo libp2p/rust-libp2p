@@ -67,7 +67,7 @@ impl QuicMuxer {
     ///
     /// Panics if `connection.is_handshaking()` returns `true`.
     pub(crate) fn from_connection(connection: Connection) -> Self {
-        assert!(!connection.is_handshaking());
+        // assert!(!connection.is_handshaking());
 
         QuicMuxer {
             inner: Mutex::new(QuicMuxerInner {
@@ -88,6 +88,7 @@ impl StreamMuxer for QuicMuxer {
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         // We use `poll_inbound` to perform the background processing of the entire connection.
         let mut inner = self.inner.lock();
+        tracing::trace!("poll_inbound called for side {:?}", inner.connection.side());
 
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {

@@ -26,6 +26,7 @@ thiserror = "1.0.15"
 untrusted = "0.7.0"
 webpki = "0.21.2"
 yasna = "0.3.1"
+tracing = "0.1.15"
 
 # TODO: RGMLRMLG fix that crate name
 [dependencies.x509-signature]

@@ -53,6 +53,13 @@
 
 #![deny(unsafe_code)]
 
+macro_rules! span {
+	($name: expr $(,$($i: tt)+)?) => {
+		let span = ::tracing::trace_span!($name $(,$($i)+)?);
+		let _guard = span.enter();
+	}
+}
+
 mod connection;
 mod endpoint;
 mod error;

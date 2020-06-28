@@ -73,8 +73,9 @@ impl Future for Upgrade {
                 Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
                     return Poll::Ready(Err(transport::Error::Established(err)));
                 }
+                Poll::Ready(ConnectionEvent::StreamOpened) => continue,
                 // TODO: enumerate the items and explain how they can't happen
-                _ => unreachable!(),
+                Poll::Ready(e) => unreachable!("{:?}", e),
             }
         }
     }

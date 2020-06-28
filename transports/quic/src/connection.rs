@@ -125,6 +125,11 @@ impl Connection {
         }
     }
 
+    /// Returns the connection’s side (client or server)
+    pub(crate) fn side(&self) -> quinn_proto::Side {
+        self.connection.side()
+    }
+
     /// Returns the certificates sent by the remote through the underlying TLS session.
     /// Returns `None` if the connection is still handshaking.
     // TODO: it seems to happen that is_handshaking is false but this returns None
@@ -153,7 +158,7 @@ impl Connection {
     ///
     /// > **Note**: This method is also the main way to determine whether a connection is closed.
     pub(crate) fn close_reason(&self) -> Option<&Error> {
-        debug_assert!(!self.is_handshaking);
+        assert!(!self.is_handshaking);
         self.closed.as_ref()
     }
 
@@ -223,7 +228,7 @@ impl Connection {
             match Pin::new(&mut self.from_endpoint).poll_next(cx) {
                 Poll::Ready(Some(event)) => self.connection.handle_event(event),
                 Poll::Ready(None) => {
-                    debug_assert!(self.closed.is_none());
+                    assert!(self.closed.is_none());
                     let err = Error::ClosedChannel;
                     self.closed = Some(err.clone());
                     return Poll::Ready(ConnectionEvent::ConnectionLost(err));
@@ -256,7 +261,7 @@ impl Connection {
             // `to_endpoint`.
             while let Some(transmit) = self.connection.poll_transmit(now) {
                 let endpoint = self.endpoint.clone();
-                debug_assert!(self.pending_to_endpoint.is_none());
+                assert!(self.pending_to_endpoint.is_none());
                 self.pending_to_endpoint = Some(Box::pin(async move {
                     // TODO: ECN bits not handled
                     endpoint
@@ -271,7 +276,7 @@ impl Connection {
             while let Some(endpoint_event) = self.connection.poll_endpoint_events() {
                 let endpoint = self.endpoint.clone();
                 let connection_id = self.connection_id;
-                debug_assert!(self.pending_to_endpoint.is_none());
+                assert!(self.pending_to_endpoint.is_none());
                 self.pending_to_endpoint = Some(Box::pin(async move {
                     endpoint
                         .report_quinn_event(connection_id, endpoint_event)
@@ -336,7 +341,7 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::StreamOpened);
                     }
                     quinn_proto::Event::ConnectionLost { reason } => {
-                        debug_assert!(self.closed.is_none());
+                        assert!(self.closed.is_none());
                         self.is_handshaking = false;
                         let err = Error::Quinn(reason);
                         self.closed = Some(err.clone());
@@ -350,8 +355,8 @@ impl Connection {
                         return Poll::Ready(ConnectionEvent::StreamFinished(id));
                     }
                     quinn_proto::Event::Connected => {
-                        debug_assert!(self.is_handshaking);
-                        debug_assert!(!self.connection.is_handshaking());
+                        assert!(self.is_handshaking);
+                        assert!(!self.connection.is_handshaking());
                         self.is_handshaking = false;
                         return Poll::Ready(ConnectionEvent::Connected);
                     }
