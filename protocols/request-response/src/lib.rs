@@ -382,6 +382,13 @@ where
         self.connected.contains_key(peer)
     }
 
+    /// Checks whether an outbound request initiated by
+    /// [`RequestResponse::send_request`] is still pending, i.e. waiting
+    /// for a response.
+    pub fn is_pending(&self, req_id: &RequestId) -> bool {
+        self.pending_responses.contains_key(req_id)
+    }
+
     /// Returns the next request ID.
     fn next_request_id(&mut self) -> RequestId {
         let request_id = self.next_request_id;
