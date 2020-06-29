@@ -59,7 +59,10 @@ impl Future for Upgrade {
 
         loop {
             if !connection.is_handshaking() {
-				let mut certificates = connection.peer_certificates().expect("we require a certificate");
+                let mut certificates = match connection.peer_certificates() {
+                    Some(certificates) => certificates,
+                    None => continue,
+                };
                 let peer_id = x509::extract_peerid_or_panic(certificates.next().unwrap().as_der()); // TODO: bad API
                 let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                 return Poll::Ready(Ok((peer_id, muxer)));
@@ -74,7 +77,8 @@ impl Future for Upgrade {
                 Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
                     return Poll::Ready(Err(transport::Error::Established(err)));
                 }
-                Poll::Ready(ConnectionEvent::StreamOpened) | Poll::Ready(ConnectionEvent::StreamReadable(_)) => continue,
+                Poll::Ready(ConnectionEvent::StreamOpened)
+                | Poll::Ready(ConnectionEvent::StreamReadable(_)) => continue,
                 // TODO: enumerate the items and explain how they can't happen
                 Poll::Ready(e) => unreachable!("{:?}", e),
             }

@@ -45,7 +45,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt, io,
     sync::{Arc, Weak},
-    task::{Poll},
+    task::Poll,
     time::{Duration, Instant},
 };
 use tracing::{info, warn};
@@ -514,8 +514,8 @@ async fn background_task(
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
                         if !alive_connections.contains_key(&connection_id) {
-							continue
-						}
+                            continue
+                        }
                         // We "drained" event indicates that the connection no longer exists and
                         // its ID can be reclaimed.
                         let is_drained_event = event.is_drained();
