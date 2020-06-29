@@ -144,7 +144,6 @@ impl Future for Closer {
     }
 }
 
-#[cfg(any())]
 #[test]
 fn wildcard_expansion() {
     init();
@@ -309,7 +308,6 @@ fn do_test(_i: u32) {
 }
 
 #[test]
-#[cfg(any)]
 fn replace_port_0_in_returned_multiaddr_ipv4() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
@@ -333,7 +331,6 @@ fn replace_port_0_in_returned_multiaddr_ipv4() {
 }
 
 #[test]
-#[cfg(any)]
 fn replace_port_0_in_returned_multiaddr_ipv6() {
     init();
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
