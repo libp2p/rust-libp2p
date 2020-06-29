@@ -196,9 +196,12 @@ fn bootstrap() {
                                 }
                                 first = false;
                                 if ok.num_remaining == 0 {
-                                    let known = swarm.kbuckets.iter()
-                                        .map(|e| e.node.key.preimage().clone())
-                                        .collect::<HashSet<_>>();
+                                    let mut known = HashSet::new();
+                                    for b in swarm.kbuckets.iter() {
+                                        for e in b.iter() {
+                                            known.insert(e.node.key.preimage().clone());
+                                        }
+                                    }
                                     assert_eq!(expected_known, known);
                                     return Poll::Ready(())
                                 }
@@ -1050,5 +1053,49 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     assert!(records.contains(&PeerRecord {
         peer: Some(Swarm::local_peer_id(&trudy).clone()),
         record: record_trudy,
+    }));
+}
+
+/// Tests that peers are not automatically inserted into
+/// the routing table with `KademliaBucketInserts::Manual`.
+#[test]
+fn manual_bucket_inserts() {
+    let mut cfg = KademliaConfig::default();
+    cfg.set_kbucket_inserts(KademliaBucketInserts::Manual);
+    // 1 -> 2 -> [3 -> ...]
+    let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
+    // The peers and their addresses for which we expect `RoutablePeer` events.
+    let mut expected = swarms.iter().skip(2)
+        .map(|(a, s)| (a.clone(), Swarm::local_peer_id(s).clone()))
+        .collect::<HashMap<_,_>>();
+    // We collect the peers for which a `RoutablePeer` event
+    // was received in here to check at the end of the test
+    // that none of them was inserted into a bucket.
+    let mut routable = Vec::new();
+    // Start an iterative query from the first peer.
+    swarms[0].1.get_closest_peers(PeerId::random());
+    block_on(poll_fn(move |ctx| {
+        for (_, swarm) in swarms.iter_mut() {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(KademliaEvent::RoutablePeer {
+                        peer, address
+                    })) => {
+                        assert_eq!(peer, expected.remove(&address).expect("Unexpected address"));
+                        routable.push(peer);
+                        if expected.is_empty() {
+                            for peer in routable.iter() {
+                                let bucket = swarm.kbucket(peer.clone()).unwrap();
+                                assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
+                            }
+                            return Poll::Ready(())
+                        }
+                    }
+                    Poll::Ready(..) => {},
+                    Poll::Pending => break
+                }
+            }
+        }
+        Poll::Pending
     }));
 }

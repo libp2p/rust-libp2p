@@ -29,8 +29,8 @@
 //! implementation of the `Transport` trait.
 //!
 //! Whenever we want to dial an address through the `DnsConfig` and that address contains a
-//! `/dns4/` or `/dns6/` component, a DNS resolve will be performed and the component will be
-//! replaced with respectively an `/ip4/` or an `/ip6/` component.
+//! `/dns/`, `/dns4/`, or `/dns6/` component, a DNS resolve will be performed and the component
+//! will be replaced with `/ip4/` and/or `/ip6/` components.
 //!
 
 use futures::{prelude::*, channel::oneshot, future::BoxFuture};
@@ -45,8 +45,8 @@ use std::{error, fmt, io, net::ToSocketAddrs};
 /// Represents the configuration for a DNS transport capability of libp2p.
 ///
 /// This struct implements the `Transport` trait and holds an underlying transport. Any call to
-/// `dial` with a multiaddr that contains `/dns4/` or `/dns6/` will be first be resolved, then
-/// passed to the underlying transport.
+/// `dial` with a multiaddr that contains `/dns/`, `/dns4/`, or `/dns6/` will be first be resolved,
+/// then passed to the underlying transport.
 ///
 /// Listening is unaffected.
 #[derive(Clone)]
