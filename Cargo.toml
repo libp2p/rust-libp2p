@@ -23,6 +23,7 @@ default = [
     "ping",
     "plaintext",
     "pnet",
+    "request-response",
     "secio",
     "secp256k1",
     "tcp-async-std",
@@ -43,6 +44,7 @@ noise = ["libp2p-noise"]
 ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
+request-response = ["libp2p-request-response"]
 secio = ["libp2p-secio"]
 tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
@@ -67,6 +69,7 @@ libp2p-noise = { version = "0.19.1", path = "protocols/noise", optional = true }
 libp2p-ping = { version = "0.19.3", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.19.1", path = "protocols/plaintext", optional = true }
 libp2p-pnet = { version = "0.19.1", path = "protocols/pnet", optional = true }
+libp2p-request-response = { version = "0.1.0", path = "protocols/request-response", optional = true }
 libp2p-secio = { version = "0.19.2", path = "protocols/secio", default-features = false, optional = true }
 libp2p-swarm = { version = "0.19.1", path = "swarm" }
 libp2p-uds = { version = "0.19.2", path = "transports/uds", optional = true }
@@ -107,6 +110,7 @@ members = [
     "protocols/noise",
     "protocols/ping",
     "protocols/plaintext",
+    "protocols/request-response",
     "protocols/secio",
     "swarm",
     "transports/dns",
