@@ -24,7 +24,7 @@ use libp2p_core::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
-    ops::{Add, Index, IndexMut, Range},
+    ops::{Index, IndexMut, Range},
 };
 use wasm_timer::Instant;
 
@@ -114,7 +114,7 @@ impl ClosestDisjointPeersIter {
             }
 
             for (i, iter) in &mut self.iters.iter_mut().enumerate() {
-                if i != (*initiated_by).into() {
+                if IteratorIndex(i) != *initiated_by {
                     // This iterator never triggered an actual request to the
                     // given peer - thus ignore the returned boolean.
                     iter.on_failure(peer);
@@ -162,7 +162,7 @@ impl ClosestDisjointPeersIter {
             }
 
             for (i, iter) in &mut self.iters.iter_mut().enumerate() {
-                if i != (*initiated_by).into() {
+                if IteratorIndex(i) != *initiated_by {
                     // Only report the success to all remaining not-first
                     // iterators. Do not pass the `closer_peers` in order to
                     // uphold the S/Kademlia disjoint paths guarantee.
@@ -322,26 +322,6 @@ impl ClosestDisjointPeersIter {
 /// Index into the [`ClosestDisjointPeersIter`] `iters` vector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct IteratorIndex(usize);
-
-impl From<usize> for IteratorIndex {
-    fn from(i: usize) -> Self {
-        IteratorIndex(i)
-    }
-}
-
-impl From<IteratorIndex> for usize {
-    fn from(i: IteratorIndex) -> Self {
-        i.0
-    }
-}
-
-impl Add<usize> for IteratorIndex {
-    type Output = Self;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        (self.0 + rhs).into()
-    }
-}
 
 impl Index<IteratorIndex> for Vec<ClosestPeersIter> {
     type Output = ClosestPeersIter;

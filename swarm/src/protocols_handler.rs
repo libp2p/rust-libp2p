@@ -144,7 +144,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Notifies the handler of a change in the address of the remote.
     fn inject_address_change(&mut self, _new_address: &Multiaddr) {}
 
-    /// Indicates to the handler that upgrading a substream to the given protocol has failed.
+    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
@@ -152,6 +152,14 @@ pub trait ProtocolsHandler: Send + 'static {
             <Self::OutboundProtocol as OutboundUpgradeSend>::Error
         >
     );
+
+    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::InboundProtocol as InboundUpgradeSend>::Error
+        >
+    ) {}
 
     /// Returns until when the connection should be kept alive.
     ///
@@ -240,7 +248,7 @@ pub struct SubstreamProtocol<TUpgrade> {
 }
 
 impl<TUpgrade> SubstreamProtocol<TUpgrade> {
-    /// Create a new `ListenProtocol` from the given upgrade.
+    /// Create a new `SubstreamProtocol` from the given upgrade.
     ///
     /// The default timeout for applying the given upgrade on a substream is
     /// 10 seconds.

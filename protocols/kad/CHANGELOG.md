@@ -1,0 +1,26 @@
+# 0.21.0 [????-??-??]
+
+- More control and insight for k-buckets
+  ([PR 1628](https://github.com/libp2p/rust-libp2p/pull/1628)).
+  In particular, `Kademlia::kbuckets_entries` has been removed and
+  replaced by `Kademlia::kbuckets`/`Kademlia::kbucket` which provide
+  more information than just the peer IDs. Furthermore `Kademlia::add_address`
+  now returns a result and two new events, `KademliaEvent::RoutablePeer`
+  and `KademliaEvent::PendingRoutablePeer` are introduced (but are not
+  required to be acted upon in order to retain existing behaviour).
+  For more details, see the PR description.
+
+# 0.20.1 [2020-06-23]
+
+Maintenance release ([PR 1623](https://github.com/libp2p/rust-libp2p/pull/1623)).
+
+# 0.20.0 [2020-06-22]
+
+- Optionally require iterative queries to use disjoint paths based
+  on S/Kademlia for increased resiliency in the presence of potentially
+  adversarial nodes ([PR 1473](https://github.com/libp2p/rust-libp2p/pull/1473)).
+
+- Re-export several types
+  ([PR 1595](https://github.com/libp2p/rust-libp2p/pull/1595)).
+
+- Updated dependencies.
