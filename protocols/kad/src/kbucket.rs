@@ -170,31 +170,11 @@ where
         }
     }
 
-    /// Returns an iterator over all the entries in the routing table.
-    pub fn iter<'a>(&'a mut self) -> impl Iterator<Item = EntryRefView<'a, TKey, TVal>> {
-        let applied_pending = &mut self.applied_pending;
-        self.buckets.iter_mut().flat_map(move |table| {
-            if let Some(applied) = table.apply_pending() {
-                applied_pending.push_back(applied)
-            }
-            let table = &*table;
-            table.iter().map(move |(n, status)| {
-                EntryRefView {
-                    node: NodeRefView {
-                        key: &n.key,
-                        value: &n.value
-                    },
-                    status
-                }
-            })
-        })
-    }
-
-    /// Returns a by-reference iterator over all buckets.
+    /// Returns an iterator over all buckets.
     ///
     /// The buckets are ordered by proximity to the `local_key`, i.e. the first
     /// bucket is the closest bucket (containing at most one key).
-    pub fn buckets<'a>(&'a mut self) -> impl Iterator<Item = KBucketRef<'a, TKey, TVal>> + 'a {
+    pub fn iter<'a>(&'a mut self) -> impl Iterator<Item = KBucketRef<'a, TKey, TVal>> + 'a {
         let applied_pending = &mut self.applied_pending;
         self.buckets.iter_mut().enumerate().map(move |(i, b)| {
             if let Some(applied) = b.apply_pending() {
@@ -205,6 +185,25 @@ where
                 bucket: b
             }
         })
+    }
+
+    /// Returns the bucket for the distance to the given key.
+    ///
+    /// Returns `None` if the given key refers to the local key.
+    pub fn bucket<K>(&mut self, key: &K) -> Option<KBucketRef<'_, TKey, TVal>>
+    where
+        K: AsRef<KeyBytes>,
+    {
+        let d = self.local_key.as_ref().distance(key);
+        if let Some(index) = BucketIndex::new(&d) {
+            let bucket = &mut self.buckets[index.0];
+            if let Some(applied) = bucket.apply_pending() {
+                self.applied_pending.push_back(applied)
+            }
+            Some(KBucketRef { bucket, index })
+        } else {
+            None
+        }
     }
 
     /// Consumes the next applied pending entry, if any.
@@ -437,17 +436,22 @@ where
     }
 }
 
-/// A reference to a bucket in a `KBucketsTable`.
-pub struct KBucketRef<'a, TPeerId, TVal> {
+/// A reference to a bucket in a [`KBucketsTable`].
+pub struct KBucketRef<'a, TKey, TVal> {
     index: BucketIndex,
-    bucket: &'a mut KBucket<TPeerId, TVal>
+    bucket: &'a mut KBucket<TKey, TVal>
 }
 
-impl<TKey, TVal> KBucketRef<'_, TKey, TVal>
+impl<'a, TKey, TVal> KBucketRef<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone
 {
+    /// Checks whether the bucket is empty.
+    pub fn is_empty(&self) -> bool {
+        self.num_entries() == 0
+    }
+
     /// Returns the number of entries in the bucket.
     pub fn num_entries(&self) -> usize {
         self.bucket.num_entries()
@@ -471,6 +475,19 @@ where
     /// rise to a random key falling into this bucket. See [`key::Key::for_distance`].
     pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         self.index.rand_distance(rng)
+    }
+
+    /// Returns an iterator over the entries in the bucket.
+    pub fn iter(&'a self) -> impl Iterator<Item = EntryRefView<'a, TKey, TVal>> {
+        self.bucket.iter().map(move |(n, status)| {
+            EntryRefView {
+                node: NodeRefView {
+                    key: &n.key,
+                    value: &n.value
+                },
+                status
+            }
+        })
     }
 }
 

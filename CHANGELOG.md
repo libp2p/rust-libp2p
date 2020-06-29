@@ -10,6 +10,7 @@
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
 - [`libp2p-plaintext` CHANGELOG](protocols/plaintext/CHANGELOG.md)
 - [`libp2p-pnet` CHANGELOG](protocols/pnet/CHANGELOG.md)
+- [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
 - [`libp2p-secio` CHANGELOG](protocols/secio/CHANGELOG.md)
 - [`libp2p-swarm` CHANGELOG](swarm/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
