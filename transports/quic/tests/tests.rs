@@ -270,15 +270,6 @@ fn do_test(_i: u32) {
         let mut stream = Outbound(&*connection).await.expect("failed");
 
         debug!("opened a stream: id {:?}", stream.id);
-        // let result = stream.read(&mut [][..]).await;
-        // let result = result.expect_err("reading from an unwritten stream cannot succeed");
-        // assert_eq!(result.kind(), std::io::ErrorKind::NotConnected);
-        // assert!(result.source().is_none());
-        // let wrapped = result.get_ref().unwrap().downcast_ref().unwrap();
-        // match wrapped {
-        //     libp2p_quic::Error::CannotReadFromUnwrittenStream => {}
-        //     e => panic!("Wrong error from reading unwritten stream: {}", e),
-        // }
         stream.write_all(&[4u8, 5, 6]).await.unwrap();
         stream.close().await.unwrap();
         let mut buf = [0u8; 3];
