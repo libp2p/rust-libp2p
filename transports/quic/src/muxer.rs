@@ -21,7 +21,6 @@
 use crate::connection::{Connection, ConnectionEvent};
 use crate::error::Error;
 
-use futures::prelude::*;
 use libp2p_core::StreamMuxer;
 use parking_lot::Mutex;
 use std::{
@@ -67,7 +66,7 @@ impl QuicMuxer {
     ///
     /// Panics if `connection.is_handshaking()` returns `true`.
     pub(crate) fn from_connection(connection: Connection) -> Self {
-        // assert!(!connection.is_handshaking());
+        assert!(!connection.is_handshaking());
 
         QuicMuxer {
             inner: Mutex::new(QuicMuxerInner {
@@ -252,7 +251,7 @@ impl StreamMuxer for QuicMuxer {
 
     fn shutdown_substream(
         &self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         substream: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner.lock();

@@ -30,7 +30,6 @@
 
 use crate::{connection::Connection, x509};
 
-use crate::error::Error;
 use async_std::net::SocketAddr;
 use either::Either;
 use futures::{
@@ -40,17 +39,16 @@ use futures::{
 };
 use libp2p_core::{
     multiaddr::{host_addresses, Multiaddr, Protocol},
-    transport::{ListenerEvent, TransportError},
-    Transport,
+    transport::TransportError,
 };
 use std::{
     collections::{HashMap, VecDeque},
     fmt, io,
     sync::{Arc, Weak},
-    task::{Context, Poll},
+    task::{Poll},
     time::{Duration, Instant},
 };
-use tracing::{debug, error, info, trace, warn};
+use tracing::{info, warn};
 
 /// Represents the configuration for the [`Endpoint`].
 #[derive(Debug, Clone)]
@@ -108,7 +106,7 @@ pub struct Endpoint {
     /// [`Endpoint::next_incoming`] are serialized.
     new_connections: Mutex<mpsc::Receiver<Either<Connection, Multiaddr>>>,
 
-    /// Copy of [`to_endpoint`], except not behind a `Mutex`. Used if we want to be guaranteed a
+    /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be guaranteed a
     /// slot in the messages buffer.
     to_endpoint2: mpsc::Sender<ToEndpoint>,
 
@@ -386,9 +384,10 @@ enum ToEndpoint {
 /// In an ideal world, we would handle a background-task-to-connection channel being full by
 /// dropping UDP packets destined to this connection, as a way to back-pressure the remote.
 /// Unfortunately, the `quinn-proto` library doesn't provide any way for us to know which
-/// connection a UDP packet is destined for before it has been turned into a [`ConnectionEvent`],
-/// and because these [`ConnectionEvent`]s are sometimes used to synchronize the states of the
-/// endpoint and connection, it would be a logic error to silently drop them.
+/// connection a UDP packet is destined for before it has been turned into a
+/// [`ConnectionEvent`](quinn_proto::ConnectionEvent) and because these
+/// [`ConnectionEvent`](quinn_proto::ConnectionEvent)s are sometimes used to synchronize the states
+/// of the endpoint and connection, it would be a logic error to silently drop them.
 ///
 /// We handle this tricky situation by simply killing connections as soon as their associated
 /// channel is full.
@@ -515,8 +514,8 @@ async fn background_task(
                     // A connection wants to notify the endpoint of something.
                     Some(ToEndpoint::ProcessConnectionEvent { connection_id, event }) => {
                         if !alive_connections.contains_key(&connection_id) {
-                            continue
-                        }
+							continue
+						}
                         // We "drained" event indicates that the connection no longer exists and
                         // its ID can be reclaimed.
                         let is_drained_event = event.is_drained();

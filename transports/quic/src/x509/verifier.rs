@@ -37,8 +37,10 @@ pub(crate) struct Libp2pCertificateVerifier;
 /// * The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
 ///
-/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
+/// The check that the [`PeerId`] matches the expected [`PeerId`] must be done by
 /// the caller.
+///
+/// [`PeerId`]: libp2p_core::PeerId
 impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
     fn verify_server_cert(
         &self,
@@ -77,7 +79,7 @@ impl rustls::ServerCertVerifier for Libp2pCertificateVerifier {
 /// * The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
 ///
-/// The check that the [`PeerId`] matches the expected `PeerId` must be done by
+/// The check that the [`PeerId`] matches the expected [`PeerId`] must be done by
 /// the caller.
 ///
 /// [`PeerId`]: libp2p_core::PeerId
@@ -215,7 +217,7 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
     })
 }
 
-/// Extracts the `PeerId` from a certificate’s libp2p extension. It is erroneous
+/// Extracts the [`PeerId`] from a certificate’s libp2p extension. It is erroneous
 /// to call this unless the certificate is known to be a well-formed X.509
 /// certificate with a valid libp2p extension. The certificate verifiers in this
 /// crate validate check this.
@@ -223,6 +225,8 @@ fn parse_libp2p_extension<'a>(extension: Input<'a>) -> Result<Libp2pExtension<'a
 /// # Panics
 ///
 /// Panics if called on an invalid certificate.
+///
+/// [`PeerId`]: libp2p_core::PeerId
 pub fn extract_peerid_or_panic(certificate: &[u8]) -> libp2p_core::PeerId {
     let r = parse_certificate(certificate)
         .expect("we already checked that the certificate was valid during the handshake; qed");

@@ -29,7 +29,6 @@
 use crate::endpoint::Endpoint;
 
 use futures::{channel::mpsc, prelude::*};
-use libp2p_core::StreamMuxer;
 use std::{
     fmt,
     net::SocketAddr,
@@ -349,7 +348,7 @@ impl Connection {
                     }
                     quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished {
                         id,
-                        stop_reason,
+                        stop_reason: _,
                     }) => {
                         // TODO: transmit `stop_reason`
                         return Poll::Ready(ConnectionEvent::StreamFinished(id));
