@@ -30,7 +30,7 @@ use libp2p_quic::{Config, Endpoint, QuicMuxer, QuicTransport};
 use std::{
     io::Result,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{Context, Poll},
 };
 use tracing::{debug, error, info, trace};

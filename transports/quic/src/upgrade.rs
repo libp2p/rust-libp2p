@@ -58,23 +58,18 @@ impl Future for Upgrade {
         };
 
         loop {
-            if !connection.is_handshaking() {
-                let mut certificates = match connection.peer_certificates() {
-                    Some(certificates) => certificates,
-                    None => continue,
-                };
-                let peer_id = x509::extract_peerid_or_panic(certificates.next().unwrap().as_der()); // TODO: bad API
-                let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
-                return Poll::Ready(Ok((peer_id, muxer)));
-            }
-
             match Connection::poll_event(connection, cx) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(ConnectionEvent::Connected) => {
-                    // `is_handshaking()` will return `false` at the next loop iteration.
-                    continue;
+                    let mut certificates = connection.peer_certificates().unwrap();
+                    let peer_id =
+                        x509::extract_peerid_or_panic(certificates.next().unwrap().as_der()); // TODO: bad API
+                    let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
+                    self.connection = None;
+                    return Poll::Ready(Ok((peer_id, muxer)));
                 }
                 Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
+                    self.connection = None;
                     return Poll::Ready(Err(transport::Error::Established(err)));
                 }
                 Poll::Ready(ConnectionEvent::StreamOpened)
