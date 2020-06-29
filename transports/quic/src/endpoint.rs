@@ -109,13 +109,6 @@ pub struct Endpoint {
     /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be guaranteed a
     /// slot in the messages buffer.
     to_endpoint2: mpsc::Sender<ToEndpoint>,
-
-    /// Configuration passed at initialization.
-    // TODO: remove?
-    config: Config,
-    /// Multiaddr of the local UDP socket passed in the configuration at initialization after it
-    /// has potentially been modified to handle port number `0`.
-    local_multiaddr: Multiaddr,
 }
 
 impl Endpoint {
@@ -149,8 +142,6 @@ impl Endpoint {
             to_endpoint: Mutex::new(to_endpoint_tx),
             to_endpoint2,
             new_connections: Mutex::new(new_connections_rx),
-            config: config.clone(),
-            local_multiaddr: config.multiaddr.clone(), // TODO: no
         });
 
         let send_addr = |e| {
