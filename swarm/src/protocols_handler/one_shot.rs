@@ -33,14 +33,14 @@ use wasm_timer::Instant;
 
 /// A `ProtocolsHandler` that opens a new substream for each request.
 // TODO: Debug
-pub struct OneShotHandler<TInbound, TOutbound, TEvent, TInfo>
+pub struct OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TOutbound: OutboundUpgradeSend,
 {
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInbound>,
     /// If `Some`, something bad happened and we should shut down the handler with an error.
-    pending_error: Option<(ProtocolsHandlerUpgrErr<<TOutbound as OutboundUpgradeSend>::Error>, TInfo)>,
+    pending_error: Option<ProtocolsHandlerUpgrErr<<TOutbound as OutboundUpgradeSend>::Error>>,
     /// Queue of events to produce in `poll()`.
     events_out: SmallVec<[TEvent; 4]>,
     /// Queue of outbound substreams to open.
@@ -55,8 +55,8 @@ where
     config: OneShotHandlerConfig,
 }
 
-impl<TInbound, TOutbound, TEvent, TInfo>
-    OneShotHandler<TInbound, TOutbound, TEvent, TInfo>
+impl<TInbound, TOutbound, TEvent>
+    OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TOutbound: OutboundUpgradeSend,
 {
@@ -105,8 +105,8 @@ where
     }
 }
 
-impl<TInbound, TOutbound, TEvent, TInfo> Default
-    for OneShotHandler<TInbound, TOutbound, TEvent, TInfo>
+impl<TInbound, TOutbound, TEvent> Default
+    for OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TOutbound: OutboundUpgradeSend,
     TInbound: InboundUpgradeSend + Default,
@@ -119,34 +119,25 @@ where
     }
 }
 
-/// The events emitted by the [`OneShotHandler`].
-pub enum OneShotEvent<TEvent, TInfo> {
-    /// An inbound or outbound upgrade succeeded.
-    Success(TEvent),
-    /// An outbound upgrade (i.e. request) timed out.
-    Timeout(TInfo),
-}
-
-impl<TInbound, TOutbound, TEvent, TInfo> ProtocolsHandler
-    for OneShotHandler<TInbound, TOutbound, TEvent, TInfo>
+impl<TInbound, TOutbound, TEvent> ProtocolsHandler
+    for OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TInbound: InboundUpgradeSend + Send + 'static,
-    TOutbound: OutboundUpgradeSend + OneShotOutboundInfo<TInfo>,
+    TOutbound: OutboundUpgradeSend,
     TInbound::Output: Into<TEvent>,
     TOutbound::Output: Into<TEvent>,
     TOutbound::Error: error::Error + Send + 'static,
     SubstreamProtocol<TInbound>: Clone,
     TEvent: Send + 'static,
-    TInfo: Send + 'static,
 {
     type InEvent = TOutbound;
-    type OutEvent = OneShotEvent<TEvent, TInfo>;
+    type OutEvent = TEvent;
     type Error = ProtocolsHandlerUpgrErr<
         <Self::OutboundProtocol as OutboundUpgradeSend>::Error,
     >;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
-    type OutboundOpenInfo = TInfo;
+    type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.listen_protocol.clone()
@@ -184,13 +175,13 @@ where
 
     fn inject_dial_upgrade_error(
         &mut self,
-        info: Self::OutboundOpenInfo,
+        _info: Self::OutboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<
             <Self::OutboundProtocol as OutboundUpgradeSend>::Error,
         >,
     ) {
         if self.pending_error.is_none() {
-            self.pending_error = Some((error, info));
+            self.pending_error = Some(error);
         }
     }
 
@@ -204,19 +195,13 @@ where
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
-        if let Some((err, info)) = self.pending_error.take() {
-            if let ProtocolsHandlerUpgrErr::Timeout = &err {
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                    OneShotEvent::Timeout(info)
-                ))
-            } else {
-                return Poll::Ready(ProtocolsHandlerEvent::Close(err))
-            }
+        if let Some(err) = self.pending_error.take() {
+            return Poll::Ready(ProtocolsHandlerEvent::Close(err))
         }
 
         if !self.events_out.is_empty() {
             return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                OneShotEvent::Success(self.events_out.remove(0)),
+                self.events_out.remove(0)
             ));
         } else {
             self.events_out.shrink_to_fit();
@@ -226,12 +211,11 @@ where
             if self.dial_negotiated < self.max_dial_negotiated {
                 self.dial_negotiated += 1;
                 let upgrade = self.dial_queue.remove(0);
-                let info = upgrade.info();
                 return Poll::Ready(
                     ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(upgrade)
                             .with_timeout(self.config.outbound_substream_timeout),
-                        info,
+                        info: (),
                     },
                 );
             }
@@ -258,21 +242,6 @@ impl Default for OneShotHandlerConfig {
             keep_alive_timeout: Duration::from_secs(10),
             outbound_substream_timeout: Duration::from_secs(10),
         }
-    }
-}
-
-/// Information about an outgoing request that is returned
-/// to the behaviour in case of a (non-fatal) request error.
-///
-/// This trait must be implemented by the outbound upgrade
-/// used with the `OneShotHandler`.
-pub trait OneShotOutboundInfo<T> {
-    fn info(&self) -> T;
-}
-
-impl<T> OneShotOutboundInfo<()> for T {
-    fn info(&self) -> () {
-        ()
     }
 }
 
