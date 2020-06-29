@@ -192,7 +192,6 @@ fn communicating_between_dialer_and_listener() {
 }
 
 fn do_test(_i: u32) {
-    use std::error::Error as _;
     let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
     let mut ready_tx = Some(ready_tx);
     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
@@ -215,7 +214,7 @@ fn do_test(_i: u32) {
                 }
                 ListenerEvent::Upgrade { upgrade, .. } => {
                     info!("got a connection upgrade!");
-                    let (id, mut muxer): (_, QuicMuxer) = upgrade.await.expect("upgrade failed");
+                    let (id, muxer): (_, QuicMuxer) = upgrade.await.expect("upgrade failed");
                     info!("got a new muxer!");
                     let muxer = Arc::new(muxer);
                     let mut socket: QuicStream =
@@ -260,7 +259,7 @@ fn do_test(_i: u32) {
         let quic_endpoint = QuicTransport(Endpoint::new(quic_config).unwrap());
         // Obtain a future socket through dialing
         error!("Dialing a Connection: {:?}", addr);
-        let (peer_id, mut connection) = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
+        let (peer_id, connection) = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
         let connection = Arc::new(connection);
         {
             let cloned = connection.clone();
