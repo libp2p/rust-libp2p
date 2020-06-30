@@ -1,4 +1,7 @@
-# 0.21.0 [????-??-??]
+# 0.21.0 [2020-06-30]
+
+- Remove `KademliaEvent::Discovered`
+  ([PR 1632](https://github.com/libp2p/rust-libp2p/pull/1632))
 
 - More control and insight for k-buckets
   ([PR 1628](https://github.com/libp2p/rust-libp2p/pull/1628)).

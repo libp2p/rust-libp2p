@@ -1,4 +1,6 @@
-# 0.20.0 [????-??-??]
+# 0.20.0 [2020-06-30]
+
+- Update to `libp2p-core-0.20.0`.
 
 - Add `ProtocolsHandler::inject_listen_upgrade_error`, the inbound
 analogue of `ProtocolsHandler::inject_dial_upgrade_error`, with an

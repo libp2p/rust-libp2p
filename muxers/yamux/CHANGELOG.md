@@ -1,3 +1,7 @@
+# 0.20.0 [2020-06-30]
+
+- Updated dependencies.
+
 # 0.19.1 [2020-06-22]
 
 Deprecated method `Yamux::is_remote_acknowledged` has been removed
