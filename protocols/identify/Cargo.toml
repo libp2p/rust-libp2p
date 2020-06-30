@@ -19,7 +19,7 @@ smallvec = "1.0"
 wasm-timer = "0.2"
 
 [dev-dependencies]
-async-std = "1.5.0"
+async-std = "1.6.2"
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-secio = { path = "../../protocols/secio" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }

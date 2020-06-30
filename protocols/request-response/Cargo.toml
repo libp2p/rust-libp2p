@@ -1,8 +1,8 @@
 [package]
-name = "libp2p-mplex"
+name = "libp2p-request-response"
 edition = "2018"
-description = "Mplex multiplexing protocol for libp2p"
-version = "0.19.2"
+description = "Generic Request/Response Protocols"
+version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,15 +10,16 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.5"
-fnv = "1.0"
+async-trait = "0.1"
 futures = "0.3.1"
-futures_codec = "0.4"
 libp2p-core = { version = "0.19.2", path = "../../core" }
-log = "0.4"
-parking_lot = "0.10"
-unsigned-varint = { version = "0.4", features = ["futures-codec"] }
+libp2p-swarm = { version = "0.19.1", path = "../../swarm" }
+smallvec = "1.4"
+wasm-timer = "0.2"
 
 [dev-dependencies]
 async-std = "1.6.2"
+libp2p-noise = { path = "../noise" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"] }
+libp2p-yamux = { path = "../../muxers/yamux" }
+rand = "0.7"
