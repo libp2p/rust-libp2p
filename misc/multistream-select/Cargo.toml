@@ -18,7 +18,7 @@ smallvec = "1.0"
 unsigned-varint = "0.4"
 
 [dev-dependencies]
-async-std = "1.5.0"
+async-std = "1.6.2"
 quickcheck = "0.9.0"
 rand = "0.7.2"
 rw-stream-sink = "0.2.1"
