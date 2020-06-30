@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::muxing::{StreamMuxer, SubstreamRef, substream_from_ref};
+use crate::muxing::{StreamMuxer, StreamMuxerEvent, SubstreamRef, substream_from_ref};
 use futures::prelude::*;
+use multiaddr::Multiaddr;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
@@ -95,6 +96,12 @@ where
         /// destroyed or `close_graceful` is called.
         substream: Substream<TMuxer>,
     },
+
+    /// Address to the remote has changed. The previous one is now obsolete.
+    ///
+    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
+    /// >           can change their IP address while retaining the same QUIC connection.
+    AddressChange(Multiaddr),
 }
 
 /// Identifier for a substream being opened.
@@ -145,13 +152,15 @@ where
     /// Provides an API similar to `Future`.
     pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
         // Polling inbound substream.
-        match self.inner.poll_inbound(cx) {
-            Poll::Ready(Ok(substream)) => {
+        match self.inner.poll_event(cx) {
+            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
                 let substream = substream_from_ref(self.inner.clone(), substream);
                 return Poll::Ready(Ok(SubstreamEvent::InboundSubstream {
                     substream,
                 }));
             }
+            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) =>
+                return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr))),
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
             Poll::Pending => {}
         }
@@ -251,6 +260,11 @@ where
                 f.debug_struct("SubstreamEvent::OutboundSubstream")
                     .field("user_data", user_data)
                     .field("substream", substream)
+                    .finish()
+            },
+            SubstreamEvent::AddressChange(address) => {
+                f.debug_struct("SubstreamEvent::AddressChange")
+                    .field("address", address)
                     .finish()
             },
         }

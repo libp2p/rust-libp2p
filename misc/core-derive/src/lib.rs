@@ -168,6 +168,19 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_address_change()`.
+    let inject_address_change_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_address_change(peer_id, connection_id, old, new); },
+                None => quote!{ self.#field_n.inject_address_change(peer_id, connection_id, old, new); },
+            })
+        })
+    };
+
     // Build the list of statements to put in the body of `inject_connection_closed()`.
     let inject_connection_closed_stmts = {
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
@@ -439,6 +452,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
                 #(#inject_connection_established_stmts);*
+            }
+
+            fn inject_address_change(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, old: &#connected_point, new: &#connected_point) {
+                #(#inject_address_change_stmts);*
             }
 
             fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {

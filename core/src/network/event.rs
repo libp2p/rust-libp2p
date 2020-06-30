@@ -155,6 +155,16 @@ where
         /// Event that was produced by the node.
         event: TOutEvent,
     },
+
+    /// An established connection has changed its address.
+    AddressChange {
+        /// The connection whose address has changed.
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        /// New endpoint of this connection.
+        new_endpoint: ConnectedPoint,
+        /// Old endpoint of this connection.
+        old_endpoint: ConnectedPoint,
+    },
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
@@ -238,6 +248,13 @@ where
                 f.debug_struct("ConnectionEvent")
                     .field("connection", connection)
                     .field("event", event)
+                    .finish()
+            }
+            NetworkEvent::AddressChange { connection, new_endpoint, old_endpoint } => {
+                f.debug_struct("AddressChange")
+                    .field("connection", connection)
+                    .field("new_endpoint", new_endpoint)
+                    .field("old_endpoint", old_endpoint)
                     .finish()
             }
         }
