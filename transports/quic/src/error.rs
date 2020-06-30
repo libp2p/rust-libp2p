@@ -47,24 +47,15 @@ pub enum Error {
     /// The stream was reset by the peer.
     #[error("Peer reset stream: code {0}")]
     Reset(quinn_proto::VarInt),
-    /// Either an attempt was made to write to a stream that was already shut down,
-    /// or a previous operation on this stream failed.
-    #[error(
-        "Use of a stream that has is no longer valid. This is a \
-                       bug in the application."
-    )]
-    ExpiredStream,
-    /// Reading from a stream that has not been written to.
-    #[error("Reading from a stream that has not been written to.")]
-    CannotReadFromUnwrittenStream,
-    /// Fatal internal error or network failure
-    #[error("Fatal internal error or network failure")]
-    NetworkFailure,
+    /// Problem finishing stream
+    #[error("Error finishing stream: {0}")]
+    Finish(#[from] quinn_proto::FinishError),
     /// Connection already being closed
     #[error("Connection already being closed")]
     ConnectionClosing,
 }
 
+#[cfg(any())]
 impl From<SendError> for Error {
     fn from(_: SendError) -> Error {
         Error::NetworkFailure
@@ -76,15 +67,14 @@ impl From<Error> for io::Error {
         match e {
             Error::IO(e) => io::Error::new(e.kind(), Error::IO(e)),
             Error::ConnectionError(e) => e.into(),
-            e @ Error::NetworkFailure
-            | e @ Error::ConnectionClosing
-            | e @ Error::ConnectError(_) => io::Error::new(ErrorKind::Other, e),
+            e @ Error::ConnectionClosing | e @ Error::ConnectError(_) => {
+                io::Error::new(ErrorKind::Other, e)
+            }
             e @ Error::Stopped(_) | e @ Error::Reset(_) | e @ Error::ConnectionLost => {
                 io::Error::new(ErrorKind::ConnectionAborted, e)
             }
-            e @ Error::ExpiredStream => io::Error::new(ErrorKind::BrokenPipe, e),
+            e @ Error::Finish(_) => io::Error::new(ErrorKind::BrokenPipe, e),
             e @ Error::AlreadyListening => io::Error::new(ErrorKind::AddrInUse, e),
-            e @ Error::CannotReadFromUnwrittenStream => io::Error::new(ErrorKind::NotConnected, e),
         }
     }
 }

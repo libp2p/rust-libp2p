@@ -46,6 +46,8 @@ struct QuicMuxerInner {
     poll_substream_opened_waker: Option<Waker>,
     /// Waker to wake if the connection is closed.
     poll_close_waker: Option<Waker>,
+    /// Count of active (writable) substreams.
+    writable_substreams: usize,
 }
 
 /// State of a single substream.
@@ -57,6 +59,10 @@ struct SubstreamState {
     write_waker: Option<Waker>,
     /// Waker to wake if the substream becomes closed.
     finished_waker: Option<Waker>,
+    /// `true` if and only if the substream has been closed for reading.
+    read_closed: bool,
+    /// `true` if and only if the substream has been closed for writing.
+    write_closed: bool,
 }
 
 impl QuicMuxer {
@@ -74,6 +80,7 @@ impl QuicMuxer {
                 substreams: Default::default(),
                 poll_substream_opened_waker: None,
                 poll_close_waker: None,
+                writable_substreams: 0,
             }),
         }
     }
@@ -87,7 +94,8 @@ impl StreamMuxer for QuicMuxer {
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         // We use `poll_inbound` to perform the background processing of the entire connection.
         let mut inner = self.inner.lock();
-        tracing::trace!("poll_inbound called for side {:?}", inner.connection.side());
+        span!("poll_inbound", side = debug(inner.connection.side()));
+        tracing::trace!("poll_inbound called");
 
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {
@@ -130,7 +138,9 @@ impl StreamMuxer for QuicMuxer {
                         if let Some(waker) = substream.finished_waker.take() {
                             waker.wake();
                         }
+                        substream.write_closed = true
                     }
+                    inner.writable_substreams -= 1;
                 }
 
                 // Do nothing as this is handled below.
@@ -140,7 +150,15 @@ impl StreamMuxer for QuicMuxer {
 
         if let Some(substream) = inner.connection.pop_incoming_substream() {
             inner.substreams.insert(substream, Default::default());
+            inner.writable_substreams += 1;
+            tracing::trace!("New substream");
             Poll::Ready(Ok(substream))
+        } else if inner.connection.is_drained() {
+            if let Some(w) = inner.poll_close_waker.take() {
+                tracing::trace!("Inner connection is drained, waking close waker");
+                w.wake()
+            }
+            Poll::Ready(Err(Error::ConnectionLost))
         } else {
             Poll::Pending
         }
@@ -160,6 +178,7 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner.lock();
         if let Some(substream) = inner.connection.pop_outgoing_substream() {
             inner.substreams.insert(substream, Default::default());
+            inner.writable_substreams += 1;
             return Poll::Ready(Ok(substream));
         }
 
@@ -251,14 +270,35 @@ impl StreamMuxer for QuicMuxer {
 
     fn shutdown_substream(
         &self,
-        _cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
+        cx: &mut Context<'_>,
+        substream_id: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner.lock();
+        let QuicMuxerInner {
+            ref mut substreams,
+            ref mut connection,
+            ..
+        } = &mut *inner;
 
-        // TODO: needs more work
-        inner.connection.shutdown_substream(*substream);
-        Poll::Ready(Ok(()))
+        let substream = substreams
+            .get_mut(substream_id)
+            .expect("using a destroyed substream");
+
+        if substream.write_closed {
+            return Poll::Ready(Ok(()));
+        }
+
+        if connection.shutdown_substream(*substream_id).is_err() {
+            substream.write_closed = true;
+            return Poll::Ready(Ok(()));
+        }
+        let waker = cx.waker();
+        match substream.finished_waker.as_mut() {
+            None => substream.finished_waker = Some(waker.clone()),
+            Some(w) if w.will_wake(waker) && false => {}
+            Some(w) => std::mem::replace(w, waker.clone()).wake(),
+        }
+        Poll::Pending
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {
@@ -288,7 +328,33 @@ impl StreamMuxer for QuicMuxer {
         // TODO: poll if closed or something
 
         let mut inner = self.inner.lock();
-        //self.connection.close();
+        if inner.connection.close_reason().is_some() || inner.connection.is_drained() {
+            return Poll::Ready(Ok(()));
+        }
+        span!("closing", side = debug(inner.connection.side()));
+        if inner.writable_substreams == 0 {
+            tracing::debug!("closing connection");
+            inner.connection.close();
+        } else {
+            tracing::debug!("shutting down pending substreams");
+            let QuicMuxerInner {
+                ref mut substreams,
+                ref mut connection,
+                ..
+            } = &mut *inner;
+            for (stream_id, waker) in substreams.iter_mut() {
+                tracing::debug!("shutting down substream {:?}", stream_id);
+                connection.shutdown_substream(*stream_id);
+                if let Some(w) = waker.write_waker.take() {
+                    w.wake()
+                }
+                waker.write_waker = Some(cx.waker().clone());
+                if let Some(w) = waker.finished_waker.take() {
+                    w.wake()
+                }
+                waker.finished_waker = Some(cx.waker().clone());
+            }
+        }
 
         // Register `cx.waker()` as being woken up if the connection closes.
         if !inner

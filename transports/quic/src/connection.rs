@@ -207,6 +207,10 @@ impl Connection {
         self.connection.write(id, buf)
     }
 
+    pub(crate) fn is_drained(&self) -> bool {
+        self.connection.is_drained()
+    }
+
     pub(crate) fn shutdown_substream(
         &mut self,
         id: quinn_proto::StreamId,
@@ -216,9 +220,10 @@ impl Connection {
 
     /// Polls the connection for an event that happend on it.
     pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
-        // Nothing more can be done if the connection is closed.
+        // Nothing more can be done if the connection is drained.
         // Return `Pending` without registering the waker, essentially freezing the task forever.
-        if self.closed.is_some() {
+        if self.connection.is_drained() {
+            tracing::error!("poll_event called on a drained connection");
             return Poll::Pending;
         }
 

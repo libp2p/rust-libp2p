@@ -46,7 +46,7 @@ impl<'a> AsyncWrite for QuicStream<'a> {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
         assert!(!self.shutdown, "written after close");
         let Self { muxer, id, .. } = self.get_mut();
-        let _ = muxer.poll_inbound(cx);
+        let _ = muxer.poll_inbound(cx).is_pending();
         muxer
             .write_substream(cx, id.as_mut().unwrap(), buf)
             .map_err(From::from)
@@ -55,7 +55,7 @@ impl<'a> AsyncWrite for QuicStream<'a> {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         self.shutdown = true;
         let Self { muxer, id, .. } = self.get_mut();
-        let _ = muxer.poll_inbound(cx);
+        let _ = muxer.poll_inbound(cx).is_pending();
         debug!("trying to close {:?}", id);
         match muxer.shutdown_substream(cx, id.as_mut().unwrap()) {
             Poll::Pending => return Poll::Pending,
@@ -77,7 +77,7 @@ impl<'a> AsyncRead for QuicStream<'a> {
         buf: &mut [u8],
     ) -> Poll<Result<usize>> {
         let Self { id, muxer, .. } = self.get_mut();
-        let _ = muxer.poll_inbound(cx);
+        let _ = muxer.poll_inbound(cx).is_pending();
         muxer
             .read_substream(cx, id.as_mut().unwrap(), buf)
             .map_err(From::from)
@@ -98,8 +98,8 @@ struct Outbound<'a>(&'a QuicMuxer);
 impl<'a> futures::Future for Outbound<'a> {
     type Output = Result<QuicStream<'a>>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let _ = self.0.poll_inbound(cx);
         let Outbound(conn) = &mut *self;
+        let _ = conn.poll_inbound(cx);
         conn.poll_outbound(cx, &mut ())
             .map_ok(|id| QuicStream {
                 id: Some(id),
@@ -139,7 +139,6 @@ impl Future for Closer {
     type Output = Result<()>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let i = &mut self.get_mut().0;
-        let _ = i.poll_inbound(cx);
         i.close(cx).map_err(From::from)
     }
 }
@@ -219,10 +218,6 @@ fn do_test(_i: u32) {
                     let muxer = Arc::new(muxer);
                     let mut socket: QuicStream =
                         Inbound(&*muxer).next().await.expect("no incoming stream");
-                    {
-                        let cloned = muxer.clone();
-                        async_std::task::spawn(future::poll_fn(move |cx| cloned.poll_inbound(cx)));
-                    }
                     let mut buf = [0u8; 3];
                     debug!("reading data from accepted stream!");
                     {
@@ -236,7 +231,6 @@ fn do_test(_i: u32) {
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     debug!("data written!");
                     socket.close().await.unwrap();
-                    // debug!("socket closed!");
                     assert_eq!(socket.read(&mut buf).await.unwrap(), 0);
                     debug!("end of stream");
                     drop(socket);
@@ -261,10 +255,6 @@ fn do_test(_i: u32) {
         error!("Dialing a Connection: {:?}", addr);
         let (peer_id, connection) = quic_endpoint.dial(addr.clone()).unwrap().await.unwrap();
         let connection = Arc::new(connection);
-        {
-            let cloned = connection.clone();
-            async_std::task::spawn(future::poll_fn(move |cx| cloned.poll_inbound(cx)));
-        }
         trace!("Received a Connection: {:?}", connection);
         let () = connection.open_outbound();
         let mut stream = Outbound(&*connection).await.expect("failed");
