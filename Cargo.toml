@@ -82,7 +82,7 @@ pin-project = "0.4.17"
 smallvec = "1.0"
 wasm-timer = "0.2.4"
 
-[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
+[target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.19.2", path = "protocols/deflate", optional = true }
 libp2p-dns = { version = "0.19.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.19.2", path = "protocols/mdns", optional = true }

@@ -9,14 +9,14 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
-[target.'cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))'.dependencies]
+[target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { version = "0.19.2", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
 tokio = { version = "0.2", default-features = false, features = ["uds"], optional = true }
 
-[target.'cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))'.dev-dependencies]
+[target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]
 tempfile = "3.0"
 
 [features]

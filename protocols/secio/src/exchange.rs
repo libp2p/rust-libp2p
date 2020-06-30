@@ -24,10 +24,10 @@ use futures::prelude::*;
 use crate::SecioError;
 
 #[path = "exchange/impl_ring.rs"]
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 mod platform;
 #[path = "exchange/impl_webcrypto.rs"]
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+#[cfg(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))]
 mod platform;
 
 /// Possible key agreement algorithms.

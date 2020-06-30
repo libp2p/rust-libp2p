@@ -31,8 +31,8 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
-#![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
-#![cfg_attr(docsrs, doc(cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))))]
+#![cfg(all(unix, not(target_os = "emscripten")))]
+#![cfg_attr(docsrs, doc(cfg(all(unix, not(target_os = "emscripten")))))]
 
 use futures::{prelude::*, future::{BoxFuture, Ready}};
 use futures::stream::BoxStream;
