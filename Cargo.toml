@@ -55,7 +55,7 @@ yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 
 [package.metadata.docs.rs]
-features = ["tcp-tokio"]
+all-features = true
 
 [dependencies]
 bytes = "0.5"
