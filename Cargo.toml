@@ -54,6 +54,9 @@ websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 bytes = "0.5"
 futures = "0.3.1"
