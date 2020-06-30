@@ -71,35 +71,20 @@
 pub mod codec;
 pub mod handler;
 
-pub use codec::{RequestResponseCodec, ProtocolName};
+pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
 
-use futures::{
-    channel::oneshot,
-};
-use handler::{
-    RequestProtocol,
-    RequestResponseHandler,
-    RequestResponseHandlerEvent,
-};
-use libp2p_core::{
-    ConnectedPoint,
-    Multiaddr,
-    PeerId,
-    connection::ConnectionId,
-};
+use futures::channel::oneshot;
+use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    DialPeerCondition,
-    NetworkBehaviour,
-    NetworkBehaviourAction,
-    NotifyHandler,
-    PollParameters,
+    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
-    collections::{VecDeque, HashMap},
+    collections::{HashMap, VecDeque},
+    task::{Context, Poll},
     time::Duration,
-    task::{Context, Poll}
 };
 
 /// An inbound request or response.
@@ -121,7 +106,7 @@ pub enum RequestResponseMessage<TRequest, TResponse> {
         /// See [`RequestResponse::send_request`].
         request_id: RequestId,
         /// The response message.
-        response: TResponse
+        response: TResponse,
     },
 }
 
@@ -133,7 +118,7 @@ pub enum RequestResponseEvent<TRequest, TResponse> {
         /// The peer who sent the message.
         peer: PeerId,
         /// The incoming message.
-        message: RequestResponseMessage<TRequest, TResponse>
+        message: RequestResponseMessage<TRequest, TResponse>,
     },
     /// An outbound request failed.
     OutboundFailure {
@@ -191,8 +176,8 @@ pub enum InboundFailure {
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
 pub struct ResponseChannel<TResponse> {
-    peer: PeerId,
-    sender: oneshot::Sender<TResponse>,
+    pub peer: PeerId,
+    pub sender: oneshot::Sender<TResponse>,
 }
 
 impl<TResponse> ResponseChannel<TResponse> {
@@ -206,13 +191,18 @@ impl<TResponse> ResponseChannel<TResponse> {
     pub fn is_open(&self) -> bool {
         !self.sender.is_canceled()
     }
+
+    // TODO
+    pub fn send(self, rs: TResponse) {
+        let _ = self.sender.send(rs);
+    }
 }
 
 /// The (local) ID of an outgoing request.
 ///
 /// See [`RequestResponse::send_request`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct RequestId(u64);
+pub struct RequestId(pub u64);
 
 /// The configuration for a `RequestResponse` protocol.
 #[derive(Debug, Clone)]
@@ -263,7 +253,9 @@ where
     pending_events: VecDeque<
         NetworkBehaviourAction<
             RequestProtocol<TCodec>,
-            RequestResponseEvent<TCodec::Request, TCodec::Response>>>,
+            RequestResponseEvent<TCodec::Request, TCodec::Response>,
+        >,
+    >,
     /// The currently connected peers and their known, reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
@@ -283,7 +275,7 @@ where
     /// protocols, codec and configuration.
     pub fn new<I>(codec: TCodec, protocols: I, cfg: RequestResponseConfig) -> Self
     where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>
+        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
     {
         let mut inbound_protocols = SmallVec::new();
         let mut outbound_protocols = SmallVec::new();
@@ -323,6 +315,17 @@ where
     /// > [`RequestResponse::remove_address`].
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> RequestId {
         let request_id = self.next_request_id();
+        self.send_request_with_id(peer, request, request_id);
+        request_id
+    }
+
+    // TODO docs
+    pub fn send_request_with_id(
+        &mut self,
+        peer: &PeerId,
+        request: TCodec::Request,
+        request_id: RequestId,
+    ) {
         let request = RequestProtocol {
             request_id,
             codec: self.codec.clone(),
@@ -331,14 +334,16 @@ where
         };
 
         if let Some(request) = self.try_send_request(peer, request) {
-            self.pending_events.push_back(NetworkBehaviourAction::DialPeer {
-                peer_id: peer.clone(),
-                condition: DialPeerCondition::Disconnected,
-            });
-            self.pending_requests.entry(peer.clone()).or_default().push(request);
+            self.pending_events
+                .push_back(NetworkBehaviourAction::DialPeer {
+                    peer_id: peer.clone(),
+                    condition: DialPeerCondition::Disconnected,
+                });
+            self.pending_requests
+                .entry(peer.clone())
+                .or_default()
+                .push(request);
         }
-
-        request_id
     }
 
     /// Initiates sending a response to an inbound request.
@@ -353,7 +358,7 @@ where
         // Fails only if the inbound upgrade timed out waiting for the response,
         // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
         // which in turn results in `RequestResponseEvent::InboundFailure`.
-        let _ = ch.sender.send(rs);
+        ch.send(rs)
     }
 
     /// Adds a known address for a peer that can be used for
@@ -362,7 +367,10 @@ where
     ///
     /// Addresses added in this way are only removed by `remove_address`.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.addresses.entry(peer.clone()).or_default().push(address);
+        self.addresses
+            .entry(peer.clone())
+            .or_default()
+            .push(address);
     }
 
     /// Removes an address of a peer previously added via `add_address`.
@@ -399,18 +407,22 @@ where
     /// Tries to send a request by queueing an appropriate event to be
     /// emitted to the `Swarm`. If the peer is not currently connected,
     /// the given request is return unchanged.
-    fn try_send_request(&mut self, peer: &PeerId, request: RequestProtocol<TCodec>)
-        -> Option<RequestProtocol<TCodec>>
-    {
+    fn try_send_request(
+        &mut self,
+        peer: &PeerId,
+        request: RequestProtocol<TCodec>,
+    ) -> Option<RequestProtocol<TCodec>> {
         if let Some(connections) = self.connected.get(peer) {
             let ix = (request.request_id.0 as usize) % connections.len();
             let conn = connections[ix].id;
-            self.pending_responses.insert(request.request_id, (peer.clone(), conn));
-            self.pending_events.push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: peer.clone(),
-                handler: NotifyHandler::One(conn),
-                event: request
-            });
+            self.pending_responses
+                .insert(request.request_id, (peer.clone(), conn));
+            self.pending_events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: peer.clone(),
+                    handler: NotifyHandler::One(conn),
+                    event: request,
+                });
             None
         } else {
             Some(request)
@@ -454,10 +466,15 @@ where
         }
     }
 
-    fn inject_connection_established(&mut self, peer: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
+    fn inject_connection_established(
+        &mut self,
+        peer: &PeerId,
+        conn: &ConnectionId,
+        endpoint: &ConnectedPoint,
+    ) {
         let address = match endpoint {
             ConnectedPoint::Dialer { address } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None
+            ConnectedPoint::Listener { .. } => None,
         };
         let connections = self.connected.entry(peer.clone()).or_default();
         connections.push(Connection { id: *conn, address })
@@ -472,24 +489,28 @@ where
 
         // Any pending responses of requests sent over this connection
         // must be considered failed.
-        let failed = self.pending_responses.iter()
-            .filter_map(|(r, (p, c))|
+        let failed = self
+            .pending_responses
+            .iter()
+            .filter_map(|(r, (p, c))| {
                 if conn == c {
                     Some((p.clone(), *r))
                 } else {
                     None
-                })
+                }
+            })
             .collect::<Vec<_>>();
 
         for (peer, request_id) in failed {
             self.pending_responses.remove(&request_id);
-            self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                RequestResponseEvent::OutboundFailure {
-                    peer,
-                    request_id,
-                    error: OutboundFailure::ConnectionClosed
-                }
-            ));
+            self.pending_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    RequestResponseEvent::OutboundFailure {
+                        peer,
+                        request_id,
+                        error: OutboundFailure::ConnectionClosed,
+                    },
+                ));
         }
     }
 
@@ -506,13 +527,14 @@ where
         // another, concurrent dialing attempt ongoing.
         if let Some(pending) = self.pending_requests.remove(peer) {
             for request in pending {
-                self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure {
-                        peer: peer.clone(),
-                        request_id: request.request_id,
-                        error: OutboundFailure::DialFailure
-                    }
-                ));
+                self.pending_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::OutboundFailure {
+                            peer: peer.clone(),
+                            request_id: request.request_id,
+                            error: OutboundFailure::DialFailure,
+                        },
+                    ));
             }
         }
     }
@@ -524,65 +546,84 @@ where
         event: RequestResponseHandlerEvent<TCodec>,
     ) {
         match event {
-            RequestResponseHandlerEvent::Response { request_id, response } => {
+            RequestResponseHandlerEvent::Response {
+                request_id,
+                response,
+            } => {
                 self.pending_responses.remove(&request_id);
-                let message = RequestResponseMessage::Response { request_id, response };
-                self.pending_events.push_back(
-                    NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message }));
+                let message = RequestResponseMessage::Response {
+                    request_id,
+                    response,
+                };
+                self.pending_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::Message { peer, message },
+                    ));
             }
             RequestResponseHandlerEvent::Request { request, sender } => {
-                let channel = ResponseChannel { peer: peer.clone(), sender };
+                let channel = ResponseChannel {
+                    peer: peer.clone(),
+                    sender,
+                };
                 let message = RequestResponseMessage::Request { request, channel };
-                self.pending_events.push_back(
-                    NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message }));
+                self.pending_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::Message { peer, message },
+                    ));
             }
             RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
                 if let Some((peer, _conn)) = self.pending_responses.remove(&request_id) {
-                    self.pending_events.push_back(
-                        NetworkBehaviourAction::GenerateEvent(
+                    self.pending_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
                             RequestResponseEvent::OutboundFailure {
                                 peer,
                                 request_id,
                                 error: OutboundFailure::Timeout,
-                            }));
+                            },
+                        ));
                 }
             }
             RequestResponseHandlerEvent::InboundTimeout => {
-                    self.pending_events.push_back(
-                        NetworkBehaviourAction::GenerateEvent(
-                            RequestResponseEvent::InboundFailure {
-                                peer,
-                                error: InboundFailure::Timeout,
-                            }));
+                self.pending_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::InboundFailure {
+                            peer,
+                            error: InboundFailure::Timeout,
+                        },
+                    ));
             }
             RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
-                self.pending_events.push_back(
-                    NetworkBehaviourAction::GenerateEvent(
+                self.pending_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::OutboundFailure {
                             peer,
                             request_id,
                             error: OutboundFailure::UnsupportedProtocols,
-                        }));
+                        },
+                    ));
             }
             RequestResponseHandlerEvent::InboundUnsupportedProtocols => {
-                self.pending_events.push_back(
-                    NetworkBehaviourAction::GenerateEvent(
+                self.pending_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
                             peer,
                             error: InboundFailure::UnsupportedProtocols,
-                        }));
+                        },
+                    ));
             }
         }
     }
 
-    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<
+    fn poll(
+        &mut self,
+        _: &mut Context,
+        _: &mut impl PollParameters,
+    ) -> Poll<
+        NetworkBehaviourAction<
             RequestProtocol<TCodec>,
-            RequestResponseEvent<TCodec::Request, TCodec::Response>
-        >>
-    {
+            RequestResponseEvent<TCodec::Request, TCodec::Response>,
+        >,
+    > {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
@@ -604,4 +645,3 @@ struct Connection {
     id: ConnectionId,
     address: Option<Multiaddr>,
 }
-
