@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    muxing::StreamMuxer,
+    muxing::{StreamMuxer, StreamMuxerEvent},
     ProtocolName,
     transport::{Transport, ListenerEvent, TransportError},
     Multiaddr
@@ -189,10 +189,26 @@ where
     type OutboundSubstream = EitherOutbound<A, B>;
     type Error = IoError;
 
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.poll_inbound(cx).map(|p| p.map(EitherOutput::First)).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.poll_inbound(cx).map(|p| p.map(EitherOutput::Second)).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.poll_event(cx).map(|result| {
+                result.map_err(|e| e.into()).map(|event| {
+                    match event {
+                        StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
+                        StreamMuxerEvent::InboundSubstream(substream) =>
+                            StreamMuxerEvent::InboundSubstream(EitherOutput::First(substream))
+                    }
+                })
+            }),
+            EitherOutput::Second(inner) => inner.poll_event(cx).map(|result| {
+                result.map_err(|e| e.into()).map(|event| {
+                    match event {
+                        StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
+                        StreamMuxerEvent::InboundSubstream(substream) =>
+                            StreamMuxerEvent::InboundSubstream(EitherOutput::Second(substream))
+                    }
+                })
+            }),
         }
     }
 

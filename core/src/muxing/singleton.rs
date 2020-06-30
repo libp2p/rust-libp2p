@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{connection::Endpoint, muxing::StreamMuxer};
+use crate::{connection::Endpoint, muxing::{StreamMuxer, StreamMuxerEvent}};
+
 use futures::prelude::*;
 use parking_lot::Mutex;
 use std::{io, pin::Pin, sync::atomic::{AtomicBool, Ordering}, task::Context, task::Poll};
@@ -64,14 +65,14 @@ where
     type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
-    fn poll_inbound(&self, _: &mut Context) -> Poll<Result<Self::Substream, io::Error>> {
+    fn poll_event(&self, _: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, io::Error>> {
         match self.endpoint {
             Endpoint::Dialer => return Poll::Pending,
             Endpoint::Listener => {}
         }
 
         if !self.substream_extracted.swap(true, Ordering::Relaxed) {
-            Poll::Ready(Ok(Substream {}))
+            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(Substream {})))
         } else {
             Poll::Pending
         }

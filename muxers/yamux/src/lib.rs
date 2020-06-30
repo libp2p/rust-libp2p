@@ -22,6 +22,7 @@
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
 use futures::{future, prelude::*, ready, stream::{BoxStream, LocalBoxStream}};
+use libp2p_core::muxing::StreamMuxerEvent;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
@@ -30,6 +31,9 @@ use thiserror::Error;
 pub use yamux::WindowUpdateMode;
 
 /// A Yamux connection.
+///
+/// This implementation isn't capable of detecting when the underlying socket changes its address,
+/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Yamux<S>(Mutex<Inner<S>>);
 
 impl<S> fmt::Debug for Yamux<S> {
@@ -99,10 +103,10 @@ where
     type OutboundSubstream = OpenSubstreamToken;
     type Error = YamuxError;
 
-    fn poll_inbound(&self, c: &mut Context) -> Poll<Self::Substream> {
+    fn poll_event(&self, c: &mut Context) -> Poll<StreamMuxerEvent<Self::Substream>> {
         let mut inner = self.0.lock();
         match ready!(inner.incoming.poll_next_unpin(c)) {
-            Some(Ok(s)) => Poll::Ready(Ok(s)),
+            Some(Ok(s)) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
             Some(Err(e)) => Poll::Ready(Err(e)),
             None => Poll::Ready(Err(yamux::ConnectionError::Closed.into()))
         }

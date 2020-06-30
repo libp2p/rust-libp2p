@@ -53,6 +53,7 @@ pub use crate::upgrade::{
 
 use libp2p_core::{
     ConnectedPoint,
+    Multiaddr,
     PeerId,
     upgrade::{self, UpgradeError},
 };
@@ -139,6 +140,9 @@ pub trait ProtocolsHandler: Send + 'static {
 
     /// Injects an event coming from the outside in the handler.
     fn inject_event(&mut self, event: Self::InEvent);
+
+    /// Notifies the handler of a change in the address of the remote.
+    fn inject_address_change(&mut self, _new_address: &Multiaddr) {}
 
     /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
     fn inject_dial_upgrade_error(
