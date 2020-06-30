@@ -39,7 +39,7 @@ mod dht_proto {
 }
 
 pub use addresses::Addresses;
-pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
+pub use behaviour::{Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
     QueryRef,
     QueryMut,

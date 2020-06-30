@@ -28,6 +28,7 @@ use bytes::Bytes;
 use libp2p_core::{
     Endpoint,
     StreamMuxer,
+    muxing::StreamMuxerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use log::{debug, trace};
@@ -174,6 +175,9 @@ where
 }
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
+///
+/// This implementation isn't capable of detecting when the underlying socket changes its address,
+/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Multiplex<C> {
     inner: Mutex<MultiplexInner<C>>,
 }
@@ -362,7 +366,7 @@ where C: AsyncRead + AsyncWrite + Unpin
     type OutboundSubstream = OutboundSubstream;
     type Error = IoError;
 
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, IoError>> {
+    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, IoError>> {
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
@@ -384,13 +388,13 @@ where C: AsyncRead + AsyncWrite + Unpin
         };
 
         debug!("Successfully opened inbound substream {}", num);
-        Poll::Ready(Ok(Substream {
+        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(Substream {
             current_data: Bytes::new(),
             num,
             endpoint: Endpoint::Listener,
             local_open: true,
             remote_open: true,
-        }))
+        })))
     }
 
     fn open_outbound(&self) -> Self::OutboundSubstream {
