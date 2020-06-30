@@ -371,7 +371,7 @@ mod tests {
     use futures::{prelude::*, channel::oneshot};
 
     #[test]
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let mut private = include_bytes!("../tests/test-rsa-private-key.pk8").to_vec();
