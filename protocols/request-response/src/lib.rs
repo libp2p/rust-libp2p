@@ -192,9 +192,10 @@ impl<TResponse> ResponseChannel<TResponse> {
         !self.sender.is_canceled()
     }
 
-    // TODO
-    pub fn send(self, rs: TResponse) {
-        let _ = self.sender.send(rs);
+    /// Sends a response through the oneshot channel.
+    /// If the receiving end has dropped, this will return an `Err` with the response instead.
+    pub fn send(self, rs: TResponse) -> Result<(), TResponse> {
+        self.sender.send(rs)
     }
 }
 
@@ -319,7 +320,10 @@ where
         request_id
     }
 
-    // TODO docs
+    /// Initiates sending a request with a specific `RequestId`.
+    ///
+    /// This function can be used to specify the Id instead of letting the `RequestResponse`
+    /// service assign the value based on the incrementation.
     pub fn send_request_with_id(
         &mut self,
         peer: &PeerId,
@@ -358,7 +362,7 @@ where
         // Fails only if the inbound upgrade timed out waiting for the response,
         // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
         // which in turn results in `RequestResponseEvent::InboundFailure`.
-        ch.send(rs)
+        let _ = ch.send(rs);
     }
 
     /// Adds a known address for a peer that can be used for
