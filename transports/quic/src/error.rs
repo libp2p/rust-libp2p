@@ -55,13 +55,6 @@ pub enum Error {
     ConnectionClosing,
 }
 
-#[cfg(any())]
-impl From<SendError> for Error {
-    fn from(_: SendError) -> Error {
-        Error::NetworkFailure
-    }
-}
-
 impl From<Error> for io::Error {
     fn from(e: Error) -> Self {
         match e {
