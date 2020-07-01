@@ -1,5 +1,6 @@
 - [`libp2p-core` CHANGELOG](core/CHANGELOG.md)
 - [`libp2p-deflate` CHANGELOG](protocols/deflate/CHANGELOG.md)
+- [`libp2p-dns` CHANGELOG](transports/dns/CHANGELOG.md)
 - [`libp2p-floodsub` CHANGELOG](protocols/floodsub/CHANGELOG.md)
 - [`libp2p-gossipsub` CHANGELOG](protocols/gossipsub/CHANGELOG.md)
 - [`libp2p-identify` CHANGELOG](protocols/identify/CHANGELOG.md)
@@ -15,10 +16,21 @@
 - [`libp2p-swarm` CHANGELOG](swarm/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
+- [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
 - [`libp2p-yamux` CHANGELOG](muxers/yamux/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
+
+# Version 0.21.0 (2020-07-01)
+
+- Conditional compilation fixes for the `wasm32-wasi` target
+  ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
+
+- New `libp2p-request-response` crate
+  ([PR 1596](https://github.com/libp2p/rust-libp2p/pull/1596)).
+
+- Updated libp2p dependencies.
 
 # Version 0.19.1 (2020-05-25)
 
