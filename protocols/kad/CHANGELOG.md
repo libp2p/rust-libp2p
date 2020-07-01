@@ -1,4 +1,4 @@
-# 0.21.0 [2020-06-30]
+# 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`
   ([PR 1632](https://github.com/libp2p/rust-libp2p/pull/1632))

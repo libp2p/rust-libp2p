@@ -22,7 +22,7 @@
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 
-# Version 0.21.0 (2020-06-30)
+# Version 0.21.0 (2020-07-01)
 
 - Conditional compilation fixes for the `wasm32-wasi` target
   ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
