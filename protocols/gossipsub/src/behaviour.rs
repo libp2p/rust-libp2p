@@ -147,21 +147,17 @@ impl Gossipsub {
             return false;
         }
 
-        // send subscription request to all peers in the topic
-        if let Some(peer_list) = self.topic_peers.get(&topic_hash) {
-            let mut fixed_event = None; // initialise the event once if needed
-            if fixed_event.is_none() {
-                fixed_event = Some(Arc::new(GossipsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![GossipsubSubscription {
-                        topic_hash: topic_hash.clone(),
-                        action: GossipsubSubscriptionAction::Subscribe,
-                    }],
-                    control_msgs: Vec::new(),
-                }));
-            }
-
-            let event = fixed_event.expect("event has been initialised");
+        // send subscription request to all peers
+        let peer_list = self.peer_topics.keys().collect::<Vec<_>>();
+        if !peer_list.is_empty() {
+            let event = Arc::new(GossipsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![GossipsubSubscription {
+                    topic_hash: topic_hash.clone(),
+                    action: GossipsubSubscriptionAction::Subscribe,
+                }],
+                control_msgs: Vec::new(),
+            });
 
             for peer in peer_list {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
@@ -194,21 +190,17 @@ impl Gossipsub {
             return false;
         }
 
-        // announce to all peers in the topic
-        let mut fixed_event = None; // initialise the event once if needed
-        if let Some(peer_list) = self.topic_peers.get(topic_hash) {
-            if fixed_event.is_none() {
-                fixed_event = Some(Arc::new(GossipsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![GossipsubSubscription {
-                        topic_hash: topic_hash.clone(),
-                        action: GossipsubSubscriptionAction::Unsubscribe,
-                    }],
-                    control_msgs: Vec::new(),
-                }));
-            }
-
-            let event = fixed_event.expect("event has been initialised");
+        // announce to all peers
+        let peer_list = self.peer_topics.keys().collect::<Vec<_>>();
+        if !peer_list.is_empty() {
+            let event = Arc::new(GossipsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![GossipsubSubscription {
+                    topic_hash: topic_hash.clone(),
+                    action: GossipsubSubscriptionAction::Unsubscribe,
+                }],
+                control_msgs: Vec::new(),
+            });
 
             for peer in peer_list {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
