@@ -35,7 +35,7 @@ use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
     core::{either::EitherTransport, transport::upgrade::Version, StreamMuxer},
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent},
+    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, Signing},
     identify::{Identify, IdentifyEvent},
     identity,
     multiaddr::Protocol,
@@ -239,11 +239,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let gossipsub_config = GossipsubConfigBuilder::default()
+        let gossipsub_config = GossipsubConfigBuilder::new(Signing::Enabled(local_key.clone()))
             .max_transmit_size(262144)
             .build();
         let mut behaviour = MyBehaviour {
-            gossipsub: Gossipsub::new(local_key.clone(), gossipsub_config),
+            gossipsub: Gossipsub::new(gossipsub_config),
             identify: Identify::new(
                 "/ipfs/0.1.0".into(),
                 "rust-ipfs-example".into(),
@@ -274,12 +274,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
-            match stdin.try_poll_next_unpin(cx)? {
+            if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => {
-                    swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes());
+                    swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes())
                 }
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
+            } {
+                println!("Publish error: {:?}", e);
             }
         }
         loop {

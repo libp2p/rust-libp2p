@@ -50,7 +50,7 @@ use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
-use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
+use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Signing, Topic};
 use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -87,13 +87,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         // set custom gossipsub
-        let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
+        let gossipsub_config = gossipsub::GossipsubConfigBuilder::new(Signing::Enabled(local_key))
             .heartbeat_interval(Duration::from_secs(10))
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
             //same content will be propagated.
             .build();
         // build a gossipsub network behaviour
-        let mut gossipsub = gossipsub::Gossipsub::new(local_key, gossipsub_config);
+        let mut gossipsub = gossipsub::Gossipsub::new(gossipsub_config);
         gossipsub.subscribe(topic.clone());
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };
@@ -120,11 +120,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
-            match stdin.try_poll_next_unpin(cx)? {
+            if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => swarm.publish(&topic, line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
-            };
+            } {
+                println!("Publish error: {:?}", e);
+            }
         }
 
         loop {
