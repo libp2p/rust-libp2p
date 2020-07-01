@@ -33,7 +33,7 @@ use libp2p_core::{
     identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
     Multiaddr, Transport,
 };
-use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
+use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Signing, Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
@@ -145,7 +145,8 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .boxed();
 
     let peer_id = public_key.clone().into_peer_id();
-    let behaviour = Gossipsub::new(key, GossipsubConfig::default());
+    let config = GossipsubConfig::new(Signing::Enabled(key));
+    let behaviour = Gossipsub::new(config);
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
@@ -193,7 +194,7 @@ fn multi_hop_propagation() {
         });
 
         // Publish a single message.
-        graph.nodes[0].1.publish(&topic, vec![1, 2, 3]);
+        graph.nodes[0].1.publish(&topic, vec![1, 2, 3]).unwrap();
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;

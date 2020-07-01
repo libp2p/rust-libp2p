@@ -135,6 +135,7 @@
 //! println!("Listening on {:?}", addr);
 //! ```
 
+pub mod error;
 pub mod protocol;
 
 mod behaviour;
@@ -148,6 +149,6 @@ mod rpc_proto {
 }
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc};
-pub use self::config::{GossipsubConfig, GossipsubConfigBuilder};
+pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, Signing};
 pub use self::protocol::{GossipsubMessage, MessageId};
 pub use self::topic::{Topic, TopicHash};

@@ -33,10 +33,11 @@ mod tests {
         topics: Vec<String>,
         to_subscribe: bool,
     ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
-        // generate a default GossipsubConfig
-        let gs_config = GossipsubConfig::default();
+        let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
+        // generate a default GossipsubConfig with signing
+        let gs_config = GossipsubConfig::new(Signing::Enabled(keypair));
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(Keypair::generate_secp256k1(), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -312,9 +313,16 @@ mod tests {
             "Subscribe should add a new entry to the mesh[topic] hashmap"
         );
 
+        // peers should be subscribed to the topic
+        assert!(
+            gs.topic_peers.get(&topic_hashes[0]).map(|p| p.is_empty()) == Some(false),
+            "Peers should be subscribed to the topic"
+        );
+
         // publish on topic
         let publish_data = vec![0; 42];
-        gs.publish(&Topic::new(publish_topic), publish_data);
+        gs.publish(&Topic::new(publish_topic), publish_data)
+            .unwrap();
 
         // Collect all publish messages
         let publishes = gs
@@ -367,7 +375,8 @@ mod tests {
 
         // Publish on unsubscribed topic
         let publish_data = vec![0; 42];
-        gs.publish(&Topic::new(fanout_topic.clone()), publish_data);
+        gs.publish(&Topic::new(fanout_topic.clone()), publish_data)
+            .unwrap();
 
         assert_eq!(
             gs.fanout
@@ -546,10 +555,10 @@ mod tests {
     /// Test Gossipsub.get_random_peers() function
     fn test_get_random_peers() {
         // generate a default GossipsubConfig
-        let gs_config = GossipsubConfig::default();
-        let key = Keypair::generate_secp256k1();
+        let key = libp2p_core::identity::Keypair::generate_secp256k1();
+        let gs_config = GossipsubConfig::new(Signing::Enabled(key));
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(key, gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(gs_config);
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test".into()).no_hash().clone();
@@ -560,23 +569,18 @@ mod tests {
 
         gs.topic_peers.insert(topic_hash.clone(), peers.clone());
 
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, |_| true);
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, |_| true);
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 30, |_| true);
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 30, |_| true);
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 20, |_| true);
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 20, |_| true);
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 0, |_| true);
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 0, |_| true);
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         // test the filter
-        let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, |_| false);
+        let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, |_| false);
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         let random_peers = Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {
             |peer| peers.contains(peer)

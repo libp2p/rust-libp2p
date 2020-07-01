@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::GossipsubConfig;
+use crate::config::{GossipsubConfig, Signing};
+use crate::error::PublishError;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::protocol::{
@@ -28,7 +29,7 @@ use crate::protocol::{
 use crate::rpc_proto;
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
-use libp2p_core::{connection::ConnectionId, identity::Keypair, Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, identity::error::SigningError, Multiaddr, PeerId};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
@@ -59,12 +60,9 @@ pub struct Gossipsub {
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
 
-    /// The local libp2p keypair, used for message source identification and signing.
-    keypair: Option<Keypair>,
-
-    /// The peer_id that will be the source of published messages. This can be set to the identity
-    /// via a config, otherwise will be derived from the libp2p keypair.
-    message_source_id: PeerId,
+    /// The `PeerId` that will be the source of published messages. This can be set to an arbitrary
+    /// PeerId when the config is initialised via the `Signing` enum.
+    message_author: PeerId,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
     topic_peers: HashMap<TopicHash, Vec<PeerId>>,
@@ -87,71 +85,54 @@ pub struct Gossipsub {
     /// Heartbeat interval stream.
     heartbeat: Interval,
 
-    /// The peer_id public to add to messages if signing is enabled and the current libp2p key is
+    /// The public `peer_id` to add to messages if signing is enabled and the current libp2p key is
     /// not inlined in the `PeerId`.  
     key: Option<Vec<u8>>,
 }
 
 impl Gossipsub {
-    /// Creates a `Gossipsub` struct given a set of parameters specified by `gs_config`.
-    pub fn new(keypair: Keypair, gs_config: GossipsubConfig) -> Self {
+    /// Creates a `Gossipsub` struct given a set of parameters specified by via a `GossipsubConfig`.
+    pub fn new(config: GossipsubConfig) -> Self {
         // Set up the router given the configuration settings.
 
-        // Sets up the source_id of published messages.
-        let message_source_id = if gs_config.no_source_id {
-            PeerId::from_bytes(crate::config::IDENTITY_SOURCE.to_vec()).expect("Valid peer id")
-        } else {
-            keypair.public().into_peer_id()
-        };
-
-        // If signing is not enabled, we don't need to store the keypair.
-        let keypair = if gs_config.disable_message_signing {
-            None
-        } else {
-            Some(keypair)
-        };
-
-        // If we are signing and the public key cannot be inlined in the `PeerId`, we store the
-        // public key to attach to published messages.
-        let key = {
-            if let Some(keypair) = keypair.as_ref() {
-                // signing is required
-                let key_enc = keypair.public().into_protobuf_encoding();
-                if key_enc.len() <= 42 {
+        // Set up the author and inlined key if required.
+        let (message_author, inlined_key) = match config.signing {
+            Signing::Enabled(ref kp) => {
+                let public_key = kp.public();
+                let key_enc = public_key.clone().into_protobuf_encoding();
+                let key = if key_enc.len() <= 42 {
                     // The public key can be inlined in [`rpc_proto::Message::from`], so we don't include it
                     // specifically in the [`rpc_proto::Message::key`] field.
                     None
                 } else {
-                    // Include the protobuf encoding of the public key in the message
+                    // Include the protobuf encoding of the public key in the message.
                     Some(key_enc)
-                }
-            } else {
-                // Signing is not required, no key needs to be added
-                None
+                };
+                (public_key.into_peer_id(), key)
             }
+            Signing::Disabled(ref peer_id) => (peer_id.clone(), None),
         };
 
         Gossipsub {
-            config: gs_config.clone(),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
-            keypair,
-            message_source_id,
+            message_author,
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             mesh: HashMap::new(),
             fanout: HashMap::new(),
             fanout_last_pub: HashMap::new(),
             mcache: MessageCache::new(
-                gs_config.history_gossip,
-                gs_config.history_length,
-                gs_config.message_id_fn,
+                config.history_gossip,
+                config.history_length,
+                config.message_id_fn,
             ),
             heartbeat: Interval::new_at(
-                Instant::now() + gs_config.heartbeat_initial_delay,
-                gs_config.heartbeat_interval,
+                Instant::now() + config.heartbeat_initial_delay,
+                config.heartbeat_interval,
             ),
-            key,
+            key: inlined_key,
+            config,
         }
     }
 
@@ -249,7 +230,7 @@ impl Gossipsub {
     }
 
     /// Publishes a message to the network.
-    pub fn publish(&mut self, topic: &Topic, data: impl Into<Vec<u8>>) {
+    pub fn publish(&mut self, topic: &Topic, data: impl Into<Vec<u8>>) -> Result<(), PublishError> {
         self.publish_many(iter::once(topic.clone()), data)
     }
 
@@ -258,18 +239,11 @@ impl Gossipsub {
         &mut self,
         topics: impl IntoIterator<Item = Topic>,
         data: impl Into<Vec<u8>>,
-    ) {
-        let message = match self.build_message(
+    ) -> Result<(), PublishError> {
+        let message = self.build_message(
             topics.into_iter().map(|t| self.topic_hash(t)).collect(),
             data.into(),
-        ) {
-            Ok(m) => m,
-            Err(e) => {
-                error!("{}", e);
-                return;
-            }
-        };
-
+        )?;
         let msg_id = (self.config.message_id_fn)(&message);
         // Add published message to our received caches
         if self.mcache.put(message.clone()).is_some() {
@@ -279,18 +253,18 @@ impl Gossipsub {
                 "Not publishing a message that has already been published. Msg-id {}",
                 msg_id
             );
-            return;
+            return Err(PublishError::Duplicate);
         }
 
         debug!("Publishing message: {:?}", msg_id);
 
-        // Forward the message to mesh peers
-        let message_source = &self.message_source_id.clone();
-        self.forward_msg(message.clone(), message_source);
+        // Forward the message to mesh peers.
+        let message_source = &self.message_author.clone();
+        let mesh_peers_sent = self.forward_msg(message.clone(), message_source);
 
         let mut recipient_peers = HashSet::new();
         for topic_hash in &message.topics {
-            // If not subscribed to the topic, use fanout peers
+            // If not subscribed to the topic, use fanout peers.
             if self.mesh.get(&topic_hash).is_none() {
                 debug!("Topic: {:?} not in the mesh", topic_hash);
                 // Build a list of peers to forward the message to
@@ -319,7 +293,9 @@ impl Gossipsub {
             }
         }
 
-        info!("Published message: {:?}", msg_id);
+        if recipient_peers.is_empty() && !mesh_peers_sent {
+            return Err(PublishError::InsufficientPeers);
+        }
 
         let event = Arc::new(GossipsubRpc {
             subscriptions: Vec::new(),
@@ -336,6 +312,9 @@ impl Gossipsub {
                     handler: NotifyHandler::Any,
                 });
         }
+
+        info!("Published message: {:?}", msg_id);
+        Ok(())
     }
 
     /// This function should be called when `config.manual_propagation` is `true` in order to
@@ -936,7 +915,8 @@ impl Gossipsub {
     }
 
     /// Helper function which forwards a message to mesh\[topic\] peers.
-    fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) {
+    /// Returns true if at least one peer was messaged.
+    fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) -> bool {
         let msg_id = (self.config.message_id_fn)(&message);
         debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
@@ -970,8 +950,11 @@ impl Gossipsub {
                         handler: NotifyHandler::Any,
                     });
             }
+            debug!("Completed forwarding message");
+            true
+        } else {
+            false
         }
-        debug!("Completed forwarding message");
     }
 
     /// Constructs a `GossipsubMessage` performing message signing if required.
@@ -979,19 +962,20 @@ impl Gossipsub {
         &self,
         topics: Vec<TopicHash>,
         data: Vec<u8>,
-    ) -> Result<GossipsubMessage, String> {
+    ) -> Result<GossipsubMessage, SigningError> {
         let sequence_number: u64 = rand::random();
-        let message = rpc_proto::Message {
-            from: Some(self.message_source_id.clone().into_bytes()),
-            data: Some(data),
-            seqno: Some(sequence_number.to_be_bytes().to_vec()),
-            topic_ids: topics.clone().into_iter().map(|t| t.into()).collect(),
-            signature: None,
-            key: None,
-        };
 
         // If a signature is required, generate it
-        let signature = if let Some(keypair) = self.keypair.as_ref() {
+        let signature = if let Signing::Enabled(ref keypair) = self.config.signing {
+            let message = rpc_proto::Message {
+                from: Some(self.message_author.clone().into_bytes()),
+                data: Some(data.clone()),
+                seqno: Some(sequence_number.to_be_bytes().to_vec()),
+                topic_ids: topics.clone().into_iter().map(|t| t.into()).collect(),
+                signature: None,
+                key: None,
+            };
+
             let mut buf = Vec::with_capacity(message.encoded_len());
             message
                 .encode(&mut buf)
@@ -999,18 +983,14 @@ impl Gossipsub {
             // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
             let mut signature_bytes = SIGNING_PREFIX.to_vec();
             signature_bytes.extend_from_slice(&buf);
-            Some(
-                keypair
-                    .sign(&signature_bytes)
-                    .map_err(|e| format!("Signing error: {}", e))?,
-            )
+            Some(keypair.sign(&signature_bytes)?)
         } else {
             None
         };
 
         Ok(GossipsubMessage {
-            source: self.message_source_id.clone(),
-            data: message.data.expect("data exists"),
+            source: self.message_author.clone(),
+            data,
             // To be interoperable with the go-implementation this is treated as a 64-bit
             // big-endian uint.
             sequence_number,
@@ -1092,10 +1072,17 @@ impl NetworkBehaviour for Gossipsub {
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        // let the handler know if we should verify signatures. If message signing is enabled, we
+        // verify signatures of messages.
+        let verify_signatures = match self.config.signing {
+            Signing::Enabled(_) => true,
+            Signing::Disabled(_) => false,
+        };
+
         GossipsubHandler::new(
             self.config.protocol_id.clone(),
             self.config.max_transmit_size,
-            self.keypair.is_some(), // if a keypair is stored we want to verify signatures
+            verify_signatures,
         )
     }
 
