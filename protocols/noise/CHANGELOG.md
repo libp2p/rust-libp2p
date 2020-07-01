@@ -1,6 +1,6 @@
 # 0.20.0 [2020-06-30]
 
-- Update dependencies.
+- Updated dependencies.
 - Conditional compilation fixes for the `wasm32-wasi` target
   ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
 

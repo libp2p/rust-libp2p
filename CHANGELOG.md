@@ -27,7 +27,7 @@
 - Conditional compilation fixes for the `wasm32-wasi` target
   ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
 
-- Add `libp2p-request-response` crate
+- New `libp2p-request-response` crate
   ([PR 1596](https://github.com/libp2p/rust-libp2p/pull/1596)).
 
 - Updated dependencies.

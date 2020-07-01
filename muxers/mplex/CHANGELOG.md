@@ -1,6 +1,7 @@
 # 0.20.0 [2020-06-30]
 
-- Updated dependencies.
+- Update `libp2p-core`, i.e. `StreamMuxer::poll_inbound` has been renamed
+  to `poll_event` and returns a `StreamMuxerEvent`.
 
 # 0.19.2 [2020-06-22]
 
