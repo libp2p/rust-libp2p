@@ -18,7 +18,7 @@ log = "0.4.8"
 quicksink = "0.1"
 rustls = "0.17.0"
 rw-stream-sink = "0.2.0"
-soketto = { version = "0.4.1", features = ["deflate"] }
+soketto = { git = "https://github.com/twittner/soketto.git", branch = "tokens", features = ["deflate"] }
 url = "2.1"
 webpki = "0.21"
 webpki-roots = "0.18"

@@ -21,7 +21,7 @@
 use async_tls::{client, server};
 use crate::{error::Error, tls};
 use either::Either;
-use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
+use futures::{future::BoxFuture, prelude::*, stream::BoxStream};
 use libp2p_core::{
     Transport,
     either::EitherOutput,
@@ -405,7 +405,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 
 /// The websocket connection.
 pub struct Connection<T> {
-    receiver: BoxStream<'static, Result<IncomingData, connection::Error>>,
+    receiver: BoxStream<'static, IncomingData>,
     sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
     _marker: std::marker::PhantomData<T>
 }
@@ -481,41 +481,57 @@ where
 {
     fn new(builder: connection::Builder<TlsOrPlain<T>>) -> Self {
         let (sender, receiver) = builder.finish();
-        let sink = quicksink::make_sink(sender, |mut sender, action| async move {
+        let sink = quicksink::make_sink(Some(sender), |sender, action| async move {
+            let mut sender =
+                if let Some(s) = sender {
+                    s
+                } else if let quicksink::Action::Close = &action {
+                    return Ok(None) // repeated close calls are a no-op
+                } else {
+                    return Err(connection::Error::Closed)
+                };
             match action {
                 quicksink::Action::Send(OutgoingData::Binary(x)) => {
-                    sender.send_binary_mut(x).await?
+                    sender = sender.send_binary_mut(x).await?
                 }
                 quicksink::Action::Send(OutgoingData::Ping(x)) => {
                     let data = x[..].try_into().map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidInput, "PING data must be < 126 bytes")
                     })?;
-                    sender.send_ping(data).await?
+                    sender = sender.send_ping(data).await?
                 }
                 quicksink::Action::Send(OutgoingData::Pong(x)) => {
                     let data = x[..].try_into().map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidInput, "PONG data must be < 126 bytes")
                     })?;
-                    sender.send_pong(data).await?
+                    sender = sender.send_pong(data).await?
                 }
-                quicksink::Action::Flush => sender.flush().await?,
-                quicksink::Action::Close => sender.close().await?
+                quicksink::Action::Flush => {
+                    sender = sender.flush().await?
+                }
+                quicksink::Action::Close => {
+                    sender.close().await?;
+                    return Ok(None)
+                }
             }
-            Ok(sender)
+            Ok(Some(sender))
         });
-        let stream = stream::unfold((Vec::new(), receiver), |(mut data, mut receiver)| async {
+        let stream = stream::unfold((Vec::new(), receiver), |(mut data, receiver)| async {
             match receiver.receive(&mut data).await {
-                Ok(soketto::Incoming::Data(soketto::Data::Text(_))) => {
-                    Some((Ok(IncomingData::Text(mem::take(&mut data))), (data, receiver)))
+                Ok((soketto::Incoming::Data(soketto::Data::Text(_)), r)) => {
+                    Some((IncomingData::Text(mem::take(&mut data)), (data, r)))
                 }
-                Ok(soketto::Incoming::Data(soketto::Data::Binary(_))) => {
-                    Some((Ok(IncomingData::Binary(mem::take(&mut data))), (data, receiver)))
+                Ok((soketto::Incoming::Data(soketto::Data::Binary(_)), r)) => {
+                    Some((IncomingData::Binary(mem::take(&mut data)), (data, r)))
                 }
-                Ok(soketto::Incoming::Pong(pong)) => {
-                    Some((Ok(IncomingData::Pong(Vec::from(pong))), (data, receiver)))
+                Ok((soketto::Incoming::Pong(pong), r)) => {
+                    Some((IncomingData::Pong(pong), (data, r)))
                 }
                 Err(connection::Error::Closed) => None,
-                Err(e) => Some((Err(e), (data, receiver)))
+                Err(e) => {
+                    log::error!("failed to read from websocket: {}", e);
+                    None
+                }
             }
         });
         Connection {
@@ -545,14 +561,10 @@ impl<T> Stream for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
-    type Item = io::Result<IncomingData>;
+    type Item = IncomingData;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let item = ready!(self.receiver.poll_next_unpin(cx));
-        let item = item.map(|result| {
-            result.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-        });
-        Poll::Ready(item)
+        self.receiver.poll_next_unpin(cx)
     }
 }
 

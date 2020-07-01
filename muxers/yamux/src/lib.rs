@@ -64,7 +64,7 @@ where
         let ctrl = conn.control();
         let inner = Inner {
             incoming: Incoming {
-                stream: yamux::into_stream(conn).err_into().boxed(),
+                stream: yamux::into_stream(conn).boxed(),
                 _marker: std::marker::PhantomData
             },
             control: ctrl,
@@ -84,7 +84,7 @@ where
         let ctrl = conn.control();
         let inner = Inner {
             incoming: LocalIncoming {
-                stream: yamux::into_stream(conn).err_into().boxed_local(),
+                stream: yamux::into_stream(conn).boxed_local(),
                 _marker: std::marker::PhantomData
             },
             control: ctrl,
@@ -97,7 +97,7 @@ type Poll<T> = std::task::Poll<Result<T, YamuxError>>;
 
 impl<S> libp2p_core::StreamMuxer for Yamux<S>
 where
-    S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin
+    S: Stream<Item = yamux::Stream> + Unpin
 {
     type Substream = yamux::Stream;
     type OutboundSubstream = OpenSubstreamToken;
@@ -106,8 +106,7 @@ where
     fn poll_event(&self, c: &mut Context) -> Poll<StreamMuxerEvent<Self::Substream>> {
         let mut inner = self.0.lock();
         match ready!(inner.incoming.poll_next_unpin(c)) {
-            Some(Ok(s)) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
-            Some(Err(e)) => Poll::Ready(Err(e)),
+            Some(s) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
             None => Poll::Ready(Err(yamux::ConnectionError::Closed.into()))
         }
     }
@@ -149,10 +148,8 @@ where
             return Poll::Ready(x.map_err(YamuxError))
         }
         while let std::task::Poll::Ready(x) = inner.incoming.poll_next_unpin(c) {
-            match x {
-                Some(Ok(_))  => {} // drop inbound stream
-                Some(Err(e)) => return Poll::Ready(Err(e)),
-                None => return Poll::Ready(Ok(()))
+            if x.is_none() {
+                return Poll::Ready(Ok(()))
             }
         }
         Poll::Pending
@@ -285,7 +282,7 @@ impl Into<io::Error> for YamuxError {
 
 /// The [`futures::stream::Stream`] of incoming substreams.
 pub struct Incoming<T> {
-    stream: BoxStream<'static, Result<yamux::Stream, YamuxError>>,
+    stream: BoxStream<'static, yamux::Stream>,
     _marker: std::marker::PhantomData<T>
 }
 
@@ -297,7 +294,7 @@ impl<T> fmt::Debug for Incoming<T> {
 
 /// The [`futures::stream::Stream`] of incoming substreams (`!Send`).
 pub struct LocalIncoming<T> {
-    stream: LocalBoxStream<'static, Result<yamux::Stream, YamuxError>>,
+    stream: LocalBoxStream<'static, yamux::Stream>,
     _marker: std::marker::PhantomData<T>
 }
 
@@ -308,7 +305,7 @@ impl<T> fmt::Debug for LocalIncoming<T> {
 }
 
 impl<T> Stream for Incoming<T> {
-    type Item = Result<yamux::Stream, YamuxError>;
+    type Item = yamux::Stream;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
@@ -323,7 +320,7 @@ impl<T> Unpin for Incoming<T> {
 }
 
 impl<T> Stream for LocalIncoming<T> {
-    type Item = Result<yamux::Stream, YamuxError>;
+    type Item = yamux::Stream;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)

@@ -145,7 +145,7 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
-            if let Some(item) = ready!(self.0.try_poll_next_unpin(cx)?) {
+            if let Some(item) = ready!(self.0.poll_next_unpin(cx)) {
                 if item.is_data() {
                     return Poll::Ready(Some(Ok(item.into_bytes())))
                 }
