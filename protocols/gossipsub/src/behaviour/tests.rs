@@ -571,22 +571,22 @@ mod tests {
         gs.topic_peers.insert(topic_hash.clone(), peers.clone());
 
         let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, |_| true);
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
         let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 30, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 30, |_| true);
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 20, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 20, |_| true);
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 0, { |_| true });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 0, |_| true);
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         // test the filter
         let random_peers =
-            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, { |_| false });
+            Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 5, |_| false);
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
         let random_peers =
             Gossipsub::get_random_peers(&gs.topic_peers, &topic_hash, 10, {

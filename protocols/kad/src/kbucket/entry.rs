@@ -186,7 +186,7 @@ where
             .0
             .bucket
             .get_mut(self.0.key)
-            .expect("We can only build a ConnectedEntry if the entry is in the bucket; QED")
+            .expect("We can only build a PresentEntry if the entry is in the bucket; QED")
             .value
     }
 
@@ -194,6 +194,14 @@ where
     pub fn update(self, status: NodeStatus) -> Self {
         self.0.bucket.update(self.0.key, status);
         Self::new(self.0.bucket, self.0.key)
+    }
+
+    /// Removes the entry from the bucket.
+    pub fn remove(self) -> EntryView<TKey, TVal> {
+        let (node, status, _pos) = self.0.bucket
+            .remove(&self.0.key)
+            .expect("We can only build a PresentEntry if the entry is in the bucket; QED");
+        EntryView { node, status }
     }
 }
 
@@ -228,6 +236,17 @@ where
     pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TKey, TVal> {
         self.0.bucket.update_pending(self.0.key, status);
         PendingEntry::new(self.0.bucket, self.0.key)
+    }
+
+    /// Removes the pending entry from the bucket.
+    pub fn remove(self) -> EntryView<TKey, TVal> {
+        let pending = self.0.bucket
+            .remove_pending()
+            .expect("We can only build a PendingEntry if the entry is pending insertion
+                    into the bucket; QED");
+        let status = pending.status();
+        let node = pending.into_node();
+        EntryView { node, status }
     }
 }
 

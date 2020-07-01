@@ -32,11 +32,13 @@ use std::{
     collections::hash_map,
     error,
     fmt,
+    mem,
     pin::Pin,
     task::{Context, Poll},
 };
 use super::{
     Connected,
+    ConnectedPoint,
     Connection,
     ConnectionError,
     ConnectionHandler,
@@ -220,7 +222,17 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
         entry: EstablishedEntry<'a, I, C>,
         /// The produced event.
         event: O
-    }
+    },
+
+    /// A connection to a node has changed its address.
+    AddressChange {
+        /// The entry associated with the connection that changed address.
+        entry: EstablishedEntry<'a, I, C>,
+        /// The former [`ConnectedPoint`].
+        old_endpoint: ConnectedPoint,
+        /// The new [`ConnectedPoint`].
+        new_endpoint: ConnectedPoint,
+    },
 }
 
 impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
@@ -369,6 +381,23 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
                     let _ = task.remove();
                     Event::PendingConnectionError { id, error, handler }
                 }
+                task::Event::AddressChange { id: _, new_address } => {
+                    let (new, old) = if let TaskState::Established(c) = &mut task.get_mut().state {
+                        let mut new_endpoint = c.endpoint.clone();
+                        new_endpoint.set_remote_address(new_address);
+                        let old_endpoint = mem::replace(&mut c.endpoint, new_endpoint.clone());
+                        (new_endpoint, old_endpoint)
+                    } else {
+                        unreachable!(
+                            "`Event::AddressChange` implies (2) occurred on that task and thus (3)."
+                        )
+                    };
+                    Event::AddressChange {
+                        entry: EstablishedEntry { task },
+                        old_endpoint: old,
+                        new_endpoint: new,
+                    }
+                },
                 task::Event::Error { id, error } => {
                     let id = ConnectionId(id);
                     let task = task.remove();

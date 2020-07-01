@@ -207,6 +207,11 @@ where
         .collect()
     }
 
+    /// Removes the pending node from the bucket, if any.
+    pub fn remove_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
+        self.pending.take()
+    }
+
     /// Updates the status of the node referred to by the given key, if it is
     /// in the bucket.
     pub fn update(&mut self, key: &TKey, new_status: NodeStatus) {
@@ -261,9 +266,10 @@ where
         }
     }
 
-    fn pending_active(&self, weighted: bool) -> bool {
-        if weighted {
-            self.weighted.pending_active()
+    /// Returns the status of the node at the given position.
+    pub fn status(&self, pos: Position) -> NodeStatus {
+        if self.first_connected_pos.map_or(false, |i| pos.0 >= i) {
+            NodeStatus::Connected
         } else {
             self.swamp.pending_active()
         }
