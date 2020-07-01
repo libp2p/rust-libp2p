@@ -35,9 +35,9 @@ mod tests {
     ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
         let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
         // generate a default GossipsubConfig with signing
-        let gs_config = GossipsubConfig::new(Signing::Enabled(keypair));
+        let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(Signing::Enabled(keypair), gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -556,9 +556,9 @@ mod tests {
     fn test_get_random_peers() {
         // generate a default GossipsubConfig
         let key = libp2p_core::identity::Keypair::generate_secp256k1();
-        let gs_config = GossipsubConfig::new(Signing::Enabled(key));
+        let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(Signing::Enabled(key), gs_config);
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test".into()).no_hash().clone();

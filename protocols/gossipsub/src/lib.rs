@@ -148,7 +148,7 @@ mod rpc_proto {
     include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));
 }
 
-pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc};
-pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, Signing};
+pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc, Signing};
+pub use self::config::{GossipsubConfig, GossipsubConfigBuilder};
 pub use self::protocol::{GossipsubMessage, MessageId};
 pub use self::topic::{Topic, TopicHash};

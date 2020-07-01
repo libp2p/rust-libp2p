@@ -145,8 +145,8 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .boxed();
 
     let peer_id = public_key.clone().into_peer_id();
-    let config = GossipsubConfig::new(Signing::Enabled(key));
-    let behaviour = Gossipsub::new(config);
+    let config = GossipsubConfig::default();
+    let behaviour = Gossipsub::new(Signing::Disabled(peer_id.clone()), config);
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();

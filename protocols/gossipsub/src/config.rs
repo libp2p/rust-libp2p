@@ -19,23 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{GossipsubMessage, MessageId};
-use libp2p_core::{identity::Keypair, PeerId};
 use std::borrow::Cow;
 use std::time::Duration;
-
-/// Determines message signing is enabled or not.
-///
-/// If message signing is disabled a `PeerId` can be entered which will be used as the author of
-/// any published message.
-#[derive(Clone)]
-pub enum Signing {
-    /// Message signing is enabled. All messages will be signed and all received messages will be
-    /// verified.
-    Enabled(Keypair),
-    /// Message signing is disabled and the associated `PeerId` will be used as the author for any
-    /// published message.
-    Disabled(PeerId),
-}
 
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
@@ -93,13 +78,10 @@ pub struct GossipsubConfig {
     /// The function takes a `GossipsubMessage` as input and outputs a String to be interpreted as
     /// the message id.
     pub message_id_fn: fn(&GossipsubMessage) -> MessageId,
-
-    /// Determines if message signing is enabled or not.
-    pub signing: Signing,
 }
 
-impl GossipsubConfig {
-    pub fn new(signing: Signing) -> GossipsubConfig {
+impl Default for GossipsubConfig {
+    fn default() -> GossipsubConfig {
         GossipsubConfig {
             protocol_id: Cow::Borrowed(b"/meshsub/1.0.0"),
             history_length: 5,
@@ -120,7 +102,6 @@ impl GossipsubConfig {
                 source_string.push_str(&message.sequence_number.to_string());
                 MessageId(source_string)
             },
-            signing,
         }
     }
 }
@@ -130,11 +111,19 @@ pub struct GossipsubConfigBuilder {
     config: GossipsubConfig,
 }
 
+impl Default for GossipsubConfigBuilder {
+    fn default() -> GossipsubConfigBuilder {
+        GossipsubConfigBuilder {
+            config: GossipsubConfig::default(),
+        }
+    }
+}
+
 impl GossipsubConfigBuilder {
     // set default values
-    pub fn new(signing: Signing) -> GossipsubConfigBuilder {
+    pub fn new() -> GossipsubConfigBuilder {
         GossipsubConfigBuilder {
-            config: GossipsubConfig::new(signing),
+            config: GossipsubConfig::default(),
         }
     }
 
@@ -263,12 +252,6 @@ impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
         let _ = builder.field("protocol_id", &self.protocol_id);
-        let (author, signing) = match &self.signing {
-            Signing::Enabled(kp) => (kp.public().into_peer_id(), true),
-            Signing::Disabled(author) => (author.clone(), false),
-        };
-        let _ = builder.field("signing", &signing);
-        let _ = builder.field("message_author", &author);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);

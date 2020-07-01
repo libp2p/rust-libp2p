@@ -511,8 +511,8 @@ mod tests {
             let keypair = TestKeypair::arbitrary(g);
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
-            let config = GossipsubConfig::new(crate::config::Signing::Enabled(keypair.0.clone()));
-            let gs = Gossipsub::new(config);
+            let config = GossipsubConfig::default();
+            let gs = Gossipsub::new(crate::Signing::Enabled(keypair.0.clone()), config);
             let data = (0..g.gen_range(1, 1024)).map(|_| g.gen()).collect();
             let topics = Vec::arbitrary(g)
                 .into_iter()

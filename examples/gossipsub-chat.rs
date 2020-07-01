@@ -87,13 +87,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         // set custom gossipsub
-        let gossipsub_config = gossipsub::GossipsubConfigBuilder::new(Signing::Enabled(local_key))
+        let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
             .heartbeat_interval(Duration::from_secs(10))
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
             //same content will be propagated.
             .build();
         // build a gossipsub network behaviour
-        let mut gossipsub = gossipsub::Gossipsub::new(gossipsub_config);
+        let mut gossipsub =
+            gossipsub::Gossipsub::new(Signing::Enabled(local_key), gossipsub_config);
         gossipsub.subscribe(topic.clone());
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };

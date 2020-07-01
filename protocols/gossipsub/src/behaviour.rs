@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{GossipsubConfig, Signing};
+use crate::config::GossipsubConfig;
 use crate::error::PublishError;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
@@ -29,7 +29,9 @@ use crate::protocol::{
 use crate::rpc_proto;
 use crate::topic::{Topic, TopicHash};
 use futures::prelude::*;
-use libp2p_core::{connection::ConnectionId, identity::error::SigningError, Multiaddr, PeerId};
+use libp2p_core::{
+    connection::ConnectionId, identity::error::SigningError, identity::Keypair, Multiaddr, PeerId,
+};
 use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
@@ -49,6 +51,20 @@ use wasm_timer::{Instant, Interval};
 
 mod tests;
 
+/// Determines message signing is enabled or not.
+///
+/// If message signing is disabled a `PeerId` can be entered which will be used as the author of
+/// any published message.
+#[derive(Clone)]
+pub enum Signing {
+    /// Message signing is enabled. All messages will be signed and all received messages will be
+    /// verified.
+    Enabled(Keypair),
+    /// Message signing is disabled and the associated `PeerId` will be used as the author for any
+    /// published message.
+    Disabled(PeerId),
+}
+
 /// Network behaviour that handles the gossipsub protocol.
 pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
@@ -63,6 +79,9 @@ pub struct Gossipsub {
     /// The `PeerId` that will be the source of published messages. This can be set to an arbitrary
     /// PeerId when the config is initialised via the `Signing` enum.
     message_author: PeerId,
+
+    /// An optional keypair for message signing.
+    keypair: Option<libp2p_core::identity::Keypair>,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
     topic_peers: HashMap<TopicHash, Vec<PeerId>>,
@@ -92,12 +111,12 @@ pub struct Gossipsub {
 
 impl Gossipsub {
     /// Creates a `Gossipsub` struct given a set of parameters specified by via a `GossipsubConfig`.
-    pub fn new(config: GossipsubConfig) -> Self {
+    pub fn new(signing: Signing, config: GossipsubConfig) -> Self {
         // Set up the router given the configuration settings.
 
         // Set up the author and inlined key if required.
-        let (message_author, inlined_key) = match config.signing {
-            Signing::Enabled(ref kp) => {
+        let (message_author, keypair, inlined_key) = match signing {
+            Signing::Enabled(kp) => {
                 let public_key = kp.public();
                 let key_enc = public_key.clone().into_protobuf_encoding();
                 let key = if key_enc.len() <= 42 {
@@ -108,15 +127,16 @@ impl Gossipsub {
                     // Include the protobuf encoding of the public key in the message.
                     Some(key_enc)
                 };
-                (public_key.into_peer_id(), key)
+                (public_key.into_peer_id(), Some(kp), key)
             }
-            Signing::Disabled(ref peer_id) => (peer_id.clone(), None),
+            Signing::Disabled(peer_id) => (peer_id, None, None),
         };
 
         Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             message_author,
+            keypair,
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             mesh: HashMap::new(),
@@ -958,7 +978,7 @@ impl Gossipsub {
         let sequence_number: u64 = rand::random();
 
         // If a signature is required, generate it
-        let signature = if let Signing::Enabled(ref keypair) = self.config.signing {
+        let signature = if let Some(keypair) = self.keypair.as_ref() {
             let message = rpc_proto::Message {
                 from: Some(self.message_author.clone().into_bytes()),
                 data: Some(data.clone()),
@@ -1066,10 +1086,7 @@ impl NetworkBehaviour for Gossipsub {
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         // let the handler know if we should verify signatures. If message signing is enabled, we
         // verify signatures of messages.
-        let verify_signatures = match self.config.signing {
-            Signing::Enabled(_) => true,
-            Signing::Disabled(_) => false,
-        };
+        let verify_signatures = self.keypair.is_some();
 
         GossipsubHandler::new(
             self.config.protocol_id.clone(),

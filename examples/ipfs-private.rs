@@ -239,11 +239,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let gossipsub_config = GossipsubConfigBuilder::new(Signing::Enabled(local_key.clone()))
+        let gossipsub_config = GossipsubConfigBuilder::new()
             .max_transmit_size(262144)
             .build();
         let mut behaviour = MyBehaviour {
-            gossipsub: Gossipsub::new(gossipsub_config),
+            gossipsub: Gossipsub::new(Signing::Enabled(local_key.clone()), gossipsub_config),
             identify: Identify::new(
                 "/ipfs/0.1.0".into(),
                 "rust-ipfs-example".into(),
