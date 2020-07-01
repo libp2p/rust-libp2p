@@ -2,7 +2,7 @@
 name = "libp2p-pnet"
 edition = "2018"
 description = "Private swarm support for libp2p"
-version = "0.19.0"
+version = "0.19.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,7 +15,7 @@ log = "0.4.8"
 salsa20 = "0.3.0"
 sha3 = "0.8"
 rand = "0.7"
-pin-project = "0.4.6"
+pin-project = "0.4.17"
 
 [dev-dependencies]
 quickcheck = "0.9.0"

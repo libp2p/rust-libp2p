@@ -125,6 +125,16 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
         /// The produced event.
         event: TOutEvent,
     },
+
+    /// The connection to a node has changed its address.
+    AddressChange {
+        /// The connection that has changed address.
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        /// The new endpoint.
+        new_endpoint: ConnectedPoint,
+        /// The old endpoint.
+        old_endpoint: ConnectedPoint,
+    },
 }
 
 impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId> fmt::Debug
@@ -160,6 +170,13 @@ where
                 f.debug_struct("PoolEvent::ConnectionEvent")
                     .field("conn_info", connection.info())
                     .field("event", event)
+                    .finish()
+            },
+            PoolEvent::AddressChange { ref connection, ref new_endpoint, ref old_endpoint } => {
+                f.debug_struct("PoolEvent::AddressChange")
+                    .field("conn_info", connection.info())
+                    .field("new_endpoint", new_endpoint)
+                    .field("old_endpoint", old_endpoint)
                     .finish()
             },
         }
@@ -639,7 +656,27 @@ where
                             }),
                         _ => unreachable!("since `entry` is an `EstablishedEntry`.")
                     }
-                }
+                },
+                manager::Event::AddressChange { entry, new_endpoint, old_endpoint } => {
+                    let id = entry.id();
+
+                    match self.established.get_mut(entry.connected().peer_id()) {
+                        Some(list) => *list.get_mut(&id)
+                            .expect("state inconsistency: entry is `EstablishedEntry` but absent \
+                                from `established`") = new_endpoint.clone(),
+                        None => unreachable!("since `entry` is an `EstablishedEntry`.")
+                    };
+
+                    match self.get(id) {
+                        Some(PoolConnection::Established(connection)) =>
+                            return Poll::Ready(PoolEvent::AddressChange {
+                                connection,
+                                new_endpoint,
+                                old_endpoint,
+                            }),
+                        _ => unreachable!("since `entry` is an `EstablishedEntry`.")
+                    }
+                },
             }
         }
     }
