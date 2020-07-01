@@ -22,7 +22,7 @@
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 
-# Version 0.21.0 (2020-06-30)
+# Version 0.20.2 (2020-06-30)
 
 - Conditional compilation fixes for the `wasm32-wasi` target
   ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
@@ -30,7 +30,7 @@
 - New `libp2p-request-response` crate
   ([PR 1596](https://github.com/libp2p/rust-libp2p/pull/1596)).
 
-- Updated dependencies.
+- Updated libp2p dependencies.
 
 # Version 0.19.1 (2020-05-25)
 

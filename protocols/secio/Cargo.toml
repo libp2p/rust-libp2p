@@ -16,7 +16,7 @@ ctr = "0.3"
 futures = "0.3.1"
 hmac = "0.7.0"
 lazy_static = "1.2.0"
-libp2p-core = { version = ">= 0.20", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core" }
 log = "0.4.6"
 prost = "0.6.1"
 pin-project = "0.4.17"
