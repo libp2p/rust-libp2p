@@ -48,6 +48,7 @@ request-response = ["libp2p-request-response"]
 secio = ["libp2p-secio"]
 tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
 tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
+tor =  ["libp2p-tor",]
 uds = ["libp2p-uds"]
 wasm-ext = ["libp2p-wasm-ext"]
 websocket = ["libp2p-websocket"]
@@ -90,6 +91,7 @@ libp2p-deflate = { version = "0.20.0", path = "protocols/deflate", optional = tr
 libp2p-dns = { version = "0.20.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.20.0", path = "protocols/mdns", optional = true }
 libp2p-tcp = { version = "0.20.0", path = "transports/tcp", optional = true }
+libp2p-tor = { version = "0.20.0", path = "transports/tor", optional = true }
 libp2p-websocket = { version = "0.21.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
@@ -118,6 +120,7 @@ members = [
     "swarm",
     "transports/dns",
     "transports/tcp",
+    "transports/tor",
     "transports/uds",
     "transports/websocket",
     "transports/wasm-ext"
