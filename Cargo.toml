@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.21.0"
+version = "0.21.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -90,7 +90,7 @@ libp2p-deflate = { version = "0.20.0", path = "protocols/deflate", optional = tr
 libp2p-dns = { version = "0.20.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.20.0", path = "protocols/mdns", optional = true }
 libp2p-tcp = { version = "0.20.0", path = "transports/tcp", optional = true }
-libp2p-websocket = { version = "0.20.1", path = "transports/websocket", optional = true }
+libp2p-websocket = { version = "0.21.0", path = "transports/websocket", optional = true }
 
 [dev-dependencies]
 async-std = "1.6.2"
