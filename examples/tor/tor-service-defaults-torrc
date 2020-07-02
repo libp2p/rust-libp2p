@@ -1,0 +1,15 @@
+DataDirectory /var/lib/tor
+PidFile /run/tor/tor.pid
+RunAsDaemon 1
+User debian-tor
+
+ControlSocket /run/tor/control GroupWritable RelaxDirModeCheck
+ControlSocketsGroupWritable 1
+SocksPort unix:/run/tor/socks WorldWritable
+SocksPort 9050
+
+CookieAuthentication 1
+CookieAuthFileGroupReadable 1
+CookieAuthFile /run/tor/control.authcookie
+
+Log notice syslog

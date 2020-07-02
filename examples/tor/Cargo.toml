@@ -1,0 +1,21 @@
+[package]
+name = "ping-pong"
+version = "0.2.0"
+authors = ["Tobin C. Harding <tobin@coblox.tech>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+clap = "2.32"
+data-encoding = "2.2"
+futures = "0.3"
+futures-timer = "3.0"
+get_if_addrs = "0.5"
+ipnet = "2.3"
+libp2p = { version = "0.20", default-features = false, features = [ "secio", "yamux", "mplex", "dns", "tcp-tokio", "ping"] }
+log = "0.4"
+simple_logger = "1.6"
+socket2 = "0.3"
+structopt = "0.3"
+tokio = { version = "0.2", features = ["rt-threaded", "macros", "tcp"] }
+tokio-socks = "0.2"

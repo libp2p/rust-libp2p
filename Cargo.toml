@@ -101,6 +101,7 @@ env_logger = "0.7.1"
 [workspace]
 members = [
     "core",
+    "examples/tor",
     "misc/core-derive",
     "misc/multiaddr",
     "misc/multistream-select",
