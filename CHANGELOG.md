@@ -22,6 +22,10 @@
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 
+# Version 0.21.1 (2020-07-02)
+
+- Bump `libp2p-websockets` lower bound.
+
 # Version 0.21.0 (2020-07-01)
 
 - Conditional compilation fixes for the `wasm32-wasi` target
