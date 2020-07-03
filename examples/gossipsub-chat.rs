@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::build_development_transport(local_key)?;
 
     // Create a Gossipsub topic
-    let topic = Topic::new("test-net".into());
+    let topic = Topic::new("test-net");
 
     // Create a Swarm to manage peers and events
     let mut swarm = {

@@ -179,7 +179,7 @@ fn multi_hop_propagation() {
         let number_nodes = graph.nodes.len();
 
         // Subscribe each node to the same topic.
-        let topic = Topic::new("test-net".into());
+        let topic = Topic::new("test-net");
         for (_addr, node) in &mut graph.nodes {
             node.subscribe(topic.clone());
         }

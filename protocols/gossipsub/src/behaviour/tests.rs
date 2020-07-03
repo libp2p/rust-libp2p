@@ -562,7 +562,7 @@ mod tests {
         let mut gs: Gossipsub = Gossipsub::new(PeerId::random(), gs_config);
 
         // create a topic and fill it with some peers
-        let topic_hash = Topic::new("Test".into()).no_hash().clone();
+        let topic_hash = Topic::new("Test").no_hash().clone();
         let mut peers = vec![];
         for _ in 0..20 {
             peers.push(PeerId::random())

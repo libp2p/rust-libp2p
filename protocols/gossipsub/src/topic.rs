@@ -51,8 +51,8 @@ pub struct Topic {
 }
 
 impl Topic {
-    pub fn new(topic: String) -> Self {
-        Topic { topic }
+    pub fn new(topic: impl Into<String>) -> Self {
+        Topic { topic: topic.into() }
     }
 
     /// Creates a `TopicHash` by SHA256 hashing the topic then base64 encoding the

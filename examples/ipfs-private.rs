@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = build_transport(local_key.clone(), psk);
 
     // Create a Gosspipsub topic
-    let gossipsub_topic = gossipsub::Topic::new("chat".into());
+    let gossipsub_topic = gossipsub::Topic::new("chat");
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
