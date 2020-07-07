@@ -1449,6 +1449,34 @@ where
         self.connected_peers.insert(peer.clone());
     }
 
+    fn inject_address_change(
+        &mut self,
+        peer: &PeerId,
+        _: &ConnectionId,
+        old: &ConnectedPoint,
+        new: &ConnectedPoint
+    ) {
+        // Only addresses of outbound connections are inserted into the routing
+        // table in `inject_connection_established`. Thereby only address
+        // changes of outbound connections require updating.
+        let new_address = match new {
+            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => return,
+        };
+
+        // First insert the new address, then remove the old address. A peer
+        // with a single address might lose its slot within the routing table if
+        // one removes the old address first.
+        self.connection_updated(peer.clone(), new_address, NodeStatus::Connected);
+
+        let old_address = match old {
+            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Listener { .. } => return,
+        };
+
+        self.remove_address(peer, old_address);
+    }
+
     fn inject_addr_reach_failure(
         &mut self,
         peer_id: Option<&PeerId>,
