@@ -382,11 +382,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// dialing attempt or `addresses_of_peer` reports no addresses, `Ok(false)`
     /// is returned.
     pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<(), DialError> {
-        let self_ext_addrs = &me.external_addrs;
-        let self_lst_addrs = &me.listened_addrs;
+        let self_listening = &me.listened_addrs;
         let mut addrs = me.behaviour.addresses_of_peer(peer_id)
             .into_iter()
-            .filter(|a| !self_ext_addrs.contains(a) && !self_lst_addrs.contains(a));
+            .filter(|a| !self_listening.contains(a));
 
         let result =
             if let Some(first) = addrs.next() {
@@ -700,13 +699,12 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             // ongoing dialing attempt, if there is one.
                             log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
                                 peer_id, condition);
-                            let self_ext_addrs = &this.external_addrs;
-                            let self_lst_addrs = &this.listened_addrs;
+                            let self_listening = &this.listened_addrs;
                             if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
                                 let addrs = this.behaviour.addresses_of_peer(peer.id());
                                 let mut attempt = peer.some_attempt();
                                 for a in addrs {
-                                    if !self_ext_addrs.contains(&a) && !self_lst_addrs.contains(&a) {
+                                    if !self_listening.contains(&a) {
                                         attempt.add_address(a);
                                     }
                                 }

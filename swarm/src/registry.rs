@@ -99,11 +99,6 @@ impl Addresses {
         self.registry.push(r)
     }
 
-    /// Checks whether an address is in the collection.
-    pub fn contains(&self, addr: &Multiaddr) -> bool {
-        self.registry.iter().any(|r| &r.addr == addr)
-    }
-
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
