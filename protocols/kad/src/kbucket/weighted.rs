@@ -111,8 +111,20 @@ where
         self.pending = Some(node)
     }
 
-    pub fn remove_pending(&mut self) {
-        self.pending = None
+    pub fn remove_pending(&mut self, key: &TKey) -> Option<PendingNode<TKey, TVal>> {
+        // let matches = self.pending.map_or(false, |n| n.node.key.as_ref() == key.as_ref());
+        // if matches {
+        //     self.pending.take().map(|n| n.into())
+        // } else {
+        //     None
+        // }
+
+        let p = self.pending.as_ref()?;
+        if p.node.key.as_ref() == key.as_ref() {
+            self.drop_pending()
+        } else {
+            None
+        }
     }
 
     // TODO: pending 1. Refactor?
@@ -212,6 +224,16 @@ where
         })
     }
 
+    fn status_of(&self, position: WeightedPosition) -> Option<NodeStatus> {
+        self.map
+            .get(&position.weight)
+            .map(|bucket| bucket.status(position.into()))
+    }
+
+    fn drop_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
+        self.pending.take()
+    }
+
     pub fn insert<Node: Into<WeightedNode<TKey, TVal>>>(
         &mut self,
         node: Node,
@@ -299,7 +321,7 @@ where
             // If the least-recently connected node re-establishes its
             // connected status, drop the pending node.
             if self.is_least_recently_connected(&node) && new_status == NodeStatus::Connected {
-                self.remove_pending();
+                self.drop_pending();
             }
             // Reinsert the node with the desired status.
             match self.insert(node, new_status) {
@@ -331,9 +353,7 @@ where
 
     pub fn status(&self, key: &TKey) -> Option<NodeStatus> {
         self.position(key).and_then(|position| {
-            self.map
-                .get(&position.weight)
-                .map(|bucket| bucket.status(position.into()))
+            self.status_of(position)
         })
     }
 
@@ -369,13 +389,19 @@ where
     }
 
     pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
-        if let Some(position) = self.position(key) {
-            self.get_bucket_mut(position.weight)
-                .get_mut(position.into())
-                .map(|n| &mut n.inner)
-        } else {
-            None
-        }
+        let position = self.position(key)?;
+        self.get_bucket_mut(position.weight)
+            .get_mut(position.into())
+            .map(|n| &mut n.inner)
+    }
+
+    pub fn remove(&mut self, key: &TKey) ->  Option<(Node<TKey, TVal>, NodeStatus, Position)> {
+        let pos = self.position(key).clone()?;
+        // TODO: excess clone
+        let status = self.status_of(pos.clone())?;
+        let node = self.evict_node(pos.clone())?;
+
+        Some((node.into(), status, pos.into()))
     }
 }
 

@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-use crate::kbucket::{
-    AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, PendingNode, SubBucket,
-};
+use crate::kbucket::{AppliedPending, InsertResult, KeyBytes, Node, NodeStatus, PendingNode, SubBucket, Position};
 use crate::K_VALUE;
 use std::time::{Duration, Instant};
 
@@ -44,8 +42,17 @@ where
         self.pending = Some(node)
     }
 
-    pub fn remove_pending(&mut self) {
-        self.pending = None
+    pub fn remove_pending(&mut self, key: &TKey) -> Option<PendingNode<TKey, TVal>> {
+        let p = self.pending.as_ref()?;
+        if p.node.key.as_ref() == key.as_ref() {
+            self.drop_pending()
+        } else {
+            None
+        }
+    }
+
+    pub fn drop_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
+        self.pending.take()
     }
 
     // TODO: pending 1. Refactor?
@@ -146,7 +153,7 @@ where
             // If the least-recently connected node re-establishes its
             // connected status, drop the pending node.
             if self.bucket.is_least_recently_connected(pos) && new_status == NodeStatus::Connected {
-                self.remove_pending();
+                self.drop_pending();
             }
             // Reinsert the node with the desired status.
             match self.insert(node, new_status) {
@@ -218,5 +225,13 @@ where
         } else {
             None
         }
+    }
+
+    pub fn remove(&mut self, key: &TKey) ->  Option<(Node<TKey, TVal>, NodeStatus, Position)> {
+        let pos = self.bucket.position(|n| n.key.as_ref() == key.as_ref())?;
+        let status = self.bucket.status(pos.clone());
+        let node = self.bucket.evict_node(pos.clone())?;
+
+        Some((node, status, pos))
     }
 }

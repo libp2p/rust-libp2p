@@ -144,7 +144,7 @@ impl ClosestDisjointPeersIter {
     /// calling this function has no effect and `false` is returned.
     pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
-        I: IntoIterator<Item = PeerId>,
+        I: IntoIterator<Item = Key<PeerId>>,
     {
         let mut updated = false;
 
@@ -650,19 +650,19 @@ mod tests {
         // Response from malicious peer 1.
         peers_iter.on_success(
             known_closest_peers[0].preimage(),
-            malicious_response_1.clone().into_iter().map(|k| k.preimage().clone()),
+            malicious_response_1.clone().into_iter().map(|k| k.clone()),
         );
 
         // Response from peer 2.
         peers_iter.on_success(
             known_closest_peers[1].preimage(),
-            response_2.clone().into_iter().map(|k| k.preimage().clone()),
+            response_2.clone().into_iter().map(|k| k.clone()),
         );
 
         // Response from peer 3.
         peers_iter.on_success(
             known_closest_peers[2].preimage(),
-            response_3.clone().into_iter().map(|k| k.preimage().clone()),
+            response_3.clone().into_iter().map(|k| k.clone()),
         );
 
         ////////////////////////////////////////////////////////////////////////
@@ -816,8 +816,8 @@ mod tests {
 
         fn on_success(&mut self, peer: &PeerId, closer_peers: Vec<PeerId>) {
             match self {
-                PeerIterator::Disjoint(iter) => iter.on_success(peer, closer_peers),
-                PeerIterator::Closest(iter) => iter.on_success(peer, closer_peers),
+                PeerIterator::Disjoint(iter) => iter.on_success(peer, closer_peers.into_iter().map(Into::into)),
+                PeerIterator::Closest(iter) => iter.on_success(peer, closer_peers.into_iter().map(Into::into)),
             };
         }
 

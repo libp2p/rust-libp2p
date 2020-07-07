@@ -193,23 +193,6 @@ where
         }
     }
 
-    /// Returns an iterator over all the entries in the routing table.
-    pub fn iter<'a>(&'a mut self) -> impl Iterator<Item = EntryRefView<'a, TKey, TVal>> {
-        let applied_pending = &mut self.applied_pending;
-        self.buckets.iter_mut().flat_map(move |table| {
-            applied_pending.extend(table.apply_pending());
-            let table = &*table;
-            table.iter().map(move |(n, status)| EntryRefView {
-                node: NodeRefView {
-                    key: &n.key,
-                    value: &n.value,
-                },
-                status,
-            })
-        })
-    }
-
-    /// Returns a by-reference iterator over all buckets.
     /// Returns an iterator over all buckets.
     ///
     /// The buckets are ordered by proximity to the `local_key`, i.e. the first
@@ -235,9 +218,7 @@ where
         let d = self.local_key.as_ref().distance(key);
         if let Some(index) = BucketIndex::new(&d) {
             let bucket = &mut self.buckets[index.0];
-            if let Some(applied) = bucket.apply_pending() {
-                self.applied_pending.push_back(applied)
-            }
+            self.applied_pending.extend(bucket.apply_pending());
             Some(KBucketRef { bucket, index })
         } else {
             None

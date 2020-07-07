@@ -225,6 +225,12 @@ impl KademliaConfig {
     /// See the S/Kademlia paper for more information on the high level design
     /// as well as its security improvements.
     pub fn disjoint_query_paths(&mut self, enabled: bool) -> &mut Self {
+        if enabled {
+            unimplemented!(
+                "TODO FIXME: disjoint paths are not working correctly with weighted \
+                    and swamp buckets. Need to fix at least behaviour::test::put_record"
+            )
+        }
         self.query_config.disjoint_query_paths = enabled;
         self
     }
@@ -441,7 +447,7 @@ where
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr, public_key: PublicKey) -> RoutingUpdate {
         let key = kbucket::Key::new(peer.clone());
-        match self.kbuckets.entry(&key) {
+        let result = match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().insert(address) {
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -479,9 +485,10 @@ where
                 status
             },
             kbucket::Entry::SelfEntry => RoutingUpdate::Failed,
-        }
+        };
 
         self.print_bucket_table();
+        result
     }
 
     /// Removes an address of a peer from the routing table.
@@ -495,19 +502,19 @@ where
     /// If the given peer or address is not in the routing table,
     /// this is a no-op.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr)
-        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
+        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Contact>>
     {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
-                if entry.value().remove(address).is_err() {
+                if entry.value().addresses.remove(address, Remove::Completely).is_err() {
                     Some(entry.remove()) // it is the last address, thus remove the peer.
                 } else {
                     None
                 }
             }
             kbucket::Entry::Pending(mut entry, _) => {
-                if entry.value().remove(address).is_err() {
+                if entry.value().addresses.remove(address, Remove::Completely).is_err() {
                     Some(entry.remove()) // it is the last address, thus remove the peer.
                 } else {
                     None
@@ -524,7 +531,7 @@ where
     /// Returns `None` if the peer was not in the routing table,
     /// not even pending insertion.
     pub fn remove_peer(&mut self, peer: &PeerId)
-        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
+        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Contact>>
     {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
@@ -542,7 +549,7 @@ where
 
     /// Returns an iterator over all non-empty buckets in the routing table.
     pub fn kbuckets(&mut self)
-        -> impl Iterator<Item = kbucket::KBucketRef<kbucket::Key<PeerId>, Addresses>>
+        -> impl Iterator<Item = kbucket::KBucketRef<kbucket::Key<PeerId>, Contact>>
     {
         self.kbuckets.iter().filter(|b| !b.is_empty())
     }
@@ -551,7 +558,7 @@ where
     ///
     /// Returns `None` if the given key refers to the local key.
     pub fn kbucket<K>(&mut self, key: K)
-        -> Option<kbucket::KBucketRef<kbucket::Key<PeerId>, Addresses>>
+        -> Option<kbucket::KBucketRef<kbucket::Key<PeerId>, Contact>>
     where
         K: Borrow<[u8]> + Clone
     {
@@ -804,9 +811,10 @@ where
         let cur_time = trust_graph::current_time();
         for peer in peers.clone() {
             for cert in peer.certificates.iter() {
-                self.trust.add(cert, cur_time).unwrap_or_else(|err| {
-                    log::warn!("Unable to add certificate for peer {}: {}", peer.node_id, err);
-                })
+                match self.trust.add(cert, cur_time) {
+                    Ok(_) => log::trace!("{} added cert {:?} from {}", self.kbuckets.local_key().preimage(), cert, source),
+                    Err(err) => log::info!("Unable to add certificate for peer {}: {}", peer.node_id, err),
+                }
             }
         }
 
@@ -952,8 +960,9 @@ where
                         ));
                     }
                     (Some(c), KademliaBucketInserts::Manual) => {
+                        let address = c.addresses.iter().last().expect("addresses can't be empty here").clone();
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::RoutablePeer { peer, address: c.addresses.last } // TODO
+                            KademliaEvent::RoutablePeer { peer, address }
                         ));
                     }
                     (Some(contact), KademliaBucketInserts::OnConnected) => {
@@ -990,6 +999,8 @@ where
             bs58::encode(contact.public_key.encode().to_vec().as_slice()).into_string(),
             weight
         );
+        // TODO: how to avoid clone when bucket isn't Full?
+        let address = contact.addresses.iter().last().expect("addresses can't be empty here").clone();
         match entry.insert(contact, status, weight) {
             kbucket::InsertResult::Inserted => {
                 (
@@ -1010,7 +1021,7 @@ where
                 (
                     RoutingUpdate::Failed,
                     vec![NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::RoutablePeer { peer, address: addresses.last } // TODO: fix compilation
+                        KademliaEvent::RoutablePeer { peer, address }
                     )]
                 )
             },
@@ -1573,7 +1584,7 @@ where
 
     fn print_bucket_table(&mut self) {
         let mut size = 0;
-        let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
+        let buckets = self.kbuckets.iter().filter_map(|KBucketRef { index, bucket }| {
             use multiaddr::Protocol::{Ip4, Ip6, Tcp};
             let elems = bucket.iter().collect::<Vec<_>>();
             if elems.len() == 0 {

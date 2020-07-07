@@ -80,7 +80,6 @@ pub use behaviour::{
     GetProvidersOk,
     GetProvidersError,
 };
-pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
 pub use protocol::KadConnectionType;
 pub use query::QueryId;
 pub use record::{store, ProviderRecord, Record};

@@ -52,6 +52,7 @@ use libp2p::{
     swarm::NetworkBehaviourEventProcess
 };
 use std::{error::Error, task::{Context, Poll}};
+use trust_graph::TrustGraph;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -61,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = build_development_transport(local_key)?;
+    let transport = build_development_transport(local_key.clone())?;
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
@@ -75,7 +76,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         fn inject_event(&mut self, event: MdnsEvent) {
             if let MdnsEvent::Discovered(list) = event {
                 for (peer_id, multiaddr) in list {
-                    self.kademlia.add_address(&peer_id, multiaddr);
+                    let key = match peer_id.as_public_key().expect("peer id must inline public key") {
+                        libp2p::identity::PublicKey::Ed25519(key) => key,
+                        _ => unreachable!("only ed25519 supported"),
+                    };
+                    self.kademlia.add_address(&peer_id, multiaddr, key);
                 }
             }
         }
@@ -118,7 +123,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id.clone());
-        let kademlia = Kademlia::new(local_peer_id.clone(), store);
+        let local_key = match local_key {
+            libp2p::identity::Keypair::Ed25519(kp) => kp,
+            _ => unreachable!("only ed25519 supported"),
+        };
+        let kademlia = Kademlia::new(local_key, local_peer_id.clone(), store, TrustGraph::new(vec![]));
         let mdns = Mdns::new()?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)

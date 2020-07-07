@@ -213,9 +213,10 @@ impl Metrics {
     pub(super) fn generated_event_name(event: &KademliaEvent) -> &str {
         match event {
             KademliaEvent::QueryResult { .. } => "query_result",
-            KademliaEvent::Discovered { .. } => "discovered",
             KademliaEvent::RoutingUpdated { .. } => "routing_updated",
             KademliaEvent::UnroutablePeer { .. } => "unroutable_peer",
+            KademliaEvent::RoutablePeer { .. } => "routable_peer",
+            KademliaEvent::PendingRoutablePeer { .. } => "pending_routable_peer"
         }
     }
 
