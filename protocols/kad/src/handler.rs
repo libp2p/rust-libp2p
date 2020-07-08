@@ -632,7 +632,7 @@ where
                     }
                     (None, Some(event), _) => {
                         if self.substreams.is_empty() {
-                            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
                         }
                         return Poll::Ready(event);
                     }
@@ -653,7 +653,7 @@ where
 
         if self.substreams.is_empty() {
             // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
         } else {
             self.keep_alive = KeepAlive::Yes;
         }

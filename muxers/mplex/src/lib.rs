@@ -28,6 +28,7 @@ use bytes::Bytes;
 use libp2p_core::{
     Endpoint,
     StreamMuxer,
+    muxing::StreamMuxerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use log::{debug, trace};
@@ -110,7 +111,6 @@ impl MplexConfig {
                     to_wake: Mutex::new(Default::default()),
                 }),
                 is_shutdown: false,
-                is_acknowledged: false,
             })
         }
     }
@@ -175,6 +175,9 @@ where
 }
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
+///
+/// This implementation isn't capable of detecting when the underlying socket changes its address,
+/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Multiplex<C> {
     inner: Mutex<MultiplexInner<C>>,
 }
@@ -203,8 +206,6 @@ struct MultiplexInner<C> {
     /// If true, the connection has been shut down. We need to be careful not to accidentally
     /// call `Sink::poll_complete` or `Sink::start_send` after `Sink::close`.
     is_shutdown: bool,
-    /// If true, the remote has sent data to us.
-    is_acknowledged: bool,
 }
 
 struct Notifier {
@@ -295,7 +296,6 @@ where C: AsyncRead + AsyncWrite + Unpin,
         };
 
         trace!("Received message: {:?}", elem);
-        inner.is_acknowledged = true;
 
         // Handle substreams opening/closing.
         match elem {
@@ -366,7 +366,7 @@ where C: AsyncRead + AsyncWrite + Unpin
     type OutboundSubstream = OutboundSubstream;
     type Error = IoError;
 
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, IoError>> {
+    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, IoError>> {
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
@@ -388,13 +388,13 @@ where C: AsyncRead + AsyncWrite + Unpin
         };
 
         debug!("Successfully opened inbound substream {}", num);
-        Poll::Ready(Ok(Substream {
+        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(Substream {
             current_data: Bytes::new(),
             num,
             endpoint: Endpoint::Listener,
             local_open: true,
             remote_open: true,
-        }))
+        })))
     }
 
     fn open_outbound(&self) -> Self::OutboundSubstream {
@@ -585,10 +585,6 @@ where C: AsyncRead + AsyncWrite + Unpin
         self.inner.lock().buffer.retain(|elem| {
             elem.substream_id() != sub.num || elem.endpoint() == Some(sub.endpoint)
         })
-    }
-
-    fn is_remote_acknowledged(&self) -> bool {
-        self.inner.lock().is_acknowledged
     }
 
     fn close(&self, cx: &mut Context) -> Poll<Result<(), IoError>> {

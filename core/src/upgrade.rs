@@ -87,12 +87,12 @@ pub use self::{
 ///
 /// # Context
 ///
-/// In situations where we provide a list of protocols that we support, the elements of that list are required to
-/// implement the [`ProtocolName`] trait.
+/// In situations where we provide a list of protocols that we support,
+/// the elements of that list are required to implement the [`ProtocolName`] trait.
 ///
-/// Libp2p will call the [`ProtocolName::protocol_name`] trait method on each element of that list, and transmit the
-/// returned value on the network. If the remote accepts a given protocol, the element serves as the return value of
-/// the function that performed the negotiation.
+/// Libp2p will call [`ProtocolName::protocol_name`] on each element of that list, and transmit the
+/// returned value on the network. If the remote accepts a given protocol, the element
+/// serves as the return value of the function that performed the negotiation.
 ///
 /// # Example
 ///
@@ -118,6 +118,9 @@ pub use self::{
 ///
 pub trait ProtocolName {
     /// The protocol name as bytes. Transmitted on the network.
+    ///
+    /// **Note:** Valid protocol names must start with `/` and
+    /// not exceed 140 bytes in length.
     fn protocol_name(&self) -> &[u8];
 }
 

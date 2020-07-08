@@ -71,6 +71,10 @@ impl<TKey, TVal> PendingNode<TKey, TVal> {
     pub fn set_ready_at(&mut self, t: Instant) {
         self.replace = t;
     }
+
+    pub fn into_node(self) -> Node<TKey, TVal> {
+        self.node
+    }
 }
 
 /// A `Node` in a bucket, representing a peer participating

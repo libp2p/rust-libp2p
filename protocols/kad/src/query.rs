@@ -21,10 +21,10 @@
 mod peers;
 
 use peers::PeersIterState;
-use peers::closest::{ClosestPeersIter, ClosestPeersIterConfig};
+use peers::closest::{ClosestPeersIterConfig, ClosestPeersIter, disjoint::ClosestDisjointPeersIter};
 use peers::fixed::FixedPeersIter;
 
-use crate::K_VALUE;
+use crate::{ALPHA_VALUE, K_VALUE};
 use crate::kbucket::{Key, KeyBytes};
 use either::Either;
 use fnv::FnvHashMap;
@@ -113,7 +113,7 @@ impl<TInner> QueryPool<TInner> {
     {
         assert!(!self.queries.contains_key(&id));
         // TODO: why not alpha?
-        let parallelism = self.config.replication_factor.get();
+        let parallelism = self.config.replication_factor;
 
         let (swamp, weighted) = peers.into_iter().partition::<Vec<_>, _>(|p| p.weight == 0);
         let swamp = swamp.into_iter().map(|p| p.peer_id.into_preimage());
@@ -143,7 +143,8 @@ impl<TInner> QueryPool<TInner> {
         I: IntoIterator<Item = WeightedPeer>
     {
         let cfg = ClosestPeersIterConfig {
-            num_results: self.config.replication_factor.get(),
+            num_results: self.config.replication_factor,
+            parallelism: self.config.parallelism,
             .. ClosestPeersIterConfig::default()
         };
 
@@ -151,8 +152,26 @@ impl<TInner> QueryPool<TInner> {
         let swamp = swamp.into_iter().map(|p| p.peer_id);
         let weighted = weighted.into_iter().map(|p| p.peer_id);
 
-        let weighted_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg.clone(), target.clone(), weighted));
-        let swamp_iter = QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, swamp));
+        let weighted_iter = if self.config.disjoint_query_paths {
+            QueryPeerIter::ClosestDisjoint(
+                ClosestDisjointPeersIter::with_config(cfg.clone(), target.clone(), weighted),
+            )
+        } else {
+            QueryPeerIter::Closest(
+                ClosestPeersIter::with_config(cfg.clone(), target.clone(), weighted)
+            )
+        };
+
+        let swamp_iter = if self.config.disjoint_query_paths {
+            QueryPeerIter::ClosestDisjoint(
+                ClosestDisjointPeersIter::with_config(cfg, target, swamp),
+            )
+        } else {
+            QueryPeerIter::Closest(
+                ClosestPeersIter::with_config(cfg, target, swamp)
+            )
+        };
+
         let query = Query::new(id, weighted_iter, swamp_iter, inner);
         self.queries.insert(id, query);
     }
@@ -233,15 +252,34 @@ pub struct QueryId(usize);
 /// The configuration for queries in a `QueryPool`.
 #[derive(Debug, Clone)]
 pub struct QueryConfig {
+    /// Timeout of a single query.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::set_query_timeout`] for details.
     pub timeout: Duration,
+
+    /// The replication factor to use.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::set_replication_factor`] for details.
     pub replication_factor: NonZeroUsize,
+
+    /// Allowed level of parallelism for iterative queries.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::set_parallelism`] for details.
+    pub parallelism: NonZeroUsize,
+
+    /// Whether to use disjoint paths on iterative lookups.
+    ///
+    /// See [`crate::behaviour::KademliaConfig::disjoint_query_paths`] for details.
+    pub disjoint_query_paths: bool,
 }
 
 impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
             timeout: Duration::from_secs(60),
-            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0")
+            replication_factor: NonZeroUsize::new(K_VALUE.get()).expect("K_VALUE > 0"),
+            parallelism: ALPHA_VALUE,
+            disjoint_query_paths: false,
         }
     }
 }
@@ -263,6 +301,7 @@ pub struct Query<TInner> {
 /// The peer selection strategies that can be used by queries.
 enum QueryPeerIter {
     Closest(ClosestPeersIter),
+    ClosestDisjoint(ClosestDisjointPeersIter),
     Fixed(FixedPeersIter)
 }
 
@@ -287,10 +326,12 @@ impl<TInner> Query<TInner> {
         let updated_swamp = match &mut self.swamp_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.on_failure(peer),
         };
 
         let updated_weighted = match &mut self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer),
         };
 
@@ -307,14 +348,19 @@ impl<TInner> Query<TInner> {
         I: IntoIterator<Item = WeightedPeer>
     {
         let (swamp, weighted) = new_peers.into_iter().partition::<Vec<_>, _>(|p| p.weight == 0);
+        let swamp = swamp.into_iter().map(|p| p.peer_id);
+        let weighted = weighted.into_iter().map(|p| p.peer_id);
+
 
         let updated_swamp = match &mut self.swamp_iter {
-            QueryPeerIter::Closest(iter) => iter.on_success(peer, swamp.into_iter().map(|p| p.peer_id)),
+            QueryPeerIter::Closest(iter) => iter.on_success(peer, swamp),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.on_success(peer, swamp),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer),
         };
 
         let updated_weighted = match &mut self.weighted_iter {
-            QueryPeerIter::Closest(iter) => iter.on_success(peer, weighted.into_iter().map(|p| p.peer_id)),
+            QueryPeerIter::Closest(iter) => iter.on_success(peer, weighted),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.on_success(peer, weighted),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer),
         };
 
@@ -327,11 +373,13 @@ impl<TInner> Query<TInner> {
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
         let weighted_waiting = match &self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.is_waiting(peer),
             QueryPeerIter::Fixed(iter) => iter.is_waiting(peer)
         };
 
         let swamp_waiting = match &self.swamp_iter {
             QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.is_waiting(peer),
             QueryPeerIter::Fixed(iter) => iter.is_waiting(peer)
         };
 
@@ -347,6 +395,7 @@ impl<TInner> Query<TInner> {
         // First query weighted iter
         let weighted_state = match &mut self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.next(now),
             QueryPeerIter::Fixed(iter) => iter.next()
         };
 
@@ -359,6 +408,7 @@ impl<TInner> Query<TInner> {
         // If there was no new weighted peer, check swamp
         let swamp_state = match &mut self.swamp_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.next(now),
             QueryPeerIter::Fixed(iter) => iter.next()
         };
 
@@ -377,6 +427,42 @@ impl<TInner> Query<TInner> {
         }
     }
 
+    /// Tries to (gracefully) finish the query prematurely, providing the peers
+    /// that are no longer of interest for further progress of the query.
+    ///
+    /// A query may require that in order to finish gracefully a certain subset
+    /// of peers must be contacted. E.g. in the case of disjoint query paths a
+    /// query may only finish gracefully if every path contacted a peer whose
+    /// response permits termination of the query. The given peers are those for
+    /// which this is considered to be the case, i.e. for which a termination
+    /// condition is satisfied.
+    ///
+    /// Returns `true` if the query did indeed finish, `false` otherwise. In the
+    /// latter case, a new attempt at finishing the query may be made with new
+    /// `peers`.
+    ///
+    /// A finished query immediately stops yielding new peers to contact and
+    /// will be reported by [`QueryPool::poll`] via
+    /// [`QueryPoolState::Finished`].
+    pub fn try_finish<'a, I>(&mut self, peers: I) -> bool
+    where
+        I: IntoIterator<Item = &'a PeerId> + Clone
+    {
+        let weighted = match &mut self.weighted_iter {
+            QueryPeerIter::Closest(iter) => { iter.finish(); true },
+            QueryPeerIter::ClosestDisjoint(iter) => iter.finish_paths(peers.clone()),
+            QueryPeerIter::Fixed(iter) => { iter.finish(); true },
+        };
+
+        let swamp = match &mut self.swamp_iter {
+            QueryPeerIter::Closest(iter) => { iter.finish(); true },
+            QueryPeerIter::ClosestDisjoint(iter) => iter.finish_paths(peers),
+            QueryPeerIter::Fixed(iter) => { iter.finish(); true },
+        };
+
+        weighted && swamp
+    }
+
     /// Finishes the query prematurely.
     ///
     /// A finished query immediately stops yielding new peers to contact and will be
@@ -384,11 +470,13 @@ impl<TInner> Query<TInner> {
     pub fn finish(&mut self) {
         match &mut self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.finish(),
             QueryPeerIter::Fixed(iter) => iter.finish()
         };
 
         match &mut self.swamp_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.finish(),
             QueryPeerIter::Fixed(iter) => iter.finish()
         };
     }
@@ -400,11 +488,13 @@ impl<TInner> Query<TInner> {
     pub fn is_finished(&self) -> bool {
         let weighted_finished = match &self.weighted_iter {
             QueryPeerIter::Closest(iter) => iter.is_finished(),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.is_finished(),
             QueryPeerIter::Fixed(iter) => iter.is_finished()
         };
 
         let swamp_finished = match &self.swamp_iter {
             QueryPeerIter::Closest(iter) => iter.is_finished(),
+            QueryPeerIter::ClosestDisjoint(iter) => iter.is_finished(),
             QueryPeerIter::Fixed(iter) => iter.is_finished()
         };
 
@@ -413,16 +503,16 @@ impl<TInner> Query<TInner> {
 
     /// Consumes the query, producing the final `QueryResult`.
     pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
-        let weighted = match self.weighted_iter {
-            QueryPeerIter::Closest(iter) => Either::Left(iter.into_result()),
-            QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
-        };
+        fn into_result_(iter: QueryPeerIter) -> impl Iterator<Item = PeerId> {
+            match iter {
+                QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
+                QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
+                QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
+            }
+        }
 
-        let swamp = match self.swamp_iter {
-            QueryPeerIter::Closest(iter) => Either::Left(iter.into_result()),
-            QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result())
-        };
-
+        let weighted = into_result_(self.weighted_iter);
+        let swamp = into_result_(self.swamp_iter);
         let peers = weighted.chain(swamp);
         QueryResult { peers, inner: self.inner, stats: self.stats }
     }
