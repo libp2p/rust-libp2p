@@ -593,6 +593,12 @@ where
         TPeerId: Clone
     {
         // Drain events resulting from forced disconnections.
+        //
+        // Note: The `Disconnected` entries in `self.disconnected`
+        // are inserted in ascending order of the remaining `num_established`
+        // connections. Thus we `pop()` them off from the end to emit the
+        // events in an order that properly counts down `num_established`.
+        // See also `Pool::disconnect`.
         while let Some(Disconnected {
             id, connected, num_established
         }) = self.disconnected.pop() {
@@ -942,8 +948,12 @@ impl<'a, TInEvent, TConnInfo> Future for StartClose<'a, TInEvent, TConnInfo> {
     }
 }
 
+/// Information about a former established connection to a peer
+/// that was dropped via [`Pool::disconnect`].
 struct Disconnected<TConnInfo> {
     id: ConnectionId,
     connected: Connected<TConnInfo>,
+    /// The remaining number of established connections
+    /// to the same peer.
     num_established: u32,
 }

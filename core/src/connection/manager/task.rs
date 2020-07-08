@@ -228,6 +228,9 @@ where
                             return Poll::Pending
                         }
                         Poll::Ready(Err(error)) => {
+                            // Don't accept any further commands and terminate the
+                            // task with a final event.
+                            this.commands.get_mut().close();
                             let event = Event::Failed { id, handler, error };
                             this.state = State::Terminating(event)
                         }
@@ -242,12 +245,14 @@ where
                             Poll::Ready(Some(Command::NotifyHandler(event))) =>
                                 connection.inject_event(event),
                             Poll::Ready(Some(Command::Close)) => {
+                                // Don't accept any further commands.
+                                this.commands.get_mut().close();
                                 // Discard the event, if any, and start a graceful close.
                                 this.state = State::Closing(connection.close());
                                 continue 'poll
                             }
                             Poll::Ready(None) => {
-                                // The manager has dropped the task; abort.
+                                // The manager has dropped the task or disappeared; abort.
                                 return Poll::Ready(())
                             }
                         }
@@ -267,10 +272,8 @@ where
                                         continue 'poll
                                     }
                                 }
-                                // The manager is no longer reachable, maybe due to
-                                // application shutdown. Try a graceful shutdown of the
-                                // connection before terminating the task.
-                                this.state = State::Closing(connection.close());
+                                // The manager is no longer reachable; abort.
+                                return Poll::Ready(())
                             }
                         }
                     } else {
@@ -287,8 +290,9 @@ where
                                 };
                             }
                             Poll::Ready(Err(error)) => {
-                                // Terminate the task with the error, dropping
-                                // the connection.
+                                // Don't accept any further commands.
+                                this.commands.get_mut().close();
+                                // Terminate the task with the error, dropping the connection.
                                 let event = Event::Closed { id, error: Some(error) };
                                 this.state = State::Terminating(event);
                             }
@@ -297,8 +301,6 @@ where
                 }
 
                 State::Closing(mut closing) => {
-                    // Ignore further commands received from the manager, if any.
-                    while let Poll::Ready(Some(_)) = this.commands.poll_next_unpin(cx) {}
                     // Try to gracefully close the connection.
                     match closing.poll_unpin(cx) {
                         Poll::Ready(Ok(())) => {
@@ -320,9 +322,6 @@ where
                 }
 
                 State::Terminating(event) => {
-                    // Ignore further commands received from the manager, if any.
-                    while let Poll::Ready(Some(_)) = this.commands.poll_next_unpin(cx)
-                    {}
                     // Try to deliver the final event.
                     match this.events.poll_ready(cx) {
                         Poll::Pending => {
