@@ -28,9 +28,15 @@ jobs:
         path: target
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
     - name: Run tests, with no feature
-      run: cargo test --workspace --no-default-features
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --workspace --no-default-features
     - name: Run tests, with all features
-      run: cargo test --workspace --all-features
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --workspace --all-features
 
   test-wasm:
     name: Build on WASM
