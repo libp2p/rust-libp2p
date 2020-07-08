@@ -21,6 +21,7 @@
 - [`libp2p-yamux` CHANGELOG](muxers/yamux/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
+- [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
 # Version 0.21.1 (2020-07-02)
 

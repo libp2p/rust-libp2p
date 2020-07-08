@@ -2,7 +2,7 @@
 name = "libp2p-swarm"
 edition = "2018"
 description = "The libp2p swarm"
-version = "0.20.0"
+version = "0.20.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"

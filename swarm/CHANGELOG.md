@@ -1,3 +1,7 @@
+# 0.20.1 [2020-07-08]
+
+- Documentation updates.
+
 # 0.20.0 [2020-07-01]
 
 - Updated the `libp2p-core` dependency.
