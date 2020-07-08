@@ -382,13 +382,16 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// dialing attempt or `addresses_of_peer` reports no addresses, `Ok(false)`
     /// is returned.
     pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<(), DialError> {
-        let mut addrs = me.behaviour.addresses_of_peer(peer_id).into_iter();
-        let peer = me.network.peer(peer_id.clone());
+        let self_listening = &me.listened_addrs;
+        let mut addrs = me.behaviour.addresses_of_peer(peer_id)
+            .into_iter()
+            .filter(|a| !self_listening.contains(a));
 
         let result =
             if let Some(first) = addrs.next() {
                 let handler = me.behaviour.new_handler().into_node_handler_builder();
-                peer.dial(first, addrs, handler)
+                me.network.peer(peer_id.clone())
+                    .dial(first, addrs, handler)
                     .map(|_| ())
                     .map_err(DialError::ConnectionLimit)
             } else {
@@ -696,11 +699,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             // ongoing dialing attempt, if there is one.
                             log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
                                 peer_id, condition);
+                            let self_listening = &this.listened_addrs;
                             if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
                                 let addrs = this.behaviour.addresses_of_peer(peer.id());
                                 let mut attempt = peer.some_attempt();
-                                for addr in addrs {
-                                    attempt.add_address(addr);
+                                for a in addrs {
+                                    if !self_listening.contains(&a) {
+                                        attempt.add_address(a);
+                                    }
                                 }
                             }
                         }
