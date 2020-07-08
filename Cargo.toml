@@ -95,7 +95,7 @@ libp2p-websocket = { version = "0.20.0", path = "transports/websocket", optional
 [dev-dependencies]
 async-std = "1.6.2"
 env_logger = "0.7.1"
-trust-graph = { git = "https://github.com/fluencelabs/fluence", branch = "libp2p_0_20" }
+trust-graph = { git = "https://github.com/fluencelabs/fluence", branch = "master" }
 
 [workspace]
 members = [
