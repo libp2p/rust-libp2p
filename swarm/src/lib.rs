@@ -524,7 +524,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                 },
                 Poll::Ready(NetworkEvent::ConnectionClosed { id, connected, error, num_established }) => {
-                    if error.is_some() {
+                    if let Some(error) = error {
                         log::debug!("Connection {:?} closed: {:?}", connected, error);
                     } else {
                         log::debug!("Connection {:?} closed (active close).", connected);
