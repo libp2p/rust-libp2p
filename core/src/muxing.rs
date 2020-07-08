@@ -91,6 +91,10 @@ pub trait StreamMuxer {
     /// is ready to be polled, similar to the API of `Stream::poll()`.
     /// Only the latest task that was used to call this method may be notified.
     ///
+    /// Implementors may rely on this method being called soon after the current
+    /// task has been notified. It is thus safe to use this method to perform
+    /// background work, such as processing incoming packets and polling timers.
+    ///
     /// An error can be generated if the connection has been closed.
     fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>>;
 
@@ -98,7 +102,8 @@ pub trait StreamMuxer {
     /// resolved when it becomes available.
     ///
     /// The API of `OutboundSubstream` is totally opaque, and the object can only be interfaced
-    /// through the methods on the `StreamMuxer` trait.
+    /// through the methods on the `StreamMuxer` trait. Interacting with `OutboundSubstream`
+    /// directly has undefined results.
     fn open_outbound(&self) -> Self::OutboundSubstream;
 
     /// Polls the outbound substream.
