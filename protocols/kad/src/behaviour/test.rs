@@ -1144,48 +1144,131 @@ mod certificates {
     use super::*;
     use trust_graph::{KeyPair, current_time};
 
-    fn gen_cert(from: KeyPair, to: KeyPair) -> (KeyPair, Certificate) {
-        let second_kp = KeyPair::generate();
-
+    fn gen_root_cert(from: &KeyPair, to: PublicKey) -> Certificate {
         let cur_time = current_time();
 
-        (
-            second_kp.clone(),
-            Certificate::issue_root(
-                &from,
-                to.public_key(),
-                cur_time.checked_add(Duration::new(60, 0)).unwrap(),
-                cur_time,
-            ),
+        Certificate::issue_root(
+            from,
+            to,
+            cur_time.checked_add(Duration::new(60, 0)).unwrap(),
+            cur_time,
         )
     }
 
+    fn gen_cert(from: &KeyPair, to: PublicKey, root: &Certificate) -> Certificate {
+        let cur_time = current_time();
+
+        Certificate::issue(
+            from,
+            to,
+            root,
+            cur_time.checked_add(Duration::new(60, 0)).unwrap(),
+            cur_time,
+            cur_time
+        ).expect("issue cert")
+    }
+
+    struct SwarmWithKeypair {
+        pub swarm: TestSwarm,
+        pub kp: Keypair,
+    }
+
+    fn bs(pk: PublicKey) -> String {
+        bs58::encode(pk.encode()).into_string()
+    }
+
     #[test]
-    pub fn certificate_propagation() {
-        // env_logger::builder().filter_level(LevelFilter::Info).init();
+    pub fn certificate_dissemination() {
+        for _ in 1..10 {
+            let total = 5; // minimum: 4
+            let mut config = KademliaConfig::default();
+            config.set_replication_factor(NonZeroUsize::new(total).unwrap());
 
-        let mut config = KademliaConfig::default();
-        config.set_replication_factor(NonZeroUsize::new(3).unwrap());
-        let mut swarms = build_fully_connected_nodes_with_config(3, config);
-        let (_, cert) = gen_cert(swarms[0].0.clone().into(), swarms[1].0.clone().into());
-        println!("issued cert {:?} from {} for {}", cert, swarms[0].2.kbuckets.local_key().preimage(), swarms[1].2.kbuckets.local_key().preimage());
-        swarms[0].2.trust.add(&cert, current_time()).unwrap();
-        // swarms[2].2.trust.add(&cert, current_time()).unwrap();
+            // each node has herself in the trust.root_weights
+            let mut swarms = build_fully_connected_nodes_with_config(total, config);
 
-        swarms[2].2.get_closest_peers(PeerId::random());
-        block_on(poll_fn(move |ctx| {
-            for (_, _, swarm) in swarms.iter_mut() {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::QueryResult { .. })) => {
-                                return Poll::Ready(())
-                        }
-                        Poll::Ready(_) => {},
-                        Poll::Pending => break
-                    }
-                }
+            // Set same weights to all nodes, so they store each other's certificates
+            let weights = swarms.iter().map(|(kp, _, _)| (kp.public(), 1)).collect::<Vec<_>>();
+            for swarm in swarms.iter_mut() {
+                swarm.2.trust.add_root_weights(weights.clone());
             }
-            Poll::Pending
-        }));
+
+            let mut swarms = swarms.into_iter();
+            let (first_kp, _, first) = swarms.next().unwrap();
+            // issue certs from each swarm to the first swarm, so all swarms trust the first one
+            let mut swarms = swarms.map(|(kp, _, mut swarm)| {
+                // root cert, its chain is [self-signed: swarm -> swarm, swarm -> first]
+                let root = gen_root_cert(&kp.clone().into(), first_kp.public());
+                swarm.trust.add(&root, current_time()).unwrap();
+                SwarmWithKeypair { swarm, kp }
+            });
+
+            let mut swarm0 = SwarmWithKeypair { swarm: first, kp: first_kp.clone() };
+            let swarm1 = swarms.next().unwrap();
+            let mut swarm2 = swarms.next().unwrap();
+
+            // issue cert from the first swarm to the second (will be later disseminated via kademlia)
+            // chain: 0 -> 1
+            let cert_0_1 = gen_root_cert(&swarm0.kp.clone().into(), swarm1.kp.public());
+            swarm0.swarm.trust.add(&cert_0_1, current_time()).unwrap();
+            let cert_0_1_check = swarm0.swarm.trust.get_all_certs(&swarm1.kp.public(), &[]);
+            assert_eq!(cert_0_1_check.len(), 1);
+            let cert_0_1_check = cert_0_1_check.into_iter().nth(0).unwrap();
+            assert_eq!(cert_0_1, cert_0_1_check);
+
+            // check that this certificate (with root prepended) can be added to trust graph of any other node
+            // chain: (2 -> 0)
+            let mut cert_2_0_1 = gen_root_cert(&swarm2.kp.clone().into(), swarm0.kp.public());
+            // chain: (2 -> 0) ++ (0 -> 1)
+            cert_2_0_1.chain.extend_from_slice(&cert_0_1.chain[1..]);
+            swarm2.swarm.trust.add(cert_2_0_1, current_time()).unwrap();
+
+            // query kademlia
+            let mut swarms = vec![swarm0, swarm1, swarm2].into_iter().chain(swarms).collect::<Vec<_>>();
+            for swarm in swarms.iter_mut() {
+                swarm.swarm.get_closest_peers(PeerId::random());
+            }
+
+            // wait for this number of queries to complete
+            let mut queries = swarms.len();
+
+            block_on(async move {
+                // poll each swarm so they make a progress, wait for all queries to complete
+                poll_fn(|ctx| {
+                    for swarm in swarms.iter_mut() {
+                        loop {
+                            match swarm.swarm.poll_next_unpin(ctx) {
+                                Poll::Ready(Some(KademliaEvent::QueryResult { .. })) => {
+                                    queries -= 1;
+                                    if queries == 0 {
+                                        return Poll::Ready(())
+                                    }
+                                }
+                                Poll::Ready(_) => {},
+                                Poll::Pending => break,
+                            }
+                        }
+                    }
+                    Poll::Pending
+                }).await;
+
+                let kp_1 = swarms[1].kp.public();
+
+                // check that certificates for `swarm[1].kp` were disseminated
+                for swarm in swarms.iter().skip(2) {
+                    let disseminated = swarm.swarm.trust.get_all_certs(kp_1.clone(), &[]);
+                    // take only certificate converging to current `swarm` public key
+                    let disseminated = disseminated.into_iter().find(|c| &c.chain[0].issued_for == &swarm.kp.public()).unwrap();
+                    // swarm -> swarm0 -> swarm1
+                    assert_eq!(disseminated.chain.len(), 3);
+                    let pubkeys = disseminated.chain.iter().map(|c| &c.issued_for).collect::<Vec<_>>();
+                    assert_eq!(pubkeys, vec![&swarm.kp.public(), &swarms[0].kp.public(), &swarms[1].kp.public()]);
+
+                    // last trust in the certificate must be equal to previously generated (0 -> 1) trust
+                    let last = disseminated.chain.last().unwrap();
+                    assert_eq!(last, cert_0_1.chain.last().unwrap());
+                }
+            });
+        }
     }
 }
