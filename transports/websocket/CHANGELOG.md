@@ -1,3 +1,7 @@
+# ?.?.? [????-??-??]
+
+- Update `rustls` dependency to `0.18`.
+
 # 0.21.0 [2020-07-02]
 
 - Update `libp2p-core`.
