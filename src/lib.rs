@@ -243,6 +243,10 @@ pub use libp2p_yamux as yamux;
 #[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "request-response")]
+#[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
+#[doc(inline)]
+pub use libp2p_request_response as request_response;
 
 mod transport_ext;
 

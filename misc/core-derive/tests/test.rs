@@ -263,3 +263,46 @@ fn nested_derives_with_import() {
         require_net_behaviour::<Bar>();
     }
 }
+
+#[test]
+fn event_process_false() {
+    enum BehaviourOutEvent {
+        Ping(libp2p::ping::PingEvent),
+        Identify(libp2p::identify::IdentifyEvent)
+    }
+
+    impl From<libp2p::ping::PingEvent> for BehaviourOutEvent {
+        fn from(event: libp2p::ping::PingEvent) -> Self {
+            BehaviourOutEvent::Ping(event)
+        }
+    }
+
+    impl From<libp2p::identify::IdentifyEvent> for BehaviourOutEvent {
+        fn from(event: libp2p::identify::IdentifyEvent) -> Self {
+            BehaviourOutEvent::Identify(event)
+        }
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "BehaviourOutEvent", event_process = false)]
+    struct Foo {
+        ping: libp2p::ping::Ping,
+        identify: libp2p::identify::Identify,
+    }
+
+    #[allow(dead_code)]
+    fn bar() {
+        require_net_behaviour::<Foo>();
+
+        let mut swarm: libp2p::Swarm<Foo> = unimplemented!();
+
+        // check that the event is bubbled up all the way to swarm
+        let _ = async {
+            match swarm.next().await {
+                BehaviourOutEvent::Ping(_) => {},
+                BehaviourOutEvent::Identify(_) => {},
+            }
+        };
+    }
+}

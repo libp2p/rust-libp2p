@@ -1,4 +1,17 @@
-# 0.20.0 [????-??-??]
+# 0.20.1 [2020-07-08]
+
+- Documentation updates.
+
+- Ignore addresses returned by `NetworkBehaviour::addresses_of_peer`
+that the `Swarm` considers to be listening addresses of the local node. This
+avoids futile dialing attempts of a node to itself, which can otherwise
+even happen in genuine situations, e.g. after the local node changed
+its network identity and a behaviour makes a dialing attempt to a
+former identity using the same addresses.
+
+# 0.20.0 [2020-07-01]
+
+- Updated the `libp2p-core` dependency.
 
 - Add `ProtocolsHandler::inject_listen_upgrade_error`, the inbound
 analogue of `ProtocolsHandler::inject_dial_upgrade_error`, with an

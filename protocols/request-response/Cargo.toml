@@ -12,8 +12,8 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = "0.1"
 futures = "0.3.1"
-libp2p-core = { version = "0.19.2", path = "../../core" }
-libp2p-swarm = { version = "0.19.1", path = "../../swarm" }
+libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
 smallvec = "1.4"
 wasm-timer = "0.2"
 
