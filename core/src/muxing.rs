@@ -91,8 +91,8 @@ pub trait StreamMuxer {
     /// is ready to be polled, similar to the API of `Stream::poll()`.
     /// Only the latest task that was used to call this method may be notified.
     ///
-    /// Implementors may rely on this method being called soon after the current
-    /// task has been notified. It is thus safe to use this method to perform
+    /// Implementors may rely on this method being called soon after the registered
+    /// task has been notified. It is thus possible to use this method to perform
     /// background work, such as processing incoming packets and polling timers.
     ///
     /// An error can be generated if the connection has been closed.
