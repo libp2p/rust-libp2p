@@ -1,6 +1,6 @@
-# ?.?.? [????-??-??]
+# 0.21.1 [2020-07-09]
 
-- Update `rustls` dependency to `0.18`.
+- Update `async-tls` and `rustls` dependency.
 
 # 0.21.0 [2020-07-02]
 
