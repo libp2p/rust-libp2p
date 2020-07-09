@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Error types than can result from gossipsub.
+//! Error types that can result from gossipsub.
 
 use libp2p_core::identity::error::SigningError;
 
