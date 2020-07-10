@@ -30,7 +30,6 @@ use crate::io::{NoiseOutput, framed::NoiseFramed};
 use libp2p_core::identity;
 use futures::prelude::*;
 use futures::task;
-// use futures::io::AsyncReadExt;
 use prost::Message;
 use std::{io, pin::Pin, task::Context};
 
@@ -354,7 +353,6 @@ where
     T: AsyncWrite + Unpin
 {
     state.io.send(&Vec::new()).await?;
-    state.io.flush().await?;
     Ok(())
 }
 
