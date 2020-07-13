@@ -111,9 +111,9 @@ where
                 if let Ok(response) = self.response_receiver.await {
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
-                    io.close().await?;
                 }
             }
+            io.close().await?;
             Ok(())
         }.boxed()
     }
@@ -164,4 +164,3 @@ where
         }.boxed()
     }
 }
-
