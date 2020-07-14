@@ -24,6 +24,7 @@ mod payload_proto {
     include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
 }
 
+use bytes::Bytes;
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use crate::io::{NoiseOutput, framed::NoiseFramed};
@@ -322,7 +323,7 @@ impl<T> State<T>
 // Handshake Message Futures
 
 /// A future for receiving a Noise handshake message.
-async fn recv<T>(state: &mut State<T>) -> Result<Vec<u8>, NoiseError>
+async fn recv<T>(state: &mut State<T>) -> Result<Bytes, NoiseError>
 where
     T: AsyncRead + Unpin
 {

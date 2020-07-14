@@ -8,6 +8,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
 [dependencies]
+bytes = "0.5"
 curve25519-dalek = "2.0.0"
 futures = "0.3.1"
 lazy_static = "1.2"

@@ -23,6 +23,7 @@
 mod framed;
 pub mod handshake;
 
+use bytes::Bytes;
 use framed::{MAX_FRAME_LEN, NoiseFramed};
 use futures::ready;
 use futures::prelude::*;
@@ -35,7 +36,7 @@ use std::{cmp::min, fmt, io, pin::Pin, task::{Context, Poll}};
 pub struct NoiseOutput<T> {
     io: NoiseFramed<T, snow::TransportState>,
     recv_offset: usize,
-    recv_buffer: Vec<u8>,
+    recv_buffer: Bytes,
     send_buffer: Vec<u8>
 }
 
@@ -51,7 +52,7 @@ impl<T> NoiseOutput<T> {
     fn new(io: NoiseFramed<T, snow::TransportState>) -> Self {
         NoiseOutput {
             io,
-            recv_buffer: Vec::new(),
+            recv_buffer: Bytes::new(),
             send_buffer: Vec::new(),
             recv_offset: 0,
         }
@@ -71,7 +72,9 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
                 this.recv_offset += n;
                 if len == this.recv_offset {
                     trace!("read: frame consumed");
-                    this.recv_buffer.clear();
+                    // Drop the existing view so `NoiseFramed` can reuse
+                    // the buffer when polling for the next frame below.
+                    this.recv_buffer = Bytes::new();
                 }
                 return Poll::Ready(Ok(n))
             }

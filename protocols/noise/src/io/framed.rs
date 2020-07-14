@@ -21,6 +21,7 @@
 //! This module provides a `Sink` and `Stream` for length-delimited
 //! Noise protocol messages in form of [`NoiseFramed`].
 
+use bytes::{Bytes, BytesMut};
 use crate::{NoiseError, Protocol, PublicKey};
 use crate::io::NoiseOutput;
 use futures::ready;
@@ -52,6 +53,7 @@ pub struct NoiseFramed<T, S> {
     write_state: WriteState,
     read_buffer: Vec<u8>,
     write_buffer: Vec<u8>,
+    decrypt_buffer: BytesMut,
 }
 
 impl<T, S> fmt::Debug for NoiseFramed<T, S> {
@@ -73,6 +75,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
             write_state: WriteState::Ready,
             read_buffer: Vec::new(),
             write_buffer: Vec::new(),
+            decrypt_buffer: BytesMut::new(),
         }
     }
 
@@ -105,6 +108,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
                     write_state: WriteState::Ready,
                     read_buffer: self.read_buffer,
                     write_buffer: self.write_buffer,
+                    decrypt_buffer: self.decrypt_buffer,
                 };
                 Ok((dh_remote_pubkey, NoiseOutput::new(io)))
             }
@@ -158,7 +162,7 @@ where
     T: AsyncRead + Unpin,
     S: SessionState + Unpin
 {
-    type Item = io::Result<Vec<u8>>;
+    type Item = io::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let mut this = Pin::into_inner(self);
@@ -210,12 +214,17 @@ where
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
-                        let mut frame = vec![0u8; len];
-                        if let Ok(n) = this.session.read_message(&this.read_buffer, &mut frame) {
-                            frame.truncate(n);
+                        this.decrypt_buffer.resize(len, 0);
+                        if let Ok(n) = this.session.read_message(&this.read_buffer, &mut this.decrypt_buffer) {
+                            this.decrypt_buffer.truncate(n);
                             trace!("read: payload len = {} bytes", n);
                             this.read_state = ReadState::Ready;
-                            return Poll::Ready(Some(Ok(frame)))
+                            // Return an immutable view into the current buffer.
+                            // If the view is dropped before the next frame is
+                            // read, the `BytesMut` will reuse the same buffer
+                            // for the next frame.
+                            let view = this.decrypt_buffer.split().freeze();
+                            return Poll::Ready(Some(Ok(view)))
                         } else {
                             debug!("read: decryption error");
                             this.read_state = ReadState::DecErr;
