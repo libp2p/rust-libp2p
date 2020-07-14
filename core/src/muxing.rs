@@ -102,8 +102,7 @@ pub trait StreamMuxer {
     /// resolved when it becomes available.
     ///
     /// The API of `OutboundSubstream` is totally opaque, and the object can only be interfaced
-    /// through the methods on the `StreamMuxer` trait. Interacting with `OutboundSubstream`
-    /// directly has undefined results.
+    /// through the methods on the `StreamMuxer` trait.
     fn open_outbound(&self) -> Self::OutboundSubstream;
 
     /// Polls the outbound substream.
