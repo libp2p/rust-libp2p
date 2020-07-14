@@ -60,32 +60,31 @@ impl<T> NoiseOutput<T> {
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let this = Pin::into_inner(self);
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         loop {
-            let len = this.recv_buffer.len();
-            let off = this.recv_offset;
+            let len = self.recv_buffer.len();
+            let off = self.recv_offset;
             if len > 0 {
                 let n = min(len - off, buf.len());
-                buf[.. n].copy_from_slice(&this.recv_buffer[off .. off + n]);
+                buf[.. n].copy_from_slice(&self.recv_buffer[off .. off + n]);
                 trace!("read: copied {}/{} bytes", off + n, len);
-                this.recv_offset += n;
-                if len == this.recv_offset {
+                self.recv_offset += n;
+                if len == self.recv_offset {
                     trace!("read: frame consumed");
                     // Drop the existing view so `NoiseFramed` can reuse
                     // the buffer when polling for the next frame below.
-                    this.recv_buffer = Bytes::new();
+                    self.recv_buffer = Bytes::new();
                 }
                 return Poll::Ready(Ok(n))
             }
 
-            match Pin::new(&mut this.io).poll_next(cx) {
+            match Pin::new(&mut self.io).poll_next(cx) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(None) => return Poll::Ready(Ok(0)),
                 Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(e)),
                 Poll::Ready(Some(Ok(frame))) => {
-                    this.recv_buffer = frame;
-                    this.recv_offset = 0;
+                    self.recv_buffer = frame;
+                    self.recv_offset = 0;
                 }
             }
         }
