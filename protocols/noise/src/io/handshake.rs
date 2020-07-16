@@ -385,10 +385,16 @@ where
     let pb = payload_proto::NoiseHandshakePayload::decode(&msg[..])
         .or_else(|e| {
             if msg.len() > 2 {
-                log::debug!("Attempting fallback legacy protobuf decoding.");
-                // The legacy protobuf decoding starts with a 2-byte length prefix,
-                // which we simply skip.
-                payload_proto::NoiseHandshakePayload::decode(&msg[2..])
+                let mut buf = [0, 0];
+                buf.copy_from_slice(&msg[.. 2]);
+                // If there is a second length it must be 2 bytes shorter than the
+                // frame length, because each length is encoded as a `u16`.
+                if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
+                    log::debug!("Attempting fallback legacy protobuf decoding.");
+                    payload_proto::NoiseHandshakePayload::decode(&msg[2 ..])
+                } else {
+                    Err(e)
+                }
             } else {
                 Err(e)
             }
