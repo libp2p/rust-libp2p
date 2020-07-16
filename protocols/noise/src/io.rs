@@ -35,9 +35,10 @@ use std::{cmp::min, fmt, io, pin::Pin, task::{Context, Poll}};
 /// `T` is the type of the underlying I/O resource.
 pub struct NoiseOutput<T> {
     io: NoiseFramed<T, snow::TransportState>,
-    recv_offset: usize,
     recv_buffer: Bytes,
-    send_buffer: Vec<u8>
+    recv_offset: usize,
+    send_buffer: Vec<u8>,
+    send_offset: usize,
 }
 
 impl<T> fmt::Debug for NoiseOutput<T> {
@@ -53,8 +54,9 @@ impl<T> NoiseOutput<T> {
         NoiseOutput {
             io,
             recv_buffer: Bytes::new(),
-            send_buffer: Vec::new(),
             recv_offset: 0,
+            send_buffer: Vec::new(),
+            send_offset: 0,
         }
     }
 }
@@ -98,19 +100,20 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         let frame_buf = &mut this.send_buffer;
 
         // The MAX_FRAME_LEN is the maximum buffer size before a frame must be sent.
-        if frame_buf.len() == MAX_FRAME_LEN {
-            trace!("write: sending {} bytes", frame_buf.len());
+        if this.send_offset == MAX_FRAME_LEN {
+            trace!("write: sending {} bytes", MAX_FRAME_LEN);
             ready!(io.as_mut().poll_ready(cx))?;
             io.as_mut().start_send(&frame_buf)?;
-            frame_buf.clear();
+            this.send_offset = 0;
         }
 
-        let len = frame_buf.len();
-        let n = min(MAX_FRAME_LEN, len.saturating_add(buf.len()));
+        let off = this.send_offset;
+        let n = min(MAX_FRAME_LEN, off.saturating_add(buf.len()));
         this.send_buffer.resize(n, 0u8);
-        let n = min(MAX_FRAME_LEN - len, buf.len());
-        this.send_buffer[len .. len + n].copy_from_slice(&buf[.. n]);
-        trace!("write: buffered {} bytes", len + n);
+        let n = min(MAX_FRAME_LEN - off, buf.len());
+        this.send_buffer[off .. off + n].copy_from_slice(&buf[.. n]);
+        this.send_offset += n;
+        trace!("write: buffered {} bytes", this.send_offset);
 
         return Poll::Ready(Ok(n))
     }
@@ -121,11 +124,11 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         let frame_buf = &mut this.send_buffer;
 
         // Check if there is still one more frame to send.
-        if frame_buf.len() > 0 {
+        if this.send_offset > 0 {
             ready!(io.as_mut().poll_ready(cx))?;
-            trace!("flush: sending {} bytes", frame_buf.len());
+            trace!("flush: sending {} bytes", this.send_offset);
             io.as_mut().start_send(&frame_buf)?;
-            frame_buf.clear();
+            this.send_offset = 0;
         }
 
         io.as_mut().poll_flush(cx)
