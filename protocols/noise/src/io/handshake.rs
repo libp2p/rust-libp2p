@@ -28,7 +28,7 @@ use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use crate::io::SnowState;
 use libp2p_core::identity;
-use futures::prelude::*;
+use futures::{future, prelude::*};
 use futures::task;
 use futures::io::AsyncReadExt;
 use prost::Message;
@@ -359,13 +359,29 @@ async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin,
 {
-    let mut len_buf = [0,0];
-    state.io.read_exact(&mut len_buf).await?;
-    let len = u16::from_be_bytes(len_buf) as usize;
-
+    let len = future::poll_fn(|cx| state.io.read_frame(cx)).await?.unwrap_or(0);
     let mut payload_buf = vec![0; len];
     state.io.read_exact(&mut payload_buf).await?;
-    let pb = payload_proto::NoiseHandshakePayload::decode(&payload_buf[..])?;
+
+    let has_nested_len =
+        if len >= 2 {
+            let mut buf = [0, 0];
+            buf.copy_from_slice(&payload_buf[.. 2]);
+            // If there is a second length it must be 2 bytes shorter than the first one,
+            // because each length is encoded as a `u16`, i.e. with 2 bytes.
+            usize::from(u16::from_be_bytes(buf)) + 2 == len
+        } else {
+            false
+        };
+
+    let pb = payload_proto::NoiseHandshakePayload::decode(&payload_buf[..])
+        .or_else(|e| {
+            if has_nested_len {
+                payload_proto::NoiseHandshakePayload::decode(&payload_buf[2 ..])
+            } else {
+                Err(e)
+            }
+        })?;
 
     if !pb.identity_key.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)

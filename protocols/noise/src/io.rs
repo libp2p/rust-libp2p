@@ -103,7 +103,7 @@ impl<T> NoiseOutput<T> {
         NoiseOutput {
             io,
             session,
-            read_state: ReadState::Init,
+            read_state: ReadState::ReadLen { buf: [0, 0], off: 0 },
             write_state: WriteState::Init,
             read_buffer: Vec::new(),
             write_buffer: Vec::new(),
@@ -116,8 +116,6 @@ impl<T> NoiseOutput<T> {
 /// The various states of reading a noise session transitions through.
 #[derive(Debug)]
 enum ReadState {
-    /// initial state
-    Init,
     /// read frame length
     ReadLen { buf: [u8; 2], off: usize },
     /// read encrypted frame data
@@ -154,62 +152,10 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
         loop {
             trace!("read state: {:?}", this.read_state);
             match this.read_state {
-                ReadState::Init => {
-                    this.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
-                }
-                ReadState::ReadLen { mut buf, mut off } => {
-                    let n = match read_frame_len(&mut this.io, cx, &mut buf, &mut off) {
-                        Poll::Ready(Ok(Some(n))) => n,
-                        Poll::Ready(Ok(None)) => {
-                            trace!("read: eof");
-                            this.read_state = ReadState::Eof(Ok(()));
-                            return Poll::Ready(Ok(0))
-                        }
-                        Poll::Ready(Err(e)) => {
-                            return Poll::Ready(Err(e))
-                        }
-                        Poll::Pending => {
-                            this.read_state = ReadState::ReadLen { buf, off };
-                            return Poll::Pending;
-                        }
-                    };
-                    trace!("read: next frame len = {}", n);
-                    if n == 0 {
-                        trace!("read: empty frame");
-                        this.read_state = ReadState::Init;
-                        continue
+                ReadState::ReadLen {..} | ReadState::ReadData {..} =>
+                    if ready!(this.read_frame(cx))?.is_none() {
+                        return Poll::Ready(Ok(0))
                     }
-                    this.read_buffer.resize(usize::from(n), 0u8);
-                    this.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
-                }
-                ReadState::ReadData { len, ref mut off } => {
-                    let n = {
-                        let f = Pin::new(&mut this.io).poll_read(cx, &mut this.read_buffer[*off .. len]);
-                        match ready!(f) {
-                            Ok(n) => n,
-                            Err(e) => return Poll::Ready(Err(e)),
-                        }
-                    };
-                    trace!("read: read {}/{} bytes", *off + n, len);
-                    if n == 0 {
-                        trace!("read: eof");
-                        this.read_state = ReadState::Eof(Err(()));
-                        return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
-                    }
-                    *off += n;
-                    if len == *off {
-                        trace!("read: decrypting {} bytes", len);
-                        this.decrypt_buffer.resize(len, 0u8);
-                        if let Ok(n) = this.session.read_message(&this.read_buffer, &mut this.decrypt_buffer) {
-                            trace!("read: payload len = {} bytes", n);
-                            this.read_state = ReadState::CopyData { len: n, off: 0 }
-                        } else {
-                            debug!("decryption error");
-                            this.read_state = ReadState::DecErr;
-                            return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
-                        }
-                    }
-                }
                 ReadState::CopyData { len, ref mut off } => {
                     let n = min(len - *off, buf.len());
                     buf[.. n].copy_from_slice(&this.decrypt_buffer[*off .. *off + n]);
@@ -400,35 +346,61 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
     }
 }
 
-/// Read 2 bytes as frame length from the given source into the given buffer.
-///
-/// Panics if `off >= 2`.
-///
-/// When [`Poll::Pending`] is returned, the given buffer and offset
-/// may have been updated (i.e. a byte may have been read) and must be preserved
-/// for the next invocation.
-///
-/// Returns `None` if EOF has been encountered.
-fn read_frame_len<R: AsyncRead + Unpin>(
-    mut io: &mut R,
-    cx: &mut Context<'_>,
-    buf: &mut [u8; 2],
-    off: &mut usize,
-) -> Poll<io::Result<Option<u16>>> {
-    loop {
-        match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off ..])) {
-            Ok(n) => {
-                if n == 0 {
-                    return Poll::Ready(Ok(None));
-                }
-                *off += n;
-                if *off == 2 {
-                    return Poll::Ready(Ok(Some(u16::from_be_bytes(*buf))));
-                }
-            },
-            Err(e) => {
-                return Poll::Ready(Err(e));
-            },
+impl<T: AsyncRead + Unpin> NoiseOutput<T> {
+    fn read_frame(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<Option<usize>>> {
+        loop {
+            match self.read_state {
+                ReadState::ReadLen { ref mut buf, ref mut off } =>
+                    match ready!(Pin::new(&mut self.io).poll_read(cx, &mut buf[*off ..])) {
+                        Ok(0) => {
+                            trace!("read: eof");
+                            self.read_state = ReadState::Eof(Ok(()));
+                            return Poll::Ready(Ok(None))
+                        }
+                        Ok(n) => {
+                            *off += n;
+                            if *off == 2 {
+                                let len = usize::from(u16::from_be_bytes(*buf));
+                                trace!("read: next frame len = {}", len);
+                                if len == 0 {
+                                    trace!("read: empty frame");
+                                    *off = 0;
+                                    continue
+                                }
+                                self.read_buffer.resize(len, 0u8);
+                                self.read_state = ReadState::ReadData { len, off: 0 };
+                            }
+                        }
+                        Err(e) => return Poll::Ready(Err(e))
+                    }
+                ReadState::ReadData { len, ref mut off } =>
+                    match ready!(Pin::new(&mut self.io).poll_read(cx, &mut self.read_buffer[*off .. len])) {
+                        Ok(0) => {
+                            trace!("read: eof");
+                            self.read_state = ReadState::Eof(Err(()));
+                            return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()))
+                        }
+                        Ok(n) => {
+                            trace!("read: read {}/{} bytes", *off + n, len);
+                            *off += n;
+                            if len == *off {
+                                trace!("read: decrypting {} bytes", len);
+                                self.decrypt_buffer.resize(len, 0u8);
+                                if let Ok(n) = self.session.read_message(&self.read_buffer, &mut self.decrypt_buffer) {
+                                    trace!("read: payload len = {} bytes", n);
+                                    self.read_state = ReadState::CopyData { len: n, off: 0 };
+                                    return Poll::Ready(Ok(Some(n)))
+                                } else {
+                                    debug!("decryption error");
+                                    self.read_state = ReadState::DecErr;
+                                    return Poll::Ready(Err(io::ErrorKind::InvalidData.into()))
+                                }
+                            }
+                        }
+                        Err(e) => return Poll::Ready(Err(e)),
+                    }
+                _ => panic!("read_frame: invalid read state: {:?}", self.read_state)
+            }
         }
     }
 }
