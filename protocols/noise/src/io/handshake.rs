@@ -32,7 +32,7 @@ use futures::{future, prelude::*};
 use futures::task;
 use futures::io::AsyncReadExt;
 use prost::Message;
-use std::{pin::Pin, task::Context};
+use std::{io, pin::Pin, task::Context};
 use super::NoiseOutput;
 
 /// The identity of the remote established during a handshake.
@@ -339,8 +339,18 @@ async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin
 {
-    state.io.read(&mut []).await?;
-    Ok(())
+    match future::poll_fn(|cx| state.io.read_frame(cx)).await? {
+        None => {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof").into())
+        }
+        Some(n) if n > 0 => {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "unexpected payload").into())
+        }
+        Some(_) => {
+            state.io.read(&mut []).await?;
+            Ok(())
+        }
+    }
 }
 
 /// A future for sending a Noise handshake message with an empty payload.
@@ -349,7 +359,7 @@ where
     T: AsyncWrite + Unpin
 {
     state.io.write(&[]).await?;
-    state.io.flush().await?;
+    state.io.flush().await?; // writes one frame
     Ok(())
 }
 
@@ -417,6 +427,6 @@ where
     let len = (buf.len() as u16).to_be_bytes();
     state.io.write_all(&len).await?;
     state.io.write_all(&buf).await?;
-    state.io.flush().await?;
+    state.io.flush().await?; // writes one frame
     Ok(())
 }

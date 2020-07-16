@@ -347,6 +347,9 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 }
 
 impl<T: AsyncRead + Unpin> NoiseOutput<T> {
+    /// Reads the next frame if called in state `ReadLen`, otherwise
+    /// completes reading of the current frame, in either case returning
+    /// the frame length or `None` on reading EOF.
     fn read_frame(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<Option<usize>>> {
         loop {
             match self.read_state {
