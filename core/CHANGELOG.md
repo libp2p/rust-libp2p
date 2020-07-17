@@ -1,3 +1,7 @@
+# 0.20.1 [2020-17-17]
+
+- Update ed25519-dalek dependency.
+
 # 0.20.0 [2020-07-01]
 
 - Conditional compilation fixes for the `wasm32-wasi` target
