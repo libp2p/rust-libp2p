@@ -20,7 +20,7 @@
 
 //! Ed25519 keys.
 
-use ed25519_dalek::{self as ed25519, Signer, Verifier};
+use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use rand::RngCore;
 use std::convert::TryFrom;
 use super::error::DecodingError;
