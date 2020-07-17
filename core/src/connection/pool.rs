@@ -146,7 +146,7 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
     /// The connection to a node has changed its address.
     AddressChange {
         /// The connection that has changed address.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
         /// The new endpoint.
         new_endpoint: ConnectedPoint,
         /// The old endpoint.

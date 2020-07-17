@@ -73,7 +73,6 @@ impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
     pub fn id(&self) -> &TaskId {
         match self {
             Event::Established { id, .. } => id,
-            Event::Error { id, .. } => id,
             Event::Failed { id, .. } => id,
             Event::AddressChange { id, .. } => id,
             Event::Notify { id, .. } => id,

@@ -168,7 +168,7 @@ where
     /// An established connection has changed its address.
     AddressChange {
         /// The connection whose address has changed.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
         /// New endpoint of this connection.
         new_endpoint: ConnectedPoint,
         /// Old endpoint of this connection.
