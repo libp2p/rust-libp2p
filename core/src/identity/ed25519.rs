@@ -20,8 +20,9 @@
 
 //! Ed25519 keys.
 
-use ed25519_dalek as ed25519;
+use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use rand::RngCore;
+use std::convert::TryFrom;
 use super::error::DecodingError;
 use zeroize::Zeroize;
 use core::fmt;
@@ -107,7 +108,7 @@ pub struct PublicKey(ed25519::PublicKey);
 impl PublicKey {
     /// Verify the Ed25519 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        ed25519::Signature::from_bytes(sig).and_then(|s| self.0.verify(msg, &s)).is_ok()
+        ed25519::Signature::try_from(sig).and_then(|s| self.0.verify(msg, &s)).is_ok()
     }
 
     /// Encode the public key into a byte array in compressed form, i.e.
