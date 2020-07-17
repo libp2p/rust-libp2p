@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    Multiaddr,
     muxing::StreamMuxer,
     connection::{
+        self,
         Close,
         Connected,
         Connection,
@@ -56,6 +58,8 @@ pub enum Event<T, H, TE, HE, C> {
     Established { id: TaskId, info: Connected<C> },
     /// A pending connection failed.
     Failed { id: TaskId, error: PendingConnectionError<TE>, handler: H },
+    /// A node we are connected to has changed its address.
+    AddressChange { id: TaskId, new_address: Multiaddr },
     /// Notify the manager of an event from the connection.
     Notify { id: TaskId, event: T },
     /// A connection closed, possibly due to an error.
@@ -69,8 +73,10 @@ impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
     pub fn id(&self) -> &TaskId {
         match self {
             Event::Established { id, .. } => id,
-            Event::Notify { id, .. } => id,
+            Event::Error { id, .. } => id,
             Event::Failed { id, .. } => id,
+            Event::AddressChange { id, .. } => id,
+            Event::Notify { id, .. } => id,
             Event::Closed { id, .. } => id,
         }
     }
@@ -283,10 +289,16 @@ where
                                 this.state = State::Established { connection, event: None };
                                 return Poll::Pending
                             }
-                            Poll::Ready(Ok(event)) => {
+                            Poll::Ready(Ok(connection::Event::Handler(event))) => {
                                 this.state = State::Established {
-                                    connection: connection,
+                                    connection,
                                     event: Some(Event::Notify { id, event })
+                                };
+                            }
+                            Poll::Ready(Ok(connection::Event::AddressChange(new_address))) => {
+                                this.state = State::Established {
+                                    connection,
+                                    event: Some(Event::AddressChange { id, new_address })
                                 };
                             }
                             Poll::Ready(Err(error)) => {

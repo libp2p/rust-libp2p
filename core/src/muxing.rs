@@ -53,6 +53,7 @@
 
 use fnv::FnvHashMap;
 use futures::{future, prelude::*, task::Context, task::Poll};
+use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use std::{io, ops::Deref, fmt, pin::Pin, sync::atomic::{AtomicUsize, Ordering}};
 
@@ -64,10 +65,11 @@ mod singleton;
 ///
 /// The state of a muxer, as exposed by this API, is the following:
 ///
-/// - A connection to the remote. The `flush_all` and `close` methods operate on this.
-/// - A list of substreams that are open. The `poll_inbound`, `poll_outbound`, `read_substream`,
-///   `write_substream`, `flush_substream`, `shutdown_substream` and `destroy_substream` methods
-///   allow controlling these entries.
+/// - A connection to the remote. The `poll_event`, `flush_all` and `close` methods operate
+///   on this.
+/// - A list of substreams that are open. The `poll_outbound`, `read_substream`, `write_substream`,
+///   `flush_substream`, `shutdown_substream` and `destroy_substream` methods allow controlling
+///   these entries.
 /// - A list of outbound substreams being opened. The `open_outbound`, `poll_outbound` and
 ///   `destroy_outbound` methods allow controlling these entries.
 ///
@@ -81,7 +83,7 @@ pub trait StreamMuxer {
     /// Error type of the muxer
     type Error: Into<io::Error>;
 
-    /// Polls for an inbound substream.
+    /// Polls for a connection-wide event.
     ///
     /// This function behaves the same as a `Stream`.
     ///
@@ -90,7 +92,7 @@ pub trait StreamMuxer {
     /// Only the latest task that was used to call this method may be notified.
     ///
     /// An error can be generated if the connection has been closed.
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>>;
+    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>>;
 
     /// Opens a new outgoing substream, and produces the equivalent to a future that will be
     /// resolved when it becomes available.
@@ -206,18 +208,49 @@ pub trait StreamMuxer {
     fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>>;
 }
 
-/// Polls for an inbound from the muxer but wraps the output in an object that
-/// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
-pub fn inbound_from_ref_and_wrap<P>(
+/// Event about a connection, reported by an implementation of [`StreamMuxer`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamMuxerEvent<T> {
+    /// Remote has opened a new substream. Contains the substream in question.
+    InboundSubstream(T),
+
+    /// Address to the remote has changed. The previous one is now obsolete.
+    ///
+    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
+    /// >           can change their IP address while retaining the same QUIC connection.
+    AddressChange(Multiaddr),
+}
+
+impl<T> StreamMuxerEvent<T> {
+    /// If `self` is a [`StreamMuxerEvent::InboundSubstream`], returns the content. Otherwise
+    /// returns `None`.
+    pub fn into_inbound_substream(self) -> Option<T> {
+        if let StreamMuxerEvent::InboundSubstream(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+}
+
+/// Polls for an event from the muxer and, if an inbound substream, wraps this substream in an
+/// object that implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
+pub fn event_from_ref_and_wrap<P>(
     muxer: P,
-) -> impl Future<Output = Result<SubstreamRef<P>, <P::Target as StreamMuxer>::Error>>
+) -> impl Future<Output = Result<StreamMuxerEvent<SubstreamRef<P>>, <P::Target as StreamMuxer>::Error>>
 where
     P: Deref + Clone,
     P::Target: StreamMuxer,
 {
     let muxer2 = muxer.clone();
-    future::poll_fn(move |cx| muxer.poll_inbound(cx))
-        .map_ok(|substream| substream_from_ref(muxer2, substream))
+    future::poll_fn(move |cx| muxer.poll_event(cx))
+        .map_ok(|event| {
+            match event {
+                StreamMuxerEvent::InboundSubstream(substream) =>
+                    StreamMuxerEvent::InboundSubstream(substream_from_ref(muxer2, substream)),
+                StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
+            }
+        })
 }
 
 /// Same as `outbound_from_ref`, but wraps the output in an object that
@@ -478,8 +511,8 @@ impl StreamMuxer for StreamMuxerBox {
     type Error = io::Error;
 
     #[inline]
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.inner.poll_inbound(cx)
+    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+        self.inner.poll_event(cx)
     }
 
     #[inline]
@@ -550,16 +583,18 @@ where
     type Error = io::Error;
 
     #[inline]
-    fn poll_inbound(&self, cx: &mut Context) -> Poll<Result<Self::Substream, Self::Error>> {
-        let substream = match self.inner.poll_inbound(cx) {
+    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+        let substream = match self.inner.poll_event(cx) {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(s)) => s,
+            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a))) =>
+                return Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a))),
+            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))) => s,
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
         };
 
         let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
         self.substreams.lock().insert(id, substream);
-        Poll::Ready(Ok(id))
+        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(id)))
     }
 
     #[inline]

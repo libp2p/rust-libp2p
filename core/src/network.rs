@@ -416,7 +416,14 @@ where
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
                 NetworkEvent::ConnectionEvent {
                     connection,
-                    event
+                    event,
+                }
+            }
+            Poll::Ready(PoolEvent::AddressChange { connection, new_endpoint, old_endpoint }) => {
+                NetworkEvent::AddressChange {
+                    connection,
+                    new_endpoint,
+                    old_endpoint,
                 }
             }
         };

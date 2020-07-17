@@ -21,7 +21,7 @@
 //! A node's network identity keys.
 
 pub mod ed25519;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rsa;
 #[cfg(feature = "secp256k1")]
 pub mod secp256k1;
@@ -52,7 +52,7 @@ use crate::{PeerId, keys_proto};
 pub enum Keypair {
     /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     /// An RSA keypair.
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
@@ -76,7 +76,7 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         rsa::Keypair::from_pkcs8(pkcs8_der).map(Keypair::Rsa)
     }
@@ -97,7 +97,7 @@ impl Keypair {
         use Keypair::*;
         match self {
             Ed25519(ref pair) => Ok(pair.sign(msg)),
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
             Secp256k1(ref pair) => pair.secret().sign(msg)
@@ -109,7 +109,7 @@ impl Keypair {
         use Keypair::*;
         match self {
             Ed25519(pair) => PublicKey::Ed25519(pair.public()),
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             Rsa(pair) => PublicKey::Rsa(pair.public()),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
@@ -122,7 +122,7 @@ impl Keypair {
 pub enum PublicKey {
     /// A public Ed25519 key.
     Ed25519(ed25519::PublicKey),
-    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     /// A public RSA key.
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
@@ -139,7 +139,7 @@ impl PublicKey {
         use PublicKey::*;
         match self {
             Ed25519(pk) => pk.verify(msg, sig),
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             Rsa(pk) => pk.verify(msg, sig),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pk) => pk.verify(msg, sig)
@@ -157,7 +157,7 @@ impl PublicKey {
                     r#type: keys_proto::KeyType::Ed25519 as i32,
                     data: key.encode().to_vec()
                 },
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             PublicKey::Rsa(key) =>
                 keys_proto::PublicKey {
                     r#type: keys_proto::KeyType::Rsa as i32,
@@ -192,11 +192,11 @@ impl PublicKey {
             keys_proto::KeyType::Ed25519 => {
                 ed25519::PublicKey::decode(&pubkey.data).map(PublicKey::Ed25519)
             },
-            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+            #[cfg(not(target_arch = "wasm32"))]
             keys_proto::KeyType::Rsa => {
                 rsa::PublicKey::decode_x509(&pubkey.data).map(PublicKey::Rsa)
             }
-            #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+            #[cfg(target_arch = "wasm32")]
             keys_proto::KeyType::Rsa => {
                 log::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::new("Unsupported"))

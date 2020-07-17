@@ -1,13 +1,49 @@
-# Version ???
+- [`libp2p-core` CHANGELOG](core/CHANGELOG.md)
+- [`libp2p-deflate` CHANGELOG](protocols/deflate/CHANGELOG.md)
+- [`libp2p-dns` CHANGELOG](transports/dns/CHANGELOG.md)
+- [`libp2p-floodsub` CHANGELOG](protocols/floodsub/CHANGELOG.md)
+- [`libp2p-gossipsub` CHANGELOG](protocols/gossipsub/CHANGELOG.md)
+- [`libp2p-identify` CHANGELOG](protocols/identify/CHANGELOG.md)
+- [`libp2p-kad` CHANGELOG](protocols/kad/CHANGELOG.md)
+- [`libp2p-mdns` CHANGELOG](protocols/mdns/CHANGELOG.md)
+- [`libp2p-mplex` CHANGELOG](muxers/mplex/CHANGELOG.md)
+- [`libp2p-noise` CHANGELOG](protocols/noise/CHANGELOG.md)
+- [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
+- [`libp2p-plaintext` CHANGELOG](protocols/plaintext/CHANGELOG.md)
+- [`libp2p-pnet` CHANGELOG](protocols/pnet/CHANGELOG.md)
+- [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
+- [`libp2p-secio` CHANGELOG](protocols/secio/CHANGELOG.md)
+- [`libp2p-swarm` CHANGELOG](swarm/CHANGELOG.md)
+- [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
+- [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
+- [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
+- [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
+- [`libp2p-yamux` CHANGELOG](muxers/yamux/CHANGELOG.md)
+- [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
+- [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
+- [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-- `libp2p-kad`: Optionally require iterative queries to use disjoint paths based
-  on S/Kademlia for increased resiliency in the presence of potentially
-  adversarial nodes.
-  [PR 1473](https://github.com/libp2p/rust-libp2p/pull/1473)
+# Version 0.22.0 (2020-07-17)
 
-# Version 0.19.2 (2020-06-19)
+**NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
+on an existing deployment using `libp2p-noise`, this version
+must not be skipped!
 
-- Update `libp2p-ping` to version 0.19.2.
+- Bump `libp2p-noise` dependency to `0.21`.
+
+# Version 0.21.1 (2020-07-02)
+
+- Bump `libp2p-websockets` lower bound.
+
+# Version 0.21.0 (2020-07-01)
+
+- Conditional compilation fixes for the `wasm32-wasi` target
+  ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
+
+- New `libp2p-request-response` crate
+  ([PR 1596](https://github.com/libp2p/rust-libp2p/pull/1596)).
+
+- Updated libp2p dependencies.
 
 # Version 0.19.1 (2020-05-25)
 
