@@ -93,7 +93,8 @@
 //! let transport = tcp.upgrade(upgrade::Version::V1).authenticate(secio).multiplex(yamux);
 //! # }
 //! ```
-//! In this example, `tcp_secio` is a new [`Transport`] that negotiates the secio protocol
+//! In this example, `transport` is a new [`Transport`] that negotiates the
+//! secio and yamux protocols
 //! on all connections.
 //!
 //! ## Network Behaviour
@@ -243,6 +244,10 @@ pub use libp2p_yamux as yamux;
 #[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "request-response")]
+#[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
+#[doc(inline)]
+pub use libp2p_request_response as request_response;
 
 mod transport_ext;
 

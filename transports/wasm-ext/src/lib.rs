@@ -72,14 +72,17 @@ pub mod ffi {
         #[wasm_bindgen(method, catch)]
         pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
 
-        /// Returns a `Readable​Stream​`.
+        /// Returns an iterator of JavaScript `Promise`s that resolve to `ArrayBuffer` objects
+        /// (or resolve to null, see below). These `ArrayBuffer` objects contain the data that the
+        /// remote has sent to us. If the remote closes the connection, the iterator must produce
+        /// a `Promise` that resolves to `null`.
         #[wasm_bindgen(method, getter)]
         pub fn read(this: &Connection) -> js_sys::Iterator;
 
         /// Writes data to the connection. Returns a `Promise` that resolves when the connection is
         /// ready for writing again.
         ///
-        /// If the `Promise` returns an error, the writing side of the connection is considered
+        /// If the `Promise` produces an error, the writing side of the connection is considered
         /// unrecoverable and the connection should be closed as soon as possible.
         ///
         /// Guaranteed to only be called after the previous write promise has resolved.
@@ -95,7 +98,8 @@ pub mod ffi {
         #[wasm_bindgen(method)]
         pub fn close(this: &Connection);
 
-        /// List of addresses we have started listening on. Must be an array of strings of multiaddrs.
+        /// List of addresses we have started listening on. Must be an array of strings of
+        /// multiaddrs.
         #[wasm_bindgen(method, getter)]
         pub fn new_addrs(this: &ListenEvent) -> Option<Box<[JsValue]>>;
 
