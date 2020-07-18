@@ -17,9 +17,8 @@ get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
 libp2p-core = { version = "0.20.0", path = "../../core" }
 log = "0.4.1"
-socket2 = "0.3.12"
+socket2 = { version = "0.3.12", features = ["reuseport"] }
 tokio = { version = "0.2", default-features = false, features = ["tcp"], optional = true }
 
 [dev-dependencies]
 libp2p-tcp = { path = ".", features = ["async-std"] }
-

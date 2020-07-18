@@ -45,7 +45,7 @@ use std::{
     convert::TryFrom,
     io,
     iter::{self, FromIterator},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6},
     pin::Pin,
     task::{Context, Poll},
     time::Duration
@@ -119,6 +119,7 @@ impl Transport for $tcp_config {
             };
             if cfg!(target_family = "unix") {
                 socket.set_reuse_address(true)?;
+                socket.set_reuse_port(true)?;
             }
             socket.bind(&socket_addr.into())?;
             socket.listen(1024)?; // we may want to make this configurable
@@ -177,8 +178,16 @@ impl Transport for $tcp_config {
         Ok(Box::pin(do_listen(self, socket_addr).try_flatten_stream()))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr =
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let local_addr = if let Some(local_addr) = local_addr {
+            let socket_addr = multiaddr_to_socketaddr(&local_addr)
+                .map_err(|_| TransportError::MultiaddrNotSupported(local_addr))?;
+            Some(socket_addr)
+        } else {
+            None
+        };
+
+        let addr =
             if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
                 if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                     debug!("Instantly refusing dialing {}, as it is invalid", addr);
@@ -191,13 +200,40 @@ impl Transport for $tcp_config {
 
         debug!("Dialing {}", addr);
 
-        async fn do_dial(cfg: $tcp_config, socket_addr: SocketAddr) -> Result<$tcp_trans_stream, io::Error> {
-            let stream = <$tcp_stream>::connect(&socket_addr).await?;
+        async fn do_dial(
+            cfg: $tcp_config,
+            local_addr: Option<SocketAddr>,
+            addr: SocketAddr,
+        ) -> Result<$tcp_trans_stream, io::Error> {
+            let socket = if addr.is_ipv4() {
+                Socket::new(Domain::ipv4(), Type::stream(), Some(socket2::Protocol::tcp()))?
+            } else {
+                let s = Socket::new(Domain::ipv6(), Type::stream(), Some(socket2::Protocol::tcp()))?;
+                s.set_only_v6(true)?;
+                s
+            };
+            let local_addr = local_addr.unwrap_or_else(|| {
+                if addr.is_ipv4() {
+                    SocketAddr::V4(SocketAddrV4::new(0.into(), 0))
+                } else {
+                    SocketAddr::V6(SocketAddrV6::new(0.into(), 0, 0, 0))
+                }
+            });
+            if cfg!(target_family = "unix") {
+                socket.set_reuse_address(true)?;
+                socket.set_reuse_port(true)?;
+            }
+            socket.bind(&local_addr.into())?;
+            socket.connect(&addr.into())?;
+
+            let stream = <$tcp_stream>::try_from(socket.into_tcp_stream())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
             $apply_config(&cfg, &stream)?;
             Ok($tcp_trans_stream { inner: stream })
         }
 
-        Ok(Box::pin(do_dial(self, socket_addr)))
+        Ok(Box::pin(do_dial(self, local_addr, addr)))
     }
 }
 
@@ -535,7 +571,7 @@ mod tests {
                 })
                 .for_each(|_| futures::future::ready(()));
 
-            let client = TcpConfig::new().dial(addr).expect("dialer");
+            let client = TcpConfig::new().dial(None, addr).expect("dialer");
             async_std::task::block_on(futures::future::join(server, client)).1.unwrap();
         }
 
@@ -625,7 +661,7 @@ mod tests {
                 let tcp = TcpConfig::new();
 
                 // Obtain a future socket through dialing
-                let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
+                let mut socket = tcp.dial(None, addr.clone()).unwrap().await.unwrap();
                 socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
 
                 let mut buf = [0u8; 3];
