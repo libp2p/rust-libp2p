@@ -258,7 +258,7 @@ mod tests {
         async_std::task::block_on(async move {
             let transport = TcpConfig::new();
 
-            let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+            let socket = transport.dial(None, rx.await.unwrap()).unwrap().await.unwrap();
             let RemoteInfo { info, observed_addr, .. } =
                 apply_outbound(socket, IdentifyProtocolConfig, upgrade::Version::V1).await.unwrap();
             assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());

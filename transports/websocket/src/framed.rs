@@ -230,7 +230,7 @@ where
         Ok(Box::pin(listen))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Quick sanity check of the provided Multiaddr.
         if let Some(Protocol::Ws(_)) | Some(Protocol::Wss(_)) = addr.iter().last() {
             // ok
@@ -245,7 +245,7 @@ where
         let future = async move {
             loop {
                 let this = self.clone();
-                match this.dial_once(addr).await {
+                match this.dial_once(local_addr.clone(), addr).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
                             debug!("too many redirects");
@@ -270,7 +270,7 @@ where
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+    async fn dial_once(self, local_addr: Option<Multiaddr>, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("dial address: {}", address);
 
         let (host_port, dns_name) = host_and_dnsname(&address)?;
@@ -293,7 +293,7 @@ where
                 }
             };
 
-        let dial = self.transport.dial(inner_addr)
+        let dial = self.transport.dial(local_addr, inner_addr)
             .map_err(|e| match e {
                 TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
                 TransportError::Other(e) => Error::Transport(e)
@@ -586,4 +586,3 @@ where
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
-

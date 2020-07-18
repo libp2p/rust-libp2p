@@ -190,7 +190,7 @@ impl Transport for ExtTransport {
         })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, _local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let promise = self
             .inner
             .dial(&addr.to_string())

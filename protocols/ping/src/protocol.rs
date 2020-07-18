@@ -138,7 +138,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let c = MemoryTransport.dial(listener_addr).unwrap().await.unwrap();
+            let c = MemoryTransport.dial(None, listener_addr).unwrap().await.unwrap();
             let rtt = upgrade::apply_outbound(c, Ping::default(), upgrade::Version::V1).await.unwrap();
             assert!(rtt > Duration::from_secs(0));
         });

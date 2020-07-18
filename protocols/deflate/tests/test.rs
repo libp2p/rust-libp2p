@@ -82,7 +82,8 @@ async fn run(message1: Vec<u8>) {
         conn.close().await.expect("close")
     });
 
-    let mut conn = transport.dial(listen_addr).expect("dialer").await.expect("connection");
+    let mut conn = transport.dial(None, listen_addr)
+        .expect("dialer").await.expect("connection");
     conn.write_all(&message1).await.expect("write_all");
     conn.close().await.expect("close");
 

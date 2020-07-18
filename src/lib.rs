@@ -50,7 +50,7 @@
 //! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
 //! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _conn = tcp.dial(addr);
+//! let _conn = tcp.dial(None, addr);
 //! ```
 //! In the above example, `_conn` is a [`Future`] that needs to be polled in order for
 //! the dialing to take place and eventually resolve to a connection. Polling

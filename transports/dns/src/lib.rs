@@ -120,7 +120,7 @@ where
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // As an optimization, we immediately pass through if no component of the address contain
         // a DNS protocol.
         let contains_dns = addr.iter().any(|cmp| match cmp {
@@ -132,7 +132,7 @@ where
 
         if !contains_dns {
             trace!("Pass-through address without DNS: {}", addr);
-            let inner_dial = self.inner.dial(addr)
+            let inner_dial = self.inner.dial(local_addr, addr)
                 .map_err(|err| err.map(DnsErr::Underlying))?;
             return Ok(inner_dial.map_err::<_, fn(_) -> _>(DnsErr::Underlying).left_future());
         }
@@ -192,7 +192,7 @@ where
                 let outcome = outcome.into_iter().collect::<Multiaddr>();
                 debug!("DNS resolution outcome: {} => {}", addr, outcome);
 
-                match self.inner.dial(outcome) {
+                match self.inner.dial(local_addr, outcome) {
                     Ok(d) => d.await.map_err(DnsErr::Underlying),
                     Err(TransportError::MultiaddrNotSupported(_addr)) =>
                         Err(DnsErr::MultiaddrNotSupported),
@@ -275,7 +275,7 @@ mod tests {
                 unreachable!()
             }
 
-            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(self, _local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
                 let addr = addr.iter().collect::<Vec<_>>();
                 assert_eq!(addr.len(), 2);
                 match addr[1] {
@@ -296,20 +296,20 @@ mod tests {
 
             let _ = transport
                 .clone()
-                .dial("/dns4/example.com/tcp/20000".parse().unwrap())
+                .dial(None, "/dns4/example.com/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
                 .unwrap();
 
             let _ = transport
                 .clone()
-                .dial("/dns6/example.com/tcp/20000".parse().unwrap())
+                .dial(None, "/dns6/example.com/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
                 .unwrap();
 
             let _ = transport
-                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
+                .dial(None, "/ip4/1.2.3.4/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
                 .unwrap();

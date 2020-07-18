@@ -203,7 +203,7 @@ where
 
         let outbound_msgs = messages.clone();
         let client_fut = async {
-            let mut client_session = client_transport.dial(server_address.clone())
+            let mut client_session = client_transport.dial(None, server_address.clone())
                 .unwrap()
                 .await
                 .map(|(_, session)| session)

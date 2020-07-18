@@ -110,8 +110,8 @@ where
         self.transport.map(wrap_connection as WrapperFn<T::Output>).listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport.map(wrap_connection as WrapperFn<T::Output>).dial(addr)
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport.map(wrap_connection as WrapperFn<T::Output>).dial(local_addr, addr)
     }
 }
 
@@ -226,7 +226,7 @@ mod tests {
             conn.await
         };
 
-        let outbound = ws_config.dial(addr).unwrap();
+        let outbound = ws_config.dial(None, addr).unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);
         a.and(b).unwrap();

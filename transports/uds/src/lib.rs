@@ -101,7 +101,7 @@ impl Transport for $uds_config {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, _local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
@@ -213,7 +213,7 @@ mod tests {
         async_std::task::block_on(async move {
             let uds = UdsConfig::new();
             let addr = rx.await.unwrap();
-            let mut socket = uds.dial(addr).unwrap().await.unwrap();
+            let mut socket = uds.dial(None, addr).unwrap().await.unwrap();
             socket.write(&[1, 2, 3]).await.unwrap();
         });
     }

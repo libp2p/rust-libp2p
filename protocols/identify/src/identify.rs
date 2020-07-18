@@ -108,7 +108,7 @@ impl NetworkBehaviour for Identify {
 
     fn inject_connection_established(&mut self, peer_id: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
         let addr = match endpoint {
-            ConnectedPoint::Dialer { address } => address.clone(),
+            ConnectedPoint::Dialer { address, .. } => address.clone(),
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
         };
 

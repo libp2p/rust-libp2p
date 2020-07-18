@@ -456,7 +456,7 @@ where
 
     fn inject_connection_established(&mut self, peer: &PeerId, conn: &ConnectionId, endpoint: &ConnectedPoint) {
         let address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
             ConnectedPoint::Listener { .. } => None
         };
         let connections = self.connected.entry(peer.clone()).or_default();
@@ -604,4 +604,3 @@ struct Connection {
     id: ConnectionId,
     address: Option<Multiaddr>,
 }
-

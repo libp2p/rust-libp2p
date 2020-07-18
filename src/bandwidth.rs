@@ -72,10 +72,10 @@ where
             .map(move |inner| BandwidthListener { inner, sinks })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let sinks = self.sinks;
         self.inner
-            .dial(addr)
+            .dial(local_addr, addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 }

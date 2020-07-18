@@ -65,7 +65,7 @@ fn async_write() {
         let transport = TcpConfig::new().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let client = Arc::new(transport.dial(None, rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = loop {
             if let Some(s) = muxing::event_from_ref_and_wrap(client.clone()).await.unwrap()
                 .into_inbound_substream() {

@@ -1426,7 +1426,7 @@ where
         // since the remote address on an inbound connection is specific to
         // that connection (e.g. typically the TCP port numbers).
         let address = match endpoint {
-            ConnectedPoint::Dialer { address } => Some(address.clone()),
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
             ConnectedPoint::Listener { .. } => None,
         };
 
