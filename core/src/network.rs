@@ -29,7 +29,6 @@ use crate::{
     Executor,
     Multiaddr,
     PeerId,
-    address_translation,
     connection::{
         ConnectionId,
         ConnectionLimit,
@@ -183,31 +182,6 @@ where
         self.listeners.listen_addrs()
     }
 
-    /// Call this function in order to know which address remotes should dial to
-    /// access your local node.
-    ///
-    /// When receiving an observed address on a tcp connection that we initiated, the observed
-    /// address contains our tcp dial port, not our tcp listen port. We know which port we are
-    /// listening on, thereby we can replace the port within the observed address.
-    ///
-    /// When receiving an observed address on a tcp connection that we did **not** initiated, the
-    /// observed address should contain our listening port. In case it differs from our listening
-    /// port there might be a proxy along the path.
-    ///
-    /// # Arguments
-    ///
-    /// * `observed_addr` - should be an address a remote observes you as, which can be obtained for
-    /// example with the identify protocol.
-    ///
-    pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
-        -> impl Iterator<Item = Multiaddr> + 'a
-    where
-        TMuxer: 'a,
-        THandler: 'a,
-    {
-        self.listen_addrs().flat_map(move |server| address_translation(server, observed_addr))
-    }
-
     /// Returns the peer id of the local node.
     pub fn local_peer_id(&self) -> &TPeerId {
         &self.local_peer_id
@@ -231,8 +205,9 @@ where
         TConnInfo: Send + 'static,
         TPeerId: Send + 'static,
     {
-        let info = OutgoingInfo { address, peer_id: None };
-        match self.transport().clone().dial(address.clone()) {
+        let local_addr = self.listeners.listener_for_port_reuse(address);
+        let info = OutgoingInfo { local_addr, address, peer_id: None };
+        match self.transport().clone().dial(local_addr.cloned(), address.clone()) {
             Ok(f) => {
                 let f = f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
                 self.pool.add_outgoing(f, handler, info)
@@ -453,6 +428,7 @@ where
 struct DialingOpts<TPeerId, THandler> {
     peer: TPeerId,
     handler: THandler,
+    local_addr: Option<Multiaddr>,
     address: Multiaddr,
     remaining: Vec<Multiaddr>,
 }
@@ -484,15 +460,18 @@ where
     TPeerId: Eq + Hash + Send + Clone + 'static,
     TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
 {
-    let result = match transport.dial(opts.address.clone()) {
+    let info = OutgoingInfo {
+        local_addr: opts.local_addr.as_ref(),
+        address: &opts.address,
+        peer_id: Some(&opts.peer),
+    };
+    let result = match transport.dial(opts.local_addr.clone(), opts.address.clone()) {
         Ok(fut) => {
             let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
-            let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
             pool.add_outgoing(fut, opts.handler, info)
         },
         Err(err) => {
             let fut = future::err(PendingConnectionError::Transport(err));
-            let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };
             pool.add_outgoing(fut, opts.handler, info)
         },
     };
@@ -551,9 +530,15 @@ where
             if num_remain > 0 {
                 if let Some(handler) = handler {
                     let next_attempt = attempt.remaining.remove(0);
+                    let local_addr = if let ConnectedPoint::Dialer { local_addr, .. } = &endpoint {
+                        local_addr.clone()
+                    } else {
+                        unreachable!()
+                    };
                     let opts = DialingOpts {
                         peer: peer_id.clone(),
                         handler,
+                        local_addr,
                         address: next_attempt,
                         remaining: attempt.remaining
                     };
@@ -577,7 +562,7 @@ where
     } else {
         // A pending incoming connection or outgoing connection to an unknown peer failed.
         match endpoint {
-            ConnectedPoint::Dialer { address } =>
+            ConnectedPoint::Dialer { address, .. } =>
                 (None, NetworkEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,

@@ -527,8 +527,8 @@ where
             .filter_map(|(_, ref endpoint, ref peer_id)| {
                 match endpoint {
                     ConnectedPoint::Listener { .. } => None,
-                    ConnectedPoint::Dialer { address } =>
-                        Some(OutgoingInfo { address, peer_id: peer_id.as_ref() }),
+                    ConnectedPoint::Dialer { local_addr, address } =>
+                        Some(OutgoingInfo { local_addr: local_addr.as_ref(), address, peer_id: peer_id.as_ref() }),
                 }
             })
     }

@@ -43,7 +43,7 @@ pub type ListenerUpgrade<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Sen
 
 trait Abstract<O, E> {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>>;
-    fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>>;
+    fn dial(&self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>>;
 }
 
 impl<T, O, E> Abstract<O, E> for T
@@ -62,8 +62,8 @@ where
         Ok(Box::pin(fut))
     }
 
-    fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
-        let fut = Transport::dial(self.clone(), addr)?;
+    fn dial(&self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
+        let fut = Transport::dial(self.clone(), local_addr, addr)?;
         Ok(Box::pin(fut) as Dial<_, _>)
     }
 }
@@ -100,7 +100,7 @@ where E: error::Error,
         self.inner.listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.dial(addr)
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.dial(local_addr, addr)
     }
 }

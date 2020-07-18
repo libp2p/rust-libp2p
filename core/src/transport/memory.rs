@@ -113,7 +113,7 @@ impl Transport for MemoryTransport {
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(self, _local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -306,9 +306,9 @@ mod tests {
     #[test]
     fn port_not_in_use() {
         let transport = MemoryTransport::default();
-        assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_err());
+        assert!(transport.dial(None, "/memory/810172461024613".parse().unwrap()).is_err());
         let _listener = transport.listen_on("/memory/810172461024613".parse().unwrap()).unwrap();
-        assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_ok());
+        assert!(transport.dial(None, "/memory/810172461024613".parse().unwrap()).is_ok());
     }
 
     #[test]
@@ -342,7 +342,7 @@ mod tests {
 
         let t2 = MemoryTransport::default();
         let dialer = async move {
-            let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
+            let mut socket = t2.dial(None, cloned_t1_addr).unwrap().await.unwrap();
             socket.write_all(&msg).await.unwrap();
         };
 

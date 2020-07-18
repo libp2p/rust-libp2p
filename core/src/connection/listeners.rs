@@ -21,6 +21,7 @@
 //! Manage listening on multiple multiaddresses at once.
 
 use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
+use crate::multiaddr::Protocol;
 use futures::{prelude::*, task::Context, task::Poll};
 use log::debug;
 use smallvec::SmallVec;
@@ -229,6 +230,26 @@ where
         self.listeners.iter().flat_map(|l| l.addresses.iter())
     }
 
+    /// Returns a listener suitable for port reuse if there is one.
+    pub fn listener_for_port_reuse(&self, address: &Multiaddr) -> Option<&Multiaddr> {
+        let ip4 = match address.iter().next() {
+                Some(Protocol::Ip4(addr)) if !addr.is_loopback() => true,
+                Some(Protocol::Dns4(_)) => true,
+                Some(Protocol::Ip6(addr)) if !addr.is_loopback() => false,
+                Some(Protocol::Dns6(_)) => false,
+            _ => return None,
+        };
+        self.listen_addrs().find(|addr| {
+            match addr.iter().next() {
+                Some(Protocol::Ip4(addr)) => !addr.is_loopback() && ip4,
+                Some(Protocol::Dns4(_)) => ip4,
+                Some(Protocol::Ip6(addr)) => !addr.is_loopback() && !ip4,
+                Some(Protocol::Dns6(_)) => !ip4,
+                _ => false,
+            }
+        })
+    }
+
     /// Provides an API similar to `Stream`, except that it cannot end.
     pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ListenersEvent<TTrans>> {
         // We remove each element from `listeners` one by one and add them back.
@@ -394,7 +415,7 @@ mod tests {
 
             let address2 = address.clone();
             async_std::task::spawn(async move {
-                mem_transport.dial(address2).unwrap().await.unwrap();
+                mem_transport.dial(None, address2).unwrap().await.unwrap();
             });
 
             match listeners.next().await.unwrap() {
@@ -427,7 +448,7 @@ mod tests {
                 })))
             }
 
-            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(self, _: Option<Multiaddr>, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
         }
@@ -465,7 +486,7 @@ mod tests {
                 })))
             }
 
-            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(self, _: Option<Multiaddr>, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
         }

@@ -60,11 +60,12 @@ where
         Ok(stream)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dialed_fut = self.transport.dial(addr.clone()).map_err(|err| err.map(EitherError::A))?;
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dialed_fut = self.transport.dial(local_addr.clone(), addr.clone())
+            .map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
-            args: Some((self.fun, ConnectedPoint::Dialer { address: addr })),
+            args: Some((self.fun, ConnectedPoint::Dialer { local_addr, address: addr })),
             marker: PhantomPinned,
         };
         Ok(future)

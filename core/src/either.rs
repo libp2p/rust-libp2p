@@ -462,15 +462,15 @@ where
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            EitherTransport::Left(a) => match a.dial(addr) {
+            EitherTransport::Left(a) => match a.dial(local_addr, addr) {
                 Ok(connec) => Ok(EitherFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::A(err))),
             },
-            EitherTransport::Right(b) => match b.dial(addr) {
+            EitherTransport::Right(b) => match b.dial(local_addr, addr) {
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::B(err))),

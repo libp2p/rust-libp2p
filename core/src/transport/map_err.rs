@@ -57,9 +57,9 @@ where
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map;
-        match self.transport.dial(addr) {
+        match self.transport.dial(local_addr, addr) {
             Ok(future) => Ok(MapErrDial { inner: future, map: Some(map) }),
             Err(err) => Err(err.map(map)),
         }

@@ -52,9 +52,9 @@ where
         Ok(MapStream { stream, fun: self.fun })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial(addr.clone())?;
-        let p = ConnectedPoint::Dialer { address: addr };
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.transport.dial(local_addr.clone(), addr.clone())?;
+        let p = ConnectedPoint::Dialer { local_addr, address: addr };
         Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
     }
 }

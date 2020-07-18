@@ -84,6 +84,8 @@ impl Endpoint {
 pub enum ConnectedPoint {
     /// We dialed the node.
     Dialer {
+        /// Local connection address.
+        local_addr: Option<Multiaddr>,
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
     },
@@ -138,7 +140,7 @@ impl ConnectedPoint {
     /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.
     pub fn set_remote_address(&mut self, new_address: Multiaddr) {
         match self {
-            ConnectedPoint::Dialer { address } => *address = new_address,
+            ConnectedPoint::Dialer { address, .. } => *address = new_address,
             ConnectedPoint::Listener { send_back_addr, .. } => *send_back_addr = new_address,
         }
     }
@@ -322,6 +324,7 @@ impl<'a> IncomingInfo<'a> {
 /// Borrowed information about an outgoing connection currently being negotiated.
 #[derive(Debug, Copy, Clone)]
 pub struct OutgoingInfo<'a, TPeerId> {
+    pub local_addr: Option<&'a Multiaddr>,
     pub address: &'a Multiaddr,
     pub peer_id: Option<&'a TPeerId>,
 }
@@ -330,7 +333,8 @@ impl<'a, TPeerId> OutgoingInfo<'a, TPeerId> {
     /// Builds a `ConnectedPoint` corresponding to the outgoing connection.
     pub fn to_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Dialer {
-            address: self.address.clone()
+            local_addr: self.local_addr.cloned(),
+            address: self.address.clone(),
         }
     }
 }

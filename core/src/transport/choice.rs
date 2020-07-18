@@ -59,14 +59,14 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = match self.0.dial(addr) {
+    fn dial(self, local_addr: Option<Multiaddr>, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        match self.0.dial(local_addr.clone(), addr.clone()) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(_)) => {},
             Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
         };
 
-        let addr = match self.1.dial(addr) {
+        let addr = match self.1.dial(local_addr, addr) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),

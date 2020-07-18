@@ -232,9 +232,12 @@ where
             Peer::Local => return Err(ConnectionLimit { current: 0, limit: 0 })
         };
 
+        let local_addr = network.listeners.listener_for_port_reuse(&address).cloned();
+
         let id = network.dial_peer(DialingOpts {
             peer: peer_id.clone(),
             handler,
+            local_addr,
             address,
             remaining: remaining.into_iter().collect(),
         })?;
@@ -629,7 +632,7 @@ impl<'a, TInEvent, TConnInfo, TPeerId>
     /// Returns the remote address of the current connection attempt.
     pub fn address(&self) -> &Multiaddr {
         match self.inner.endpoint() {
-            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { .. } => unreachable!("by definition of a `DialingAttempt`.")
         }
     }

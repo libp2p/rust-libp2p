@@ -744,12 +744,10 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     }
                 },
                 Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    for addr in this.network.address_translation(&address) {
-                        if this.external_addrs.iter().all(|a| *a != addr) {
-                            this.behaviour.inject_new_external_addr(&addr);
-                        }
-                        this.external_addrs.add(addr);
+                    if this.external_addrs.iter().find(|a| *a != &address).is_none() {
+                        this.behaviour.inject_new_external_addr(&address);
                     }
+                    this.external_addrs.add(address);
                 },
             }
         }

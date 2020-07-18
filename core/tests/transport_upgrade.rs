@@ -127,11 +127,10 @@ fn upgrade_pipeline() {
     };
 
     let client = async move {
-        let (peer, _mplex) = dialer_transport.dial(listen_addr2).unwrap().await.unwrap();
+        let (peer, _mplex) = dialer_transport.dial(None, listen_addr2).unwrap().await.unwrap();
         assert_eq!(peer, listener_id);
     };
 
     async_std::task::spawn(server);
     async_std::task::block_on(client);
 }
-
