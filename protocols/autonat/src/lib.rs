@@ -20,7 +20,7 @@
 
 //! Implementation of the [AutoNAT] protocol.
 
-pub use self::autonat::{AutoNat, AutoNatEvent};
+pub use self::autonat::{AutoNat, AutoNatEvent, DialResponse};
 
 mod autonat;
 mod protocol;
