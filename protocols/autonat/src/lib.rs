@@ -23,6 +23,7 @@
 pub use self::autonat::{AutoNat, AutoNatEvent};
 
 mod autonat;
+mod protocol;
 
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));
