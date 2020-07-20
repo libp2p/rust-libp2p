@@ -18,3 +18,12 @@ libp2p-core = { version = "0.20.0", path = "../../core" }
 libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
 libp2p-request-response = { version = "0.1.0", path = "../request-response" }
 prost = "0.6.1"
+
+[dev-dependencies]
+async-std = "1.6.2"
+netsim-embed = "0.1.0"
+
+[dev-dependencies.libp2p]
+default-features = false
+features = ["autonat", "noise", "tcp-async-std", "yamux"]
+path = "../.."
