@@ -23,6 +23,16 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
+# Version 0.23.0 (2020-??-??)
+
+**NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
+on an existing deployment, this version must not be skipped
+or the provided feature flags used!
+
+- Bump `libp2p-noise` dependency to `0.22`. See the `libp2p-noise`
+changelog for details. The corresponding feature flag `noise-send-legacy-handshake`
+is provided through the `libp2p` crate.
+
 # Version 0.22.0 (2020-07-17)
 
 **NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`

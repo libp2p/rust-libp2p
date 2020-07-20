@@ -424,17 +424,26 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = payload_proto::NoiseHandshakePayload::default();
+
     if state.send_identity {
         pb.identity_key = state.identity.public.clone().into_protobuf_encoding()
     }
+
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
     }
-    // NOTE: We temporarily need to continue sending the (legacy) length prefix
-    // for a short while to permit migration.
-    let mut msg = Vec::with_capacity(pb.encoded_len() + 2);
-    msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+
+    let mut msg =
+        if cfg!(feature = "send-legacy-handshake") {
+            let mut msg = Vec::with_capacity(2 + pb.encoded_len());
+            msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+            msg
+        } else {
+            Vec::with_capacity(pb.encoded_len())
+        };
+
     pb.encode(&mut msg).expect("Vec<u8> provides capacity as needed");
     state.io.send(&msg).await?;
+
     Ok(())
 }
