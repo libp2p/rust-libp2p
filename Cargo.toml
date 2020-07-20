@@ -11,6 +11,7 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 default = [
+    "autonat",
     "deflate",
     "dns",
     "floodsub",
@@ -32,6 +33,7 @@ default = [
     "websocket",
     "yamux",
 ]
+autonat = ["libp2p-autonat"]
 deflate = ["libp2p-deflate"]
 dns = ["libp2p-dns"]
 floodsub = ["libp2p-floodsub"]
@@ -61,6 +63,7 @@ all-features = true
 bytes = "0.5"
 futures = "0.3.1"
 lazy_static = "1.2"
+libp2p-autonat = { version = "0.20.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.20.0", path = "core" }
 libp2p-core-derive = { version = "0.20.0", path = "misc/core-derive" }
 libp2p-floodsub = { version = "0.20.0", path = "protocols/floodsub", optional = true }
@@ -105,6 +108,7 @@ members = [
     "misc/peer-id-generator",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/autonat",
     "protocols/floodsub",
     "protocols/gossipsub",
     "protocols/identify",

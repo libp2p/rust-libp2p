@@ -163,6 +163,10 @@ pub use multiaddr;
 #[doc(inline)]
 pub use multihash;
 
+#[cfg(feature = "autonat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "autonat")))]
+#[doc(inline)]
+pub use libp2p_autonat as autonat;
 #[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(feature = "deflate")]
