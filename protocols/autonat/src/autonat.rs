@@ -120,7 +120,6 @@ impl NetworkBehaviour for AutoNat {
         endpoint: &ConnectedPoint,
     ) {
         self.inner.inject_connection_closed(peer, conn, endpoint);
-
         if let Some(addrs) = self.observed_addresses.get_mut(peer) {
             addrs.remove(conn);
         }
@@ -162,7 +161,6 @@ impl NetworkBehaviour for AutoNat {
                         request: _,
                         channel,
                     } => {
-                        println!("{:?}", self.addresses_of_peer(&peer));
                         self.requests.insert(peer.clone(), channel);
                         return Poll::Ready(NetworkBehaviourAction::DialPeer {
                             peer_id: peer,

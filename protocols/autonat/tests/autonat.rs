@@ -72,6 +72,10 @@ fn autonat_netsim_setup(natconfig: NatConfig) -> oneshot::Receiver<AutoNatEvent>
         local.spawn_machine(
             |mut cmd: mpsc::Receiver<Command>, mut event: mpsc::Sender<Event>| async move {
                 let (_peer_id, mut swarm) = mk_swarm();
+                let addr = "/ip4/0.0.0.0/tcp/0".parse().expect("Invalid addr");
+                Swarm::listen_on(&mut swarm, addr).expect("listen_on failed");
+                while let Some(_) = swarm.next().now_or_never() {}
+
                 if let Some(Command::DialRequest(peer_id, addr)) = cmd.next().await {
                     swarm.add_address(&peer_id, addr);
                     swarm.dial_request(&peer_id);
