@@ -102,9 +102,9 @@ impl RequestResponseCodec for AutoNatCodec {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DialRequest {
-    pub peer_id: PeerId,
+    pub peer_id: Option<PeerId>,
     pub addrs: Vec<Multiaddr>,
 }
 
@@ -116,14 +116,10 @@ impl DialRequest {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
         let (peer_id, addrs) = if let Some(structs_proto::message::Dial {
-            peer:
-                Some(structs_proto::message::PeerInfo {
-                    id: Some(peer_id),
-                    addrs,
-                }),
+            peer: Some(structs_proto::message::PeerInfo { id, addrs }),
         }) = msg.dial
         {
-            (peer_id, addrs)
+            (id, addrs)
         } else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -131,9 +127,13 @@ impl DialRequest {
             ));
         };
 
-        let peer_id = {
-            PeerId::try_from(peer_id)
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?
+        let peer_id = if let Some(peer_id) = peer_id {
+            Some(
+                PeerId::try_from(peer_id)
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?,
+            )
+        } else {
+            None
         };
         let addrs = {
             let mut maddrs = vec![];
@@ -148,14 +148,14 @@ impl DialRequest {
     }
 
     pub fn to_bytes(self) -> Vec<u8> {
-        let peer_id = self.peer_id.into_bytes();
+        let peer_id = self.peer_id.map(|id| id.into_bytes());
         let addrs = self.addrs.into_iter().map(|addr| addr.to_vec()).collect();
 
         let msg = structs_proto::Message {
             r#type: Some(structs_proto::message::MessageType::Dial as _),
             dial: Some(structs_proto::message::Dial {
                 peer: Some(structs_proto::message::PeerInfo {
-                    id: Some(peer_id),
+                    id: peer_id,
                     addrs: addrs,
                 }),
             }),
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_request_encode_decode() {
         let request = DialRequest {
-            peer_id: PeerId::random(),
+            peer_id: Some(PeerId::random()),
             addrs: vec![
                 "/ip4/8.8.8.8/tcp/30333".parse().unwrap(),
                 "/ip4/192.168.1.42/tcp/30333".parse().unwrap(),

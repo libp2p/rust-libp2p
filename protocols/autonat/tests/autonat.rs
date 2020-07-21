@@ -74,7 +74,7 @@ fn autonat_netsim_setup(natconfig: NatConfig) -> oneshot::Receiver<AutoNatEvent>
                 let (_peer_id, mut swarm) = mk_swarm();
                 if let Some(Command::DialRequest(peer_id, addr)) = cmd.next().await {
                     swarm.add_address(&peer_id, addr);
-                    Swarm::dial(&mut swarm, &peer_id).expect("dial failed");
+                    swarm.dial_request(&peer_id);
                 } else {
                     unreachable!();
                 }
