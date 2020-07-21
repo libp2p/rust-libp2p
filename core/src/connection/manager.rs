@@ -459,7 +459,7 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
         self.task.get_mut().sender.try_send(cmd)
             .map_err(|e| match e.into_inner() {
                 task::Command::NotifyHandler(event) => event,
-                _ => unreachable!("by (*)")
+                _ => panic!("Unexpected command. Expected `NotifyHandler`") // see (*)
             })
     }
 

@@ -882,7 +882,7 @@ where
                     Some(manager::Entry::Established(entry)) => {
                         return Some(EstablishedConnection { entry })
                     }
-                    _ => unreachable!("by (*)")
+                    _ => panic!("Established entry not found in manager.") // see (*)
                 }
             }
         }
@@ -905,7 +905,7 @@ where
                     Some(manager::Entry::Established(entry)) => {
                         return Some(EstablishedConnection { entry })
                     }
-                    _ => unreachable!("by (*)")
+                    _ => panic!("Established entry not found in manager.") // see (*)
                 }
             }
         }
