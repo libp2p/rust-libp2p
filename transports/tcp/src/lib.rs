@@ -205,26 +205,39 @@ impl Transport for $tcp_config {
             local_addr: Option<SocketAddr>,
             addr: SocketAddr,
         ) -> Result<$tcp_trans_stream, io::Error> {
-            let socket = if addr.is_ipv4() {
-                Socket::new(Domain::ipv4(), Type::stream(), Some(socket2::Protocol::tcp()))?
+            let default_addr = if addr.is_ipv4() {
+                SocketAddr::V4(SocketAddrV4::new(0.into(), 0))
             } else {
-                let s = Socket::new(Domain::ipv6(), Type::stream(), Some(socket2::Protocol::tcp()))?;
-                s.set_only_v6(true)?;
-                s
+                SocketAddr::V6(SocketAddrV6::new(0.into(), 0, 0, 0))
             };
-            let local_addr = local_addr.unwrap_or_else(|| {
-                if addr.is_ipv4() {
-                    SocketAddr::V4(SocketAddrV4::new(0.into(), 0))
+            let mut local_addr = local_addr.unwrap_or(default_addr);
+            let socket = loop {
+                let socket = if addr.is_ipv4() {
+                    Socket::new(Domain::ipv4(), Type::stream(), Some(socket2::Protocol::tcp()))?
                 } else {
-                    SocketAddr::V6(SocketAddrV6::new(0.into(), 0, 0, 0))
+                    let s = Socket::new(Domain::ipv6(), Type::stream(), Some(socket2::Protocol::tcp()))?;
+                    s.set_only_v6(true)?;
+                    s
+                };
+
+                if cfg!(target_family = "unix") {
+                    socket.set_reuse_address(true)?;
+                    socket.set_reuse_port(true)?;
+                    socket.bind(&local_addr.into())?;
+                    match socket.connect(&addr.into()) {
+                        Ok(()) => break socket,
+                        Err(err) if err.raw_os_error() == Some(99) => {
+                            log::debug!("retrying socket with default addr");
+                            local_addr = default_addr;
+                        }
+                        Err(err) => return Err(err),
+                    }
+                } else {
+                    socket.bind(&default_addr.into())?;
+                    socket.connect(&addr.into())?;
+                    break socket;
                 }
-            });
-            if cfg!(target_family = "unix") {
-                socket.set_reuse_address(true)?;
-                socket.set_reuse_port(true)?;
-            }
-            socket.bind(&local_addr.into())?;
-            socket.connect(&addr.into())?;
+            };
 
             let stream = <$tcp_stream>::try_from(socket.into_tcp_stream())
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
