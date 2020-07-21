@@ -453,6 +453,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address });
                     }
+                    std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection_id }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection_id });
+                    }
+                    std::task::Poll::Ready(#network_behaviour_action::DisconnectPeer { peer_id }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::DisconnectPeer { peer_id });
+                    }
                     std::task::Poll::Pending => break,
                 }
             }

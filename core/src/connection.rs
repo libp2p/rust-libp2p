@@ -30,7 +30,7 @@ pub use error::{ConnectionError, PendingConnectionError};
 pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler};
 pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
 pub use manager::ConnectionId;
-pub use substream::{Substream, SubstreamEndpoint, Close};
+pub use substream::{Substream, SubstreamEndpoint};
 pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
 
 use crate::muxing::StreamMuxer;
@@ -194,10 +194,12 @@ where
     TMuxer: StreamMuxer,
     THandler: ConnectionHandler<Substream = Substream<TMuxer>>,
 {
-    /// Node that handles the muxing.
+    /// The substream multiplexer over the connection I/O stream.
     muxing: substream::Muxing<TMuxer, THandler::OutboundOpenInfo>,
-    /// Handler that processes substreams.
+    /// The connection handler for the substreams.
     handler: THandler,
+    /// The operating state of the connection.
+    state: ConnectionState,
 }
 
 impl<TMuxer, THandler> fmt::Debug for Connection<TMuxer, THandler>
@@ -231,44 +233,76 @@ where
         Connection {
             muxing: Muxing::new(muxer),
             handler,
+            state: ConnectionState::Open,
         }
     }
 
-    /// Returns a reference to the `ConnectionHandler`
-    pub fn handler(&self) -> &THandler {
-        &self.handler
-    }
-
-    /// Returns a mutable reference to the `ConnectionHandler`
-    pub fn handler_mut(&mut self) -> &mut THandler {
-        &mut self.handler
-    }
-
     /// Notifies the connection handler of an event.
+    ///
+    /// Has no effect if the connection handler is already closed.
     pub fn inject_event(&mut self, event: THandler::InEvent) {
-        self.handler.inject_event(event);
+        match self.state {
+            ConnectionState::Open | ConnectionState::CloseHandler
+                => self.handler.inject_event(event),
+            _ => {
+                log::trace!("Ignoring handler event. Handler is closed.")
+            }
+        }
     }
 
-    /// Begins an orderly shutdown of the connection, returning a
-    /// `Future` that resolves when connection shutdown is complete.
-    pub fn close(self) -> Close<TMuxer> {
-        self.muxing.close().0
+    /// Begins a graceful shutdown of the connection.
+    ///
+    /// The connection must continue to be `poll()`ed to drive the
+    /// shutdown process to completion. Once connection shutdown is
+    /// complete, `poll()` returns `Ok(None)`.
+    pub fn start_close(&mut self) {
+        if self.state == ConnectionState::Open {
+            self.state = ConnectionState::CloseHandler;
+        }
     }
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
+    ///
+    /// > **Note**: A return value of `Ok(None)` signals successful
+    /// > connection shutdown, whereas an `Err` signals termination
+    /// > of the connection due to an error. In either case, the
+    /// > connection must be dropped; any further method calls
+    /// > result in unspecified behaviour.
     pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>>
+        -> Poll<Result<Option<Event<THandler::OutEvent>>, ConnectionError<THandler::Error>>>
     {
         loop {
+            if let ConnectionState::Closed = self.state { // (1)
+                return Poll::Ready(Ok(None))
+            }
+
+            if let ConnectionState::CloseMuxer = self.state { // (2)
+                match futures::ready!(self.muxing.poll_close(cx)) {
+                    Ok(()) => {
+                        self.state = ConnectionState::Closed;
+                        return Poll::Ready(Ok(None))
+                    }
+                    Err(e) => return Poll::Ready(Err(ConnectionError::IO(e)))
+                }
+            }
+
+            // At this point the connection is either open or in the process
+            // of a graceful shutdown by the connection handler.
             let mut io_pending = false;
 
             // Perform I/O on the connection through the muxer, informing the handler
-            // of new substreams.
+            // of new substreams or other muxer events.
             match self.muxing.poll(cx) {
                 Poll::Pending => io_pending = true,
                 Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
-                    self.handler.inject_substream(substream, SubstreamEndpoint::Listener)
+                    // Drop new inbound substreams when closing. This is analogous
+                    // to rejecting new connections.
+                    if self.state == ConnectionState::Open {
+                        self.handler.inject_substream(substream, SubstreamEndpoint::Listener)
+                    } else {
+                        log::trace!("Inbound substream dropped. Connection is closing.")
+                    }
                 }
                 Poll::Ready(Ok(SubstreamEvent::OutboundSubstream { user_data, substream })) => {
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
@@ -276,23 +310,37 @@ where
                 }
                 Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
                     self.handler.inject_address_change(&address);
-                    return Poll::Ready(Ok(Event::AddressChange(address)));
+                    return Poll::Ready(Ok(Some(Event::AddressChange(address))));
                 }
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::IO(err))),
             }
 
             // Poll the handler for new events.
-            match self.handler.poll(cx) {
+            let poll = match &self.state {
+                ConnectionState::Open => self.handler.poll(cx).map_ok(Some),
+                ConnectionState::CloseHandler => self.handler.poll_close(cx).map_ok(
+                    |event| event.map(ConnectionHandlerEvent::Custom)),
+                s => panic!("Unexpected closing state: {:?}", s) // s.a. (1),(2)
+            };
+
+            match poll {
                 Poll::Pending => {
                     if io_pending {
                         return Poll::Pending // Nothing to do
                     }
                 }
-                Poll::Ready(Ok(ConnectionHandlerEvent::OutboundSubstreamRequest(user_data))) => {
+                Poll::Ready(Ok(Some(ConnectionHandlerEvent::OutboundSubstreamRequest(user_data)))) => {
                     self.muxing.open_substream(user_data);
                 }
-                Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event))) => {
-                    return Poll::Ready(Ok(Event::Handler(event)));
+                Poll::Ready(Ok(Some(ConnectionHandlerEvent::Custom(event)))) => {
+                    return Poll::Ready(Ok(Some(Event::Handler(event))));
+                }
+                Poll::Ready(Ok(Some(ConnectionHandlerEvent::Close))) => {
+                    self.start_close()
+                }
+                Poll::Ready(Ok(None)) => {
+                    // The handler is done, we can now close the muxer (i.e. connection).
+                    self.state = ConnectionState::CloseMuxer;
                 }
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
             }
@@ -352,3 +400,25 @@ impl fmt::Display for ConnectionLimit {
 
 /// A `ConnectionLimit` can represent an error if it has been exceeded.
 impl Error for ConnectionLimit {}
+
+/// The state of a [`Connection`] w.r.t. an active graceful close.
+#[derive(Debug, PartialEq, Eq)]
+enum ConnectionState {
+    /// The connection is open, accepting new inbound and outbound
+    /// substreams.
+    Open,
+    /// The connection is closing, rejecting new inbound substreams
+    /// and not permitting new outbound substreams while the
+    /// connection handler closes. [`ConnectionHandler::poll_close`]
+    /// is called until completion which results in transitioning to
+    /// `CloseMuxer`.
+    CloseHandler,
+    /// The connection is closing, rejecting new inbound substreams
+    /// and not permitting new outbound substreams while the
+    /// muxer is closing the transport connection. [`Muxer::poll_close`]
+    /// is called until completion, which results in transitioning
+    /// to `Closed`.
+    CloseMuxer,
+    /// The connection is closed.
+    Closed
+}

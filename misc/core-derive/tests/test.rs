@@ -300,8 +300,9 @@ fn event_process_false() {
         // check that the event is bubbled up all the way to swarm
         let _ = async {
             match swarm.next().await {
-                BehaviourOutEvent::Ping(_) => {},
-                BehaviourOutEvent::Identify(_) => {},
+                Some(BehaviourOutEvent::Ping(_)) => {},
+                Some(BehaviourOutEvent::Identify(_)) => {},
+                None => panic!("swarm terminated unexpectedly")
             }
         };
     }

@@ -86,7 +86,7 @@ where
 
 impl<TCodec> RequestResponseHandler<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: RequestResponseCodec + Clone + Send + 'static,
 {
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -105,6 +105,30 @@ where
             pending_events: VecDeque::new(),
             pending_error: None,
         }
+    }
+
+    fn poll_inbound(&mut self, cx: &mut Context<'_>)
+        -> Poll<RequestResponseHandlerEvent<TCodec>>
+    {
+        while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
+            match result {
+                Ok((rq, rs_sender)) => {
+                    // We received an inbound request.
+                    self.keep_alive = KeepAlive::Yes;
+                    return Poll::Ready(
+                        RequestResponseHandlerEvent::Request {
+                            request: rq, sender: rs_sender
+                        })
+                }
+                Err(oneshot::Canceled) => {
+                    // The inbound upgrade has errored or timed out reading
+                    // or waiting for the request. The handler is informed
+                    // via `inject_listen_upgrade_error`.
+                }
+            }
+        }
+
+        Poll::Pending
     }
 }
 
@@ -132,6 +156,8 @@ where
     InboundTimeout,
     /// An inbound request failed to negotiate a mutually supported protocol.
     InboundUnsupportedProtocols,
+    /// An outbound request could not be sent because the connection is closing.
+    Closing(RequestProtocol<TCodec>),
 }
 
 impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
@@ -256,10 +282,7 @@ where
         self.keep_alive
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
         ProtocolsHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>,
     > {
         // Check for a pending (fatal) error.
@@ -276,22 +299,8 @@ where
         }
 
         // Check for inbound requests.
-        while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
-            match result {
-                Ok((rq, rs_sender)) => {
-                    // We received an inbound request.
-                    self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RequestResponseHandlerEvent::Request {
-                            request: rq, sender: rs_sender
-                        }))
-                }
-                Err(oneshot::Canceled) => {
-                    // The inbound upgrade has errored or timed out reading
-                    // or waiting for the request. The handler is informed
-                    // via `inject_listen_upgrade_error`.
-                }
-            }
+        if let Poll::Ready(event) = self.poll_inbound(cx) {
+            return Poll::Ready(ProtocolsHandlerEvent::Custom(event))
         }
 
         // Emit outbound requests.
@@ -321,6 +330,38 @@ where
         }
 
         Poll::Pending
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<
+        Result<Option<Self::OutEvent>, Self::Error>
+    > {
+        // Check for a pending (fatal) error.
+        if let Some(err) = self.pending_error.take() {
+            // The handler will not be polled again by the `Swarm`.
+            return Poll::Ready(Err(err))
+        }
+
+        // Drain pending events.
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(Ok(Some(event)))
+        }
+
+        // Drain remaining inbound requests. New inbound requests
+        // will not be received.
+        if let Poll::Ready(event) = self.poll_inbound(cx) {
+            return Poll::Ready(Ok(Some(event)))
+        }
+
+        // Deny new outbound requests so they can be rescheduled on
+        // a different connection.
+        if let Some(request) = self.outbound.pop_front() {
+            return Poll::Ready(Ok(Some(RequestResponseHandlerEvent::Closing(request))))
+        }
+
+        // Ongoing inbound and outbound upgrades are always allowed to
+        // complete, thus there is nothing else that needs to delay
+        // connection shutdown.
+        return Poll::Ready(Ok(None))
     }
 }
 

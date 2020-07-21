@@ -62,7 +62,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
         .authenticate(SecioConfig::new(local_key))
         .multiplex(yamux::Config::default())
         .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-        .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })
+        .map_err(|e| -> io::Error { io::Error::new(io::ErrorKind::Other, e.to_string()) })
         .boxed();
 
     let local_id = local_public_key.clone().into_peer_id();
@@ -179,43 +179,55 @@ fn bootstrap() {
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();
         let mut first = true;
 
+        let mut success = false;
+
         // Run test
-        block_on(
-            poll_fn(move |ctx| {
-                for (i, swarm) in swarms.iter_mut().enumerate() {
-                    loop {
-                        match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::QueryResult {
-                                id, result: QueryResult::Bootstrap(Ok(ok)), ..
-                            })) => {
-                                assert_eq!(id, qid);
-                                assert_eq!(i, 0);
-                                if first {
-                                    // Bootstrapping must start with a self-lookup.
-                                    assert_eq!(ok.peer, swarm_ids[0]);
-                                }
-                                first = false;
-                                if ok.num_remaining == 0 {
-                                    let mut known = HashSet::new();
-                                    for b in swarm.kbuckets.iter() {
-                                        for e in b.iter() {
-                                            known.insert(e.node.key.preimage().clone());
-                                        }
-                                    }
-                                    assert_eq!(expected_known, known);
-                                    return Poll::Ready(())
-                                }
+        block_on(poll_fn(move |ctx| {
+            for (i, swarm) in swarms.iter_mut().enumerate() {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::Bootstrap(Ok(ok)), ..
+                        })) => {
+                            assert_eq!(id, qid);
+                            assert_eq!(i, 0);
+                            if first {
+                                // Bootstrapping must start with a self-lookup.
+                                assert_eq!(ok.peer, swarm_ids[0]);
                             }
-                            // Ignore any other event.
-                            Poll::Ready(Some(_)) => (),
-                            e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                            Poll::Pending => break,
+                            first = false;
+                            if ok.num_remaining == 0 {
+                                let mut known = HashSet::new();
+                                for b in swarm.kbuckets.iter() {
+                                    for e in b.iter() {
+                                        known.insert(e.node.key.preimage().clone());
+                                    }
+                                }
+                                assert_eq!(expected_known, known);
+                                success = true;
+                                Swarm::start_close(swarm);
+                            }
                         }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        Poll::Ready(None) => break,
+                        Poll::Pending =>
+                            if success && !Swarm::is_closing(swarm) {
+                                Swarm::start_close(swarm)
+                            } else {
+                                break
+                            }
                     }
                 }
-                Poll::Pending
-            })
-        )
+            }
+
+            if swarms.iter().all(Swarm::is_closed) {
+                assert!(success);
+                return Poll::Ready(())
+            }
+
+            Poll::Pending
+        }))
     }
 
     QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
@@ -259,34 +271,46 @@ fn query_iter() {
         let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
         expected_distances.sort();
 
+        let mut success = false;
+
         // Run test
-        block_on(
-            poll_fn(move |ctx| {
-                for (i, swarm) in swarms.iter_mut().enumerate() {
-                    loop {
-                        match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::QueryResult {
-                                id, result: QueryResult::GetClosestPeers(Ok(ok)), ..
-                            })) => {
-                                assert_eq!(id, qid);
-                                assert_eq!(&ok.key[..], search_target.as_bytes());
-                                assert_eq!(swarm_ids[i], expected_swarm_id);
-                                assert_eq!(swarm.queries.size(), 0);
-                                assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
-                                let key = kbucket::Key::new(ok.key);
-                                assert_eq!(expected_distances, distances(&key, ok.peers));
-                                return Poll::Ready(());
-                            }
-                            // Ignore any other event.
-                            Poll::Ready(Some(_)) => (),
-                            e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                            Poll::Pending => break,
+        block_on(poll_fn(move |ctx| {
+            for (i, swarm) in swarms.iter_mut().enumerate() {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::GetClosestPeers(Ok(ok)), ..
+                        })) => {
+                            assert_eq!(id, qid);
+                            assert_eq!(&ok.key[..], search_target.as_bytes());
+                            assert_eq!(swarm_ids[i], expected_swarm_id);
+                            assert_eq!(swarm.queries.size(), 0);
+                            assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
+                            let key = kbucket::Key::new(ok.key);
+                            assert_eq!(expected_distances, distances(&key, ok.peers));
+                            success = true;
+                            Swarm::start_close(swarm);
                         }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        Poll::Ready(None) => break,
+                        Poll::Pending =>
+                            if success && !Swarm::is_closing(swarm) {
+                                Swarm::start_close(swarm);
+                            } else {
+                                break
+                            }
                     }
                 }
-                Poll::Pending
-            })
-        )
+            }
+
+            if swarms.iter().all(Swarm::is_closed) {
+                assert!(success);
+                return Poll::Ready(())
+            }
+
+            Poll::Pending
+        }))
     }
 
     let mut rng = thread_rng();
@@ -323,11 +347,11 @@ fn unresponsive_not_returned_direct() {
                         })) => {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 0);
-                            return Poll::Ready(());
+                            Swarm::start_close(swarm);
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                        Poll::Ready(None) => return Poll::Ready(()),
                         Poll::Pending => break,
                     }
                 }
@@ -374,11 +398,11 @@ fn unresponsive_not_returned_indirect() {
                             assert_eq!(&ok.key[..], search_target.as_bytes());
                             assert_eq!(ok.peers.len(), 1);
                             assert_eq!(ok.peers[0], first_peer_id);
-                            return Poll::Ready(());
+                            Swarm::start_close(swarm);
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                        Poll::Ready(None) => return Poll::Ready(()),
                         Poll::Pending => break,
                     }
                 }
@@ -408,36 +432,40 @@ fn get_record_not_found() {
     let target_key = record::Key::from(random_multihash());
     let qid = swarms[0].get_record(&target_key, Quorum::One);
 
-    block_on(
-        poll_fn(move |ctx| {
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::QueryResult {
-                            id, result: QueryResult::GetRecord(Err(e)), ..
-                        })) => {
-                            assert_eq!(id, qid);
-                            if let GetRecordError::NotFound { key, closest_peers, } = e {
-                                assert_eq!(key, target_key);
-                                assert_eq!(closest_peers.len(), 2);
-                                assert!(closest_peers.contains(&swarm_ids[1]));
-                                assert!(closest_peers.contains(&swarm_ids[2]));
-                                return Poll::Ready(());
-                            } else {
-                                panic!("Unexpected error result: {:?}", e);
-                            }
+    let mut success = false;
+
+    block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(KademliaEvent::QueryResult {
+                        id, result: QueryResult::GetRecord(Err(e)), ..
+                    })) => {
+                        assert_eq!(id, qid);
+                        if let GetRecordError::NotFound { key, closest_peers, } = e {
+                            assert_eq!(key, target_key);
+                            assert_eq!(closest_peers.len(), 2);
+                            assert!(closest_peers.contains(&swarm_ids[1]));
+                            assert!(closest_peers.contains(&swarm_ids[2]));
+                            success = true;
+                            Swarm::start_close(swarm);
+                        } else {
+                            panic!("Unexpected error result: {:?}", e);
                         }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                        Poll::Pending => break,
+                    }
+                    Poll::Pending => break,
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    Poll::Ready(None) => {
+                        assert!(success);
+                        return Poll::Ready(())
                     }
                 }
             }
+        }
 
-            Poll::Pending
-        })
-    )
+        Poll::Pending
+    }))
 }
 
 /// A node joining a fully connected network via three (ALPHA_VALUE) bootnodes
@@ -514,6 +542,8 @@ fn put_record() {
         // The accumulated results for one round of publishing.
         let mut results = Vec::new();
 
+        let mut success = false;
+
         block_on(
             poll_fn(move |ctx| loop {
                 // Poll all swarms until they are "Pending".
@@ -542,15 +572,14 @@ fn put_record() {
                             }
                             // Ignore any other event.
                             Poll::Ready(Some(_)) => (),
-                            e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                            Poll::Pending => break,
+                            Poll::Ready(None) | Poll::Pending => break,
                         }
                     }
                 }
 
                 // All swarms are Pending and not enough results have been collected
                 // so far, thus wait to be polled again for further progress.
-                if results.len() != records.len() {
+                if !success && results.len() != records.len() {
                     return Poll::Pending
                 }
 
@@ -608,14 +637,21 @@ fn put_record() {
                 }
 
                 if republished {
-                    assert_eq!(swarms[0].store.records().count(), records.len());
-                    assert_eq!(swarms[0].queries.size(), 0);
-                    for k in records.keys() {
-                        swarms[0].store.remove(&k);
+                    if !success {
+                        assert_eq!(swarms[0].store.records().count(), records.len());
+                        assert_eq!(swarms[0].queries.size(), 0);
+                        for k in records.keys() {
+                            swarms[0].store.remove(&k);
+                        }
+                        assert_eq!(swarms[0].store.records().count(), 0);
+                        // All records have been republished, thus the test is complete.
+                        swarms.iter_mut().for_each(Swarm::start_close);
+                        success = true;
                     }
-                    assert_eq!(swarms[0].store.records().count(), 0);
-                    // All records have been republished, thus the test is complete.
-                    return Poll::Ready(());
+                    if swarms.iter().all(Swarm::is_closed) {
+                        assert!(success);
+                        return Poll::Ready(())
+                    }
                 }
 
                 // Tell the replication job to republish asap.
@@ -646,32 +682,44 @@ fn get_record() {
     swarms[1].store.put(record.clone()).unwrap();
     let qid = swarms[0].get_record(&record.key, Quorum::One);
 
-    block_on(
-        poll_fn(move |ctx| {
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::QueryResult {
-                            id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
-                            ..
-                        })) => {
-                            assert_eq!(id, qid);
-                            assert_eq!(records.len(), 1);
-                            assert_eq!(records.first().unwrap().record, record);
-                            return Poll::Ready(());
-                        }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                        Poll::Pending => break,
+    let mut success = false;
+
+    block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(KademliaEvent::QueryResult {
+                        id,
+                        result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                        ..
+                    })) => {
+                        assert!(!success);
+                        assert_eq!(id, qid);
+                        assert_eq!(records.len(), 1);
+                        assert_eq!(records.first().unwrap().record, record);
+                        success = true;
+                        Swarm::start_close(swarm);
                     }
+                    // Ignore any other event.
+                    Poll::Ready(Some(..)) => {},
+                    Poll::Pending =>
+                        if success && !Swarm::is_closing(swarm) {
+                            Swarm::start_close(swarm);
+                        } else {
+                            break
+                        },
+                    Poll::Ready(None) => break
                 }
             }
+        }
 
-            Poll::Pending
-        })
-    )
+        if swarms.iter().all(Swarm::is_closed) {
+            assert!(success);
+            return Poll::Ready(())
+        }
+
+        Poll::Pending
+    }));
 }
 
 #[test]
@@ -692,31 +740,43 @@ fn get_record_many() {
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
     let qid = swarms[0].get_record(&record.key, quorum);
 
-    block_on(
-        poll_fn(move |ctx| {
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(KademliaEvent::QueryResult {
-                            id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
-                            ..
-                        })) => {
-                            assert_eq!(id, qid);
-                            assert_eq!(records.len(), num_results);
-                            assert_eq!(records.first().unwrap().record, record);
-                            return Poll::Ready(());
-                        }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                        Poll::Pending => break,
+    let mut success = false;
+
+    block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(KademliaEvent::QueryResult {
+                        id,
+                        result: QueryResult::GetRecord(Ok(GetRecordOk { records })),
+                        ..
+                    })) => {
+                        assert_eq!(id, qid);
+                        assert_eq!(records.len(), num_results);
+                        assert_eq!(records.first().unwrap().record, record);
+                        success = true;
+                        Swarm::start_close(swarm);
                     }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    Poll::Ready(None) => break,
+                    Poll::Pending =>
+                        if success && !Swarm::is_closing(swarm) {
+                            Swarm::start_close(swarm);
+                        } else {
+                            break
+                        }
                 }
             }
-            Poll::Pending
-        })
-    )
+        }
+
+        if swarms.iter().all(Swarm::is_closed) {
+            assert!(success);
+            return Poll::Ready(())
+        }
+
+        Poll::Pending
+    }));
 }
 
 /// A node joining a fully connected network via three (ALPHA_VALUE) bootnodes
@@ -773,106 +833,112 @@ fn add_provider() {
             qids.insert(qid);
         }
 
-        block_on(
-            poll_fn(move |ctx| loop {
-                // Poll all swarms until they are "Pending".
-                for swarm in &mut swarms {
-                    loop {
-                        match swarm.poll_next_unpin(ctx) {
-                            Poll::Ready(Some(KademliaEvent::QueryResult {
-                                id, result: QueryResult::StartProviding(res), ..
-                            })) |
-                            Poll::Ready(Some(KademliaEvent::QueryResult {
-                                id, result: QueryResult::RepublishProvider(res), ..
-                            })) => {
-                                assert!(qids.is_empty() || qids.remove(&id));
-                                match res {
-                                    Err(e) => panic!(e),
-                                    Ok(ok) => {
-                                        assert!(keys.contains(&ok.key));
-                                        results.push(ok.key);
-                                    }
+        let mut success = false;
+
+        block_on(poll_fn(move |ctx| loop {
+            // Poll all swarms until they are "Pending".
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::StartProviding(res), ..
+                        })) |
+                        Poll::Ready(Some(KademliaEvent::QueryResult {
+                            id, result: QueryResult::RepublishProvider(res), ..
+                        })) => {
+                            assert!(qids.is_empty() || qids.remove(&id));
+                            match res {
+                                Err(e) => panic!(e),
+                                Ok(ok) => {
+                                    assert!(keys.contains(&ok.key));
+                                    results.push(ok.key);
                                 }
                             }
-                            // Ignore any other event.
-                            Poll::Ready(Some(_)) => (),
-                            e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
-                            Poll::Pending => break,
                         }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        Poll::Ready(None) | Poll::Pending => break,
                     }
                 }
+            }
 
-                if results.len() == keys.len() {
-                    // All requests have been sent for one round of publishing.
-                    published = true
-                }
+            if results.len() == keys.len() {
+                // All requests have been sent for one round of publishing.
+                published = true
+            }
 
-                if !published {
-                    // Still waiting for all requests to be sent for one round
-                    // of publishing.
+            if !success && !published {
+                // Still waiting for all requests to be sent for one round
+                // of publishing.
+                return Poll::Pending
+            }
+
+            // A round of publishing is complete. Consume the results, checking that
+            // each key was published to the `replication_factor` closest peers.
+            while let Some(key) = results.pop() {
+                // Collect the nodes that have a provider record for `key`.
+                let actual = swarms.iter().skip(1)
+                    .filter_map(|swarm|
+                        if swarm.store.providers(&key).len() == 1 {
+                            Some(Swarm::local_peer_id(&swarm).clone())
+                        } else {
+                            None
+                        })
+                    .collect::<HashSet<_>>();
+
+                if actual.len() != replication_factor.get() {
+                    // Still waiting for some nodes to process the request.
+                    results.push(key);
                     return Poll::Pending
                 }
 
-                // A round of publishing is complete. Consume the results, checking that
-                // each key was published to the `replication_factor` closest peers.
-                while let Some(key) = results.pop() {
-                    // Collect the nodes that have a provider record for `key`.
-                    let actual = swarms.iter().skip(1)
-                        .filter_map(|swarm|
-                            if swarm.store.providers(&key).len() == 1 {
-                                Some(Swarm::local_peer_id(&swarm).clone())
-                            } else {
-                                None
-                            })
-                        .collect::<HashSet<_>>();
+                let mut expected = swarms.iter()
+                    .skip(1)
+                    .map(Swarm::local_peer_id)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let kbucket_key = kbucket::Key::new(key);
+                expected.sort_by(|id1, id2|
+                    kbucket::Key::new(id1.clone()).distance(&kbucket_key).cmp(
+                        &kbucket::Key::new(id2.clone()).distance(&kbucket_key)));
 
-                    if actual.len() != replication_factor.get() {
-                        // Still waiting for some nodes to process the request.
-                        results.push(key);
-                        return Poll::Pending
-                    }
+                let expected = expected
+                    .into_iter()
+                    .take(replication_factor.get())
+                    .collect::<HashSet<_>>();
 
-                    let mut expected = swarms.iter()
-                        .skip(1)
-                        .map(Swarm::local_peer_id)
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let kbucket_key = kbucket::Key::new(key);
-                    expected.sort_by(|id1, id2|
-                        kbucket::Key::new(id1.clone()).distance(&kbucket_key).cmp(
-                            &kbucket::Key::new(id2.clone()).distance(&kbucket_key)));
+                assert_eq!(actual, expected);
+            }
 
-                    let expected = expected
-                        .into_iter()
-                        .take(replication_factor.get())
-                        .collect::<HashSet<_>>();
+            // One round of publishing is complete.
+            assert!(results.is_empty());
+            for swarm in &swarms {
+                assert_eq!(swarm.queries.size(), 0);
+            }
 
-                    assert_eq!(actual, expected);
-                }
-
-                // One round of publishing is complete.
-                assert!(results.is_empty());
-                for swarm in &swarms {
-                    assert_eq!(swarm.queries.size(), 0);
-                }
-
-                if republished {
+            if republished {
+                // All records have been republished, thus the test is complete.
+                if !success {
                     assert_eq!(swarms[0].store.provided().count(), keys.len());
                     for k in &keys {
                         swarms[0].stop_providing(&k);
                     }
                     assert_eq!(swarms[0].store.provided().count(), 0);
-                    // All records have been republished, thus the test is complete.
+                    success = true;
+                    swarms.iter_mut().for_each(Swarm::start_close);
+                }
+                if swarms.iter().all(Swarm::is_closed) {
+                    assert!(success);
                     return Poll::Ready(());
                 }
+            }
 
-                // Initiate the second round of publishing by telling the
-                // periodic provider job to run asap.
-                swarms[0].add_provider_job.as_mut().unwrap().asap();
-                published = false;
-                republished = true;
-            })
-        )
+            // Initiate the second round of publishing by telling the
+            // periodic provider job to run asap.
+            swarms[0].add_provider_job.as_mut().unwrap().asap();
+            published = false;
+            republished = true;
+        }))
     }
 
     QuickCheck::new().tests(3).quickcheck(prop as fn(_,_))
@@ -891,25 +957,23 @@ fn exceed_jobs_max_queries() {
 
     assert_eq!(swarm.queries.size(), num);
 
-    block_on(
-        poll_fn(move |ctx| {
-            for _ in 0 .. num {
-                // There are no other nodes, so the queries finish instantly.
-                if let Poll::Ready(Some(e)) = swarm.poll_next_unpin(ctx) {
-                    if let KademliaEvent::QueryResult {
-                        result: QueryResult::GetClosestPeers(Ok(r)), ..
-                    } = e {
-                        assert!(r.peers.is_empty())
-                    } else {
-                        panic!("Unexpected event: {:?}", e)
-                    }
+    block_on(poll_fn(move |ctx| {
+        for _ in 0 .. num {
+            // There are no other nodes, so the queries finish instantly.
+            if let Poll::Ready(Some(e)) = swarm.poll_next_unpin(ctx) {
+                if let KademliaEvent::QueryResult {
+                    result: QueryResult::GetClosestPeers(Ok(r)), ..
+                } = e {
+                    assert!(r.peers.is_empty())
                 } else {
-                    panic!("Expected event")
+                    panic!("Unexpected event: {:?}", e)
                 }
+            } else {
+                panic!("Expected event")
             }
-            Poll::Ready(())
-        })
-    )
+        }
+        Poll::Ready(())
+    }))
 }
 
 #[test]
@@ -1011,9 +1075,11 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         }
     });
 
+    let mut records = Vec::new();
+
     // Poll `alice` and `bob` expecting `alice` to return a successful query
     // result as it is now able to explore the second disjoint path.
-    let records = block_on(
+    block_on(
         poll_fn(|ctx| {
             for (i, swarm) in [&mut alice, &mut bob].iter_mut().enumerate() {
                 loop {
@@ -1027,18 +1093,29 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                             }
 
                             match result {
-                                Ok(ok) => return Poll::Ready(ok.records),
+                                Ok(ok) => {
+                                    records = ok.records;
+                                    Swarm::start_close(swarm);
+                                },
                                 Err(e) => unreachable!("{:?}", e),
                             }
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        Poll::Ready(None) => panic!(
-                            "Expected Kademlia behaviour not to finish.",
-                        ),
-                        Poll::Pending => break,
+                        Poll::Ready(None) => break,
+                        Poll::Pending => {
+                            if !records.is_empty() && !Swarm::is_closing(swarm) {
+                                Swarm::start_close(swarm)
+                            } else {
+                                break
+                            }
+                        }
                     }
                 }
+            }
+
+            if [&alice, &bob].iter().all(|s| Swarm::is_closed(*s)) {
+                return Poll::Ready(())
             }
 
             Poll::Pending
@@ -1074,6 +1151,7 @@ fn manual_bucket_inserts() {
     let mut routable = Vec::new();
     // Start an iterative query from the first peer.
     swarms[0].1.get_closest_peers(PeerId::random());
+    let mut success = false;
     block_on(poll_fn(move |ctx| {
         for (_, swarm) in swarms.iter_mut() {
             loop {
@@ -1088,14 +1166,27 @@ fn manual_bucket_inserts() {
                                 let bucket = swarm.kbucket(peer.clone()).unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }
-                            return Poll::Ready(())
+                            success = true;
+                            Swarm::start_close(swarm);
                         }
                     }
-                    Poll::Ready(..) => {},
-                    Poll::Pending => break
+                    Poll::Ready(Some(_)) => {},
+                    Poll::Ready(None) => break,
+                    Poll::Pending =>
+                        if success && !Swarm::is_closing(swarm) {
+                            Swarm::start_close(swarm)
+                        } else {
+                            break
+                        }
                 }
             }
         }
+
+        if swarms.iter().all(|(_, s)| Swarm::is_closed(s)) {
+            assert!(success);
+            return Poll::Ready(())
+        }
+
         Poll::Pending
     }));
 }

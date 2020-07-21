@@ -48,15 +48,18 @@ struct Graph {
 }
 
 impl Future for Graph {
-    type Output = (Multiaddr, GossipsubEvent);
+    type Output = Option<(Multiaddr, GossipsubEvent)>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
             match node.poll_next_unpin(cx) {
-                Poll::Ready(Some(event)) => return Poll::Ready((addr.clone(), event)),
-                Poll::Ready(None) => panic!("unexpected None when polling nodes"),
-                Poll::Pending => {}
+                Poll::Ready(Some(event)) => return Poll::Ready(Some((addr.clone(), event))),
+                Poll::Ready(None) | Poll::Pending => {},
             }
+        }
+
+        if self.nodes.iter().all(|(_, s)| Swarm::is_closed(s)) {
+            return Poll::Ready(None)
         }
 
         Poll::Pending
@@ -118,11 +121,12 @@ impl Graph {
         let fut = futures::future::poll_fn(move |cx| match &mut this {
             Some(graph) => loop {
                 match graph.poll_unpin(cx) {
-                    Poll::Ready((_addr, ev)) => {
+                    Poll::Ready(Some((_addr, ev))) => {
                         if f(ev) {
-                            return Poll::Ready(this.take().unwrap());
+                            graph.nodes.iter_mut().for_each(|(_, s)| Swarm::start_close(s));
                         }
                     }
+                    Poll::Ready(None) => return Poll::Ready(this.take().unwrap()),
                     Poll::Pending => return Poll::Pending,
                 }
             },

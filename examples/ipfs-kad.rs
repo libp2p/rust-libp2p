@@ -97,10 +97,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(async move {
         loop {
             let event = swarm.next().await;
-            if let KademliaEvent::QueryResult {
+            if let Some(KademliaEvent::QueryResult {
                 result: QueryResult::GetClosestPeers(result),
                 ..
-            } = event {
+            }) = event {
                 match result {
                     Ok(ok) =>
                         if !ok.peers.is_empty() {

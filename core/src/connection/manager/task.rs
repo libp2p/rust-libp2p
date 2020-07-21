@@ -23,7 +23,6 @@ use crate::{
     muxing::StreamMuxer,
     connection::{
         self,
-        Close,
         Connected,
         Connection,
         ConnectionError,
@@ -168,9 +167,6 @@ where
         event: Option<Event<O, H, E, <H::Handler as ConnectionHandler>::Error, C>>
     },
 
-    /// The connection is closing (active close).
-    Closing(Close<M>),
-
     /// The task is terminating with a final event for the `Manager`.
     Terminating(Event<O, H, E, <H::Handler as ConnectionHandler>::Error, C>),
 
@@ -250,11 +246,8 @@ where
                             Poll::Ready(Some(Command::NotifyHandler(event))) =>
                                 connection.inject_event(event),
                             Poll::Ready(Some(Command::Close)) => {
-                                // Don't accept any further commands.
-                                this.commands.get_mut().close();
-                                // Discard the event, if any, and start a graceful close.
-                                this.state = State::Closing(connection.close());
-                                continue 'poll
+                                // Start closing the connection, if not already.
+                                connection.start_close();
                             }
                             Poll::Ready(None) => {
                                 // The manager has dropped the task or disappeared; abort.
@@ -267,13 +260,19 @@ where
                         // Send the event to the manager.
                         match this.events.poll_ready(cx) {
                             Poll::Pending => {
-                                this.state = State::Established { connection, event: Some(event) };
+                                this.state = State::Established {
+                                    connection,
+                                    event: Some(event),
+                                };
                                 return Poll::Pending
                             }
                             Poll::Ready(result) => {
                                 if result.is_ok() {
                                     if let Ok(()) = this.events.start_send(event) {
-                                        this.state = State::Established { connection, event: None };
+                                        this.state = State::Established {
+                                            connection,
+                                            event: None,
+                                        };
                                         continue 'poll
                                     }
                                 }
@@ -282,23 +281,33 @@ where
                             }
                         }
                     } else {
-                        // Poll the connection for new events.
                         match Connection::poll(Pin::new(&mut connection), cx) {
                             Poll::Pending => {
-                                this.state = State::Established { connection, event: None };
+                                this.state = State::Established {
+                                    connection,
+                                    event: None,
+                                };
                                 return Poll::Pending
                             }
-                            Poll::Ready(Ok(connection::Event::Handler(event))) => {
+                            Poll::Ready(Ok(Some(connection::Event::Handler(event)))) => {
                                 this.state = State::Established {
                                     connection,
-                                    event: Some(Event::Notify { id, event })
+                                    event: Some(Event::Notify { id, event }),
                                 };
                             }
-                            Poll::Ready(Ok(connection::Event::AddressChange(new_address))) => {
+                            Poll::Ready(Ok(Some(connection::Event::AddressChange(new_address)))) => {
                                 this.state = State::Established {
                                     connection,
-                                    event: Some(Event::AddressChange { id, new_address })
+                                    event: Some(Event::AddressChange { id, new_address }),
                                 };
+                            }
+                            Poll::Ready(Ok(None)) => {
+                                // The connection is closed, don't accept any further commands
+                                // and terminate the task with a final event.
+                                this.commands.get_mut().close();
+                                let event = Event::Closed { id: this.id, error: None };
+                                this.state = State::Terminating(event);
+                                continue 'poll
                             }
                             Poll::Ready(Err(error)) => {
                                 // Don't accept any further commands.
@@ -307,27 +316,6 @@ where
                                 let event = Event::Closed { id, error: Some(error) };
                                 this.state = State::Terminating(event);
                             }
-                        }
-                    }
-                }
-
-                State::Closing(mut closing) => {
-                    // Try to gracefully close the connection.
-                    match closing.poll_unpin(cx) {
-                        Poll::Ready(Ok(())) => {
-                            let event = Event::Closed { id: this.id, error: None };
-                            this.state = State::Terminating(event);
-                        }
-                        Poll::Ready(Err(e)) => {
-                            let event = Event::Closed {
-                                id: this.id,
-                                error: Some(ConnectionError::IO(e))
-                            };
-                            this.state = State::Terminating(event);
-                        }
-                        Poll::Pending => {
-                            this.state = State::Closing(closing);
-                            return Poll::Pending
                         }
                     }
                 }

@@ -60,7 +60,7 @@ fn ping() {
 
         loop {
             match swarm1.next().await {
-                PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                Some(PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) }) => {
                     return (pid1.clone(), peer, rtt)
                 },
                 _ => {}
@@ -74,7 +74,7 @@ fn ping() {
 
         loop {
             match swarm2.next().await {
-                PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) } => {
+                Some(PingEvent { peer, result: Ok(PingSuccess::Ping { rtt }) }) => {
                     return (pid2.clone(), peer, rtt)
                 },
                 _ => {}

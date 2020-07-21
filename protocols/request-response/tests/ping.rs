@@ -72,10 +72,10 @@ fn ping_protocol() {
 
         loop {
             match swarm1.next().await {
-                RequestResponseEvent::Message {
+                Some(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel }
-                } => {
+                }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
                     swarm1.send_response(channel, pong.clone());
@@ -93,10 +93,10 @@ fn ping_protocol() {
 
         loop {
             match swarm2.next().await {
-                RequestResponseEvent::Message {
+                Some(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Response { request_id, response }
-                } => {
+                }) => {
                     count += 1;
                     assert_eq!(&response, &expected_pong);
                     assert_eq!(&peer, &peer1_id);

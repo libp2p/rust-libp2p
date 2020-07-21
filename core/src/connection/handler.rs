@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Multiaddr, PeerId};
-use std::{task::Context, task::Poll};
+use std::task::{Context, Poll};
 use super::{Connected, SubstreamEndpoint};
 
 /// The interface of a connection handler.
@@ -66,6 +66,37 @@ pub trait ConnectionHandler {
     /// Returning an error will close the connection to the remote.
     fn poll(&mut self, cx: &mut Context<'_>)
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>;
+
+    /// Polls the handler to make progress towards closing the connection.
+    ///
+    /// When a connection is actively closed, the handler can perform
+    /// a graceful shutdown of the connection by draining the I/O
+    /// activity, e.g. allowing in-flight requests to complete without
+    /// accepting new ones, possibly signaling the remote that it
+    /// should direct further requests elsewhere.
+    ///
+    /// The handler can also use the opportunity to flush any buffers
+    /// or clean up any other (asynchronous) resources before the
+    /// connection is ultimately dropped and closed on the transport
+    /// layer.
+    ///
+    /// While closing, new inbound substreams are rejected and the
+    /// handler is unable to request new outbound substreams as
+    /// per the return type of `poll_close`.
+    ///
+    /// The handler signals its readiness for the connection
+    /// to be closed by returning `Ready(Ok(None))`, which is the
+    /// default implementation. Hence, by default, connection
+    /// shutdown is not delayed and may result in ungraceful
+    /// interruption of ongoing I/O.
+    ///
+    /// > **Note**: Once `poll_close()` is invoked, the handler is no
+    /// > longer `poll()`ed.
+    fn poll_close(&mut self, _: &mut Context)
+        -> Poll<Result<Option<Self::OutEvent>, Self::Error>>
+    {
+        Poll::Ready(Ok(None))
+    }
 }
 
 /// Prototype for a `ConnectionHandler`.
@@ -99,6 +130,9 @@ pub enum ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
 
     /// Other event.
     Custom(TCustom),
+
+    /// Initiate connection shutdown.
+    Close,
 }
 
 /// Event produced by a handler.
@@ -112,6 +146,7 @@ impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCust
                 ConnectionHandlerEvent::OutboundSubstreamRequest(map(val))
             },
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
+            ConnectionHandlerEvent::Close => ConnectionHandlerEvent::Close,
         }
     }
 
@@ -124,6 +159,7 @@ impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCust
                 ConnectionHandlerEvent::OutboundSubstreamRequest(val)
             },
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
+            ConnectionHandlerEvent::Close => ConnectionHandlerEvent::Close,
         }
     }
 }

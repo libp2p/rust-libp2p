@@ -80,7 +80,7 @@ fn deny_incoming_connec() {
     swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
     let address = async_std::task::block_on(future::poll_fn(|cx| {
-        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
+        if let Poll::Ready(Some(NetworkEvent::NewListenerAddress { listen_addr, .. })) = swarm1.poll(cx) {
             Poll::Ready(listen_addr)
         } else {
             panic!("Was expecting the listen address to be reported")
@@ -94,18 +94,18 @@ fn deny_incoming_connec() {
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         match swarm1.poll(cx) {
-            Poll::Ready(NetworkEvent::IncomingConnection(inc)) => drop(inc),
+            Poll::Ready(Some(NetworkEvent::IncomingConnection(inc))) => drop(inc),
             Poll::Ready(_) => unreachable!(),
             Poll::Pending => (),
         }
 
         match swarm2.poll(cx) {
-            Poll::Ready(NetworkEvent::DialError {
+            Poll::Ready(Some(NetworkEvent::DialError {
                 attempts_remaining: 0,
                 peer_id,
                 multiaddr,
                 error: PendingConnectionError::Transport(_)
-            }) => {
+            })) => {
                 assert_eq!(peer_id, *swarm1.local_peer_id());
                 assert_eq!(multiaddr, address);
                 return Poll::Ready(Ok(()));
@@ -136,7 +136,7 @@ fn dial_self() {
 
     let (local_address, mut swarm) = async_std::task::block_on(
         future::lazy(move |cx| {
-            if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm.poll(cx) {
+            if let Poll::Ready(Some(NetworkEvent::NewListenerAddress { listen_addr, .. })) = swarm.poll(cx) {
                 Ok::<_, void::Void>((listen_addr, swarm))
             } else {
                 panic!("Was expecting the listen address to be reported")
@@ -151,11 +151,11 @@ fn dial_self() {
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
-                Poll::Ready(NetworkEvent::UnknownPeerDialError {
+                Poll::Ready(Some(NetworkEvent::UnknownPeerDialError {
                     multiaddr,
                     error: PendingConnectionError::InvalidPeerId { .. },
                     ..
-                }) => {
+                })) => {
                     assert!(!got_dial_err);
                     assert_eq!(multiaddr, local_address);
                     got_dial_err = true;
@@ -163,9 +163,9 @@ fn dial_self() {
                         return Poll::Ready(Ok(()))
                     }
                 },
-                Poll::Ready(NetworkEvent::IncomingConnectionError {
+                Poll::Ready(Some(NetworkEvent::IncomingConnectionError {
                     local_addr, ..
-                }) => {
+                })) => {
                     assert!(!got_inc_err);
                     assert_eq!(local_addr, local_address);
                     got_inc_err = true;
@@ -173,12 +173,15 @@ fn dial_self() {
                        return Poll::Ready(Ok(()))
                     }
                 },
-                Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
+                Poll::Ready(Some(NetworkEvent::IncomingConnection(inc))) => {
                     assert_eq!(*inc.local_addr(), local_address);
                     inc.accept(TestHandler()).unwrap();
                 },
-                Poll::Ready(ev) => {
+                Poll::Ready(Some(ev)) => {
                     panic!("Unexpected event: {:?}", ev)
+                }
+                Poll::Ready(None) => {
+                    panic!("Unexpected shutdown")
                 }
                 Poll::Pending => break Poll::Pending,
             }
@@ -221,12 +224,12 @@ fn multiple_addresses_err() {
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         loop {
             match swarm.poll(cx) {
-                Poll::Ready(NetworkEvent::DialError {
+                Poll::Ready(Some(NetworkEvent::DialError {
                     attempts_remaining,
                     peer_id,
                     multiaddr,
                     error: PendingConnectionError::Transport(_)
-                }) => {
+                })) => {
                     assert_eq!(peer_id, target);
                     let expected = addresses.remove(0);
                     assert_eq!(multiaddr, expected);

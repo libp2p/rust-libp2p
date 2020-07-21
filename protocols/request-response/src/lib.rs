@@ -398,7 +398,7 @@ where
 
     /// Tries to send a request by queueing an appropriate event to be
     /// emitted to the `Swarm`. If the peer is not currently connected,
-    /// the given request is return unchanged.
+    /// the given request is returned unchanged.
     fn try_send_request(&mut self, peer: &PeerId, request: RequestProtocol<TCodec>)
         -> Option<RequestProtocol<TCodec>>
     {
@@ -520,7 +520,7 @@ where
     fn inject_event(
         &mut self,
         peer: PeerId,
-        _: ConnectionId,
+        conn: ConnectionId,
         event: RequestResponseHandlerEvent<TCodec>,
     ) {
         match event {
@@ -573,6 +573,30 @@ where
                             peer,
                             error: InboundFailure::UnsupportedProtocols,
                         }));
+            }
+            RequestResponseHandlerEvent::Closing(request) => {
+                if let Some((req_peer, req_conn)) = self.pending_responses.remove(&request.request_id) {
+                    debug_assert_eq!(req_peer, peer);
+                    debug_assert_eq!(req_conn, conn);
+                    // Try to send the request on a different connection.
+                    if let Some(conn) = self.connected.get(&peer).and_then(|conns|
+                        conns.iter().find(|c| c.id != conn)
+                    ) {
+                        self.pending_responses.insert(request.request_id, (peer, conn.id));
+                        self.pending_events.push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id: req_peer,
+                            handler: NotifyHandler::One(conn.id),
+                            event: request
+                        });
+                    } else {
+                        // There is no other existing connection to use, so request a new one.
+                        self.pending_events.push_back(NetworkBehaviourAction::DialPeer {
+                            peer_id: peer.clone(),
+                            condition: DialPeerCondition::Disconnected,
+                        });
+                        self.pending_requests.entry(peer).or_default().push(request);
+                    }
+                }
             }
         }
     }

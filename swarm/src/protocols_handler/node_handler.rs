@@ -113,6 +113,75 @@ where
     shutdown: Shutdown,
 }
 
+impl<TProtoHandler> NodeHandlerWrapper<TProtoHandler>
+where
+    TProtoHandler: ProtocolsHandler,
+{
+    fn poll_inbound(&mut self, cx: &mut Context<'_>) {
+        // Continue negotiation of newly-opened substreams on the listening side.
+        // We remove each element from `negotiating_in` one by one and add them back if not ready.
+        for n in (0..self.negotiating_in.len()).rev() {
+            let (mut in_progress, mut timeout) = self.negotiating_in.swap_remove(n);
+            match Future::poll(Pin::new(&mut timeout), cx) {
+                Poll::Ready(Ok(_)) => {
+                    let err = ProtocolsHandlerUpgrErr::Timeout;
+                    self.handler.inject_listen_upgrade_error(err);
+                    continue
+                }
+                Poll::Ready(Err(_)) => {
+                    let err = ProtocolsHandlerUpgrErr::Timer;
+                    self.handler.inject_listen_upgrade_error(err);
+                    continue;
+                }
+                Poll::Pending => {},
+            }
+            match Future::poll(Pin::new(&mut in_progress), cx) {
+                Poll::Ready(Ok(upgrade)) =>
+                    self.handler.inject_fully_negotiated_inbound(upgrade),
+                Poll::Pending => self.negotiating_in.push((in_progress, timeout)),
+                Poll::Ready(Err(err)) => {
+                    let err = ProtocolsHandlerUpgrErr::Upgrade(err);
+                    self.handler.inject_listen_upgrade_error(err);
+                }
+            }
+        }
+
+    }
+
+    fn poll_outbound(&mut self, cx: &mut Context<'_>) {
+        // Continue negotiation of newly-opened substreams.
+        // We remove each element from `negotiating_out` one by one and add them back if not ready.
+        for n in (0..self.negotiating_out.len()).rev() {
+            let (upgr_info, mut in_progress, mut timeout) = self.negotiating_out.swap_remove(n);
+            match Future::poll(Pin::new(&mut timeout), cx) {
+                Poll::Ready(Ok(_)) => {
+                    let err = ProtocolsHandlerUpgrErr::Timeout;
+                    self.handler.inject_dial_upgrade_error(upgr_info, err);
+                    continue;
+                },
+                Poll::Ready(Err(_)) => {
+                    let err = ProtocolsHandlerUpgrErr::Timer;
+                    self.handler.inject_dial_upgrade_error(upgr_info, err);
+                    continue;
+                },
+                Poll::Pending => {},
+            }
+            match Future::poll(Pin::new(&mut in_progress), cx) {
+                Poll::Ready(Ok(upgrade)) => {
+                    self.handler.inject_fully_negotiated_outbound(upgrade, upgr_info);
+                }
+                Poll::Pending => {
+                    self.negotiating_out.push((upgr_info, in_progress, timeout));
+                }
+                Poll::Ready(Err(err)) => {
+                    let err = ProtocolsHandlerUpgrErr::Upgrade(err);
+                    self.handler.inject_dial_upgrade_error(upgr_info, err);
+                }
+            }
+        }
+    }
+}
+
 /// The options for a planned connection & handler shutdown.
 ///
 /// A shutdown is planned anew based on the the return value of
@@ -228,64 +297,8 @@ where
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
         Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>
     > {
-        // Continue negotiation of newly-opened substreams on the listening side.
-        // We remove each element from `negotiating_in` one by one and add them back if not ready.
-        for n in (0..self.negotiating_in.len()).rev() {
-            let (mut in_progress, mut timeout) = self.negotiating_in.swap_remove(n);
-            match Future::poll(Pin::new(&mut timeout), cx) {
-                Poll::Ready(Ok(_)) => {
-                    let err = ProtocolsHandlerUpgrErr::Timeout;
-                    self.handler.inject_listen_upgrade_error(err);
-                    continue
-                }
-                Poll::Ready(Err(_)) => {
-                    let err = ProtocolsHandlerUpgrErr::Timer;
-                    self.handler.inject_listen_upgrade_error(err);
-                    continue;
-                }
-                Poll::Pending => {},
-            }
-            match Future::poll(Pin::new(&mut in_progress), cx) {
-                Poll::Ready(Ok(upgrade)) =>
-                    self.handler.inject_fully_negotiated_inbound(upgrade),
-                Poll::Pending => self.negotiating_in.push((in_progress, timeout)),
-                Poll::Ready(Err(err)) => {
-                    let err = ProtocolsHandlerUpgrErr::Upgrade(err);
-                    self.handler.inject_listen_upgrade_error(err);
-                }
-            }
-        }
-
-        // Continue negotiation of newly-opened substreams.
-        // We remove each element from `negotiating_out` one by one and add them back if not ready.
-        for n in (0..self.negotiating_out.len()).rev() {
-            let (upgr_info, mut in_progress, mut timeout) = self.negotiating_out.swap_remove(n);
-            match Future::poll(Pin::new(&mut timeout), cx) {
-                Poll::Ready(Ok(_)) => {
-                    let err = ProtocolsHandlerUpgrErr::Timeout;
-                    self.handler.inject_dial_upgrade_error(upgr_info, err);
-                    continue;
-                },
-                Poll::Ready(Err(_)) => {
-                    let err = ProtocolsHandlerUpgrErr::Timer;
-                    self.handler.inject_dial_upgrade_error(upgr_info, err);
-                    continue;
-                },
-                Poll::Pending => {},
-            }
-            match Future::poll(Pin::new(&mut in_progress), cx) {
-                Poll::Ready(Ok(upgrade)) => {
-                    self.handler.inject_fully_negotiated_outbound(upgrade, upgr_info);
-                }
-                Poll::Pending => {
-                    self.negotiating_out.push((upgr_info, in_progress, timeout));
-                }
-                Poll::Ready(Err(err)) => {
-                    let err = ProtocolsHandlerUpgrErr::Upgrade(err);
-                    self.handler.inject_dial_upgrade_error(upgr_info, err);
-                }
-            }
-        }
+        self.poll_inbound(cx);
+        self.poll_outbound(cx);
 
         // Poll the handler at the end so that we see the consequences of the method
         // calls on `self.handler`.
@@ -328,16 +341,42 @@ where
         // Check if the connection (and handler) should be shut down.
         // As long as we're still negotiating substreams, shutdown is always postponed.
         if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
-            match self.shutdown {
-                Shutdown::None => {},
-                Shutdown::Asap => return Poll::Ready(Err(NodeHandlerWrapperError::KeepAliveTimeout)),
+            let close = match self.shutdown {
+                Shutdown::None => false,
+                Shutdown::Asap => true,
                 Shutdown::Later(ref mut delay, _) => match Future::poll(Pin::new(delay), cx) {
-                    Poll::Ready(_) => return Poll::Ready(Err(NodeHandlerWrapperError::KeepAliveTimeout)),
-                    Poll::Pending => {}
+                    Poll::Ready(_) => true,
+                    Poll::Pending => false
                 }
+            };
+            if close {
+                log::debug!("Closing connection due to keep-alive timeout.");
+                return Poll::Ready(Ok(ConnectionHandlerEvent::Close))
             }
         }
 
         Poll::Pending
+    }
+
+    fn poll_close(&mut self, cx: &mut Context)
+        -> Poll<Result<Option<Self::OutEvent>, Self::Error>>
+    {
+        // Allow ongoing inbound and outbound substream upgrades to complete.
+        // New inbound substreams are dropped / rejected and new outbound
+        // substreams are not permitted as per the return type of `poll_close`.
+        self.poll_inbound(cx);
+        self.poll_outbound(cx);
+
+        // If the handler is ready to close and there are no more
+        // substreams being negotiated, the connection can close.
+        match self.handler.poll_close(cx).map_err(NodeHandlerWrapperError::Handler) {
+            Poll::Ready(Ok(None)) =>
+                if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
+                    return Poll::Ready(Ok(None))
+                } else {
+                    return Poll::Pending
+                }
+            poll => poll
+        }
     }
 }

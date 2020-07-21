@@ -70,15 +70,20 @@ pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo
     /// event for each. Every `ConnectionEstablished` event must be
     /// paired with (eventually) a `ConnectionClosed`.
     disconnected: Vec<Disconnected<TConnInfo>>,
+
+    /// The current operating state of the pool.
+    state: PoolState,
 }
 
 impl<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId> fmt::Debug
 for Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        // TODO: More useful debug impl?
         f.debug_struct("Pool")
+            .field("state", &self.state)
             .field("limits", &self.limits)
+            .field("peers", &self.established.len())
+            .field("pending", &self.pending.len())
             .finish()
     }
 }
@@ -218,12 +223,29 @@ where
             established: Default::default(),
             pending: Default::default(),
             disconnected: Vec::new(),
+            state: PoolState::Open,
         }
     }
 
     /// Gets the configured connection limits of the pool.
     pub fn limits(&self) -> &PoolLimits {
         &self.limits
+    }
+
+    /// Whether the `Pool` is open, i.e. accepting new connections.
+    pub fn is_open(&self) -> bool {
+        self.state == PoolState::Open
+    }
+
+    /// Whether the `Pool` is closing, i.e. rejecting new connections.
+    pub fn is_closing(&self) -> bool {
+        self.state == PoolState::Draining
+    }
+
+    /// Whether the `Pool` is closed, i.e. all connections are closed
+    /// and no new connections are accepted.
+    pub fn is_closed(&self) -> bool {
+        self.state == PoolState::Closed
     }
 
     /// Adds a pending incoming connection to the pool in the form of a
@@ -599,16 +621,57 @@ where
         self.established.keys()
     }
 
+    /// Initiates a graceful shutdown of the `Pool`.
+    ///
+    /// All pending connections are immediately aborted and the `Pool`
+    /// refuses to accept any new connections. Established connections
+    /// will be drained by continued `poll()`ing of the `Pool`.
+    pub fn start_close(&mut self) {
+        if self.state != PoolState::Open {
+            return // Already closing
+        }
+
+        // Set the state and limits for the shutdown.
+        self.state = PoolState::Draining;
+        self.limits = SHUTDOWN_LIMITS;
+
+        // Immediately abort all pending connections.
+        for (id, _) in self.pending.drain() {
+            match self.manager.entry(id) {
+                Some(manager::Entry::Pending(e)) => { e.abort(); },
+                _ => {}
+            }
+        }
+
+        // Start a clean shutdown for all established connections.
+        for id in self.established.values().flat_map(|conns| conns.keys()) {
+            match self.manager.entry(*id) {
+                Some(manager::Entry::Established(mut e)) => {
+                    e.start_close();
+                },
+                _ => {
+                    panic!("Entry for established connection not found: {:?}", id)
+                }
+            }
+        }
+
+        // Shutdown progress for established connections is driven by `Pool::poll`.
+    }
+
     /// Polls the connection pool for events.
     ///
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
     pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<
-        PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
+        Option<PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>>
     > where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Clone,
         TPeerId: Clone
     {
+        if self.state == PoolState::Closed {
+            return Poll::Ready(None)
+        }
+
         // Drain events resulting from forced disconnections.
         //
         // Note: The `Disconnected` entries in `self.disconnected`
@@ -619,33 +682,39 @@ where
         while let Some(Disconnected {
             id, connected, num_established
         }) = self.disconnected.pop() {
-            return Poll::Ready(PoolEvent::ConnectionClosed {
+            return Poll::Ready(Some(PoolEvent::ConnectionClosed {
                 id,
                 connected,
                 num_established,
                 error: None,
                 pool: self,
-            })
+            }))
         }
 
         // Poll the connection `Manager`.
         loop {
+            // If there are no more established connections, shutdown is complete.
+            if self.state == PoolState::Draining && self.established.is_empty() {
+                self.state = PoolState::Closed;
+                return Poll::Ready(None)
+            }
+
             let item = match self.manager.poll(cx) {
                 Poll::Ready(item) => item,
-                Poll::Pending => return Poll::Pending,
+                Poll::Pending => return Poll::Pending
             };
 
             match item {
                 manager::Event::PendingConnectionError { id, error, handler } => {
                     if let Some((endpoint, peer)) = self.pending.remove(&id) {
-                        return Poll::Ready(PoolEvent::PendingConnectionError {
+                        return Poll::Ready(Some(PoolEvent::PendingConnectionError {
                             id,
                             endpoint,
                             error,
                             handler: Some(handler),
                             peer,
                             pool: self
-                        })
+                        }))
                     }
                 },
                 manager::Event::ConnectionClosed { id, connected, error } => {
@@ -659,9 +728,9 @@ where
                     if num_established == 0 {
                         self.established.remove(connected.peer_id());
                     }
-                    return Poll::Ready(PoolEvent::ConnectionClosed {
+                    return Poll::Ready(Some(PoolEvent::ConnectionClosed {
                         id, connected, error, num_established, pool: self
-                    })
+                    }))
                 }
                 manager::Event::ConnectionEstablished { entry } => {
                     let id = entry.id();
@@ -672,14 +741,14 @@ where
                                             .map_or(0, |conns| conns.len());
                         if let Err(e) = self.limits.check_established(current) {
                             let connected = entry.remove();
-                            return Poll::Ready(PoolEvent::PendingConnectionError {
+                            return Poll::Ready(Some(PoolEvent::PendingConnectionError {
                                 id,
                                 endpoint: connected.endpoint,
                                 error: PendingConnectionError::ConnectionLimit(e),
                                 handler: None,
                                 peer,
                                 pool: self
-                            })
+                            }))
                         }
                         // Peer ID checks must already have happened. See `add_pending`.
                         if cfg!(debug_assertions) {
@@ -700,9 +769,9 @@ where
                         conns.insert(id, endpoint);
                         match self.get(id) {
                             Some(PoolConnection::Established(connection)) =>
-                                return Poll::Ready(PoolEvent::ConnectionEstablished {
+                                return Poll::Ready(Some(PoolEvent::ConnectionEstablished {
                                     connection, num_established
-                                }),
+                                })),
                             _ => unreachable!("since `entry` is an `EstablishedEntry`.")
                         }
                     }
@@ -711,10 +780,10 @@ where
                     let id = entry.id();
                     match self.get(id) {
                         Some(PoolConnection::Established(connection)) =>
-                            return Poll::Ready(PoolEvent::ConnectionEvent {
+                            return Poll::Ready(Some(PoolEvent::ConnectionEvent {
                                 connection,
                                 event,
-                            }),
+                            })),
                         _ => unreachable!("since `entry` is an `EstablishedEntry`.")
                     }
                 },
@@ -730,11 +799,11 @@ where
 
                     match self.get(id) {
                         Some(PoolConnection::Established(connection)) =>
-                            return Poll::Ready(PoolEvent::AddressChange {
+                            return Poll::Ready(Some(PoolEvent::AddressChange {
                                 connection,
                                 new_endpoint,
                                 old_endpoint,
-                            }),
+                            })),
                         _ => unreachable!("since `entry` is an `EstablishedEntry`.")
                     }
                 },
@@ -916,13 +985,21 @@ where
 }
 
 /// The configurable limits of a connection [`Pool`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PoolLimits {
     pub max_outgoing: Option<usize>,
     pub max_incoming: Option<usize>,
     pub max_established_per_peer: Option<usize>,
     pub max_outgoing_per_peer: Option<usize>,
 }
+
+const SHUTDOWN_LIMITS: PoolLimits =
+    PoolLimits {
+        max_outgoing: Some(0),
+        max_incoming: Some(0),
+        max_established_per_peer: Some(0),
+        max_outgoing_per_peer: Some(0),
+    };
 
 impl PoolLimits {
     fn check_established<F>(&self, current: F) -> Result<(), ConnectionLimit>
@@ -975,4 +1052,17 @@ struct Disconnected<TConnInfo> {
     /// The remaining number of established connections
     /// to the same peer.
     num_established: u32,
+}
+
+/// The operating state of a [`Pool`].
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum PoolState {
+    /// The pool is open for new connections, subject to the
+    /// configured limits.
+    Open,
+    /// The pool is waiting for established connections to close
+    /// while rejecting new connections.
+    Draining,
+    /// The pool has shut down and is closed.
+    Closed
 }

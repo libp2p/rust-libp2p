@@ -137,14 +137,20 @@ where
 impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, TConnInfo, TPeerId>
     Network<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
 where
-    TTrans: Transport + Clone,
-    TMuxer: StreamMuxer,
+    TTrans: Transport<Output = (TConnInfo, TMuxer)> + Clone,
+    TTrans::Error: Send + 'static,
+    TTrans::Dial: Send + 'static,
+    TTrans::ListenerUpgrade: Send + 'static,
+    TMuxer: StreamMuxer + Send + Sync + 'static,
+    TMuxer::OutboundSubstream: Send,
     THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
     THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-    TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
-    TPeerId: Eq + Hash + Clone,
+    TConnInfo: ConnectionInfo<PeerId = TPeerId> + fmt::Debug + Clone + Send + 'static,
+    TPeerId: Eq + Hash + Clone + Send + 'static,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
 {
     /// Creates a new node events stream.
     pub fn new(
@@ -220,16 +226,6 @@ where
     /// connection ID is returned.
     pub fn dial(&mut self, address: &Multiaddr, handler: THandler)
         -> Result<ConnectionId, ConnectionLimit>
-    where
-        TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Error: Send + 'static,
-        TTrans::Dial: Send + 'static,
-        TMuxer: Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
-        TConnInfo: Send + 'static,
-        TPeerId: Send + 'static,
     {
         let info = OutgoingInfo { address, peer_id: None };
         match self.transport().clone().dial(address.clone()) {
@@ -326,59 +322,125 @@ where
         Peer::new(self, peer_id)
     }
 
+    /// Initiates a graceful shutdown of the `Network`.
+    ///
+    /// A graceful shutdown proceeds by not accepting any new
+    /// connections while waiting for all currently established
+    /// connections to close.
+    ///
+    /// After calling this method, [`Network::poll`] makes progress
+    /// towards shutdown, eventually returning `Poll::Ready(None)` when
+    /// shutdown is complete.
+    ///
+    /// A graceful shutdown involves gracefully closing all established
+    /// connections, as defined by [`ConnectionHandler::poll_close`].
+    pub fn start_close(&mut self) {
+        self.pool.start_close();
+    }
+
+    /// Performs a graceful shutdown of the `Network`, ignoring
+    /// any further events.
+    ///
+    /// See [`Network::start_close`] for further details.
+    pub async fn close(&mut self) {
+        self.start_close();
+        future::poll_fn(move |cx| {
+            loop {
+                match self.poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(None) => return Poll::Ready(()),
+                    Poll::Ready(Some(_)) => {},
+                }
+            }
+        }).await
+    }
+
+    /// Whether the `Network` is closed.
+    ///
+    /// The `Network` is closed after successful completion
+    /// of a graceful shutdown. See [`Network::start_close`]
+    /// and [`Network::closed`].
+    ///
+    /// A closed `Network` no longer performs any I/O and
+    /// shoudl eventually be discarded.
+    pub fn is_closed(&self) -> bool {
+        self.pool.is_closed()
+    }
+
+    /// Whether the `Network` is closing.
+    ///
+    /// When the `Network` is closing, no new inbound connections
+    /// are accepted and no new outbound connections can be requested
+    /// while already established connections are drained.
+    ///
+    /// Returns `false` if the network is already closed
+    /// or is not currently closing.
+    pub fn is_closing(&self) -> bool {
+        self.pool.is_closing()
+    }
+
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
-    where
-        TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Error: Send + 'static,
-        TTrans::Dial: Send + 'static,
-        TTrans::ListenerUpgrade: Send + 'static,
-        TMuxer: Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-        TInEvent: Send + 'static,
-        TOutEvent: Send + 'static,
-        THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-        THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
-        <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-        TConnInfo: Clone,
-        TPeerId: Send + 'static,
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>)
+        -> Poll<Option<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>>
     {
-        // Poll the listener(s) for new connections.
-        match ListenersStream::poll(Pin::new(&mut self.listeners), cx) {
-            Poll::Pending => (),
-            Poll::Ready(ListenersEvent::Incoming {
-                listener_id,
-                upgrade,
-                local_addr,
-                send_back_addr
-            }) => {
-                return Poll::Ready(NetworkEvent::IncomingConnection(
-                    IncomingConnectionEvent {
-                        listener_id,
-                        upgrade,
-                        local_addr,
-                        send_back_addr,
-                        pool: &mut self.pool,
-                    }))
-            }
-            Poll::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
-                return Poll::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr })
-            }
-            Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
-                return Poll::Ready(NetworkEvent::ExpiredListenerAddress { listener_id, listen_addr })
-            }
-            Poll::Ready(ListenersEvent::Closed { listener_id, addresses, reason }) => {
-                return Poll::Ready(NetworkEvent::ListenerClosed { listener_id, addresses, reason })
-            }
-            Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
-                return Poll::Ready(NetworkEvent::ListenerError { listener_id, error })
+        // If the connection pool is closed, the network is considered closed as well.
+        if self.pool.is_closed() {
+            return Poll::Ready(None)
+        }
+
+        // If the pool accepts new connections, poll the listeners stream.
+        if self.pool.is_open() {
+            match ListenersStream::poll(Pin::new(&mut self.listeners), cx) {
+                Poll::Pending => (),
+                Poll::Ready(ListenersEvent::Incoming {
+                    listener_id,
+                    upgrade,
+                    local_addr,
+                    send_back_addr
+                }) => {
+                    return Poll::Ready(Some(
+                        NetworkEvent::IncomingConnection(
+                            IncomingConnectionEvent {
+                                listener_id,
+                                upgrade,
+                                local_addr,
+                                send_back_addr,
+                                pool: &mut self.pool,
+                            })))
+                }
+                Poll::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
+                    return Poll::Ready(Some(
+                        NetworkEvent::NewListenerAddress {
+                            listener_id, listen_addr
+                        }))
+                }
+                Poll::Ready(ListenersEvent::AddressExpired { listener_id, listen_addr }) => {
+                    return Poll::Ready(Some(
+                        NetworkEvent::ExpiredListenerAddress {
+                            listener_id, listen_addr
+                        }))
+                }
+                Poll::Ready(ListenersEvent::Closed { listener_id, addresses, reason }) => {
+                    return Poll::Ready(Some(
+                        NetworkEvent::ListenerClosed {
+                            listener_id, addresses, reason
+                        }))
+                }
+                Poll::Ready(ListenersEvent::Error { listener_id, error }) => {
+                    return Poll::Ready(Some(
+                        NetworkEvent::ListenerError {
+                            listener_id, error
+                        }))
+                }
             }
         }
 
-        // Poll the known peers.
+        // Poll the connection pool.
         let event = match self.pool.poll(cx) {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(PoolEvent::ConnectionEstablished { connection, num_established }) => {
+            Poll::Ready(Some(
+                PoolEvent::ConnectionEstablished { connection, num_established }
+            )) => {
                 match self.dialing.entry(connection.peer_id().clone()) {
                     hash_map::Entry::Occupied(mut e) => {
                         e.get_mut().retain(|s| s.current.0 != connection.id());
@@ -394,7 +456,9 @@ where
                     num_established,
                 }
             }
-            Poll::Ready(PoolEvent::PendingConnectionError { id, endpoint, error, handler, pool, .. }) => {
+            Poll::Ready(Some(
+                PoolEvent::PendingConnectionError { id, endpoint, error, handler, pool, .. }
+            )) => {
                 let dialing = &mut self.dialing;
                 let (next, event) = on_connection_failed(dialing, id, endpoint, error, handler);
                 if let Some(dial) = next {
@@ -405,7 +469,9 @@ where
                 }
                 event
             }
-            Poll::Ready(PoolEvent::ConnectionClosed { id, connected, error, num_established, .. }) => {
+            Poll::Ready(Some(
+                PoolEvent::ConnectionClosed { id, connected, error, num_established, .. }
+            )) => {
                 NetworkEvent::ConnectionClosed {
                     id,
                     connected,
@@ -413,31 +479,36 @@ where
                     error,
                 }
             }
-            Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
+            Poll::Ready(Some(
+                PoolEvent::ConnectionEvent { connection, event }
+            )) => {
                 NetworkEvent::ConnectionEvent {
                     connection,
                     event,
                 }
             }
-            Poll::Ready(PoolEvent::AddressChange { connection, new_endpoint, old_endpoint }) => {
+            Poll::Ready(Some(
+                PoolEvent::AddressChange { connection, new_endpoint, old_endpoint }
+            )) => {
                 NetworkEvent::AddressChange {
                     connection,
                     new_endpoint,
                     old_endpoint,
                 }
             }
+            Poll::Ready(None) => {
+                // If the connection pool closed, so does the network.
+                return Poll::Ready(None)
+            }
         };
 
-        Poll::Ready(event)
+        Poll::Ready(Some(event))
     }
 
     /// Initiates a connection attempt to a known peer.
     fn dial_peer(&mut self, opts: DialingOpts<TPeerId, THandler>)
         -> Result<ConnectionId, ConnectionLimit>
     where
-        TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-        TTrans::Dial: Send + 'static,
-        TTrans::Error: Send + 'static,
         TMuxer: Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TInEvent: Send + 'static,

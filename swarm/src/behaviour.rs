@@ -279,6 +279,17 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// The observed address of the local node.
         address: Multiaddr,
     },
+
+    /// Instructs the `Swarm` to initiate a shutdown of a connection.
+    CloseConnection {
+        peer_id: PeerId,
+        connection_id: ConnectionId
+    },
+
+    /// Instructs the `Swarm to immediately disconnect a peer.
+    DisconnectPeer {
+        peer_id: PeerId,
+    }
 }
 
 /// The options w.r.t. which connection handlers to notify of an event.

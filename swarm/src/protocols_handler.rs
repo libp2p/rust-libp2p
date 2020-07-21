@@ -96,9 +96,13 @@ pub use select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 /// implemented by the handler can include conditions for terminating the connection.
 /// The lifetime of successfully negotiated substreams is fully controlled by the handler.
 ///
-/// Implementors of this trait should keep in mind that the connection can be closed at any time.
-/// When a connection is closed gracefully, the substreams used by the handler may still
-/// continue reading data until the remote closes its side of the connection.
+/// When the keep-alive expires, the connection is gracefully closed. However,
+/// implementors of this trait should keep in mind that the connection can close
+/// as a result of encountering an error (including reading EOF as a result of
+/// the connection being closed by the remote) at any time.
+///
+/// When a connection is gracefully closed, the substreams used by the handler may be
+/// shut down in an orderly fashion by implementing [`ProtocolsHandler::poll_close`].
 pub trait ProtocolsHandler: Send + 'static {
     /// Custom event that can be received from the outside.
     type InEvent: Send + 'static;
@@ -164,15 +168,14 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Returns until when the connection should be kept alive.
     ///
     /// This method is called by the `Swarm` after each invocation of
-    /// [`ProtocolsHandler::poll`] to determine if the connection and the associated
+    /// [`Self::poll`] to determine if the connection and the associated
     /// `ProtocolsHandler`s should be kept alive as far as this handler is concerned
     /// and if so, for how long.
     ///
-    /// Returning [`KeepAlive::No`] indicates that the connection should be
-    /// closed and this handler destroyed immediately.
+    /// Returning [`KeepAlive::No`] indicates that the connection should be closed.
     ///
     /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
-    /// and this handler destroyed after the specified `Instant`.
+    /// after the specified `Instant`.
     ///
     /// Returning [`KeepAlive::Yes`] indicates that the connection should
     /// be kept alive until the next call to this method.
@@ -187,6 +190,37 @@ pub trait ProtocolsHandler: Send + 'static {
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     >;
+
+    /// Polls the handler to make progress towards closing the connection.
+    ///
+    /// When a connection is actively closed, the handler can perform
+    /// a graceful shutdown of the connection by draining the I/O
+    /// activity, e.g. allowing in-flight requests to complete without
+    /// accepting new ones, possibly signaling the remote that it
+    /// should direct further requests elsewhere.
+    ///
+    /// The handler can also use the opportunity to flush any buffers
+    /// or clean up any other (asynchronous) resources before the
+    /// connection is ultimately dropped and closed on the transport
+    /// layer.
+    ///
+    /// While closing, new inbound substreams are rejected and the
+    /// handler is unable to request new outbound substreams as
+    /// per the return type of `poll_close`.
+    ///
+    /// The handler signals its readiness for the connection
+    /// to be closed by returning `Ready(Ok(None))`, which is the
+    /// default implementation. Hence, by default, connection
+    /// shutdown is not delayed and may result in sudden
+    /// interruption of ongoing I/O.
+    ///
+    /// > **Note**: Once `poll_close()` is invoked, the handler is no
+    /// > longer `poll()`ed.
+    fn poll_close(&mut self, _: &mut Context)
+        -> Poll<Result<Option<Self::OutEvent>, Self::Error>>
+    {
+        Poll::Ready(Ok(None))
+    }
 
     /// Adds a closure that turns the input event into something else.
     #[inline]

@@ -19,11 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::muxing::{StreamMuxer, StreamMuxerEvent, SubstreamRef, substream_from_ref};
-use futures::prelude::*;
 use multiaddr::Multiaddr;
 use smallvec::SmallVec;
 use std::sync::Arc;
-use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
+use std::{fmt, io, task::Context, task::Poll};
 
 /// Endpoint for a received substream.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -65,12 +64,6 @@ where
     inner: Arc<TMuxer>,
     /// List of substreams we are currently opening.
     outbound_substreams: SmallVec<[(TUserData, TMuxer::OutboundSubstream); 8]>,
-}
-
-/// Future that signals the remote that we have closed the connection.
-pub struct Close<TMuxer> {
-    /// Muxer to close.
-    muxer: Arc<TMuxer>,
 }
 
 /// A successfully opened substream.
@@ -130,27 +123,27 @@ where
         self.outbound_substreams.push((user_data, raw));
     }
 
-    /// Destroys the node stream and returns all the pending outbound substreams, plus an object
-    /// that signals the remote that we shut down the connection.
-    #[must_use]
-    pub fn close(mut self) -> (Close<TMuxer>, Vec<TUserData>) {
-        let substreams = self.cancel_outgoing();
-        let close = Close { muxer: self.inner.clone() };
-        (close, substreams)
+    /// Closes the underlying connection, canceling any pending outbound substreams.
+    pub fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.cancel_outgoing();
+        match self.inner.close(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+        }
     }
 
-    /// Destroys all outbound streams and returns the corresponding user data.
-    pub fn cancel_outgoing(&mut self) -> Vec<TUserData> {
-        let mut out = Vec::with_capacity(self.outbound_substreams.len());
-        for (user_data, outbound) in self.outbound_substreams.drain(..) {
-            out.push(user_data);
+    /// Destroys all outbound streams.
+    fn cancel_outgoing(&mut self) {
+        for (_, outbound) in self.outbound_substreams.drain(..) {
             self.inner.destroy_outbound(outbound);
         }
-        out
     }
 
     /// Provides an API similar to `Future`.
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
+    pub fn poll(&mut self, cx: &mut Context<'_>)
+        -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, io::Error>>
+    {
         // Polling inbound substream.
         match self.inner.poll_event(cx) {
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
@@ -218,6 +211,7 @@ where
     }
 }
 
+<<<<<<< HEAD
 impl<TMuxer> Future for Close<TMuxer>
 where
     TMuxer: StreamMuxer,
@@ -243,6 +237,8 @@ where
     }
 }
 
+=======
+>>>>>>> Graceful shutdown for connections, networks and swarms.
 impl<TMuxer, TUserData> fmt::Debug for SubstreamEvent<TMuxer, TUserData>
 where
     TMuxer: StreamMuxer,
