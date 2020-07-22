@@ -132,8 +132,8 @@ impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
 
 /// Allows obtaining the average bandwidth of the connections created from a [`BandwidthLogging`].
 pub struct BandwidthSinks {
-    download: Atomic<u64>,
-    upload: Atomic<u64>,
+    inbound: Atomic<u64>,
+    outbound: Atomic<u64>,
 }
 
 impl BandwidthSinks {
@@ -142,7 +142,7 @@ impl BandwidthSinks {
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
     /// >           only ever be used for statistics purposes.
-    pub fn total_downloaded(&self) -> u64 {
+    pub fn total_inbound(&self) -> u64 {
         self.download.load(Ordering::Relaxed)
     }
 
@@ -151,7 +151,7 @@ impl BandwidthSinks {
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
     /// >           only ever be used for statistics purposes.
-    pub fn total_uploaded(&self) -> u64 {
+    pub fn total_outbound(&self) -> u64 {
         self.upload.load(Ordering::Relaxed)
     }
 }
