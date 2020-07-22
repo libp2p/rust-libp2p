@@ -27,7 +27,7 @@ fn mk_swarm() -> (PeerId, Swarm<AutoNat>) {
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
         .boxed();
-    let swarm = Swarm::new(transport, AutoNat::new(), peer_id.clone());
+    let swarm = Swarm::new(transport, AutoNat::default(), peer_id.clone());
     (peer_id, swarm)
 }
 

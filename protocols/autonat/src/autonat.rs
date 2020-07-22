@@ -20,6 +20,7 @@
 
 use crate::protocol::{AutoNatCodec, AutoNatProtocol};
 pub use crate::protocol::{DialRequest, DialResponse, ResponseStatus};
+use futures::future::FutureExt;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_request_response::{
     handler::RequestProtocol, handler::RequestResponseHandlerEvent, ProtocolSupport,
@@ -31,7 +32,22 @@ use std::{
     collections::HashMap,
     iter,
     task::{Context, Poll},
+    time::Duration,
 };
+use wasm_timer::Delay;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AutoNatConfig {
+    timeout: Duration,
+}
+
+impl Default for AutoNatConfig {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_secs(2),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AutoNatEvent {
@@ -39,29 +55,37 @@ pub enum AutoNatEvent {
 }
 
 pub struct AutoNat {
+    config: AutoNatConfig,
     inner: RequestResponse<AutoNatCodec>,
     observed_addresses: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    requests: HashMap<PeerId, ResponseChannel<DialResponse>>,
+    requests: HashMap<PeerId, (ResponseChannel<DialResponse>, Delay)>,
+}
+
+impl Default for AutoNat {
+    fn default() -> Self {
+        Self::new(AutoNatConfig::default())
+    }
 }
 
 impl AutoNat {
-    pub fn new() -> Self {
+    pub fn new(config: AutoNatConfig) -> Self {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
         let cfg = RequestResponseConfig::default();
         let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
         Self {
+            config,
             inner,
             observed_addresses: Default::default(),
             requests: Default::default(),
         }
     }
 
-    pub fn add_address(&mut self, peer_id: &PeerId, addr: Multiaddr) {
-        self.inner.add_address(peer_id, addr)
+    pub fn add_address(&mut self, peer: &PeerId, addr: Multiaddr) {
+        self.inner.add_address(peer, addr)
     }
 
-    pub fn dial_request(&mut self, peer_id: &PeerId) {
-        self.inner.send_request(peer_id, DialRequest::default());
+    pub fn dial_request(&mut self, peer: &PeerId) {
+        self.inner.send_request(peer, DialRequest::default());
     }
 }
 
@@ -106,7 +130,7 @@ impl NetworkBehaviour for AutoNat {
             .insert(*conn, addr);
 
         if let ConnectedPoint::Dialer { address, .. } = endpoint {
-            if let Some(channel) = self.requests.remove(peer) {
+            if let Some((channel, _)) = self.requests.remove(peer) {
                 self.inner
                     .send_response(channel, DialResponse::Ok(address.clone()));
             }
@@ -132,10 +156,6 @@ impl NetworkBehaviour for AutoNat {
 
     fn inject_dial_failure(&mut self, peer: &PeerId) {
         self.inner.inject_dial_failure(peer);
-        if let Some(channel) = self.requests.remove(peer) {
-            let response = DialResponse::Err(ResponseStatus::EDialError, "".into());
-            self.inner.send_response(channel, response);
-        }
     }
 
     fn inject_event(
@@ -161,7 +181,8 @@ impl NetworkBehaviour for AutoNat {
                         request: _,
                         channel,
                     } => {
-                        self.requests.insert(peer.clone(), channel);
+                        let timeout = Delay::new(self.config.timeout);
+                        self.requests.insert(peer.clone(), (channel, timeout));
                         return Poll::Ready(NetworkBehaviourAction::DialPeer {
                             peer_id: peer,
                             condition: DialPeerCondition::NotDialing,
@@ -182,7 +203,12 @@ impl NetworkBehaviour for AutoNat {
                         error,
                     },
                 )) => {
-                    log::error!("autonat outbound failure {} {:?} {:?}", peer, request_id, error);
+                    log::error!(
+                        "autonat outbound failure {} {:?} {:?}",
+                        peer,
+                        request_id,
+                        error
+                    );
                 }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::InboundFailure { peer, error },
@@ -209,8 +235,21 @@ impl NetworkBehaviour for AutoNat {
                 Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     return Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address })
                 }
-                Poll::Pending => return Poll::Pending,
+                Poll::Pending => break,
             }
         }
+        self.requests = std::mem::replace(&mut self.requests, Default::default())
+            .into_iter()
+            .filter_map(|(peer, (channel, mut timeout))| {
+                if let Poll::Pending = timeout.poll_unpin(cx) {
+                    Some((peer, (channel, timeout)))
+                } else {
+                    let response = DialResponse::Err(ResponseStatus::EDialError, "".into());
+                    self.inner.send_response(channel, response);
+                    None
+                }
+            })
+            .collect();
+        Poll::Pending
     }
 }
