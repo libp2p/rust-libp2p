@@ -182,12 +182,12 @@ impl NetworkBehaviour for AutoNat {
                         error,
                     },
                 )) => {
-                    println!("outbound failure {} {:?} {:?}", peer, request_id, error);
+                    log::error!("autonat outbound failure {} {:?} {:?}", peer, request_id, error);
                 }
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                     RequestResponseEvent::InboundFailure { peer, error },
                 )) => {
-                    println!("inbound failure {} {:?}", peer, error);
+                    log::error!("autonat inbound failure {} {:?}", peer, error);
                 }
                 Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
                     return Poll::Ready(NetworkBehaviourAction::DialAddress { address })

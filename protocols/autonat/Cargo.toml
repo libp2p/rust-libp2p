@@ -17,6 +17,7 @@ futures = "0.3.5"
 libp2p-core = { version = "0.20.0", path = "../../core" }
 libp2p-swarm = { version = "0.20.0", path = "../../swarm" }
 libp2p-request-response = { version = "0.1.0", path = "../request-response" }
+log = "0.4.11"
 prost = "0.6.1"
 
 [dev-dependencies]
