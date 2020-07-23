@@ -238,7 +238,7 @@ impl std::fmt::Debug for GossipsubConfig {
                 if let Ok(text) = std::str::from_utf8(self.0) {
                     write!(f, "\"{}\"", text)
                 } else {
-                    write!(f, "{}", hex::encode(self.0))
+                    write!(f, "{}", hex_fmt::HexFmt(self.0))
                 }
             }
         }

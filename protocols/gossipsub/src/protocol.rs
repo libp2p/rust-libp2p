@@ -356,13 +356,12 @@ pub struct GossipsubMessage {
 impl fmt::Debug for GossipsubMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GossipsubMessage")
-            .field("data.len", &self.data.len())
+            .field("data", &hex_fmt::HexFmt(&self.data))
             .field("source", &self.source)
             .field("sequence_number", &self.sequence_number)
             .field("topics", &self.topics)
             .finish()
     }
-
 }
 
 /// A subscription received by the gossipsub system.
