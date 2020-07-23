@@ -768,7 +768,7 @@ impl Gossipsub {
             }
             for to_remove in to_remove_peers {
                 peers.remove(&to_remove);
-            }            
+            }
 
             // not enough peers
             if peers.len() < self.config.mesh_n {
