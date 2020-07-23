@@ -254,11 +254,11 @@ mod tests {
 
         // verify fanout nodes
         // add 3 random peers to the fanout[topic1]
-        gs.fanout.insert(topic_hashes[1].clone(), vec![]);
+        gs.fanout.insert(topic_hashes[1].clone(), Default::default());
         let new_peers = vec![];
         for _ in 0..3 {
             let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
-            fanout_peers.push(PeerId::random());
+            fanout_peers.insert(PeerId::random());
         }
 
         // subscribe to topic1
