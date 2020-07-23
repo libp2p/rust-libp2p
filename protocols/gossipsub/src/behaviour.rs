@@ -374,7 +374,7 @@ impl Gossipsub {
             let mesh_peers = self
                 .mesh
                 .entry(topic_hash.clone())
-                .or_insert_with(|| Default::default());
+                .or_insert_with(Default::default);
             mesh_peers.extend(new_peers);
         }
 
@@ -695,7 +695,7 @@ impl Gossipsub {
                         |peer| !peers.contains(peer)
                     });
                 for peer in &peer_list {
-                    let current_topic = to_graft.entry(peer.clone()).or_insert_with(|| vec![]);
+                    let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }
                 // update the mesh
@@ -721,7 +721,7 @@ impl Gossipsub {
                     let peer = shuffled
                         .pop()
                         .expect("There should always be enough peers to remove");
-                    let current_topic = to_prune.entry(peer).or_insert_with(|| vec![]);
+                    let current_topic = to_prune.entry(peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }
             }
