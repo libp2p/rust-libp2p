@@ -231,8 +231,19 @@ impl GossipsubConfigBuilder {
 
 impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        struct StringOrBytes<'a>(&'a [u8]);
+
+        impl<'a> std::fmt::Debug for StringOrBytes<'a> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                if let Ok(text) = std::str::from_utf8(self.0) {
+                    write!(f, "\"{}\"", text)
+                } else {
+                    write!(f, "{}", hex::encode(self.0))
+                }
+            }
+        }
         let mut builder = f.debug_struct("GossipsubConfig");
-        let _ = builder.field("protocol_id", &self.protocol_id);
+        let _ = builder.field("protocol_id", &StringOrBytes(&self.protocol_id));
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
