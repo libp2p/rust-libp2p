@@ -1,3 +1,7 @@
+# 0.21.1 [2020-07-09]
+
+- Update `async-tls` and `rustls` dependency.
+
 # 0.21.0 [2020-07-02]
 
 - Update `libp2p-core`.
