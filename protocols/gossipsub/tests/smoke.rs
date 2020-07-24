@@ -33,7 +33,7 @@ use libp2p_core::{
     identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
     Multiaddr, Transport,
 };
-use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Signing, Topic};
+use libp2p_gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, Signing, Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
@@ -145,7 +145,16 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .boxed();
 
     let peer_id = public_key.clone().into_peer_id();
-    let config = GossipsubConfig::default();
+
+    // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
+    // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we
+    // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
+    // timely fashion.
+
+    let config = GossipsubConfigBuilder::new()
+        .heartbeat_initial_delay(Duration::from_millis(50))
+        .heartbeat_interval(Duration::from_millis(100))
+        .build();
     let behaviour = Gossipsub::new(Signing::Disabled(peer_id.clone()), config);
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
@@ -213,6 +222,6 @@ fn multi_hop_propagation() {
     }
 
     QuickCheck::new()
-        .max_tests(10)
+        .max_tests(1)
         .quickcheck(prop as fn(usize, u64) -> TestResult)
 }

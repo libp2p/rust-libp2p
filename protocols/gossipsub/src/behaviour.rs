@@ -40,9 +40,9 @@ use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{BTreeSet, hash_map::HashMap},
     collections::HashSet,
     collections::VecDeque,
+    collections::{hash_map::HashMap, BTreeSet},
     iter,
     sync::Arc,
     task::{Context, Poll},
@@ -382,8 +382,10 @@ impl Gossipsub {
                 add_peers, topic_hash
             );
             added_peers.extend(peers.iter().cloned().take(add_peers));
-            self.mesh
-                .insert(topic_hash.clone(), peers.into_iter().take(add_peers).collect());
+            self.mesh.insert(
+                topic_hash.clone(),
+                peers.into_iter().take(add_peers).collect(),
+            );
             // remove the last published time
             self.fanout_last_pub.remove(topic_hash);
         }
@@ -529,10 +531,8 @@ impl Gossipsub {
                     "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
                     peer_id, topic_hash
                 );
-                // ensure peer is not already added
-                if !peers.contains(peer_id) {
-                    peers.insert(peer_id.clone());
-                }
+                // Duplicates are ignored
+                peers.insert(peer_id.clone());
             } else {
                 to_prune_topics.insert(topic_hash.clone());
             }
@@ -567,18 +567,20 @@ impl Gossipsub {
 
     /// Handles PRUNE control messages. Removes peer from the mesh.
     fn handle_prune(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
-        debug!("Handling PRUNE message for peer: {:?}", peer_id);
+        debug!("Handling PRUNE message for peer: {}", peer_id.to_string());
         for topic_hash in topics {
             if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                 // remove the peer if it exists in the mesh
-                info!(
-                    "PRUNE: Removing peer: {:?} from the mesh for topic: {:?}",
-                    peer_id, topic_hash
-                );
-                peers.remove(peer_id);
+                if peers.remove(peer_id) {
+                    info!(
+                        "PRUNE: Removing peer: {} from the mesh for topic: {:?}",
+                        peer_id.to_string(),
+                        topic_hash
+                    );
+                }
             }
         }
-        debug!("Completed PRUNE handling for peer: {:?}", peer_id);
+        debug!("Completed PRUNE handling for peer: {}", peer_id.to_string());
     }
 
     /// Handles a newly received GossipsubMessage.
@@ -586,8 +588,9 @@ impl Gossipsub {
     fn handle_received_message(&mut self, msg: GossipsubMessage, propagation_source: &PeerId) {
         let msg_id = (self.config.message_id_fn)(&msg);
         debug!(
-            "Handling message: {:?} from peer: {:?}",
-            msg_id, propagation_source
+            "Handling message: {:?} from peer: {}",
+            msg_id,
+            propagation_source.to_string()
         );
         if self.mcache.put(msg.clone()).is_some() {
             debug!("Message already received, ignoring. Message: {:?}", msg_id);
@@ -617,13 +620,17 @@ impl Gossipsub {
         propagation_source: &PeerId,
     ) {
         debug!(
-            "Handling subscriptions: {:?}, from source: {:?}",
-            subscriptions, propagation_source
+            "Handling subscriptions: {:?}, from source: {}",
+            subscriptions,
+            propagation_source.to_string()
         );
         let subscribed_topics = match self.peer_topics.get_mut(propagation_source) {
             Some(topics) => topics,
             None => {
-                error!("Subscription by unknown peer: {:?}", &propagation_source);
+                error!(
+                    "Subscription by unknown peer: {}",
+                    propagation_source.to_string()
+                );
                 return;
             }
         };
@@ -637,32 +644,33 @@ impl Gossipsub {
 
             match subscription.action {
                 GossipsubSubscriptionAction::Subscribe => {
-                    if !peer_list.contains(propagation_source) {
+                    if peer_list.insert(propagation_source.clone()) {
                         debug!(
-                            "SUBSCRIPTION: topic_peer: Adding gossip peer: {:?} to topic: {:?}",
-                            propagation_source, subscription.topic_hash
+                            "SUBSCRIPTION: topic_peer: Adding gossip peer: {} to topic: {:?}",
+                            propagation_source.to_string(),
+                            subscription.topic_hash
                         );
-                        peer_list.insert(propagation_source.clone());
                     }
 
                     // add to the peer_topics mapping
-                    if !subscribed_topics.contains(&subscription.topic_hash) {
+                    if subscribed_topics.insert(subscription.topic_hash.clone()) {
                         info!(
-                            "SUBSCRIPTION: Adding peer: {:?} to topic: {:?}",
-                            propagation_source, subscription.topic_hash
+                            "SUBSCRIPTION: Adding peer: {} to topic: {:?}",
+                            propagation_source.to_string(),
+                            subscription.topic_hash
                         );
-                        subscribed_topics.insert(subscription.topic_hash.clone());
                     }
 
                     // if the mesh needs peers add the peer to the mesh
                     if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
                         if peers.len() < self.config.mesh_n_low {
-                            debug!(
-                                "SUBSCRIPTION: Adding peer {:?} to the mesh",
-                                propagation_source,
-                            );
+                            if peers.insert(propagation_source.clone()) {
+                                debug!(
+                                    "SUBSCRIPTION: Adding peer {} to the mesh",
+                                    propagation_source.to_string(),
+                                );
+                            }
                         }
-                        peers.insert(propagation_source.clone());
                     }
                     // generates a subscription event to be polled
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -675,8 +683,9 @@ impl Gossipsub {
                 GossipsubSubscriptionAction::Unsubscribe => {
                     if peer_list.remove(propagation_source) {
                         info!(
-                            "SUBSCRIPTION: Removing gossip peer: {:?} from topic: {:?}",
-                            propagation_source, subscription.topic_hash
+                            "SUBSCRIPTION: Removing gossip peer: {} from topic: {:?}",
+                            propagation_source.to_string(),
+                            subscription.topic_hash
                         );
                     }
                     // remove topic from the peer_topics mapping
@@ -1148,7 +1157,7 @@ impl NetworkBehaviour for Gossipsub {
                 // remove from topic_peers
                 if let Some(peer_list) = self.topic_peers.get_mut(&topic) {
                     if !peer_list.remove(id) {
-                    // debugging purposes
+                        // debugging purposes
                         warn!("Disconnected node: {:?} not in topic_peers peer list", &id);
                     }
                 } else {
@@ -1159,9 +1168,7 @@ impl NetworkBehaviour for Gossipsub {
                 }
 
                 // remove from fanout
-                self.fanout
-                    .get_mut(&topic)
-                    .map(|peers| peers.remove(id));
+                self.fanout.get_mut(&topic).map(|peers| peers.remove(id));
             }
         }
 
@@ -1173,7 +1180,9 @@ impl NetworkBehaviour for Gossipsub {
     fn inject_event(&mut self, propagation_source: PeerId, _: ConnectionId, event: GossipsubRpc) {
         // Handle subscriptions
         // Update connected peers topics
-        self.handle_received_subscriptions(&event.subscriptions, &propagation_source);
+        if !event.subscriptions.is_empty() {
+            self.handle_received_subscriptions(&event.subscriptions, &propagation_source);
+        }
 
         // Handle messages
         for message in event.messages {

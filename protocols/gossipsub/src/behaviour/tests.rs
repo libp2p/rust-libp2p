@@ -303,9 +303,10 @@ mod tests {
             "Subscribe should add a new entry to the mesh[topic] hashmap"
         );
 
-        // peers should be subscribed to the topic
-        assert!(
-            gs.topic_peers.get(&topic_hashes[0]).map(|p| p.is_empty()) == Some(false),
+        // all peers should be subscribed to the topic
+        assert_eq!(
+            gs.topic_peers.get(&topic_hashes[0]).map(|p| p.len()),
+            Some(20),
             "Peers should be subscribed to the topic"
         );
 
@@ -331,8 +332,10 @@ mod tests {
         let msg_id =
             (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
 
-        assert!(
-            publishes.len() == 20,
+        let config = GossipsubConfig::default();
+        assert_eq!(
+            publishes.len(),
+            config.mesh_n_low,
             "Should send a publish message to all known peers"
         );
 
@@ -786,7 +789,7 @@ mod tests {
         );
 
         assert!(
-            gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
             "Expected peer to have been added to mesh"
         );
     }
