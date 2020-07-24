@@ -38,7 +38,7 @@ pub struct GossipsubConfig {
     /// Target number of peers for the mesh network (D in the spec, default is 6).
     pub mesh_n: usize,
 
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 4).
+    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
     pub mesh_n_low: usize,
 
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
@@ -87,7 +87,7 @@ impl Default for GossipsubConfig {
             history_length: 5,
             history_gossip: 3,
             mesh_n: 6,
-            mesh_n_low: 4,
+            mesh_n_low: 5,
             mesh_n_high: 12,
             gossip_lazy: 6, // default to mesh_n
             heartbeat_initial_delay: Duration::from_secs(5),
