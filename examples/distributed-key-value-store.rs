@@ -33,13 +33,14 @@ use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
-    record::Key,
     Kademlia,
     KademliaEvent,
+    PeerRecord,
     PutRecordOk,
     QueryResult,
     Quorum,
-    Record
+    Record,
+    record::Key,
 };
 use libp2p::{
     NetworkBehaviour,
@@ -86,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             match message {
                 KademliaEvent::QueryResult { result, .. } => match result {
                     QueryResult::GetRecord(Ok(ok)) => {
-                        for Record { key, value, .. } in ok.records {
+                        for PeerRecord { record: Record { key, value, .. }, ..} in ok.records {
                             println!(
                                 "Got record {:?} {:?}",
                                 std::str::from_utf8(key.as_ref()).unwrap(),

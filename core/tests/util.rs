@@ -2,15 +2,15 @@
 #![allow(dead_code)]
 
 use futures::prelude::*;
-use libp2p_core::muxing::StreamMuxer;
 use libp2p_core::{
+    Multiaddr,
     connection::{
         ConnectionHandler,
         ConnectionHandlerEvent,
         Substream,
         SubstreamEndpoint,
     },
-    muxing::StreamMuxerBox,
+    muxing::{StreamMuxer, StreamMuxerBox},
 };
 use std::{io, pin::Pin, task::Context, task::Poll};
 
@@ -27,6 +27,9 @@ impl ConnectionHandler for TestHandler {
     {}
 
     fn inject_event(&mut self, _: Self::InEvent)
+    {}
+
+    fn inject_address_change(&mut self, _: &Multiaddr)
     {}
 
     fn poll(&mut self, _: &mut Context)

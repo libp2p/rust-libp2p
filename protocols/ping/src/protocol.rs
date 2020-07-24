@@ -69,6 +69,7 @@ where
             while let Ok(_) = socket.read_exact(&mut payload).await {
                 socket.write_all(&payload).await?;
             }
+            socket.close().await?;
             Ok(())
         }.boxed()
     }
@@ -128,7 +129,7 @@ mod tests {
             } else {
                 panic!("MemoryTransport not listening on an address!");
             };
-        
+
         async_std::task::spawn(async move {
             let listener_event = listener.next().await.unwrap();
             let (listener_upgrade, _) = listener_event.unwrap().into_upgrade().unwrap();
