@@ -314,7 +314,7 @@ impl Gossipsub {
             None => {
                 warn!(
                     "Message not in cache. Ignoring forwarding. Message Id: {}",
-                    message_id.0
+                    message_id
                 );
                 return false;
             }
