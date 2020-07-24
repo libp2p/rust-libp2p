@@ -24,7 +24,7 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TopicHash {
     /// The topic hash. Stored as a string to align with the protobuf API.
     hash: String,
@@ -41,7 +41,7 @@ impl TopicHash {
 }
 
 /// A gossipsub topic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Topic {
     topic: String,
 }

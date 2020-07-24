@@ -40,7 +40,7 @@ use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::hash_map::HashMap,
+    collections::{BTreeSet, hash_map::HashMap},
     collections::HashSet,
     collections::VecDeque,
     iter,
@@ -84,16 +84,16 @@ pub struct Gossipsub {
     keypair: Option<libp2p_core::identity::Keypair>,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
-    topic_peers: HashMap<TopicHash, Vec<PeerId>>,
+    topic_peers: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// A map of all connected peers to their subscribed topics.
-    peer_topics: HashMap<PeerId, Vec<TopicHash>>,
+    peer_topics: HashMap<PeerId, BTreeSet<TopicHash>>,
 
     /// Overlay network of connected peers - Maps topics to connected gossipsub peers.
-    mesh: HashMap<TopicHash, Vec<PeerId>>,
+    mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// Map of topics to list of peers that we publish to, but don't subscribe to.
-    fanout: HashMap<TopicHash, Vec<PeerId>>,
+    fanout: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
@@ -381,9 +381,9 @@ impl Gossipsub {
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
                 add_peers, topic_hash
             );
-            added_peers.extend_from_slice(&peers[..add_peers]);
+            added_peers.extend(peers.iter().cloned().take(add_peers));
             self.mesh
-                .insert(topic_hash.clone(), peers[..add_peers].to_vec());
+                .insert(topic_hash.clone(), peers.into_iter().take(add_peers).collect());
             // remove the last published time
             self.fanout_last_pub.remove(topic_hash);
         }
@@ -397,7 +397,7 @@ impl Gossipsub {
                 self.config.mesh_n - added_peers.len(),
                 |peer| !added_peers.contains(peer),
             );
-            added_peers.extend_from_slice(&new_peers);
+            added_peers.extend(new_peers.clone());
             // add them to the mesh
             debug!(
                 "JOIN: Inserting {:?} random peers into the mesh",
@@ -406,8 +406,8 @@ impl Gossipsub {
             let mesh_peers = self
                 .mesh
                 .entry(topic_hash.clone())
-                .or_insert_with(|| Vec::new());
-            mesh_peers.extend_from_slice(&new_peers);
+                .or_insert_with(Default::default);
+            mesh_peers.extend(new_peers);
         }
 
         for peer_id in added_peers {
@@ -531,7 +531,7 @@ impl Gossipsub {
                 );
                 // ensure peer is not already added
                 if !peers.contains(peer_id) {
-                    peers.push(peer_id.clone());
+                    peers.insert(peer_id.clone());
                 }
             } else {
                 to_prune_topics.insert(topic_hash.clone());
@@ -575,7 +575,7 @@ impl Gossipsub {
                     "PRUNE: Removing peer: {:?} from the mesh for topic: {:?}",
                     peer_id, topic_hash
                 );
-                peers.retain(|p| p != peer_id);
+                peers.remove(peer_id);
             }
         }
         debug!("Completed PRUNE handling for peer: {:?}", peer_id);
@@ -633,16 +633,16 @@ impl Gossipsub {
             let peer_list = self
                 .topic_peers
                 .entry(subscription.topic_hash.clone())
-                .or_insert_with(Vec::new);
+                .or_insert_with(Default::default);
 
             match subscription.action {
                 GossipsubSubscriptionAction::Subscribe => {
-                    if !peer_list.contains(&propagation_source) {
+                    if !peer_list.contains(propagation_source) {
                         debug!(
                             "SUBSCRIPTION: topic_peer: Adding gossip peer: {:?} to topic: {:?}",
                             propagation_source, subscription.topic_hash
                         );
-                        peer_list.push(propagation_source.clone());
+                        peer_list.insert(propagation_source.clone());
                     }
 
                     // add to the peer_topics mapping
@@ -651,7 +651,7 @@ impl Gossipsub {
                             "SUBSCRIPTION: Adding peer: {:?} to topic: {:?}",
                             propagation_source, subscription.topic_hash
                         );
-                        subscribed_topics.push(subscription.topic_hash.clone());
+                        subscribed_topics.insert(subscription.topic_hash.clone());
                     }
 
                     // if the mesh needs peers add the peer to the mesh
@@ -662,7 +662,7 @@ impl Gossipsub {
                                 propagation_source,
                             );
                         }
-                        peers.push(propagation_source.clone());
+                        peers.insert(propagation_source.clone());
                     }
                     // generates a subscription event to be polled
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -673,23 +673,17 @@ impl Gossipsub {
                     ));
                 }
                 GossipsubSubscriptionAction::Unsubscribe => {
-                    if let Some(pos) = peer_list.iter().position(|p| p == propagation_source) {
+                    if peer_list.remove(propagation_source) {
                         info!(
                             "SUBSCRIPTION: Removing gossip peer: {:?} from topic: {:?}",
                             propagation_source, subscription.topic_hash
                         );
-                        peer_list.remove(pos);
                     }
                     // remove topic from the peer_topics mapping
-                    if let Some(pos) = subscribed_topics
-                        .iter()
-                        .position(|t| t == &subscription.topic_hash)
-                    {
-                        subscribed_topics.remove(pos);
-                    }
+                    subscribed_topics.remove(&subscription.topic_hash);
                     // remove the peer from the mesh if it exists
                     if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
-                        peers.retain(|peer| peer != propagation_source);
+                        peers.remove(propagation_source);
                     }
 
                     // generate an unsubscribe event to be polled
@@ -732,7 +726,7 @@ impl Gossipsub {
                         |peer| !peers.contains(peer)
                     });
                 for peer in &peer_list {
-                    let current_topic = to_graft.entry(peer.clone()).or_insert_with(|| vec![]);
+                    let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }
                 // update the mesh
@@ -751,13 +745,14 @@ impl Gossipsub {
                 let excess_peer_no = peers.len() - self.config.mesh_n;
                 // shuffle the peers
                 let mut rng = thread_rng();
-                peers.shuffle(&mut rng);
+                let mut shuffled = peers.iter().cloned().collect::<Vec<_>>();
+                shuffled.shuffle(&mut rng);
                 // remove the first excess_peer_no peers adding them to to_prune
                 for _ in 0..excess_peer_no {
-                    let peer = peers
+                    let peer = shuffled
                         .pop()
                         .expect("There should always be enough peers to remove");
-                    let current_topic = to_prune.entry(peer).or_insert_with(|| vec![]);
+                    let current_topic = to_prune.entry(peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }
             }
@@ -802,7 +797,9 @@ impl Gossipsub {
                     }
                 }
             }
-            peers.retain(|peer| to_remove_peers.contains(&peer));
+            for to_remove in to_remove_peers {
+                peers.remove(&to_remove);
+            }
 
             // not enough peers
             if peers.len() < self.config.mesh_n {
@@ -1015,11 +1012,11 @@ impl Gossipsub {
     /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
     /// filtered by the function `f`.
     fn get_random_peers(
-        topic_peers: &HashMap<TopicHash, Vec<PeerId>>,
+        topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
         topic_hash: &TopicHash,
         n: usize,
         mut f: impl FnMut(&PeerId) -> bool,
-    ) -> Vec<PeerId> {
+    ) -> BTreeSet<PeerId> {
         let mut gossip_peers = match topic_peers.get(topic_hash) {
             // if they exist, filter the peers by `f`
             Some(peer_list) => peer_list.iter().cloned().filter(|p| f(p)).collect(),
@@ -1029,7 +1026,7 @@ impl Gossipsub {
         // if we have less than needed, return them
         if gossip_peers.len() <= n {
             debug!("RANDOM PEERS: Got {:?} peers", gossip_peers.len());
-            return gossip_peers.to_vec();
+            return gossip_peers.into_iter().collect();
         }
 
         // we have more peers than needed, shuffle them and return n of them
@@ -1038,7 +1035,7 @@ impl Gossipsub {
 
         debug!("RANDOM PEERS: Got {:?} peers", n);
 
-        gossip_peers[..n].to_vec()
+        gossip_peers.into_iter().take(n).collect()
     }
 
     // adds a control action to control_pool
@@ -1125,7 +1122,7 @@ impl NetworkBehaviour for Gossipsub {
         }
 
         // For the time being assume all gossipsub peers
-        self.peer_topics.insert(id.clone(), Vec::new());
+        self.peer_topics.insert(id.clone(), Default::default());
     }
 
     fn inject_disconnected(&mut self, id: &PeerId) {
@@ -1145,18 +1142,13 @@ impl NetworkBehaviour for Gossipsub {
                 // check the mesh for the topic
                 if let Some(mesh_peers) = self.mesh.get_mut(&topic) {
                     // check if the peer is in the mesh and remove it
-                    if let Some(pos) = mesh_peers.iter().position(|p| p == id) {
-                        mesh_peers.remove(pos);
-                    }
+                    mesh_peers.remove(id);
                 }
 
                 // remove from topic_peers
                 if let Some(peer_list) = self.topic_peers.get_mut(&topic) {
-                    if let Some(pos) = peer_list.iter().position(|p| p == id) {
-                        peer_list.remove(pos);
-                    }
+                    if !peer_list.remove(id) {
                     // debugging purposes
-                    else {
                         warn!("Disconnected node: {:?} not in topic_peers peer list", &id);
                     }
                 } else {
@@ -1169,7 +1161,7 @@ impl NetworkBehaviour for Gossipsub {
                 // remove from fanout
                 self.fanout
                     .get_mut(&topic)
-                    .map(|peers| peers.retain(|p| p != id));
+                    .map(|peers| peers.remove(id));
             }
         }
 
