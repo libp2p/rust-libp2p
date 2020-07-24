@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{GossipsubMessage, MessageId};
-use log::warn;
 use std::borrow::Cow;
 use std::time::Duration;
 
@@ -158,6 +157,29 @@ impl Default for GossipsubConfig {
     }
 }
 
+impl GossipsubConfig {
+    // Prevent users from using settings where the published messages will be rejected based on combinations of privacy and validation.
+    pub fn validate_privacy_validation(&self) {
+        match (&self.validation_mode, &self.privacy_mode) {
+            (ValidationSetting::Strict, PrivacySetting::RandomAuthor) => panic!(
+                "Messages will be
+            published unsigned and incoming unsigned messages will be rejected. Consider adjusting
+            the validation or privacy settings in the config"
+            ),
+            (ValidationSetting::Strict, PrivacySetting::Anonymous) => {
+                panic!("Messages will not be signed or contain an author, but incoming messages requires this. Consider adjusting the validation or privacy settings in the config")
+            }
+            (ValidationSetting::Anonymous, PrivacySetting::None) => {
+                panic!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config")
+            }
+            (ValidationSetting::Anonymous, PrivacySetting::RandomAuthor) => {
+                panic!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config")
+            }
+            (_, _) => {}
+        }
+    }
+}
+
 /// The builder struct for constructing a gossipsub configuration.
 pub struct GossipsubConfigBuilder {
     config: GossipsubConfig,
@@ -285,9 +307,6 @@ impl GossipsubConfigBuilder {
     /// the available types.
     pub fn privacy_mode(&mut self, privacy_setting: PrivacySetting) -> &mut Self {
         self.config.privacy_mode = privacy_setting;
-
-        // warn the user about odd combinations of privacy/validation
-        self.check_privacy_validation();
         self
     }
 
@@ -295,9 +314,6 @@ impl GossipsubConfigBuilder {
     /// for the available types. The default is ValidationSetting::Strict.
     pub fn validation_mode(&mut self, validation_setting: ValidationSetting) -> &mut Self {
         self.config.validation_mode = validation_setting;
-
-        // warn the user about odd combinations of privacy/validation
-        self.check_privacy_validation();
         self
     }
 
@@ -316,28 +332,8 @@ impl GossipsubConfigBuilder {
 
     /// Constructs a `GossipsubConfig` from the given configuration.
     pub fn build(&self) -> GossipsubConfig {
+        self.config.validate_privacy_validation();
         self.config.clone()
-    }
-
-    // Warns the user for odd combinations of privacy and validation.
-    fn check_privacy_validation(&self) {
-        match (&self.config.validation_mode, &self.config.privacy_mode) {
-            (ValidationSetting::Strict, PrivacySetting::RandomAuthor) => warn!(
-                "Messages will be
-            published unsigned and incoming unsigned messages will be rejected. Consider adjusting
-            the validation or privacy settings in the config"
-            ),
-            (ValidationSetting::Strict, PrivacySetting::Anonymous) => {
-                warn!("Messages will not be signed or contain an author, but incoming messages requires this. Consider adjusting the validation or privacy settings in the config")
-            }
-            (ValidationSetting::Anonymous, PrivacySetting::None) => {
-                warn!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config")
-            }
-            (ValidationSetting::Anonymous, PrivacySetting::RandomAuthor) => {
-                warn!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config")
-            }
-            (_, _) => {}
-        }
     }
 }
 

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::GossipsubConfig;
+use crate::config::{GossipsubConfig, PrivacySetting, ValidationSetting};
 use crate::error::PublishError;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
@@ -53,20 +53,22 @@ use wasm_timer::{Instant, Interval};
 mod tests;
 
 /// Determines message signing is enabled or not.
-///
-/// If message signing is disabled a `PeerId` can be entered which will be used as the author of
-/// any published message.
 #[derive(Clone)]
 pub enum Signing {
-    /// Message signing is enabled. All messages will be signed and all received messages will be
-    /// verified.
+    /// Message signing is enabled.
     Enabled(Keypair),
-    /// Message signing is disabled and the associated `PeerId` will be used as the author for any
-    /// published message.
-    Disabled(PeerId),
+    /// Message signing is disabled.
+    ///
+    /// NOTE: The default validation settings are to require signatures. The [`ValidationSetting`]
+    /// should be updated in the [`GossipsubConfig`] to allow for unsigned messages.
+    Disabled,
 }
 
 /// Network behaviour that handles the gossipsub protocol.
+///
+/// NOTE: Initialisation requires a [`Signing`] and [`GossipsubConfig`] instance. If Signing is set to
+/// disabled, the [`ValidationSetting`] in the config should be adjusted to an appropriate level to
+/// accept unsigned messages.
 pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
@@ -114,6 +116,11 @@ impl Gossipsub {
     /// Creates a `Gossipsub` struct given a set of parameters specified by via a `GossipsubConfig`.
     pub fn new(signing: Signing, config: GossipsubConfig) -> Self {
         // Set up the router given the configuration settings.
+
+        // We do not allow configurations where a published message would also be rejected if it
+        // were received locally.
+        config.validate_privacy_validation();
+        validate_config(&signing, &config);
 
         // Set up the author and inlined key if required.
         let (message_author, keypair, inlined_key) = match signing {
@@ -1281,4 +1288,23 @@ pub enum GossipsubEvent {
         /// The topic it has subscribed from.
         topic: TopicHash,
     },
+}
+
+/// Validates the combination of signing, privacy and message validation to ensure the
+/// configuration will not reject published messages.
+fn validate_config(signing: &Signing, config: &GossipsubConfig) {
+    match signing {
+        Signing::Enabled(_) => {
+            if let PrivacySetting::RandomAuthor | PrivacySetting::Anonymous = config.privacy_mode {
+                panic!("Cannot enable message signing without an author or with a random author. Adjust the PrivacySetting in the configuration.");
+            }
+
+            // Config validation prevents anonymous validation.
+        }
+        Signing::Disabled => {
+            if let ValidationSetting::Strict = config.validation_mode {
+                panic!("Cannot disable signing with message validation set to `Strict`. Adjust the ValidationSetting in the configuration.");
+            }
+        }
+    }
 }
