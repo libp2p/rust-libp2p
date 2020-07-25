@@ -32,11 +32,11 @@ message ControlMessage {
 
 message ControlIHave {
 	optional string topic_id = 1;
-	repeated string message_ids = 2;
+	repeated bytes message_ids = 2;
 }
 
 message ControlIWant {
-	repeated string message_ids= 1;
+	repeated bytes message_ids= 1;
 }
 
 message ControlGraft {

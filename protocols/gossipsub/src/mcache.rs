@@ -62,7 +62,7 @@ impl MessageCache {
             // default message id is: source + sequence number
             let mut source_string = message.source.to_base58();
             source_string.push_str(&message.sequence_number.to_string());
-            MessageId(source_string)
+            MessageId::from(source_string)
         };
         MessageCache {
             gossip,
@@ -160,7 +160,7 @@ mod tests {
             // default message id is: source + sequence number
             let mut source_string = message.source.to_base58();
             source_string.push_str(&message.sequence_number.to_string());
-            MessageId(source_string)
+            MessageId::from(source_string)
         };
         let x: usize = 3;
         let mc = MessageCache::new(x, 5, default_id);
@@ -207,7 +207,7 @@ mod tests {
         mc.put(m.clone());
 
         // Try to get an incorrect ID
-        let wrong_id = MessageId(String::from("wrongid"));
+        let wrong_id = MessageId::new(b"wrongid");
         let fetched = mc.get(&wrong_id);
         assert_eq!(fetched.is_none(), true);
     }
@@ -218,7 +218,7 @@ mod tests {
         let mc = MessageCache::new_default(10, 15);
 
         // Try to get an incorrect ID
-        let wrong_string = MessageId(String::from("imempty"));
+        let wrong_string = MessageId::new(b"imempty");
         let fetched = mc.get(&wrong_string);
         assert_eq!(fetched.is_none(), true);
     }

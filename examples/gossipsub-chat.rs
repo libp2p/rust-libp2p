@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let message_id_fn = |message: &GossipsubMessage| {
             let mut s = DefaultHasher::new();
             message.data.hash(&mut s);
-            MessageId(s.finish().to_string())
+            MessageId::from(s.finish().to_string())
         };
 
         // set custom gossipsub

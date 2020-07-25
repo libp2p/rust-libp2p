@@ -151,7 +151,7 @@ impl Default for GossipsubConfig {
                 // default message id is: source + sequence number
                 let mut source_string = message.source.to_base58();
                 source_string.push_str(&message.sequence_number.to_string());
-                MessageId(source_string)
+                MessageId::from(source_string)
             },
         }
     }

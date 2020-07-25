@@ -351,7 +351,7 @@ impl Decoder for GossipsubCodec {
                     message_ids: ihave
                         .message_ids
                         .into_iter()
-                        .map(|x| MessageId(x))
+                        .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
                 .collect();
@@ -363,7 +363,7 @@ impl Decoder for GossipsubCodec {
                     message_ids: iwant
                         .message_ids
                         .into_iter()
-                        .map(|x| MessageId(x))
+                        .map(MessageId::from)
                         .collect::<Vec<_>>(),
                 })
                 .collect();
@@ -410,18 +410,30 @@ impl Decoder for GossipsubCodec {
 }
 
 /// A type for gossipsub message ids.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MessageId(pub String);
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct MessageId(Vec<u8>);
 
-impl std::fmt::Display for MessageId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+impl MessageId {
+    pub fn new(value: &[u8]) -> Self {
+        Self(value.to_vec())
     }
 }
 
-impl Into<String> for MessageId {
-    fn into(self) -> String {
-        self.0.into()
+impl<T: Into<Vec<u8>>> From<T> for MessageId {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl std::fmt::Display for MessageId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex_fmt::HexFmt(&self.0))
+    }
+}
+
+impl std::fmt::Debug for MessageId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MessageId({})", hex_fmt::HexFmt(&self.0))
     }
 }
 
