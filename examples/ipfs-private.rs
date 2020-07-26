@@ -35,7 +35,7 @@ use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{
     core::{either::EitherTransport, transport::upgrade::Version, StreamMuxer},
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, Signing},
+    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify::{Identify, IdentifyEvent},
     identity,
     multiaddr::Protocol,
@@ -243,7 +243,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .max_transmit_size(262144)
             .build();
         let mut behaviour = MyBehaviour {
-            gossipsub: Gossipsub::new(Signing::Enabled(local_key.clone()), gossipsub_config),
+            gossipsub: Gossipsub::new(MessageAuthenticity::Signed(local_key.clone()), gossipsub_config),
             identify: Identify::new(
                 "/ipfs/0.1.0".into(),
                 "rust-ipfs-example".into(),

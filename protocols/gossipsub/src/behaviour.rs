@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{GossipsubConfig, PrivacySetting, ValidationSetting};
+use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::PublishError;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
@@ -43,31 +43,110 @@ use std::{
     collections::HashSet,
     collections::VecDeque,
     collections::{hash_map::HashMap, BTreeSet},
-    iter,
+    fmt, iter,
     sync::Arc,
     task::{Context, Poll},
-    fmt,
 };
 use wasm_timer::{Instant, Interval};
 
 mod tests;
 
-/// Determines message signing is enabled or not.
+/// Determines if published messages should be signed or not.
+///
+/// Without signing, a number of privacy preserving modes can be selected.
+///
+/// NOTE: The default validation settings are to require signatures. The [`ValidationSetting`]
+/// should be updated in the [`GossipsubConfig`] to allow for unsigned messages.
 #[derive(Clone)]
-pub enum Signing {
-    /// Message signing is enabled.
-    Enabled(Keypair),
+pub enum MessageAuthenticity {
+    /// Message signing is enabled. The author will be the owner of the key and the sequence number
+    /// will be a random number.
+    Signed(Keypair),
     /// Message signing is disabled.
     ///
-    /// NOTE: The default validation settings are to require signatures. The [`ValidationSetting`]
-    /// should be updated in the [`GossipsubConfig`] to allow for unsigned messages.
-    Disabled,
+    /// The specified `PeerId` will be used as the author of all published messages. The sequence
+    /// number will be randomized.
+    Author(PeerId),
+    /// Message signing is disabled.
+    ///
+    /// A random `PeerId` will be used when publishing each message. The sequence number will be a
+    /// random number.
+    RandomAuthor,
+    /// Message signing is disabled.
+    ///
+    /// The author of the message and the sequence numbers are excluded from the message.
+    ///
+    /// NOTE: Excluding these fields may make these messages invalid by other nodes who enforce validation of these
+    /// fields. See [`ValidationMode`] in the `GossipsubConfig` for how to customise this for rust-libp2p gossipsub. A custom message_id function will need to be set to prevent all messages from a peer being filtered as duplicates.
+    Anonymous,
+}
+
+impl MessageAuthenticity {
+    /// Returns true if signing is enabled.
+    fn is_signing(&self) -> bool {
+        match self {
+            MessageAuthenticity::Signed(_) => true,
+            _ => false,
+        }
+    }
+
+    fn is_anonymous(&self) -> bool {
+        match self {
+            MessageAuthenticity::Anonymous => true,
+            _ => false,
+        }
+    }
+}
+
+/// A data structure for storing information for publishing messages.
+enum PublishInfo {
+    /// Message signing is enabled and this contains relevant information for publishing
+    /// signed messages.
+    Signing {
+        keypair: Keypair,
+        author: PeerId,
+        inline_key: Option<Vec<u8>>,
+    },
+    // Signing is disabled, but this author is used to publish messages.
+    Author(PeerId),
+    /// The author is radomized each message.
+    RandomAuthor,
+    /// The from and sequence number fields are excluded from the message
+    Anonymous,
+}
+
+impl From<MessageAuthenticity> for PublishInfo {
+    fn from(authenticity: MessageAuthenticity) -> Self {
+        match authenticity {
+            MessageAuthenticity::Signed(keypair) => {
+                let public_key = keypair.public();
+                let key_enc = public_key.clone().into_protobuf_encoding();
+                let key = if key_enc.len() <= 42 {
+                    // The public key can be inlined in [`rpc_proto::Message::from`], so we don't include it
+                    // specifically in the [`rpc_proto::Message::key`] field.
+                    None
+                } else {
+                    // Include the protobuf encoding of the public key in the message.
+                    Some(key_enc)
+                };
+
+                PublishInfo::Signing {
+                    keypair,
+                    author: public_key.into_peer_id(),
+                    inline_key: key,
+                }
+            }
+            MessageAuthenticity::Author(peer_id) => PublishInfo::Author(peer_id),
+            MessageAuthenticity::RandomAuthor => PublishInfo::RandomAuthor,
+            MessageAuthenticity::Anonymous => PublishInfo::Anonymous,
+        }
+    }
 }
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
-/// NOTE: Initialisation requires a [`Signing`] and [`GossipsubConfig`] instance. If Signing is set to
-/// disabled, the [`ValidationSetting`] in the config should be adjusted to an appropriate level to
+/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If message signing is
+/// disabled, the [`ValidationMode`] in the config should be adjusted to an appropriate level to
 /// accept unsigned messages.
 pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
@@ -79,12 +158,8 @@ pub struct Gossipsub {
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
 
-    /// The `PeerId` that will be the source of published messages. This can be set to an arbitrary
-    /// PeerId when the config is initialised via the `Signing` enum.
-    message_author: PeerId,
-
-    /// An optional keypair for message signing.
-    keypair: Option<libp2p_core::identity::Keypair>,
+    /// Information used for publishing messages.
+    publish_info: PublishInfo,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
     topic_peers: HashMap<TopicHash, BTreeSet<PeerId>>,
@@ -106,45 +181,23 @@ pub struct Gossipsub {
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
-
-    /// The public `peer_id` to add to messages if signing is enabled and the current libp2p key is
-    /// not inlined in the `PeerId`.  
-    key: Option<Vec<u8>>,
 }
 
 impl Gossipsub {
     /// Creates a `Gossipsub` struct given a set of parameters specified by via a `GossipsubConfig`.
-    pub fn new(signing: Signing, config: GossipsubConfig) -> Self {
+    pub fn new(privacy: MessageAuthenticity, config: GossipsubConfig) -> Self {
         // Set up the router given the configuration settings.
 
         // We do not allow configurations where a published message would also be rejected if it
         // were received locally.
-        config.validate_privacy_validation();
-        validate_config(&signing, &config);
+        validate_config(&privacy, &config.validation_mode);
 
-        // Set up the author and inlined key if required.
-        let (message_author, keypair, inlined_key) = match signing {
-            Signing::Enabled(kp) => {
-                let public_key = kp.public();
-                let key_enc = public_key.clone().into_protobuf_encoding();
-                let key = if key_enc.len() <= 42 {
-                    // The public key can be inlined in [`rpc_proto::Message::from`], so we don't include it
-                    // specifically in the [`rpc_proto::Message::key`] field.
-                    None
-                } else {
-                    // Include the protobuf encoding of the public key in the message.
-                    Some(key_enc)
-                };
-                (public_key.into_peer_id(), Some(kp), key)
-            }
-            Signing::Disabled(peer_id) => (peer_id, None, None),
-        };
+        // Set up message publishing parameters.
 
         Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
-            message_author,
-            keypair,
+            publish_info: privacy.into(),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             mesh: HashMap::new(),
@@ -159,7 +212,6 @@ impl Gossipsub {
                 Instant::now() + config.heartbeat_initial_delay,
                 config.heartbeat_interval,
             ),
-            key: inlined_key,
             config,
         }
     }
@@ -226,7 +278,7 @@ impl Gossipsub {
             });
 
             for peer in peer_list {
-                debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
+                debug!("Sending UNSUBSCRIBE to peer: {}", peer.to_string());
                 self.send_message(peer, event.clone());
             }
         }
@@ -269,8 +321,7 @@ impl Gossipsub {
         debug!("Publishing message: {:?}", msg_id);
 
         // Forward the message to mesh peers.
-        let message_source = &self.message_author.clone();
-        let mesh_peers_sent = self.forward_msg(message.clone(), message_source);
+        let mesh_peers_sent = self.forward_msg(message.clone(), None);
 
         let mut recipient_peers = HashSet::new();
         for topic_hash in &message.topics {
@@ -344,7 +395,7 @@ impl Gossipsub {
                 return false;
             }
         };
-        self.forward_msg(message, propagation_source);
+        self.forward_msg(message, Some(propagation_source));
         true
     }
 
@@ -497,11 +548,14 @@ impl Gossipsub {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
             let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
-            self.send_message(peer_id.clone(), GossipsubRpc {
-                subscriptions: Vec::new(),
-                messages: message_list,
-                control_msgs: Vec::new(),
-            });
+            self.send_message(
+                peer_id.clone(),
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: message_list,
+                    control_msgs: Vec::new(),
+                },
+            );
         }
         debug!("Completed IWANT handling for peer: {:?}", peer_id);
     }
@@ -539,11 +593,14 @@ impl Gossipsub {
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer: {:?}",
                 peer_id
             );
-            self.send_message(peer_id.clone(), GossipsubRpc {
-                subscriptions: Vec::new(),
-                messages: Vec::new(),
-                control_msgs: prune_messages,
-            });
+            self.send_message(
+                peer_id.clone(),
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: prune_messages,
+                },
+            );
         }
         debug!("Completed GRAFT handling for peer: {:?}", peer_id);
     }
@@ -591,7 +648,7 @@ impl Gossipsub {
         // forward the message to mesh peers, if no validation is required
         if !self.config.manual_propagation {
             let message_id = (self.config.message_id_fn)(&msg);
-            self.forward_msg(msg, propagation_source);
+            self.forward_msg(msg, Some(propagation_source));
             debug!("Completed message handling for message: {:?}", message_id);
         }
     }
@@ -882,11 +939,14 @@ impl Gossipsub {
             grafts.append(&mut prunes);
 
             // send the control messages
-            self.send_message(peer.clone(), GossipsubRpc {
-                subscriptions: Vec::new(),
-                messages: Vec::new(),
-                control_msgs: grafts,
-            });
+            self.send_message(
+                peer.clone(),
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: grafts,
+                },
+            );
         }
 
         // handle the remaining prunes
@@ -897,17 +957,20 @@ impl Gossipsub {
                     topic_hash: topic_hash.clone(),
                 })
                 .collect();
-            self.send_message(peer.clone(), GossipsubRpc {
-                subscriptions: Vec::new(),
-                messages: Vec::new(),
-                control_msgs: remaining_prunes,
-            });
+            self.send_message(
+                peer.clone(),
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: remaining_prunes,
+                },
+            );
         }
     }
 
     /// Helper function which forwards a message to mesh\[topic\] peers.
     /// Returns true if at least one peer was messaged.
-    fn forward_msg(&mut self, message: GossipsubMessage, source: &PeerId) -> bool {
+    fn forward_msg(&mut self, message: GossipsubMessage, source: Option<&PeerId>) -> bool {
         let msg_id = (self.config.message_id_fn)(&message);
         debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
@@ -917,7 +980,7 @@ impl Gossipsub {
             // mesh
             if let Some(mesh_peers) = self.mesh.get(&topic) {
                 for peer_id in mesh_peers {
-                    if peer_id != source {
+                    if Some(peer_id) != source {
                         recipient_peers.insert(peer_id.clone());
                     }
                 }
@@ -949,41 +1012,84 @@ impl Gossipsub {
         topics: Vec<TopicHash>,
         data: Vec<u8>,
     ) -> Result<GossipsubMessage, SigningError> {
-        let sequence_number: u64 = rand::random();
+        match &self.publish_info {
+            PublishInfo::Signing {
+                ref keypair,
+                author,
+                inline_key,
+            } => {
+                // Build and sign the message
+                let sequence_number: u64 = rand::random();
 
-        // If a signature is required, generate it
-        let signature = if let Some(keypair) = self.keypair.as_ref() {
-            let message = rpc_proto::Message {
-                from: Some(self.message_author.clone().into_bytes()),
-                data: Some(data.clone()),
-                seqno: Some(sequence_number.to_be_bytes().to_vec()),
-                topic_ids: topics.clone().into_iter().map(|t| t.into()).collect(),
-                signature: None,
-                key: None,
-            };
+                let signature = {
+                    let message = rpc_proto::Message {
+                        from: Some(author.clone().into_bytes()),
+                        data: Some(data.clone()),
+                        seqno: Some(sequence_number.to_be_bytes().to_vec()),
+                        topic_ids: topics.clone().into_iter().map(|t| t.into()).collect(),
+                        signature: None,
+                        key: None,
+                    };
 
-            let mut buf = Vec::with_capacity(message.encoded_len());
-            message
-                .encode(&mut buf)
-                .expect("Buffer has sufficient capacity");
-            // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
-            let mut signature_bytes = SIGNING_PREFIX.to_vec();
-            signature_bytes.extend_from_slice(&buf);
-            Some(keypair.sign(&signature_bytes)?)
-        } else {
-            None
-        };
+                    let mut buf = Vec::with_capacity(message.encoded_len());
+                    message
+                        .encode(&mut buf)
+                        .expect("Buffer has sufficient capacity");
 
-        Ok(GossipsubMessage {
-            source: self.message_author.clone(),
-            data,
-            // To be interoperable with the go-implementation this is treated as a 64-bit
-            // big-endian uint.
-            sequence_number,
-            topics,
-            signature,
-            key: self.key.clone(),
-        })
+                    // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
+                    let mut signature_bytes = SIGNING_PREFIX.to_vec();
+                    signature_bytes.extend_from_slice(&buf);
+                    Some(keypair.sign(&signature_bytes)?)
+                };
+
+                Ok(GossipsubMessage {
+                    source: Some(author.clone()),
+                    data,
+                    // To be interoperable with the go-implementation this is treated as a 64-bit
+                    // big-endian uint.
+                    sequence_number: Some(sequence_number),
+                    topics,
+                    signature,
+                    key: inline_key.clone(),
+                })
+            }
+            PublishInfo::Author(peer_id) => {
+                Ok(GossipsubMessage {
+                    source: Some(peer_id.clone()),
+                    data,
+                    // To be interoperable with the go-implementation this is treated as a 64-bit
+                    // big-endian uint.
+                    sequence_number: rand::random(),
+                    topics,
+                    signature: None,
+                    key: None,
+                })
+            }
+            PublishInfo::RandomAuthor => {
+                Ok(GossipsubMessage {
+                    source: Some(PeerId::random()),
+                    data,
+                    // To be interoperable with the go-implementation this is treated as a 64-bit
+                    // big-endian uint.
+                    sequence_number: rand::random(),
+                    topics,
+                    signature: None,
+                    key: None,
+                })
+            }
+            PublishInfo::Anonymous => {
+                Ok(GossipsubMessage {
+                    source: None,
+                    data,
+                    // To be interoperable with the go-implementation this is treated as a 64-bit
+                    // big-endian uint.
+                    sequence_number: None,
+                    topics,
+                    signature: None,
+                    key: None,
+                })
+            }
+        }
     }
 
     /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
@@ -1039,22 +1145,26 @@ impl Gossipsub {
     /// Takes each control action mapping and turns it into a message
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
-            self.send_message(peer, GossipsubRpc {
-                subscriptions: Vec::new(),
-                messages: Vec::new(),
-                control_msgs: controls,
-            });
+            self.send_message(
+                peer,
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: controls,
+                },
+            );
         }
     }
 
     /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
     fn send_message(&mut self, peer_id: PeerId, message: impl Into<Arc<GossipsubRpc>>) {
-        self.events.push_back(NetworkBehaviourAction::NotifyHandler {
-            peer_id,
-            event: message.into(),
-            handler: NotifyHandler::Any,
-        })
+        self.events
+            .push_back(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                event: message.into(),
+                handler: NotifyHandler::Any,
+            })
     }
 }
 
@@ -1063,14 +1173,10 @@ impl NetworkBehaviour for Gossipsub {
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        // let the handler know if we should verify signatures. If message signing is enabled, we
-        // verify signatures of messages.
-        let verify_signatures = self.keypair.is_some();
-
         GossipsubHandler::new(
             self.config.protocol_id.clone(),
             self.config.max_transmit_size,
-            verify_signatures,
+            self.config.validation_mode.clone(),
         )
     }
 
@@ -1091,11 +1197,14 @@ impl NetworkBehaviour for Gossipsub {
 
         if !subscriptions.is_empty() {
             // send our subscriptions to the peer
-            self.send_message(id.clone(), GossipsubRpc {
-                messages: Vec::new(),
-                subscriptions,
-                control_msgs: Vec::new(),
-            });
+            self.send_message(
+                id.clone(),
+                GossipsubRpc {
+                    messages: Vec::new(),
+                    subscriptions,
+                    control_msgs: Vec::new(),
+                },
+            );
         }
 
         // For the time being assume all gossipsub peers
@@ -1199,34 +1308,33 @@ impl NetworkBehaviour for Gossipsub {
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(
-                match event {
+            return Poll::Ready(match event {
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event: send_event,
+                } => {
+                    // clone send event reference if others references are present
+                    let event = Arc::try_unwrap(send_event).unwrap_or_else(|e| (*e).clone());
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id,
+                        event,
                         handler,
-                        event: send_event,
-                    } => {
-                        // clone send event reference if others references are present
-                        let event = Arc::try_unwrap(send_event).unwrap_or_else(|e| (*e).clone());
-                        NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            event,
-                            handler,
-                        }
-                    },
-                    NetworkBehaviourAction::GenerateEvent(e) => {
-                        NetworkBehaviourAction::GenerateEvent(e)
                     }
-                    NetworkBehaviourAction::DialAddress { address } => {
-                        NetworkBehaviourAction::DialAddress { address }
-                    }
-                    NetworkBehaviourAction::DialPeer { peer_id, condition } => {
-                        NetworkBehaviourAction::DialPeer { peer_id, condition }
-                    }
-                    NetworkBehaviourAction::ReportObservedAddr { address } => {
-                        NetworkBehaviourAction::ReportObservedAddr { address }
-                    }
-                })
+                }
+                NetworkBehaviourAction::GenerateEvent(e) => {
+                    NetworkBehaviourAction::GenerateEvent(e)
+                }
+                NetworkBehaviourAction::DialAddress { address } => {
+                    NetworkBehaviourAction::DialAddress { address }
+                }
+                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
+                    NetworkBehaviourAction::DialPeer { peer_id, condition }
+                }
+                NetworkBehaviourAction::ReportObservedAddr { address } => {
+                    NetworkBehaviourAction::ReportObservedAddr { address }
+                }
+            });
         }
 
         while let Poll::Ready(Some(())) = self.heartbeat.poll_next_unpin(cx) {
@@ -1262,7 +1370,6 @@ impl fmt::Debug for GossipsubRpc {
         }
         b.finish()
     }
-
 }
 
 /// Event that can happen on the gossipsub behaviour.
@@ -1292,19 +1399,26 @@ pub enum GossipsubEvent {
 
 /// Validates the combination of signing, privacy and message validation to ensure the
 /// configuration will not reject published messages.
-fn validate_config(signing: &Signing, config: &GossipsubConfig) {
-    match signing {
-        Signing::Enabled(_) => {
-            if let PrivacySetting::RandomAuthor | PrivacySetting::Anonymous = config.privacy_mode {
-                panic!("Cannot enable message signing without an author or with a random author. Adjust the PrivacySetting in the configuration.");
+fn validate_config(authenticity: &MessageAuthenticity, validation_mode: &ValidationMode) {
+    match validation_mode {
+        ValidationMode::Anonymous => {
+            if authenticity.is_signing() {
+                panic!("Cannot enable message signing with an Anonymous validation mode. Consider changing either the ValidationMode or MessageAuthenticity");
             }
 
-            // Config validation prevents anonymous validation.
-        }
-        Signing::Disabled => {
-            if let ValidationSetting::Strict = config.validation_mode {
-                panic!("Cannot disable signing with message validation set to `Strict`. Adjust the ValidationSetting in the configuration.");
+            if !authenticity.is_anonymous() {
+                panic!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config");
             }
         }
+        ValidationMode::Strict => {
+            if !authenticity.is_signing() {
+                panic!(
+                    "Messages will be
+                published unsigned and incoming unsigned messages will be rejected. Consider adjusting
+                the validation or privacy settings in the config"
+                );
+            }
+        }
+        _ => {}
     }
 }

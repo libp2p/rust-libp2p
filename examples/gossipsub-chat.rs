@@ -50,7 +50,7 @@ use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
-use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Signing, Topic};
+use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, MessageAuthenticity, Topic};
 use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .build();
         // build a gossipsub network behaviour
         let mut gossipsub =
-            gossipsub::Gossipsub::new(Signing::Enabled(local_key), gossipsub_config);
+            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config);
         gossipsub.subscribe(topic.clone());
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };

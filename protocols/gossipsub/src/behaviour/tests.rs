@@ -37,7 +37,7 @@ mod tests {
         // generate a default GossipsubConfig with signing
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(Signing::Enabled(keypair), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Signed(keypair), gs_config);
 
         let mut topic_hashes = vec![];
 
@@ -548,10 +548,10 @@ mod tests {
     /// Test Gossipsub.get_random_peers() function
     fn test_get_random_peers() {
         // generate a default GossipsubConfig
-        let key = libp2p_core::identity::Keypair::generate_secp256k1();
-        let gs_config = GossipsubConfig::default();
+        let mut gs_config = GossipsubConfig::default();
+        gs_config.validation_mode = ValidationMode::Anonymous;
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(Signing::Enabled(key), gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config);
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test".into()).no_hash().clone();
@@ -596,9 +596,9 @@ mod tests {
         let id = gs.config.message_id_fn;
 
         let message = GossipsubMessage {
-            source: peers[11].clone(),
+            source: Some(peers[11].clone()),
             data: vec![1, 2, 3, 4],
-            sequence_number: 1u64,
+            sequence_number: Some(1u64),
             topics: Vec::new(),
             signature: None,
             key: None,
@@ -637,9 +637,9 @@ mod tests {
         // perform 10 memshifts and check that it leaves the cache
         for shift in 1..10 {
             let message = GossipsubMessage {
-                source: peers[11].clone(),
+                source: Some(peers[11].clone()),
                 data: vec![1, 2, 3, 4],
-                sequence_number: shift,
+                sequence_number: Some(shift),
                 topics: Vec::new(),
                 signature: None,
                 key: None,

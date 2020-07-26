@@ -33,7 +33,9 @@ use libp2p_core::{
     identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
     Multiaddr, Transport,
 };
-use libp2p_gossipsub::{Gossipsub, GossipsubConfigBuilder, GossipsubEvent, Signing, Topic};
+use libp2p_gossipsub::{
+    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity, Topic, ValidationMode,
+};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
@@ -154,8 +156,9 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     let config = GossipsubConfigBuilder::new()
         .heartbeat_initial_delay(Duration::from_millis(50))
         .heartbeat_interval(Duration::from_millis(100))
+        .validation_mode(ValidationMode::Permissive)
         .build();
-    let behaviour = Gossipsub::new(Signing::Disabled(peer_id.clone()), config);
+    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id.clone()), config);
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();

@@ -55,23 +55,6 @@ impl MessageCache {
         }
     }
 
-    /// Creates a `MessageCache` with a default message id function.
-    #[allow(dead_code)]
-    pub fn new_default(gossip: usize, history_capacity: usize) -> MessageCache {
-        let default_id = |message: &GossipsubMessage| {
-            // default message id is: source + sequence number
-            let mut source_string = message.source.to_base58();
-            source_string.push_str(&message.sequence_number.to_string());
-            MessageId::from(source_string)
-        };
-        MessageCache {
-            gossip,
-            msgs: HashMap::default(),
-            history: vec![Vec::new(); history_capacity],
-            msg_id: default_id,
-        }
-    }
-
     /// Put a message into the memory cache.
     ///
     /// Returns the message if it already exists.
@@ -138,9 +121,9 @@ mod tests {
 
     fn gen_testm(x: u64, topics: Vec<TopicHash>) -> GossipsubMessage {
         let u8x: u8 = x as u8;
-        let source = PeerId::random();
+        let source = Some(PeerId::random());
         let data: Vec<u8> = vec![u8x];
-        let sequence_number = x;
+        let sequence_number = Some(x);
 
         let m = GossipsubMessage {
             source,
@@ -153,17 +136,22 @@ mod tests {
         m
     }
 
+    fn new_cache(gossip_size: usize, history: usize) -> MessageCache {
+        let default_id = |message: &GossipsubMessage| {
+            // default message id is: source + sequence number
+            let mut source_string = message.source.as_ref().unwrap().to_base58();
+            source_string.push_str(&message.sequence_number.unwrap().to_string());
+            MessageId::from(source_string)
+        };
+
+        MessageCache::new(gossip_size, history, default_id)
+    }
+
     #[test]
     /// Test that the message cache can be created.
     fn test_new_cache() {
-        let default_id = |message: &GossipsubMessage| {
-            // default message id is: source + sequence number
-            let mut source_string = message.source.to_base58();
-            source_string.push_str(&message.sequence_number.to_string());
-            MessageId::from(source_string)
-        };
         let x: usize = 3;
-        let mc = MessageCache::new(x, 5, default_id);
+        let mc = new_cache(x, 5);
 
         assert_eq!(mc.gossip, x);
     }
@@ -171,7 +159,7 @@ mod tests {
     #[test]
     /// Test you can put one message and get one.
     fn test_put_get_one() {
-        let mut mc = MessageCache::new_default(10, 15);
+        let mut mc = new_cache(10, 15);
 
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
@@ -197,7 +185,7 @@ mod tests {
     #[test]
     /// Test attempting to 'get' with a wrong id.
     fn test_get_wrong() {
-        let mut mc = MessageCache::new_default(10, 15);
+        let mut mc = new_cache(10, 15);
 
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
@@ -215,7 +203,7 @@ mod tests {
     #[test]
     /// Test attempting to 'get' empty message cache.
     fn test_get_empty() {
-        let mc = MessageCache::new_default(10, 15);
+        let mc = new_cache(10, 15);
 
         // Try to get an incorrect ID
         let wrong_string = MessageId::new(b"imempty");
@@ -226,7 +214,7 @@ mod tests {
     #[test]
     /// Test adding a message with no topics.
     fn test_no_topic_put() {
-        let mut mc = MessageCache::new_default(3, 5);
+        let mut mc = new_cache(3, 5);
 
         // Build the message
         let m = gen_testm(1, vec![]);
@@ -244,7 +232,7 @@ mod tests {
     #[test]
     /// Test shift mechanism.
     fn test_shift() {
-        let mut mc = MessageCache::new_default(1, 5);
+        let mut mc = new_cache(1, 5);
 
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
@@ -268,7 +256,7 @@ mod tests {
     #[test]
     /// Test Shift with no additions.
     fn test_empty_shift() {
-        let mut mc = MessageCache::new_default(1, 5);
+        let mut mc = new_cache(1, 5);
 
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();
@@ -294,7 +282,7 @@ mod tests {
     #[test]
     /// Test shift to see if the last history messages are removed.
     fn test_remove_last_from_shift() {
-        let mut mc = MessageCache::new_default(4, 5);
+        let mut mc = new_cache(4, 5);
 
         let topic1_hash = Topic::new("topic1".into()).no_hash().clone();
         let topic2_hash = Topic::new("topic2".into()).no_hash().clone();

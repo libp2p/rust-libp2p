@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::GossipsubRpc;
+use crate::config::ValidationMode;
 use crate::rpc_proto;
 use crate::topic::TopicHash;
 use byteorder::{BigEndian, ByteOrder};
@@ -42,8 +43,8 @@ pub struct ProtocolConfig {
     protocol_id: Cow<'static, [u8]>,
     /// The maximum transmit size for a packet.
     max_transmit_size: usize,
-    /// Determines whether to check and verify signatures of incoming messages.
-    verify_signatures: bool,
+    /// Determines the level of validation to be done on incoming messages.
+    validation_mode: ValidationMode,
 }
 
 impl ProtocolConfig {
@@ -52,12 +53,12 @@ impl ProtocolConfig {
     pub fn new(
         protocol_id: impl Into<Cow<'static, [u8]>>,
         max_transmit_size: usize,
-        verify_signatures: bool,
+        validation_mode: ValidationMode,
     ) -> ProtocolConfig {
         ProtocolConfig {
             protocol_id: protocol_id.into(),
             max_transmit_size,
-            verify_signatures,
+            validation_mode,
         }
     }
 }
@@ -84,7 +85,7 @@ where
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok(Framed::new(
             socket,
-            GossipsubCodec::new(length_codec, self.verify_signatures),
+            GossipsubCodec::new(length_codec, self.validation_mode),
         )))
     }
 }
@@ -102,7 +103,7 @@ where
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok(Framed::new(
             socket,
-            GossipsubCodec::new(length_codec, self.verify_signatures),
+            GossipsubCodec::new(length_codec, self.validation_mode),
         )))
     }
 }
@@ -112,15 +113,15 @@ where
 pub struct GossipsubCodec {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
     length_codec: codec::UviBytes,
-    /// Determines whether to check and verify signatures of incoming messages.
-    verify_signatures: bool,
+    /// Determines the level of validation performed on incoming messages.
+    validation_mode: ValidationMode,
 }
 
 impl GossipsubCodec {
-    pub fn new(length_codec: codec::UviBytes, verify_signatures: bool) -> Self {
+    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> Self {
         GossipsubCodec {
             length_codec,
-            verify_signatures,
+            validation_mode,
         }
     }
 
@@ -199,9 +200,9 @@ impl Encoder for GossipsubCodec {
 
         for message in item.messages.into_iter() {
             let message = rpc_proto::Message {
-                from: Some(message.source.into_bytes()),
+                from: message.source.map(|m| m.into_bytes()),
                 data: Some(message.data),
-                seqno: Some(message.sequence_number.to_be_bytes().to_vec()),
+                seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
                 topic_ids: message.topics.into_iter().map(TopicHash::into).collect(),
                 signature: message.signature,
                 key: message.key,
@@ -297,8 +298,48 @@ impl Decoder for GossipsubCodec {
 
         let mut messages = Vec::with_capacity(rpc.publish.len());
         for message in rpc.publish.into_iter() {
+            let mut verify_signature = false;
+            let mut verify_sequence_no = false;
+            let mut verify_source = false;
+
+            match self.validation_mode {
+                ValidationMode::Strict => {
+                    // Validate everything
+                    verify_signature = true;
+                    verify_sequence_no = true;
+                    verify_source = true;
+                }
+                ValidationMode::Permissive => {
+                    // If the fields exist, validate them
+                    if message.signature.is_some() {
+                        verify_signature = true;
+                    }
+                    if message.seqno.is_some() {
+                        verify_sequence_no = true;
+                    }
+                    if message.from.is_some() {
+                        verify_source = true;
+                    }
+                }
+                ValidationMode::Anonymous => {
+                    if message.signature.is_some() {
+                        warn!("Message dropped. Signature field was non-empty and anonymous validation mode is set");
+                        return Ok(None);
+                    }
+                    if message.seqno.is_some() {
+                        warn!("Message dropped. Sequence number was non-empty and anonymous validation mode is set");
+                        return Ok(None);
+                    }
+                    if message.from.is_some() {
+                        warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        return Ok(None);
+                    }
+                }
+                ValidationMode::None => {}
+            }
+
             // verify message signatures if required
-            if self.verify_signatures {
+            if verify_signature {
                 // If a single message is unsigned, we will drop all of them
                 // Most implementations should not have a list of mixed signed/not-signed messages in a single RPC
                 // NOTE: Invalid messages are simply dropped with a warning log. We don't throw an
@@ -311,24 +352,38 @@ impl Decoder for GossipsubCodec {
             }
 
             // ensure the sequence number is a u64
-            let seq_no = message.seqno.ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "sequence number was not provided",
+            let sequence_number = if verify_sequence_no {
+                let seq_no = message.seqno.ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "sequence number was not provided",
+                    )
+                })?;
+                if seq_no.len() != 8 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "sequence number has an incorrect size",
+                    ));
+                }
+                Some(BigEndian::read_u64(&seq_no))
+            } else {
+                None
+            };
+
+            let source = if verify_source {
+                Some(
+                    PeerId::from_bytes(message.from.unwrap_or_default()).map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id")
+                    })?,
                 )
-            })?;
-            if seq_no.len() != 8 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "sequence number has an incorrect size",
-                ));
-            }
+            } else {
+                None
+            };
 
             messages.push(GossipsubMessage {
-                source: PeerId::from_bytes(message.from.unwrap_or_default())
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id"))?,
+                source,
                 data: message.data.unwrap_or_default(),
-                sequence_number: BigEndian::read_u64(&seq_no),
+                sequence_number,
                 topics: message
                     .topic_ids
                     .into_iter()
@@ -441,13 +496,13 @@ impl std::fmt::Debug for MessageId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {
     /// Id of the peer that published this message.
-    pub source: PeerId,
+    pub source: Option<PeerId>,
 
     /// Content of the message. Its meaning is out of scope of this library.
     pub data: Vec<u8>,
 
     /// A random sequence number.
-    pub sequence_number: u64,
+    pub sequence_number: Option<u64>,
 
     /// List of topics this message belongs to.
     ///
@@ -524,7 +579,10 @@ mod tests {
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
             let config = GossipsubConfig::default();
-            let gs = Gossipsub::new(crate::Signing::Enabled(keypair.0.clone()), config);
+            let gs = Gossipsub::new(
+                crate::MessageAuthenticity::Signed(keypair.0.clone()),
+                config,
+            );
             let data = (0..g.gen_range(1, 1024)).map(|_| g.gen()).collect();
             let topics = Vec::arbitrary(g)
                 .into_iter()
@@ -582,7 +640,7 @@ mod tests {
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), true);
+            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
             let mut buf = BytesMut::new();
             codec.encode(rpc.clone(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();

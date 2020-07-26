@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::GossipsubRpc;
+use crate::config::ValidationMode;
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use futures::prelude::*;
 use futures_codec::Framed;
@@ -83,13 +84,13 @@ impl GossipsubHandler {
     pub fn new(
         protocol_id: impl Into<Cow<'static, [u8]>>,
         max_transmit_size: usize,
-        verify_signatures: bool,
+        validation_mode: ValidationMode,
     ) -> Self {
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
                 protocol_id,
                 max_transmit_size,
-                verify_signatures,
+                validation_mode,
             )),
             inbound_substream: None,
             outbound_substream: None,

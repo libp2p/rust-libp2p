@@ -19,35 +19,17 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{GossipsubMessage, MessageId};
+use libp2p_core::PeerId;
 use std::borrow::Cow;
 use std::time::Duration;
 
-/// The types of privacy settings that can be employed by gossipsub. These are related to how
-/// anonymous the publisher of the message would like to be.
-#[derive(Debug, Clone)]
-pub enum PrivacySetting {
-    /// This is the default setting. The PeerId publishing the message will be broadcast with the
-    /// message along with a random sequence number.
-    None,
-    /// A randomized `PeerId` will be used as the publisher of a message.
-    ///
-    /// NOTE: This mode cannot be used in conjunction with message signing.
-    RandomAuthor,
-    /// The author of the message and the sequence numbers are excluded from the message.
-    ///
-    /// NOTE: This mode cannot be used in conjunction with message signing. Also not that excluding
-    /// these fields may make these messages invalid by other nodes who enforce validation of these
-    /// fields. See [`ValidationSetting`] for how to customise this for rust-libp2p gossipsub.
-    Anonymous,
-}
-
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
-pub enum ValidationSetting {
+pub enum ValidationMode {
     /// This is the default setting. This requires the message author to be a valid `PeerId` and to
     /// be present as well as the sequence number. All messages must have valid signatures.
     ///
-    /// NOTE: This setting will reject messages from nodes using `PrivacySetting::Anonymous` and
+    /// NOTE: This setting will reject messages from nodes using `PrivacyMode::Anonymous` and
     /// all messages that do not have signatures.
     Strict,
     /// This setting permits messages that have no author, sequence number or signature. If any of
@@ -110,13 +92,9 @@ pub struct GossipsubConfig {
     /// once validated (default is `false`).
     pub manual_propagation: bool,
 
-    /// Determines the level of privacy for the node when publishing a message. See [`PrivacySetting`] for
-    /// the available types. The default is PrivacySetting::None.
-    pub privacy_mode: PrivacySetting,
-
-    /// Determines the level of validation used when receiving messages. See [`ValidationSetting`]
-    /// for the available types. The default is ValidationSetting::Strict.
-    pub validation_mode: ValidationSetting,
+    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
+    /// for the available types. The default is ValidationMode::Strict.
+    pub validation_mode: ValidationMode,
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
     /// The default value is to concatenate the source peer id with a sequence number. Setting this
@@ -145,37 +123,20 @@ impl Default for GossipsubConfig {
             max_transmit_size: 2048,
             hash_topics: false, // default compatibility with floodsub
             manual_propagation: false,
-            privacy_mode: PrivacySetting::None,
-            validation_mode: ValidationSetting::Strict,
+            validation_mode: ValidationMode::Strict,
             message_id_fn: |message| {
                 // default message id is: source + sequence number
-                let mut source_string = message.source.to_base58();
-                source_string.push_str(&message.sequence_number.to_string());
+                // NOTE: If either the peer_id or source is not provided, we set to 0;
+                let mut source_string = if let Some(peer_id) = message.source.as_ref() {
+                    peer_id.to_base58()
+                } else {
+                    PeerId::from_bytes(vec![0, 1, 0])
+                        .expect("Valid peer id")
+                        .to_base58()
+                };
+                source_string.push_str(&message.sequence_number.unwrap_or_default().to_string());
                 MessageId::from(source_string)
             },
-        }
-    }
-}
-
-impl GossipsubConfig {
-    // Prevent users from using settings where the published messages will be rejected based on combinations of privacy and validation.
-    pub fn validate_privacy_validation(&self) {
-        match (&self.validation_mode, &self.privacy_mode) {
-            (ValidationSetting::Strict, PrivacySetting::RandomAuthor) => panic!(
-                "Messages will be
-            published unsigned and incoming unsigned messages will be rejected. Consider adjusting
-            the validation or privacy settings in the config"
-            ),
-            (ValidationSetting::Strict, PrivacySetting::Anonymous) => {
-                panic!("Messages will not be signed or contain an author, but incoming messages requires this. Consider adjusting the validation or privacy settings in the config")
-            }
-            (ValidationSetting::Anonymous, PrivacySetting::None) => {
-                panic!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config")
-            }
-            (ValidationSetting::Anonymous, PrivacySetting::RandomAuthor) => {
-                panic!("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config")
-            }
-            (_, _) => {}
         }
     }
 }
@@ -303,17 +264,10 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Determines the level of privacy for the node when publishing a message. See [`PrivacySetting`] for
-    /// the available types.
-    pub fn privacy_mode(&mut self, privacy_setting: PrivacySetting) -> &mut Self {
-        self.config.privacy_mode = privacy_setting;
-        self
-    }
-
-    /// Determines the level of validation used when receiving messages. See [`ValidationSetting`]
-    /// for the available types. The default is ValidationSetting::Strict.
-    pub fn validation_mode(&mut self, validation_setting: ValidationSetting) -> &mut Self {
-        self.config.validation_mode = validation_setting;
+    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
+    /// for the available types. The default is ValidationMode::Strict.
+    pub fn validation_mode(&mut self, validation_mode: ValidationMode) -> &mut Self {
+        self.config.validation_mode = validation_mode;
         self
     }
 
@@ -332,7 +286,6 @@ impl GossipsubConfigBuilder {
 
     /// Constructs a `GossipsubConfig` from the given configuration.
     pub fn build(&self) -> GossipsubConfig {
-        self.config.validate_privacy_validation();
         self.config.clone()
     }
 }
