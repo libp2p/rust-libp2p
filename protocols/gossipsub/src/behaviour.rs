@@ -1133,7 +1133,7 @@ impl NetworkBehaviour for Gossipsub {
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<

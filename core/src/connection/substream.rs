@@ -150,7 +150,7 @@ where
     }
 
     /// Provides an API similar to `Future`.
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
         // Polling inbound substream.
         match self.inner.poll_event(cx) {
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
@@ -224,7 +224,7 @@ where
 {
     type Output = Result<(), IoError>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.muxer.close(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => Poll::Ready(Ok(())),

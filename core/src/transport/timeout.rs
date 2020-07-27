@@ -118,7 +118,7 @@ where
 {
     type Item = Result<ListenerEvent<Timeout<O>, TransportTimeoutError<E>>, TransportTimeoutError<E>>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         let poll_out = match TryStream::try_poll_next(this.inner, cx) {
@@ -160,7 +160,7 @@ where
 {
     type Output = Result<InnerFut::Ok, TransportTimeoutError<InnerFut::Error>>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // It is debatable whether we should poll the inner future first or the timer first.
         // For example, if you start dialing with a timeout of 10 seconds, then after 15 seconds
         // the dialing succeeds on the wire, then after 20 seconds you poll, then depending on

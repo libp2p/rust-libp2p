@@ -104,7 +104,7 @@ impl<S> DeflateOutput<S> {
 
     /// Tries to write the content of `self.write_out` to `self.inner`.
     /// Returns `Ready(Ok(()))` if `self.write_out` is empty.
-    fn flush_write_out(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>>
+    fn flush_write_out(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>
         where S: AsyncWrite + Unpin
     {
         loop {
@@ -125,7 +125,7 @@ impl<S> DeflateOutput<S> {
 impl<S> AsyncRead for DeflateOutput<S>
     where S: AsyncRead + Unpin
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         // We use a `this` variable because the compiler doesn't allow multiple mutable borrows
         // across a `Deref`.
         let this = &mut *self;
@@ -177,7 +177,7 @@ impl<S> AsyncRead for DeflateOutput<S>
 impl<S> AsyncWrite for DeflateOutput<S>
     where S: AsyncWrite + Unpin
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
         // We use a `this` variable because the compiler doesn't allow multiple mutable borrows
@@ -208,7 +208,7 @@ impl<S> AsyncWrite for DeflateOutput<S>
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // We use a `this` variable because the compiler doesn't allow multiple mutable borrows
         // across a `Deref`.
         let this = &mut *self;
@@ -231,7 +231,7 @@ impl<S> AsyncWrite for DeflateOutput<S>
         AsyncWrite::poll_flush(Pin::new(&mut this.inner), cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // We use a `this` variable because the compiler doesn't allow multiple mutable borrows
         // across a `Deref`.
         let this = &mut *self;
