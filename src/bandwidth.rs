@@ -38,8 +38,8 @@ impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new [`BandwidthLogging`] around the transport.
     pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
         let sink = Arc::new(BandwidthSinks {
-            download: Atomic::new(0),
-            upload: Atomic::new(0),
+            inbound: Atomic::new(0),
+            outbound: Atomic::new(0),
         });
 
         let trans = BandwidthLogging {
@@ -143,7 +143,7 @@ impl BandwidthSinks {
     /// > **Note**: This method is by design subject to race conditions. The returned value should
     /// >           only ever be used for statistics purposes.
     pub fn total_inbound(&self) -> u64 {
-        self.download.load(Ordering::Relaxed)
+        self.inbound.load(Ordering::Relaxed)
     }
 
     /// Returns the total number of bytes that have been uploaded on all the connections spawned
@@ -152,7 +152,7 @@ impl BandwidthSinks {
     /// > **Note**: This method is by design subject to race conditions. The returned value should
     /// >           only ever be used for statistics purposes.
     pub fn total_outbound(&self) -> u64 {
-        self.upload.load(Ordering::Relaxed)
+        self.outbound.load(Ordering::Relaxed)
     }
 }
 
@@ -168,14 +168,14 @@ impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
-        this.sinks.download.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        this.sinks.inbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 
     fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
-        this.sinks.download.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        this.sinks.inbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 }
@@ -184,14 +184,14 @@ impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
-        this.sinks.upload.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        this.sinks.outbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 
     fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
-        this.sinks.upload.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
+        this.sinks.outbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 
