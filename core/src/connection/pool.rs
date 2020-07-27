@@ -100,7 +100,7 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
     ///
     ///   * it encounters an error, which includes the connection being
     ///     closed by the remote. In this case `error` is `Some`.
-    ///   * it was actively closed by [`EstablishedConnection::close`],
+    ///   * it was actively closed by [`EstablishedConnection::start_close`],
     ///     i.e. a successful, orderly close.
     ///   * it was actively closed by [`Pool::disconnect`], i.e.
     ///     dropped without an orderly close.
@@ -469,7 +469,7 @@ where
     /// by the pool effective immediately.
     ///
     /// > **Note**: Established connections are dropped without performing
-    /// > an orderly close. See [`EstablishedConnection::close`] for
+    /// > an orderly close. See [`EstablishedConnection::start_close`] for
     /// > performing such an orderly close.
     pub fn disconnect(&mut self, peer: &TPeerId) {
         if let Some(conns) = self.established.get(peer) {
