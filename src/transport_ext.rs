@@ -21,7 +21,7 @@
 //! Provides the `TransportExt` trait.
 
 use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, Transport};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
@@ -29,13 +29,13 @@ pub trait TransportExt: Transport {
     /// Adds a layer on the `Transport` that logs all trafic that passes through the sockets
     /// created by it.
     ///
-    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the bandwidth
-    /// values.
-    fn with_bandwidth_logging(self, period: Duration) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
+    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the total number
+    /// of bytes transferred through the sockets.
+    fn with_bandwidth_logging(self) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
     where
         Self: Sized
     {
-        BandwidthLogging::new(self, period)
+        BandwidthLogging::new(self)
     }
 
     // TODO: add methods to easily upgrade for secio/mplex/yamux
