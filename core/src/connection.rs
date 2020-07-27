@@ -31,7 +31,7 @@ pub use handler::{ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandl
 pub use listeners::{ListenerId, ListenersStream, ListenersEvent};
 pub use manager::ConnectionId;
 pub use substream::{Substream, SubstreamEndpoint, Close};
-pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection, StartClose};
+pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnection};
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};

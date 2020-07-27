@@ -473,21 +473,19 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
         self.task.get_mut().sender.poll_ready(cx).map_err(|_| ())
     }
 
-    /// Tries to send a close command to the associated background task,
+    /// Sends a close command to the associated background task,
     /// thus initiating a graceful active close of the connection.
+    ///
+    /// Has no effect if the connection is already closing.
     ///
     /// When the connection is ultimately closed, [`Event::ConnectionClosed`]
     /// is emitted by [`Manager::poll`].
-    pub fn poll_start_close(&mut self, cx: &mut Context) -> Poll<()> {
-        match self.task.get_mut().sender.poll_ready(cx) {
-            Poll::Ready(result) => {
-                if result.is_ok() {
-                    // If it fails now then the task is already gone.
-                    let _ = self.task.get_mut().sender.try_send(task::Command::Close);
-                }
-                Poll::Ready(())
-            }
-            Poll::Pending => Poll::Pending
+    pub fn start_close(&mut self) {
+        // Clone the sender so that we are guaranteed to have
+        // capacity for the close command (every sender gets a slot).
+        match self.task.get_mut().sender.clone().try_send(task::Command::Close) {
+            Ok(()) => {},
+            Err(e) => assert!(e.is_disconnected(), "No capacity for close command.")
         }
     }
 

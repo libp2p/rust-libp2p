@@ -854,8 +854,8 @@ where
     }
 
     /// Initiates a graceful close of the connection.
-    pub fn close(self) -> StartClose<'a, TInEvent, TConnInfo> {
-        StartClose(self.entry)
+    pub fn start_close(mut self) {
+        self.entry.start_close()
     }
 }
 
@@ -962,26 +962,6 @@ impl PoolLimits {
             }
         }
         Ok(())
-    }
-}
-
-/// A `StartClose` future resolves when the command to
-/// close has been enqueued for the background task associated
-/// with a connection.
-///
-/// When the connection is ultimately closed,
-/// [`crate::network::NetworkEvent::ConnectionClosed`]
-/// is emitted with no `error` on success.
-#[derive(Debug)]
-pub struct StartClose<'a, TInEvent, TConnInfo>(
-    manager::EstablishedEntry<'a, TInEvent, TConnInfo>,
-);
-
-impl<'a, TInEvent, TConnInfo> Future for StartClose<'a, TInEvent, TConnInfo> {
-    type Output = ();
-
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
-        self.0.poll_start_close(cx)
     }
 }
 
