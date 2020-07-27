@@ -23,6 +23,14 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
+# Version 0.22.0 (2020-07-17)
+
+**NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
+on an existing deployment using `libp2p-noise`, this version
+must not be skipped!
+
+- Bump `libp2p-noise` dependency to `0.21`.
+
 # Version 0.21.1 (2020-07-02)
 
 - Bump `libp2p-websockets` lower bound.
