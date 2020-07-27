@@ -435,7 +435,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(quote!{
             loop {
-                match #field_name.poll(cx, poll_params) {
+                match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
                     #generate_event_match_arm
                     std::task::Poll::Ready(#network_behaviour_action::DialAddress { address }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address });
