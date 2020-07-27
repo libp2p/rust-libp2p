@@ -55,7 +55,7 @@ mod tests;
 ///
 /// Without signing, a number of privacy preserving modes can be selected.
 ///
-/// NOTE: The default validation settings are to require signatures. The [`ValidationSetting`]
+/// NOTE: The default validation settings are to require signatures. The [`ValidationMode`]
 /// should be updated in the [`GossipsubConfig`] to allow for unsigned messages.
 #[derive(Clone)]
 pub enum MessageAuthenticity {
