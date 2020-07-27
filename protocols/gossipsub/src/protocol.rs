@@ -466,7 +466,7 @@ impl Decoder for GossipsubCodec {
 }
 
 /// A type for gossipsub message ids.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MessageId(Vec<u8>);
 
 impl MessageId {
@@ -647,7 +647,9 @@ mod tests {
             let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
             let mut buf = BytesMut::new();
             codec.encode(rpc.clone(), &mut buf).unwrap();
-            let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
+            let mut decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
+            // mark as validated as its a published message
+            decoded_rpc.messages[0].validated = true;
 
             assert_eq!(rpc, decoded_rpc);
         }

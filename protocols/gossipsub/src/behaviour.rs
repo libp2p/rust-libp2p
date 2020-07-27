@@ -36,6 +36,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::{debug, error, info, trace, warn};
+use lru_time_cache::LruCache;
 use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
@@ -161,6 +162,10 @@ pub struct Gossipsub {
     /// Information used for publishing messages.
     publish_info: PublishInfo,
 
+    /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
+    /// duplicates from being propagated to the application and on the network.
+    duplication_cache: LruCache<MessageId, ()>,
+
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
     topic_peers: HashMap<TopicHash, BTreeSet<PeerId>>,
 
@@ -198,6 +203,7 @@ impl Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_info: privacy.into(),
+            duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             mesh: HashMap::new(),
@@ -307,8 +313,9 @@ impl Gossipsub {
             data.into(),
         )?;
         let msg_id = (self.config.message_id_fn)(&message);
-        // Add published message to our received caches
-        if self.mcache.put(message.clone()).is_some() {
+        // Add published message to our memcache and add it to the duplicate cache.
+        self.mcache.put(message.clone());
+        if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
             warn!(
@@ -644,7 +651,10 @@ impl Gossipsub {
         if !self.config.validate_messages {
             msg.validated = true;
         }
-        if self.mcache.put(msg.clone()).is_some() {
+
+        // Add the message to the duplication cache and memcache.
+        self.mcache.put(msg.clone());
+        if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
             debug!("Message already received, ignoring. Message: {:?}", msg_id);
             return;
         }

@@ -602,6 +602,7 @@ mod tests {
             topics: Vec::new(),
             signature: None,
             key: None,
+            validated: true,
         };
         let msg_id = id(&message);
         gs.mcache.put(message.clone());
@@ -643,6 +644,7 @@ mod tests {
                 topics: Vec::new(),
                 signature: None,
                 key: None,
+                validated: true,
             };
             let msg_id = id(&message);
             gs.mcache.put(message.clone());

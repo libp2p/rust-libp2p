@@ -96,7 +96,8 @@ pub struct GossipsubConfig {
     /// allows a user to validate the messages before propagating them to their peers. If set to
     /// true, the user must manually call `validate_message()` on the behaviour to forward message
     /// once validated (default is `false`). Furthermore, the application may optionally call
-    /// `invalidate_message()` on the behaviour to remove the message from the memcache.
+    /// `invalidate_message()` on the behaviour to remove the message from the memcache. The
+    /// default is false.
     pub validate_messages: bool,
 
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]

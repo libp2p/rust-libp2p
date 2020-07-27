@@ -146,6 +146,7 @@ mod tests {
             topics,
             signature: None,
             key: None,
+            validated: true,
         };
         m
     }
