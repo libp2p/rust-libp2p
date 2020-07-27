@@ -529,11 +529,11 @@ where
         }
     }
 
-    /// Returns an iterator over all non-empty buckets in the routing table.
+    /// Returns an iterator over all buckets in the routing table.
     pub fn kbuckets(&mut self)
         -> impl Iterator<Item = kbucket::KBucketRef<kbucket::Key<PeerId>, Addresses>>
     {
-        self.kbuckets.iter().filter(|b| !b.is_empty())
+        self.kbuckets.iter()
     }
 
     /// Returns the k-bucket for the distance to the given key.

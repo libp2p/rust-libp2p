@@ -1,3 +1,8 @@
+# Next
+
+- Include empty buckets in `Kademlia::kbuckets`.
+
+
 # 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`
