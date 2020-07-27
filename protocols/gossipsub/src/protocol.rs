@@ -391,6 +391,7 @@ impl Decoder for GossipsubCodec {
                     .collect(),
                 signature: message.signature,
                 key: message.key,
+                validated: false,
             });
         }
 
@@ -514,6 +515,9 @@ pub struct GossipsubMessage {
 
     /// The public key of the message if it is signed and the source `PeerId` cannot be inlined.
     pub key: Option<Vec<u8>>,
+
+    /// Flag indicating if this message has been validated by the application or not.
+    pub validated: bool,
 }
 
 /// A subscription received by the gossipsub system.

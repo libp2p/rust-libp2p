@@ -373,19 +373,24 @@ impl Gossipsub {
         Ok(())
     }
 
-    /// This function should be called when `config.manual_propagation` is `true` in order to
-    /// propagate messages. Messages are stored in the ['Memcache'] and validation is expected to be
+    /// This function should be called when `config.validate_messages` is `true` in order to
+    /// validate and propagate messages. Messages are stored in the ['Memcache'] and validation is expected to be
     /// fast enough that the messages should still exist in the cache.
     ///
     /// Calling this function will propagate a message stored in the cache, if it still exists.
     /// If the message still exists in the cache, it will be forwarded and this function will return true,
     /// otherwise it will return false.
-    pub fn propagate_message(
+    ///
+    /// The `propagation_source` parameter indicates who the message was received by and will not
+    /// be forwarded back to that peer.
+    ///
+    /// This should only be called once per message.
+    pub fn validate_message(
         &mut self,
         message_id: &MessageId,
         propagation_source: &PeerId,
     ) -> bool {
-        let message = match self.mcache.get(message_id) {
+        let message = match self.mcache.validate(message_id) {
             Some(message) => message.clone(),
             None => {
                 warn!(
@@ -625,13 +630,20 @@ impl Gossipsub {
 
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all peers in the mesh.
-    fn handle_received_message(&mut self, msg: GossipsubMessage, propagation_source: &PeerId) {
+    fn handle_received_message(&mut self, mut msg: GossipsubMessage, propagation_source: &PeerId) {
         let msg_id = (self.config.message_id_fn)(&msg);
         debug!(
             "Handling message: {:?} from peer: {}",
             msg_id,
             propagation_source.to_string()
         );
+
+        // If we are not validating messages, assume this message is validated
+        // This will allow the message to be gossiped without explicitly calling
+        // `validate_message`.
+        if !self.config.validate_messages {
+            msg.validated = true;
+        }
         if self.mcache.put(msg.clone()).is_some() {
             debug!("Message already received, ignoring. Message: {:?}", msg_id);
             return;
@@ -646,7 +658,7 @@ impl Gossipsub {
         }
 
         // forward the message to mesh peers, if no validation is required
-        if !self.config.manual_propagation {
+        if !self.config.validate_messages {
             let message_id = (self.config.message_id_fn)(&msg);
             self.forward_msg(msg, Some(propagation_source));
             debug!("Completed message handling for message: {:?}", message_id);
@@ -1051,6 +1063,7 @@ impl Gossipsub {
                     topics,
                     signature,
                     key: inline_key.clone(),
+                    validated: true, // all published messages are valid
                 })
             }
             PublishInfo::Author(peer_id) => {
@@ -1063,6 +1076,7 @@ impl Gossipsub {
                     topics,
                     signature: None,
                     key: None,
+                    validated: true, // all published messages are valid
                 })
             }
             PublishInfo::RandomAuthor => {
@@ -1075,6 +1089,7 @@ impl Gossipsub {
                     topics,
                     signature: None,
                     key: None,
+                    validated: true, // all published messages are valid
                 })
             }
             PublishInfo::Anonymous => {
@@ -1087,6 +1102,7 @@ impl Gossipsub {
                     topics,
                     signature: None,
                     key: None,
+                    validated: true, // all published messages are valid
                 })
             }
         }

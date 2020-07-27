@@ -78,6 +78,14 @@ impl MessageCache {
         self.msgs.get(message_id)
     }
 
+    /// Gets and validates a message with `message_id`.
+    pub fn validate(&mut self, message_id: &MessageId) -> Option<&GossipsubMessage> {
+        self.msgs.get_mut(message_id).map(|message| {
+            message.validated = true;
+            &*message
+        })
+    }
+
     /// Get a list of GossipIds for a given topic
     pub fn get_gossip_ids(&self, topic: &TopicHash) -> Vec<MessageId> {
         self.history[..self.gossip]
@@ -88,7 +96,13 @@ impl MessageCache {
                     .iter()
                     .filter_map(|entry| {
                         if entry.topics.iter().any(|t| t == topic) {
-                            Some(entry.mid.clone())
+                            let mid = &entry.mid;
+                            // Only gossip validated messages
+                            if let Some(true) = self.msgs.get(mid).map(|msg| msg.validated) {
+                                Some(mid.clone())
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }

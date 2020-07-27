@@ -83,14 +83,21 @@ pub struct GossipsubConfig {
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub max_transmit_size: usize,
 
+    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
+    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
+    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// default is 1 minute.
+    pub duplicate_cache_time: Duration,
+
     /// Flag determining if gossipsub topics are hashed or sent as plain strings (default is false).
     pub hash_topics: bool,
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call `propagate_message()` on the behaviour to forward message
-    /// once validated (default is `false`).
-    pub manual_propagation: bool,
+    /// true, the user must manually call `validate_message()` on the behaviour to forward message
+    /// once validated (default is `false`). Furthermore, the application may optionally call
+    /// `invalidate_message()` on the behaviour to remove the message from the memcache.
+    pub validate_messages: bool,
 
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
     /// for the available types. The default is ValidationMode::Strict.
@@ -121,8 +128,9 @@ impl Default for GossipsubConfig {
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
             max_transmit_size: 2048,
+            duplicate_cache_time: Duration::from_secs(60),
             hash_topics: false, // default compatibility with floodsub
-            manual_propagation: false,
+            validate_messages: false,
             validation_mode: ValidationMode::Strict,
             message_id_fn: |message| {
                 // default message id is: source + sequence number
@@ -249,6 +257,15 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
+    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
+    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// default is 1 minute.
+    pub fn duplicate_cache_time(&mut self, cache_size: Duration) -> &mut Self {
+        self.config.duplicate_cache_time = cache_size;
+        self
+    }
+
     /// When set, gossipsub topics are hashed instead of being sent as plain strings.
     pub fn hash_topics(&mut self) -> &mut Self {
         self.config.hash_topics = true;
@@ -257,10 +274,10 @@ impl GossipsubConfigBuilder {
 
     /// When set, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set,
-    /// the user must manually call `propagate_message()` on the behaviour to forward a message
+    /// the user must manually call `validate_message()` on the behaviour to forward a message
     /// once validated.
-    pub fn manual_propagation(&mut self) -> &mut Self {
-        self.config.manual_propagation = true;
+    pub fn validate_messages(&mut self) -> &mut Self {
+        self.config.validate_messages = true;
         self
     }
 
@@ -304,8 +321,9 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
         let _ = builder.field("max_transmit_size", &self.max_transmit_size);
+        let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("hash_topics", &self.hash_topics);
-        let _ = builder.field("manual_propagation", &self.manual_propagation);
+        let _ = builder.field("validate_messages", &self.validate_messages);
         builder.finish()
     }
 }
