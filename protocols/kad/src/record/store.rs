@@ -64,7 +64,7 @@ pub trait RecordStore<'a> {
     type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord>>;
 
     /// Gets a record from the store, given its key.
-    fn get(&'a self, k: &Key) -> Option<Cow<Record>>;
+    fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>>;
 
     /// Puts a record into the store.
     fn put(&'a mut self, r: Record) -> Result<()>;

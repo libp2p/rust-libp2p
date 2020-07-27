@@ -105,7 +105,7 @@ where
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             match mem::replace(&mut self.inner, InboundUpgradeApplyState::Undefined) {
                 InboundUpgradeApplyState::Init { mut future, upgrade } => {
@@ -181,7 +181,7 @@ where
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             match mem::replace(&mut self.inner, OutboundUpgradeApplyState::Undefined) {
                 OutboundUpgradeApplyState::Init { mut future, upgrade } => {

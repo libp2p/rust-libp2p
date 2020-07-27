@@ -94,7 +94,7 @@ where
         EitherError<TTransErr, TMapOut::Error>
     >;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         match TryStream::try_poll_next(this.stream, cx) {
             Poll::Ready(Some(Ok(event))) => {
@@ -146,7 +146,7 @@ where
 {
     type Output = Result<TMapOut::Ok, EitherError<TFut::Error, TMapOut::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             let future = match &mut self.inner {
                 Either::Left(future) => {
