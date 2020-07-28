@@ -33,13 +33,15 @@ use libp2p_core::{
     connection::ConnectionId, identity::error::SigningError, identity::Keypair, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
+    DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ProtocolsHandler,
 };
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
+use std::iter::FromIterator;
 use std::{
     collections::HashSet,
     collections::VecDeque,
@@ -172,6 +174,9 @@ pub struct Gossipsub {
     /// A map of all connected peers to their subscribed topics.
     peer_topics: HashMap<PeerId, BTreeSet<TopicHash>>,
 
+    ///A set of all explicit peers
+    explicit_peers: HashSet<PeerId>,
+
     /// Overlay network of connected peers - Maps topics to connected gossipsub peers.
     mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
 
@@ -186,6 +191,9 @@ pub struct Gossipsub {
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
+
+    /// Interval stream for checking explicit peers.
+    check_explicit_peers: Interval,
 }
 
 impl Gossipsub {
@@ -206,6 +214,7 @@ impl Gossipsub {
             duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
+            explicit_peers: HashSet::new(),
             mesh: HashMap::new(),
             fanout: HashMap::new(),
             fanout_last_pub: HashMap::new(),
@@ -217,6 +226,10 @@ impl Gossipsub {
             heartbeat: Interval::new_at(
                 Instant::now() + config.heartbeat_initial_delay,
                 config.heartbeat_interval,
+            ),
+            check_explicit_peers: Interval::new_at(
+                Instant::now() + config.heartbeat_initial_delay,
+                config.check_explicit_peers_interval,
             ),
             config,
         }
@@ -416,6 +429,23 @@ impl Gossipsub {
         true
     }
 
+    /// Adds a new peer to the list of explicitly connected peers.
+    pub fn add_explicit_peer(&mut self, peer_id: &PeerId) {
+        debug!("Adding explicit peer {:?}", peer_id);
+
+        self.explicit_peers.insert(peer_id.clone());
+
+        self.check_explicit_peer_connection(peer_id);
+    }
+
+    /// This removes the peer from explicitly connected peers, note that this does not disconnect
+    /// the peer.
+    pub fn remove_explicit_peer(&mut self, peer_id: &PeerId) {
+        debug!("Removing explicit peer {:?}", peer_id);
+
+        self.explicit_peers.remove(peer_id);
+    }
+
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
         debug!("Running JOIN for topic: {:?}", topic_hash);
@@ -430,11 +460,17 @@ impl Gossipsub {
 
         // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
         // removing the fanout entry.
-        if let Some((_, peers)) = self.fanout.remove_entry(topic_hash) {
+        if let Some((_, mut peers)) = self.fanout.remove_entry(topic_hash) {
             debug!(
                 "JOIN: Removing peers from the fanout for topic: {:?}",
                 topic_hash
             );
+            //remove explicit peers
+            peers = peers
+                .into_iter()
+                .filter(|p| !self.explicit_peers.contains(p))
+                .collect();
+
             // add up to mesh_n of them them to the mesh
             // Note: These aren't randomly added, currently FIFO
             let add_peers = std::cmp::min(peers.len(), self.config.mesh_n);
@@ -458,7 +494,7 @@ impl Gossipsub {
                 &self.topic_peers,
                 topic_hash,
                 self.config.mesh_n - added_peers.len(),
-                |peer| !added_peers.contains(peer),
+                |peer| !added_peers.contains(peer) && !self.explicit_peers.contains(peer),
             );
             added_peers.extend(new_peers.clone());
             // add them to the mesh
@@ -506,6 +542,18 @@ impl Gossipsub {
             }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
+    }
+
+    ///Checks if the given peer is still connected and if not dials the peer again
+    fn check_explicit_peer_connection(&mut self, peer_id: &PeerId) {
+        if !self.peer_topics.contains_key(peer_id) {
+            //connect to peer
+            debug!("Connecting to explicit peer {:?}", peer_id);
+            self.events.push_back(NetworkBehaviourAction::DialPeer {
+                peer_id: peer_id.clone(),
+                condition: DialPeerCondition::Disconnected,
+            });
+        }
     }
 
     /// Handles an IHAVE control message. Checks our cache of messages. If the message is unknown,
@@ -583,17 +631,24 @@ impl Gossipsub {
         debug!("Handling GRAFT message for peer: {:?}", peer_id);
 
         let mut to_prune_topics = HashSet::new();
-        for topic_hash in topics {
-            if let Some(peers) = self.mesh.get_mut(&topic_hash) {
-                // if we are subscribed, add peer to the mesh, if not already added
-                info!(
-                    "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
-                    peer_id, topic_hash
-                );
-                // Duplicates are ignored
-                peers.insert(peer_id.clone());
-            } else {
-                to_prune_topics.insert(topic_hash.clone());
+        // we don't GRAFT to/from explicit peers; complain loudly if this happens
+        if self.explicit_peers.contains(peer_id) {
+            warn!("GRAFT: ignoring request from direct peer {:?}", peer_id);
+            // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
+            to_prune_topics = HashSet::from_iter(topics.into_iter());
+        } else {
+            for topic_hash in topics {
+                if let Some(peers) = self.mesh.get_mut(&topic_hash) {
+                    // if we are subscribed, add peer to the mesh, if not already added
+                    info!(
+                        "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
+                        peer_id, topic_hash
+                    );
+                    // Duplicates are ignored
+                    peers.insert(peer_id.clone());
+                } else {
+                    to_prune_topics.insert(topic_hash.clone());
+                }
             }
         }
 
@@ -729,23 +784,25 @@ impl Gossipsub {
                     subscribed_topics.insert(subscription.topic_hash.clone());
 
                     // if the mesh needs peers add the peer to the mesh
-                    if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
-                        if peers.len() < self.config.mesh_n_low {
-                            if peers.insert(propagation_source.clone()) {
-                                debug!(
-                                    "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
-                                    propagation_source.to_string(),
-                                    subscription.topic_hash
-                                );
-                                // send graft to the peer
-                                debug!(
-                                    "Sending GRAFT to peer {} for topic {:?}",
-                                    propagation_source.to_string(),
-                                    subscription.topic_hash
-                                );
-                                grafts.push(GossipsubControlAction::Graft {
-                                    topic_hash: subscription.topic_hash.clone(),
-                                });
+                    if !self.explicit_peers.contains(propagation_source) {
+                        if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
+                            if peers.len() < self.config.mesh_n_low {
+                                if peers.insert(propagation_source.clone()) {
+                                    debug!(
+                                        "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
+                                        propagation_source.to_string(),
+                                        subscription.topic_hash
+                                    );
+                                    // send graft to the peer
+                                    debug!(
+                                        "Sending GRAFT to peer {} for topic {:?}",
+                                        propagation_source.to_string(),
+                                        subscription.topic_hash
+                                    );
+                                    grafts.push(GossipsubControlAction::Graft {
+                                        topic_hash: subscription.topic_hash.clone(),
+                                    });
+                                }
                             }
                         }
                     }
@@ -816,6 +873,7 @@ impl Gossipsub {
         let mut to_prune = HashMap::new();
 
         // maintain the mesh for each topic
+        let explicit_peers = &self.explicit_peers;
         for (topic_hash, peers) in self.mesh.iter_mut() {
             // too little peers - add some
             if peers.len() < self.config.mesh_n_low {
@@ -829,7 +887,7 @@ impl Gossipsub {
                 let desired_peers = self.config.mesh_n - peers.len();
                 let peer_list =
                     Self::get_random_peers(&self.topic_peers, topic_hash, desired_peers, {
-                        |peer| !peers.contains(peer)
+                        |peer| !peers.contains(peer) && !explicit_peers.contains(peer)
                     });
                 for peer in &peer_list {
                     let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
@@ -935,6 +993,7 @@ impl Gossipsub {
 
         // shift the memcache
         self.mcache.shift();
+
         debug!("Completed Heartbeat");
     }
 
@@ -952,7 +1011,7 @@ impl Gossipsub {
                 &self.topic_peers,
                 &topic_hash,
                 self.config.gossip_lazy,
-                |peer| !peers.contains(peer),
+                |peer| !peers.contains(peer) && !self.explicit_peers.contains(peer),
             );
 
             debug!("Gossiping IHAVE to {} peers.", to_msg_peers.len());
@@ -1043,6 +1102,15 @@ impl Gossipsub {
                     if Some(peer_id) != source {
                         recipient_peers.insert(peer_id.clone());
                     }
+                }
+            }
+        }
+
+        //add explicit peers
+        for p in &self.explicit_peers {
+            if let Some(topics) = self.peer_topics.get(p) {
+                if message.topics.iter().any(|t| topics.contains(t)) {
+                    recipient_peers.insert(p.clone());
                 }
             }
         }
@@ -1398,6 +1466,13 @@ impl NetworkBehaviour for Gossipsub {
 
         while let Poll::Ready(Some(())) = self.heartbeat.poll_next_unpin(cx) {
             self.heartbeat();
+        }
+
+        //check connections to explicit peers
+        while let Poll::Ready(Some(())) = self.check_explicit_peers.poll_next_unpin(cx) {
+            for p in self.explicit_peers.clone() {
+                self.check_explicit_peer_connection(&p);
+            }
         }
 
         Poll::Pending

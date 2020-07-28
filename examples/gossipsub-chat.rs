@@ -98,6 +98,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut gossipsub =
             gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config);
         gossipsub.subscribe(topic.clone());
+        if let Some(explicit) = std::env::args().nth(2) {
+            let explicit = explicit.clone();
+            match explicit.parse() {
+                Ok(id) => gossipsub.add_explicit_peer(&id),
+                Err(err) => println!("Failed to parse explicit peer id: {:?}", err),
+            }
+        }
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };
 
