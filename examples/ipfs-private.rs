@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = build_transport(local_key.clone(), psk);
 
     // Create a Gosspipsub topic
-    let gossipsub_topic = gossipsub::Topic::new("chat".into());
+    let gossipsub_topic = gossipsub::IdentTopic::new("chat");
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
@@ -276,7 +276,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => {
-                    swarm.gossipsub.publish(&gossipsub_topic, line.as_bytes());
+                    swarm.gossipsub.publish(gossipsub_topic.clone(), line.as_bytes());
                 }
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,

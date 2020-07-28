@@ -50,7 +50,7 @@ use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
-use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
+use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, IdentTopic};
 use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -59,6 +59,7 @@ use std::{
     error::Error,
     task::{Context, Poll},
 };
+use libp2p_core::Multiaddr;
 
 fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -72,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::build_development_transport(local_key.clone())?;
 
     // Create a Gossipsub topic
-    let topic = Topic::new("test-net".into());
+    let topic = IdentTopic::new("test-net");
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
@@ -95,6 +96,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         // build a gossipsub network behaviour
         let mut gossipsub = gossipsub::Gossipsub::new(local_key, gossipsub_config);
         gossipsub.subscribe(topic.clone());
+        if let Some(explicit) = std::env::args().nth(2) {
+            let explicit = explicit.clone();
+            match explicit.parse() {
+                Ok(id) => gossipsub.add_explicit_peer(&id),
+                Err(err) => println!("Failed to parse explicit peer id: {:?}", err),
+            }
+        }
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };
 
@@ -121,7 +129,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     task::block_on(future::poll_fn(move |cx: &mut Context| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
-                Poll::Ready(Some(line)) => swarm.publish(&topic, line.as_bytes()),
+                Poll::Ready(Some(line)) => swarm.publish(topic.clone(), line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
             };

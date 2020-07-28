@@ -65,6 +65,10 @@ pub struct GossipsubConfig {
     /// Time to live for fanout peers (default is 60 seconds).
     pub fanout_ttl: Duration,
 
+    /// Interval for rechecking the connection to explicit peers and reconnecting if necessary
+    /// (default 300 seconds).
+    pub check_explicit_peers_interval: Duration,
+
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub max_transmit_size: usize,
 
@@ -108,6 +112,7 @@ impl Default for GossipsubConfig {
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
+            check_explicit_peers_interval: Duration::from_secs(300),
             max_transmit_size: 2048,
             hash_topics: false, // default compatibility with floodsub
             no_source_id: false,
@@ -214,6 +219,13 @@ impl GossipsubConfigBuilder {
     /// Time between each heartbeat (default is 1 second).
     pub fn heartbeat_interval(&mut self, heartbeat_interval: Duration) -> &mut Self {
         self.config.heartbeat_interval = heartbeat_interval;
+        self
+    }
+
+    /// Time between each heartbeat (default is 1 second).
+    pub fn check_explicit_peers_interval(&mut self,
+                                         check_explicit_peers_interval: Duration) -> &mut Self {
+        self.config.check_explicit_peers_interval = check_explicit_peers_interval;
         self
     }
 
