@@ -213,7 +213,7 @@ impl NetworkBehaviour for Mdns {
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<

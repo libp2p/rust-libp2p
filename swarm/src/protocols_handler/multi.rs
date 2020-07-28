@@ -58,7 +58,7 @@ where
     K: fmt::Debug + Eq + Hash,
     H: fmt::Debug
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MultiHandler")
             .field("handlers", &self.handlers)
             .finish()
@@ -154,7 +154,7 @@ where
             .unwrap_or(KeepAlive::No)
     }
 
-    fn poll(&mut self, cx: &mut Context)
+    fn poll(&mut self, cx: &mut Context<'_>)
         -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>>
     {
         // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
@@ -195,7 +195,7 @@ where
     K: fmt::Debug + Eq + Hash,
     H: fmt::Debug
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IntoMultiHandler")
             .field("handlers", &self.handlers)
             .finish()
@@ -266,7 +266,7 @@ where
     K: fmt::Debug + Eq + Hash,
     H: fmt::Debug
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Upgrade")
             .field("upgrades", &self.upgrades)
             .finish()
@@ -369,7 +369,7 @@ impl DuplicateProtonameError {
 }
 
 impl fmt::Display for DuplicateProtonameError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Ok(s) = std::str::from_utf8(&self.0) {
             write!(f, "duplicate protocol name: {}", s)
         } else {

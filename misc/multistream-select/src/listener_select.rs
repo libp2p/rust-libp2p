@@ -101,7 +101,7 @@ where
 {
     type Output = Result<(N, Negotiated<R>), NegotiationError>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
         loop {
