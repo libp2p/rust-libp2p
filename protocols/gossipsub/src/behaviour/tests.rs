@@ -424,7 +424,9 @@ mod tests {
             .events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { .. } => true,
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    !event.subscriptions.is_empty()
+                }
                 _ => false,
             })
             .collect();

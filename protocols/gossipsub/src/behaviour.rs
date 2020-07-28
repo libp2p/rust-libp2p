@@ -697,6 +697,12 @@ impl Gossipsub {
             }
         };
 
+        // Collect potential graft messages for the peer.
+        let mut grafts = Vec::new();
+
+        // Notify the application about the subscription, after the grafts are sent.
+        let mut application_event = Vec::new();
+
         for subscription in subscriptions {
             // get the peers from the mapping, or insert empty lists if topic doesn't exist
             let peer_list = self
@@ -708,34 +714,38 @@ impl Gossipsub {
                 GossipsubSubscriptionAction::Subscribe => {
                     if peer_list.insert(propagation_source.clone()) {
                         debug!(
-                            "SUBSCRIPTION: topic_peer: Adding gossip peer: {} to topic: {:?}",
+                            "SUBSCRIPTION: Adding gossip peer: {} to topic: {:?}",
                             propagation_source.to_string(),
                             subscription.topic_hash
                         );
                     }
 
                     // add to the peer_topics mapping
-                    if subscribed_topics.insert(subscription.topic_hash.clone()) {
-                        info!(
-                            "SUBSCRIPTION: Adding peer: {} to topic: {:?}",
-                            propagation_source.to_string(),
-                            subscription.topic_hash
-                        );
-                    }
+                    subscribed_topics.insert(subscription.topic_hash.clone());
 
                     // if the mesh needs peers add the peer to the mesh
                     if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
                         if peers.len() < self.config.mesh_n_low {
                             if peers.insert(propagation_source.clone()) {
                                 debug!(
-                                    "SUBSCRIPTION: Adding peer {} to the mesh",
+                                    "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
                                     propagation_source.to_string(),
+                                    subscription.topic_hash
                                 );
+                                // send graft to the peer
+                                debug!(
+                                    "Sending GRAFT to peer {} for topic {:?}",
+                                    propagation_source.to_string(),
+                                    subscription.topic_hash
+                                );
+                                grafts.push(GossipsubControlAction::Graft {
+                                    topic_hash: subscription.topic_hash.clone(),
+                                });
                             }
                         }
                     }
                     // generates a subscription event to be polled
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Subscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
@@ -755,10 +765,11 @@ impl Gossipsub {
                     // remove the peer from the mesh if it exists
                     if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
                         peers.remove(propagation_source);
+                        // the peer requested the unsubscription so we don't need to send a PRUNE.
                     }
 
                     // generate an unsubscribe event to be polled
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    application_event.push(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Unsubscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
@@ -767,6 +778,25 @@ impl Gossipsub {
                 }
             }
         }
+
+        // If we need to send grafts to peer, do so immediately, rather than waiting for the
+        // heartbeat.
+        if !grafts.is_empty() {
+            self.send_message(
+                propagation_source.clone(),
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: grafts,
+                },
+            );
+        }
+
+        // Notify the application of the subscriptions
+        for event in application_event {
+            self.events.push_back(event);
+        }
+
         trace!(
             "Completed handling subscriptions from source: {:?}",
             propagation_source
@@ -906,7 +936,6 @@ impl Gossipsub {
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
     /// and fanout peers
     fn emit_gossip(&mut self) {
-        debug!("Started gossip");
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
             let message_ids = self.mcache.get_gossip_ids(&topic_hash);
             if message_ids.is_empty() {
@@ -920,6 +949,9 @@ impl Gossipsub {
                 self.config.gossip_lazy,
                 |peer| !peers.contains(peer),
             );
+
+            debug!("Gossiping IHAVE to {} peers.", to_msg_peers.len());
+
             for peer in to_msg_peers {
                 // send an IHAVE message
                 Self::control_pool_add(
@@ -932,7 +964,6 @@ impl Gossipsub {
                 );
             }
         }
-        debug!("Completed gossip");
     }
 
     /// Handles multiple GRAFT/PRUNE messages and coalesces them into chunked gossip control
@@ -942,23 +973,25 @@ impl Gossipsub {
         to_graft: HashMap<PeerId, Vec<TopicHash>>,
         mut to_prune: HashMap<PeerId, Vec<TopicHash>>,
     ) {
-        // handle the grafts and overlapping prunes
+        // handle the grafts and overlapping prunes per peer
         for (peer, topics) in to_graft.iter() {
-            let mut grafts: Vec<GossipsubControlAction> = topics
+            let mut control_msgs: Vec<GossipsubControlAction> = topics
                 .iter()
                 .map(|topic_hash| GossipsubControlAction::Graft {
                     topic_hash: topic_hash.clone(),
                 })
                 .collect();
-            let mut prunes: Vec<GossipsubControlAction> = to_prune
-                .remove(peer)
-                .unwrap_or_else(|| vec![])
-                .iter()
-                .map(|topic_hash| GossipsubControlAction::Prune {
-                    topic_hash: topic_hash.clone(),
-                })
-                .collect();
-            grafts.append(&mut prunes);
+
+            // If there are prunes associated with the same peer add them.
+            if let Some(topics) = to_prune.remove(peer) {
+                let mut prunes = topics
+                    .iter()
+                    .map(|topic_hash| GossipsubControlAction::Prune {
+                        topic_hash: topic_hash.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                control_msgs.append(&mut prunes);
+            }
 
             // send the control messages
             self.send_message(
@@ -966,7 +999,7 @@ impl Gossipsub {
                 GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
-                    control_msgs: grafts,
+                    control_msgs,
                 },
             );
         }
