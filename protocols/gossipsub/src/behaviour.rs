@@ -41,6 +41,7 @@ use lru_time_cache::LruCache;
 use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
+use std::iter::FromIterator;
 use std::{
     collections::HashSet,
     collections::VecDeque,
@@ -50,9 +51,6 @@ use std::{
     task::{Context, Poll},
 };
 use wasm_timer::{Instant, Interval};
-use std::iter::FromIterator;
-use futures::prelude::*;
-
 
 mod tests;
 
@@ -229,11 +227,11 @@ impl Gossipsub {
                 Instant::now() + config.heartbeat_initial_delay,
                 config.heartbeat_interval,
             ),
-            config,
             check_explicit_peers: Interval::new_at(
-                Instant::now() + gs_config.heartbeat_initial_delay,
-                gs_config.check_explicit_peers_interval,
+                Instant::now() + config.heartbeat_initial_delay,
+                config.check_explicit_peers_interval,
             ),
+            config,
         }
     }
 
@@ -465,7 +463,10 @@ impl Gossipsub {
                 topic_hash
             );
             //remove explicit peers
-            peers = peers.into_iter().filter(|p| !self.explicit_peers.contains(p)).collect();
+            peers = peers
+                .into_iter()
+                .filter(|p| !self.explicit_peers.contains(p))
+                .collect();
 
             // add up to mesh_n of them them to the mesh
             // Note: These aren't randomly added, currently FIFO
@@ -490,7 +491,7 @@ impl Gossipsub {
                 &self.topic_peers,
                 topic_hash,
                 self.config.mesh_n - added_peers.len(),
-                |peer| !added_peers.contains(peer) && !self.explicit_peers.contains(p),
+                |peer| !added_peers.contains(peer) && !self.explicit_peers.contains(peer),
             );
             added_peers.extend(new_peers.clone());
             // add them to the mesh

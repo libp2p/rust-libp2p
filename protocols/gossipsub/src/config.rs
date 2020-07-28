@@ -252,8 +252,10 @@ impl GossipsubConfigBuilder {
     }
 
     /// Time between each heartbeat (default is 1 second).
-    pub fn check_explicit_peers_interval(&mut self,
-                                         check_explicit_peers_interval: Duration) -> &mut Self {
+    pub fn check_explicit_peers_interval(
+        &mut self,
+        check_explicit_peers_interval: Duration,
+    ) -> &mut Self {
         self.config.check_explicit_peers_interval = check_explicit_peers_interval;
         self
     }

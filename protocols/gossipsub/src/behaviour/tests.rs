@@ -25,10 +25,7 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
 
-    use futures::task::Waker;
     use futures_test::task::noop_context;
-
-    use libp2p_swarm::SwarmPollParameters;
 
     use crate::{GossipsubConfigBuilder, IdentTopic as Topic};
 
@@ -42,8 +39,12 @@ mod tests {
         to_subscribe: bool,
     ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
         // use a default GossipsubConfig
-        build_and_inject_nodes_with_config(peer_no, topics, to_subscribe,
-                                           GossipsubConfig::default())
+        build_and_inject_nodes_with_config(
+            peer_no,
+            topics,
+            to_subscribe,
+            GossipsubConfig::default(),
+        )
     }
 
     fn build_and_inject_nodes_with_config(
@@ -896,19 +897,23 @@ mod tests {
             .filter(|e| match e {
                 NetworkBehaviourAction::DialPeer {
                     peer_id,
-                    condition: DialPeerCondition::Disconnected
+                    condition: DialPeerCondition::Disconnected,
                 } => peer_id == &peer,
                 _ => false,
             })
             .collect();
 
-        assert_eq!(dial_events.len(), 1, "There was no dial peer event for the explicit peer");
+        assert_eq!(
+            dial_events.len(),
+            1,
+            "There was no dial peer event for the explicit peer"
+        );
     }
 
     //dummy struct for PollParameters
     #[derive(Clone)]
     struct DummyPollParameters {
-        peer_id: PeerId
+        peer_id: PeerId,
     }
 
     impl PollParameters for DummyPollParameters {
@@ -933,9 +938,13 @@ mod tests {
         }
     }
 
-    fn collect_actions(gs: &mut Gossipsub, peer: &PeerId)
-                       -> Vec<NetworkBehaviourAction<GossipsubRpc, GossipsubEvent>> {
-        let mut parameters = DummyPollParameters { peer_id: peer.clone() };
+    fn collect_actions(
+        gs: &mut Gossipsub,
+        peer: &PeerId,
+    ) -> Vec<NetworkBehaviourAction<GossipsubRpc, GossipsubEvent>> {
+        let mut parameters = DummyPollParameters {
+            peer_id: peer.clone(),
+        };
         let mut previous_was_pending = false;
         let mut is_pending = false;
         let mut result = Vec::new();
@@ -945,8 +954,8 @@ mod tests {
                 Poll::Ready(action) => {
                     result.push(action);
                     false
-                },
-                Poll::Pending => true
+                }
+                Poll::Pending => true,
             }
         }
         result
@@ -975,22 +984,31 @@ mod tests {
         sleep(Duration::from_millis(2));
 
         //assert that there is some reconnect action after next poll
-        assert!(collect_actions(&mut gs, &local_id)
-                    .iter()
-                    .filter(|e| match e {
-                        NetworkBehaviourAction::DialPeer {
-                            peer_id,
-                            condition: DialPeerCondition::Disconnected
-                        } => peer_id == peer,
-                        _ => false,
-                    }).count() >= 1, "There was no dial peer event for the explicit peer");
+        assert!(
+            collect_actions(&mut gs, &local_id)
+                .iter()
+                .filter(|e| match e {
+                    NetworkBehaviourAction::DialPeer {
+                        peer_id,
+                        condition: DialPeerCondition::Disconnected,
+                    } => peer_id == peer,
+                    _ => false,
+                })
+                .count()
+                >= 1,
+            "There was no dial peer event for the explicit peer"
+        );
     }
 
     #[test]
     fn test_handle_graft_explicit_peer() {
         let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            1, vec![String::from("topic1"), String::from("topic2")], true,
-            GossipsubConfig::default(), 1);
+            1,
+            vec![String::from("topic1"), String::from("topic2")],
+            true,
+            GossipsubConfig::default(),
+            1,
+        );
 
         let peer = peers.get(0).unwrap();
 
@@ -1000,51 +1018,71 @@ mod tests {
         assert!(gs.mesh[&topic_hashes[0]].is_empty());
         assert!(gs.mesh[&topic_hashes[1]].is_empty());
 
-        assert!(collect_actions(&mut gs, &PeerId::random())
-                    .iter()
-                    .filter(|e| match e {
-                        NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            event,
-                            ..
-                        } => peer_id == peer && event.control_msgs
-                            .iter()
-                            .filter(|m| match m {
-                                GossipsubControlAction::Prune { topic_hash } =>
-                                    topic_hash == &topic_hashes[0] || topic_hash ==
-                                        &topic_hashes[1],
-                                _ => false,
-                            }).count() == 2,
-                        _ => false,
-                    }).count() >= 1, "There were no prunes sent when grafting from explicit peer");
+        assert!(
+            collect_actions(&mut gs, &PeerId::random())
+                .iter()
+                .filter(|e| match e {
+                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } =>
+                        peer_id == peer
+                            && event
+                                .control_msgs
+                                .iter()
+                                .filter(|m| match m {
+                                    GossipsubControlAction::Prune { topic_hash } =>
+                                        topic_hash == &topic_hashes[0]
+                                            || topic_hash == &topic_hashes[1],
+                                    _ => false,
+                                })
+                                .count()
+                                == 2,
+                    _ => false,
+                })
+                .count()
+                >= 1,
+            "There were no prunes sent when grafting from explicit peer"
+        );
     }
 
     #[test]
     fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
-        let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2, vec![String::from("topic1")], true, GossipsubConfig::default(), 1);
+        let (gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
+            2,
+            vec![String::from("topic1")],
+            true,
+            GossipsubConfig::default(),
+            1,
+        );
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
-        assert_eq!(gs.mesh[&topic_hashes[0]], vec![peers[1].clone()]);
+        assert_eq!(
+            gs.mesh[&topic_hashes[0]],
+            vec![peers[1].clone()].into_iter().collect()
+        );
 
         //assert that graft gets created to non-explicit peer
         //TODO enable this when "bug" is fixed
         /*assert!(gs.control_pool.get(&peers[1])
-                       .unwrap_or(&Vec::new())
-                       .iter()
-                       .filter(|m| match m {
-                           GossipsubControlAction::Graft { .. } => true,
-                           _ => false,
-                       }).count() > 0, "No graft message got created to non-explicit peer");*/
+        .unwrap_or(&Vec::new())
+        .iter()
+        .filter(|m| match m {
+            GossipsubControlAction::Graft { .. } => true,
+            _ => false,
+        }).count() > 0, "No graft message got created to non-explicit peer");*/
 
         //assert that no graft gets created to explicit peer
-        assert_eq!(gs.control_pool.get(&peers[0])
-                       .unwrap_or(&Vec::new())
-                       .iter()
-                       .filter(|m| match m {
-                           GossipsubControlAction::Graft { .. } => true,
-                           _ => false,
-                       }).count(), 0, "A graft message got created to an explicit peer");
+        assert_eq!(
+            gs.control_pool
+                .get(&peers[0])
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter(|m| match m {
+                    GossipsubControlAction::Graft { .. } => true,
+                    _ => false,
+                })
+                .count(),
+            0,
+            "A graft message got created to an explicit peer"
+        );
     }
 
     #[test]
@@ -1053,66 +1091,84 @@ mod tests {
             .heartbeat_initial_delay(Duration::from_secs(0))
             .build();
         let (mut gs, others, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            1, vec![String::from("topic")], true, config, 1);
+            1,
+            vec![String::from("topic")],
+            true,
+            config,
+            1,
+        );
 
         let actions = collect_actions(&mut gs, &PeerId::random());
 
         //mesh stays empty
-        assert_eq!(gs.mesh[&topic_hashes[0]], Vec::new());
+        assert_eq!(gs.mesh[&topic_hashes[0]], BTreeSet::new());
 
         //assert that no graft gets created to explicit peer
-        assert_eq!(actions
-                       .iter()
-                       .filter(|e| match e {
-                           NetworkBehaviourAction::NotifyHandler {
-                               peer_id,
-                               event,
-                               ..
-                           } => peer_id == &others[0] && event.control_msgs.iter().any(|m| match m {
-                               GossipsubControlAction::Graft { .. } => true,
-                               _ => false
-                           }),
-                           _ => false,
-                       }).count(), 0, "No graft message got created to non-explicit peer");
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|e| match e {
+                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } =>
+                        peer_id == &others[0]
+                            && event.control_msgs.iter().any(|m| match m {
+                                GossipsubControlAction::Graft { .. } => true,
+                                _ => false,
+                            }),
+                    _ => false,
+                })
+                .count(),
+            0,
+            "No graft message got created to non-explicit peer"
+        );
     }
 
     #[test]
     fn do_forward_messages_to_explicit_peers() {
         let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2, vec![String::from("topic1"), String::from("topic2")], true,
-            GossipsubConfig::default(), 1);
+            2,
+            vec![String::from("topic1"), String::from("topic2")],
+            true,
+            GossipsubConfig::default(),
+            1,
+        );
 
         let local_id = PeerId::random();
 
         let message = GossipsubMessage {
-            source: peers[1].clone(),
+            source: Some(peers[1].clone()),
             data: vec![],
-            sequence_number: 0,
+            sequence_number: Some(0),
             topics: vec![topic_hashes[0].clone()],
             signature: None,
             key: None,
+            validated: true,
         };
         gs.handle_received_message(message.clone(), &local_id);
 
-        assert_eq!(gs
-                       .events
-                       .iter()
-                       .filter(|e| match e {
-                           NetworkBehaviourAction::NotifyHandler {
-                               peer_id,
-                               event,
-                               ..
-                           } => peer_id == &peers[0] && event.messages
-                               .iter()
-                               .filter(|m| *m == &message).count() > 0,
-                           _ => false,
-                       }).count(), 1, "The message did not get forwarded to the explicit peer");
+        assert_eq!(
+            gs.events
+                .iter()
+                .filter(|e| match e {
+                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } =>
+                        peer_id == &peers[0]
+                            && event.messages.iter().filter(|m| *m == &message).count() > 0,
+                    _ => false,
+                })
+                .count(),
+            1,
+            "The message did not get forwarded to the explicit peer"
+        );
     }
 
     #[test]
     fn explicit_peers_not_added_to_mesh_on_subscribe() {
-        let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2, Vec::new(), true, GossipsubConfig::default(), 1);
+        let (mut gs, peers, _) = build_and_inject_nodes_with_config_and_explicit(
+            2,
+            Vec::new(),
+            true,
+            GossipsubConfig::default(),
+            1,
+        );
 
         //create new topic, both peers subscribing to it but we do not subscribe to it
         let topic = Topic::new(String::from("t"));
@@ -1131,30 +1187,49 @@ mod tests {
         gs.subscribe(topic.clone());
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
-        assert_eq!(gs.mesh[&topic_hash], vec![peers[1].clone()]);
+        assert_eq!(
+            gs.mesh[&topic_hash],
+            vec![peers[1].clone()].into_iter().collect()
+        );
 
         //assert that graft gets created to non-explicit peer
-        assert!(gs.control_pool[&peers[1]]
-                    .iter()
-                    .filter(|m| match m {
-                        GossipsubControlAction::Graft { .. } => true,
-                        _ => false,
-                    }).count() > 0, "No graft message got created to non-explicit peer");
+        assert!(
+            gs.control_pool[&peers[1]]
+                .iter()
+                .filter(|m| match m {
+                    GossipsubControlAction::Graft { .. } => true,
+                    _ => false,
+                })
+                .count()
+                > 0,
+            "No graft message got created to non-explicit peer"
+        );
 
         //assert that no graft gets created to explicit peer
-        assert_eq!(gs.control_pool.get(&peers[0])
-                       .unwrap_or(&Vec::new())
-                       .iter()
-                       .filter(|m| match m {
-                           GossipsubControlAction::Graft { .. } => true,
-                           _ => false,
-                       }).count(), 0, "A graft message got created to an explicit peer");
+        assert_eq!(
+            gs.control_pool
+                .get(&peers[0])
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter(|m| match m {
+                    GossipsubControlAction::Graft { .. } => true,
+                    _ => false,
+                })
+                .count(),
+            0,
+            "A graft message got created to an explicit peer"
+        );
     }
 
     #[test]
     fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
         let (mut gs, peers, _) = build_and_inject_nodes_with_config_and_explicit(
-            2, Vec::new(), true, GossipsubConfig::default(), 1);
+            2,
+            Vec::new(),
+            true,
+            GossipsubConfig::default(),
+            1,
+        );
 
         //create new topic, both peers subscribing to it but we do not subscribe to it
         let topic = Topic::new(String::from("t"));
@@ -1170,7 +1245,7 @@ mod tests {
         }
 
         //we send a message for this topic => this will initialize the fanout
-        gs.publish(topic.clone(), vec![1, 2, 3]);
+        gs.publish(topic.clone(), vec![1, 2, 3]).unwrap();
 
         //subscribe now to topic
         gs.subscribe(topic.clone());
@@ -1180,38 +1255,54 @@ mod tests {
         //assert_eq!(gs.mesh[&topic_hash], vec![peers[1].clone()]);
 
         //assert that graft gets created to non-explicit peer
-        assert!(gs.control_pool[&peers[1]]
-                    .iter()
-                    .filter(|m| match m {
-                           GossipsubControlAction::Graft { .. } => true,
-                           _ => false,
-                       }).count() > 0, "No graft message got created to non-explicit peer");
+        assert!(
+            gs.control_pool[&peers[1]]
+                .iter()
+                .filter(|m| match m {
+                    GossipsubControlAction::Graft { .. } => true,
+                    _ => false,
+                })
+                .count()
+                > 0,
+            "No graft message got created to non-explicit peer"
+        );
 
         //assert that no graft gets created to explicit peer
-        assert_eq!(gs.control_pool.get(&peers[0])
-                       .unwrap_or(&Vec::new())
-                       .iter()
-                       .filter(|m| match m {
-                           GossipsubControlAction::Graft { .. } => true,
-                           _ => false,
-                       }).count(), 0, "A graft message got created to an explicit peer");
+        assert_eq!(
+            gs.control_pool
+                .get(&peers[0])
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter(|m| match m {
+                    GossipsubControlAction::Graft { .. } => true,
+                    _ => false,
+                })
+                .count(),
+            0,
+            "A graft message got created to an explicit peer"
+        );
     }
 
     #[test]
     fn no_gossip_gets_sent_to_explicit_peers() {
         let (mut gs, peers, topic_hashes) = build_and_inject_nodes_with_config_and_explicit(
-            2, vec![String::from("topic1"), String::from("topic2")], true,
-            GossipsubConfig::default(), 1);
+            2,
+            vec![String::from("topic1"), String::from("topic2")],
+            true,
+            GossipsubConfig::default(),
+            1,
+        );
 
         let local_id = PeerId::random();
 
         let message = GossipsubMessage {
-            source: peers[1].clone(),
+            source: Some(peers[1].clone()),
             data: vec![],
-            sequence_number: 0,
+            sequence_number: Some(0),
             topics: vec![topic_hashes[0].clone()],
             signature: None,
             key: None,
+            validated: true,
         };
 
         //forward the message
@@ -1222,14 +1313,19 @@ mod tests {
             gs.emit_gossip();
         }
 
-
         //assert that no gossip gets sent to explicit peer
-        assert_eq!(gs.control_pool.get(&peers[0])
-                       .unwrap_or(&Vec::new())
-                       .iter()
-                       .filter(|m| match m {
-                           GossipsubControlAction::IHave { .. } => true,
-                           _ => false,
-                       }).count(), 0, "Gossip got emitted to explicit peer");
+        assert_eq!(
+            gs.control_pool
+                .get(&peers[0])
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter(|m| match m {
+                    GossipsubControlAction::IHave { .. } => true,
+                    _ => false,
+                })
+                .count(),
+            0,
+            "Gossip got emitted to explicit peer"
+        );
     }
 }

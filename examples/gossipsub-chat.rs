@@ -61,7 +61,6 @@ use std::{
     error::Error,
     task::{Context, Poll},
 };
-use libp2p_core::Multiaddr;
 
 fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
