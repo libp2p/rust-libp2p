@@ -257,7 +257,7 @@ where
 
     /// Polls the connection for events produced by the associated handler
     /// as a result of I/O activity on the substream multiplexer.
-    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context)
+    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>>
     {
         loop {

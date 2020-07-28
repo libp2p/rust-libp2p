@@ -171,7 +171,7 @@ pub trait NetworkBehaviour: Send + 'static {
     ///
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
-    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 

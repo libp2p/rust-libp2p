@@ -136,7 +136,7 @@ pub enum PingFailure {
 }
 
 impl fmt::Display for PingFailure {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PingFailure::Timeout => f.write_str("Ping timeout"),
             PingFailure::Other { error } => write!(f, "Ping error: {}", error)
@@ -221,7 +221,7 @@ impl ProtocolsHandler for PingHandler {
         }
     }
 
-    fn poll(&mut self, cx: &mut Context) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult, Self::Error>> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), PingResult, Self::Error>> {
         if let Some(result) = self.pending_results.pop_back() {
             if let Ok(PingSuccess::Ping { .. }) = result {
                 self.failures = 0;
