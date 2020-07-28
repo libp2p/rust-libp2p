@@ -52,7 +52,7 @@ fn client_to_server_outbound() {
             .unwrap()
             .unwrap()
             .into_upgrade().unwrap().0.await.unwrap();
-        
+
         let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
 
         let mut buf = Vec::new();
@@ -64,9 +64,14 @@ fn client_to_server_outbound() {
         let mplex = libp2p_mplex::MplexConfig::new();
         let transport = TcpConfig::new().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
-    
-        let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+
+        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let mut inbound = loop {
+            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone()).await.unwrap()
+                .into_inbound_substream() {
+                break s;
+            }
+        };
         inbound.write_all(b"hello world").await.unwrap();
         inbound.close().await.unwrap();
 
@@ -98,13 +103,18 @@ fn client_to_server_inbound() {
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let client = Arc::new(listener
             .next().await
             .unwrap()
             .unwrap()
-            .into_upgrade().unwrap().0.await.unwrap();
-        
-        let mut inbound = muxing::inbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
+            .into_upgrade().unwrap().0.await.unwrap());
+
+        let mut inbound = loop {
+            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone()).await.unwrap()
+                .into_inbound_substream() {
+                break s;
+            }
+        };
 
         let mut buf = Vec::new();
         inbound.read_to_end(&mut buf).await.unwrap();
@@ -115,7 +125,7 @@ fn client_to_server_inbound() {
         let mplex = libp2p_mplex::MplexConfig::new();
         let transport = TcpConfig::new().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
-    
+
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
         let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client)).await.unwrap();
         outbound.write_all(b"hello world").await.unwrap();

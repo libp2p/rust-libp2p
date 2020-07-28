@@ -74,6 +74,10 @@ impl<TKey, TVal> PendingNode<TKey, TVal> {
     pub fn set_ready_at(&mut self, t: Instant) {
         self.replace = t;
     }
+
+    pub fn into_node(self) -> Node<TKey, TVal> {
+        self.node
+    }
 }
 
 /// A `Node` in a bucket, representing a peer participating
@@ -264,6 +268,11 @@ where
         }
     }
 
+    /// Removes the pending node from the bucket, if any.
+    pub fn remove_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
+        self.pending.take()
+    }
+
     /// Updates the status of the node referred to by the given key, if it is
     /// in the bucket.
     pub fn update(&mut self, key: &TKey, status: NodeStatus) {
@@ -272,24 +281,7 @@ where
         // prefix list of disconnected nodes or the suffix list of connected
         // nodes (i.e. most-recently disconnected or most-recently connected,
         // respectively).
-        if let Some(pos) = self.position(key) {
-            // Remove the node from its current position.
-            let old_status = self.status(pos);
-            let node = self.nodes.remove(pos.0);
-            // Adjust `first_connected_pos` accordingly.
-            match old_status {
-                NodeStatus::Connected =>
-                    if self.first_connected_pos.map_or(false, |p| p == pos.0) {
-                        if pos.0 == self.nodes.len() {
-                            // It was the last connected node.
-                            self.first_connected_pos = None
-                        }
-                    }
-                NodeStatus::Disconnected =>
-                    if let Some(ref mut p) = self.first_connected_pos {
-                        *p -= 1;
-                    }
-            }
+        if let Some((node, _status, pos)) = self.remove(key) {
             // If the least-recently connected node re-establishes its
             // connected status, drop the pending node.
             if pos == Position(0) && status == NodeStatus::Connected {
@@ -354,6 +346,32 @@ where
                 }
                 InsertResult::Inserted
             }
+        }
+    }
+
+    /// Removes the node with the given key from the bucket, if it exists.
+    pub fn remove(&mut self, key: &TKey) -> Option<(Node<TKey, TVal>, NodeStatus, Position)> {
+        if let Some(pos) = self.position(key) {
+            // Remove the node from its current position.
+            let status = self.status(pos);
+            let node = self.nodes.remove(pos.0);
+            // Adjust `first_connected_pos` accordingly.
+            match status {
+                NodeStatus::Connected =>
+                    if self.first_connected_pos.map_or(false, |p| p == pos.0) {
+                        if pos.0 == self.nodes.len() {
+                            // It was the last connected node.
+                            self.first_connected_pos = None
+                        }
+                    }
+                NodeStatus::Disconnected =>
+                    if let Some(ref mut p) = self.first_connected_pos {
+                        *p -= 1;
+                    }
+            }
+            Some((node, status, pos))
+        } else {
+            None
         }
     }
 

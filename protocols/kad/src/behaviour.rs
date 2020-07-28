@@ -52,10 +52,14 @@ use wasm_timer::Instant;
 
 pub use crate::query::QueryStats;
 
-/// Network behaviour that handles Kademlia.
+/// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
+/// Kademlia protocol.
 pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
+
+    /// The k-bucket insertion strategy.
+    kbucket_inserts: KademliaBucketInserts,
 
     /// Configuration of the wire protocol.
     protocol_config: KademliaProtocolConfig,
@@ -92,6 +96,30 @@ pub struct Kademlia<TStore> {
     store: TStore,
 }
 
+/// The configurable strategies for the insertion of peers
+/// and their addresses into the k-buckets of the Kademlia
+/// routing table.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum KademliaBucketInserts {
+    /// Whenever a connection to a peer is established as a
+    /// result of a dialing attempt and that peer is not yet
+    /// in the routing table, it is inserted as long as there
+    /// is a free slot in the corresponding k-bucket. If the
+    /// k-bucket is full but still has a free pending slot,
+    /// it may be inserted into the routing table at a later time if an unresponsive
+    /// disconnected peer is evicted from the bucket.
+    OnConnected,
+    /// New peers and addresses are only added to the routing table via
+    /// explicit calls to [`Kademlia::add_address`].
+    ///
+    /// > **Note**: Even though peers can only get into the
+    /// > routing table as a result of [`Kademlia::add_address`],
+    /// > routing table entries are still updated as peers
+    /// > connect and disconnect (i.e. the order of the entries
+    /// > as well as the network addresses).
+    Manual,
+}
+
 /// The configuration for the `Kademlia` behaviour.
 ///
 /// The configuration is consumed by [`Kademlia::new`].
@@ -106,6 +134,7 @@ pub struct KademliaConfig {
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
+    kbucket_inserts: KademliaBucketInserts,
 }
 
 impl Default for KademliaConfig {
@@ -120,6 +149,7 @@ impl Default for KademliaConfig {
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
+            kbucket_inserts: KademliaBucketInserts::OnConnected,
         }
     }
 }
@@ -127,8 +157,9 @@ impl Default for KademliaConfig {
 impl KademliaConfig {
     /// Sets a custom protocol name.
     ///
-    /// Kademlia nodes only communicate with other nodes using the same protocol name. Using a
-    /// custom name therefore allows to segregate the DHT from others, if that is desired.
+    /// Kademlia nodes only communicate with other nodes using the same protocol
+    /// name. Using a custom name therefore allows to segregate the DHT from
+    /// others, if that is desired.
     pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
         self.protocol_config.set_protocol_name(name);
         self
@@ -154,10 +185,41 @@ impl KademliaConfig {
         self
     }
 
+    /// Sets the allowed level of parallelism for iterative queries.
+    ///
+    /// The `α` parameter in the Kademlia paper. The maximum number of peers
+    /// that an iterative query is allowed to wait for in parallel while
+    /// iterating towards the closest nodes to a target. Defaults to
+    /// `ALPHA_VALUE`.
+    ///
+    /// This only controls the level of parallelism of an iterative query, not
+    /// the level of parallelism of a query to a fixed set of peers.
+    ///
+    /// When used with [`KademliaConfig::disjoint_query_paths`] it equals
+    /// the amount of disjoint paths used.
+    pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
+        self.query_config.parallelism = parallelism;
+        self
+    }
+
+    /// Require iterative queries to use disjoint paths for increased resiliency
+    /// in the presence of potentially adversarial nodes.
+    ///
+    /// When enabled the number of disjoint paths used equals the configured
+    /// parallelism.
+    ///
+    /// See the S/Kademlia paper for more information on the high level design
+    /// as well as its security improvements.
+    pub fn disjoint_query_paths(&mut self, enabled: bool) -> &mut Self {
+        self.query_config.disjoint_query_paths = enabled;
+        self
+    }
+
     /// Sets the TTL for stored records.
     ///
     /// The TTL should be significantly longer than the (re-)publication
-    /// interval, to avoid premature expiration of records. The default is 36 hours.
+    /// interval, to avoid premature expiration of records. The default is 36
+    /// hours.
     ///
     /// `None` means records never expire.
     ///
@@ -191,10 +253,10 @@ impl KademliaConfig {
 
     /// Sets the (re-)publication interval of stored records.
     ///
-    /// Records persist in the DHT until they expire. By default, published records
-    /// are re-published in regular intervals for as long as the record exists
-    /// in the local storage of the original publisher, thereby extending the
-    /// records lifetime.
+    /// Records persist in the DHT until they expire. By default, published
+    /// records are re-published in regular intervals for as long as the record
+    /// exists in the local storage of the original publisher, thereby extending
+    /// the records lifetime.
     ///
     /// This interval should be significantly shorter than the record TTL, to
     /// ensure records do not expire prematurely. The default is 24 hours.
@@ -220,7 +282,8 @@ impl KademliaConfig {
     /// Sets the interval at which provider records for keys provided
     /// by the local node are re-published.
     ///
-    /// `None` means that stored provider records are never automatically re-published.
+    /// `None` means that stored provider records are never automatically
+    /// re-published.
     ///
     /// Must be significantly less than the provider record TTL.
     pub fn set_provider_publication_interval(&mut self, interval: Option<Duration>) -> &mut Self {
@@ -236,9 +299,16 @@ impl KademliaConfig {
 
     /// Modifies the maximum allowed size of individual Kademlia packets.
     ///
-    /// It might be necessary to increase this value if trying to put large records.
+    /// It might be necessary to increase this value if trying to put large
+    /// records.
     pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
         self.protocol_config.set_max_packet_size(size);
+        self
+    }
+
+    /// Sets the k-bucket insertion strategy for the Kademlia routing table.
+    pub fn set_kbucket_inserts(&mut self, inserts: KademliaBucketInserts) -> &mut Self {
+        self.kbucket_inserts = inserts;
         self
     }
 }
@@ -247,7 +317,7 @@ impl<TStore> Kademlia<TStore>
 where
     for<'a> TStore: RecordStore<'a>
 {
-    /// Creates a new `Kademlia` network behaviour with the given configuration.
+    /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
         Self::with_config(id, store, Default::default())
     }
@@ -278,6 +348,7 @@ where
         Kademlia {
             store,
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
+            kbucket_inserts: config.kbucket_inserts,
             protocol_config: config.protocol_config,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             queries: QueryPool::new(config.query_config),
@@ -347,7 +418,7 @@ where
     ///
     /// If the routing table has been updated as a result of this operation,
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> RoutingUpdate {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
@@ -360,9 +431,11 @@ where
                         }
                     ))
                 }
+                RoutingUpdate::Success
             }
             kbucket::Entry::Pending(mut entry, _) => {
                 entry.value().insert(address);
+                RoutingUpdate::Pending
             }
             kbucket::Entry::Absent(entry) => {
                 let addresses = Addresses::new(address);
@@ -381,26 +454,97 @@ where
                                 old_peer: None,
                             }
                         ));
+                        RoutingUpdate::Success
                     },
                     kbucket::InsertResult::Full => {
-                        debug!("Bucket full. Peer not added to routing table: {}", peer)
+                        debug!("Bucket full. Peer not added to routing table: {}", peer);
+                        RoutingUpdate::Failed
                     },
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                             peer_id: disconnected.into_preimage(),
                             condition: DialPeerCondition::Disconnected
-                        })
+                        });
+                        RoutingUpdate::Pending
                     },
                 }
             },
-            kbucket::Entry::SelfEntry => {},
+            kbucket::Entry::SelfEntry => RoutingUpdate::Failed,
         }
     }
 
-    /// Returns an iterator over all peer IDs of nodes currently contained in a bucket
-    /// of the Kademlia routing table.
-    pub fn kbuckets_entries(&mut self) -> impl Iterator<Item = &PeerId> {
-        self.kbuckets.iter().map(|entry| entry.node.key.preimage())
+    /// Removes an address of a peer from the routing table.
+    ///
+    /// If the given address is the last address of the peer in the
+    /// routing table, the peer is removed from the routing table
+    /// and `Some` is returned with a view of the removed entry.
+    /// The same applies if the peer is currently pending insertion
+    /// into the routing table.
+    ///
+    /// If the given peer or address is not in the routing table,
+    /// this is a no-op.
+    pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr)
+        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
+    {
+        let key = kbucket::Key::new(peer.clone());
+        match self.kbuckets.entry(&key) {
+            kbucket::Entry::Present(mut entry, _) => {
+                if entry.value().remove(address).is_err() {
+                    Some(entry.remove()) // it is the last address, thus remove the peer.
+                } else {
+                    None
+                }
+            }
+            kbucket::Entry::Pending(mut entry, _) => {
+                if entry.value().remove(address).is_err() {
+                    Some(entry.remove()) // it is the last address, thus remove the peer.
+                } else {
+                    None
+                }
+            }
+            kbucket::Entry::Absent(..) | kbucket::Entry::SelfEntry => {
+                None
+            }
+        }
+    }
+
+    /// Removes a peer from the routing table.
+    ///
+    /// Returns `None` if the peer was not in the routing table,
+    /// not even pending insertion.
+    pub fn remove_peer(&mut self, peer: &PeerId)
+        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
+    {
+        let key = kbucket::Key::new(peer.clone());
+        match self.kbuckets.entry(&key) {
+            kbucket::Entry::Present(entry, _) => {
+                Some(entry.remove())
+            }
+            kbucket::Entry::Pending(entry, _) => {
+                Some(entry.remove())
+            }
+            kbucket::Entry::Absent(..) | kbucket::Entry::SelfEntry => {
+                None
+            }
+        }
+    }
+
+    /// Returns an iterator over all non-empty buckets in the routing table.
+    pub fn kbuckets(&mut self)
+        -> impl Iterator<Item = kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Addresses>>
+    {
+        self.kbuckets.iter().filter(|b| !b.is_empty())
+    }
+
+    /// Returns the k-bucket for the distance to the given key.
+    ///
+    /// Returns `None` if the given key refers to the local key.
+    pub fn kbucket<K>(&mut self, key: K)
+        -> Option<kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Addresses>>
+    where
+        K: Borrow<[u8]> + Clone
+    {
+        self.kbuckets.bucket(&kbucket::Key::new(key))
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -430,7 +574,7 @@ where
             if record.is_expired(Instant::now()) {
                 self.store.remove(key)
             } else {
-                records.push(record.into_owned());
+                records.push(PeerRecord{ peer: None, record: record.into_owned()});
             }
         }
 
@@ -609,17 +753,6 @@ where
     {
         let local_id = self.kbuckets.local_key().preimage().clone();
         let others_iter = peers.filter(|p| p.node_id != local_id);
-
-        for peer in others_iter.clone() {
-            self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                KademliaEvent::Discovered {
-                    peer_id: peer.node_id.clone(),
-                    addresses: peer.multiaddrs.clone(),
-                    ty: peer.connection_ty,
-                }
-            ));
-        }
-
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
@@ -689,7 +822,7 @@ where
         self.queries.add_iter_closest(target.clone(), peers, inner);
     }
 
-    /// Updates the connection status of a peer in the Kademlia routing table.
+    /// Updates the routing table with a new connection status and address of a peer.
     fn connection_updated(&mut self, peer: PeerId, address: Option<Multiaddr>, new_status: NodeStatus) {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
@@ -721,9 +854,22 @@ where
 
             kbucket::Entry::Absent(entry) => {
                 // Only connected nodes with a known address are newly inserted.
-                if new_status == NodeStatus::Connected {
-                    if let Some(address) = address {
-                        let addresses = Addresses::new(address);
+                if new_status != NodeStatus::Connected {
+                    return
+                }
+                match (address, self.kbucket_inserts) {
+                    (None, _) => {
+                        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::UnroutablePeer { peer }
+                        ));
+                    }
+                    (Some(a), KademliaBucketInserts::Manual) => {
+                        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                            KademliaEvent::RoutablePeer { peer, address: a }
+                        ));
+                    }
+                    (Some(a), KademliaBucketInserts::OnConnected) => {
+                        let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
                                 let event = KademliaEvent::RoutingUpdated {
@@ -735,20 +881,24 @@ where
                                     NetworkBehaviourAction::GenerateEvent(event));
                             },
                             kbucket::InsertResult::Full => {
-                                debug!("Bucket full. Peer not added to routing table: {}", peer)
+                                debug!("Bucket full. Peer not added to routing table: {}", peer);
+                                let address = addresses.first().clone();
+                                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                                    KademliaEvent::RoutablePeer { peer, address }
+                                ));
                             },
                             kbucket::InsertResult::Pending { disconnected } => {
                                 debug_assert!(!self.connected_peers.contains(disconnected.preimage()));
+                                let address = addresses.first().clone();
+                                self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                                    KademliaEvent::PendingRoutablePeer { peer, address }
+                                ));
                                 self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                                     peer_id: disconnected.into_preimage(),
                                     condition: DialPeerCondition::Disconnected
                                 })
                             },
                         }
-                    } else {
-                        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::UnroutablePeer { peer }
-                        ));
                     }
                 }
             },
@@ -772,8 +922,8 @@ where
                     // a bucket refresh should be performed for every bucket farther away than
                     // the first non-empty bucket (which are most likely no more than the last
                     // few, i.e. farthest, buckets).
-                    self.kbuckets.buckets()
-                        .skip_while(|b| b.num_entries() == 0)
+                    self.kbuckets.iter()
+                        .skip_while(|b| b.is_empty())
                         .skip(1) // Skip the bucket with the closest neighbour.
                         .map(|b| {
                             // Try to find a key that falls into the bucket. While such keys can
@@ -892,7 +1042,7 @@ where
                     if let Some(cache_key) = cache_at {
                         // Cache the record at the closest node to the key that
                         // did not return the record.
-                        let record = records.first().expect("[not empty]").clone();
+                        let record = records.first().expect("[not empty]").record.clone();
                         let quorum = NonZeroUsize::new(1).expect("1 > 0");
                         let context = PutRecordContext::Cache;
                         let info = QueryInfo::PutRecord {
@@ -900,7 +1050,7 @@ where
                             record,
                             quorum,
                             phase: PutRecordPhase::PutRecord {
-                                num_results: 0,
+                                success: vec![],
                                 get_closest_peers_stats: QueryStats::empty()
                             }
                         };
@@ -934,7 +1084,7 @@ where
                     record,
                     quorum,
                     phase: PutRecordPhase::PutRecord {
-                        num_results: 0,
+                        success: vec![],
                         get_closest_peers_stats: result.stats
                     }
                 };
@@ -947,13 +1097,13 @@ where
                 context,
                 record,
                 quorum,
-                phase: PutRecordPhase::PutRecord { num_results, get_closest_peers_stats }
+                phase: PutRecordPhase::PutRecord { success, get_closest_peers_stats }
             } => {
                 let mk_result = |key: record::Key| {
-                    if num_results >= quorum.get() {
+                    if success.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
-                        Err(PutRecordError::QuorumFailed { key, quorum, num_results })
+                        Err(PutRecordError::QuorumFailed { key, quorum, success })
                     }
                 };
                 match context {
@@ -1050,9 +1200,9 @@ where
                 let err = Err(PutRecordError::Timeout {
                     key: record.key,
                     quorum,
-                    num_results: match phase {
-                        PutRecordPhase::GetClosestPeers => 0,
-                        PutRecordPhase::PutRecord { num_results, .. } => num_results
+                    success: match phase {
+                        PutRecordPhase::GetClosestPeers => vec![],
+                        PutRecordPhase::PutRecord { ref success, .. } => success.clone(),
                     }
                 });
                 match context {
@@ -1098,7 +1248,7 @@ where
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(Err(
-                        GetRecordError::Timeout { key, records, quorum }
+                        GetRecordError::Timeout { key, records, quorum },
                     ))
                 }),
 
@@ -1213,13 +1363,6 @@ where
 
     /// Processes a provider record received from a peer.
     fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
-        self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-            KademliaEvent::Discovered {
-                peer_id: provider.node_id.clone(),
-                addresses: provider.multiaddrs.clone(),
-                ty: provider.connection_ty,
-            }));
-
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
                 key,
@@ -1475,9 +1618,24 @@ where
                         key, records, quorum, cache_at
                     } = &mut query.inner.info {
                         if let Some(record) = record {
-                            records.push(record);
-                            if records.len() >= quorum.get() {
-                                query.finish()
+                            records.push(PeerRecord{ peer: Some(source.clone()), record });
+
+                            let quorum = quorum.get();
+                            if records.len() >= quorum {
+                                // Desired quorum reached. The query may finish. See
+                                // [`Query::try_finish`] for details.
+                                let peers = records.iter()
+                                    .filter_map(|PeerRecord{ peer, .. }| peer.as_ref())
+                                    .cloned()
+                                    .collect::<Vec<_>>();
+                                let finished = query.try_finish(peers.iter());
+                                if !finished {
+                                    debug!(
+                                        "GetRecord query ({:?}) reached quorum ({}/{}) with \
+                                         response from peer {} but could not yet finish.",
+                                        user_data, peers.len(), quorum, source,
+                                    );
+                                }
                             }
                         } else if quorum.get() == 1 {
                             // It is a "standard" Kademlia query, for which the
@@ -1513,11 +1671,21 @@ where
                 if let Some(query) = self.queries.get_mut(&user_data) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
-                        phase: PutRecordPhase::PutRecord { num_results, .. }, quorum, ..
+                        phase: PutRecordPhase::PutRecord { success, .. }, quorum, ..
                     } = &mut query.inner.info {
-                        *num_results += 1;
-                        if *num_results >= quorum.get() {
-                            query.finish()
+                        success.push(source.clone());
+
+                        let quorum = quorum.get();
+                        if success.len() >= quorum {
+                            let peers = success.clone();
+                            let finished = query.try_finish(peers.iter());
+                            if !finished {
+                                debug!(
+                                    "PutRecord query ({:?}) reached quorum ({}/{}) with response \
+                                     from peer {} but could not yet finish.",
+                                    user_data, peers.len(), quorum, source,
+                                );
+                            }
                         }
                     }
                 }
@@ -1525,7 +1693,7 @@ where
         };
     }
 
-    fn poll(&mut self, cx: &mut Context, parameters: &mut impl PollParameters) -> Poll<
+    fn poll(&mut self, cx: &mut Context<'_>, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
             <KademliaHandler<QueryId> as ProtocolsHandler>::InEvent,
             Self::OutEvent,
@@ -1659,6 +1827,16 @@ impl Quorum {
     }
 }
 
+/// A record either received by the given peer or retrieved from the local
+/// record store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerRecord {
+    /// The peer from whom the record was received. `None` if the record was
+    /// retrieved from local storage.
+    pub peer: Option<PeerId>,
+    pub record: Record,
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Events
 
@@ -1677,22 +1855,12 @@ pub enum KademliaEvent {
         stats: QueryStats
     },
 
-    /// A peer has been discovered during a query.
-    Discovered {
-        /// The ID of the discovered peer.
-        peer_id: PeerId,
-        /// The known addresses of the discovered peer.
-        addresses: Vec<Multiaddr>,
-        /// The connection status reported by the discovered peer
-        /// towards the local peer.
-        ty: KadConnectionType,
-    },
-
-    /// The routing table has been updated.
+    /// The routing table has been updated with a new peer and / or
+    /// address, thereby possibly evicting another peer.
     RoutingUpdated {
         /// The ID of the peer that was added or updated.
         peer: PeerId,
-        /// The list of known addresses of `peer`.
+        /// The full list of known addresses of `peer`.
         addresses: Addresses,
         /// The ID of the peer that was evicted from the routing table to make
         /// room for the new peer, if any.
@@ -1701,10 +1869,42 @@ pub enum KademliaEvent {
 
     /// A peer has connected for whom no listen address is known.
     ///
-    /// If the peer is to be added to the local node's routing table, a known
+    /// If the peer is to be added to the routing table, a known
     /// listen address for the peer must be provided via [`Kademlia::add_address`].
     UnroutablePeer {
         peer: PeerId
+    },
+
+    /// A connection to a peer has been established for whom a listen address
+    /// is known but the peer has not been added to the routing table either
+    /// because [`KademliaBucketInserts::Manual`] is configured or because
+    /// the corresponding bucket is full.
+    ///
+    /// If the peer is to be included in the routing table, it must
+    /// must be explicitly added via [`Kademlia::add_address`], possibly after
+    /// removing another peer.
+    ///
+    /// See [`Kademlia::kbucket`] for insight into the contents of
+    /// the k-bucket of `peer`.
+    RoutablePeer {
+        peer: PeerId,
+        address: Multiaddr,
+    },
+
+    /// A connection to a peer has been established for whom a listen address
+    /// is known but the peer is only pending insertion into the routing table
+    /// if the least-recently disconnected peer is unresponsive, i.e. the peer
+    /// may not make it into the routing table.
+    ///
+    /// If the peer is to be unconditionally included in the routing table,
+    /// it should be explicitly added via [`Kademlia::add_address`] after
+    /// removing another peer.
+    ///
+    /// See [`Kademlia::kbucket`] for insight into the contents of
+    /// the k-bucket of `peer`.
+    PendingRoutablePeer {
+        peer: PeerId,
+        address: Multiaddr,
     }
 }
 
@@ -1742,7 +1942,7 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 /// The successful result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
 pub struct GetRecordOk {
-    pub records: Vec<Record>
+    pub records: Vec<PeerRecord>
 }
 
 /// The error result of [`Kademlia::get_record`].
@@ -1754,12 +1954,12 @@ pub enum GetRecordError {
     },
     QuorumFailed {
         key: record::Key,
-        records: Vec<Record>,
+        records: Vec<PeerRecord>,
         quorum: NonZeroUsize
     },
     Timeout {
         key: record::Key,
-        records: Vec<Record>,
+        records: Vec<PeerRecord>,
         quorum: NonZeroUsize
     }
 }
@@ -1799,12 +1999,14 @@ pub struct PutRecordOk {
 pub enum PutRecordError {
     QuorumFailed {
         key: record::Key,
-        num_results: usize,
+        /// [`PeerId`]s of the peers the record was successfully stored on.
+        success: Vec<PeerId>,
         quorum: NonZeroUsize
     },
     Timeout {
         key: record::Key,
-        num_results: usize,
+        /// [`PeerId`]s of the peers the record was successfully stored on.
+        success: Vec<PeerId>,
         quorum: NonZeroUsize
     },
 }
@@ -2061,8 +2263,9 @@ pub enum QueryInfo {
     GetRecord {
         /// The key to look for.
         key: record::Key,
-        /// The records found so far.
-        records: Vec<Record>,
+        /// The records with the id of the peer that returned them. `None` when
+        /// the record was found in the local store.
+        records: Vec<PeerRecord>,
         /// The number of records to look for.
         quorum: NonZeroUsize,
         /// The closest peer to `key` that did not return a record.
@@ -2150,8 +2353,8 @@ pub enum PutRecordPhase {
 
     /// The query is replicating the record to the closest nodes to the key.
     PutRecord {
-        /// The number of successful replication requests so far.
-        num_results: usize,
+        /// A list of peers the given record has been successfully replicated to.
+        success: Vec<PeerId>,
         /// Query statistics from the finished `GetClosestPeers` phase.
         get_closest_peers_stats: QueryStats,
     },
@@ -2222,3 +2425,22 @@ impl fmt::Display for NoKnownPeers {
 }
 
 impl std::error::Error for NoKnownPeers {}
+
+/// The possible outcomes of [`Kademlia::add_address`].
+pub enum RoutingUpdate {
+    /// The given peer and address has been added to the routing
+    /// table.
+    Success,
+    /// The peer and address is pending insertion into
+    /// the routing table, if a disconnected peer fails
+    /// to respond. If the given peer and address ends up
+    /// in the routing table, [`KademliaEvent::RoutingUpdated`]
+    /// is eventually emitted.
+    Pending,
+    /// The routing table update failed, either because the
+    /// corresponding bucket for the peer is full and the
+    /// pending slot(s) are occupied, or because the given
+    /// peer ID is deemed invalid (e.g. refers to the local
+    /// peer ID).
+    Failed,
+}

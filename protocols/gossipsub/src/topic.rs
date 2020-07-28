@@ -60,7 +60,7 @@ impl Hasher for Sha256Hash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TopicHash {
     /// The topic hash. Stored as a string to align with the protobuf API.
     hash: String,
@@ -81,7 +81,7 @@ impl TopicHash {
 }
 
 /// A gossipsub topic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Topic<H: Hasher> {
     topic: String,
     phantom_data: std::marker::PhantomData<H>,
@@ -113,7 +113,7 @@ impl<H: Hasher> fmt::Display for Topic<H> {
 }
 
 impl fmt::Display for TopicHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.hash)
     }
 }

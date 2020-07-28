@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::PeerId;
+use crate::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 use super::{Connected, SubstreamEndpoint};
 
@@ -58,10 +58,13 @@ pub trait ConnectionHandler {
     /// Notifies the handler of an event.
     fn inject_event(&mut self, event: Self::InEvent);
 
+    /// Notifies the handler of a change in the address of the remote.
+    fn inject_address_change(&mut self, new_address: &Multiaddr);
+
     /// Polls the handler for events.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self, cx: &mut Context)
+    fn poll(&mut self, cx: &mut Context<'_>)
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>;
 }
 

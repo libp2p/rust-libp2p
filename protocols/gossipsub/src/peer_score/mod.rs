@@ -173,20 +173,13 @@ impl Default for DeliveryRecord {
 
 impl PeerScore {
     /// Creates a new `PeerScore` using a given set of peer scoring parameters.
-    pub fn new(params: PeerScoreParams) -> Self {
-        let default_message_id = |message: &GossipsubMessage| {
-            // default message id is: source + sequence number
-            let mut source_string = message.source.to_base58();
-            source_string.push_str(&message.sequence_number.to_string());
-            MessageId(source_string)
-        };
-
+    pub fn new(params: PeerScoreParams, msg_id: fn(&GossipsubMessage) -> MessageId) -> Self {
         PeerScore {
             params,
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
             deliveries: LruCache::with_expiry_duration(Duration::from_secs(TIME_CACHE_DURATION)),
-            msg_id: default_message_id,
+            msg_id,
         }
     }
 
@@ -715,7 +708,7 @@ impl PeerScore {
 
                             let cap = topic_params.mesh_message_deliveries_cap;
                             topic_stats.mesh_message_deliveries =
-                                if { topic_stats.mesh_message_deliveries + 1f64 > cap } {
+                                if topic_stats.mesh_message_deliveries + 1f64 > cap {
                                     cap
                                 } else {
                                     topic_stats.mesh_message_deliveries + 1f64

@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::GossipsubRpc;
+use crate::config::ValidationMode;
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use futures::prelude::*;
 use futures_codec::Framed;
-use libp2p_core::identity::Keypair;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
-use libp2p_core::PeerId;
 use libp2p_swarm::protocols_handler::{
     KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
@@ -50,6 +49,10 @@ pub struct GossipsubHandler {
 
     /// Queue of values that we want to send to the remote.
     send_queue: SmallVec<[GossipsubRpc; 16]>,
+
+    /// Flag indicating that an outbound substream is being established to prevent duplicate
+    /// requests.
+    outbound_substream_establishing: bool,
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
@@ -83,19 +86,18 @@ impl GossipsubHandler {
     /// Builds a new `GossipsubHandler`.
     pub fn new(
         protocol_id_prefix: std::borrow::Cow<'static, str>,
-        local_peer_id: PeerId,
         max_transmit_size: usize,
-        keypair: Option<Keypair>,
+        validation_mode: ValidationMode,
     ) -> Self {
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
                 protocol_id_prefix,
-                local_peer_id,
                 max_transmit_size,
-                keypair,
+                validation_mode,
             )),
             inbound_substream: None,
             outbound_substream: None,
+            outbound_substream_establishing: false,
             send_queue: SmallVec::new(),
             keep_alive: KeepAlive::Yes,
         }
@@ -128,6 +130,7 @@ impl ProtocolsHandler for GossipsubHandler {
         substream: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
         message: Self::OutboundOpenInfo,
     ) {
+        self.outbound_substream_establishing = false;
         // Should never establish a new outbound substream if one already exists.
         // If this happens, an outbound message is not sent.
         if self.outbound_substream.is_some() {
@@ -150,6 +153,7 @@ impl ProtocolsHandler for GossipsubHandler {
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
+        self.outbound_substream_establishing = false;
         // Ignore upgrade errors for now.
         // If a peer doesn't support this protocol, this will just ignore them, but not disconnect
         // them.
@@ -161,7 +165,7 @@ impl ProtocolsHandler for GossipsubHandler {
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
@@ -171,9 +175,13 @@ impl ProtocolsHandler for GossipsubHandler {
         >,
     > {
         // determine if we need to create the stream
-        if !self.send_queue.is_empty() && self.outbound_substream.is_none() {
+        if !self.send_queue.is_empty()
+            && self.outbound_substream.is_none()
+            && !self.outbound_substream_establishing
+        {
             let message = self.send_queue.remove(0);
             self.send_queue.shrink_to_fit();
+            self.outbound_substream_establishing = true;
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 protocol: self.listen_protocol.clone(),
                 info: message,
@@ -194,9 +202,21 @@ impl ProtocolsHandler for GossipsubHandler {
                             return Poll::Ready(ProtocolsHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(e))) => {
-                            warn!("Invalid message received. Error: {}", e);
-                            self.inbound_substream =
-                                Some(InboundSubstreamState::WaitingInput(substream));
+                            match e.kind() {
+                                std::io::ErrorKind::InvalidData => {
+                                    // Invalid message, ignore it and reset to waiting
+                                    warn!("Invalid message received. Error: {}", e);
+                                    self.inbound_substream =
+                                        Some(InboundSubstreamState::WaitingInput(substream));
+                                }
+                                _ => {
+                                    // More serious errors, close this side of the stream. If the
+                                    // peer is still around, they will re-establish their
+                                    // connection
+                                    self.inbound_substream =
+                                        Some(InboundSubstreamState::Closing(substream));
+                                }
+                            }
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {
@@ -238,7 +258,7 @@ impl ProtocolsHandler for GossipsubHandler {
                     break;
                 }
                 Some(InboundSubstreamState::Poisoned) => {
-                    panic!("Error occurred during inbound stream processing")
+                    unreachable!("Error occurred during inbound stream processing")
                 }
             }
         }
@@ -334,7 +354,7 @@ impl ProtocolsHandler for GossipsubHandler {
                     break;
                 }
                 Some(OutboundSubstreamState::Poisoned) => {
-                    panic!("Error occurred during outbound stream processing")
+                    unreachable!("Error occurred during outbound stream processing")
                 }
             }
         }

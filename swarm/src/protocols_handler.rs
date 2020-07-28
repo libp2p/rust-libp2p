@@ -53,6 +53,7 @@ pub use crate::upgrade::{
 
 use libp2p_core::{
     ConnectedPoint,
+    Multiaddr,
     PeerId,
     upgrade::{self, UpgradeError},
 };
@@ -140,7 +141,10 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Injects an event coming from the outside in the handler.
     fn inject_event(&mut self, event: Self::InEvent);
 
-    /// Indicates to the handler that upgrading a substream to the given protocol has failed.
+    /// Notifies the handler of a change in the address of the remote.
+    fn inject_address_change(&mut self, _new_address: &Multiaddr) {}
+
+    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
     fn inject_dial_upgrade_error(
         &mut self,
         info: Self::OutboundOpenInfo,
@@ -148,6 +152,14 @@ pub trait ProtocolsHandler: Send + 'static {
             <Self::OutboundProtocol as OutboundUpgradeSend>::Error
         >
     );
+
+    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: ProtocolsHandlerUpgrErr<
+            <Self::InboundProtocol as InboundUpgradeSend>::Error
+        >
+    ) {}
 
     /// Returns until when the connection should be kept alive.
     ///
@@ -172,7 +184,7 @@ pub trait ProtocolsHandler: Send + 'static {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
-    fn poll(&mut self, cx: &mut Context) -> Poll<
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     >;
 
@@ -236,7 +248,7 @@ pub struct SubstreamProtocol<TUpgrade> {
 }
 
 impl<TUpgrade> SubstreamProtocol<TUpgrade> {
-    /// Create a new `ListenProtocol` from the given upgrade.
+    /// Create a new `SubstreamProtocol` from the given upgrade.
     ///
     /// The default timeout for applying the given upgrade on a substream is
     /// 10 seconds.

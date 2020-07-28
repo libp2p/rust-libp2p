@@ -132,7 +132,7 @@ impl ProtocolsHandler for IdentifyHandler {
         self.keep_alive
     }
 
-    fn poll(&mut self, cx: &mut Context) -> Poll<
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
