@@ -14,12 +14,29 @@ fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
 // generates a random gossipsub message with sequence number i
 fn make_test_message(seq: u64) -> GossipsubMessage {
     GossipsubMessage {
-        source: PeerId::random(),
+        source: Some(PeerId::random()),
         data: vec![12, 34, 56],
-        sequence_number: seq,
+        sequence_number: Some(seq),
         topics: vec![Topic::new("test").hash()],
         signature: None,
         key: None,
+        validated: true,
+    }
+}
+
+fn default_message_id() -> fn(&GossipsubMessage) -> MessageId {
+    |message| {
+        // default message id is: source + sequence number
+        // NOTE: If either the peer_id or source is not provided, we set to 0;
+        let mut source_string = if let Some(peer_id) = message.source.as_ref() {
+            peer_id.to_base58()
+        } else {
+            PeerId::from_bytes(vec![0, 1, 0])
+                .expect("Valid peer id")
+                .to_base58()
+        };
+        source_string.push_str(&message.sequence_number.unwrap_or_default().to_string());
+        MessageId::from(source_string)
     }
 }
 
@@ -41,7 +58,7 @@ fn test_score_time_in_mesh() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
     peer_score.add_peer(peer_id.clone(), Vec::new());
 
@@ -87,7 +104,7 @@ fn test_score_time_in_mesh_cap() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
     peer_score.add_peer(peer_id.clone(), Vec::new());
 
@@ -136,7 +153,7 @@ fn test_score_first_message_deliveries() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
     peer_score.add_peer(peer_id.clone(), Vec::new());
     peer_score.graft(&peer_id, topic);
@@ -180,7 +197,7 @@ fn test_score_first_message_deliveries_cap() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
     peer_score.add_peer(peer_id.clone(), Vec::new());
     peer_score.graft(&peer_id, topic);
@@ -222,7 +239,7 @@ fn test_score_first_message_deliveries_decay() {
 
     params.topics.insert(topic_hash, topic_params.clone());
     let peer_id = PeerId::random();
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, default_message_id());
     peer_score.add_peer(peer_id.clone(), Vec::new());
     peer_score.graft(&peer_id, topic);
 
@@ -282,7 +299,7 @@ fn test_score_mesh_message_deliveries() {
     topic_params.mesh_failure_penalty_weight = 0.0;
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, default_message_id());
 
     // peer A always delivers the message first.
     // peer B delivers next (within the delivery window).

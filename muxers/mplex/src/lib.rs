@@ -245,7 +245,7 @@ impl ArcWake for Notifier {
 ///
 /// If `Pending` is returned, the waker is kept and notified later, just like with any `Poll`.
 /// `Ready(Ok())` is almost always returned. An error is returned if the stream is EOF.
-fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, cx: &mut Context, mut filter: F) -> Poll<Result<O, IoError>>
+fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, cx: &mut Context<'_>, mut filter: F) -> Poll<Result<O, IoError>>
 where C: AsyncRead + AsyncWrite + Unpin,
       F: FnMut(&codec::Elem) -> Option<O>,
 {
@@ -324,7 +324,7 @@ where C: AsyncRead + AsyncWrite + Unpin,
 }
 
 // Small convenience function that tries to write `elem` to the stream.
-fn poll_send<C>(inner: &mut MultiplexInner<C>, cx: &mut Context, elem: codec::Elem) -> Poll<Result<(), IoError>>
+fn poll_send<C>(inner: &mut MultiplexInner<C>, cx: &mut Context<'_>, elem: codec::Elem) -> Poll<Result<(), IoError>>
 where C: AsyncRead + AsyncWrite + Unpin
 {
     ensure_no_error_no_close(inner)?;
@@ -366,7 +366,7 @@ where C: AsyncRead + AsyncWrite + Unpin
     type OutboundSubstream = OutboundSubstream;
     type Error = IoError;
 
-    fn poll_event(&self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent<Self::Substream>, IoError>> {
+    fn poll_event(&self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent<Self::Substream>, IoError>> {
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
@@ -416,7 +416,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         }
     }
 
-    fn poll_outbound(&self, cx: &mut Context, substream: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, IoError>> {
+    fn poll_outbound(&self, cx: &mut Context<'_>, substream: &mut Self::OutboundSubstream) -> Poll<Result<Self::Substream, IoError>> {
         loop {
             let mut inner = self.inner.lock();
 
@@ -475,7 +475,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         // Nothing to do.
     }
 
-    fn read_substream(&self, cx: &mut Context, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, IoError>> {
+    fn read_substream(&self, cx: &mut Context<'_>, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<Result<usize, IoError>> {
         loop {
             // First, transfer from `current_data`.
             if !substream.current_data.is_empty() {
@@ -529,7 +529,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         }
     }
 
-    fn write_substream(&self, cx: &mut Context, substream: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, IoError>> {
+    fn write_substream(&self, cx: &mut Context<'_>, substream: &mut Self::Substream, buf: &[u8]) -> Poll<Result<usize, IoError>> {
         if !substream.local_open {
             return Poll::Ready(Err(IoErrorKind::BrokenPipe.into()));
         }
@@ -551,7 +551,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         }
     }
 
-    fn flush_substream(&self, cx: &mut Context, _substream: &mut Self::Substream) -> Poll<Result<(), IoError>> {
+    fn flush_substream(&self, cx: &mut Context<'_>, _substream: &mut Self::Substream) -> Poll<Result<(), IoError>> {
         let mut inner = self.inner.lock();
         ensure_no_error_no_close(&mut inner)?;
         let inner = &mut *inner; // Avoids borrow errors
@@ -563,7 +563,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         result
     }
 
-    fn shutdown_substream(&self, cx: &mut Context, sub: &mut Self::Substream) -> Poll<Result<(), IoError>> {
+    fn shutdown_substream(&self, cx: &mut Context<'_>, sub: &mut Self::Substream) -> Poll<Result<(), IoError>> {
         if !sub.local_open {
             return Poll::Ready(Ok(()));
         }
@@ -587,7 +587,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         })
     }
 
-    fn close(&self, cx: &mut Context) -> Poll<Result<(), IoError>> {
+    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), IoError>> {
         let inner = &mut *self.inner.lock();
         if inner.is_shutdown {
             return Poll::Ready(Ok(()))
@@ -609,7 +609,7 @@ where C: AsyncRead + AsyncWrite + Unpin
         }
     }
 
-    fn flush_all(&self, cx: &mut Context) -> Poll<Result<(), IoError>> {
+    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), IoError>> {
         let inner = &mut *self.inner.lock();
         if inner.is_shutdown {
             return Poll::Ready(Ok(()))

@@ -19,12 +19,31 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{GossipsubMessage, MessageId};
+use libp2p_core::PeerId;
 use std::borrow::Cow;
 use std::time::Duration;
 
-/// If the `no_source_id` flag is set, the IDENTITY_SOURCE value is used as the source of the
-/// packet.
-pub const IDENTITY_SOURCE: [u8; 3] = [0, 1, 0];
+/// The types of message validation that can be employed by gossipsub.
+#[derive(Debug, Clone)]
+pub enum ValidationMode {
+    /// This is the default setting. This requires the message author to be a valid `PeerId` and to
+    /// be present as well as the sequence number. All messages must have valid signatures.
+    ///
+    /// NOTE: This setting will reject messages from nodes using `PrivacyMode::Anonymous` and
+    /// all messages that do not have signatures.
+    Strict,
+    /// This setting permits messages that have no author, sequence number or signature. If any of
+    /// these fields exist in the message these are validated.
+    Permissive,
+    /// This setting requires the author, sequence number and signature fields of a message to be
+    /// empty. Any message that contains these fields is considered invalid.
+    Anonymous,
+    /// This setting does not check the author, sequence number or signature fields of incoming
+    /// messages. If these fields contain data, they are simply ignored.
+    ///
+    /// NOTE: This setting will consider messages with invalid signatures as valid messages.
+    None,
+}
 
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
@@ -46,7 +65,7 @@ pub struct GossipsubConfig {
     /// Target number of peers for the mesh network (D in the spec, default is 6).
     pub mesh_n: usize,
 
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 4).
+    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
     pub mesh_n_low: usize,
 
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
@@ -72,21 +91,23 @@ pub struct GossipsubConfig {
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub max_transmit_size: usize,
 
-    /// Flag determining if gossipsub topics are hashed or sent as plain strings (default is false).
-    pub hash_topics: bool,
-
-    /// When set, all published messages will have a 0 source `PeerId` (default is false).
-    pub no_source_id: bool,
+    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
+    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
+    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// default is 1 minute.
+    pub duplicate_cache_time: Duration,
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call `propagate_message()` on the behaviour to forward message
-    /// once validated (default is `false`).
-    pub manual_propagation: bool,
+    /// true, the user must manually call `validate_message()` on the behaviour to forward message
+    /// once validated (default is `false`). Furthermore, the application may optionally call
+    /// `invalidate_message()` on the behaviour to remove the message from the memcache. The
+    /// default is false.
+    pub validate_messages: bool,
 
-    /// Message signing is on by default.  When this parameter is set,
-    /// published messages are not signed by the libp2p key.
-    pub disable_message_signing: bool,
+    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
+    /// for the available types. The default is ValidationMode::Strict.
+    pub validation_mode: ValidationMode,
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
     /// The default value is to concatenate the source peer id with a sequence number. Setting this
@@ -106,7 +127,7 @@ impl Default for GossipsubConfig {
             history_length: 5,
             history_gossip: 3,
             mesh_n: 6,
-            mesh_n_low: 4,
+            mesh_n_low: 5,
             mesh_n_high: 12,
             gossip_lazy: 6, // default to mesh_n
             heartbeat_initial_delay: Duration::from_secs(5),
@@ -114,15 +135,21 @@ impl Default for GossipsubConfig {
             fanout_ttl: Duration::from_secs(60),
             check_explicit_peers_interval: Duration::from_secs(300),
             max_transmit_size: 2048,
-            hash_topics: false, // default compatibility with floodsub
-            no_source_id: false,
-            manual_propagation: false,
-            disable_message_signing: false,
+            duplicate_cache_time: Duration::from_secs(60),
+            validate_messages: false,
+            validation_mode: ValidationMode::Strict,
             message_id_fn: |message| {
                 // default message id is: source + sequence number
-                let mut source_string = message.source.to_base58();
-                source_string.push_str(&message.sequence_number.to_string());
-                MessageId(source_string)
+                // NOTE: If either the peer_id or source is not provided, we set to 0;
+                let mut source_string = if let Some(peer_id) = message.source.as_ref() {
+                    peer_id.to_base58()
+                } else {
+                    PeerId::from_bytes(vec![0, 1, 0])
+                        .expect("Valid peer id")
+                        .to_base58()
+                };
+                source_string.push_str(&message.sequence_number.unwrap_or_default().to_string());
+                MessageId::from(source_string)
             },
         }
     }
@@ -144,7 +171,9 @@ impl Default for GossipsubConfigBuilder {
 impl GossipsubConfigBuilder {
     // set default values
     pub fn new() -> GossipsubConfigBuilder {
-        GossipsubConfigBuilder::default()
+        GossipsubConfigBuilder {
+            config: GossipsubConfig::default(),
+        }
     }
 
     /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
@@ -241,34 +270,28 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// When set, gossipsub topics are hashed instead of being sent as plain strings.
-    pub fn hash_topics(&mut self) -> &mut Self {
-        self.config.hash_topics = true;
-        self
-    }
-
-    /// When set, all published messages will have a 0 source `PeerId`
-    pub fn no_source_id(&mut self) -> &mut Self {
-        assert!(
-            self.config.disable_message_signing,
-            "Message signing must be disabled in order to mask the source peer id. Cannot sign for the 0 peer_id"
-        );
-        self.config.no_source_id = true;
+    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
+    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
+    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// default is 1 minute.
+    pub fn duplicate_cache_time(&mut self, cache_size: Duration) -> &mut Self {
+        self.config.duplicate_cache_time = cache_size;
         self
     }
 
     /// When set, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set,
-    /// the user must manually call `propagate_message()` on the behaviour to forward a message
+    /// the user must manually call `validate_message()` on the behaviour to forward a message
     /// once validated.
-    pub fn manual_propagation(&mut self) -> &mut Self {
-        self.config.manual_propagation = true;
+    pub fn validate_messages(&mut self) -> &mut Self {
+        self.config.validate_messages = true;
         self
     }
 
-    /// Disables message signing for all published messages.
-    pub fn disable_message_signing(&mut self) -> &mut Self {
-        self.config.disable_message_signing = true;
+    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
+    /// for the available types. The default is ValidationMode::Strict.
+    pub fn validation_mode(&mut self, validation_mode: ValidationMode) -> &mut Self {
+        self.config.validation_mode = validation_mode;
         self
     }
 
@@ -292,7 +315,7 @@ impl GossipsubConfigBuilder {
 }
 
 impl std::fmt::Debug for GossipsubConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
         let _ = builder.field("protocol_id_prefix", &self.protocol_id_prefix);
         let _ = builder.field("history_length", &self.history_length);
@@ -305,10 +328,8 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
         let _ = builder.field("max_transmit_size", &self.max_transmit_size);
-        let _ = builder.field("hash_topics", &self.hash_topics);
-        let _ = builder.field("no_source_id", &self.no_source_id);
-        let _ = builder.field("manual_propagation", &self.manual_propagation);
-        let _ = builder.field("disable_message_signing", &self.disable_message_signing);
+        let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
+        let _ = builder.field("validate_messages", &self.validate_messages);
         builder.finish()
     }
 }

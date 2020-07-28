@@ -217,7 +217,7 @@ where
         &mut self,
         future: TFut,
         handler: THandler,
-        info: IncomingInfo,
+        info: IncomingInfo<'_>,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
@@ -254,7 +254,7 @@ where
         &mut self,
         future: TFut,
         handler: THandler,
-        info: OutgoingInfo<TPeerId>,
+        info: OutgoingInfo<'_, TPeerId>,
     ) -> Result<ConnectionId, ConnectionLimit>
     where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
@@ -562,7 +562,7 @@ where
     ///
     /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
     /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<
         PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>
     > where
         TConnInfo: ConnectionInfo<PeerId = TPeerId> + Clone,
@@ -793,7 +793,7 @@ where
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<Result<(),()>> {
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(),()>> {
         self.entry.poll_ready_notify_handler(cx)
     }
 

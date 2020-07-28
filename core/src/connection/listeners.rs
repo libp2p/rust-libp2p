@@ -230,7 +230,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot end.
-    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<ListenersEvent<TTrans>> {
+    pub fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<ListenersEvent<TTrans>> {
         // We remove each element from `listeners` one by one and add them back.
         let mut remaining = self.listeners.len();
         while let Some(mut listener) = self.listeners.pop_back() {
@@ -310,7 +310,7 @@ where
 {
     type Item = ListenersEvent<TTrans>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         ListenersStream::poll(self, cx).map(Option::Some)
     }
 }
