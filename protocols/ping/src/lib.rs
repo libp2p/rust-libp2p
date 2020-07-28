@@ -108,7 +108,7 @@ impl NetworkBehaviour for Ping {
         self.events.push_front(PingEvent { peer, result })
     }
 
-    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters)
+    fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<Void, PingEvent>>
     {
         if let Some(e) = self.events.pop_back() {

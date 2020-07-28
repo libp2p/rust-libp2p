@@ -230,7 +230,7 @@ impl GossipsubConfigBuilder {
 }
 
 impl std::fmt::Debug for GossipsubConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
         let _ = if let Ok(text) = std::str::from_utf8(&self.protocol_id) {
             builder.field("protocol_id", &text)
