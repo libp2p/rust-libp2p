@@ -315,8 +315,8 @@ impl Gossipsub {
         let message =
             self.build_message(topics.into_iter().map(|t| t.hash()).collect(), data.into())?;
         let msg_id = (self.config.message_id_fn)(&message);
-        // Add published message to our memcache and add it to the duplicate cache.
-        self.mcache.put(message.clone());
+
+        // Add published message to the duplicate cache.
         if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
@@ -326,6 +326,9 @@ impl Gossipsub {
             );
             return Err(PublishError::Duplicate);
         }
+
+        // If the message isn't a duplicate add it to the memcache.
+        self.mcache.put(message.clone());
 
         debug!("Publishing message: {:?}", msg_id);
 
@@ -655,11 +658,11 @@ impl Gossipsub {
         }
 
         // Add the message to the duplication cache and memcache.
-        self.mcache.put(msg.clone());
         if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
             debug!("Message already received, ignoring. Message: {:?}", msg_id);
             return;
         }
+        self.mcache.put(msg.clone());
 
         // dispatch the message to the user
         if self.mesh.keys().any(|t| msg.topics.iter().any(|u| t == u)) {
