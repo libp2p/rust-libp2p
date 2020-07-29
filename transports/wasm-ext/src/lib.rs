@@ -151,7 +151,7 @@ impl ExtTransport {
 }
 
 impl fmt::Debug for ExtTransport {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ExtTransport").finish()
     }
 }
@@ -224,7 +224,7 @@ impl fmt::Debug for Dial {
 impl Future for Dial {
     type Output = Result<Connection, JsErr>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match Future::poll(Pin::new(&mut *self.inner), cx) {
             Poll::Ready(Ok(connec)) => Poll::Ready(Ok(Connection::new(connec.into()))),
             Poll::Pending => Poll::Pending,
@@ -253,7 +253,7 @@ impl fmt::Debug for Listen {
 impl Stream for Listen {
     type Item = Result<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>, JsErr>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(ev) = self.pending_events.pop_front() {
                 return Poll::Ready(Some(Ok(ev)));
@@ -371,7 +371,7 @@ impl fmt::Debug for Connection {
 }
 
 impl AsyncRead for Connection {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         loop {
             match mem::replace(&mut self.read_state, ConnectionReadState::Finished) {
                 ConnectionReadState::Finished => break Poll::Ready(Err(io::ErrorKind::BrokenPipe.into())),
@@ -435,7 +435,7 @@ impl AsyncRead for Connection {
 }
 
 impl AsyncWrite for Connection {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         // Note: as explained in the doc-comments of `Connection`, each call to this function must
         // map to exactly one call to `self.inner.write()`.
 
@@ -457,12 +457,12 @@ impl AsyncWrite for Connection {
         Poll::Ready(Ok(buf.len()))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // There's no flushing mechanism. In the FFI we consider that writing implicitly flushes.
         Poll::Ready(Ok(()))
     }
 
-    fn poll_close(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // Shutting down is considered instantaneous.
         match self.inner.shutdown() {
             Ok(()) => Poll::Ready(Ok(())),

@@ -225,7 +225,7 @@ where
         self.handler.inject_address_change(new_address);
     }
 
-    fn poll(&mut self, cx: &mut Context) -> Poll<
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
         Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>
     > {
         // Continue negotiation of newly-opened substreams on the listening side.

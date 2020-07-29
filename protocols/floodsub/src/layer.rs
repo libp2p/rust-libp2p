@@ -370,7 +370,7 @@ impl NetworkBehaviour for Floodsub {
 
     fn poll(
         &mut self,
-        _: &mut Context,
+        _: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
