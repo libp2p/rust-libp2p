@@ -24,11 +24,11 @@ use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::protocol::{
     GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
-    MessageId, SIGNING_PREFIX,
+    MessageId, PeerInfo, SIGNING_PREFIX,
 };
 use crate::rpc_proto;
 use crate::topic::{Hasher, Topic, TopicHash};
-use futures::prelude::*;
+use futures::StreamExt;
 use libp2p_core::{
     connection::ConnectionId, identity::error::SigningError, identity::Keypair, Multiaddr, PeerId,
 };
@@ -41,7 +41,9 @@ use lru_time_cache::LruCache;
 use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
+use std::collections::hash_map::Entry;
 use std::iter::FromIterator;
+use std::time::Duration;
 use std::{
     collections::HashSet,
     collections::VecDeque,
@@ -53,6 +55,10 @@ use std::{
 use wasm_timer::{Instant, Interval};
 
 mod tests;
+
+/// The number of heartbeat ticks until we clean up the backoff dictionary. Does only affect
+/// memory performance and nothing external.
+const BACKOFF_CLEAN_UP_TICKS: u64 = 15;
 
 /// Determines if published messages should be signed or not.
 ///
@@ -182,14 +188,19 @@ pub struct Gossipsub {
     /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
 
+    /// The backoff times for each topic and peer. We do not graft to peers for some topic until
+    /// the given backoff instant. Values in the past get cleaned up regularly.
+    backoff: HashMap<TopicHash, HashMap<PeerId, Instant>>,
+
     /// Message cache for the last few heartbeats.
     mcache: MessageCache,
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
 
-    /// Interval stream for checking explicit peers.
-    check_explicit_peers: Interval,
+    /// number of heartbeats since the beginning of time; this allows us to amortize some resource
+    /// clean up -- eg backoff clean up.
+    heartbeat_ticks: u64,
 }
 
 impl Gossipsub {
@@ -214,6 +225,7 @@ impl Gossipsub {
             mesh: HashMap::new(),
             fanout: HashMap::new(),
             fanout_last_pub: HashMap::new(),
+            backoff: HashMap::new(),
             mcache: MessageCache::new(
                 config.history_gossip,
                 config.history_length,
@@ -223,10 +235,7 @@ impl Gossipsub {
                 Instant::now() + config.heartbeat_initial_delay,
                 config.heartbeat_interval,
             ),
-            check_explicit_peers: Interval::new_at(
-                Instant::now() + config.heartbeat_initial_delay,
-                config.check_explicit_peers_interval,
-            ),
+            heartbeat_ticks: 0,
             config,
         }
     }
@@ -519,6 +528,40 @@ impl Gossipsub {
         debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
+    fn make_prune(
+        &mut self,
+        topic_hash: &TopicHash,
+        peer: &PeerId,
+        do_px: bool,
+    ) -> GossipsubControlAction {
+        //TODO check the receving peers version and if not 1.1 do not send any exchange peers
+        //select peers for peer exchange
+        let peers = if do_px {
+            Self::get_random_peers(&self.topic_peers, &topic_hash, self.config.prune_peers, {
+                |p| p != peer //TODO score threshold
+            })
+            .into_iter()
+            .map(|p| PeerInfo { peer: Some(p) })
+            .collect()
+        } else {
+            Vec::new()
+        };
+
+        //update backoff
+        Self::add_backoff(
+            &mut self.backoff,
+            peer,
+            topic_hash,
+            self.config.prune_backoff,
+        );
+
+        GossipsubControlAction::Prune {
+            topic_hash: topic_hash.clone(),
+            peers,
+            backoff: Some(self.config.prune_backoff.as_secs()),
+        }
+    }
+
     /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
@@ -528,13 +571,8 @@ impl Gossipsub {
             for peer in peers {
                 // Send a PRUNE control message
                 info!("LEAVE: Sending PRUNE to peer: {:?}", peer);
-                Self::control_pool_add(
-                    &mut self.control_pool,
-                    peer.clone(),
-                    GossipsubControlAction::Prune {
-                        topic_hash: topic_hash.clone(),
-                    },
-                );
+                let control = self.make_prune(topic_hash, &peer, self.config.do_px);
+                Self::control_pool_add(&mut self.control_pool, peer.clone(), control);
             }
         }
         debug!("Completed LEAVE for topic: {:?}", topic_hash);
@@ -621,19 +659,70 @@ impl Gossipsub {
         debug!("Completed IWANT handling for peer: {:?}", peer_id);
     }
 
+    fn add_backoff(
+        backoff: &mut HashMap<TopicHash, HashMap<PeerId, Instant>>,
+        peer_id: &PeerId,
+        topic: &TopicHash,
+        time: Duration,
+    ) {
+        let instant = Instant::now() + time;
+        match backoff
+            .entry(topic.clone())
+            .or_insert_with(HashMap::new)
+            .entry(peer_id.clone())
+        {
+            Entry::Occupied(mut o) => {
+                if o.get() < &instant {
+                    o.insert(instant);
+                }
+            }
+            Entry::Vacant(v) => {
+                v.insert(instant);
+            }
+        }
+    }
+
     /// Handles GRAFT control messages. If subscribed to the topic, adds the peer to mesh, if not,
     /// responds with PRUNE messages.
     fn handle_graft(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
         debug!("Handling GRAFT message for peer: {:?}", peer_id);
 
         let mut to_prune_topics = HashSet::new();
+
+        let mut do_px = self.config.do_px;
+
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
             warn!("GRAFT: ignoring request from direct peer {:?}", peer_id);
             // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
             to_prune_topics = HashSet::from_iter(topics.into_iter());
+            // but don't PX
+            do_px = false
         } else {
             for topic_hash in topics {
+                // make sure we are not backing off that peer
+                if let Some(backoff_time) = self
+                    .backoff
+                    .get(&topic_hash)
+                    .and_then(|peers| peers.get(peer_id))
+                {
+                    if backoff_time > &Instant::now() {
+                        debug!("GRAFT: ignoring backed off peer {:?}", peer_id);
+                        //TODO add penalty
+                        //no PX
+                        do_px = false;
+                        //TODO extra penalty if the graft is coming too fast (see
+                        // GossipSubGraftFloodThreshold)
+
+                        to_prune_topics.insert(topic_hash.clone());
+                        continue;
+                    }
+                }
+
+                //TODO check score of peer
+
+                //TODO check mesh size upper limit if connection is incoming
+
                 if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                     // if we are subscribed, add peer to the mesh, if not already added
                     info!(
@@ -643,6 +732,7 @@ impl Gossipsub {
                     // Duplicates are ignored
                     peers.insert(peer_id.clone());
                 } else {
+                    //TODO spam hardening as in go implementation?
                     to_prune_topics.insert(topic_hash.clone());
                 }
             }
@@ -652,9 +742,7 @@ impl Gossipsub {
             // build the prune messages to send
             let prune_messages = to_prune_topics
                 .iter()
-                .map(|t| GossipsubControlAction::Prune {
-                    topic_hash: t.clone(),
-                })
+                .map(|t| self.make_prune(t, peer_id, do_px))
                 .collect();
             // Send the prune messages to the peer
             info!(
@@ -674,9 +762,13 @@ impl Gossipsub {
     }
 
     /// Handles PRUNE control messages. Removes peer from the mesh.
-    fn handle_prune(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
+    fn handle_prune(
+        &mut self,
+        peer_id: &PeerId,
+        prune_data: Vec<(TopicHash, Vec<PeerInfo>, Option<u64>)>,
+    ) {
         debug!("Handling PRUNE message for peer: {}", peer_id.to_string());
-        for topic_hash in topics {
+        for (topic_hash, px, backoff) in prune_data {
             if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                 // remove the peer if it exists in the mesh
                 if peers.remove(peer_id) {
@@ -686,9 +778,52 @@ impl Gossipsub {
                         topic_hash
                     );
                 }
+
+                // is there a backoff specified by the peer? if so obey it.
+                Self::add_backoff(
+                    &mut self.backoff,
+                    peer_id,
+                    &topic_hash,
+                    if let Some(backoff) = backoff {
+                        Duration::from_secs(backoff)
+                    } else {
+                        self.config.prune_backoff
+                    },
+                );
+
+                //connect to px peers
+                if !px.is_empty() {
+                    //TODO check score threshold before connecting
+                    self.px_connect(px);
+                }
             }
         }
         debug!("Completed PRUNE handling for peer: {}", peer_id.to_string());
+    }
+
+    fn px_connect(&mut self, mut px: Vec<PeerInfo>) {
+        let n = self.config.prune_peers;
+        //ignore peerInfo with no ID
+        //TODO can we use peerInfo without any IDs if they have a signed peer record?
+        px = px.into_iter().filter(|p| p.peer.is_some()).collect();
+        if px.len() > n {
+            //only use at most prune_peers many random peers
+            let mut rng = thread_rng();
+            px.partial_shuffle(&mut rng, n);
+            px = px.into_iter().take(n).collect();
+        }
+
+        for p in px {
+            //TODO extract signed peer record if given and handle it, see
+            // https://github.com/libp2p/specs/pull/217
+            if let Some(peer_id) = p.peer {
+                //dial peer
+                self.events.push_back(NetworkBehaviourAction::DialPeer {
+                    peer_id,
+                    condition: DialPeerCondition::Disconnected,
+                });
+            }
+        }
     }
 
     /// Handles a newly received GossipsubMessage.
@@ -861,12 +996,36 @@ impl Gossipsub {
         );
     }
 
+    fn do_backoff(backoff_peers: Option<&HashMap<PeerId, Instant>>, peer: &PeerId) -> bool {
+        //We do not consider the instants here, as long as there is an entry we backoff
+        //In the heartbeat we clean up to backoff map to stay up to date.
+        backoff_peers.map_or(false, |m| m.contains_key(peer))
+    }
+
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
         debug!("Starting heartbeat");
 
+        self.heartbeat_ticks += 1;
+
         let mut to_graft = HashMap::new();
         let mut to_prune = HashMap::new();
+
+        //clean up expired backoffs
+        if self.heartbeat_ticks % BACKOFF_CLEAN_UP_TICKS == 0 {
+            let cutoff = Instant::now();
+            self.backoff.retain(|_, m| {
+                m.retain(|_, backoff| &*backoff > &cutoff);
+                !m.is_empty()
+            });
+        }
+
+        //check connections to explicit peers
+        if self.heartbeat_ticks % self.config.check_explicit_peers_ticks == 0 {
+            for p in self.explicit_peers.clone() {
+                self.check_explicit_peer_connection(&p);
+            }
+        }
 
         // maintain the mesh for each topic
         let explicit_peers = &self.explicit_peers;
@@ -881,9 +1040,14 @@ impl Gossipsub {
                 );
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = self.config.mesh_n - peers.len();
+                let backoff_peers = self.backoff.get(topic_hash);
                 let peer_list =
                     Self::get_random_peers(&self.topic_peers, topic_hash, desired_peers, {
-                        |peer| !peers.contains(peer) && !explicit_peers.contains(peer)
+                        |peer| {
+                            !peers.contains(peer)
+                                && !explicit_peers.contains(peer)
+                                && !Self::do_backoff(backoff_peers, peer)
+                        }
                     });
                 for peer in &peer_list {
                     let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
@@ -1047,9 +1211,7 @@ impl Gossipsub {
             if let Some(topics) = to_prune.remove(peer) {
                 let mut prunes = topics
                     .iter()
-                    .map(|topic_hash| GossipsubControlAction::Prune {
-                        topic_hash: topic_hash.clone(),
-                    })
+                    .map(|topic_hash| self.make_prune(topic_hash, peer, self.config.do_px))
                     .collect::<Vec<_>>();
                 control_msgs.append(&mut prunes);
             }
@@ -1069,9 +1231,7 @@ impl Gossipsub {
         for (peer, topics) in to_prune.iter() {
             let remaining_prunes = topics
                 .iter()
-                .map(|topic_hash| GossipsubControlAction::Prune {
-                    topic_hash: topic_hash.clone(),
-                })
+                .map(|topic_hash| self.make_prune(topic_hash, peer, self.config.do_px))
                 .collect();
             self.send_message(
                 peer.clone(),
@@ -1407,7 +1567,11 @@ impl NetworkBehaviour for Gossipsub {
                     self.handle_iwant(&propagation_source, message_ids)
                 }
                 GossipsubControlAction::Graft { topic_hash } => graft_msgs.push(topic_hash),
-                GossipsubControlAction::Prune { topic_hash } => prune_msgs.push(topic_hash),
+                GossipsubControlAction::Prune {
+                    topic_hash,
+                    peers,
+                    backoff,
+                } => prune_msgs.push((topic_hash, peers, backoff)),
             }
         }
         if !ihave_msgs.is_empty() {
@@ -1463,13 +1627,6 @@ impl NetworkBehaviour for Gossipsub {
 
         while let Poll::Ready(Some(())) = self.heartbeat.poll_next_unpin(cx) {
             self.heartbeat();
-        }
-
-        //check connections to explicit peers
-        while let Poll::Ready(Some(())) = self.check_explicit_peers.poll_next_unpin(cx) {
-            for p in self.explicit_peers.clone() {
-                self.check_explicit_peer_connection(&p);
-            }
         }
 
         Poll::Pending

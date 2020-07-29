@@ -263,9 +263,22 @@ impl Encoder for GossipsubCodec {
                     };
                     control.graft.push(rpc_graft);
                 }
-                GossipsubControlAction::Prune { topic_hash } => {
+                GossipsubControlAction::Prune {
+                    topic_hash,
+                    peers,
+                    backoff,
+                } => {
                     let rpc_prune = rpc_proto::ControlPrune {
                         topic_id: Some(topic_hash.into_string()),
+                        peers: peers
+                            .into_iter()
+                            .map(|info| rpc_proto::PeerInfo {
+                                peer_id: info.peer.map(|id| id.into_bytes()),
+                                /// TODO, see https://github.com/libp2p/specs/pull/217
+                                signed_peer_record: None,
+                            })
+                            .collect(),
+                        backoff,
                     };
                     control.prune.push(rpc_prune);
                 }
@@ -443,10 +456,34 @@ impl Decoder for GossipsubCodec {
             let prune_msgs: Vec<GossipsubControlAction> = rpc_control
                 .prune
                 .into_iter()
-                .map(|prune| GossipsubControlAction::Prune {
-                    topic_hash: TopicHash::from_raw(prune.topic_id.unwrap_or_default()),
+                .map(|prune| {
+                    Ok(GossipsubControlAction::Prune {
+                        topic_hash: TopicHash::from_raw(prune.topic_id.unwrap_or_default()),
+                        peers: prune
+                            .peers
+                            .into_iter()
+                            .map(|info| {
+                                Ok({
+                                    PeerInfo {
+                                        peer: info
+                                            .peer_id
+                                            .map(|id| PeerId::from_bytes(id))
+                                            .transpose()
+                                            .map_err(|_| {
+                                                io::Error::new(
+                                                    io::ErrorKind::InvalidData,
+                                                    "Invalid Peer Id",
+                                                )
+                                            })?,
+                                        //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
+                                    }
+                                })
+                            })
+                            .collect::<Result<_, Self::Error>>()?,
+                        backoff: prune.backoff,
+                    })
                 })
-                .collect();
+                .collect::<Result<_, Self::Error>>()?;
 
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
@@ -546,6 +583,14 @@ pub enum GossipsubSubscriptionAction {
     Unsubscribe,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PeerInfo {
+    pub peer: Option<PeerId>,
+    //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
+    // https://github.com/libp2p/specs/pull/217)
+    //pub signed_peer_record: ?,
+}
+
 /// A Control message received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GossipsubControlAction {
@@ -570,6 +615,10 @@ pub enum GossipsubControlAction {
     Prune {
         /// The mesh topic the peer should be removed from.
         topic_hash: TopicHash,
+        /// A list of peers to be proposed to the removed peer as peer exchange
+        peers: Vec<PeerInfo>,
+        /// The backoff time in seconds before we allow to reconnect
+        backoff: Option<u64>,
     },
 }
 
