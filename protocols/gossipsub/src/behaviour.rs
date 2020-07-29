@@ -77,8 +77,11 @@ pub enum MessageAuthenticity {
     ///
     /// The author of the message and the sequence numbers are excluded from the message.
     ///
-    /// NOTE: Excluding these fields may make these messages invalid by other nodes who enforce validation of these
-    /// fields. See [`ValidationMode`] in the `GossipsubConfig` for how to customise this for rust-libp2p gossipsub. A custom message_id function will need to be set to prevent all messages from a peer being filtered as duplicates.
+    /// NOTE: Excluding these fields may make these messages invalid by other nodes who
+    /// enforce validation of these fields. See [`ValidationMode`] in the `GossipsubConfig`
+    /// for how to customise this for rust-libp2p gossipsub.  A custom `message_id`
+    /// function will need to be set to prevent all messages from a peer being filtered
+    /// as duplicates.
     Anonymous,
 }
 
