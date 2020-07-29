@@ -232,7 +232,11 @@ impl GossipsubConfigBuilder {
 impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
-        let _ = builder.field("protocol_id", &self.protocol_id);
+        let _ = if let Ok(text) = std::str::from_utf8(&self.protocol_id) {
+            builder.field("protocol_id", &text)
+        } else {
+            builder.field("protocol_id", &hex_fmt::HexFmt(&self.protocol_id))
+        };
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
