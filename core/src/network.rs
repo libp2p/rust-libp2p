@@ -359,7 +359,7 @@ where
     ///
     /// The `Network` is closed after successful completion
     /// of a graceful shutdown. See [`Network::start_close`]
-    /// and [`Network::closed`].
+    /// and [`Network::close`].
     ///
     /// A closed `Network` no longer performs any I/O and
     /// shoudl eventually be discarded.
