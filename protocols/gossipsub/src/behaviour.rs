@@ -72,8 +72,8 @@ pub enum MessageAuthenticity {
     Author(PeerId),
     /// Message signing is disabled.
     ///
-    /// A random `PeerId` will be used when publishing each message. The sequence number will be a
-    /// random number.
+    /// A random `PeerId` will be used when publishing each message. The sequence number will be
+    /// randomized.
     RandomAuthor,
     /// Message signing is disabled.
     ///
@@ -101,24 +101,20 @@ impl MessageAuthenticity {
     }
 }
 
-/// A data structure for storing information for publishing messages.
-enum PublishInfo {
-    /// Message signing is enabled and this contains relevant information for publishing
-    /// signed messages.
+/// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
+/// for further details.
+enum PublishConfig {
     Signing {
         keypair: Keypair,
         author: PeerId,
         inline_key: Option<Vec<u8>>,
     },
-    // Signing is disabled, but this author is used to publish messages.
     Author(PeerId),
-    /// The author is radomized each message.
     RandomAuthor,
-    /// The from and sequence number fields are excluded from the message
     Anonymous,
 }
 
-impl From<MessageAuthenticity> for PublishInfo {
+impl From<MessageAuthenticity> for PublishConfig {
     fn from(authenticity: MessageAuthenticity) -> Self {
         match authenticity {
             MessageAuthenticity::Signed(keypair) => {
@@ -133,15 +129,15 @@ impl From<MessageAuthenticity> for PublishInfo {
                     Some(key_enc)
                 };
 
-                PublishInfo::Signing {
+                PublishConfig::Signing {
                     keypair,
                     author: public_key.into_peer_id(),
                     inline_key: key,
                 }
             }
-            MessageAuthenticity::Author(peer_id) => PublishInfo::Author(peer_id),
-            MessageAuthenticity::RandomAuthor => PublishInfo::RandomAuthor,
-            MessageAuthenticity::Anonymous => PublishInfo::Anonymous,
+            MessageAuthenticity::Author(peer_id) => PublishConfig::Author(peer_id),
+            MessageAuthenticity::RandomAuthor => PublishConfig::RandomAuthor,
+            MessageAuthenticity::Anonymous => PublishConfig::Anonymous,
         }
     }
 }
@@ -162,7 +158,7 @@ pub struct Gossipsub {
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
 
     /// Information used for publishing messages.
-    publish_info: PublishInfo,
+    publish_info: PublishConfig,
 
     /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
     /// duplicates from being propagated to the application and on the network.
@@ -197,7 +193,7 @@ pub struct Gossipsub {
 }
 
 impl Gossipsub {
-    /// Creates a `Gossipsub` struct given a set of parameters specified by via a `GossipsubConfig`.
+    /// Creates a `Gossipsub` struct given a set of parameters specified via a `GossipsubConfig`.
     pub fn new(privacy: MessageAuthenticity, config: GossipsubConfig) -> Self {
         // Set up the router given the configuration settings.
 
@@ -916,6 +912,7 @@ impl Gossipsub {
                     let peer = shuffled
                         .pop()
                         .expect("There should always be enough peers to remove");
+                    peers.remove(&peer);
                     let current_topic = to_prune.entry(peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }
@@ -1141,7 +1138,7 @@ impl Gossipsub {
         data: Vec<u8>,
     ) -> Result<GossipsubMessage, SigningError> {
         match &self.publish_info {
-            PublishInfo::Signing {
+            PublishConfig::Signing {
                 ref keypair,
                 author,
                 inline_key,
@@ -1186,7 +1183,7 @@ impl Gossipsub {
                     validated: true, // all published messages are valid
                 })
             }
-            PublishInfo::Author(peer_id) => {
+            PublishConfig::Author(peer_id) => {
                 Ok(GossipsubMessage {
                     source: Some(peer_id.clone()),
                     data,
@@ -1199,7 +1196,7 @@ impl Gossipsub {
                     validated: true, // all published messages are valid
                 })
             }
-            PublishInfo::RandomAuthor => {
+            PublishConfig::RandomAuthor => {
                 Ok(GossipsubMessage {
                     source: Some(PeerId::random()),
                     data,
@@ -1212,7 +1209,7 @@ impl Gossipsub {
                     validated: true, // all published messages are valid
                 })
             }
-            PublishInfo::Anonymous => {
+            PublishConfig::Anonymous => {
                 Ok(GossipsubMessage {
                     source: None,
                     data,
