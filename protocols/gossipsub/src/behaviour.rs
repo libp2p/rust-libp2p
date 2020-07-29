@@ -856,6 +856,7 @@ impl Gossipsub {
                     let peer = shuffled
                         .pop()
                         .expect("There should always be enough peers to remove");
+                    peers.remove(&peer);
                     let current_topic = to_prune.entry(peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
                 }

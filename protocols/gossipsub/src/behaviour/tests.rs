@@ -846,4 +846,53 @@ mod tests {
             "Expected peer to be removed from mesh"
         );
     }
+
+    #[test]
+    // Tests the mesh maintenance addition
+    fn test_mesh_addition() {
+        let config = GossipsubConfig::default();
+
+        // Adds mesh_low peers and PRUNE 2 giving us a deficit.
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes(config.mesh_n + 1, vec!["test".into()], true);
+
+        let to_remove_peers = config.mesh_n + 1 - config.mesh_n_low - 1;
+
+        for index in 0..to_remove_peers {
+            gs.handle_prune(&peers[index], topics.clone());
+        }
+
+        // Verify the pruned peers are removed from the mesh.
+        assert_eq!(
+            gs.mesh.get(&topics[0]).unwrap().len(),
+            config.mesh_n_low - 1
+        );
+
+        // run a heartbeat
+        gs.heartbeat();
+
+        // Peers should be added to reach mesh_n
+        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n);
+    }
+
+    #[test]
+    // Tests the mesh maintenance subtraction
+    fn test_mesh_subtraction() {
+        let config = GossipsubConfig::default();
+
+        // Adds mesh_low peers and PRUNE 2 giving us a deficit.
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes(config.mesh_n_high + 10, vec!["test".into()], true);
+
+        // graft all the peers
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        // run a heartbeat
+        gs.heartbeat();
+
+        // Peers should be removed to reach mesh_n
+        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n);
+    }
 }
