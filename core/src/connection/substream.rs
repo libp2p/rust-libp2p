@@ -211,34 +211,6 @@ where
     }
 }
 
-<<<<<<< HEAD
-impl<TMuxer> Future for Close<TMuxer>
-where
-    TMuxer: StreamMuxer,
-{
-    type Output = Result<(), IoError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.muxer.close(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
-        }
-    }
-}
-
-impl<TMuxer> fmt::Debug for Close<TMuxer>
-where
-    TMuxer: StreamMuxer,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("Close")
-            .finish()
-    }
-}
-
-=======
->>>>>>> Graceful shutdown for connections, networks and swarms.
 impl<TMuxer, TUserData> fmt::Debug for SubstreamEvent<TMuxer, TUserData>
 where
     TMuxer: StreamMuxer,
