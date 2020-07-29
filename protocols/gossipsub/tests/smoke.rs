@@ -29,6 +29,7 @@ use std::{
     time::Duration,
 };
 
+use futures::StreamExt;
 use libp2p_core::{
     identity, multiaddr::Protocol, muxing::StreamMuxerBox, transport::MemoryTransport, upgrade,
     Multiaddr, Transport,

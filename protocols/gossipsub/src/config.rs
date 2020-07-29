@@ -84,9 +84,9 @@ pub struct GossipsubConfig {
     /// Time to live for fanout peers (default is 60 seconds).
     pub fanout_ttl: Duration,
 
-    /// Interval for rechecking the connection to explicit peers and reconnecting if necessary
-    /// (default 300 seconds).
-    pub check_explicit_peers_interval: Duration,
+    /// The number of heartbeat ticks until we recheck the connection to explicit peers and
+    /// reconnecting if necessary (default 300).
+    pub check_explicit_peers_ticks: u64,
 
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub max_transmit_size: usize,
@@ -118,6 +118,25 @@ pub struct GossipsubConfig {
     /// The function takes a `GossipsubMessage` as input and outputs a String to be interpreted as
     /// the message id.
     pub message_id_fn: fn(&GossipsubMessage) -> MessageId,
+
+    // Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
+    // connected/trusted nodes. The default is true.
+    pub do_px: bool,
+
+    /// Controls the number of peers to include in prune Peer eXchange.
+    /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
+    /// send them signed peer records for up to `prune_peers` other peers that we
+    /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
+    /// peer can reliably form a full mesh. The default is 16.
+    pub prune_peers: usize,
+
+    // Controls the backoff time for pruned peers. This is how long
+    // a peer must wait before attempting to graft into our mesh again after being pruned.
+    // When pruning a peer, we send them our value of `prune_backoff` so they know
+    // the minimum time to wait. Peers running older versions may not send a backoff time,
+    // so if we receive a prune message without one, we will wait at least `prune_backoff`
+    // before attempting to re-graft. The default is one minute.
+    pub prune_backoff: Duration,
 }
 
 impl Default for GossipsubConfig {
@@ -133,7 +152,7 @@ impl Default for GossipsubConfig {
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
-            check_explicit_peers_interval: Duration::from_secs(300),
+            check_explicit_peers_ticks: 300,
             max_transmit_size: 2048,
             duplicate_cache_time: Duration::from_secs(60),
             validate_messages: false,
@@ -151,6 +170,9 @@ impl Default for GossipsubConfig {
                 source_string.push_str(&message.sequence_number.unwrap_or_default().to_string());
                 MessageId::from(source_string)
             },
+            do_px: true,
+            prune_peers: 16,
+            prune_backoff: Duration::from_secs(60),
         }
     }
 }
@@ -251,12 +273,10 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Time between each heartbeat (default is 1 second).
-    pub fn check_explicit_peers_interval(
-        &mut self,
-        check_explicit_peers_interval: Duration,
-    ) -> &mut Self {
-        self.config.check_explicit_peers_interval = check_explicit_peers_interval;
+    /// The number of heartbeat ticks until we recheck the connection to explicit peers and
+    /// reconnecting if necessary (default 300).
+    pub fn check_explicit_peers_ticks(&mut self, check_explicit_peers_ticks: u64) -> &mut Self {
+        self.config.check_explicit_peers_ticks = check_explicit_peers_ticks;
         self
     }
 
@@ -307,6 +327,34 @@ impl GossipsubConfigBuilder {
     /// the message id.
     pub fn message_id_fn(&mut self, id_fn: fn(&GossipsubMessage) -> MessageId) -> &mut Self {
         self.config.message_id_fn = id_fn;
+        self
+    }
+
+    // Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
+    // connected/trusted nodes. The default is true.
+    pub fn do_px(&mut self, do_px: bool) -> &mut Self {
+        self.config.do_px = do_px;
+        self
+    }
+
+    /// Controls the number of peers to include in prune Peer eXchange.
+    /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
+    /// send them signed peer records for up to `prune_peers` other peers that we
+    /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
+    /// peer can reliably form a full mesh. The default is 16.
+    pub fn prune_peers(&mut self, prune_peers: usize) -> &mut Self {
+        self.config.prune_peers = prune_peers;
+        self
+    }
+
+    // Controls the backoff time for pruned peers. This is how long
+    // a peer must wait before attempting to graft into our mesh again after being pruned.
+    // When pruning a peer, we send them our value of `prune_backoff` so they know
+    // the minimum time to wait. Peers running older versions may not send a backoff time,
+    // so if we receive a prune message without one, we will wait at least `prune_backoff`
+    // before attempting to re-graft. The default is one minute.
+    pub fn prune_backoff(&mut self, prune_backoff: Duration) -> &mut Self {
+        self.config.prune_backoff = prune_backoff;
         self
     }
 
