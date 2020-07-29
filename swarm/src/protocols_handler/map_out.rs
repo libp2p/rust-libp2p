@@ -100,7 +100,7 @@ where
     #[inline]
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {

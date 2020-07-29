@@ -577,7 +577,7 @@ where
         }
     }
 
-    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters)
+    fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<
             RequestProtocol<TCodec>,
             RequestResponseEvent<TCodec::Request, TCodec::Response>

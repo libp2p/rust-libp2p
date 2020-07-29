@@ -51,6 +51,7 @@ use wasm_timer::{Instant, Interval};
 
 mod tests;
 
+#[derive(Debug)]
 /// Network behaviour that handles the gossipsub protocol.
 pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
@@ -1133,7 +1134,7 @@ impl NetworkBehaviour for Gossipsub {
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<

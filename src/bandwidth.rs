@@ -91,7 +91,7 @@ where
 {
     type Item = Result<ListenerEvent<BandwidthFuture<TConn>, TErr>, TErr>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         let event =
@@ -122,7 +122,7 @@ pub struct BandwidthFuture<TInner> {
 impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
     type Output = Result<BandwidthConnecLogging<TInner::Ok>, TInner::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let inner = ready!(this.inner.try_poll(cx)?);
         let logged = BandwidthConnecLogging { inner, sinks: this.sinks.clone() };
@@ -165,14 +165,14 @@ pub struct BandwidthConnecLogging<TInner> {
 }
 
 impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
         this.sinks.inbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &mut [IoSliceMut]) -> Poll<io::Result<usize>> {
+    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &mut [IoSliceMut<'_>]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
         this.sinks.inbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
@@ -181,26 +181,26 @@ impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
 }
 
 impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
         this.sinks.outbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice]) -> Poll<io::Result<usize>> {
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>]) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
         this.sinks.outbound.fetch_add(u64::try_from(num_bytes).unwrap_or(u64::max_value()), Ordering::Relaxed);
         Poll::Ready(Ok(num_bytes))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.project();
         this.inner.poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.project();
         this.inner.poll_close(cx)
     }

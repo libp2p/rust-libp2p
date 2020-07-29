@@ -191,7 +191,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut Context,
+        _: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {

@@ -243,7 +243,7 @@ impl<S: AsyncRead + AsyncWrite> PnetOutput<S> {
 impl<S: AsyncRead + AsyncWrite> AsyncRead for PnetOutput<S> {
     fn poll_read(
         self: Pin<&mut Self>,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         let this = self.project();
@@ -260,17 +260,17 @@ impl<S: AsyncRead + AsyncWrite> AsyncRead for PnetOutput<S> {
 impl<S: AsyncRead + AsyncWrite> AsyncWrite for PnetOutput<S> {
     fn poll_write(
         self: Pin<&mut Self>,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         self.project().inner.poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().inner.poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().inner.poll_close(cx)
     }
 }

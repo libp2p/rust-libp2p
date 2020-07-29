@@ -64,7 +64,7 @@ pub trait ConnectionHandler {
     /// Polls the handler for events.
     ///
     /// Returning an error will close the connection to the remote.
-    fn poll(&mut self, cx: &mut Context)
+    fn poll(&mut self, cx: &mut Context<'_>)
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>;
 }
 
