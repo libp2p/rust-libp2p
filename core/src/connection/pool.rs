@@ -646,7 +646,7 @@ where
         // Start a clean shutdown for all established connections.
         for id in self.established.values().flat_map(|conns| conns.keys()) {
             match self.manager.entry(*id) {
-                Some(manager::Entry::Established(mut e)) => {
+                Some(manager::Entry::Established(e)) => {
                     e.start_close();
                 },
                 _ => {
