@@ -480,7 +480,7 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
     ///
     /// When the connection is ultimately closed, [`Event::ConnectionClosed`]
     /// is emitted by [`Manager::poll`].
-    pub fn start_close(&mut self) {
+    pub fn start_close(mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
         match self.task.get_mut().sender.clone().try_send(task::Command::Close) {

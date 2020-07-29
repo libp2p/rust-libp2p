@@ -854,7 +854,9 @@ where
     }
 
     /// Initiates a graceful close of the connection.
-    pub fn start_close(mut self) {
+    ///
+    /// Has no effect if the connection is already closing.
+    pub fn start_close(self) {
         self.entry.start_close()
     }
 }
