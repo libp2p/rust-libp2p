@@ -415,7 +415,7 @@ enum ConnectionState {
     CloseHandler,
     /// The connection is closing, rejecting new inbound substreams
     /// and not permitting new outbound substreams while the
-    /// muxer is closing the transport connection. [`Muxer::poll_close`]
+    /// muxer is closing the transport connection. [`substream::Muxing::poll_close`]
     /// is called until completion, which results in transitioning
     /// to `Closed`.
     CloseMuxer,
