@@ -549,7 +549,7 @@ where
 
     /// Returns an iterator over all non-empty buckets in the routing table.
     pub fn kbuckets(&mut self)
-        -> impl Iterator<Item = kbucket::KBucketRef<kbucket::Key<PeerId>, Contact>>
+        -> impl Iterator<Item = kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Contact>>
     {
         self.kbuckets.iter().filter(|b| !b.is_empty())
     }
@@ -558,7 +558,7 @@ where
     ///
     /// Returns `None` if the given key refers to the local key.
     pub fn kbucket<K>(&mut self, key: K)
-        -> Option<kbucket::KBucketRef<kbucket::Key<PeerId>, Contact>>
+        -> Option<kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Contact>>
     where
         K: Borrow<[u8]> + Clone
     {
@@ -1990,7 +1990,7 @@ where
         };
     }
 
-    fn poll(&mut self, cx: &mut Context, parameters: &mut impl PollParameters) -> Poll<
+    fn poll(&mut self, cx: &mut Context<'_>, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
             <KademliaHandler<QueryId> as ProtocolsHandler>::InEvent,
             Self::OutEvent,

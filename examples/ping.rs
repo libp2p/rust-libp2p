@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     let mut listening = false;
-    task::block_on(future::poll_fn(move |cx: &mut Context| {
+    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => println!("{:?}", event),

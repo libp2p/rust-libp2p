@@ -82,7 +82,7 @@ where
 {
     type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>, TErr>, TErr>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
         match TryStream::try_poll_next(this.inner, cx) {
             Poll::Ready(Some(Ok(event))) => {
@@ -118,7 +118,7 @@ where T: Transport,
 {
     type Output = Result<T::Output, TErr>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match Future::poll(this.inner, cx) {
             Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
@@ -146,7 +146,7 @@ where
 {
     type Output = Result<T::Output, TErr>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match Future::poll(this.inner, cx) {
             Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),

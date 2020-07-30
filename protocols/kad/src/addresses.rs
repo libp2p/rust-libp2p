@@ -108,7 +108,7 @@ impl From<SmallVec<[Multiaddr; 6]>> for Addresses {
 }
 
 impl fmt::Debug for Addresses {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list()
             .entries(self.addrs.iter())
             .finish()

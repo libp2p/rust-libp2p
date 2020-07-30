@@ -29,7 +29,7 @@ use futures::prelude::*;
 use futures_codec::{Decoder, Encoder, Framed};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, io, iter, pin::Pin};
+use std::{borrow::Cow, fmt, io, iter, pin::Pin};
 use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
@@ -336,7 +336,7 @@ impl Into<String> for MessageId {
 }
 
 /// A message received by the gossipsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {
     /// Id of the peer that published this message.
     pub source: PeerId,
@@ -351,6 +351,17 @@ pub struct GossipsubMessage {
     ///
     /// Each message can belong to multiple topics at once.
     pub topics: Vec<TopicHash>,
+}
+
+impl fmt::Debug for GossipsubMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GossipsubMessage")
+            .field("data",&format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)))
+            .field("source", &self.source)
+            .field("sequence_number", &self.sequence_number)
+            .field("topics", &self.topics)
+            .finish()
+    }
 }
 
 /// A subscription received by the gossipsub system.

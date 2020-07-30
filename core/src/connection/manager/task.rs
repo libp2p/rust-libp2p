@@ -190,7 +190,7 @@ where
     // NOTE: It is imperative to always consume all incoming commands from
     // the manager first, in order to not prevent it from making progress because
     // it is blocked on the channel capacity.
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
         let this = &mut *self;
         let id = this.id;
 

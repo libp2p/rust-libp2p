@@ -46,7 +46,7 @@ pub struct DialFuture {
 impl Future for DialFuture {
     type Output = Result<Channel<Vec<u8>>, MemoryTransportError>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.sender.poll_ready(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(Ok(())) => {},
@@ -175,7 +175,7 @@ pub struct Listener {
 impl Stream for Listener {
     type Item = Result<ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>, MemoryTransportError>, MemoryTransportError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.tell_listen_addr {
             self.tell_listen_addr = false;
             return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))))
@@ -240,7 +240,7 @@ impl<T> Unpin for Chan<T> {
 impl<T> Stream for Chan<T> {
     type Item = Result<T, io::Error>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Stream::poll_next(Pin::new(&mut self.incoming), cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(Some(Err(io::ErrorKind::BrokenPipe.into()))),
@@ -252,7 +252,7 @@ impl<T> Stream for Chan<T> {
 impl<T> Sink<T> for Chan<T> {
     type Error = io::Error;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.outgoing.poll_ready(cx)
             .map(|v| v.map_err(|_| io::ErrorKind::BrokenPipe.into()))
     }
@@ -261,11 +261,11 @@ impl<T> Sink<T> for Chan<T> {
         self.outgoing.start_send(item).map_err(|_| io::ErrorKind::BrokenPipe.into())
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_close(self: Pin<&mut Self>, _: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 }

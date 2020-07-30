@@ -110,7 +110,7 @@ impl<R> LengthDelimited<R> {
     ///
     /// After this method returns `Poll::Ready`, the write buffer of frames
     /// submitted to the `Sink` is guaranteed to be empty.
-    pub fn poll_write_buffer(self: Pin<&mut Self>, cx: &mut Context)
+    pub fn poll_write_buffer(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     where
         R: AsyncWrite
@@ -140,7 +140,7 @@ where
 {
     type Item = Result<Bytes, io::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
 
         loop {
@@ -212,7 +212,7 @@ where
 {
     type Error = io::Error;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Use the maximum frame length also as a (soft) upper limit
         // for the entire write buffer. The actual (hard) limit is thus
         // implied to be roughly 2 * MAX_FRAME_SIZE.
@@ -250,7 +250,7 @@ where
         Ok(())
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Write all buffered frame data to the underlying I/O stream.
         match LengthDelimited::poll_write_buffer(self.as_mut(), cx) {
             Poll::Ready(Ok(())) => {},
@@ -265,7 +265,7 @@ where
         this.inner.poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Write all buffered frame data to the underlying I/O stream.
         match LengthDelimited::poll_write_buffer(self.as_mut(), cx) {
             Poll::Ready(Ok(())) => {},
@@ -314,7 +314,7 @@ where
 {
     type Item = Result<Bytes, io::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.project().inner.poll_next(cx)
     }
 }
@@ -323,7 +323,7 @@ impl<R> AsyncWrite for LengthDelimitedReader<R>
 where
     R: AsyncWrite
 {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
         // `this` here designates the `LengthDelimited`.
@@ -340,15 +340,15 @@ where
         this.project().inner.poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().inner.poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().inner.poll_close(cx)
     }
 
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice])
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>])
         -> Poll<Result<usize, io::Error>>
     {
         // `this` here designates the `LengthDelimited`.

@@ -193,7 +193,7 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Polls the pool to advance the queries.
-    pub fn poll(&mut self, now: Instant) -> QueryPoolState<TInner> {
+    pub fn poll(&mut self, now: Instant) -> QueryPoolState<'_, TInner> {
         let mut finished = None;
         let mut timeout = None;
         let mut waiting = None;
@@ -389,7 +389,7 @@ impl<TInner> Query<TInner> {
     }
 
     /// Advances the state of the underlying peer iterator.
-    fn next(&mut self, now: Instant) -> PeersIterState {
+    fn next(&mut self, now: Instant) -> PeersIterState<'_> {
         use PeersIterState::*;
 
         // First query weighted iter
