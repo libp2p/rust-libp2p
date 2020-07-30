@@ -1634,4 +1634,82 @@ mod tests {
             "Message cache should contain published message"
         );
     }
+
+    #[test]
+    fn test_gossip_to_at_least_gossip_lazy_peers() {
+        let config = GossipsubConfig::default();
+
+        //add more peers than in mesh to test gossipping
+        //by default only mesh_n_low peers will get added to mesh
+        let (mut gs, _, topic_hashes) = build_and_inject_nodes(
+            config.mesh_n_low + config.gossip_lazy + 1,
+            vec!["topic".into()],
+            true,
+        );
+
+        //receive message
+        let message = GossipsubMessage {
+            source: Some(PeerId::random()),
+            data: vec![],
+            sequence_number: Some(0),
+            topics: vec![topic_hashes[0].clone()],
+            signature: None,
+            key: None,
+            validated: true,
+        };
+        gs.handle_received_message(message.clone(), &PeerId::random());
+
+        //emit gossip
+        gs.emit_gossip();
+
+        //check that exactly config.gossip_lazy many gossip messages were sent.
+        let msg_id = (gs.config.message_id_fn)(&message);
+        assert_eq!(
+            count_control_msgs(&gs, |peer, action| match action {
+                GossipsubControlAction::IHave {
+                    topic_hash,
+                    message_ids,
+                } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
+                _ => false,
+            }),
+            config.gossip_lazy
+        );
+    }
+
+    #[test]
+    fn test_gossip_to_at_most_gossip_factor_peers() {
+        let config = GossipsubConfig::default();
+
+        //add a lot of peers
+        let m = config.mesh_n_low + config.gossip_lazy * (2.0 / config.gossip_factor) as usize;
+        let (mut gs, _, topic_hashes) = build_and_inject_nodes(m, vec!["topic".into()], true);
+
+        //receive message
+        let message = GossipsubMessage {
+            source: Some(PeerId::random()),
+            data: vec![],
+            sequence_number: Some(0),
+            topics: vec![topic_hashes[0].clone()],
+            signature: None,
+            key: None,
+            validated: true,
+        };
+        gs.handle_received_message(message.clone(), &PeerId::random());
+
+        //emit gossip
+        gs.emit_gossip();
+
+        //check that exactly config.gossip_lazy many gossip messages were sent.
+        let msg_id = (gs.config.message_id_fn)(&message);
+        assert_eq!(
+            count_control_msgs(&gs, |peer, action| match action {
+                GossipsubControlAction::IHave {
+                    topic_hash,
+                    message_ids,
+                } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
+                _ => false,
+            }),
+            ((m - config.mesh_n_low) as f64 * config.gossip_factor) as usize
+        );
+    }
 }
