@@ -474,14 +474,21 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// drained by asking the associated [`ProtocolsHandler`] to close,
     /// after which the underlying connection is closed.
     ///
-    /// 2. The [`NetworkBehaviour`] associated with the `Swarm` continues
-    /// to be polled once the `Network` closed until it returns
-    /// `Poll::Pending`, indicating that further network I/O would be
-    /// needed for the behaviour to make progress. In this way, the
-    /// behaviour can finish any work and emit resulting events.
+    /// 2. While the `Network` is shutting down, the [`NetworkBehaviour`]
+    /// is polled to close as well, via [`NetworkBehaviour::poll_close`],
+    /// i.e. `Network` and `NetworkBehaviour` perform the shutdown in tandem.
+    ///
+    /// 3. Once the `Network` is closed and at the same time
+    /// [`NetworkBehaviour::poll_close`] returns `Poll::Ready(None)`,
+    /// shutdown is complete. In this way, the behaviour can finish
+    /// any work and emit resulting events even after the `Network`
+    /// already closed.
     ///
     /// After calling this method, the `Swarm` must be `poll()`ed to
     /// drive the shutdown to completion.
+    ///
+    /// See [`ExpandedSwarm::close`] to perform a shutdown that
+    /// ignores any further events that are emitted.
     pub fn start_close(me: &mut Self) {
         me.network.start_close()
     }
