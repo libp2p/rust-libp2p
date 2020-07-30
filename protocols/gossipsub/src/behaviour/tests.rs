@@ -1472,8 +1472,13 @@ mod tests {
 
     #[test]
     fn test_do_not_graft_within_backoff_period() {
+        let config = GossipsubConfigBuilder::new()
+            .backoff_slack(1)
+            .heartbeat_interval(Duration::from_millis(100))
+            .build();
         //only one peer => mesh too small and will try to regraft as early as possible
-        let (mut gs, peers, topics) = build_and_inject_nodes(1, vec!["test".into()], true);
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes_with_config(1, vec!["test".into()], true, config);
 
         //handle prune from peer with backoff of one second
         gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), Some(1))]);
@@ -1484,7 +1489,14 @@ mod tests {
         //call heartbeat
         gs.heartbeat();
 
-        //check that no graft got created
+        //Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
+        for _ in 0..10 {
+            sleep(Duration::from_millis(100));
+            gs.heartbeat();
+        }
+
+        //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+        // is needed).
         assert_eq!(
             count_control_msgs(&gs, |_, m| match m {
                 GossipsubControlAction::Graft { .. } => true,
@@ -1494,16 +1506,9 @@ mod tests {
             "Graft message created too early within backoff period"
         );
 
-        //sleep for one second
-        sleep(Duration::from_secs(1));
-
-        //backoff is over check that we graft
-
-        //backoffs are only cleared every `BACKOFF_CLEAN_UP_TICKS` many heartbeats, apply as many
-        //heartbeats
-        for _ in 0..BACKOFF_CLEAN_UP_TICKS {
-            gs.heartbeat();
-        }
+        //Heartbeat one more time this should graft now
+        sleep(Duration::from_millis(100));
+        gs.heartbeat();
 
         //check that graft got created
         assert!(
@@ -1519,7 +1524,9 @@ mod tests {
     fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without_backoff() {
         //set default backoff period to 1 second
         let config = GossipsubConfigBuilder::new()
-            .prune_backoff(Duration::from_millis(100))
+            .prune_backoff(Duration::from_millis(90))
+            .backoff_slack(1)
+            .heartbeat_interval(Duration::from_millis(100))
             .build();
         //only one peer => mesh too small and will try to regraft as early as possible
         let (mut gs, peers, topics) =
@@ -1534,7 +1541,12 @@ mod tests {
         //call heartbeat
         gs.heartbeat();
 
-        //check that no graft got created
+        //Apply one more heartbeat
+        sleep(Duration::from_millis(100));
+        gs.heartbeat();
+
+        //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+        // is needed).
         assert_eq!(
             count_control_msgs(&gs, |_, m| match m {
                 GossipsubControlAction::Graft { .. } => true,
@@ -1544,16 +1556,9 @@ mod tests {
             "Graft message created too early within backoff period"
         );
 
-        //sleep for 100 milli seconds
+        //Heartbeat one more time this should graft now
         sleep(Duration::from_millis(100));
-
-        //backoff is over check that we graft
-
-        //backoffs are only cleared every `BACKOFF_CLEAN_UP_TICKS` many heartbeats, apply as many
-        //heartbeats
-        for _ in 0..BACKOFF_CLEAN_UP_TICKS {
-            gs.heartbeat();
-        }
+        gs.heartbeat();
 
         //check that graft got created
         assert!(
