@@ -181,7 +181,7 @@ impl ClosestDisjointPeersIter {
         self.iters.iter().any(|i| i.is_waiting(peer))
     }
 
-    pub fn next(&mut self, now: Instant) -> PeersIterState {
+    pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
         let mut state = None;
 
         // Ensure querying each iterator at most once.
@@ -713,7 +713,7 @@ mod tests {
     struct Graph(HashMap<PeerId, Peer>);
 
     impl std::fmt::Debug for Graph {
-        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             fmt.debug_list().entries(self.0.iter().map(|(id, _)| id)).finish()
         }
     }
@@ -807,7 +807,7 @@ mod tests {
     }
 
     impl PeerIterator {
-        fn next(&mut self, now: Instant) -> PeersIterState {
+        fn next(&mut self, now: Instant) -> PeersIterState<'_> {
             match self {
                 PeerIterator::Disjoint(iter) => iter.next(now),
                 PeerIterator::Closest(iter) => iter.next(now),

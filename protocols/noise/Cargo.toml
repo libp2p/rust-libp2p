@@ -1,13 +1,14 @@
 [package]
 name = "libp2p-noise"
 description = "Cryptographic handshake protocol using the noise framework."
-version = "0.20.0"
+version = "0.21.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
 [dependencies]
+bytes = "0.5"
 curve25519-dalek = "2.0.0"
 futures = "0.3.1"
 lazy_static = "1.2"
@@ -21,10 +22,10 @@ x25519-dalek = "0.6.0"
 zeroize = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-snow = { version = "0.7.0", features = ["ring-resolver"], default-features = false }
+snow = { version = "0.7.1", features = ["ring-resolver"], default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-snow = { version = "0.7.0", features = ["default-resolver"], default-features = false }
+snow = { version = "0.7.1", features = ["default-resolver"], default-features = false }
 
 [dev-dependencies]
 env_logger = "0.7.1"

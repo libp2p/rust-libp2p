@@ -335,7 +335,7 @@ fn append() {
     assert_eq!(None, i.next())
 }
 
-fn replace_ip_addr(a: &Multiaddr, p: Protocol) -> Option<Multiaddr> {
+fn replace_ip_addr(a: &Multiaddr, p: Protocol<'_>) -> Option<Multiaddr> {
     a.replace(0, move |x| match x {
         Protocol::Ip4(_) | Protocol::Ip6(_) => Some(p),
         _ => None

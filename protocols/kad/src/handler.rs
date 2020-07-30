@@ -109,7 +109,7 @@ impl<TUserData> SubstreamState<TUserData> {
     /// Tries to close the substream.
     ///
     /// If the substream is not ready to be closed, returns it back.
-    fn try_close(&mut self, cx: &mut Context) -> Poll<()> {
+    fn try_close(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         match self {
             SubstreamState::OutPendingOpen(_, _)
             | SubstreamState::OutReportError(_, _) => Poll::Ready(()),
@@ -612,7 +612,7 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>,
     > {
@@ -679,7 +679,7 @@ impl Default for KademliaHandlerConfig {
 fn advance_substream<TUserData>(
     state: SubstreamState<TUserData>,
     upgrade: KademliaProtocolConfig,
-    cx: &mut Context,
+    cx: &mut Context<'_>,
 ) -> (
     Option<SubstreamState<TUserData>>,
     Option<

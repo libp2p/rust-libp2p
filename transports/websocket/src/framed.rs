@@ -470,7 +470,7 @@ pub enum OutgoingData {
 }
 
 impl<T> fmt::Debug for Connection<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Connection")
     }
 }
@@ -547,7 +547,7 @@ where
 {
     type Item = io::Result<IncomingData>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let item = ready!(self.receiver.poll_next_unpin(cx));
         let item = item.map(|result| {
             result.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -562,7 +562,7 @@ where
 {
     type Error = io::Error;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_ready(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -574,13 +574,13 @@ where
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_flush(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.sender)
             .poll_close(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))

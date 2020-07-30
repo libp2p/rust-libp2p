@@ -125,7 +125,7 @@ impl<I, O, H, E, HE, C> fmt::Debug for Manager<I, O, H, E, HE, C>
 where
     C: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.tasks.iter().map(|(id, task)| (id, &task.state)))
             .finish()
@@ -346,7 +346,7 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
     }
 
     /// Polls the manager for events relating to the managed connections.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<Event<'a, I, O, H, TE, HE, C>> {
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<Event<'a, I, O, H, TE, HE, C>> {
         // Advance the content of `local_spawns`.
         while let Poll::Ready(Some(_)) = Stream::poll_next(Pin::new(&mut self.local_spawns), cx) {}
 
@@ -468,7 +468,7 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<Result<(),()>> {
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(),()>> {
         self.task.get_mut().sender.poll_ready(cx).map_err(|_| ())
     }
 

@@ -26,6 +26,7 @@ base64 = "0.11.0"
 lru = "0.4.3"
 smallvec = "1.1.0"
 prost = "0.6.1"
+hex_fmt = "0.3.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
