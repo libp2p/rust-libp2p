@@ -168,7 +168,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Returns until when the connection should be kept alive.
     ///
     /// This method is called by the `Swarm` after each invocation of
-    /// [`Self::poll`] to determine if the connection and the associated
+    /// [`ProtocolsHandler::poll`] to determine if the connection and the associated
     /// `ProtocolsHandler`s should be kept alive as far as this handler is concerned
     /// and if so, for how long.
     ///

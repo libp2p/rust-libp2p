@@ -487,7 +487,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 
     /// Closes the `Swarm`, ignoring any further events.
     ///
-    /// See [`Self::start_close`] for details.
+    /// See [`ExpandedSwarm::start_close`] for details.
     pub async fn close(&mut self) {
         self.network.start_close();
         while let Some(_) = self.next_event().await {}
