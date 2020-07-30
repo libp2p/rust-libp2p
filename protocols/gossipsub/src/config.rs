@@ -119,8 +119,8 @@ pub struct GossipsubConfig {
     /// the message id.
     pub message_id_fn: fn(&GossipsubMessage) -> MessageId,
 
-    // Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    // connected/trusted nodes. The default is true.
+    /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
+    /// connected/trusted nodes. The default is true.
     pub do_px: bool,
 
     /// Controls the number of peers to include in prune Peer eXchange.
@@ -130,13 +130,21 @@ pub struct GossipsubConfig {
     /// peer can reliably form a full mesh. The default is 16.
     pub prune_peers: usize,
 
-    // Controls the backoff time for pruned peers. This is how long
-    // a peer must wait before attempting to graft into our mesh again after being pruned.
-    // When pruning a peer, we send them our value of `prune_backoff` so they know
-    // the minimum time to wait. Peers running older versions may not send a backoff time,
-    // so if we receive a prune message without one, we will wait at least `prune_backoff`
-    // before attempting to re-graft. The default is one minute.
+    /// Controls the backoff time for pruned peers. This is how long
+    /// a peer must wait before attempting to graft into our mesh again after being pruned.
+    /// When pruning a peer, we send them our value of `prune_backoff` so they know
+    /// the minimum time to wait. Peers running older versions may not send a backoff time,
+    /// so if we receive a prune message without one, we will wait at least `prune_backoff`
+    /// before attempting to re-graft. The default is one minute.
     pub prune_backoff: Duration,
+
+    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
+    /// solves problems occuring through high latencies. In particular if
+    /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
+    /// prunes on our side and processing prunes on the receiving side this guarantees that we
+    /// get not punished for too early grafting. The default is 1.
+    pub backoff_slack: u32,
 }
 
 impl Default for GossipsubConfig {
@@ -173,6 +181,7 @@ impl Default for GossipsubConfig {
             do_px: true,
             prune_peers: 16,
             prune_backoff: Duration::from_secs(60),
+            backoff_slack: 1,
         }
     }
 }
@@ -330,8 +339,8 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    // Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    // connected/trusted nodes. The default is true.
+    /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
+    /// connected/trusted nodes. The default is true.
     pub fn do_px(&mut self, do_px: bool) -> &mut Self {
         self.config.do_px = do_px;
         self
@@ -347,14 +356,25 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    // Controls the backoff time for pruned peers. This is how long
-    // a peer must wait before attempting to graft into our mesh again after being pruned.
-    // When pruning a peer, we send them our value of `prune_backoff` so they know
-    // the minimum time to wait. Peers running older versions may not send a backoff time,
-    // so if we receive a prune message without one, we will wait at least `prune_backoff`
-    // before attempting to re-graft. The default is one minute.
+    /// Controls the backoff time for pruned peers. This is how long
+    /// a peer must wait before attempting to graft into our mesh again after being pruned.
+    /// When pruning a peer, we send them our value of `prune_backoff` so they know
+    /// the minimum time to wait. Peers running older versions may not send a backoff time,
+    /// so if we receive a prune message without one, we will wait at least `prune_backoff`
+    /// before attempting to re-graft. The default is one minute.
     pub fn prune_backoff(&mut self, prune_backoff: Duration) -> &mut Self {
         self.config.prune_backoff = prune_backoff;
+        self
+    }
+
+    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
+    /// solves problems occuring through high latencies. In particular if
+    /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
+    /// prunes on our side and processing prunes on the receiving side this guarantees that we
+    /// get not punished for too early grafting. The default is 1.
+    pub fn backoff_slack(&mut self, backoff_slack: u32) -> &mut Self {
+        self.config.backoff_slack = backoff_slack;
         self
     }
 
