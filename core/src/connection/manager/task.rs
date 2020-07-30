@@ -198,7 +198,7 @@ where
         let this = &mut *self;
         let id = this.id;
 
-        'poll: loop {
+        loop {
             match std::mem::replace(&mut this.state, State::Done) {
                 State::Pending { mut future, handler } => {
                     // Check whether the task is still registered with a `Manager`
@@ -244,14 +244,23 @@ where
                         match this.commands.poll_next_unpin(cx) {
                             Poll::Pending => break,
                             Poll::Ready(Some(Command::NotifyHandler(event))) =>
-                                connection.inject_event(event),
+                                if connection.inject_event(event).is_err() {
+                                    // The handler is already closed and the connection
+                                    // about to close; stop accepting commands.
+                                    this.commands.get_mut().close();
+                                    break
+                                },
                             Poll::Ready(Some(Command::Close)) => {
                                 // Start closing the connection, if not already.
                                 connection.start_close();
                             }
                             Poll::Ready(None) => {
-                                // The manager has dropped the task or disappeared; abort.
-                                return Poll::Ready(())
+                                if connection.is_open() {
+                                    // The manager has dropped the task or disappeared
+                                    // while the connection was open; abort.
+                                    return Poll::Ready(())
+                                }
+                                break
                             }
                         }
                     }
@@ -273,7 +282,7 @@ where
                                             connection,
                                             event: None,
                                         };
-                                        continue 'poll
+                                        continue
                                     }
                                 }
                                 // The manager is no longer reachable; abort.
@@ -281,6 +290,7 @@ where
                             }
                         }
                     } else {
+                        // Poll the connection for new events.
                         match Connection::poll(Pin::new(&mut connection), cx) {
                             Poll::Pending => {
                                 this.state = State::Established {
@@ -294,12 +304,14 @@ where
                                     connection,
                                     event: Some(Event::Notify { id, event }),
                                 };
+                                continue
                             }
                             Poll::Ready(Ok(Some(connection::Event::AddressChange(new_address)))) => {
                                 this.state = State::Established {
                                     connection,
                                     event: Some(Event::AddressChange { id, new_address }),
                                 };
+                                continue
                             }
                             Poll::Ready(Ok(None)) => {
                                 // The connection is closed, don't accept any further commands
@@ -307,7 +319,7 @@ where
                                 this.commands.get_mut().close();
                                 let event = Event::Closed { id: this.id, error: None };
                                 this.state = State::Terminating(event);
-                                continue 'poll
+                                continue
                             }
                             Poll::Ready(Err(error)) => {
                                 // Don't accept any further commands.
@@ -315,6 +327,7 @@ where
                                 // Terminate the task with the error, dropping the connection.
                                 let event = Event::Closed { id, error: Some(error) };
                                 this.state = State::Terminating(event);
+                                continue
                             }
                         }
                     }

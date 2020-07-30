@@ -941,7 +941,7 @@ fn add_provider() {
         }))
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_,_))
+    QuickCheck::new().tests(1).quickcheck(prop as fn(_,_))
 }
 
 /// User code should be able to start queries beyond the internal
@@ -1173,7 +1173,7 @@ fn manual_bucket_inserts() {
                     Poll::Ready(Some(_)) => {},
                     Poll::Ready(None) => break,
                     Poll::Pending =>
-                        if success && !Swarm::is_closing(swarm) {
+                        if success && !Swarm::is_closed(swarm) {
                             Swarm::start_close(swarm)
                         } else {
                             break

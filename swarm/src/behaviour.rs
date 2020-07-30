@@ -167,12 +167,41 @@ pub trait NetworkBehaviour: Send + 'static {
     fn inject_listener_closed(&mut self, _id: ListenerId, _reason: Result<(), &std::io::Error>) {
     }
 
-    /// Polls for things that swarm should do.
+    /// Polls the behaviour for the next action to perform.
     ///
-    /// This API mimics the API of the `Stream` trait. The method may register the current task in
-    /// order to wake it up at a later point in time.
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    /// The method may register the current task in order to wake it up at a later point in time.
+    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<
+        NetworkBehaviourAction<
+            <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
+            Self::OutEvent
+        >
+    >;
+
+    /// Polls the behaviour for the next action to perform during shutdown.
+    ///
+    /// The underlying `Network` and the `NetworkBehaviour` perform a
+    /// graceful shutdown in tandem. Shutdown is complete when `Network`
+    /// is closed (i.e. all established connections closed) and the
+    /// `NetworkBehaviour` returns `Ready(None)`. Since the `NetworkBehaviour`
+    /// does not know when the `Network` ultimately closed, it is perfectly
+    /// legitimate and expected for the `NetworkBehaviour` to return `Poll::Ready`
+    /// with `Some` event after having previously returned `None`  if more
+    /// input from the `Network` was received that results in further work
+    /// to do for a clean shutdown.
+    ///
+    /// The default implementation is to always return `Poll::Ready(None)`,
+    /// i.e. shutdown completes as soon as the underlying `Network` is closed.
+    ///
+    /// Like `poll`, this method may register the current task in order to wake
+    /// it up at a later point in time.
+    fn poll_close(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) -> Poll<
+        Option<NetworkBehaviourCloseAction<
+            <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
+            Self::OutEvent
+        >>
+    > {
+        Poll::Ready(None)
+    }
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -263,7 +292,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     NotifyHandler {
         /// The peer for whom a `ProtocolsHandler` should be notified.
         peer_id: PeerId,
-        /// The ID of the connection whose `ProtocolsHandler` to notify.
+        /// The handlers to notify.
         handler: NotifyHandler,
         /// The event to send.
         event: TInEvent,
@@ -302,6 +331,30 @@ pub enum NotifyHandler {
     /// Notify all connection handlers.
     All
 }
+
+/// An action that a [`NetworkBehaviour`] can trigger in the [`Swarm`]
+/// while the `Swarm` is shutting down.
+///
+/// [`Swarm`]: super::Swarm
+#[derive(Debug, Clone)]
+pub enum NetworkBehaviourCloseAction<TInEvent, TOutEvent> {
+    /// Instructs the `Swarm` to return an event when it is being polled.
+    GenerateEvent(TOutEvent),
+
+    /// Instructs the `Swarm` to send an event to the handler dedicated to a
+    /// connection with a peer.
+    ///
+    /// See [`NetworkBehaviourAction::NotifyHandler`].
+    NotifyHandler {
+        /// The peer for whom a `ProtocolsHandler` should be notified.
+        peer_id: PeerId,
+        /// The handlers to notify.
+        handler: NotifyHandler,
+        /// The event to send.
+        event: TInEvent,
+    },
+}
+
 
 /// The available conditions under which a new dialing attempt to
 /// a peer is initiated when requested by [`NetworkBehaviourAction::DialPeer`].

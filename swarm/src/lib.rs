@@ -65,6 +65,7 @@ pub mod toggle;
 pub use behaviour::{
     NetworkBehaviour,
     NetworkBehaviourAction,
+    NetworkBehaviourCloseAction,
     NetworkBehaviourEventProcess,
     PollParameters,
     NotifyHandler,
@@ -752,7 +753,23 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     listened_addrs: &this.listened_addrs,
                     external_addrs: &this.external_addrs
                 };
-                this.behaviour.poll(cx, &mut parameters)
+                if this.network.is_open() {
+                    this.behaviour.poll(cx, &mut parameters).map(Some)
+                } else {
+                    // The `Network` and `NetworkBehaviourehaviour` are
+                    // shutting down together.
+                    this.behaviour.poll_close(cx, &mut parameters)
+                        .map(|next| next.map(|action|
+                            match action {
+                                NetworkBehaviourCloseAction::GenerateEvent(e) =>
+                                    NetworkBehaviourAction::GenerateEvent(e),
+                                NetworkBehaviourCloseAction::NotifyHandler {
+                                    peer_id, handler, event
+                                } => NetworkBehaviourAction::NotifyHandler {
+                                        peer_id, handler, event
+                                    },
+                            }))
+                }
             };
 
             match behaviour_poll {
@@ -767,13 +784,13 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         return Poll::Ready(None)
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                Poll::Ready(Some(NetworkBehaviourAction::GenerateEvent(event))) => {
                     return Poll::Ready(Some(SwarmEvent::Behaviour(event)))
                 },
-                Poll::Ready(NetworkBehaviourAction::DialAddress { address }) => {
+                Poll::Ready(Some(NetworkBehaviourAction::DialAddress { address })) => {
                     let _ = ExpandedSwarm::dial_addr(&mut *this, address);
                 },
-                Poll::Ready(NetworkBehaviourAction::DialPeer { peer_id, condition }) => {
+                Poll::Ready(Some(NetworkBehaviourAction::DialPeer { peer_id, condition })) => {
                     if this.banned_peers.contains(&peer_id) {
                         this.behaviour.inject_dial_failure(&peer_id);
                     } else {
@@ -807,19 +824,19 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         }
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::DisconnectPeer { peer_id }) => {
+                Poll::Ready(Some(NetworkBehaviourAction::DisconnectPeer { peer_id })) => {
                     if let Some(peer) = this.network.peer(peer_id).into_connected() {
                         peer.disconnect();
                     }
                 }
-                Poll::Ready(NetworkBehaviourAction::CloseConnection { peer_id, connection_id }) => {
+                Poll::Ready(Some(NetworkBehaviourAction::CloseConnection { peer_id, connection_id })) => {
                     if let Some(mut peer) = this.network.peer(peer_id).into_connected() {
                         if let Some(conn) = peer.connection(connection_id) {
                             conn.start_close();
                         }
                     }
                 }
-                Poll::Ready(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event }) => {
+                Poll::Ready(Some(NetworkBehaviourAction::NotifyHandler { peer_id, handler, event })) => {
                     if let Some(mut peer) = this.network.peer(peer_id.clone()).into_connected() {
                         match handler {
                             NotifyHandler::One(connection) => {
@@ -850,7 +867,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         }
                     }
                 },
-                Poll::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
+                Poll::Ready(Some(NetworkBehaviourAction::ReportObservedAddr { address })) => {
                     for addr in this.network.address_translation(&address) {
                         if this.external_addrs.iter().all(|a| *a != addr) {
                             this.behaviour.inject_new_external_addr(&addr);
@@ -858,6 +875,13 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         this.external_addrs.add(addr);
                     }
                 },
+                Poll::Ready(None) => {
+                    if this.network.is_closed() {
+                        this.closed = true;
+                        return Poll::Ready(None)
+                    }
+                    debug_assert!(this.network.is_closing());
+                }
             }
         }
     }

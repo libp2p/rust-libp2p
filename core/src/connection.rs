@@ -239,14 +239,15 @@ where
 
     /// Notifies the connection handler of an event.
     ///
-    /// Has no effect if the connection handler is already closed.
-    pub fn inject_event(&mut self, event: THandler::InEvent) {
+    /// Returns `Ok` if the event was delivered to the handler, `Err`
+    /// if the connection is closing and the handler is already closed.
+    pub fn inject_event(&mut self, event: THandler::InEvent) -> Result<(), THandler::InEvent> {
         match self.state {
-            ConnectionState::Open | ConnectionState::CloseHandler
-                => self.handler.inject_event(event),
-            _ => {
-                log::trace!("Ignoring handler event. Handler is closed.")
+            ConnectionState::Open | ConnectionState::CloseHandler => {
+                self.handler.inject_event(event);
+                Ok(())
             }
+            _ => Err(event)
         }
     }
 
@@ -259,6 +260,11 @@ where
         if self.state == ConnectionState::Open {
             self.state = ConnectionState::CloseHandler;
         }
+    }
+
+    /// Whether the connection is open, i.e. neither closing nor already closed.
+    pub fn is_open(&self) -> bool {
+        self.state == ConnectionState::Open
     }
 
     /// Polls the connection for events produced by the associated handler
@@ -283,7 +289,9 @@ where
                         self.state = ConnectionState::Closed;
                         return Poll::Ready(Ok(None))
                     }
-                    Err(e) => return Poll::Ready(Err(ConnectionError::IO(e)))
+                    Err(e) => {
+                        return Poll::Ready(Err(ConnectionError::IO(e)))
+                    }
                 }
             }
 

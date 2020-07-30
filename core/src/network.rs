@@ -379,6 +379,12 @@ where
         self.pool.is_closing()
     }
 
+    /// Whether the `Network` is open for new connections, i.e. closing
+    /// or already closed.
+    pub fn is_open(&self) -> bool {
+        self.pool.is_open()
+    }
+
     /// Provides an API similar to `Stream`, except that it cannot error.
     pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>)
         -> Poll<Option<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>>

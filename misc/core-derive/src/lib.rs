@@ -52,6 +52,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let net_behv_event_proc = quote!{::libp2p::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::swarm::NetworkBehaviourAction};
+    let network_behaviour_close_action = quote!{::libp2p::swarm::NetworkBehaviourCloseAction};
     let into_protocols_handler = quote!{::libp2p::swarm::IntoProtocolsHandler};
     let protocols_handler = quote!{::libp2p::swarm::ProtocolsHandler};
     let into_proto_select_ident = quote!{::libp2p::swarm::IntoProtocolsHandlerSelect};
@@ -404,7 +405,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+    let poll_stmts = data_struct.fields.iter()
+        .enumerate()
+        .filter(|f| !is_ignored(&f.1))
+        .enumerate()
+        .map(|(enum_n, (field_n, field))|
+    {
         let field_name = match field.ident {
             Some(ref i) => quote!{ self.#i },
             None => quote!{ self.#field_n },
@@ -460,6 +466,67 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         return std::task::Poll::Ready(#network_behaviour_action::DisconnectPeer { peer_id });
                     }
                     std::task::Poll::Pending => break,
+                }
+            }
+        })
+    });
+
+
+    // List of statements to put in `poll_close()`.
+    //
+    // We poll each child one by one and wrap around the output.
+    let poll_close_stmts = data_struct.fields.iter()
+        .enumerate()
+        .filter(|f| !is_ignored(&f.1))
+        .enumerate()
+        .map(|(enum_n, (field_n, field))|
+    {
+        let field_name = match field.ident {
+            Some(ref i) => quote!{ self.#i },
+            None => quote!{ self.#field_n },
+        };
+
+        let mut wrapped_event = if enum_n != 0 {
+            quote!{ #either_ident::Second(event) }
+        } else {
+            quote!{ event }
+        };
+        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - enum_n {
+            wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
+        }
+
+        let generate_event_match_arm = if event_process {
+            quote! {
+                std::task::Poll::Ready(Some(#network_behaviour_close_action::GenerateEvent(event))) => {
+                    #net_behv_event_proc::inject_event(self, event)
+                }
+            }
+        } else {
+            quote! {
+                std::task::Poll::Ready(Some(#network_behaviour_close_action::GenerateEvent(event))) => {
+                    return std::task::Poll::Ready(Some(#network_behaviour_close_action::GenerateEvent(event.into())))
+                }
+            }
+        };
+
+        Some(quote!{
+            loop {
+                match #trait_to_impl::poll_close(&mut #field_name, cx, poll_params) {
+                    #generate_event_match_arm
+                    std::task::Poll::Ready(Some(#network_behaviour_close_action::NotifyHandler { peer_id, handler, event })) => {
+                        return std::task::Poll::Ready(Some(#network_behaviour_close_action::NotifyHandler {
+                            peer_id,
+                            handler,
+                            event: #wrapped_event,
+                        }));
+                    },
+                    std::task::Poll::Ready(None) => {
+                        break
+                    }
+                    std::task::Poll::Pending => {
+                        pending = true;
+                        break
+                    }
                 }
             }
         })
@@ -544,10 +611,18 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
 
             fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> {
-                use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
                 let f: std::task::Poll<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
                 f
+            }
+
+            fn poll_close(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<Option<#network_behaviour_close_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>>> {
+                let mut pending = false;
+                #(#poll_close_stmts)*
+                if pending {
+                    return std::task::Poll::Pending
+                }
+                return std::task::Poll::Ready(None)
             }
         }
     };
