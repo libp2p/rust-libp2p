@@ -502,13 +502,18 @@ impl Gossipsub {
 
         debug!("Publishing message: {:?}", msg_id);
 
-        // Forward the message to mesh peers.
-        let mesh_peers_sent = self.forward_msg(message.clone(), None);
+        // If we are not flood publishing forward the message to mesh peers.
+        let mesh_peers_sent = !self.config.flood_publish && self.forward_msg(message.clone(), None);
 
         let mut recipient_peers = HashSet::new();
         for topic_hash in &message.topics {
-            // If not subscribed to the topic, use fanout peers.
-            if self.mesh.get(&topic_hash).is_none() {
+            if self.config.flood_publish {
+                //forward to all peers above score
+                if let Some(set) = self.topic_peers.get(&topic_hash) {
+                    recipient_peers.extend(set.iter().map(|p| p.clone()));
+                    //TODO filter out peers with too low score that are not explicit peers
+                }
+            } else if self.mesh.get(&topic_hash).is_none() {
                 debug!("Topic: {:?} not in the mesh", topic_hash);
                 // Build a list of peers to forward the message to
                 // if we have fanout peers add them to the map.

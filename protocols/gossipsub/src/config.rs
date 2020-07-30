@@ -145,6 +145,11 @@ pub struct GossipsubConfig {
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
     pub backoff_slack: u32,
+
+    /// Whether to do flood publishing or not. If enabled newly created messages will always be
+    /// sent to all peers that are subscribed to the topic and have a good enough score.
+    /// The default is true.
+    pub flood_publish: bool,
 }
 
 impl Default for GossipsubConfig {
@@ -182,6 +187,7 @@ impl Default for GossipsubConfig {
             prune_peers: 16,
             prune_backoff: Duration::from_secs(60),
             backoff_slack: 1,
+            flood_publish: true,
         }
     }
 }
@@ -375,6 +381,14 @@ impl GossipsubConfigBuilder {
     /// get not punished for too early grafting. The default is 1.
     pub fn backoff_slack(&mut self, backoff_slack: u32) -> &mut Self {
         self.config.backoff_slack = backoff_slack;
+        self
+    }
+
+    /// Whether to do flood publishing or not. If enabled newly created messages will always be
+    /// sent to all peers that are subscribed to the topic and have a good enough score.
+    /// The default is true.
+    pub fn flood_publish(&mut self, flood_publish: bool) -> &mut Self {
+        self.config.flood_publish = flood_publish;
         self
     }
 
