@@ -321,14 +321,17 @@ mod tests {
 
     /// Test local node publish to subscribed topic
     #[test]
-    fn test_publish() {
+    fn test_publish_without_flood_publishing() {
         // node should:
         // - Send publish message to all peers
         // - Insert message into gs.mcache and gs.received
 
+        //turn off flood publish to test old behaviour
+        let config = GossipsubConfigBuilder::new().flood_publish(false).build();
+
         let publish_topic = String::from("test_publish");
         let (mut gs, _, topic_hashes) =
-            build_and_inject_nodes(20, vec![publish_topic.clone()], true);
+            build_and_inject_nodes_with_config(20, vec![publish_topic.clone()], true, config);
 
         assert!(
             gs.mesh.get(&topic_hashes[0]).is_some(),
@@ -383,9 +386,13 @@ mod tests {
         // - Populate fanout peers
         // - Send publish message to fanout peers
         // - Insert message into gs.mcache and gs.received
+
+        //turn off flood publish to test fanout behaviour
+        let config = GossipsubConfigBuilder::new().flood_publish(false).build();
+
         let fanout_topic = String::from("test_fanout");
         let (mut gs, _, topic_hashes) =
-            build_and_inject_nodes(20, vec![fanout_topic.clone()], true);
+            build_and_inject_nodes_with_config(20, vec![fanout_topic.clone()], true, config);
 
         assert!(
             gs.mesh.get(&topic_hashes[0]).is_some(),
@@ -1567,6 +1574,64 @@ mod tests {
                 _ => false,
             }) > 0,
             "No graft message was created after backoff period"
+        );
+    }
+
+    #[test]
+    fn test_flood_publish() {
+        let config = GossipsubConfig::default();
+
+        let topic = "test";
+        // Adds more peers than mesh can hold to test flood publishing
+        let (mut gs, _, _) =
+            build_and_inject_nodes(config.mesh_n_high + 10, vec![topic.into()], true);
+
+        let other_topic = Topic::new("test2");
+
+        // subscribe an additional new peer to test2
+        gs.subscribe(other_topic.clone());
+        let other_peer = PeerId::random();
+        gs.inject_connected(&other_peer);
+        gs.handle_received_subscriptions(
+            &vec![GossipsubSubscription {
+                action: GossipsubSubscriptionAction::Subscribe,
+                topic_hash: other_topic.hash(),
+            }],
+            &other_peer,
+        );
+
+        //publish message
+        let publish_data = vec![0; 42];
+        gs.publish_many(vec![Topic::new(topic), other_topic.clone()], publish_data)
+            .unwrap();
+
+        // Collect all publish messages
+        let publishes = gs
+            .events
+            .iter()
+            .fold(vec![], |mut collected_publish, e| match e {
+                NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    for s in &event.messages {
+                        collected_publish.push(s.clone());
+                    }
+                    collected_publish
+                }
+                _ => collected_publish,
+            });
+
+        let msg_id =
+            (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
+
+        let config = GossipsubConfig::default();
+        assert_eq!(
+            publishes.len(),
+            config.mesh_n_high + 10 + 1,
+            "Should send a publish message to all known peers"
+        );
+
+        assert!(
+            gs.mcache.get(&msg_id).is_some(),
+            "Message cache should contain published message"
         );
     }
 }
