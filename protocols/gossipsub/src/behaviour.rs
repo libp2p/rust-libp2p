@@ -294,7 +294,7 @@ impl BackoffStorage {
         }
 
         //increase heartbeat index
-        self.heartbeat_index += 1;
+        self.heartbeat_index = (self.heartbeat_index + 1) % self.backoffs_by_heartbeat.len();
     }
 }
 
