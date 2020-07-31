@@ -1458,6 +1458,7 @@ where
     ) {
         let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
+        // Update routing table.
         if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::new(peer.clone())).value() {
             if addrs.replace(old, new) {
                 debug!("Address '{}' replaced with '{}' for peer '{}'.", old, new, peer);
@@ -1474,6 +1475,17 @@ where
                  routing table.",
                 old, new, peer,
             );
+        }
+
+        // Update query address cache.
+        for query in self.queries.iter_mut() {
+            if let Some(addrs) = query.inner.addresses.get_mut(peer) {
+                for addr in addrs.iter_mut() {
+                    if addr == old {
+                        *addr = new.clone();
+                    }
+                }
+            }
         }
     }
 
