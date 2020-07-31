@@ -1456,25 +1456,25 @@ where
         old: &ConnectedPoint,
         new: &ConnectedPoint
     ) {
-        // Only addresses of outbound connections are inserted into the routing
-        // table in `inject_connection_established`. Thereby only address
-        // changes of outbound connections require updating.
-        let new_address = match new {
-            ConnectedPoint::Dialer { address } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => return,
-        };
+        let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
-        // First insert the new address, then remove the old address. A peer
-        // with a single address might lose its slot within the routing table if
-        // one removes the old address first.
-        self.connection_updated(peer.clone(), new_address, NodeStatus::Connected);
-
-        let old_address = match old {
-            ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { .. } => return,
-        };
-
-        self.remove_address(peer, old_address);
+        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::new(peer.clone())).value() {
+            if addrs.replace(old, new) {
+                debug!("Address '{}' replaced with '{}' for peer '{}'.", old, new, peer);
+            } else {
+                debug!(
+                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
+                     present.",
+                    old, new, peer,
+                );
+            }
+        } else {
+            debug!(
+                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
+                 routing table.",
+                old, new, peer,
+            );
+        }
     }
 
     fn inject_addr_reach_failure(

@@ -133,6 +133,13 @@ impl ConnectedPoint {
         }
     }
 
+    pub fn get_remote_address(&self) -> &Multiaddr {
+        match self {
+            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
+        }
+    }
+
     /// Modifies the address of the remote stored in this struct.
     ///
     /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.
