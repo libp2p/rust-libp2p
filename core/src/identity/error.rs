@@ -41,7 +41,7 @@ impl DecodingError {
 }
 
 impl fmt::Display for DecodingError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Key decoding error: {}", self.msg)
     }
 }
@@ -71,7 +71,7 @@ impl SigningError {
 }
 
 impl fmt::Display for SigningError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Key signing error: {}", self.msg)
     }
 }

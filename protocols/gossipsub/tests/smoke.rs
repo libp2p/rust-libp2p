@@ -50,7 +50,7 @@ struct Graph {
 impl Future for Graph {
     type Output = (Multiaddr, GossipsubEvent);
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
             match node.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => return Poll::Ready((addr.clone(), event)),

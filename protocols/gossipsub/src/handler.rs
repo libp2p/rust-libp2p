@@ -165,7 +165,7 @@ impl ProtocolsHandler for GossipsubHandler {
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<
             Self::OutboundProtocol,

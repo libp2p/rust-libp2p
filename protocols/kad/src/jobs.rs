@@ -107,7 +107,7 @@ impl<T> PeriodicJob<T> {
 
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
-    fn is_ready(&mut self, cx: &mut Context, now: Instant) -> bool {
+    fn is_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
                 return true
@@ -190,7 +190,7 @@ impl PutRecordJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, cx: &mut Context, store: &mut T, now: Instant) -> Poll<Record>
+    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
     where
         for<'a> T: RecordStore<'a>
     {
@@ -288,7 +288,7 @@ impl AddProviderJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, cx: &mut Context, store: &mut T, now: Instant) -> Poll<ProviderRecord>
+    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<ProviderRecord>
     where
         for<'a> T: RecordStore<'a>
     {

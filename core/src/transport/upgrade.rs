@@ -194,7 +194,7 @@ where
 {
     type Output = <EitherUpgrade<C, U> as Future>::Output;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         Future::poll(this.inner, cx)
     }
@@ -223,7 +223,7 @@ where
 {
     type Output = Result<(I, M), UpgradeError<E>>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let m = match ready!(Future::poll(this.upgrade, cx)) {
             Ok(m) => m,
@@ -337,7 +337,7 @@ where
 {
     type Output = Result<(I, D), TransportUpgradeError<F::Error, U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
         // accross a `Deref`.
         let this = &mut *self;
@@ -387,7 +387,7 @@ where
 {
     type Item = Result<ListenerEvent<ListenerUpgradeFuture<F, U, I, C>, TransportUpgradeError<E, U::Error>>, TransportUpgradeError<E, U::Error>>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match ready!(TryStream::try_poll_next(self.stream.as_mut(), cx)) {
             Some(Ok(event)) => {
                 let event = event
@@ -430,7 +430,7 @@ where
 {
     type Output = Result<(I, D), TransportUpgradeError<F::Error, U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
         // accross a `Deref`.
         let this = &mut *self;

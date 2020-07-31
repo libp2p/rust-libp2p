@@ -382,13 +382,16 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// dialing attempt or `addresses_of_peer` reports no addresses, `Ok(false)`
     /// is returned.
     pub fn dial(me: &mut Self, peer_id: &PeerId) -> Result<(), DialError> {
-        let mut addrs = me.behaviour.addresses_of_peer(peer_id).into_iter();
-        let peer = me.network.peer(peer_id.clone());
+        let self_listening = &me.listened_addrs;
+        let mut addrs = me.behaviour.addresses_of_peer(peer_id)
+            .into_iter()
+            .filter(|a| !self_listening.contains(a));
 
         let result =
             if let Some(first) = addrs.next() {
                 let handler = me.behaviour.new_handler().into_node_handler_builder();
-                peer.dial(first, addrs, handler)
+                me.network.peer(peer_id.clone())
+                    .dial(first, addrs, handler)
                     .map(|_| ())
                     .map_err(DialError::ConnectionLimit)
             } else {
@@ -478,7 +481,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
     /// Internal function used by everything event-related.
     ///
     /// Polls the `Swarm` for the next event.
-    fn poll_next_event(mut self: Pin<&mut Self>, cx: &mut Context)
+    fn poll_next_event(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<SwarmEvent<TBehaviour::OutEvent, THandleErr>>
     {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
@@ -696,11 +699,14 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                             // ongoing dialing attempt, if there is one.
                             log::trace!("Condition for new dialing attempt to {:?} not met: {:?}",
                                 peer_id, condition);
+                            let self_listening = &this.listened_addrs;
                             if let Some(mut peer) = this.network.peer(peer_id.clone()).into_dialing() {
                                 let addrs = this.behaviour.addresses_of_peer(peer.id());
                                 let mut attempt = peer.some_attempt();
-                                for addr in addrs {
-                                    attempt.add_address(addr);
+                                for a in addrs {
+                                    if !self_listening.contains(&a) {
+                                        attempt.add_address(a);
+                                    }
                                 }
                             }
                         }
@@ -773,7 +779,7 @@ enum PendingNotifyHandler {
 fn notify_one<'a, TInEvent, TConnInfo, TPeerId>(
     conn: &mut EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
     event: TInEvent,
-    cx: &mut Context,
+    cx: &mut Context<'_>,
 ) -> Option<TInEvent>
 where
     TPeerId: Eq + std::hash::Hash + Clone,
@@ -804,7 +810,7 @@ fn notify_any<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
     ids: SmallVec<[ConnectionId; 10]>,
     peer: &mut ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
     event: TInEvent,
-    cx: &mut Context,
+    cx: &mut Context<'_>,
 ) -> Option<(TInEvent, SmallVec<[ConnectionId; 10]>)>
 where
     TTrans: Transport,
@@ -853,7 +859,7 @@ fn notify_all<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>(
     ids: SmallVec<[ConnectionId; 10]>,
     peer: &mut ConnectedPeer<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>,
     event: TInEvent,
-    cx: &mut Context,
+    cx: &mut Context<'_>,
 ) -> Option<(TInEvent, SmallVec<[ConnectionId; 10]>)>
 where
     TTrans: Transport,
@@ -901,7 +907,7 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
 {
     type Item = TBehaviour::OutEvent;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             let event = futures::ready!(ExpandedSwarm::poll_next_event(self.as_mut(), cx));
             if let SwarmEvent::Behaviour(event) = event {
@@ -1172,7 +1178,7 @@ impl NetworkBehaviour for DummyBehaviour {
     fn inject_event(&mut self, _: PeerId, _: ConnectionId,
         _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
+    fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) ->
         Poll<NetworkBehaviourAction<<Self::ProtocolsHandler as
         ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
