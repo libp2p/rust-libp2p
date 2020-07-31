@@ -105,6 +105,64 @@ mod tests {
         return (gs, peers, topic_hashes);
     }
 
+    fn build_and_inject_nodes_with_config_and_explicit_and_outbound(
+        peer_no: usize,
+        topics: Vec<String>,
+        to_subscribe: bool,
+        gs_config: GossipsubConfig,
+        explicit: usize,
+        outbound: usize,
+    ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
+        let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
+        // create a gossipsub struct
+        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Signed(keypair), gs_config);
+
+        let mut topic_hashes = vec![];
+
+        // subscribe to the topics
+        for t in topics {
+            let topic = Topic::new(t);
+            gs.subscribe(topic.clone());
+            topic_hashes.push(topic.hash().clone());
+        }
+
+        // build and connect peer_no random peers
+        let mut peers = vec![];
+
+        for i in 0..peer_no {
+            let peer = PeerId::random();
+            peers.push(peer.clone());
+            if i < outbound {
+                gs.inject_connection_established(
+                    &peer,
+                    &ConnectionId::new(0),
+                    &ConnectedPoint::Dialer {
+                        address: Multiaddr::empty(),
+                    },
+                );
+            }
+            <Gossipsub as NetworkBehaviour>::inject_connected(&mut gs, &peer);
+            if i < explicit {
+                gs.add_explicit_peer(&peer);
+            }
+            if to_subscribe {
+                gs.handle_received_subscriptions(
+                    &topic_hashes
+                        .iter()
+                        .cloned()
+                        .map(|t| GossipsubSubscription {
+                            action: GossipsubSubscriptionAction::Subscribe,
+                            topic_hash: t,
+                        })
+                        .collect::<Vec<_>>(),
+                    &peer,
+                );
+            };
+        }
+
+        return (gs, peers, topic_hashes);
+    }
+
     #[test]
     /// Test local node subscribing to a topic
     fn test_subscribe() {
@@ -1341,8 +1399,16 @@ mod tests {
         let config = GossipsubConfig::default();
 
         // Adds mesh_low peers and PRUNE 2 giving us a deficit.
-        let (mut gs, peers, topics) =
-            build_and_inject_nodes(config.mesh_n_high() + 10, vec!["test".into()], true);
+        let n = config.mesh_n_high() + 10;
+        //make all outbound connections so that we allow grafting to all
+        let (mut gs, peers, topics) = build_and_inject_nodes_with_config_and_explicit_and_outbound(
+            n,
+            vec!["test".into()],
+            true,
+            config.clone(),
+            0,
+            n,
+        );
 
         // graft all the peers
         for peer in peers {
@@ -1453,7 +1519,8 @@ mod tests {
         let (mut gs, peers, topics) =
             build_and_inject_nodes(config.prune_peers() + 1, vec!["test".into()], true);
 
-        //send prune to peer => this adds a backoff for this peer
+        //remove peer from mesh and send prune to peer => this adds a backoff for this peer
+        gs.mesh.get_mut(&topics[0]).unwrap().remove(&peers[0]);
         gs.send_graft_prune(
             HashMap::new(),
             vec![(peers[0].clone(), vec![topics[0].clone()])]
@@ -1724,4 +1791,167 @@ mod tests {
             ((m - config.mesh_n_low()) as f64 * config.gossip_factor()) as usize
         );
     }
+
+    #[test]
+    fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
+        let config = GossipsubConfig::default();
+
+        //enough peers to fill the mesh
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes(config.mesh_n_high(), vec!["test".into()], true);
+
+        // graft all the peers => this will fill the mesh
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //create an outbound and an inbound peer
+        let inbound = PeerId::random();
+        let outbound = PeerId::random();
+        gs.inject_connection_established(
+            &outbound,
+            &ConnectionId::new(0),
+            &ConnectedPoint::Dialer {
+                address: Multiaddr::empty(),
+            },
+        );
+
+        //inject_connected and subscription
+        for peer in &[&inbound, &outbound] {
+            gs.inject_connected(peer);
+            gs.handle_received_subscriptions(
+                &vec![GossipsubSubscription {
+                    action: GossipsubSubscriptionAction::Subscribe,
+                    topic_hash: topics[0].clone(),
+                }],
+                peer,
+            );
+        }
+
+        //assert current mesh size
+        assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high());
+
+        //send grafts
+        gs.handle_graft(&inbound, vec![topics[0].clone()]);
+        gs.handle_graft(&outbound, vec![topics[0].clone()]);
+
+        //assert mesh size
+        assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high() + 1);
+
+        //inbound is not in mesh
+        assert!(!gs.mesh[&topics[0]].contains(&inbound));
+
+        //outbound is in mesh
+        assert!(gs.mesh[&topics[0]].contains(&outbound));
+    }
+
+    #[test]
+    fn test_do_not_remove_too_many_outbound_peers() {
+        //use an extreme case to catch errors with high probability
+        let m = 50;
+        let n = 2 * m;
+        let config = GossipsubConfigBuilder::new()
+            .mesh_n_high(n)
+            .mesh_n(n)
+            .mesh_n_low(n)
+            .mesh_outbound_min(m)
+            .build()
+            .unwrap();
+
+        //fill the mesh with inbound connections
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes_with_config(n, vec!["test".into()], true, config.clone());
+
+        // graft all the peers
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //create m outbound connections and graft (we will accept the graft)
+        let mut outbound = HashSet::new();
+        for _ in 0..m {
+            let peer = PeerId::random();
+            outbound.insert(peer.clone());
+            gs.inject_connection_established(
+                &peer,
+                &ConnectionId::new(0),
+                &ConnectedPoint::Dialer {
+                    address: Multiaddr::empty(),
+                },
+            );
+            gs.inject_connected(&peer);
+            gs.handle_received_subscriptions(
+                &vec![GossipsubSubscription {
+                    action: GossipsubSubscriptionAction::Subscribe,
+                    topic_hash: topics[0].clone(),
+                }],
+                &peer,
+            );
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //mesh is overly full
+        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), n + m);
+
+        // run a heartbeat
+        gs.heartbeat();
+
+        // Peers should be removed to reach n
+        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), n);
+
+        //all outbound peers are still in the mesh
+        assert!(outbound.iter().all(|p| gs.mesh[&topics[0]].contains(p)));
+    }
+
+    #[test]
+    fn test_add_outbound_peers_if_min_is_not_satisfied() {
+        let config = GossipsubConfig::default();
+
+        // Fill full mesh with inbound peers
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes(config.mesh_n_high(), vec!["test".into()], true);
+
+        // graft all the peers
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //create config.mesh_outbound_min() many outbound connections without grafting
+        for _ in 0..config.mesh_outbound_min() {
+            let peer = PeerId::random();
+            gs.inject_connection_established(
+                &peer,
+                &ConnectionId::new(0),
+                &ConnectedPoint::Dialer {
+                    address: Multiaddr::empty(),
+                },
+            );
+            gs.inject_connected(&peer);
+            gs.handle_received_subscriptions(
+                &vec![GossipsubSubscription {
+                    action: GossipsubSubscriptionAction::Subscribe,
+                    topic_hash: topics[0].clone(),
+                }],
+                &peer,
+            );
+        }
+
+        // Nothing changed in the mesh yet
+        assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high());
+
+        // run a heartbeat
+        gs.heartbeat();
+
+        // The outbound peers got additionally added
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            config.mesh_n_high() + config.mesh_outbound_min()
+        );
+    }
+
+    //TODO add a test that ensures that new outbound connections are recognized as such.
+    // This is at the moment done in behaviour with relying on the fact that the call to
+    // `inject_connection_established` for the first connection is done before `inject_connected`
+    // gets called. For all further connections `inject_connection_established` should get called
+    // after `inject_connected`.
 }
