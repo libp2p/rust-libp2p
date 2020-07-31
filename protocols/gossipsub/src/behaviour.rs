@@ -359,7 +359,7 @@ impl Gossipsub {
 
         // We do not allow configurations where a published message would also be rejected if it
         // were received locally.
-        validate_config(&privacy, &config.validation_mode);
+        validate_config(&privacy, &config.validation_mode());
 
         // Set up message publishing parameters.
 
@@ -367,7 +367,7 @@ impl Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_info: privacy.into(),
-            duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time),
+            duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
@@ -375,18 +375,18 @@ impl Gossipsub {
             fanout: HashMap::new(),
             fanout_last_pub: HashMap::new(),
             backoffs: BackoffStorage::new(
-                &config.prune_backoff,
-                config.heartbeat_interval,
-                config.backoff_slack,
+                &config.prune_backoff(),
+                config.heartbeat_interval(),
+                config.backoff_slack(),
             ),
             mcache: MessageCache::new(
-                config.history_gossip,
-                config.history_length,
-                config.message_id_fn,
+                config.history_gossip(),
+                config.history_length(),
+                config.message_id_fn(),
             ),
             heartbeat: Interval::new_at(
-                Instant::now() + config.heartbeat_initial_delay,
-                config.heartbeat_interval,
+                Instant::now() + config.heartbeat_initial_delay(),
+                config.heartbeat_interval(),
             ),
             heartbeat_ticks: 0,
             config,
@@ -485,7 +485,7 @@ impl Gossipsub {
     ) -> Result<(), PublishError> {
         let message =
             self.build_message(topics.into_iter().map(|t| t.hash()).collect(), data.into())?;
-        let msg_id = (self.config.message_id_fn)(&message);
+        let msg_id = (self.config.message_id_fn())(&message);
 
         // Add published message to the duplicate cache.
         if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
@@ -504,11 +504,12 @@ impl Gossipsub {
         debug!("Publishing message: {:?}", msg_id);
 
         // If we are not flood publishing forward the message to mesh peers.
-        let mesh_peers_sent = !self.config.flood_publish && self.forward_msg(message.clone(), None);
+        let mesh_peers_sent =
+            !self.config.flood_publish() && self.forward_msg(message.clone(), None);
 
         let mut recipient_peers = HashSet::new();
         for topic_hash in &message.topics {
-            if self.config.flood_publish {
+            if self.config.flood_publish() {
                 //forward to all peers above score
                 if let Some(set) = self.topic_peers.get(&topic_hash) {
                     recipient_peers.extend(set.iter().map(|p| p.clone()));
@@ -524,7 +525,7 @@ impl Gossipsub {
                     }
                 } else {
                     // we have no fanout peers, select mesh_n of them and add them to the fanout
-                    let mesh_n = self.config.mesh_n;
+                    let mesh_n = self.config.mesh_n();
                     let new_peers =
                         Self::get_random_peers(&self.topic_peers, &topic_hash, mesh_n, {
                             |_| true
@@ -561,7 +562,7 @@ impl Gossipsub {
         Ok(())
     }
 
-    /// This function should be called when `config.validate_messages` is `true` in order to
+    /// This function should be called when `config.validate_messages()` is `true` in order to
     /// validate and propagate messages. Messages are stored in the ['Memcache'] and validation is expected to be
     /// fast enough that the messages should still exist in the cache.
     ///
@@ -636,7 +637,7 @@ impl Gossipsub {
 
             // add up to mesh_n of them them to the mesh
             // Note: These aren't randomly added, currently FIFO
-            let add_peers = std::cmp::min(peers.len(), self.config.mesh_n);
+            let add_peers = std::cmp::min(peers.len(), self.config.mesh_n());
             debug!(
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
                 add_peers, topic_hash
@@ -651,12 +652,12 @@ impl Gossipsub {
         }
 
         // check if we need to get more peers, which we randomly select
-        if added_peers.len() < self.config.mesh_n {
+        if added_peers.len() < self.config.mesh_n() {
             // get the peers
             let new_peers = Self::get_random_peers(
                 &self.topic_peers,
                 topic_hash,
-                self.config.mesh_n - added_peers.len(),
+                self.config.mesh_n() - added_peers.len(),
                 |peer| !added_peers.contains(peer) && !self.explicit_peers.contains(peer),
             );
             added_peers.extend(new_peers.clone());
@@ -695,7 +696,7 @@ impl Gossipsub {
         //TODO check the receving peers version and if not 1.1 do not send any exchange peers
         //select peers for peer exchange
         let peers = if do_px {
-            Self::get_random_peers(&self.topic_peers, &topic_hash, self.config.prune_peers, {
+            Self::get_random_peers(&self.topic_peers, &topic_hash, self.config.prune_peers(), {
                 |p| p != peer //TODO score threshold
             })
             .into_iter()
@@ -707,12 +708,12 @@ impl Gossipsub {
 
         //update backoff
         self.backoffs
-            .update_backoff(topic_hash, peer, self.config.prune_backoff);
+            .update_backoff(topic_hash, peer, self.config.prune_backoff());
 
         GossipsubControlAction::Prune {
             topic_hash: topic_hash.clone(),
             peers,
-            backoff: Some(self.config.prune_backoff.as_secs()),
+            backoff: Some(self.config.prune_backoff().as_secs()),
         }
     }
 
@@ -725,7 +726,7 @@ impl Gossipsub {
             for peer in peers {
                 // Send a PRUNE control message
                 info!("LEAVE: Sending PRUNE to peer: {:?}", peer);
-                let control = self.make_prune(topic_hash, &peer, self.config.do_px);
+                let control = self.make_prune(topic_hash, &peer, self.config.do_px());
                 Self::control_pool_add(&mut self.control_pool, peer.clone(), control);
             }
         }
@@ -820,7 +821,7 @@ impl Gossipsub {
 
         let mut to_prune_topics = HashSet::new();
 
-        let mut do_px = self.config.do_px;
+        let mut do_px = self.config.do_px();
 
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
@@ -911,7 +912,7 @@ impl Gossipsub {
                     if let Some(backoff) = backoff {
                         Duration::from_secs(backoff)
                     } else {
-                        self.config.prune_backoff
+                        self.config.prune_backoff()
                     },
                 );
 
@@ -926,7 +927,7 @@ impl Gossipsub {
     }
 
     fn px_connect(&mut self, mut px: Vec<PeerInfo>) {
-        let n = self.config.prune_peers;
+        let n = self.config.prune_peers();
         //ignore peerInfo with no ID
         //TODO can we use peerInfo without any IDs if they have a signed peer record?
         px = px.into_iter().filter(|p| p.peer.is_some()).collect();
@@ -953,7 +954,7 @@ impl Gossipsub {
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(&mut self, mut msg: GossipsubMessage, propagation_source: &PeerId) {
-        let msg_id = (self.config.message_id_fn)(&msg);
+        let msg_id = (self.config.message_id_fn())(&msg);
         debug!(
             "Handling message: {:?} from peer: {}",
             msg_id,
@@ -963,7 +964,7 @@ impl Gossipsub {
         // If we are not validating messages, assume this message is validated
         // This will allow the message to be gossiped without explicitly calling
         // `validate_message`.
-        if !self.config.validate_messages {
+        if !self.config.validate_messages() {
             msg.validated = true;
         }
 
@@ -983,8 +984,8 @@ impl Gossipsub {
         }
 
         // forward the message to mesh peers, if no validation is required
-        if !self.config.validate_messages {
-            let message_id = (self.config.message_id_fn)(&msg);
+        if !self.config.validate_messages() {
+            let message_id = (self.config.message_id_fn())(&msg);
             self.forward_msg(msg, Some(propagation_source));
             debug!("Completed message handling for message: {:?}", message_id);
         }
@@ -1041,7 +1042,7 @@ impl Gossipsub {
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source) {
                         if let Some(peers) = self.mesh.get_mut(&subscription.topic_hash) {
-                            if peers.len() < self.config.mesh_n_low {
+                            if peers.len() < self.config.mesh_n_low() {
                                 if peers.insert(propagation_source.clone()) {
                                     debug!(
                                         "SUBSCRIPTION: Adding peer {} to the mesh for topic {:?}",
@@ -1133,7 +1134,7 @@ impl Gossipsub {
         self.backoffs.heartbeat();
 
         //check connections to explicit peers
-        if self.heartbeat_ticks % self.config.check_explicit_peers_ticks == 0 {
+        if self.heartbeat_ticks % self.config.check_explicit_peers_ticks() == 0 {
             for p in self.explicit_peers.clone() {
                 self.check_explicit_peer_connection(&p);
             }
@@ -1143,15 +1144,15 @@ impl Gossipsub {
         let explicit_peers = &self.explicit_peers;
         for (topic_hash, peers) in self.mesh.iter_mut() {
             // too little peers - add some
-            if peers.len() < self.config.mesh_n_low {
+            if peers.len() < self.config.mesh_n_low() {
                 debug!(
                     "HEARTBEAT: Mesh low. Topic: {} Contains: {} needs: {}",
                     topic_hash,
                     peers.len(),
-                    self.config.mesh_n_low
+                    self.config.mesh_n_low()
                 );
                 // not enough peers - get mesh_n - current_length more
-                let desired_peers = self.config.mesh_n - peers.len();
+                let desired_peers = self.config.mesh_n() - peers.len();
                 let backoffs = &self.backoffs;
                 let peer_list =
                     Self::get_random_peers(&self.topic_peers, topic_hash, desired_peers, {
@@ -1171,14 +1172,14 @@ impl Gossipsub {
             }
 
             // too many peers - remove some
-            if peers.len() > self.config.mesh_n_high {
+            if peers.len() > self.config.mesh_n_high() {
                 debug!(
                     "HEARTBEAT: Mesh high. Topic: {} Contains: {} needs: {}",
                     topic_hash,
                     peers.len(),
-                    self.config.mesh_n_high
+                    self.config.mesh_n_high()
                 );
-                let excess_peer_no = peers.len() - self.config.mesh_n;
+                let excess_peer_no = peers.len() - self.config.mesh_n();
                 // shuffle the peers
                 let mut rng = thread_rng();
                 let mut shuffled = peers.iter().cloned().collect::<Vec<_>>();
@@ -1198,7 +1199,7 @@ impl Gossipsub {
         // remove expired fanout topics
         {
             let fanout = &mut self.fanout; // help the borrow checker
-            let fanout_ttl = self.config.fanout_ttl;
+            let fanout_ttl = self.config.fanout_ttl();
             self.fanout_last_pub.retain(|topic_hash, last_pub_time| {
                 if *last_pub_time + fanout_ttl < Instant::now() {
                     debug!(
@@ -1239,13 +1240,13 @@ impl Gossipsub {
             }
 
             // not enough peers
-            if peers.len() < self.config.mesh_n {
+            if peers.len() < self.config.mesh_n() {
                 debug!(
                     "HEARTBEAT: Fanout low. Contains: {:?} needs: {:?}",
                     peers.len(),
-                    self.config.mesh_n
+                    self.config.mesh_n()
                 );
-                let needed_peers = self.config.mesh_n - peers.len();
+                let needed_peers = self.config.mesh_n() - peers.len();
                 let new_peers =
                     Self::get_random_peers(&self.topic_peers, topic_hash, needed_peers, |peer| {
                         !peers.contains(peer)
@@ -1282,8 +1283,8 @@ impl Gossipsub {
             // dynamic number of peers to gossip based on `gossip_factor` with minimum `gossip_lazy`
             let n_map = |m| {
                 max(
-                    self.config.gossip_lazy,
-                    (self.config.gossip_factor * m as f64) as usize,
+                    self.config.gossip_lazy(),
+                    (self.config.gossip_factor() * m as f64) as usize,
                 )
             };
             // get gossip_lazy random peers
@@ -1328,7 +1329,7 @@ impl Gossipsub {
             if let Some(topics) = to_prune.remove(peer) {
                 let mut prunes = topics
                     .iter()
-                    .map(|topic_hash| self.make_prune(topic_hash, peer, self.config.do_px))
+                    .map(|topic_hash| self.make_prune(topic_hash, peer, self.config.do_px()))
                     .collect::<Vec<_>>();
                 control_msgs.append(&mut prunes);
             }
@@ -1348,7 +1349,7 @@ impl Gossipsub {
         for (peer, topics) in to_prune.iter() {
             let remaining_prunes = topics
                 .iter()
-                .map(|topic_hash| self.make_prune(topic_hash, peer, self.config.do_px))
+                .map(|topic_hash| self.make_prune(topic_hash, peer, self.config.do_px()))
                 .collect();
             self.send_message(
                 peer.clone(),
@@ -1364,7 +1365,7 @@ impl Gossipsub {
     /// Helper function which forwards a message to mesh\[topic\] peers.
     /// Returns true if at least one peer was messaged.
     fn forward_msg(&mut self, message: GossipsubMessage, source: Option<&PeerId>) -> bool {
-        let msg_id = (self.config.message_id_fn)(&message);
+        let msg_id = (self.config.message_id_fn())(&message);
         debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
 
@@ -1589,9 +1590,9 @@ impl NetworkBehaviour for Gossipsub {
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         GossipsubHandler::new(
-            self.config.protocol_id_prefix.clone(),
-            self.config.max_transmit_size,
-            self.config.validation_mode.clone(),
+            self.config.protocol_id_prefix().clone(),
+            self.config.max_transmit_size(),
+            self.config.validation_mode().clone(),
         )
     }
 

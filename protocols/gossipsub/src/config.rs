@@ -53,55 +53,55 @@ pub struct GossipsubConfig {
     /// protocol id's supported.
     ///
     /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
-    pub protocol_id_prefix: Cow<'static, str>,
+    protocol_id_prefix: Cow<'static, str>,
 
     // Overlay network parameters.
     /// Number of heartbeats to keep in the `memcache` (default is 5).
-    pub history_length: usize,
+    history_length: usize,
 
     /// Number of past heartbeats to gossip about (default is 3).
-    pub history_gossip: usize,
+    history_gossip: usize,
 
     /// Target number of peers for the mesh network (D in the spec, default is 6).
-    pub mesh_n: usize,
+    mesh_n: usize,
 
     /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
-    pub mesh_n_low: usize,
+    mesh_n_low: usize,
 
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
     /// is 12).
-    pub mesh_n_high: usize,
+    mesh_n_high: usize,
 
     /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
     /// default is 6).
-    pub gossip_lazy: usize,
+    gossip_lazy: usize,
 
     /// Affects how many peers we will emit gossip to at each heartbeat.
     /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
     /// `gossip_lazy`, whichever is greater. The default is 0.25.
-    pub gossip_factor: f64,
+    gossip_factor: f64,
 
     /// Initial delay in each heartbeat (default is 5 seconds).
-    pub heartbeat_initial_delay: Duration,
+    heartbeat_initial_delay: Duration,
 
     /// Time between each heartbeat (default is 1 second).
-    pub heartbeat_interval: Duration,
+    heartbeat_interval: Duration,
 
     /// Time to live for fanout peers (default is 60 seconds).
-    pub fanout_ttl: Duration,
+    fanout_ttl: Duration,
 
     /// The number of heartbeat ticks until we recheck the connection to explicit peers and
     /// reconnecting if necessary (default 300).
-    pub check_explicit_peers_ticks: u64,
+    check_explicit_peers_ticks: u64,
 
     /// The maximum byte size for each gossip (default is 2048 bytes).
-    pub max_transmit_size: usize,
+    max_transmit_size: usize,
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
     /// This settings sets the time period that messages are stored in the cache. Duplicates can be
     /// received if duplicate messages are sent at a time greater than this setting apart. The
     /// default is 1 minute.
-    pub duplicate_cache_time: Duration,
+    duplicate_cache_time: Duration,
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
@@ -109,11 +109,11 @@ pub struct GossipsubConfig {
     /// once validated (default is `false`). Furthermore, the application may optionally call
     /// `invalidate_message()` on the behaviour to remove the message from the memcache. The
     /// default is false.
-    pub validate_messages: bool,
+    validate_messages: bool,
 
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
     /// for the available types. The default is ValidationMode::Strict.
-    pub validation_mode: ValidationMode,
+    validation_mode: ValidationMode,
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
     /// The default value is to concatenate the source peer id with a sequence number. Setting this
@@ -123,18 +123,18 @@ pub struct GossipsubConfig {
     ///
     /// The function takes a `GossipsubMessage` as input and outputs a String to be interpreted as
     /// the message id.
-    pub message_id_fn: fn(&GossipsubMessage) -> MessageId,
+    message_id_fn: fn(&GossipsubMessage) -> MessageId,
 
     /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
     /// connected/trusted nodes. The default is true.
-    pub do_px: bool,
+    do_px: bool,
 
     /// Controls the number of peers to include in prune Peer eXchange.
     /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
     /// send them signed peer records for up to `prune_peers` other peers that we
     /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
     /// peer can reliably form a full mesh. The default is 16.
-    pub prune_peers: usize,
+    prune_peers: usize,
 
     /// Controls the backoff time for pruned peers. This is how long
     /// a peer must wait before attempting to graft into our mesh again after being pruned.
@@ -142,7 +142,7 @@ pub struct GossipsubConfig {
     /// the minimum time to wait. Peers running older versions may not send a backoff time,
     /// so if we receive a prune message without one, we will wait at least `prune_backoff`
     /// before attempting to re-graft. The default is one minute.
-    pub prune_backoff: Duration,
+    prune_backoff: Duration,
 
     /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
@@ -150,52 +150,178 @@ pub struct GossipsubConfig {
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
-    pub backoff_slack: u32,
+    backoff_slack: u32,
 
     /// Whether to do flood publishing or not. If enabled newly created messages will always be
     /// sent to all peers that are subscribed to the topic and have a good enough score.
     /// The default is true.
-    pub flood_publish: bool,
+    flood_publish: bool,
+}
+
+//TODO should we use a macro for getters + the builder?
+impl GossipsubConfig {
+    //all the getters
+
+    /// The protocol id prefix to negotiate this protocol. The protocol id is of the form
+    /// `/<prefix>/<supported-versions>`. As gossipsub supports version 1.0 and 1.1, there are two
+    /// protocol id's supported.
+    ///
+    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
+    pub fn protocol_id_prefix(&self) -> &Cow<'static, str> {
+        &self.protocol_id_prefix
+    }
+
+    // Overlay network parameters.
+    /// Number of heartbeats to keep in the `memcache` (default is 5).
+    pub fn history_length(&self) -> usize {
+        self.history_length
+    }
+
+    /// Number of past heartbeats to gossip about (default is 3).
+    pub fn history_gossip(&self) -> usize {
+        self.history_gossip
+    }
+
+    /// Target number of peers for the mesh network (D in the spec, default is 6).
+    pub fn mesh_n(&self) -> usize {
+        self.mesh_n
+    }
+
+    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
+    pub fn mesh_n_low(&self) -> usize {
+        self.mesh_n_low
+    }
+
+    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
+    /// is 12).
+    pub fn mesh_n_high(&self) -> usize {
+        self.mesh_n_high
+    }
+
+    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
+    /// default is 6).
+    pub fn gossip_lazy(&self) -> usize {
+        self.gossip_lazy
+    }
+
+    /// Affects how many peers we will emit gossip to at each heartbeat.
+    /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
+    /// `gossip_lazy`, whichever is greater. The default is 0.25.
+    pub fn gossip_factor(&self) -> f64 {
+        self.gossip_factor
+    }
+
+    /// Initial delay in each heartbeat (default is 5 seconds).
+    pub fn heartbeat_initial_delay(&self) -> Duration {
+        self.heartbeat_initial_delay
+    }
+
+    /// Time between each heartbeat (default is 1 second).
+    pub fn heartbeat_interval(&self) -> Duration {
+        self.heartbeat_interval
+    }
+
+    /// Time to live for fanout peers (default is 60 seconds).
+    pub fn fanout_ttl(&self) -> Duration {
+        self.fanout_ttl
+    }
+
+    /// The number of heartbeat ticks until we recheck the connection to explicit peers and
+    /// reconnecting if necessary (default 300).
+    pub fn check_explicit_peers_ticks(&self) -> u64 {
+        self.check_explicit_peers_ticks
+    }
+
+    /// The maximum byte size for each gossip (default is 2048 bytes).
+    pub fn max_transmit_size(&self) -> usize {
+        self.max_transmit_size
+    }
+
+    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
+    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
+    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// default is 1 minute.
+    pub fn duplicate_cache_time(&self) -> Duration {
+        self.duplicate_cache_time
+    }
+
+    /// When set to `true`, prevents automatic forwarding of all received messages. This setting
+    /// allows a user to validate the messages before propagating them to their peers. If set to
+    /// true, the user must manually call `validate_message()` on the behaviour to forward message
+    /// once validated (default is `false`). Furthermore, the application may optionally call
+    /// `invalidate_message()` on the behaviour to remove the message from the memcache. The
+    /// default is false.
+    pub fn validate_messages(&self) -> bool {
+        self.validate_messages
+    }
+
+    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
+    /// for the available types. The default is ValidationMode::Strict.
+    pub fn validation_mode(&self) -> &ValidationMode {
+        &self.validation_mode
+    }
+
+    /// A user-defined function allowing the user to specify the message id of a gossipsub message.
+    /// The default value is to concatenate the source peer id with a sequence number. Setting this
+    /// parameter allows the user to address packets arbitrarily. One example is content based
+    /// addressing, where this function may be set to `hash(message)`. This would prevent messages
+    /// of the same content from being duplicated.
+    ///
+    /// The function takes a `GossipsubMessage` as input and outputs a String to be interpreted as
+    /// the message id.
+    pub fn message_id_fn(&self) -> fn(&GossipsubMessage) -> MessageId {
+        self.message_id_fn
+    }
+
+    /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
+    /// connected/trusted nodes. The default is true.
+    pub fn do_px(&self) -> bool {
+        self.do_px
+    }
+
+    /// Controls the number of peers to include in prune Peer eXchange.
+    /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
+    /// send them signed peer records for up to `prune_peers` other peers that we
+    /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
+    /// peer can reliably form a full mesh. The default is 16.
+    pub fn prune_peers(&self) -> usize {
+        self.prune_peers
+    }
+
+    /// Controls the backoff time for pruned peers. This is how long
+    /// a peer must wait before attempting to graft into our mesh again after being pruned.
+    /// When pruning a peer, we send them our value of `prune_backoff` so they know
+    /// the minimum time to wait. Peers running older versions may not send a backoff time,
+    /// so if we receive a prune message without one, we will wait at least `prune_backoff`
+    /// before attempting to re-graft. The default is one minute.
+    pub fn prune_backoff(&self) -> Duration {
+        self.prune_backoff
+    }
+
+    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
+    /// solves problems occuring through high latencies. In particular if
+    /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
+    /// prunes on our side and processing prunes on the receiving side this guarantees that we
+    /// get not punished for too early grafting. The default is 1.
+    pub fn backoff_slack(&self) -> u32 {
+        self.backoff_slack
+    }
+
+    /// Whether to do flood publishing or not. If enabled newly created messages will always be
+    /// sent to all peers that are subscribed to the topic and have a good enough score.
+    /// The default is true.
+    pub fn flood_publish(&self) -> bool {
+        self.flood_publish
+    }
 }
 
 impl Default for GossipsubConfig {
     fn default() -> GossipsubConfig {
-        GossipsubConfig {
-            protocol_id_prefix: Cow::Borrowed("meshsub"),
-            history_length: 5,
-            history_gossip: 3,
-            mesh_n: 6,
-            mesh_n_low: 5,
-            mesh_n_high: 12,
-            gossip_lazy: 6, // default to mesh_n
-            gossip_factor: 0.25,
-            heartbeat_initial_delay: Duration::from_secs(5),
-            heartbeat_interval: Duration::from_secs(1),
-            fanout_ttl: Duration::from_secs(60),
-            check_explicit_peers_ticks: 300,
-            max_transmit_size: 2048,
-            duplicate_cache_time: Duration::from_secs(60),
-            validate_messages: false,
-            validation_mode: ValidationMode::Strict,
-            message_id_fn: |message| {
-                // default message id is: source + sequence number
-                // NOTE: If either the peer_id or source is not provided, we set to 0;
-                let mut source_string = if let Some(peer_id) = message.source.as_ref() {
-                    peer_id.to_base58()
-                } else {
-                    PeerId::from_bytes(vec![0, 1, 0])
-                        .expect("Valid peer id")
-                        .to_base58()
-                };
-                source_string.push_str(&message.sequence_number.unwrap_or_default().to_string());
-                MessageId::from(source_string)
-            },
-            do_px: true,
-            prune_peers: 16,
-            prune_backoff: Duration::from_secs(60),
-            backoff_slack: 1,
-            flood_publish: true,
-        }
+        //use GossipsubConfigBuilder to also validate defaults
+        GossipsubConfigBuilder::new()
+            .build()
+            .expect("Default config parameters should be valid parameters")
     }
 }
 
@@ -216,7 +342,43 @@ impl GossipsubConfigBuilder {
     // set default values
     pub fn new() -> GossipsubConfigBuilder {
         GossipsubConfigBuilder {
-            config: GossipsubConfig::default(),
+            config: GossipsubConfig {
+                protocol_id_prefix: Cow::Borrowed("meshsub"),
+                history_length: 5,
+                history_gossip: 3,
+                mesh_n: 6,
+                mesh_n_low: 5,
+                mesh_n_high: 12,
+                gossip_lazy: 6, // default to mesh_n
+                gossip_factor: 0.25,
+                heartbeat_initial_delay: Duration::from_secs(5),
+                heartbeat_interval: Duration::from_secs(1),
+                fanout_ttl: Duration::from_secs(60),
+                check_explicit_peers_ticks: 300,
+                max_transmit_size: 2048,
+                duplicate_cache_time: Duration::from_secs(60),
+                validate_messages: false,
+                validation_mode: ValidationMode::Strict,
+                message_id_fn: |message| {
+                    // default message id is: source + sequence number
+                    // NOTE: If either the peer_id or source is not provided, we set to 0;
+                    let mut source_string = if let Some(peer_id) = message.source.as_ref() {
+                        peer_id.to_base58()
+                    } else {
+                        PeerId::from_bytes(vec![0, 1, 0])
+                            .expect("Valid peer id")
+                            .to_base58()
+                    };
+                    source_string
+                        .push_str(&message.sequence_number.unwrap_or_default().to_string());
+                    MessageId::from(source_string)
+                },
+                do_px: true,
+                prune_peers: 16,
+                prune_backoff: Duration::from_secs(60),
+                backoff_slack: 1,
+                flood_publish: true,
+            },
         }
     }
 
@@ -228,40 +390,24 @@ impl GossipsubConfigBuilder {
 
     /// Number of heartbeats to keep in the `memcache` (default is 5).
     pub fn history_length(&mut self, history_length: usize) -> &mut Self {
-        assert!(
-            history_length >= self.config.history_gossip,
-            "The history_length must be greater than or equal to the history_gossip length"
-        );
         self.config.history_length = history_length;
         self
     }
 
     /// Number of past heartbeats to gossip about (default is 3).
     pub fn history_gossip(&mut self, history_gossip: usize) -> &mut Self {
-        assert!(
-            self.config.history_length >= history_gossip,
-            "The history_length must be greater than or equal to the history_gossip length"
-        );
         self.config.history_gossip = history_gossip;
         self
     }
 
     /// Target number of peers for the mesh network (D in the spec, default is 6).
     pub fn mesh_n(&mut self, mesh_n: usize) -> &mut Self {
-        assert!(
-            self.config.mesh_n_low <= mesh_n && mesh_n <= self.config.mesh_n_high,
-            "The following equality doesn't hold mesh_n_low <= mesh_n <= mesh_n_high"
-        );
         self.config.mesh_n = mesh_n;
         self
     }
 
     /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 4).
     pub fn mesh_n_low(&mut self, mesh_n_low: usize) -> &mut Self {
-        assert!(
-            mesh_n_low <= self.config.mesh_n && self.config.mesh_n <= self.config.mesh_n_high,
-            "The following equality doesn't hold mesh_n_low <= mesh_n <= mesh_n_high"
-        );
         self.config.mesh_n_low = mesh_n_low;
         self
     }
@@ -269,10 +415,6 @@ impl GossipsubConfigBuilder {
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
     /// is 12).
     pub fn mesh_n_high(&mut self, mesh_n_high: usize) -> &mut Self {
-        assert!(
-            self.config.mesh_n_low <= self.config.mesh_n && self.config.mesh_n <= mesh_n_high,
-            "The following equality doesn't hold mesh_n_low <= mesh_n <= mesh_n_high"
-        );
         self.config.mesh_n_high = mesh_n_high;
         self
     }
@@ -408,9 +550,23 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Constructs a `GossipsubConfig` from the given configuration.
-    pub fn build(&self) -> GossipsubConfig {
-        self.config.clone()
+    /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
+    pub fn build(&self) -> Result<GossipsubConfig, &str> {
+        //check all constraints on config
+        if !(self.config.history_length >= self.config.history_gossip) {
+            return Err(
+                "The history_length must be greater than or equal to the history_gossip \
+                length",
+            );
+        }
+        if !(self.config.mesh_n_low <= self.config.mesh_n
+            && self.config.mesh_n <= self.config.mesh_n_high)
+        {
+            return Err(
+                "The following inequality doesn't hold mesh_n_low <= mesh_n <= mesh_n_high",
+            );
+        }
+        Ok(self.config.clone())
     }
 }
 
@@ -449,7 +605,8 @@ mod test {
     fn create_thing() {
         let builder = GossipsubConfigBuilder::new()
             .protocol_id_prefix("purple")
-            .build();
+            .build()
+            .unwrap();
 
         dbg!(builder);
     }

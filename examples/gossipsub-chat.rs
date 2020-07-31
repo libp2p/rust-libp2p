@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .heartbeat_interval(Duration::from_secs(10))
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
             //same content will be propagated.
-            .build();
+            .build().expect("Valid config");
         // build a gossipsub network behaviour
         let mut gossipsub =
             gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config);

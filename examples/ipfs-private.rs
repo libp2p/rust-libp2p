@@ -241,7 +241,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let gossipsub_config = GossipsubConfigBuilder::new()
             .max_transmit_size(262144)
-            .build();
+            .build().expect("valid config");
         let mut behaviour = MyBehaviour {
             gossipsub: Gossipsub::new(
                 MessageAuthenticity::Signed(local_key.clone()),

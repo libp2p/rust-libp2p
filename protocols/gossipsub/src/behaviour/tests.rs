@@ -327,7 +327,10 @@ mod tests {
         // - Insert message into gs.mcache and gs.received
 
         //turn off flood publish to test old behaviour
-        let config = GossipsubConfigBuilder::new().flood_publish(false).build();
+        let config = GossipsubConfigBuilder::new()
+            .flood_publish(false)
+            .build()
+            .unwrap();
 
         let publish_topic = String::from("test_publish");
         let (mut gs, _, topic_hashes) =
@@ -364,12 +367,12 @@ mod tests {
             });
 
         let msg_id =
-            (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
+            (gs.config.message_id_fn())(&publishes.first().expect("Should contain > 0 entries"));
 
         let config = GossipsubConfig::default();
         assert_eq!(
             publishes.len(),
-            config.mesh_n_low,
+            config.mesh_n_low(),
             "Should send a publish message to all known peers"
         );
 
@@ -388,7 +391,10 @@ mod tests {
         // - Insert message into gs.mcache and gs.received
 
         //turn off flood publish to test fanout behaviour
-        let config = GossipsubConfigBuilder::new().flood_publish(false).build();
+        let config = GossipsubConfigBuilder::new()
+            .flood_publish(false)
+            .build()
+            .unwrap();
 
         let fanout_topic = String::from("test_fanout");
         let (mut gs, _, topic_hashes) =
@@ -414,7 +420,7 @@ mod tests {
                 .get(&TopicHash::from_raw(fanout_topic.clone()))
                 .unwrap()
                 .len(),
-            gs.config.mesh_n,
+            gs.config.mesh_n(),
             "Fanout should contain `mesh_n` peers for fanout topic"
         );
 
@@ -433,11 +439,11 @@ mod tests {
             });
 
         let msg_id =
-            (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
+            (gs.config.message_id_fn())(&publishes.first().expect("Should contain > 0 entries"));
 
         assert_eq!(
             publishes.len(),
-            gs.config.mesh_n,
+            gs.config.mesh_n(),
             "Should send a publish message to `mesh_n` fanout peers"
         );
 
@@ -588,8 +594,10 @@ mod tests {
     /// Test Gossipsub.get_random_peers() function
     fn test_get_random_peers() {
         // generate a default GossipsubConfig
-        let mut gs_config = GossipsubConfig::default();
-        gs_config.validation_mode = ValidationMode::Anonymous;
+        let gs_config = GossipsubConfigBuilder::new()
+            .validation_mode(ValidationMode::Anonymous)
+            .build()
+            .unwrap();
         // create a gossipsub struct
         let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config);
 
@@ -633,7 +641,7 @@ mod tests {
     fn test_handle_iwant_msg_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
-        let id = gs.config.message_id_fn;
+        let id = gs.config.message_id_fn();
 
         let message = GossipsubMessage {
             source: Some(peers[11].clone()),
@@ -674,7 +682,7 @@ mod tests {
     fn test_handle_iwant_msg_cached_shifted() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
-        let id = gs.config.message_id_fn;
+        let id = gs.config.message_id_fn();
         // perform 10 memshifts and check that it leaves the cache
         for shift in 1..10 {
             let message = GossipsubMessage {
@@ -951,7 +959,8 @@ mod tests {
     fn test_explicit_peer_reconnects() {
         let config = GossipsubConfigBuilder::new()
             .check_explicit_peers_ticks(2)
-            .build();
+            .build()
+            .unwrap();
         let (mut gs, others, _) = build_and_inject_nodes_with_config(1, Vec::new(), true, config);
 
         let peer = others.get(0).unwrap();
@@ -1302,9 +1311,9 @@ mod tests {
 
         // Adds mesh_low peers and PRUNE 2 giving us a deficit.
         let (mut gs, peers, topics) =
-            build_and_inject_nodes(config.mesh_n + 1, vec!["test".into()], true);
+            build_and_inject_nodes(config.mesh_n() + 1, vec!["test".into()], true);
 
-        let to_remove_peers = config.mesh_n + 1 - config.mesh_n_low - 1;
+        let to_remove_peers = config.mesh_n() + 1 - config.mesh_n_low() - 1;
 
         for index in 0..to_remove_peers {
             gs.handle_prune(
@@ -1316,14 +1325,14 @@ mod tests {
         // Verify the pruned peers are removed from the mesh.
         assert_eq!(
             gs.mesh.get(&topics[0]).unwrap().len(),
-            config.mesh_n_low - 1
+            config.mesh_n_low() - 1
         );
 
         // run a heartbeat
         gs.heartbeat();
 
         // Peers should be added to reach mesh_n
-        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n);
+        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n());
     }
 
     #[test]
@@ -1333,7 +1342,7 @@ mod tests {
 
         // Adds mesh_low peers and PRUNE 2 giving us a deficit.
         let (mut gs, peers, topics) =
-            build_and_inject_nodes(config.mesh_n_high + 10, vec!["test".into()], true);
+            build_and_inject_nodes(config.mesh_n_high() + 10, vec!["test".into()], true);
 
         // graft all the peers
         for peer in peers {
@@ -1344,7 +1353,7 @@ mod tests {
         gs.heartbeat();
 
         // Peers should be removed to reach mesh_n
-        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n);
+        assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n());
     }
 
     #[test]
@@ -1356,8 +1365,8 @@ mod tests {
         //handle prune from single peer with px peers
 
         let mut px = Vec::new();
-        //propose more px peers than config.prune_peers
-        for _ in 0..config.prune_peers + 5 {
+        //propose more px peers than config.prune_peers()
+        for _ in 0..config.prune_peers() + 5 {
             px.push(PeerInfo {
                 peer: Some(PeerId::random()),
             });
@@ -1368,7 +1377,7 @@ mod tests {
             vec![(
                 topics[0].clone(),
                 px.clone(),
-                Some(config.prune_backoff.as_secs()),
+                Some(config.prune_backoff().as_secs()),
             )],
         );
 
@@ -1385,13 +1394,13 @@ mod tests {
             })
             .collect();
 
-        // Exactly config.prune_peers many random peers should be dialled
-        assert_eq!(dials.len(), config.prune_peers);
+        // Exactly config.prune_peers() many random peers should be dialled
+        assert_eq!(dials.len(), config.prune_peers());
 
         let dials_set: HashSet<_> = dials.into_iter().collect();
 
         // No duplicates
-        assert_eq!(dials_set.len(), config.prune_peers);
+        assert_eq!(dials_set.len(), config.prune_peers());
 
         //all dial peers must be in px
         assert!(dials_set.is_subset(&HashSet::from_iter(
@@ -1405,7 +1414,7 @@ mod tests {
 
         //build mesh with enough peers for px
         let (mut gs, peers, topics) =
-            build_and_inject_nodes(config.prune_peers + 1, vec!["test".into()], true);
+            build_and_inject_nodes(config.prune_peers() + 1, vec!["test".into()], true);
 
         //send prune to peer
         gs.send_graft_prune(
@@ -1425,11 +1434,11 @@ mod tests {
                         backoff,
                     } =>
                         topic_hash == &topics[0] &&
-                peers.len() == config.prune_peers &&
+                peers.len() == config.prune_peers() &&
                 //all peers are different
                 peers.iter().collect::<HashSet<_>>().len() ==
-                    config.prune_peers &&
-                backoff.unwrap() == config.prune_backoff.as_secs(),
+                    config.prune_peers() &&
+                backoff.unwrap() == config.prune_backoff().as_secs(),
                     _ => false,
                 }),
             1
@@ -1442,7 +1451,7 @@ mod tests {
 
         //build mesh with enough peers for px
         let (mut gs, peers, topics) =
-            build_and_inject_nodes(config.prune_peers + 1, vec!["test".into()], true);
+            build_and_inject_nodes(config.prune_peers() + 1, vec!["test".into()], true);
 
         //send prune to peer => this adds a backoff for this peer
         gs.send_graft_prune(
@@ -1470,7 +1479,7 @@ mod tests {
                         topic_hash == &topics[0] &&
                 //no px in this case
                 peers.is_empty() &&
-                backoff.unwrap() == config.prune_backoff.as_secs(),
+                backoff.unwrap() == config.prune_backoff().as_secs(),
                     _ => false,
                 }),
             1
@@ -1482,7 +1491,8 @@ mod tests {
         let config = GossipsubConfigBuilder::new()
             .backoff_slack(1)
             .heartbeat_interval(Duration::from_millis(100))
-            .build();
+            .build()
+            .unwrap();
         //only one peer => mesh too small and will try to regraft as early as possible
         let (mut gs, peers, topics) =
             build_and_inject_nodes_with_config(1, vec!["test".into()], true, config);
@@ -1534,7 +1544,8 @@ mod tests {
             .prune_backoff(Duration::from_millis(90))
             .backoff_slack(1)
             .heartbeat_interval(Duration::from_millis(100))
-            .build();
+            .build()
+            .unwrap();
         //only one peer => mesh too small and will try to regraft as early as possible
         let (mut gs, peers, topics) =
             build_and_inject_nodes_with_config(1, vec!["test".into()], true, config);
@@ -1584,7 +1595,7 @@ mod tests {
         let topic = "test";
         // Adds more peers than mesh can hold to test flood publishing
         let (mut gs, _, _) =
-            build_and_inject_nodes(config.mesh_n_high + 10, vec![topic.into()], true);
+            build_and_inject_nodes(config.mesh_n_high() + 10, vec![topic.into()], true);
 
         let other_topic = Topic::new("test2");
 
@@ -1620,12 +1631,12 @@ mod tests {
             });
 
         let msg_id =
-            (gs.config.message_id_fn)(&publishes.first().expect("Should contain > 0 entries"));
+            (gs.config.message_id_fn())(&publishes.first().expect("Should contain > 0 entries"));
 
         let config = GossipsubConfig::default();
         assert_eq!(
             publishes.len(),
-            config.mesh_n_high + 10 + 1,
+            config.mesh_n_high() + 10 + 1,
             "Should send a publish message to all known peers"
         );
 
@@ -1642,7 +1653,7 @@ mod tests {
         //add more peers than in mesh to test gossipping
         //by default only mesh_n_low peers will get added to mesh
         let (mut gs, _, topic_hashes) = build_and_inject_nodes(
-            config.mesh_n_low + config.gossip_lazy + 1,
+            config.mesh_n_low() + config.gossip_lazy() + 1,
             vec!["topic".into()],
             true,
         );
@@ -1662,17 +1673,17 @@ mod tests {
         //emit gossip
         gs.emit_gossip();
 
-        //check that exactly config.gossip_lazy many gossip messages were sent.
-        let msg_id = (gs.config.message_id_fn)(&message);
+        //check that exactly config.gossip_lazy() many gossip messages were sent.
+        let msg_id = (gs.config.message_id_fn())(&message);
         assert_eq!(
-            count_control_msgs(&gs, |peer, action| match action {
+            count_control_msgs(&gs, |_, action| match action {
                 GossipsubControlAction::IHave {
                     topic_hash,
                     message_ids,
                 } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
                 _ => false,
             }),
-            config.gossip_lazy
+            config.gossip_lazy()
         );
     }
 
@@ -1681,7 +1692,8 @@ mod tests {
         let config = GossipsubConfig::default();
 
         //add a lot of peers
-        let m = config.mesh_n_low + config.gossip_lazy * (2.0 / config.gossip_factor) as usize;
+        let m =
+            config.mesh_n_low() + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
         let (mut gs, _, topic_hashes) = build_and_inject_nodes(m, vec!["topic".into()], true);
 
         //receive message
@@ -1699,17 +1711,17 @@ mod tests {
         //emit gossip
         gs.emit_gossip();
 
-        //check that exactly config.gossip_lazy many gossip messages were sent.
-        let msg_id = (gs.config.message_id_fn)(&message);
+        //check that exactly config.gossip_lazy() many gossip messages were sent.
+        let msg_id = (gs.config.message_id_fn())(&message);
         assert_eq!(
-            count_control_msgs(&gs, |peer, action| match action {
+            count_control_msgs(&gs, |_, action| match action {
                 GossipsubControlAction::IHave {
                     topic_hash,
                     message_ids,
                 } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
                 _ => false,
             }),
-            ((m - config.mesh_n_low) as f64 * config.gossip_factor) as usize
+            ((m - config.mesh_n_low()) as f64 * config.gossip_factor()) as usize
         );
     }
 }

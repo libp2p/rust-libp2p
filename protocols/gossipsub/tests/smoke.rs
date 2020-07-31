@@ -180,7 +180,8 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .history_length(10)
         .history_gossip(10)
         .validation_mode(ValidationMode::Permissive)
-        .build();
+        .build()
+        .unwrap();
     let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id.clone()), config);
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
