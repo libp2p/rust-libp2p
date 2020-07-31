@@ -72,8 +72,14 @@ pub struct GossipsubConfig {
     /// is 12).
     pub mesh_n_high: usize,
 
-    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec, default is 6).
+    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
+    /// default is 6).
     pub gossip_lazy: usize,
+
+    /// Affects how many peers we will emit gossip to at each heartbeat.
+    /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
+    /// `gossip_lazy`, whichever is greater. The default is 0.25.
+    pub gossip_factor: f64,
 
     /// Initial delay in each heartbeat (default is 5 seconds).
     pub heartbeat_initial_delay: Duration,
@@ -162,6 +168,7 @@ impl Default for GossipsubConfig {
             mesh_n_low: 5,
             mesh_n_high: 12,
             gossip_lazy: 6, // default to mesh_n
+            gossip_factor: 0.25,
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
@@ -270,9 +277,18 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec, default is 6).
+    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
+    /// default is 6).
     pub fn gossip_lazy(&mut self, gossip_lazy: usize) -> &mut Self {
         self.config.gossip_lazy = gossip_lazy;
+        self
+    }
+
+    /// Affects how many peers we will emit gossip to at each heartbeat.
+    /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
+    /// `gossip_lazy`, whichever is greater. The default is 0.25.
+    pub fn gossip_factor(&mut self, gossip_factor: f64) -> &mut Self {
+        self.config.gossip_factor = gossip_factor;
         self
     }
 
@@ -408,12 +424,19 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("mesh_n_low", &self.mesh_n_low);
         let _ = builder.field("mesh_n_high", &self.mesh_n_high);
         let _ = builder.field("gossip_lazy", &self.gossip_lazy);
+        let _ = builder.field("gossip_factor", &self.gossip_factor);
         let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
         let _ = builder.field("max_transmit_size", &self.max_transmit_size);
         let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("validate_messages", &self.validate_messages);
+        let _ = builder.field("validation_mode", &self.validation_mode);
+        let _ = builder.field("do_px", &self.do_px);
+        let _ = builder.field("prune_peers", &self.prune_peers);
+        let _ = builder.field("prune_backoff", &self.prune_backoff);
+        let _ = builder.field("backoff_slack", &self.backoff_slack);
+        let _ = builder.field("flood_publish", &self.flood_publish);
         builder.finish()
     }
 }

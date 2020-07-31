@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::cmp::max;
 use std::collections::hash_map::Entry;
 use std::iter::FromIterator;
 use std::time::Duration;
@@ -1278,13 +1279,18 @@ impl Gossipsub {
                 return;
             }
 
+            // dynamic number of peers to gossip based on `gossip_factor` with minimum `gossip_lazy`
+            let n_map = |m| {
+                max(
+                    self.config.gossip_lazy,
+                    (self.config.gossip_factor * m as f64) as usize,
+                )
+            };
             // get gossip_lazy random peers
-            let to_msg_peers = Self::get_random_peers(
-                &self.topic_peers,
-                &topic_hash,
-                self.config.gossip_lazy,
-                |peer| !peers.contains(peer) && !self.explicit_peers.contains(peer),
-            );
+            let to_msg_peers =
+                Self::get_random_peers_dynamic(&self.topic_peers, &topic_hash, n_map, |peer| {
+                    !peers.contains(peer) && !self.explicit_peers.contains(peer)
+                });
 
             debug!("Gossiping IHAVE to {} peers.", to_msg_peers.len());
 
@@ -1496,12 +1502,14 @@ impl Gossipsub {
         }
     }
 
-    /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
-    /// filtered by the function `f`.
-    fn get_random_peers(
+    /// Helper function to get a subset of random gossipsub peers for a `topic_hash`
+    /// filtered by the function `f`. The number of peers to get equals the output of `n_map`
+    /// that gets as input the number of filtered peers.
+    fn get_random_peers_dynamic(
         topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
         topic_hash: &TopicHash,
-        n: usize,
+        // maps the number of total peers to the number of selected peers
+        n_map: impl Fn(usize) -> usize,
         mut f: impl FnMut(&PeerId) -> bool,
     ) -> BTreeSet<PeerId> {
         let mut gossip_peers = match topic_peers.get(topic_hash) {
@@ -1511,6 +1519,7 @@ impl Gossipsub {
         };
 
         // if we have less than needed, return them
+        let n = n_map(gossip_peers.len());
         if gossip_peers.len() <= n {
             debug!("RANDOM PEERS: Got {:?} peers", gossip_peers.len());
             return gossip_peers.into_iter().collect();
@@ -1523,6 +1532,17 @@ impl Gossipsub {
         debug!("RANDOM PEERS: Got {:?} peers", n);
 
         gossip_peers.into_iter().take(n).collect()
+    }
+
+    /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
+    /// filtered by the function `f`.
+    fn get_random_peers(
+        topic_peers: &HashMap<TopicHash, BTreeSet<PeerId>>,
+        topic_hash: &TopicHash,
+        n: usize,
+        f: impl FnMut(&PeerId) -> bool,
+    ) -> BTreeSet<PeerId> {
+        Self::get_random_peers_dynamic(topic_peers, topic_hash, |_| n, f)
     }
 
     // adds a control action to control_pool
