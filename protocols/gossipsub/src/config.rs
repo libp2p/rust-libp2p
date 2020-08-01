@@ -18,10 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{GossipsubMessage, MessageId};
-use libp2p_core::PeerId;
 use std::borrow::Cow;
 use std::time::Duration;
+
+use libp2p_core::PeerId;
+
+use crate::protocol::{GossipsubMessage, MessageId};
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -156,6 +158,11 @@ pub struct GossipsubConfig {
     /// sent to all peers that are subscribed to the topic and have a good enough score.
     /// The default is true.
     flood_publish: bool,
+
+    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
+    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
+    /// The default is 2.
+    mesh_outbound_min: usize,
 }
 
 //TODO should we use a macro for getters + the builder?
@@ -314,6 +321,13 @@ impl GossipsubConfig {
     pub fn flood_publish(&self) -> bool {
         self.flood_publish
     }
+
+    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
+    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
+    /// The default is 2.
+    pub fn mesh_outbound_min(&self) -> usize {
+        self.mesh_outbound_min
+    }
 }
 
 impl Default for GossipsubConfig {
@@ -378,6 +392,7 @@ impl GossipsubConfigBuilder {
                 prune_backoff: Duration::from_secs(60),
                 backoff_slack: 1,
                 flood_publish: true,
+                mesh_outbound_min: 2,
             },
         }
     }
@@ -550,6 +565,14 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
+    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
+    /// The default is 2.
+    pub fn mesh_outbound_min(&mut self, mesh_outbound_min: usize) -> &mut Self {
+        self.config.mesh_outbound_min = mesh_outbound_min;
+        self
+    }
+
     /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
     pub fn build(&self) -> Result<GossipsubConfig, &str> {
         //check all constraints on config
@@ -559,11 +582,17 @@ impl GossipsubConfigBuilder {
                 length",
             );
         }
-        if !(self.config.mesh_n_low <= self.config.mesh_n
+        if !(self.config.mesh_outbound_min < self.config.mesh_n_low
+            && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
+            return Err("The following inequality doesn't hold \
+                mesh_outbound_min < mesh_n_low <= mesh_n <= mesh_n_high");
+        }
+
+        if !(self.config.mesh_outbound_min * 2 <= self.config.mesh_n) {
             return Err(
-                "The following inequality doesn't hold mesh_n_low <= mesh_n <= mesh_n_high",
+                "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
             );
         }
         Ok(self.config.clone())
@@ -593,6 +622,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("prune_backoff", &self.prune_backoff);
         let _ = builder.field("backoff_slack", &self.backoff_slack);
         let _ = builder.field("flood_publish", &self.flood_publish);
+        let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
         builder.finish()
     }
 }

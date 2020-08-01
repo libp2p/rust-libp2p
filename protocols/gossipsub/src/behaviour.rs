@@ -40,7 +40,8 @@ use rand::{seq::SliceRandom, thread_rng};
 use wasm_timer::{Instant, Interval};
 
 use libp2p_core::{
-    connection::ConnectionId, identity::error::SigningError, identity::Keypair, Multiaddr, PeerId,
+    connection::ConnectionId, identity::error::SigningError, identity::Keypair, ConnectedPoint,
+    Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -350,6 +351,16 @@ pub struct Gossipsub {
     /// number of heartbeats since the beginning of time; this allows us to amortize some resource
     /// clean up -- eg backoff clean up.
     heartbeat_ticks: u64,
+
+    /// We remember all peers we found through peer exchange, since those peers are not considered
+    /// as safe as randomly discovered outbound peers. This behaviour diverges from the go
+    /// implementation to avoid possible love bombing attacks in px. When disconnecting peers will
+    /// be removed from this list which may result in a true outbound rediscovery.
+    px_peers: HashSet<PeerId>,
+
+    /// Set of connected outbound peers (we only consider true outbound peers found through
+    /// discovery and not by px)
+    outbound_peers: HashSet<PeerId>,
 }
 
 impl Gossipsub {
@@ -390,6 +401,8 @@ impl Gossipsub {
             ),
             heartbeat_ticks: 0,
             config,
+            px_peers: HashSet::new(),
+            outbound_peers: HashSet::new(),
         }
     }
 
@@ -832,30 +845,41 @@ impl Gossipsub {
             do_px = false
         } else {
             for topic_hash in topics {
-                // make sure we are not backing off that peer
-                if self.backoffs.is_backoff(&topic_hash, peer_id) {
-                    debug!("GRAFT: ignoring backed off peer {:?}", peer_id);
-                    //TODO add penalty
-                    //no PX
-                    do_px = false;
-                    //TODO extra penalty if the graft is coming too fast (see
-                    // GossipSubGraftFloodThreshold)
-
-                    to_prune_topics.insert(topic_hash.clone());
-                    continue;
-                }
-
-                //TODO check score of peer
-
-                //TODO check mesh size upper limit if connection is incoming
-
                 if let Some(peers) = self.mesh.get_mut(&topic_hash) {
-                    // if we are subscribed, add peer to the mesh, if not already added
+                    //if the peer is already in the mesh ignore the graft
+                    if peers.contains(peer_id) {
+                        continue;
+                    }
+
+                    // make sure we are not backing off that peer
+                    if self.backoffs.is_backoff(&topic_hash, peer_id) {
+                        debug!("GRAFT: ignoring backed off peer {:?}", peer_id);
+                        //TODO add penalty
+                        //no PX
+                        do_px = false;
+                        //TODO extra penalty if the graft is coming too fast (see
+                        // GossipSubGraftFloodThreshold)
+
+                        to_prune_topics.insert(topic_hash.clone());
+                        continue;
+                    }
+
+                    //TODO check score of peer
+
+                    //check mesh upper bound and only allow graft if upperbound not reached or
+                    //if it is an outbound peer
+                    if peers.len() >= self.config.mesh_n_high()
+                        && !self.outbound_peers.contains(peer_id)
+                    {
+                        to_prune_topics.insert(topic_hash.clone());
+                        continue;
+                    }
+
+                    // add peer to the mesh
                     info!(
                         "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
                         peer_id, topic_hash
                     );
-                    // Duplicates are ignored
                     peers.insert(peer_id.clone());
                 } else {
                     //TODO spam hardening as in go implementation?
@@ -942,6 +966,9 @@ impl Gossipsub {
             //TODO extract signed peer record if given and handle it, see
             // https://github.com/libp2p/specs/pull/217
             if let Some(peer_id) = p.peer {
+                //mark as px peer
+                self.px_peers.insert(peer_id.clone());
+
                 //dial peer
                 self.events.push_back(NetworkBehaviourAction::DialPeer {
                     peer_id,
@@ -1141,8 +1168,31 @@ impl Gossipsub {
         }
 
         // maintain the mesh for each topic
-        let explicit_peers = &self.explicit_peers;
         for (topic_hash, peers) in self.mesh.iter_mut() {
+            let explicit_peers = &self.explicit_peers;
+            let backoffs = &self.backoffs;
+            let topic_peers = &self.topic_peers;
+            let mut insert_peers =
+                |peers: &mut BTreeSet<PeerId>, n, outbound_peers: Option<&HashSet<PeerId>>| {
+                    let peer_list = Self::get_random_peers(topic_peers, topic_hash, n, |peer| {
+                        !peers.contains(peer)
+                        && !explicit_peers.contains(peer)
+                        && !backoffs.is_backoff_with_slack(topic_hash, peer)
+                        //TODO score filter
+                        && match outbound_peers {
+                            Some(outbound_peers) => outbound_peers.contains(peer),
+                            None => true
+                        }
+                    });
+                    for peer in &peer_list {
+                        let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
+                        current_topic.push(topic_hash.clone());
+                    }
+                    // update the mesh
+                    debug!("Updating mesh, new mesh: {:?}", peer_list);
+                    peers.extend(peer_list);
+                };
+
             // too little peers - add some
             if peers.len() < self.config.mesh_n_low() {
                 debug!(
@@ -1153,22 +1203,7 @@ impl Gossipsub {
                 );
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = self.config.mesh_n() - peers.len();
-                let backoffs = &self.backoffs;
-                let peer_list =
-                    Self::get_random_peers(&self.topic_peers, topic_hash, desired_peers, {
-                        |peer| {
-                            !peers.contains(peer)
-                                && !explicit_peers.contains(peer)
-                                && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                        }
-                    });
-                for peer in &peer_list {
-                    let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
-                    current_topic.push(topic_hash.clone());
-                }
-                // update the mesh
-                debug!("Updating mesh, new mesh: {:?}", peer_list);
-                peers.extend(peer_list);
+                insert_peers(peers, desired_peers, None);
             }
 
             // too many peers - remove some
@@ -1184,14 +1219,53 @@ impl Gossipsub {
                 let mut rng = thread_rng();
                 let mut shuffled = peers.iter().cloned().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
-                // remove the first excess_peer_no peers adding them to to_prune
-                for _ in 0..excess_peer_no {
-                    let peer = shuffled
-                        .pop()
-                        .expect("There should always be enough peers to remove");
+
+                //count total number of outbound peers
+                let mut outbound = {
+                    let outbound_peers = &self.outbound_peers;
+                    shuffled
+                        .iter()
+                        .filter(|p| outbound_peers.contains(*p))
+                        .count()
+                };
+
+                // remove the first excess_peer_no allowed (by outbound restrictions) peers adding
+                // them to to_prune
+                let mut removed = 0;
+                for peer in shuffled {
+                    if removed == excess_peer_no {
+                        break;
+                    }
+                    if self.outbound_peers.contains(&peer) {
+                        if outbound <= self.config.mesh_outbound_min() {
+                            //do not remove anymore outbound peers
+                            continue;
+                        } else {
+                            //an outbound peer gets removed
+                            outbound -= 1;
+                        }
+                    }
+
+                    //remove the peer
                     peers.remove(&peer);
                     let current_topic = to_prune.entry(peer).or_insert_with(Vec::new);
                     current_topic.push(topic_hash.clone());
+                    removed += 1;
+                }
+            }
+
+            // do we have enough outbound peers?
+            if peers.len() >= self.config.mesh_n_low() {
+                //count number of outbound peers we have
+                let outbound = {
+                    let outbound_peers = &self.outbound_peers;
+                    peers.iter().filter(|p| outbound_peers.contains(*p)).count()
+                };
+
+                //if we have not enough outbound peers, graft to some new outbound peers
+                if outbound < self.config.mesh_outbound_min() {
+                    let needed = self.config.mesh_outbound_min() - outbound;
+                    insert_peers(peers, needed, Some(&self.outbound_peers));
                 }
             }
         }
@@ -1663,11 +1737,38 @@ impl NetworkBehaviour for Gossipsub {
                 // remove from fanout
                 self.fanout.get_mut(&topic).map(|peers| peers.remove(id));
             }
+
+            //forget px and outbound status for this peer
+            self.px_peers.remove(id);
+            self.outbound_peers.remove(id);
         }
 
         // remove peer from peer_topics
         let was_in = self.peer_topics.remove(id);
         debug_assert!(was_in.is_some());
+    }
+
+    fn inject_connection_established(
+        &mut self,
+        peer: &PeerId,
+        _: &ConnectionId,
+        endpoint: &ConnectedPoint,
+    ) {
+        //check if the peer is an outbound peer
+        if let ConnectedPoint::Dialer { .. } = endpoint {
+            //TODO: Should we check protocols/streams somehow like in the go implementation?
+
+            //Diverging from the go implementation we only want to consider a peer as outbound peer
+            //if its first connection is outbound. To check if this connection is the first we
+            //check if the peer isn't connected yet. This only works because the
+            //`inject_connection_established` event for the first connection gets called immediatly
+            //before `inject_connected` gets called.
+            if !self.peer_topics.contains_key(peer) && !self.px_peers.contains(peer) {
+                //the first connection is outbound and it is not a peer from peer exchange => mark
+                //it as outbound peer
+                self.outbound_peers.insert(peer.clone());
+            }
+        }
     }
 
     fn inject_event(&mut self, propagation_source: PeerId, _: ConnectionId, event: GossipsubRpc) {
