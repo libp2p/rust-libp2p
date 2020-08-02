@@ -148,7 +148,6 @@ impl From<MessageAuthenticity> for PublishConfig {
 /// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If message signing is
 /// disabled, the [`ValidationMode`] in the config should be adjusted to an appropriate level to
 /// accept unsigned messages.
-#[derive(Debug)]
 pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
@@ -160,7 +159,7 @@ pub struct Gossipsub {
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
 
     /// Information used for publishing messages.
-    publish_info: PublishConfig,
+    publish_config: PublishConfig,
 
     /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
     /// duplicates from being propagated to the application and on the network.
@@ -202,7 +201,7 @@ impl Gossipsub {
         Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
-            publish_info: privacy.into(),
+            publish_config: privacy.into(),
             duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
@@ -1071,7 +1070,7 @@ impl Gossipsub {
         topics: Vec<TopicHash>,
         data: Vec<u8>,
     ) -> Result<GossipsubMessage, SigningError> {
-        match &self.publish_info {
+        match &self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
                 author,
@@ -1485,3 +1484,35 @@ fn validate_config(authenticity: &MessageAuthenticity, validation_mode: &Validat
         _ => {}
     }
 }
+
+
+
+impl fmt::Debug for Gossipsub {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Gossipsub")
+         .field("config", &self.config)
+         .field("events", &self.events)
+         .field("control_pool", &self.control_pool)
+         .field("publish_config", &self.publish_config)
+         .field("topic_peers", &self.topic_peers)
+         .field("peer_topics", &self.peer_topics)
+         .field("mesh", &self.mesh)
+         .field("fanout", &self.fanout)
+         .field("fanout_last_pub", &self.fanout_last_pub)
+         .field("mcache", &self.mcache)
+         .field("heartbeat", &self.heartbeat)
+         .finish()
+    }
+}
+
+impl fmt::Debug for PublishConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PublishConfig::Signing { author, .. } => f.write_fmt(format_args!("PublishConfig::Signing({})", author)), 
+            PublishConfig::Author(author) => f.write_fmt(format_args!("PublishConfig::Author({})", author)), 
+            PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")), 
+            PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")), 
+        }
+    }
+}
+
