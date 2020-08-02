@@ -1118,7 +1118,7 @@ impl Gossipsub {
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
-                    sequence_number: rand::random(),
+                    sequence_number: Some(rand::random()),
                     topics,
                     signature: None,
                     key: None,
@@ -1131,7 +1131,7 @@ impl Gossipsub {
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
-                    sequence_number: rand::random(),
+                    sequence_number: Some(rand::random()),
                     topics,
                     signature: None,
                     key: None,
