@@ -148,6 +148,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 /// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If message signing is
 /// disabled, the [`ValidationMode`] in the config should be adjusted to an appropriate level to
 /// accept unsigned messages.
+#[derive(Debug)]
 pub struct Gossipsub {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,

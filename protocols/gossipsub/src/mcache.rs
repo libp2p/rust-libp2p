@@ -22,7 +22,7 @@
 
 use crate::protocol::{GossipsubMessage, MessageId};
 use crate::topic::TopicHash;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 /// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -38,6 +38,16 @@ pub struct MessageCache {
     history: Vec<Vec<CacheEntry>>,
     gossip: usize,
     msg_id: fn(&GossipsubMessage) -> MessageId,
+}
+
+impl fmt::Debug for MessageCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MessageCache")
+            .field("msgs", &self.msgs)
+            .field("history", &self.history)
+            .field("gossip", &self.gossip)
+            .finish()
+    }
 }
 
 /// Implementation of the MessageCache.
