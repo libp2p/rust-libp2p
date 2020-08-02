@@ -221,7 +221,7 @@ impl Gossipsub {
         }
     }
 
-    /// lists the hashes of the topics we are currently subscribed to
+    /// Lists the hashes of the topics we are currently subscribed to.
     pub fn topics(&self) -> impl Iterator<Item = &TopicHash> {
         self.mesh.keys()
     }
@@ -234,7 +234,7 @@ impl Gossipsub {
     /// lists all peers for any topic
     pub fn all_peers(&self) -> impl Iterator<Item = &PeerId> {
         let mut res = BTreeSet::new();
-        for (_, peers) in self.mesh.iter() {
+        for peers in self.mesh.values() {
             res.extend(peers);
         }
         res.into_iter()

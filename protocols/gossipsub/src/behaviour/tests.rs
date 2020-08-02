@@ -904,17 +904,17 @@ mod tests {
 
         assert_eq!(
             gs.topics().cloned().collect::<Vec<_>>(), topic_hashes,
-            "Expected topics to contain registred topic"
+            "Expected topics to match registered topic."
         );
 
         assert_eq!(
             gs.peers(&TopicHash::from_raw("topic1")).cloned().collect::<Vec<_>>(), peers,
-            "Expected peers for a registered topic to contain all peers"
+            "Expected peers for a registered topic to contain all peers."
         );
 
         assert_eq!(
             gs.all_peers().cloned().collect::<BTreeSet<_>>(), peers.into_iter().collect::<BTreeSet<_>>(),
-            "Expected all_peers to contain all peers"
+            "Expected all_peers to contain all peers."
         );
     }
 }
