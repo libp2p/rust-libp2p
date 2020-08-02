@@ -541,6 +541,23 @@ mod tests {
     }
 
     #[test]
+    fn buckets_are_non_overlapping_and_exhaustive() {
+        let local_key = Key::from(PeerId::random());
+        let timeout = Duration::from_secs(0);
+        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+
+        let mut prev_max = U256::from(0);
+
+        for bucket in table.iter() {
+            let (min, max) = bucket.range();
+            assert_eq!(Distance(prev_max + U256::from(1)), min);
+            prev_max = max.0;
+        }
+
+        assert_eq!(U256::MAX, prev_max);
+    }
+
+    #[test]
     fn bucket_contains_range() {
         fn prop(ix: u8) {
             let index = BucketIndex(ix as usize);
