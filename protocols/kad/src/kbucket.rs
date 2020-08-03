@@ -120,12 +120,12 @@ impl BucketIndex {
     /// included in the bucket for this index.
     fn range(&self) -> (Distance, Distance) {
         let min = Distance(U256::pow(U256::from(2), U256::from(self.0)));
-        let max = match U256::overflowing_pow(U256::from(2), U256::from(self.0 + 1)) {
-            (exp, false) => Distance(exp - 1),
-            (_, true) => Distance(U256::MAX),
-        };
-
-        (min, max)
+        if self.0 == u8::MAX.into() {
+            (min, Distance(U256::MAX))
+        } else {
+            let max = Distance(U256::pow(U256::from(2), U256::from(self.0 + 1)) - 1);
+            (min, max)
+        }
     }
 
     /// Generates a random distance that falls into the bucket for this index.
