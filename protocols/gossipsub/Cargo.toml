@@ -23,10 +23,10 @@ unsigned-varint = { version = "0.4.0", features = ["futures-codec"] }
 log = "0.4.8"
 sha2 = "0.8.1"
 base64 = "0.11.0"
-lru = "0.4.3"
 smallvec = "1.1.0"
 prost = "0.6.1"
 hex_fmt = "0.3.0"
+lru_time_cache = "0.10.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
@@ -34,6 +34,7 @@ env_logger = "0.7.1"
 libp2p-plaintext = { path = "../plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = "0.9.2"
+hex = "0.4.2"
 
 [build-dependencies]
 prost-build = "0.6"
