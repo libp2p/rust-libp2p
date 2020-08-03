@@ -1,4 +1,4 @@
-# 0.22.0 [2020-??-??]
+# 0.22.0 [2020-08-03]
 
 **NOTE**: For a smooth upgrade path from `0.20` to `> 0.21`
 on an existing deployment, this version must not be skipped
