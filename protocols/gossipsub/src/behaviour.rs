@@ -226,12 +226,12 @@ impl Gossipsub {
         self.mesh.keys()
     }
 
-    /// lists peers for a certain topic hash
+    /// Lists peers for a certain topic hash.
     pub fn peers(&self, topic_hash: &TopicHash) -> impl Iterator<Item = &PeerId> {
         self.mesh.get(topic_hash).into_iter().map(|x| x.into_iter()).flatten()
     }
 
-    /// lists all peers for any topic
+    /// Lists all peers for any topic.
     pub fn all_peers(&self) -> impl Iterator<Item = &PeerId> {
         let mut res = BTreeSet::new();
         for peers in self.mesh.values() {

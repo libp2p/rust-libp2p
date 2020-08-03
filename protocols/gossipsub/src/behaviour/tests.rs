@@ -896,7 +896,7 @@ mod tests {
         assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n);
     }
 
-    // some very basic test of public api methods
+    // Some very basic test of public api methods.
     #[test]
     fn test_public_api() {
         let (gs, peers, topic_hashes) =
