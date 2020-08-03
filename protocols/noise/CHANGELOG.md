@@ -2,7 +2,7 @@
 
 **NOTE**: For a smooth upgrade path from `0.20` to `> 0.21`
 on an existing deployment, this version must not be skipped
-or the provided feature flags used!
+or the provided `LegacyConfig` used!
 
 - Stop sending length-prefixed protobuf frames in handshake
 payloads by default. See [issue 1631](https://github.com/libp2p/rust-libp2p/issues/1631).
