@@ -53,8 +53,6 @@ wasm-ext = ["libp2p-wasm-ext"]
 websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
-noise-send-legacy-handshake = ["libp2p-noise/send-legacy-handshake"]
-
 [package.metadata.docs.rs]
 all-features = true
 

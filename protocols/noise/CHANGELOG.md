@@ -6,14 +6,16 @@ or the provided feature flags used!
 
 - Stop sending length-prefixed protobuf frames in handshake
 payloads by default. See [issue 1631](https://github.com/libp2p/rust-libp2p/issues/1631).
-The new feature `send-legacy-handshake` is provided to optionally
-continue sending the legacy handshake. Note: This release
+The new `LegacyConfig` is provided to optionally
+configure sending the legacy handshake. Note: This release
 always supports receiving legacy handshake payloads. A future
-release will also move receiving legacy handshake payloads
-behind a feature flag, before support for legacy handshakes
-is eventually removed altogether. In this way the feature
-flags allow to delay the handshake upgrade without having to freeze
-the version of `libp2p-noise` altogether.
+release will also move receiving legacy handshake payloads,
+allowing to enable it through the `LegacyConfig`. However,
+all legacy configuration options will eventually be removed,
+so this is primarily to allow delaying the handshake upgrade
+or keeping compatibility with a network whose peers are slow
+to upgrade, without having to freeze the version of `libp2p-noise`
+altogether in these projects.
 
 # 0.21.0 [2020-07-17]
 

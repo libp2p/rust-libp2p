@@ -36,7 +36,3 @@ sodiumoxide = "0.2.5"
 [build-dependencies]
 prost-build = "0.6"
 
-[features]
-default = []
-send-legacy-handshake = []
-
