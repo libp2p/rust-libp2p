@@ -279,78 +279,81 @@ where
         -> Poll<Result<Option<Event<THandler::OutEvent>>, ConnectionError<THandler::Error>>>
     {
         loop {
-            if let ConnectionState::Closed = self.state { // (1)
-                return Poll::Ready(Ok(None))
-            }
-
-            if let ConnectionState::CloseMuxer = self.state { // (2)
-                match futures::ready!(self.muxing.poll_close(cx)) {
-                    Ok(()) => {
-                        self.state = ConnectionState::Closed;
-                        return Poll::Ready(Ok(None))
-                    }
-                    Err(e) => {
-                        return Poll::Ready(Err(ConnectionError::IO(e)))
-                    }
+            match self.state {
+                ConnectionState::Closed => {
+                    return Poll::Ready(Ok(None))
                 }
-            }
-
-            // At this point the connection is either open or in the process
-            // of a graceful shutdown by the connection handler.
-            let mut io_pending = false;
-
-            // Perform I/O on the connection through the muxer, informing the handler
-            // of new substreams or other muxer events.
-            match self.muxing.poll(cx) {
-                Poll::Pending => io_pending = true,
-                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
-                    // Drop new inbound substreams when closing. This is analogous
-                    // to rejecting new connections.
-                    if self.state == ConnectionState::Open {
-                        self.handler.inject_substream(substream, SubstreamEndpoint::Listener)
-                    } else {
-                        log::trace!("Inbound substream dropped. Connection is closing.")
+                ConnectionState::CloseMuxer => {
+                    match futures::ready!(self.muxing.poll_close(cx)) {
+                        Ok(()) => {
+                            self.state = ConnectionState::Closed;
+                            return Poll::Ready(Ok(None))
+                        }
+                        Err(e) => {
+                            return Poll::Ready(Err(ConnectionError::IO(e)))
+                        }
                     }
                 }
-                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream { user_data, substream })) => {
-                    let endpoint = SubstreamEndpoint::Dialer(user_data);
-                    self.handler.inject_substream(substream, endpoint)
-                }
-                Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
-                    self.handler.inject_address_change(&address);
-                    return Poll::Ready(Ok(Some(Event::AddressChange(address))));
-                }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::IO(err))),
-            }
+                ConnectionState::Open | ConnectionState::CloseHandler => {
+                    // At this point the connection is either open or in the process
+                    // of a graceful shutdown by the connection handler.
+                    let mut io_pending = false;
 
-            // Poll the handler for new events.
-            let poll = match &self.state {
-                ConnectionState::Open => self.handler.poll(cx).map_ok(Some),
-                ConnectionState::CloseHandler => self.handler.poll_close(cx).map_ok(
-                    |event| event.map(ConnectionHandlerEvent::Custom)),
-                s => panic!("Unexpected closing state: {:?}", s) // s.a. (1),(2)
-            };
+                    // Perform I/O on the connection through the muxer, informing the handler
+                    // of new substreams or other muxer events.
+                    match self.muxing.poll(cx) {
+                        Poll::Pending => io_pending = true,
+                        Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
+                            // Drop new inbound substreams when closing. This is analogous
+                            // to rejecting new connections.
+                            if self.state == ConnectionState::Open {
+                                self.handler.inject_substream(substream, SubstreamEndpoint::Listener)
+                            } else {
+                                log::trace!("Inbound substream dropped. Connection is closing.")
+                            }
+                        }
+                        Poll::Ready(Ok(SubstreamEvent::OutboundSubstream { user_data, substream })) => {
+                            let endpoint = SubstreamEndpoint::Dialer(user_data);
+                            self.handler.inject_substream(substream, endpoint)
+                        }
+                        Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
+                            self.handler.inject_address_change(&address);
+                            return Poll::Ready(Ok(Some(Event::AddressChange(address))));
+                        }
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::IO(err))),
+                    }
 
-            match poll {
-                Poll::Pending => {
-                    if io_pending {
-                        return Poll::Pending // Nothing to do
+                    // Poll the handler for new events.
+                    let poll =
+                        if self.state == ConnectionState::Open {
+                            self.handler.poll(cx).map_ok(Some)
+                        } else {
+                            self.handler.poll_close(cx).map_ok(|event|
+                                event.map(ConnectionHandlerEvent::Custom))
+                        };
+
+                    match poll {
+                        Poll::Pending => {
+                            if io_pending {
+                                return Poll::Pending // Nothing to do
+                            }
+                        }
+                        Poll::Ready(Ok(Some(ConnectionHandlerEvent::OutboundSubstreamRequest(user_data)))) => {
+                            self.muxing.open_substream(user_data);
+                        }
+                        Poll::Ready(Ok(Some(ConnectionHandlerEvent::Custom(event)))) => {
+                            return Poll::Ready(Ok(Some(Event::Handler(event))));
+                        }
+                        Poll::Ready(Ok(Some(ConnectionHandlerEvent::Close))) => {
+                            self.start_close()
+                        }
+                        Poll::Ready(Ok(None)) => {
+                            // The handler is done, we can now close the muxer (i.e. connection).
+                            self.state = ConnectionState::CloseMuxer;
+                        }
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
                     }
                 }
-                Poll::Ready(Ok(Some(ConnectionHandlerEvent::OutboundSubstreamRequest(user_data)))) => {
-                    self.muxing.open_substream(user_data);
-                }
-                Poll::Ready(Ok(Some(ConnectionHandlerEvent::Custom(event)))) => {
-                    return Poll::Ready(Ok(Some(Event::Handler(event))));
-                }
-                Poll::Ready(Ok(Some(ConnectionHandlerEvent::Close))) => {
-                    self.start_close()
-                }
-                Poll::Ready(Ok(None)) => {
-                    // The handler is done, we can now close the muxer (i.e. connection).
-                    self.state = ConnectionState::CloseMuxer;
-                }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
             }
         }
     }
