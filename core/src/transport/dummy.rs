@@ -42,7 +42,7 @@ impl<TOut> Default for DummyTransport<TOut> {
 }
 
 impl<TOut> fmt::Debug for DummyTransport<TOut> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DummyTransport")
     }
 }
@@ -73,13 +73,13 @@ impl<TOut> Transport for DummyTransport<TOut> {
 pub struct DummyStream(());
 
 impl fmt::Debug for DummyStream {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DummyStream")
     }
 }
 
 impl AsyncRead for DummyStream {
-    fn poll_read(self: Pin<&mut Self>, _: &mut Context, _: &mut [u8])
+    fn poll_read(self: Pin<&mut Self>, _: &mut Context<'_>, _: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
@@ -87,19 +87,19 @@ impl AsyncRead for DummyStream {
 }
 
 impl AsyncWrite for DummyStream {
-    fn poll_write(self: Pin<&mut Self>, _: &mut Context, _: &[u8])
+    fn poll_write(self: Pin<&mut Self>, _: &mut Context<'_>, _: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context)
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     {
         Poll::Ready(Err(io::ErrorKind::Other.into()))
     }
 
-    fn poll_close(self: Pin<&mut Self>, _: &mut Context)
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     {
         Poll::Ready(Err(io::ErrorKind::Other.into()))

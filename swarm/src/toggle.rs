@@ -141,7 +141,7 @@ where
         }
     }
 
-    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
         if let Some(inner) = self.inner.as_mut() {
@@ -252,7 +252,7 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     > {

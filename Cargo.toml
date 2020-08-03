@@ -59,6 +59,7 @@ noise-send-legacy-handshake = ["libp2p-noise/send-legacy-handshake"]
 all-features = true
 
 [dependencies]
+atomic = "0.4.6"
 bytes = "0.5"
 futures = "0.3.1"
 lazy_static = "1.2"

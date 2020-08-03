@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,27 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Provides the `TransportExt` trait.
+//! Error types that can result from gossipsub.
 
-use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, Transport};
-use std::sync::Arc;
+use libp2p_core::identity::error::SigningError;
 
-/// Trait automatically implemented on all objects that implement `Transport`. Provides some
-/// additional utilities.
-pub trait TransportExt: Transport {
-    /// Adds a layer on the `Transport` that logs all trafic that passes through the sockets
-    /// created by it.
-    ///
-    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the total number
-    /// of bytes transferred through the sockets.
-    fn with_bandwidth_logging(self) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
-    where
-        Self: Sized
-    {
-        BandwidthLogging::new(self)
-    }
-
-    // TODO: add methods to easily upgrade for secio/mplex/yamux
+/// Error associated with publishing a gossipsub message.
+#[derive(Debug)]
+pub enum PublishError {
+    /// This message has already been published.
+    Duplicate,
+    /// An error occurred whilst signing the message.
+    SigningError(SigningError),
+    /// There were no peers to send this message to.
+    InsufficientPeers,
 }
 
-impl<TTransport> TransportExt for TTransport where TTransport: Transport {}
+impl From<SigningError> for PublishError {
+    fn from(error: SigningError) -> Self {
+        PublishError::SigningError(error)
+    }
+}

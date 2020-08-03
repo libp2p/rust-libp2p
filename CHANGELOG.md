@@ -33,6 +33,8 @@ or the provided feature flags used!
 changelog for details. The corresponding feature flag `noise-send-legacy-handshake`
 is provided through the `libp2p` crate.
 
+- Refactored bandwidth logging ([PR 1670](https://github.com/libp2p/rust-libp2p/pull/1670)).
+
 # Version 0.22.0 (2020-07-17)
 
 **NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`

@@ -32,7 +32,7 @@ impl ConnectionHandler for TestHandler {
     fn inject_address_change(&mut self, _: &Multiaddr)
     {}
 
-    fn poll(&mut self, _: &mut Context)
+    fn poll(&mut self, _: &mut Context<'_>)
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
     {
         Poll::Ready(Ok(ConnectionHandlerEvent::Custom(())))
@@ -63,7 +63,7 @@ where
 {
     type Output = Result<M, M::Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             match std::mem::replace(&mut self.state, CloseMuxerState::Done) {
                 CloseMuxerState::Close(muxer) => {
