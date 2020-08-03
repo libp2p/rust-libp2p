@@ -9,13 +9,12 @@ payloads by default. See [issue 1631](https://github.com/libp2p/rust-libp2p/issu
 The new `LegacyConfig` is provided to optionally
 configure sending the legacy handshake. Note: This release
 always supports receiving legacy handshake payloads. A future
-release will also move receiving legacy handshake payloads,
-allowing to enable it through the `LegacyConfig`. However,
-all legacy configuration options will eventually be removed,
-so this is primarily to allow delaying the handshake upgrade
-or keeping compatibility with a network whose peers are slow
-to upgrade, without having to freeze the version of `libp2p-noise`
-altogether in these projects.
+release will also move receiving legacy handshake payloads
+into a `LegacyConfig` option. However, all legacy configuration
+options will eventually be removed, so this is primarily to allow
+delaying the handshake upgrade or keeping compatibility with a network
+whose peers are slow to upgrade, without having to freeze the
+version of `libp2p-noise` altogether in these projects.
 
 # 0.21.0 [2020-07-17]
 
