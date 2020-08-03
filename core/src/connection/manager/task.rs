@@ -304,14 +304,12 @@ where
                                     connection,
                                     event: Some(Event::Notify { id, event }),
                                 };
-                                continue
                             }
                             Poll::Ready(Ok(Some(connection::Event::AddressChange(new_address)))) => {
                                 this.state = State::Established {
                                     connection,
                                     event: Some(Event::AddressChange { id, new_address }),
                                 };
-                                continue
                             }
                             Poll::Ready(Ok(None)) => {
                                 // The connection is closed, don't accept any further commands
@@ -319,7 +317,6 @@ where
                                 this.commands.get_mut().close();
                                 let event = Event::Closed { id: this.id, error: None };
                                 this.state = State::Terminating(event);
-                                continue
                             }
                             Poll::Ready(Err(error)) => {
                                 // Don't accept any further commands.
@@ -327,7 +324,6 @@ where
                                 // Terminate the task with the error, dropping the connection.
                                 let event = Event::Closed { id, error: Some(error) };
                                 this.state = State::Terminating(event);
-                                continue
                             }
                         }
                     }
