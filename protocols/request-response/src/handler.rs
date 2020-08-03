@@ -86,7 +86,7 @@ where
 
 impl<TCodec> RequestResponseHandler<TCodec>
 where
-    TCodec: RequestResponseCodec + Clone + Send + 'static,
+    TCodec: RequestResponseCodec
 {
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -364,4 +364,3 @@ where
         return Poll::Ready(Ok(None))
     }
 }
-
