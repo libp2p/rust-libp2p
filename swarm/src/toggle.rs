@@ -51,6 +51,16 @@ impl<TBehaviour> Toggle<TBehaviour> {
     pub fn is_enabled(&self) -> bool {
         self.inner.is_some()
     }
+
+    /// Returns a reference to the inner `NetworkBehaviour`.
+    pub fn as_ref(&self) -> Option<&TBehaviour> {
+        self.inner.as_ref()
+    }
+
+    /// Returns a mutable reference to the inner `NetworkBehaviour`.
+    pub fn as_mut(&mut self) -> Option<&mut TBehaviour> {
+        self.inner.as_mut()
+    }
 }
 
 impl<TBehaviour> From<Option<TBehaviour>> for Toggle<TBehaviour> {
