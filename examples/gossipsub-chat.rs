@@ -50,15 +50,15 @@ use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::protocol::MessageId;
-use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, Topic};
-use libp2p::{
-    gossipsub, identity,
-    PeerId,
-};
+use libp2p::gossipsub::{GossipsubEvent, GossipsubMessage, MessageAuthenticity, Topic};
+use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use std::{error::Error, task::{Context, Poll}};
+use std::{
+    error::Error,
+    task::{Context, Poll},
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key)?;
+    let transport = libp2p::build_development_transport(local_key.clone())?;
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net".into());
@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let message_id_fn = |message: &GossipsubMessage| {
             let mut s = DefaultHasher::new();
             message.data.hash(&mut s);
-            MessageId(s.finish().to_string())
+            MessageId::from(s.finish().to_string())
         };
 
         // set custom gossipsub
@@ -93,7 +93,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             //same content will be propagated.
             .build();
         // build a gossipsub network behaviour
-        let mut gossipsub = gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config);
+        let mut gossipsub =
+            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config);
         gossipsub.subscribe(topic.clone());
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };
@@ -120,11 +121,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
-            match stdin.try_poll_next_unpin(cx)? {
+            if let Err(e) = match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => swarm.publish(&topic, line.as_bytes()),
                 Poll::Ready(None) => panic!("Stdin closed"),
                 Poll::Pending => break,
-            };
+            } {
+                println!("Publish error: {:?}", e);
+            }
         }
 
         loop {
