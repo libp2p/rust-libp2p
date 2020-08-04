@@ -31,12 +31,15 @@ use std::task::{Context, Poll};
 use void::Void;
 
 /// Implementation of `ProtocolsHandler` that doesn't handle anything.
+#[derive(Clone, Debug)]
 pub struct DummyProtocolsHandler {
+    pub keep_alive: KeepAlive,
 }
 
 impl Default for DummyProtocolsHandler {
     fn default() -> Self {
         DummyProtocolsHandler {
+            keep_alive: KeepAlive::No
         }
     }
 }
@@ -49,19 +52,16 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
 
-    #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade)
     }
 
-    #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output
     ) {
     }
 
-    #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
         _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
@@ -69,16 +69,14 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     ) {
     }
 
-    #[inline]
     fn inject_event(&mut self, _: Self::InEvent) {}
 
-    #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error>) {}
 
-    #[inline]
-    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::No }
+    fn connection_keep_alive(&self) -> KeepAlive {
+        self.keep_alive
+    }
 
-    #[inline]
     fn poll(
         &mut self,
         _: &mut Context<'_>,
