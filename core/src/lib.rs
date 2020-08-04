@@ -78,20 +78,8 @@ pub trait Executor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>);
 }
 
-impl<'a, T: ?Sized + Executor> Executor for &'a T {
+impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for F {
     fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        T::exec(&**self, f)
-    }
-}
-
-impl<'a, T: ?Sized + Executor> Executor for &'a mut T {
-    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        T::exec(&**self, f)
-    }
-}
-
-impl<T: ?Sized + Executor> Executor for Box<T> {
-    fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        T::exec(&**self, f)
+        self(f)
     }
 }
