@@ -1,3 +1,7 @@
+# 0.22.0 [unreleased]
+
+- Update `libp2p-core` and `libp2p-swarm` dependencies.
+
 # 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`

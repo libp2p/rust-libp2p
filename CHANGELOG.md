@@ -23,6 +23,10 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
+# Version 0.24.0 [unreleased]
+
+- Update `libp2p-core`, `libp2p-swarm` and dependent crates.
+
 # Version 0.23.0 (2020-08-03)
 
 **NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
