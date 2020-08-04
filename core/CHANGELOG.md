@@ -11,7 +11,7 @@
   a peer takes effect immediately without an orderly connection shutdown.
   See [PR 1619](https://github.com/libp2p/rust-libp2p/pull/1619) for further details.
 
-# 0.20.1 [2020-17-17]
+# 0.20.1 [2020-07-17]
 
 - Update ed25519-dalek dependency.
 
