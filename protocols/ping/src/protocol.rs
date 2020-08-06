@@ -88,7 +88,7 @@ where
     log::debug!("Preparing ping payload {:?}", payload);
     stream.write_all(&payload).await?;
     let started = Instant::now();
-    let mut recv_payload = [0u8; 32];
+    let mut recv_payload = [0u8; PING_SIZE];
     stream.read_exact(&mut recv_payload).await?;
     if recv_payload == payload {
         Ok((stream, started.elapsed()))
