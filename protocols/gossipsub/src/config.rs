@@ -173,6 +173,16 @@ pub struct GossipsubConfig {
     /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
     /// The default is 2.
     mesh_outbound_min: usize,
+
+    // Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    // applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
+    // peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
+    // threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
+    // The default is 60.
+    opportunistic_graft_ticks: u64,
+
+    /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
+    opportunistic_graft_peers: usize,
 }
 
 //TODO should we use a macro for getters + the builder?
@@ -351,6 +361,21 @@ impl GossipsubConfig {
     pub fn mesh_outbound_min(&self) -> usize {
         self.mesh_outbound_min
     }
+
+    // Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    // applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
+    // peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
+    // threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
+    // The default is 60.
+    pub fn opportunistic_graft_ticks(&self) -> u64 {
+        self.opportunistic_graft_ticks
+    }
+
+
+    /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
+    pub fn opportunistic_graft_peers(&self) -> usize {
+        self.opportunistic_graft_peers
+    }
 }
 
 impl Default for GossipsubConfig {
@@ -418,6 +443,8 @@ impl GossipsubConfigBuilder {
                 flood_publish: true,
                 graft_flood_threshold: Duration::from_secs(10),
                 mesh_outbound_min: 2,
+                opportunistic_graft_ticks: 60,
+                opportunistic_graft_peers: 2
             },
         }
     }
@@ -613,6 +640,22 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    // Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    // applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
+    // peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
+    // threshold (see https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds).
+    // The default is 60.
+    pub fn opportunistic_graft_ticks(&mut self, opportunistic_graft_ticks: u64) -> &mut Self {
+        self.config.opportunistic_graft_ticks = opportunistic_graft_ticks;
+        self
+    }
+
+    /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
+    pub fn opportunistic_graft_peers(&mut self, opportunistic_graft_peers: usize) -> &mut Self {
+        self.config.opportunistic_graft_peers = opportunistic_graft_peers;
+        self
+    }
+
     /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
     pub fn build(&self) -> Result<GossipsubConfig, &str> {
         //check all constraints on config
@@ -665,6 +708,8 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("flood_publish", &self.flood_publish);
         let _ = builder.field("graft_flood_threshold", &self.graft_flood_threshold);
         let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
+        let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
+        let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
         builder.finish()
     }
 }
