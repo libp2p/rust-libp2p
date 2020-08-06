@@ -20,8 +20,8 @@
 
 use crate::protocol::{GossipsubMessage, MessageId};
 use crate::topic::TopicHash;
+use log::warn;
 use std::collections::HashMap;
-use log::{warn};
 
 /// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -120,10 +120,13 @@ impl MessageCache {
         for entry in self.history.pop().expect("history is always > 1") {
             if let Some(msg) = self.msgs.remove(&entry.mid) {
                 if !msg.validated {
-                    warn!("The message with id {} got removed from the cache without being
+                    warn!(
+                        "The message with id {} got removed from the cache without being
                     validated. If GossipsubConfig::validate_messages is true, the implementing
                     application has to ensure that Gossipsub::validate_message gets called for
-                    each received message within the cache timeout time.", &entry.mid);
+                    each received message within the cache timeout time.",
+                        &entry.mid
+                    );
                 }
             }
         }
