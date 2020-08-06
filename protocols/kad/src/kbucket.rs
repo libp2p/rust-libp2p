@@ -116,6 +116,18 @@ impl BucketIndex {
         self.0
     }
 
+    /// Returns the minimum inclusive and maximum inclusive [`Distance`]
+    /// included in the bucket for this index.
+    fn range(&self) -> (Distance, Distance) {
+        let min = Distance(U256::pow(U256::from(2), U256::from(self.0)));
+        if self.0 == u8::MAX.into() {
+            (min, Distance(U256::MAX))
+        } else {
+            let max = Distance(U256::pow(U256::from(2), U256::from(self.0 + 1)) - 1);
+            (min, max)
+        }
+    }
+
     /// Generates a random distance that falls into the bucket for this index.
     fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         let mut bytes = [0u8; 32];
@@ -447,6 +459,12 @@ where
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone
 {
+    /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+    /// this bucket.
+    pub fn range(&self) -> (Distance, Distance) {
+        self.index.range()
+    }
+
     /// Checks whether the bucket is empty.
     pub fn is_empty(&self) -> bool {
         self.num_entries() == 0
@@ -523,6 +541,47 @@ mod tests {
             }
             table
         }
+    }
+
+    #[test]
+    fn buckets_are_non_overlapping_and_exhaustive() {
+        let local_key = Key::from(PeerId::random());
+        let timeout = Duration::from_secs(0);
+        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+
+        let mut prev_max = U256::from(0);
+
+        for bucket in table.iter() {
+            let (min, max) = bucket.range();
+            assert_eq!(Distance(prev_max + U256::from(1)), min);
+            prev_max = max.0;
+        }
+
+        assert_eq!(U256::MAX, prev_max);
+    }
+
+    #[test]
+    fn bucket_contains_range() {
+        fn prop(ix: u8) {
+            let index = BucketIndex(ix as usize);
+            let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(0));
+            let bucket_ref = KBucketRef {
+                index,
+                bucket: &mut bucket,
+            };
+
+            let (min, max) = bucket_ref.range();
+
+            assert!(min <= max);
+
+            assert!(bucket_ref.contains(&min));
+            assert!(bucket_ref.contains(&max));
+
+            assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
+            assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
+        }
+
+        quickcheck(prop as fn(_));
     }
 
     #[test]
