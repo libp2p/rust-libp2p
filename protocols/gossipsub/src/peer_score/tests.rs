@@ -60,7 +60,7 @@ fn test_score_time_in_mesh() {
 
     let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.add_peer(peer_id.clone());
 
     let score = peer_score.score(&peer_id);
     assert!(
@@ -106,7 +106,7 @@ fn test_score_time_in_mesh_cap() {
 
     let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.add_peer(peer_id.clone());
 
     let score = peer_score.score(&peer_id);
     assert!(
@@ -155,7 +155,7 @@ fn test_score_first_message_deliveries() {
 
     let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.add_peer(peer_id.clone());
     peer_score.graft(&peer_id, topic);
 
     // deliver a bunch of messages from the peer
@@ -199,7 +199,7 @@ fn test_score_first_message_deliveries_cap() {
 
     let mut peer_score = PeerScore::new(params, default_message_id());
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.add_peer(peer_id.clone());
     peer_score.graft(&peer_id, topic);
 
     // deliver a bunch of messages from the peer
@@ -240,7 +240,7 @@ fn test_score_first_message_deliveries_decay() {
     params.topics.insert(topic_hash, topic_params.clone());
     let peer_id = PeerId::random();
     let mut peer_score = PeerScore::new(params, default_message_id());
-    peer_score.add_peer(peer_id.clone(), Vec::new());
+    peer_score.add_peer(peer_id.clone());
     peer_score.graft(&peer_id, topic);
 
     // deliver a bunch of messages from the peer
@@ -313,7 +313,7 @@ fn test_score_mesh_message_deliveries() {
     let peers = vec![peer_id_a.clone(), peer_id_b.clone(), peer_id_c.clone()];
 
     for peer_id in &peers {
-        peer_score.add_peer(peer_id.clone(), Vec::new());
+        peer_score.add_peer(peer_id.clone());
         peer_score.graft(&peer_id, topic.clone());
     }
 

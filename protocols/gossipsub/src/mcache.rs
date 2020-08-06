@@ -21,6 +21,7 @@
 use crate::protocol::{GossipsubMessage, MessageId};
 use crate::topic::TopicHash;
 use std::collections::HashMap;
+use log::{warn};
 
 /// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -117,11 +118,26 @@ impl MessageCache {
     /// last entry
     pub fn shift(&mut self) {
         for entry in self.history.pop().expect("history is always > 1") {
-            self.msgs.remove(&entry.mid);
+            if let Some(msg) = self.msgs.remove(&entry.mid) {
+                if !msg.validated {
+                    warn!("The message with id {} got removed from the cache without being
+                    validated. If GossipsubConfig::validate_messages is true, the implementing
+                    application has to ensure that Gossipsub::validate_message gets called for
+                    each received message within the cache timeout time.", &entry.mid);
+                }
+            }
         }
 
         // Insert an empty vec in position 0
         self.history.insert(0, Vec::new());
+    }
+
+    /// Removes a message from the cache
+    pub fn remove(&mut self, message_id: &MessageId) -> Option<GossipsubMessage> {
+        //We only remove the message from msgs and keep the message_id in the history vector.
+        //The id in the history vector will simply be ignored on popping.
+
+        self.msgs.remove(message_id)
     }
 }
 

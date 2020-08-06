@@ -6,7 +6,7 @@ use std::time::Duration;
 /// The default number of seconds for a decay interval.
 const DEFAULT_DECAY_INTERVAL: u64 = 1;
 /// The default rate to decay to 0.
-const DEFAULT_DECAY_TO_ZERO: f64 = 0.01;
+const DEFAULT_DECAY_TO_ZERO: f64 = 0.1;
 
 // TODO: Adjust these defaults
 impl Default for TopicScoreParams {
@@ -32,7 +32,7 @@ impl Default for TopicScoreParams {
             mesh_failure_penalty_weight: -1.0,
             mesh_failure_penalty_decay: 0.5,
             // P4
-            invalid_message_deliveries_weight: 1.0,
+            invalid_message_deliveries_weight: -1.0,
             invalid_message_deliveries_decay: 0.3,
         }
     }
@@ -61,8 +61,8 @@ impl Default for PeerScoreParams {
             ip_colocation_factor_whitelist: HashSet::new(),
             behaviour_penalty_weight: -10.0,
             behaviour_penalty_decay: 0.2,
-            decay_interval: Duration::from_secs(1),
-            decay_to_zero: 0.1,
+            decay_interval: Duration::from_secs(DEFAULT_DECAY_INTERVAL),
+            decay_to_zero: DEFAULT_DECAY_TO_ZERO,
             retain_score: Duration::from_secs(3600),
         }
     }
@@ -70,7 +70,7 @@ impl Default for PeerScoreParams {
 
 /// Computes the decay factor for a parameter, assuming the `decay_interval` is 1s
 /// and that the value decays to zero if it drops below 0.01.
-fn score_parameter_decay(decay: Duration) -> f64 {
+pub fn score_parameter_decay(decay: Duration) -> f64 {
     return score_parameter_decay_with_base(
         decay,
         Duration::from_secs(DEFAULT_DECAY_INTERVAL),
@@ -79,7 +79,7 @@ fn score_parameter_decay(decay: Duration) -> f64 {
 }
 
 /// Computes the decay factor for a parameter using base as the `decay_interval`.
-fn score_parameter_decay_with_base(decay: Duration, base: Duration, decay_to_zero: f64) -> f64 {
+pub fn score_parameter_decay_with_base(decay: Duration, base: Duration, decay_to_zero: f64) -> f64 {
     // the decay is linear, so after n ticks the value is factor^n
     // so factor^n = decay_to_zero => factor = decay_to_zero^(1/n)
     let ticks = decay.as_secs_f64() / base.as_secs_f64();
@@ -131,7 +131,7 @@ impl PeerScoreThresholds {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PeerScoreParams {
+pub struct PeerScoreParams {
     /// Score parameters per topic.
     pub topics: HashMap<TopicHash, TopicScoreParams>,
 
@@ -140,8 +140,6 @@ pub(crate) struct PeerScoreParams {
     pub topic_score_cap: f64,
 
     /// P5: Application-specific peer scoring
-    //TODO: Add in
-    // pub app_specific_score  func(p peer.ID) f64
     pub app_specific_weight: f64,
 
     ///  P6: IP-colocation factor.
@@ -230,7 +228,7 @@ impl PeerScoreParams {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TopicScoreParams {
+pub struct TopicScoreParams {
     /// The weight of the topic.
     pub topic_weight: f64,
 
@@ -300,9 +298,6 @@ impl TopicScoreParams {
         }
         if self.time_in_mesh_weight < 0f64 {
             return Err("Invalid time_in_mesh_weight; must be positive (or 0 to disable)");
-        }
-        if self.time_in_mesh_weight != 0f64 {
-            return Err("Invalid time_in_mesh_quantum; must be positive");
         }
         if self.time_in_mesh_weight != 0f64 && self.time_in_mesh_cap <= 0f64 {
             return Err("Invalid time_in_mesh_cap must be positive");

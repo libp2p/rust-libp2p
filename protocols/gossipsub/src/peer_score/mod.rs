@@ -1,15 +1,18 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
-use crate::{GossipsubMessage, Hasher, MessageId, Topic, TopicHash};
+use crate::{GossipsubMessage, MessageId, TopicHash};
 use libp2p_core::PeerId;
 use log::warn;
 use lru_time_cache::LruCache;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 mod params;
-use params::*;
+pub use params::{
+    score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
+    TopicScoreParams,
+};
 
 #[cfg(test)]
 mod tests;
@@ -17,7 +20,7 @@ mod tests;
 /// The number of seconds delivery messages are stored in the cache.
 const TIME_CACHE_DURATION: u64 = 120;
 
-struct PeerScore {
+pub(crate) struct PeerScore {
     params: PeerScoreParams,
     /// The score parameters.
     peer_stats: HashMap<PeerId, PeerStats>,
@@ -36,9 +39,11 @@ struct PeerStats {
     /// Stats per topic.
     topics: HashMap<TopicHash, TopicStats>,
     /// IP tracking for individual peers.
-    known_ips: Vec<IpAddr>,
+    known_ips: HashSet<IpAddr>,
     /// Behaviour penalty that is applied to the peer, assigned by the behaviour.
     behaviour_penalty: f64,
+    /// Application specific score. Can be manipulated by calling PeerScore::set_application_score
+    application_score: f64,
 }
 
 enum ConnectionStatus {
@@ -56,8 +61,9 @@ impl Default for PeerStats {
         PeerStats {
             status: ConnectionStatus::Connected,
             topics: HashMap::new(),
-            known_ips: Vec::new(),
+            known_ips: HashSet::new(),
             behaviour_penalty: 0f64,
+            application_score: 0f64,
         }
     }
 }
@@ -183,20 +189,6 @@ impl PeerScore {
         }
     }
 
-    /// Creates a new `PeerScore` with a non-default message id function.
-    pub fn new_with_msg_id(
-        params: PeerScoreParams,
-        msg_id: fn(&GossipsubMessage) -> MessageId,
-    ) -> Self {
-        PeerScore {
-            params,
-            peer_stats: HashMap::new(),
-            peer_ips: HashMap::new(),
-            deliveries: LruCache::with_expiry_duration(Duration::from_secs(TIME_CACHE_DURATION)),
-            msg_id,
-        }
-    }
-
     /// Returns the score for a peer.
     pub fn score(&self, peer_id: &PeerId) -> f64 {
         let peer_stats = match self.peer_stats.get(peer_id) {
@@ -232,7 +224,14 @@ impl PeerScore {
                 }
 
                 // P2: first message deliveries
-                let p2 = topic_stats.first_message_deliveries as f64;
+                let p2 = {
+                    let v = topic_stats.first_message_deliveries as f64;
+                    if v < topic_params.first_message_deliveries_cap {
+                        v
+                    } else {
+                        topic_params.first_message_deliveries_cap
+                    }
+                };
                 topic_score += p2 * topic_params.first_message_deliveries_weight;
                 dbg!(topic_score);
 
@@ -275,11 +274,8 @@ impl PeerScore {
         dbg!(score);
 
         // P5: application-specific score
-        //TODO: Add in
-        /*
-        let p5 = self.params.app_specific_score(peer_id);
+        let p5 = peer_stats.application_score;
         score += p5 * self.params.app_specific_weight;
-            */
 
         // P6: IP collocation factor
         for ip in peer_stats.known_ips.iter() {
@@ -312,6 +308,18 @@ impl PeerScore {
         }
     }
 
+    fn remove_ips_for_peer(
+        peer_stats: &PeerStats,
+        peer_ips: &mut HashMap<IpAddr, HashSet<PeerId>>,
+        peer_id: &PeerId,
+    ) {
+        for ip in peer_stats.known_ips.iter() {
+            if let Some(peer_set) = peer_ips.get_mut(ip) {
+                peer_set.remove(peer_id);
+            }
+        }
+    }
+
     pub fn refresh_scores(&mut self) {
         let now = Instant::now();
         let params_ref = &self.params;
@@ -321,11 +329,7 @@ impl PeerScore {
                 // has the retention period expired?
                 if now > expire {
                     // yes, throw it away (but clean up the IP tracking first)
-                    for ip in peer_stats.known_ips.iter() {
-                        if let Some(peer_set) = peer_ips_ref.get_mut(ip) {
-                            peer_set.remove(peer_id);
-                        }
-                    }
+                    Self::remove_ips_for_peer(peer_stats, peer_ips_ref, peer_id);
                     // re address this, use retain or entry
                     return false;
                 }
@@ -383,26 +387,38 @@ impl PeerScore {
         });
     }
 
-    /// Gets a mutable reference to the underlying IPs for a peer, if they exist.
-    pub fn get_ips_mut(&mut self, peer_id: &PeerId) -> Option<&mut [IpAddr]> {
-        let peer_stats = self.peer_stats.get_mut(peer_id)?;
-        Some(&mut peer_stats.known_ips)
-    }
-
-    /// Adds a connected peer to `PeerScore`, initialising with default stats.
-    pub fn add_peer(&mut self, peer_id: PeerId, known_ips: Vec<IpAddr>) {
+    /// Adds a connected peer to `PeerScore`, initialising with empty ips (ips get added later
+    /// through add_ip.
+    pub fn add_peer(&mut self, peer_id: PeerId) {
         let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
 
         // mark the peer as connected
         peer_stats.status = ConnectionStatus::Connected;
-        peer_stats.known_ips = known_ips.clone();
+    }
 
-        // add known ips to the peer score tracking map
-        for ip in known_ips {
-            self.peer_ips
-                .entry(ip)
-                .or_insert_with(|| HashSet::new())
-                .insert(peer_id.clone());
+    /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
+    pub fn add_ip(&mut self, peer_id: PeerId, ip: IpAddr) {
+        let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
+
+        //mark the peer as connected (currently the default is connected, but we don't want to
+        // rely on the default).
+        peer_stats.status = ConnectionStatus::Connected;
+
+        //insert the ip
+        peer_stats.known_ips.insert(ip.clone());
+        self.peer_ips
+            .entry(ip)
+            .or_insert_with(|| HashSet::new())
+            .insert(peer_id);
+    }
+
+    /// Removes an ip from a peer
+    pub fn remove_ip(&mut self, peer_id: &PeerId, ip: &IpAddr) {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
+            peer_stats.known_ips.remove(ip);
+            if let Some(peer_ids) = self.peer_ips.get_mut(ip) {
+                peer_ids.remove(peer_id);
+            }
         }
     }
 
@@ -411,7 +427,10 @@ impl PeerScore {
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
         if self.score(peer_id) > 0f64 {
-            self.peer_stats.remove(peer_id);
+            if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(peer_id.clone()) {
+                Self::remove_ips_for_peer(entry.get(), &mut self.peer_ips, peer_id);
+                entry.remove();
+            }
             return;
         }
 
@@ -444,12 +463,6 @@ impl PeerScore {
             };
         }
     }
-
-    /// Handles peer scoring functionality on subscription.
-    pub fn join<H: Hasher>(&mut self, _topic: Topic<H>) {}
-
-    /// Handles peer scoring functionality when un-subscribing from a topic.
-    pub fn leave<H: Hasher>(&mut self, _topic: Topic<H>) {}
 
     /// Handles scoring functionality as a peer GRAFTs to a topic.
     pub fn graft(&mut self, peer_id: &PeerId, topic: impl Into<TopicHash>) {
@@ -487,9 +500,11 @@ impl PeerScore {
         }
     }
 
-    //TODO: Required?
     pub fn validate_message(&mut self, _from: &PeerId, _msg: &GossipsubMessage) {
         // adds an empty record with the message id
+        self.deliveries
+            .entry((self.msg_id)(_msg))
+            .or_insert_with(|| DeliveryRecord::default());
     }
 
     pub fn deliver_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
@@ -600,11 +615,11 @@ impl PeerScore {
             DeliveryStatus::Unknown => {
                 // the message is being validated; track the peer delivery and wait for
                 // the Deliver/Reject notification.
-                record.peers.remove(from);
+                record.peers.insert(from.clone());
             }
             DeliveryStatus::Valid => {
                 // mark the peer delivery time to only count a duplicate delivery once.
-                record.peers.remove(from);
+                record.peers.insert(from.clone());
                 let validated = record.validated.clone();
                 self.mark_duplicate_message_delivery(from, msg, Some(validated));
             }
@@ -615,6 +630,17 @@ impl PeerScore {
             DeliveryStatus::Throttled | DeliveryStatus::Ignored => {
                 // the message was throttled or ignored; do nothing (we don't know if it was valid)
             }
+        }
+    }
+
+    /// Sets the application specific score for a peer. Returns true if the peer is the peer is
+    /// connected or if the score of the peer is not yet expired and false otherwise.
+    pub fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
+            peer_stats.application_score = new_score;
+            true
+        } else {
+            false
         }
     }
 
@@ -666,7 +692,7 @@ impl PeerScore {
                             if topic_stats.mesh_message_deliveries + 1f64 > cap {
                                 cap
                             } else {
-                                topic_stats.first_message_deliveries + 1f64
+                                topic_stats.mesh_message_deliveries + 1f64
                             };
                     }
                 }
@@ -683,6 +709,11 @@ impl PeerScore {
         validated_time: Option<Instant>,
     ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
+            let now = if validated_time.is_some() {
+                Some(Instant::now())
+            } else {
+                None
+            };
             for topic_hash in msg.topics.iter() {
                 if let Some(topic_stats) =
                     peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
@@ -698,39 +729,33 @@ impl PeerScore {
                         // the message was received before we finished validation and thus falls within the mesh
                         // delivery window.
                         if let Some(validated_time) = validated_time {
-                            let now = Instant::now();
-                            let window_time = validated_time
-                                .checked_add(topic_params.mesh_message_deliveries_window)
-                                .unwrap_or_else(|| now.clone());
-                            if now > window_time {
-                                continue;
+                            if let Some(now) = &now {
+                                //should always be true
+                                let window_time = validated_time
+                                    .checked_add(topic_params.mesh_message_deliveries_window)
+                                    .unwrap_or_else(|| now.clone());
+                                if now > &window_time {
+                                    continue;
+                                }
                             }
-
-                            let cap = topic_params.mesh_message_deliveries_cap;
-                            topic_stats.mesh_message_deliveries =
-                                if topic_stats.mesh_message_deliveries + 1f64 > cap {
-                                    cap
-                                } else {
-                                    topic_stats.mesh_message_deliveries + 1f64
-                                };
                         }
+
+                        let cap = topic_params.mesh_message_deliveries_cap;
+                        topic_stats.mesh_message_deliveries =
+                            if topic_stats.mesh_message_deliveries + 1f64 > cap {
+                                cap
+                            } else {
+                                topic_stats.mesh_message_deliveries + 1f64
+                            };
                     }
                 }
             }
         }
     }
-
-    /// Removes an IP list from the tracking list for a peer.
-    fn remove_ips(&mut self, peer_id: &PeerId, ips: Vec<IpAddr>) {
-        for ip in ips {
-            if let Some(peer_set) = self.peer_ips.get_mut(&ip) {
-                peer_set.remove(peer_id);
-            }
-        }
-    }
 }
 
-enum RejectMsg {
+//TODO do we need all variants? If yes some of them are never used yet (missing something).
+pub(crate) enum RejectMsg {
     MissingSignature,
     InvalidSignature,
     SelfOrigin,
@@ -739,4 +764,5 @@ enum RejectMsg {
     ValidationQueueFull,
     ValidationThrottled,
     ValidationIgnored,
+    ValidationFailed,
 }

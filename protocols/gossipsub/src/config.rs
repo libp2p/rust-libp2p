@@ -74,6 +74,11 @@ pub struct GossipsubConfig {
     /// is 12).
     mesh_n_high: usize,
 
+    /// Affects how peers are selected when pruning a mesh due to over subscription.
+    //  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
+    //  chosen randomly (D_score in the spec, default is 4).
+    retain_scores: usize,
+
     /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
     /// default is 6).
     gossip_lazy: usize,
@@ -159,6 +164,11 @@ pub struct GossipsubConfig {
     /// The default is true.
     flood_publish: bool,
 
+    // If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
+    // then there is an extra score penalty applied to the peer through P7. The default is 10
+    // seconds.
+    graft_flood_threshold: Duration,
+
     /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
     /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
     /// The default is 2.
@@ -203,6 +213,13 @@ impl GossipsubConfig {
     /// is 12).
     pub fn mesh_n_high(&self) -> usize {
         self.mesh_n_high
+    }
+
+    /// Affects how peers are selected when pruning a mesh due to over subscription.
+    //  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
+    //  chosen randomly (D_score in the spec, default is 4).
+    pub fn retain_scores(&self) -> usize {
+        self.retain_scores
     }
 
     /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
@@ -322,6 +339,12 @@ impl GossipsubConfig {
         self.flood_publish
     }
 
+    // If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
+    // then there is an extra score penalty applied to the peer through P7.
+    pub fn graft_flood_threshold(&self) -> Duration {
+        self.graft_flood_threshold
+    }
+
     /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
     /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
     /// The default is 2.
@@ -363,6 +386,7 @@ impl GossipsubConfigBuilder {
                 mesh_n: 6,
                 mesh_n_low: 5,
                 mesh_n_high: 12,
+                retain_scores: 4,
                 gossip_lazy: 6, // default to mesh_n
                 gossip_factor: 0.25,
                 heartbeat_initial_delay: Duration::from_secs(5),
@@ -392,6 +416,7 @@ impl GossipsubConfigBuilder {
                 prune_backoff: Duration::from_secs(60),
                 backoff_slack: 1,
                 flood_publish: true,
+                graft_flood_threshold: Duration::from_secs(10),
                 mesh_outbound_min: 2,
             },
         }
@@ -431,6 +456,14 @@ impl GossipsubConfigBuilder {
     /// is 12).
     pub fn mesh_n_high(&mut self, mesh_n_high: usize) -> &mut Self {
         self.config.mesh_n_high = mesh_n_high;
+        self
+    }
+
+    /// Affects how peers are selected when pruning a mesh due to over subscription.
+    //  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
+    //  chosen randomly (D_score in the spec, default is 4).
+    pub fn retain_scores(&mut self, retain_scores: usize) -> &mut Self {
+        self.config.retain_scores = retain_scores;
         self
     }
 
@@ -565,6 +598,13 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    // If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
+    // then there is an extra score penalty applied to the peer through P7.
+    pub fn graft_flood_threshold(&mut self, graft_flood_threshold: Duration) -> &mut Self {
+        self.config.graft_flood_threshold = graft_flood_threshold;
+        self
+    }
+
     /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
     /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
     /// The default is 2.
@@ -608,6 +648,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("mesh_n", &self.mesh_n);
         let _ = builder.field("mesh_n_low", &self.mesh_n_low);
         let _ = builder.field("mesh_n_high", &self.mesh_n_high);
+        let _ = builder.field("retain_scores", &self.retain_scores);
         let _ = builder.field("gossip_lazy", &self.gossip_lazy);
         let _ = builder.field("gossip_factor", &self.gossip_factor);
         let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
@@ -622,6 +663,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("prune_backoff", &self.prune_backoff);
         let _ = builder.field("backoff_slack", &self.backoff_slack);
         let _ = builder.field("flood_publish", &self.flood_publish);
+        let _ = builder.field("graft_flood_threshold", &self.graft_flood_threshold);
         let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
         builder.finish()
     }
