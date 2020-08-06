@@ -60,6 +60,7 @@ use crate::protocol::{
 };
 use crate::rpc_proto;
 use crate::topic::{Hasher, Topic, TopicHash};
+use std::cmp::Ordering::Equal;
 
 mod tests;
 
@@ -1547,7 +1548,57 @@ impl Gossipsub {
                 }
             }
 
-            //TODO opportunistic grafting
+            // should we try to improve the mesh with opportunistic grafting?
+            if self.heartbeat_ticks % self.config.opportunistic_graft_ticks() == 0
+                && peers.len() > 1 && self.peer_score.is_some() {
+                if let Some((_, thresholds, _)) = &self.peer_score {
+                    // Opportunistic grafting works as follows: we check the median score of peers
+                    // in the mesh; if this score is below the opportunisticGraftThreshold, we
+                    // select a few peers at random with score over the median.
+                    // The intention is to (slowly) improve an underperforming mesh by introducing
+                    // good scoring peers that may have been gossiping at us. This allows us to
+                    // get out of sticky situations where we are stuck with poor peers and also
+                    // recover from churn of good peers.
+
+
+                    // now compute the median peer score in the mesh
+                    let mut peers_by_score: Vec<_> = peers.iter().collect();
+                    peers_by_score.sort_by(|p1, p2|
+                        score(p1).partial_cmp(&score(p2)).unwrap_or(Equal)
+                    );
+
+                    let middle = peers_by_score.len() / 2;
+                    let median = if peers_by_score.len() % 2 == 0 {
+                        (score(*peers_by_score.get(middle - 1)
+                            .expect("middle < vector length and middle > 0 since peers.len() > 0")) +
+                            score(*peers_by_score.get(middle).expect("middle < vector length")))
+                            * 0.5
+                    } else {
+                        score(*peers_by_score.get(middle).expect("middle < vector length"))
+                    };
+
+                    // if the median score is below the threshold, select a better peer (if any) and
+                    // GRAFT
+                    if median < thresholds.opportunistic_graft_threshold {
+                        let peer_list =
+                            Self::get_random_peers(topic_peers, topic_hash,
+                                                   self.config.opportunistic_graft_peers(),|peer| {
+                                !peers.contains(peer)
+                                    && !explicit_peers.contains(peer)
+                                    && !backoffs.is_backoff_with_slack(topic_hash, peer)
+                                    && score(peer) > median
+                            });
+                        for peer in &peer_list {
+                            let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
+                            current_topic.push(topic_hash.clone());
+                        }
+                        // update the mesh
+                        debug!("Opportunistically graft in topic {} with peers {:?}",
+                               topic_hash, peer_list);
+                        peers.extend(peer_list);
+                    }
+                }
+            }
         }
 
         // remove expired fanout topics

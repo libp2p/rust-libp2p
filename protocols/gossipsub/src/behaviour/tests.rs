@@ -25,13 +25,14 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
 
-    use crate::{GossipsubConfigBuilder, IdentTopic as Topic, TopicScoreParams};
-
-    use super::super::*;
     use async_std::net::Ipv4Addr;
     use rand::Rng;
 
-    // helper functions for testing
+    use crate::{GossipsubConfigBuilder, IdentTopic as Topic, TopicScoreParams};
+
+    use super::super::*;
+
+// helper functions for testing
 
     fn build_and_inject_nodes(
         peer_no: usize,
@@ -2639,7 +2640,7 @@ mod tests {
         );
     }
 
-    //TODO test oppertunisticGraftThreshold
+    //TODO test opportunisticGraftThreshold
 
     #[test]
     fn test_keep_best_scoring_peers_on_oversubscription() {
@@ -3710,5 +3711,84 @@ mod tests {
             gs.peer_score.as_ref().unwrap().0.score(&peers[1]),
             1.0 * 0.9 * 0.9 * -2.0
         );
+    }
+
+    #[test]
+    fn test_opportunistic_grafting() {
+        let config = GossipsubConfigBuilder::new()
+            .mesh_n_low(3)
+            .mesh_n(5)
+            .mesh_n_high(7)
+            .mesh_outbound_min(0) //deactivate outbound handling
+            .opportunistic_graft_ticks(2)
+            .opportunistic_graft_peers(2)
+            .build()
+            .unwrap();
+        let mut peer_score_params = PeerScoreParams::default();
+        peer_score_params.app_specific_weight = 1.0;
+        let mut thresholds = PeerScoreThresholds::default();
+        thresholds.opportunistic_graft_threshold = 2.0;
+
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
+                5,
+                vec!["test".into()],
+                false,
+                config,
+                0,
+                0,
+                Some((peer_score_params, thresholds)),
+            );
+
+        //fill mesh with 5 peers
+        for peer in &peers {
+            gs.handle_graft(peer, topics.clone());
+        }
+
+        //add additional 5 peers
+        let others: Vec<_> = (0..5)
+            .into_iter()
+            .map(|_| add_peer(&mut gs, &topics, false, false))
+            .collect();
+
+        //currently mesh equals peers
+        assert_eq!(gs.mesh[&topics[0]], peers.iter().cloned().collect());
+
+        //give others high scores (but the first two have not high enough scores)
+        for i in 0..5 {
+            gs.set_application_score(&peers[i], 0.0 + i as f64);
+        }
+
+        //set scores for peers in the mesh
+        for i in 0..5 {
+            gs.set_application_score(&others[i], 0.0 + i as f64);
+        }
+
+        //this gives a median of exactly 2.0 => should not apply opportunistic grafting
+        gs.heartbeat();
+        gs.heartbeat();
+
+        assert_eq!(gs.mesh[&topics[0]].len(), 5, "should not apply opportunistic grafting");
+
+        //reduce middle score to 1.0 giving a median of 1.0
+        gs.set_application_score(&peers[2], 1.0);
+
+
+        //opportunistic grafting after two heartbeats
+
+        gs.heartbeat();
+        assert_eq!(gs.mesh[&topics[0]].len(), 5,
+                   "should not apply opportunistic grafting after first tick");
+
+        gs.heartbeat();
+
+        assert_eq!(gs.mesh[&topics[0]].len(), 7,
+                   "opportunistic grafting should have added 2 peers");
+
+        assert!(gs.mesh[&topics[0]].is_superset(&peers.iter().cloned().collect()),
+                "old peers are still part of the mesh");
+
+        assert!(gs.mesh[&topics[0]].is_disjoint(&others.iter().cloned().take(2).collect()),
+                "peers below or equal to median should not be added in opportunistic grafting");
     }
 }
