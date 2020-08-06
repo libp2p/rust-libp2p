@@ -2639,8 +2639,6 @@ mod tests {
         );
     }
 
-    //TODO test oppertunisticGraftThreshold
-
     #[test]
     fn test_keep_best_scoring_peers_on_oversubscription() {
         let config = GossipsubConfigBuilder::new()
