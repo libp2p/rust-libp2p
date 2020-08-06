@@ -3789,4 +3789,23 @@ mod tests {
         assert!(gs.mesh[&topics[0]].is_disjoint(&others.iter().cloned().take(2).collect()),
                 "peers below or equal to median should not be added in opportunistic grafting");
     }
+
+    #[test]
+    fn test_ignore_graft_from_unknown_topic() {
+        //build gossipsub without subscribing to any topics
+        let (mut gs, _, _) = build_and_inject_nodes(0, vec![], false);
+
+        //handle an incoming graft for some topic
+        gs.handle_graft(&PeerId::random(), vec![Topic::new("test").hash()]);
+
+        //assert that no prune got created
+        assert_eq!(
+            count_control_msgs(&gs, |_, a| match a {
+                GossipsubControlAction::Prune { .. } => true,
+                _ => false,
+            }),
+            0,
+            "we should not prune after graft in unknown topic"
+        );
+    }
 }

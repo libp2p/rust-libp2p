@@ -1063,8 +1063,10 @@ impl Gossipsub {
                         peer_score.graft(peer_id, topic_hash);
                     }
                 } else {
-                    //TODO spam hardening as in go implementation?
-                    to_prune_topics.insert(topic_hash.clone());
+                    // don't do PX when there is an unknown topic to avoid leaking our peers
+                    do_px = false;
+                    // spam hardening: ignore GRAFTs for unknown topics
+                    continue;
                 }
             }
         }
