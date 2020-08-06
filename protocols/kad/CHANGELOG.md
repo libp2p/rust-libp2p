@@ -2,6 +2,10 @@
 
 - Update `libp2p-core` and `libp2p-swarm` dependencies.
 
+- Add `KBucketRef::range` exposing the minimum inclusive and maximum inclusive
+  `Distance` for the bucket
+  ([PR 1680](https://github.com/libp2p/rust-libp2p/pull/1680)).
+
 # 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`
