@@ -954,9 +954,18 @@ impl Gossipsub {
         let mut cached_messages = HashMap::new();
 
         for id in iwant_msgs {
-            // if we have it, add it do the cached_messages mapping
-            if let Some(msg) = self.mcache.get(&id) {
-                cached_messages.insert(id.clone(), msg.clone());
+            // if we have it and the ihave count is not above the threshold, add it do the
+            // cached_messages mapping
+            if let Some((msg, count)) = self.mcache.get_with_iwant_counts(&id, peer_id) {
+                if count > self.config.gossip_retransimission() {
+                    debug!(
+                        "IWANT: Peer {} has asked for message {} too many times; ignoring \
+                    request",
+                        peer_id, &id
+                    );
+                } else {
+                    cached_messages.insert(id.clone(), msg.clone());
+                }
             }
         }
 
@@ -1552,7 +1561,9 @@ impl Gossipsub {
 
             // should we try to improve the mesh with opportunistic grafting?
             if self.heartbeat_ticks % self.config.opportunistic_graft_ticks() == 0
-                && peers.len() > 1 && self.peer_score.is_some() {
+                && peers.len() > 1
+                && self.peer_score.is_some()
+            {
                 if let Some((_, thresholds, _)) = &self.peer_score {
                     // Opportunistic grafting works as follows: we check the median score of peers
                     // in the mesh; if this score is below the opportunisticGraftThreshold, we
@@ -1562,18 +1573,18 @@ impl Gossipsub {
                     // get out of sticky situations where we are stuck with poor peers and also
                     // recover from churn of good peers.
 
-
                     // now compute the median peer score in the mesh
                     let mut peers_by_score: Vec<_> = peers.iter().collect();
-                    peers_by_score.sort_by(|p1, p2|
-                        score(p1).partial_cmp(&score(p2)).unwrap_or(Equal)
-                    );
+                    peers_by_score
+                        .sort_by(|p1, p2| score(p1).partial_cmp(&score(p2)).unwrap_or(Equal));
 
                     let middle = peers_by_score.len() / 2;
                     let median = if peers_by_score.len() % 2 == 0 {
-                        (score(*peers_by_score.get(middle - 1)
-                            .expect("middle < vector length and middle > 0 since peers.len() > 0")) +
-                            score(*peers_by_score.get(middle).expect("middle < vector length")))
+                        (score(
+                            *peers_by_score.get(middle - 1).expect(
+                                "middle < vector length and middle > 0 since peers.len() > 0",
+                            ),
+                        ) + score(*peers_by_score.get(middle).expect("middle < vector length")))
                             * 0.5
                     } else {
                         score(*peers_by_score.get(middle).expect("middle < vector length"))
@@ -1582,21 +1593,27 @@ impl Gossipsub {
                     // if the median score is below the threshold, select a better peer (if any) and
                     // GRAFT
                     if median < thresholds.opportunistic_graft_threshold {
-                        let peer_list =
-                            Self::get_random_peers(topic_peers, topic_hash,
-                                                   self.config.opportunistic_graft_peers(),|peer| {
+                        let peer_list = Self::get_random_peers(
+                            topic_peers,
+                            topic_hash,
+                            self.config.opportunistic_graft_peers(),
+                            |peer| {
                                 !peers.contains(peer)
                                     && !explicit_peers.contains(peer)
                                     && !backoffs.is_backoff_with_slack(topic_hash, peer)
                                     && score(peer) > median
-                            });
+                            },
+                        );
                         for peer in &peer_list {
-                            let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
+                            let current_topic =
+                                to_graft.entry(peer.clone()).or_insert_with(Vec::new);
                             current_topic.push(topic_hash.clone());
                         }
                         // update the mesh
-                        debug!("Opportunistically graft in topic {} with peers {:?}",
-                               topic_hash, peer_list);
+                        debug!(
+                            "Opportunistically graft in topic {} with peers {:?}",
+                            topic_hash, peer_list
+                        );
                         peers.extend(peer_list);
                     }
                 }

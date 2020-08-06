@@ -20,6 +20,7 @@
 
 use crate::protocol::{GossipsubMessage, MessageId};
 use crate::topic::TopicHash;
+use libp2p_core::PeerId;
 use log::warn;
 use std::collections::HashMap;
 
@@ -34,6 +35,8 @@ pub struct CacheEntry {
 #[derive(Clone)]
 pub struct MessageCache {
     msgs: HashMap<MessageId, GossipsubMessage>,
+    /// For every message and peer the number of times this peer asked for the message
+    iwant_counts: HashMap<MessageId, HashMap<PeerId, u32>>,
     history: Vec<Vec<CacheEntry>>,
     gossip: usize,
     msg_id: fn(&GossipsubMessage) -> MessageId,
@@ -49,6 +52,7 @@ impl MessageCache {
         MessageCache {
             gossip,
             msgs: HashMap::default(),
+            iwant_counts: HashMap::default(),
             history: vec![Vec::new(); history_capacity],
             msg_id,
         }
@@ -75,6 +79,27 @@ impl MessageCache {
     /// Get a message with `message_id`
     pub fn get(&self, message_id: &MessageId) -> Option<&GossipsubMessage> {
         self.msgs.get(message_id)
+    }
+
+    ///increases the iwant count for the given message by one and returns the message together
+    /// with the iwant if the message exists.
+    pub fn get_with_iwant_counts(
+        &mut self,
+        message_id: &MessageId,
+        peer: &PeerId,
+    ) -> Option<(&GossipsubMessage, u32)> {
+        let iwant_counts = &mut self.iwant_counts;
+        self.msgs.get(message_id).map(|message| {
+            (message, {
+                let count = iwant_counts
+                    .entry(message_id.clone())
+                    .or_default()
+                    .entry(peer.clone())
+                    .or_default();
+                *count += 1;
+                *count
+            })
+        })
     }
 
     /// Gets and validates a message with `message_id`.
@@ -129,17 +154,20 @@ impl MessageCache {
                     );
                 }
             }
+
+            self.iwant_counts.remove(&entry.mid);
         }
 
         // Insert an empty vec in position 0
         self.history.insert(0, Vec::new());
     }
 
-    /// Removes a message from the cache
+    /// Removes a message from the cache and returns it if existent
     pub fn remove(&mut self, message_id: &MessageId) -> Option<GossipsubMessage> {
-        //We only remove the message from msgs and keep the message_id in the history vector.
-        //The id in the history vector will simply be ignored on popping.
+        //We only remove the message from msgs and iwant_count and keep the message_id in the
+        // history vector. Zhe id in the history vector will simply be ignored on popping.
 
+        self.iwant_counts.remove(message_id);
         self.msgs.remove(message_id)
     }
 }

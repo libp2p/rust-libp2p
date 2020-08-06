@@ -32,7 +32,7 @@ mod tests {
 
     use super::super::*;
 
-// helper functions for testing
+    // helper functions for testing
 
     fn build_and_inject_nodes(
         peer_no: usize,
@@ -3766,28 +3766,41 @@ mod tests {
         gs.heartbeat();
         gs.heartbeat();
 
-        assert_eq!(gs.mesh[&topics[0]].len(), 5, "should not apply opportunistic grafting");
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            5,
+            "should not apply opportunistic grafting"
+        );
 
         //reduce middle score to 1.0 giving a median of 1.0
         gs.set_application_score(&peers[2], 1.0);
 
-
         //opportunistic grafting after two heartbeats
 
         gs.heartbeat();
-        assert_eq!(gs.mesh[&topics[0]].len(), 5,
-                   "should not apply opportunistic grafting after first tick");
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            5,
+            "should not apply opportunistic grafting after first tick"
+        );
 
         gs.heartbeat();
 
-        assert_eq!(gs.mesh[&topics[0]].len(), 7,
-                   "opportunistic grafting should have added 2 peers");
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            7,
+            "opportunistic grafting should have added 2 peers"
+        );
 
-        assert!(gs.mesh[&topics[0]].is_superset(&peers.iter().cloned().collect()),
-                "old peers are still part of the mesh");
+        assert!(
+            gs.mesh[&topics[0]].is_superset(&peers.iter().cloned().collect()),
+            "old peers are still part of the mesh"
+        );
 
-        assert!(gs.mesh[&topics[0]].is_disjoint(&others.iter().cloned().take(2).collect()),
-                "peers below or equal to median should not be added in opportunistic grafting");
+        assert!(
+            gs.mesh[&topics[0]].is_disjoint(&others.iter().cloned().take(2).collect()),
+            "peers below or equal to median should not be added in opportunistic grafting"
+        );
     }
 
     #[test]
@@ -3806,6 +3819,47 @@ mod tests {
             }),
             0,
             "we should not prune after graft in unknown topic"
+        );
+    }
+
+    #[test]
+    fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
+        let config = GossipsubConfig::default();
+        //build gossipsub with full mesh
+        let (mut gs, _, topics) =
+            build_and_inject_nodes(config.mesh_n_high(), vec!["test".into()], false);
+
+        //add another peer not in the mesh
+        let peer = add_peer(&mut gs, &topics, false, false);
+
+        //receive a message
+        let mut seq = 0;
+        let m1 = random_message(&mut seq, &topics);
+        let id = (config.message_id_fn())(&m1);
+
+        gs.handle_received_message(m1.clone(), &PeerId::random());
+
+        //clear events
+        gs.events.clear();
+
+        //the first gossip_retransimission many iwants return the valid message, all others are
+        // ignored.
+        for _ in 0..(2 * config.gossip_retransimission() + 10) {
+            gs.handle_iwant(&peer, vec![id.clone()]);
+        }
+
+        assert_eq!(
+            gs.events
+                .iter()
+                .map(|e| match e {
+                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                        event.messages.len()
+                    }
+                    _ => 0,
+                })
+                .sum::<usize>(),
+            config.gossip_retransimission() as usize,
+            "not more then gossip_retransmission many messages get sent back"
         );
     }
 }

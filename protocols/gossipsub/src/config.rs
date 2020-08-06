@@ -183,6 +183,11 @@ pub struct GossipsubConfig {
 
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     opportunistic_graft_peers: usize,
+
+    // Controls how many times we will allow a peer to request the same message id through IWANT
+    // gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    // with requests and wasting our resources. The default is 3.
+    gossip_retransimission: u32,
 }
 
 //TODO should we use a macro for getters + the builder?
@@ -371,6 +376,12 @@ impl GossipsubConfig {
         self.opportunistic_graft_ticks
     }
 
+    // Controls how many times we will allow a peer to request the same message id through IWANT
+    // gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    // with requests and wasting our resources. The default is 3.
+    pub fn gossip_retransimission(&self) -> u32 {
+        self.gossip_retransimission
+    }
 
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     pub fn opportunistic_graft_peers(&self) -> usize {
@@ -444,7 +455,8 @@ impl GossipsubConfigBuilder {
                 graft_flood_threshold: Duration::from_secs(10),
                 mesh_outbound_min: 2,
                 opportunistic_graft_ticks: 60,
-                opportunistic_graft_peers: 2
+                opportunistic_graft_peers: 2,
+                gossip_retransimission: 3,
             },
         }
     }
@@ -650,6 +662,14 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    // Controls how many times we will allow a peer to request the same message id through IWANT
+    // gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    // with requests and wasting our resources.
+    pub fn gossip_retransimission(&mut self, gossip_retransimission: u32) -> &mut Self {
+        self.config.gossip_retransimission = gossip_retransimission;
+        self
+    }
+
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     pub fn opportunistic_graft_peers(&mut self, opportunistic_graft_peers: usize) -> &mut Self {
         self.config.opportunistic_graft_peers = opportunistic_graft_peers;
@@ -710,6 +730,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
+        let _ = builder.field("gossip_retransimission", &self.gossip_retransimission);
         builder.finish()
     }
 }
