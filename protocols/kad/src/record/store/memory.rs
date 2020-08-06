@@ -106,7 +106,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
         fn(&'a ProviderRecord) -> Cow<'a, ProviderRecord>
     >;
 
-    fn get(&'a self, k: &Key) -> Option<Cow<Record>> {
+    fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>> {
         self.records.get(k).map(Cow::Borrowed)
     }
 

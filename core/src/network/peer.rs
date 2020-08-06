@@ -313,7 +313,7 @@ where
 
     /// Obtains an established connection to the peer by ID.
     pub fn connection<'b>(&'b mut self, id: ConnectionId)
-        -> Option<EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>>
+        -> Option<EstablishedConnection<'b, TInEvent, TConnInfo>>
     {
         self.network.pool.get_established(id)
     }
@@ -359,7 +359,7 @@ where
 
     /// Obtains some established connection to the peer.
     pub fn some_connection<'b>(&'b mut self)
-        -> EstablishedConnection<'b, TInEvent, TConnInfo, TPeerId>
+        -> EstablishedConnection<'b, TInEvent, TConnInfo>
     {
         self.connections()
             .into_first()

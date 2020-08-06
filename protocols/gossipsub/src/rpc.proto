@@ -19,6 +19,8 @@ message Message {
 	optional bytes data = 2;
 	optional bytes seqno = 3;
 	repeated string topic_ids = 4;
+    optional bytes signature = 5;
+    optional bytes key = 6;
 }
 
 message ControlMessage {
@@ -30,11 +32,11 @@ message ControlMessage {
 
 message ControlIHave {
 	optional string topic_id = 1;
-	repeated string message_ids = 2;
+	repeated bytes message_ids = 2;
 }
 
 message ControlIWant {
-	repeated string message_ids= 1;
+	repeated bytes message_ids= 1;
 }
 
 message ControlGraft {

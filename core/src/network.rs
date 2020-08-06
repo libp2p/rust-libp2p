@@ -327,7 +327,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -405,12 +405,12 @@ where
                 }
                 event
             }
-            Poll::Ready(PoolEvent::ConnectionError { id, connected, error, num_established, .. }) => {
-                NetworkEvent::ConnectionError {
+            Poll::Ready(PoolEvent::ConnectionClosed { id, connected, error, num_established, .. }) => {
+                NetworkEvent::ConnectionClosed {
                     id,
                     connected,
-                    error,
                     num_established,
+                    error,
                 }
             }
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {

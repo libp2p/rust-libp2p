@@ -1,3 +1,7 @@
+# 0.2.0
+
+- Bump `libp2p-core` and `libp2p-swarm` dependencies.
+
 # 0.1.1
 
 - Always properly `close()` the substream after sending requests and

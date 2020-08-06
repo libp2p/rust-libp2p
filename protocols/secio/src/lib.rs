@@ -206,7 +206,7 @@ impl<S> AsyncRead for SecioOutput<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8])
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
         AsyncRead::poll_read(Pin::new(&mut self.stream), cx, buf)
@@ -217,19 +217,19 @@ impl<S> AsyncWrite for SecioOutput<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8])
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
         AsyncWrite::poll_write(Pin::new(&mut self.stream), cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     {
         AsyncWrite::poll_flush(Pin::new(&mut self.stream), cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context)
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     {
         AsyncWrite::poll_close(Pin::new(&mut self.stream), cx)
@@ -273,7 +273,7 @@ where
 {
     type Error = io::Error;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Sink::poll_ready(Pin::new(&mut self.inner), cx)
     }
 
@@ -281,11 +281,11 @@ where
         Sink::start_send(Pin::new(&mut self.inner), item)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Sink::poll_flush(Pin::new(&mut self.inner), cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Sink::poll_close(Pin::new(&mut self.inner), cx)
     }
 }
@@ -296,7 +296,7 @@ where
 {
     type Item = Result<Vec<u8>, SecioError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Stream::poll_next(Pin::new(&mut self.inner), cx)
     }
 }

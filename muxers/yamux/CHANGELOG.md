@@ -1,3 +1,7 @@
+# 0.21.0 [unreleased]
+
+- Bump `libp2p-core` dependency.
+
 # 0.20.0 [2020-07-01]
 
 - Update `libp2p-core`, i.e. `StreamMuxer::poll_inbound` has been renamed

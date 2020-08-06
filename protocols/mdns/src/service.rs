@@ -397,7 +397,7 @@ pub struct MdnsResponse {
 
 impl MdnsResponse {
     /// Creates a new `MdnsResponse` based on the provided `Packet`.
-    fn new(packet: Packet, from: SocketAddr) -> MdnsResponse {
+    fn new(packet: Packet<'_>, from: SocketAddr) -> MdnsResponse {
         let peers = packet.answers.iter().filter_map(|record| {
             if record.name.to_string().as_bytes() != SERVICE_NAME {
                 return None;
@@ -471,7 +471,7 @@ pub struct MdnsPeer {
 
 impl MdnsPeer {
     /// Creates a new `MdnsPeer` based on the provided `Packet`.
-    pub fn new(packet: &Packet, record_value: String, my_peer_id: PeerId, ttl: u32) -> MdnsPeer {
+    pub fn new(packet: &Packet<'_>, record_value: String, my_peer_id: PeerId, ttl: u32) -> MdnsPeer {
         let addrs = packet
             .additional
             .iter()
