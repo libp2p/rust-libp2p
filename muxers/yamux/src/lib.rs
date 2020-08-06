@@ -28,7 +28,7 @@ use parking_lot::Mutex;
 use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
 use thiserror::Error;
 
-pub use yamux::WindowUpdateMode;
+pub use yamux::{Mode, WindowUpdateMode};
 
 /// A Yamux connection.
 ///
