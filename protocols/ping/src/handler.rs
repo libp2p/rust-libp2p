@@ -169,7 +169,8 @@ impl Error for PingFailure {
 pub struct PingHandler {
     /// Configuration options.
     config: PingConfig,
-    /// The timer for when to send the next ping.
+    /// The timer used for the delay to the next ping as well as
+    /// the ping timeout.
     timer: Delay,
     /// Outbound ping failures that are pending to be processed by `poll()`.
     pending_errors: VecDeque<PingFailure>,
