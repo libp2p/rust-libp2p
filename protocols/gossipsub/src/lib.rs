@@ -151,6 +151,10 @@ mod rpc_proto {
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, GossipsubRpc, MessageAuthenticity};
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, ValidationMode};
+pub use self::peer_score::{
+    score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
+    TopicScoreParams,
+};
 pub use self::protocol::{GossipsubMessage, MessageId};
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
