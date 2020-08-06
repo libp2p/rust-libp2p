@@ -26,7 +26,6 @@ use crate::codec::RequestResponseCodec;
 pub use protocol::{RequestProtocol, ResponseProtocol, ProtocolSupport};
 
 use futures::{
-    channel::oneshot,
     future::BoxFuture,
     prelude::*,
     stream::FuturesUnordered
@@ -78,10 +77,7 @@ where
     outbound: VecDeque<RequestProtocol<TCodec>>,
     /// Inbound upgrades waiting for the incoming request.
     inbound: FuturesUnordered<BoxFuture<'static,
-        Result<
-            (TCodec::Request, oneshot::Sender<TCodec::Response>),
-            oneshot::Canceled
-        >>>,
+        Option<(TCodec::Request, scambio::Right<TCodec::Request, TCodec::Response>)>>>,
 }
 
 impl<TCodec> RequestResponseHandler<TCodec>
@@ -117,7 +113,7 @@ where
     /// An inbound request.
     Request {
         request: TCodec::Request,
-        sender: oneshot::Sender<TCodec::Response>
+        reply: scambio::Right<TCodec::Request, TCodec::Response>
     },
     /// An inbound response.
     Response {
@@ -146,13 +142,7 @@ where
     type OutboundOpenInfo = RequestId;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        // A channel for notifying the handler when the inbound
-        // upgrade received the request.
-        let (rq_send, rq_recv) = oneshot::channel();
-
-        // A channel for notifying the inbound upgrade when the
-        // response is sent.
-        let (rs_send, rs_recv) = oneshot::channel();
+        let (client, mut server) = scambio::exchange();
 
         // By keeping all I/O inside the `ResponseProtocol` and thus the
         // inbound substream upgrade via above channels, we ensure that it
@@ -163,14 +153,16 @@ where
         let proto = ResponseProtocol {
             protocols: self.inbound_protocols.clone(),
             codec: self.codec.clone(),
-            request_sender: rq_send,
-            response_receiver: rs_recv,
+            client
         };
 
         // The handler waits for the request to come in. It then emits
         // `RequestResponseHandlerEvent::Request` together with a
         // `ResponseChannel`.
-        self.inbound.push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
+        self.inbound.push(async move {
+            let rq = server.receive().await?;
+            Some((rq, server))
+        }.boxed());
 
         SubstreamProtocol::new(proto).with_timeout(self.substream_timeout)
     }
@@ -277,21 +269,14 @@ where
 
         // Check for inbound requests.
         while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
-            match result {
-                Ok((rq, rs_sender)) => {
-                    // We received an inbound request.
-                    self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        RequestResponseHandlerEvent::Request {
-                            request: rq, sender: rs_sender
-                        }))
-                }
-                Err(oneshot::Canceled) => {
-                    // The inbound upgrade has errored or timed out reading
-                    // or waiting for the request. The handler is informed
-                    // via `inject_listen_upgrade_error`.
-                }
+            if let Some((rq, reply)) = result { // We received an inbound request.
+                self.keep_alive = KeepAlive::Yes;
+                let event = RequestResponseHandlerEvent::Request { request: rq, reply };
+                return Poll::Ready(ProtocolsHandlerEvent::Custom(event))
             }
+            // The inbound upgrade has errored or timed out reading
+            // or waiting for the request. The handler is informed
+            // via `inject_listen_upgrade_error`.
         }
 
         // Emit outbound requests.

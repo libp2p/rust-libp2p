@@ -27,7 +27,6 @@ use crate::RequestId;
 use crate::codec::RequestResponseCodec;
 
 use futures::{
-    channel::oneshot,
     future::BoxFuture,
     prelude::*,
 };
@@ -79,8 +78,7 @@ where
 {
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
-    pub(crate) request_sender: oneshot::Sender<TCodec::Request>,
-    pub(crate) response_receiver: oneshot::Receiver<TCodec::Response>
+    pub(crate) client: scambio::Left<TCodec::Request, TCodec::Response>
 }
 
 impl<TCodec> UpgradeInfo for ResponseProtocol<TCodec>
@@ -107,8 +105,8 @@ where
         async move {
             let read = self.codec.read_request(&protocol, &mut io);
             let request = read.await?;
-            if let Ok(()) = self.request_sender.send(request) {
-                if let Ok(response) = self.response_receiver.await {
+            if let Ok(()) = self.client.send_now(request) {
+                if let Some(response) = self.client.receive().await {
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
                 }
