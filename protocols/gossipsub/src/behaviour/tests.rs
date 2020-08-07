@@ -4114,4 +4114,112 @@ mod tests {
                 (this may fail with a probability < 10^-58"
         );
     }
+
+    #[test]
+    fn test_iwant_penalties() {
+        let config = GossipsubConfigBuilder::new()
+            .iwant_followup_time(Duration::from_secs(1))
+            .build()
+            .unwrap();
+        let mut peer_score_params = PeerScoreParams::default();
+        peer_score_params.behaviour_penalty_weight = -1.0;
+
+        //fill the mesh
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
+                config.mesh_n_high(),
+                vec!["test".into()],
+                false,
+                config.clone(),
+                0,
+                0,
+                Some((peer_score_params, PeerScoreThresholds::default())),
+            );
+
+        //graft to all peers to really fill the mesh with all the peers
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //add 100 more peers
+        let other_peers: Vec<_> = (0..100)
+            .map(|_| add_peer(&mut gs, &topics, false, false))
+            .collect();
+
+        //each peer sends us two ihave containing each two message ids
+        let mut first_messages = Vec::new();
+        let mut second_messages = Vec::new();
+        let mut seq = 0;
+        let id_fn = config.message_id_fn();
+        for peer in &other_peers {
+            for _ in 0..2 {
+                let msg1 = random_message(&mut seq, &topics);
+                let msg2 = random_message(&mut seq, &topics);
+                first_messages.push(msg1.clone());
+                second_messages.push(msg2.clone());
+                gs.handle_ihave(
+                    peer,
+                    vec![(topics[0].clone(), vec![id_fn(&msg1), id_fn(&msg2)])],
+                );
+            }
+        }
+
+        //other peers send us all the first message ids in time
+        for message in first_messages {
+            gs.handle_received_message(message.clone(), &PeerId::random());
+        }
+
+        //now we do a heartbeat no penalization should have been applied yet
+        gs.heartbeat();
+
+        for peer in &other_peers {
+            assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 0.0);
+        }
+
+        //receive the first twenty of the second messages (that are the messages of the first 10
+        // peers)
+        for message in second_messages.iter().take(20) {
+            gs.handle_received_message(message.clone(), &PeerId::random());
+        }
+
+        //sleep for one second
+        sleep(Duration::from_secs(1));
+
+        //now we do a heartbeat to apply penalization
+        gs.heartbeat();
+
+        //now we get all the second messages
+        for message in second_messages {
+            gs.handle_received_message(message.clone(), &PeerId::random());
+        }
+
+        //no further penalizations should get applied
+        gs.heartbeat();
+
+        //now randomly some peers got penalized, some may not, and some may got penalized twice
+        //with very high probability (> 1 - 10^-50) all three cases are present under the 100 peers
+        //but the first 10 peers should all not got penalized.
+        let mut not_penalized = 0;
+        let mut single_penalized = 0;
+        let mut double_penalized = 0;
+
+        for (i, peer) in other_peers.iter().enumerate() {
+            let score = gs.peer_score.as_ref().unwrap().0.score(peer);
+            if score == 0.0 {
+                not_penalized += 1;
+            } else if score == -1.0 {
+                assert!(i > 9);
+                single_penalized += 1;
+            } else if score == -4.0 {
+                assert!(i > 9);
+                double_penalized += 1
+            } else {
+                assert!(false, "Invalid score of peer")
+            }
+        }
+
+        assert!(not_penalized > 10);
+        assert!(single_penalized > 0);
+        assert!(double_penalized > 0);
+    }
 }

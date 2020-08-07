@@ -199,6 +199,11 @@ pub struct GossipsubConfig {
     /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
     /// within a heartbeat.
     max_ihave_messages: usize,
+
+    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
+    /// If the message is not received within this window, a broken promise is declared and
+    /// the router may apply behavioural penalties. The default is 3 seconds.
+    iwant_followup_time: Duration,
 }
 
 //TODO should we use a macro for getters + the builder?
@@ -413,6 +418,13 @@ impl GossipsubConfig {
     pub fn max_ihave_messages(&self) -> usize {
         self.max_ihave_messages
     }
+
+    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
+    /// If the message is not received within this window, a broken promise is declared and
+    /// the router may apply behavioural penalties. The default is 3 seconds.
+    pub fn iwant_followup_time(&self) -> Duration {
+        self.iwant_followup_time
+    }
 }
 
 impl Default for GossipsubConfig {
@@ -485,6 +497,7 @@ impl GossipsubConfigBuilder {
                 gossip_retransimission: 3,
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
+                iwant_followup_time: Duration::from_secs(3),
             },
         }
     }
@@ -721,6 +734,11 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    pub fn iwant_followup_time(&mut self, iwant_followup_time: Duration) -> &mut Self {
+        self.config.iwant_followup_time = iwant_followup_time;
+        self
+    }
+
     /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
     pub fn build(&self) -> Result<GossipsubConfig, &str> {
         //check all constraints on config
@@ -777,6 +795,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
+        let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
         builder.finish()
     }
 }
