@@ -1495,7 +1495,6 @@ impl Gossipsub {
 
         //apply iwant penalties
         self.apply_iwant_penalties();
-        //TODO implement I want penalties (see go)
 
         //check connections to explicit peers
         if self.heartbeat_ticks % self.config.check_explicit_peers_ticks() == 0 {
