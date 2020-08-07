@@ -183,6 +183,27 @@ pub struct GossipsubConfig {
 
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     opportunistic_graft_peers: usize,
+
+    /// Controls how many times we will allow a peer to request the same message id through IWANT
+    /// gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    /// with requests and wasting our resources. The default is 3.
+    gossip_retransimission: u32,
+
+    /// The maximum number of messages to include in an IHAVE message.
+    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    max_ihave_length: usize,
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    max_ihave_messages: usize,
+
+    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
+    /// If the message is not received within this window, a broken promise is declared and
+    /// the router may apply behavioural penalties. The default is 3 seconds.
+    iwant_followup_time: Duration,
 }
 
 //TODO should we use a macro for getters + the builder?
@@ -371,10 +392,38 @@ impl GossipsubConfig {
         self.opportunistic_graft_ticks
     }
 
+    // Controls how many times we will allow a peer to request the same message id through IWANT
+    // gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    // with requests and wasting our resources. The default is 3.
+    pub fn gossip_retransimission(&self) -> u32 {
+        self.gossip_retransimission
+    }
 
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     pub fn opportunistic_graft_peers(&self) -> usize {
         self.opportunistic_graft_peers
+    }
+
+    /// The maximum number of messages to include in an IHAVE message.
+    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    pub fn max_ihave_length(&self) -> usize {
+        self.max_ihave_length
+    }
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    pub fn max_ihave_messages(&self) -> usize {
+        self.max_ihave_messages
+    }
+
+    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
+    /// If the message is not received within this window, a broken promise is declared and
+    /// the router may apply behavioural penalties. The default is 3 seconds.
+    pub fn iwant_followup_time(&self) -> Duration {
+        self.iwant_followup_time
     }
 }
 
@@ -444,7 +493,11 @@ impl GossipsubConfigBuilder {
                 graft_flood_threshold: Duration::from_secs(10),
                 mesh_outbound_min: 2,
                 opportunistic_graft_ticks: 60,
-                opportunistic_graft_peers: 2
+                opportunistic_graft_peers: 2,
+                gossip_retransimission: 3,
+                max_ihave_length: 5000,
+                max_ihave_messages: 10,
+                iwant_followup_time: Duration::from_secs(3),
             },
         }
     }
@@ -650,9 +703,39 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    // Controls how many times we will allow a peer to request the same message id through IWANT
+    // gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    // with requests and wasting our resources.
+    pub fn gossip_retransimission(&mut self, gossip_retransimission: u32) -> &mut Self {
+        self.config.gossip_retransimission = gossip_retransimission;
+        self
+    }
+
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     pub fn opportunistic_graft_peers(&mut self, opportunistic_graft_peers: usize) -> &mut Self {
         self.config.opportunistic_graft_peers = opportunistic_graft_peers;
+        self
+    }
+
+    /// The maximum number of messages to include in an IHAVE message.
+    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    pub fn max_ihave_length(&mut self, max_ihave_length: usize) -> &mut Self {
+        self.config.max_ihave_length = max_ihave_length;
+        self
+    }
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    pub fn max_ihave_messages(&mut self, max_ihave_messages: usize) -> &mut Self {
+        self.config.max_ihave_messages = max_ihave_messages;
+        self
+    }
+
+    pub fn iwant_followup_time(&mut self, iwant_followup_time: Duration) -> &mut Self {
+        self.config.iwant_followup_time = iwant_followup_time;
         self
     }
 
@@ -710,6 +793,9 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
+        let _ = builder.field("max_ihave_length", &self.max_ihave_length);
+        let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
+        let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
         builder.finish()
     }
 }

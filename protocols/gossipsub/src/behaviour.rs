@@ -51,6 +51,7 @@ use libp2p_swarm::{
 
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::PublishError;
+use crate::gossip_promises::GossipPromises;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectMsg};
@@ -384,8 +385,15 @@ pub struct Gossipsub {
     /// discovery and not by px)
     outbound_peers: HashSet<PeerId>,
 
-    /// stores optional peer score data together with thresholds and decay interval
-    peer_score: Option<(PeerScore, PeerScoreThresholds, Interval)>,
+    /// Stores optional peer score data together with thresholds, decay interval and gossip
+    /// promises.
+    peer_score: Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
+
+    /// Counts the number of ihave received from each peer since the last heartbeat
+    count_peer_have: HashMap<PeerId, usize>,
+
+    /// Counts the number of iwant that we sent the each peer since the last heartbeat
+    count_iasked: HashMap<PeerId, usize>,
 }
 
 impl Gossipsub {
@@ -429,6 +437,8 @@ impl Gossipsub {
             px_peers: HashSet::new(),
             outbound_peers: HashSet::new(),
             peer_score: None,
+            count_peer_have: HashMap::new(),
+            count_iasked: HashMap::new(),
         }
     }
 
@@ -670,7 +680,14 @@ impl Gossipsub {
         };
 
         if let Some(message) = self.mcache.remove(message_id) {
-            //tell peer_score that message should be ignored
+            //tell peer_score and gossip promises about reject
+            Self::reject_message(
+                &mut self.peer_score,
+                propagation_source,
+                &message,
+                message_id,
+                reject_reason,
+            );
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.reject_message(propagation_source, &message, reject_reason);
             }
@@ -711,7 +728,7 @@ impl Gossipsub {
 
         let interval = Interval::new(params.decay_interval);
         let peer_score = PeerScore::new(params, self.config.message_id_fn());
-        self.peer_score = Some((peer_score, threshold, interval));
+        self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
         Ok(())
     }
 
@@ -900,6 +917,28 @@ impl Gossipsub {
             return;
         }
 
+        //IHAVE flood protection
+        let peer_have = self.count_peer_have.entry(peer_id.clone()).or_insert(0);
+        *peer_have += 1;
+        if *peer_have > self.config.max_ihave_messages() {
+            debug!(
+                "IHAVE: peer {} has advertised too many times ({}) within this heartbeat \
+            interval; ignoring",
+                peer_id, *peer_have
+            );
+            return;
+        }
+
+        if let Some(iasked) = self.count_iasked.get(peer_id) {
+            if *iasked >= self.config.max_ihave_length() {
+                debug!(
+                    "IHAVE: peer {} has already advertised too many messages ({}); ignoring",
+                    peer_id, *iasked
+                );
+                return;
+            }
+        }
+
         debug!("Handling IHAVE for peer: {:?}", peer_id);
 
         // use a hashset to avoid duplicates efficiently
@@ -924,14 +963,41 @@ impl Gossipsub {
         }
 
         if !iwant_ids.is_empty() {
+            let iasked = self.count_iasked.entry(peer_id.clone()).or_insert(0);
+            let mut iask = iwant_ids.len();
+            if *iasked + iask > self.config.max_ihave_length() {
+                iask = self.config.max_ihave_length() - *iasked;
+            }
+
             // Send the list of IWANT control messages
-            debug!("IHAVE: Sending IWANT message");
+            debug!(
+                "IHAVE: Asking for {} out of {} messages from {}",
+                iask,
+                iwant_ids.len(),
+                peer_id
+            );
+
+            //ask in random order
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.iter().collect();
+            let mut rng = thread_rng();
+            iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
+
+            iwant_ids_vec.truncate(iask as usize);
+            *iasked += iask;
+
+            let message_ids = iwant_ids_vec.into_iter().cloned().collect();
+            if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
+                gossip_promises.add_promise(
+                    peer_id.clone(),
+                    &message_ids,
+                    Instant::now() + self.config.iwant_followup_time(),
+                );
+            }
+
             Self::control_pool_add(
                 &mut self.control_pool,
                 peer_id.clone(),
-                GossipsubControlAction::IWant {
-                    message_ids: iwant_ids.iter().cloned().collect(),
-                },
+                GossipsubControlAction::IWant { message_ids },
             );
         }
         debug!("Completed IHAVE handling for peer: {:?}", peer_id);
@@ -954,9 +1020,18 @@ impl Gossipsub {
         let mut cached_messages = HashMap::new();
 
         for id in iwant_msgs {
-            // if we have it, add it do the cached_messages mapping
-            if let Some(msg) = self.mcache.get(&id) {
-                cached_messages.insert(id.clone(), msg.clone());
+            // if we have it and the ihave count is not above the threshold, add it do the
+            // cached_messages mapping
+            if let Some((msg, count)) = self.mcache.get_with_iwant_counts(&id, peer_id) {
+                if count > self.config.gossip_retransimission() {
+                    debug!(
+                        "IWANT: Peer {} has asked for message {} too many times; ignoring \
+                    request",
+                        peer_id, &id
+                    );
+                } else {
+                    cached_messages.insert(id.clone(), msg.clone());
+                }
             }
         }
 
@@ -1063,8 +1138,10 @@ impl Gossipsub {
                         peer_score.graft(peer_id, topic_hash);
                     }
                 } else {
-                    //TODO spam hardening as in go implementation?
-                    to_prune_topics.insert(topic_hash.clone());
+                    // don't do PX when there is an unknown topic to avoid leaking our peers
+                    do_px = false;
+                    // spam hardening: ignore GRAFTs for unknown topics
+                    continue;
                 }
             }
         }
@@ -1174,6 +1251,20 @@ impl Gossipsub {
         }
     }
 
+    /// informs peer score and gossip_promises about a rejected message
+    fn reject_message(
+        peer_score: &mut Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
+        from: &PeerId,
+        msg: &GossipsubMessage,
+        id: &MessageId,
+        reason: RejectMsg,
+    ) {
+        if let Some((peer_score, _, _, gossip_promises)) = peer_score {
+            peer_score.reject_message(from, &msg, reason);
+            gossip_promises.reject_message(id, &reason);
+        }
+    }
+
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(&mut self, mut msg: GossipsubMessage, propagation_source: &PeerId) {
@@ -1198,9 +1289,13 @@ impl Gossipsub {
                     "Dropping message claiming to be from self but forwarded from {:?}",
                     propagation_source
                 );
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.reject_message(propagation_source, &msg, RejectMsg::SelfOrigin);
-                }
+                Self::reject_message(
+                    &mut self.peer_score,
+                    propagation_source,
+                    &msg,
+                    &msg_id,
+                    RejectMsg::SelfOrigin,
+                );
                 return;
             }
         }
@@ -1373,6 +1468,14 @@ impl Gossipsub {
         );
     }
 
+    fn apply_iwant_penalties(&mut self) {
+        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+            for (peer, count) in gossip_promises.get_broken_promises() {
+                peer_score.add_penalty(&peer, count);
+            }
+        }
+    }
+
     /// Heartbeat function which shifts the memcache and updates the mesh.
     fn heartbeat(&mut self) {
         debug!("Starting heartbeat");
@@ -1386,9 +1489,12 @@ impl Gossipsub {
         //clean up expired backoffs
         self.backoffs.heartbeat();
 
-        //TODO do we need to clear i have counters (see go)
+        // clean up ihave counters
+        self.count_iasked.clear();
+        self.count_peer_have.clear();
 
-        //TODO implement I want penalties (see go)
+        //apply iwant penalties
+        self.apply_iwant_penalties();
 
         //check connections to explicit peers
         if self.heartbeat_ticks % self.config.check_explicit_peers_ticks() == 0 {
@@ -1550,8 +1656,10 @@ impl Gossipsub {
 
             // should we try to improve the mesh with opportunistic grafting?
             if self.heartbeat_ticks % self.config.opportunistic_graft_ticks() == 0
-                && peers.len() > 1 && self.peer_score.is_some() {
-                if let Some((_, thresholds, _)) = &self.peer_score {
+                && peers.len() > 1
+                && self.peer_score.is_some()
+            {
+                if let Some((_, thresholds, _, _)) = &self.peer_score {
                     // Opportunistic grafting works as follows: we check the median score of peers
                     // in the mesh; if this score is below the opportunisticGraftThreshold, we
                     // select a few peers at random with score over the median.
@@ -1560,18 +1668,18 @@ impl Gossipsub {
                     // get out of sticky situations where we are stuck with poor peers and also
                     // recover from churn of good peers.
 
-
                     // now compute the median peer score in the mesh
                     let mut peers_by_score: Vec<_> = peers.iter().collect();
-                    peers_by_score.sort_by(|p1, p2|
-                        score(p1).partial_cmp(&score(p2)).unwrap_or(Equal)
-                    );
+                    peers_by_score
+                        .sort_by(|p1, p2| score(p1).partial_cmp(&score(p2)).unwrap_or(Equal));
 
                     let middle = peers_by_score.len() / 2;
                     let median = if peers_by_score.len() % 2 == 0 {
-                        (score(*peers_by_score.get(middle - 1)
-                            .expect("middle < vector length and middle > 0 since peers.len() > 0")) +
-                            score(*peers_by_score.get(middle).expect("middle < vector length")))
+                        (score(
+                            *peers_by_score.get(middle - 1).expect(
+                                "middle < vector length and middle > 0 since peers.len() > 0",
+                            ),
+                        ) + score(*peers_by_score.get(middle).expect("middle < vector length")))
                             * 0.5
                     } else {
                         score(*peers_by_score.get(middle).expect("middle < vector length"))
@@ -1580,21 +1688,27 @@ impl Gossipsub {
                     // if the median score is below the threshold, select a better peer (if any) and
                     // GRAFT
                     if median < thresholds.opportunistic_graft_threshold {
-                        let peer_list =
-                            Self::get_random_peers(topic_peers, topic_hash,
-                                                   self.config.opportunistic_graft_peers(),|peer| {
+                        let peer_list = Self::get_random_peers(
+                            topic_peers,
+                            topic_hash,
+                            self.config.opportunistic_graft_peers(),
+                            |peer| {
                                 !peers.contains(peer)
                                     && !explicit_peers.contains(peer)
                                     && !backoffs.is_backoff_with_slack(topic_hash, peer)
                                     && score(peer) > median
-                            });
+                            },
+                        );
                         for peer in &peer_list {
-                            let current_topic = to_graft.entry(peer.clone()).or_insert_with(Vec::new);
+                            let current_topic =
+                                to_graft.entry(peer.clone()).or_insert_with(Vec::new);
                             current_topic.push(topic_hash.clone());
                         }
                         // update the mesh
-                        debug!("Opportunistically graft in topic {} with peers {:?}",
-                               topic_hash, peer_list);
+                        debug!(
+                            "Opportunistically graft in topic {} with peers {:?}",
+                            topic_hash, peer_list
+                        );
                         peers.extend(peer_list);
                     }
                 }
@@ -1623,7 +1737,7 @@ impl Gossipsub {
         for (topic_hash, peers) in self.fanout.iter_mut() {
             let mut to_remove_peers = Vec::new();
             let publish_threshold = match &self.peer_score {
-                Some((_, thresholds, _)) => thresholds.publish_threshold,
+                Some((_, thresholds, _, _)) => thresholds.publish_threshold,
                 _ => 0.0,
             };
             for peer in peers.iter() {
@@ -1686,10 +1800,23 @@ impl Gossipsub {
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
     /// and fanout peers
     fn emit_gossip(&mut self) {
+        let mut rng = thread_rng();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
-            let message_ids = self.mcache.get_gossip_ids(&topic_hash);
+            let mut message_ids = self.mcache.get_gossip_ids(&topic_hash);
             if message_ids.is_empty() {
                 return;
+            }
+
+            // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
+            if message_ids.len() > self.config.max_ihave_length() {
+                // we do the truncation (with shuffling) per peer below
+                debug!(
+                    "too many messages for gossip; will truncate IHAVE list ({} messages)",
+                    message_ids.len()
+                );
+            } else {
+                // shuffle to emit in random order
+                message_ids.shuffle(&mut rng);
             }
 
             // dynamic number of peers to gossip based on `gossip_factor` with minimum `gossip_lazy`
@@ -1710,13 +1837,23 @@ impl Gossipsub {
             debug!("Gossiping IHAVE to {} peers.", to_msg_peers.len());
 
             for peer in to_msg_peers {
+                let mut peer_message_ids = message_ids.clone();
+
+                if peer_message_ids.len() > self.config.max_ihave_length() {
+                    // we do this per peer so that we emit a different set for each peer.
+                    // we have enough redundancy in the system that this will significantly increase
+                    // the message coverage when we do truncate.
+                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_ihave_length());
+                    peer_message_ids.truncate(self.config.max_ihave_length());
+                }
+
                 // send an IHAVE message
                 Self::control_pool_add(
                     &mut self.control_pool,
                     peer.clone(),
                     GossipsubControlAction::IHave {
                         topic_hash: topic_hash.clone(),
-                        message_ids: message_ids.clone(),
+                        message_ids: peer_message_ids,
                     },
                 );
             }
@@ -1798,14 +1935,16 @@ impl Gossipsub {
     /// Helper function which forwards a message to mesh\[topic\] peers.
     /// Returns true if at least one peer was messaged.
     fn forward_msg(&mut self, message: GossipsubMessage, source: Option<&PeerId>) -> bool {
-        //message is fully validated, inform peer_score
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        let msg_id = (self.config.message_id_fn())(&message);
+
+        //message is fully validated, inform peer_score and gossip promises
+        if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
             if let Some(peer) = source {
                 peer_score.deliver_message(peer, &message);
             }
+            gossip_promises.deliver_message(&msg_id);
         }
 
-        let msg_id = (self.config.message_id_fn())(&message);
         debug!("Forwarding message: {:?}", msg_id);
         let mut recipient_peers = HashSet::new();
 
@@ -2294,7 +2433,7 @@ impl NetworkBehaviour for Gossipsub {
         }
 
         //update scores
-        if let Some((peer_score, _, interval)) = &mut self.peer_score {
+        if let Some((peer_score, _, interval, _)) = &mut self.peer_score {
             while let Poll::Ready(Some(())) = interval.poll_next_unpin(cx) {
                 peer_score.refresh_scores();
             }

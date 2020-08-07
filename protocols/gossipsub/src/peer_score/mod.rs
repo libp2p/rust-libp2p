@@ -755,6 +755,7 @@ impl PeerScore {
 }
 
 //TODO do we need all variants? If yes some of them are never used yet (missing something).
+#[derive(Clone, Copy)]
 pub(crate) enum RejectMsg {
     MissingSignature,
     InvalidSignature,

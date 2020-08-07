@@ -32,7 +32,7 @@ mod tests {
 
     use super::super::*;
 
-// helper functions for testing
+    // helper functions for testing
 
     fn build_and_inject_nodes(
         peer_no: usize,
@@ -3766,27 +3766,460 @@ mod tests {
         gs.heartbeat();
         gs.heartbeat();
 
-        assert_eq!(gs.mesh[&topics[0]].len(), 5, "should not apply opportunistic grafting");
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            5,
+            "should not apply opportunistic grafting"
+        );
 
         //reduce middle score to 1.0 giving a median of 1.0
         gs.set_application_score(&peers[2], 1.0);
 
-
         //opportunistic grafting after two heartbeats
 
         gs.heartbeat();
-        assert_eq!(gs.mesh[&topics[0]].len(), 5,
-                   "should not apply opportunistic grafting after first tick");
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            5,
+            "should not apply opportunistic grafting after first tick"
+        );
 
         gs.heartbeat();
 
-        assert_eq!(gs.mesh[&topics[0]].len(), 7,
-                   "opportunistic grafting should have added 2 peers");
+        assert_eq!(
+            gs.mesh[&topics[0]].len(),
+            7,
+            "opportunistic grafting should have added 2 peers"
+        );
 
-        assert!(gs.mesh[&topics[0]].is_superset(&peers.iter().cloned().collect()),
-                "old peers are still part of the mesh");
+        assert!(
+            gs.mesh[&topics[0]].is_superset(&peers.iter().cloned().collect()),
+            "old peers are still part of the mesh"
+        );
 
-        assert!(gs.mesh[&topics[0]].is_disjoint(&others.iter().cloned().take(2).collect()),
-                "peers below or equal to median should not be added in opportunistic grafting");
+        assert!(
+            gs.mesh[&topics[0]].is_disjoint(&others.iter().cloned().take(2).collect()),
+            "peers below or equal to median should not be added in opportunistic grafting"
+        );
+    }
+
+    #[test]
+    fn test_ignore_graft_from_unknown_topic() {
+        //build gossipsub without subscribing to any topics
+        let (mut gs, _, _) = build_and_inject_nodes(0, vec![], false);
+
+        //handle an incoming graft for some topic
+        gs.handle_graft(&PeerId::random(), vec![Topic::new("test").hash()]);
+
+        //assert that no prune got created
+        assert_eq!(
+            count_control_msgs(&gs, |_, a| match a {
+                GossipsubControlAction::Prune { .. } => true,
+                _ => false,
+            }),
+            0,
+            "we should not prune after graft in unknown topic"
+        );
+    }
+
+    #[test]
+    fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
+        let config = GossipsubConfig::default();
+        //build gossipsub with full mesh
+        let (mut gs, _, topics) =
+            build_and_inject_nodes(config.mesh_n_high(), vec!["test".into()], false);
+
+        //add another peer not in the mesh
+        let peer = add_peer(&mut gs, &topics, false, false);
+
+        //receive a message
+        let mut seq = 0;
+        let m1 = random_message(&mut seq, &topics);
+        let id = (config.message_id_fn())(&m1);
+
+        gs.handle_received_message(m1.clone(), &PeerId::random());
+
+        //clear events
+        gs.events.clear();
+
+        //the first gossip_retransimission many iwants return the valid message, all others are
+        // ignored.
+        for _ in 0..(2 * config.gossip_retransimission() + 10) {
+            gs.handle_iwant(&peer, vec![id.clone()]);
+        }
+
+        assert_eq!(
+            gs.events
+                .iter()
+                .map(|e| match e {
+                    NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                        event.messages.len()
+                    }
+                    _ => 0,
+                })
+                .sum::<usize>(),
+            config.gossip_retransimission() as usize,
+            "not more then gossip_retransmission many messages get sent back"
+        );
+    }
+
+    #[test]
+    fn test_ignore_too_many_ihaves() {
+        let config = GossipsubConfigBuilder::new()
+            .max_ihave_messages(10)
+            .build()
+            .unwrap();
+        //build gossipsub with full mesh
+        let (mut gs, _, topics) = build_and_inject_nodes_with_config(
+            config.mesh_n_high(),
+            vec!["test".into()],
+            false,
+            config.clone(),
+        );
+
+        //add another peer not in the mesh
+        let peer = add_peer(&mut gs, &topics, false, false);
+
+        //peer has 20 messages
+        let mut seq = 0;
+        let id_fn = config.message_id_fn();
+        let messages: Vec<_> = (0..20).map(|_| random_message(&mut seq, &topics)).collect();
+
+        //peer sends us one ihave for each message in order
+        for message in &messages {
+            gs.handle_ihave(&peer, vec![(topics[0].clone(), vec![id_fn(message)])]);
+        }
+
+        let first_ten: HashSet<_> = messages.iter().take(10).map(|m| id_fn(m)).collect();
+
+        //we send iwant only for the first 10 messages
+        assert_eq!(
+            count_control_msgs(&gs, |p, action| match action {
+                GossipsubControlAction::IWant { message_ids } =>
+                    p == &peer && {
+                        assert_eq!(
+                            message_ids.len(),
+                            1,
+                            "each iwant should have one message \
+                corresponding to one ihave"
+                        );
+
+                        assert!(first_ten.contains(&message_ids[0]));
+
+                        true
+                    },
+                _ => false,
+            }),
+            10,
+            "exactly the first ten ihaves should be processed and one iwant for each created"
+        );
+
+        //after a heartbeat everything is forgotten
+        gs.heartbeat();
+        for message in messages[10..].iter() {
+            gs.handle_ihave(&peer, vec![(topics[0].clone(), vec![id_fn(message)])]);
+        }
+
+        //we sent iwant for all 20 messages
+        assert_eq!(
+            count_control_msgs(&gs, |p, action| match action {
+                GossipsubControlAction::IWant { message_ids } =>
+                    p == &peer && {
+                        assert_eq!(
+                            message_ids.len(),
+                            1,
+                            "each iwant should have one message \
+                corresponding to one ihave"
+                        );
+                        true
+                    },
+                _ => false,
+            }),
+            20,
+            "all 20 should get sent"
+        );
+    }
+
+    #[test]
+    fn test_ignore_too_many_messages_in_ihave() {
+        let config = GossipsubConfigBuilder::new()
+            .max_ihave_messages(10)
+            .max_ihave_length(10)
+            .build()
+            .unwrap();
+        //build gossipsub with full mesh
+        let (mut gs, _, topics) = build_and_inject_nodes_with_config(
+            config.mesh_n_high(),
+            vec!["test".into()],
+            false,
+            config.clone(),
+        );
+
+        //add another peer not in the mesh
+        let peer = add_peer(&mut gs, &topics, false, false);
+
+        //peer has 20 messages
+        let mut seq = 0;
+        let id_fn = config.message_id_fn();
+        let message_ids: Vec<_> = (0..20)
+            .map(|_| id_fn(&random_message(&mut seq, &topics)))
+            .collect();
+
+        //peer sends us three ihaves
+        gs.handle_ihave(
+            &peer,
+            vec![(
+                topics[0].clone(),
+                message_ids[0..8].iter().cloned().collect(),
+            )],
+        );
+        gs.handle_ihave(
+            &peer,
+            vec![(
+                topics[0].clone(),
+                message_ids[0..12].iter().cloned().collect(),
+            )],
+        );
+        gs.handle_ihave(
+            &peer,
+            vec![(
+                topics[0].clone(),
+                message_ids[0..20].iter().cloned().collect(),
+            )],
+        );
+
+        let first_twelve: HashSet<_> = message_ids.iter().take(12).collect();
+
+        //we send iwant only for the first 10 messages
+        let mut sum = 0;
+        assert_eq!(
+            count_control_msgs(&gs, |p, action| match action {
+                GossipsubControlAction::IWant { message_ids } =>
+                    p == &peer && {
+                        assert!(first_twelve.is_superset(&message_ids.iter().collect()));
+                        sum += message_ids.len();
+                        true
+                    },
+                _ => false,
+            }),
+            2,
+            "the third ihave should get ignored and no iwant sent"
+        );
+
+        assert_eq!(sum, 10, "exactly the first ten ihaves should be processed");
+
+        //after a heartbeat everything is forgotten
+        gs.heartbeat();
+        gs.handle_ihave(
+            &peer,
+            vec![(
+                topics[0].clone(),
+                message_ids[10..20].iter().cloned().collect(),
+            )],
+        );
+
+        //we sent 20 iwant messages
+        let mut sum = 0;
+        assert_eq!(
+            count_control_msgs(&gs, |p, action| match action {
+                GossipsubControlAction::IWant { message_ids } =>
+                    p == &peer && {
+                        sum += message_ids.len();
+                        true
+                    },
+                _ => false,
+            }),
+            3
+        );
+        assert_eq!(sum, 20, "exactly 20 iwants should get sent");
+    }
+
+    #[test]
+    fn test_limit_number_of_message_ids_inside_ihave() {
+        let config = GossipsubConfigBuilder::new()
+            .max_ihave_messages(10)
+            .max_ihave_length(100)
+            .build()
+            .unwrap();
+        //build gossipsub with full mesh
+        let (mut gs, peers, topics) = build_and_inject_nodes_with_config(
+            config.mesh_n_high(),
+            vec!["test".into()],
+            false,
+            config.clone(),
+        );
+
+        //graft to all peers to really fill the mesh with all the peers
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //add two other peers not in the mesh
+        let p1 = add_peer(&mut gs, &topics, false, false);
+        let p2 = add_peer(&mut gs, &topics, false, false);
+
+        //receive 200 messages from another peer
+        let mut seq = 0;
+        for _ in 0..200 {
+            gs.handle_received_message(random_message(&mut seq, &topics), &PeerId::random());
+        }
+
+        //emit gossip
+        gs.emit_gossip();
+
+        // both peers should have gotten 100 random ihave messages, to asser the randomness, we
+        // assert that both have not gotten the same set of messages, but have an intersection
+        // (which is the case with very high probability, the probabiltity of failure is < 10^-58).
+
+        let mut ihaves1 = HashSet::new();
+        let mut ihaves2 = HashSet::new();
+
+        assert_eq!(
+            count_control_msgs(&gs, |p, action| match action {
+                GossipsubControlAction::IHave { message_ids, .. } => {
+                    if p == &p1 {
+                        ihaves1 = message_ids.iter().cloned().collect();
+                        true
+                    } else if p == &p2 {
+                        ihaves2 = message_ids.iter().cloned().collect();
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            }),
+            2,
+            "should have emitted one ihave to p1 and one to p2"
+        );
+
+        assert_eq!(
+            ihaves1.len(),
+            100,
+            "should have sent 100 message ids in ihave to p1"
+        );
+        assert_eq!(
+            ihaves2.len(),
+            100,
+            "should have sent 100 message ids in ihave to p2"
+        );
+        assert!(
+            ihaves1 != ihaves2,
+            "should have sent different random messages to p1 and p2 \
+            (this may fail with a probability < 10^-58"
+        );
+        assert!(
+            ihaves1.intersection(&ihaves2).into_iter().count() > 0,
+            "should have sent random messages with some common messages to p1 and p2 \
+                (this may fail with a probability < 10^-58"
+        );
+    }
+
+    #[test]
+    fn test_iwant_penalties() {
+        let config = GossipsubConfigBuilder::new()
+            .iwant_followup_time(Duration::from_secs(1))
+            .build()
+            .unwrap();
+        let mut peer_score_params = PeerScoreParams::default();
+        peer_score_params.behaviour_penalty_weight = -1.0;
+
+        //fill the mesh
+        let (mut gs, peers, topics) =
+            build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
+                config.mesh_n_high(),
+                vec!["test".into()],
+                false,
+                config.clone(),
+                0,
+                0,
+                Some((peer_score_params, PeerScoreThresholds::default())),
+            );
+
+        //graft to all peers to really fill the mesh with all the peers
+        for peer in peers {
+            gs.handle_graft(&peer, topics.clone());
+        }
+
+        //add 100 more peers
+        let other_peers: Vec<_> = (0..100)
+            .map(|_| add_peer(&mut gs, &topics, false, false))
+            .collect();
+
+        //each peer sends us two ihave containing each two message ids
+        let mut first_messages = Vec::new();
+        let mut second_messages = Vec::new();
+        let mut seq = 0;
+        let id_fn = config.message_id_fn();
+        for peer in &other_peers {
+            for _ in 0..2 {
+                let msg1 = random_message(&mut seq, &topics);
+                let msg2 = random_message(&mut seq, &topics);
+                first_messages.push(msg1.clone());
+                second_messages.push(msg2.clone());
+                gs.handle_ihave(
+                    peer,
+                    vec![(topics[0].clone(), vec![id_fn(&msg1), id_fn(&msg2)])],
+                );
+            }
+        }
+
+        //other peers send us all the first message ids in time
+        for message in first_messages {
+            gs.handle_received_message(message.clone(), &PeerId::random());
+        }
+
+        //now we do a heartbeat no penalization should have been applied yet
+        gs.heartbeat();
+
+        for peer in &other_peers {
+            assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 0.0);
+        }
+
+        //receive the first twenty of the second messages (that are the messages of the first 10
+        // peers)
+        for message in second_messages.iter().take(20) {
+            gs.handle_received_message(message.clone(), &PeerId::random());
+        }
+
+        //sleep for one second
+        sleep(Duration::from_secs(1));
+
+        //now we do a heartbeat to apply penalization
+        gs.heartbeat();
+
+        //now we get all the second messages
+        for message in second_messages {
+            gs.handle_received_message(message.clone(), &PeerId::random());
+        }
+
+        //no further penalizations should get applied
+        gs.heartbeat();
+
+        //now randomly some peers got penalized, some may not, and some may got penalized twice
+        //with very high probability (> 1 - 10^-50) all three cases are present under the 100 peers
+        //but the first 10 peers should all not got penalized.
+        let mut not_penalized = 0;
+        let mut single_penalized = 0;
+        let mut double_penalized = 0;
+
+        for (i, peer) in other_peers.iter().enumerate() {
+            let score = gs.peer_score.as_ref().unwrap().0.score(peer);
+            if score == 0.0 {
+                not_penalized += 1;
+            } else if score == -1.0 {
+                assert!(i > 9);
+                single_penalized += 1;
+            } else if score == -4.0 {
+                assert!(i > 9);
+                double_penalized += 1
+            } else {
+                assert!(false, "Invalid score of peer")
+            }
+        }
+
+        assert!(not_penalized > 10);
+        assert!(single_penalized > 0);
+        assert!(double_penalized > 0);
     }
 }

@@ -140,6 +140,7 @@ pub mod protocol;
 
 mod behaviour;
 mod config;
+mod gossip_promises;
 mod handler;
 mod mcache;
 mod peer_score;
