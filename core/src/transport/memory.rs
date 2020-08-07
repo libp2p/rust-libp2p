@@ -243,7 +243,7 @@ impl<T> Stream for Chan<T> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Stream::poll_next(Pin::new(&mut self.incoming), cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => Poll::Ready(Some(Err(io::ErrorKind::BrokenPipe.into()))),
+            Poll::Ready(None) => Poll::Ready(None),
             Poll::Ready(Some(v)) => Poll::Ready(Some(Ok(v))),
         }
     }

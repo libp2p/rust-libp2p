@@ -31,7 +31,7 @@ use futures_codec::{Decoder, Encoder, Framed};
 use libp2p_core::{identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, io, pin::Pin};
+use std::{borrow::Cow, fmt, io, pin::Pin};
 use unsigned_varint::codec;
 
 pub const SIGNING_PREFIX: &'static [u8] = b"libp2p-pubsub:";
@@ -539,7 +539,7 @@ impl std::fmt::Debug for MessageId {
 }
 
 /// A message received by the gossipsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubMessage {
     /// Id of the peer that published this message.
     pub source: Option<PeerId>,
@@ -563,6 +563,17 @@ pub struct GossipsubMessage {
 
     /// Flag indicating if this message has been validated by the application or not.
     pub validated: bool,
+}
+
+impl fmt::Debug for GossipsubMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GossipsubMessage")
+            .field("data",&format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)))
+            .field("source", &self.source)
+            .field("sequence_number", &self.sequence_number)
+            .field("topics", &self.topics)
+            .finish()
+    }
 }
 
 /// A subscription received by the gossipsub system.

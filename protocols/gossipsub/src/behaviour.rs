@@ -90,8 +90,11 @@ pub enum MessageAuthenticity {
     ///
     /// The author of the message and the sequence numbers are excluded from the message.
     ///
-    /// NOTE: Excluding these fields may make these messages invalid by other nodes who enforce validation of these
-    /// fields. See [`ValidationMode`] in the `GossipsubConfig` for how to customise this for rust-libp2p gossipsub. A custom message_id function will need to be set to prevent all messages from a peer being filtered as duplicates.
+    /// NOTE: Excluding these fields may make these messages invalid by other nodes who
+    /// enforce validation of these fields. See [`ValidationMode`] in the `GossipsubConfig`
+    /// for how to customise this for rust-libp2p gossipsub.  A custom `message_id`
+    /// function will need to be set to prevent all messages from a peer being filtered
+    /// as duplicates.
     Anonymous,
 }
 
@@ -338,7 +341,7 @@ pub struct Gossipsub {
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
 
     /// Information used for publishing messages.
-    publish_info: PublishConfig,
+    publish_config: PublishConfig,
 
     /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
     /// duplicates from being propagated to the application and on the network.
@@ -410,7 +413,7 @@ impl Gossipsub {
         Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
-            publish_info: privacy.into(),
+            publish_config: privacy.into(),
             duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
@@ -1283,7 +1286,7 @@ impl Gossipsub {
         }
 
         // reject messages claiming to be from ourselves but not locally published
-        if let Some(own_id) = self.publish_info.get_own_id() {
+        if let Some(own_id) = self.publish_config.get_own_id() {
             if own_id != propagation_source && msg.source.as_ref().map_or(false, |s| s == own_id) {
                 debug!(
                     "Dropping message claiming to be from self but forwarded from {:?}",
@@ -1994,7 +1997,7 @@ impl Gossipsub {
         topics: Vec<TopicHash>,
         data: Vec<u8>,
     ) -> Result<GossipsubMessage, SigningError> {
-        match &self.publish_info {
+        match &self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
                 author,
@@ -2046,7 +2049,7 @@ impl Gossipsub {
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
-                    sequence_number: rand::random(),
+                    sequence_number: Some(rand::random()),
                     topics,
                     signature: None,
                     key: None,
@@ -2059,7 +2062,7 @@ impl Gossipsub {
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
                     // big-endian uint.
-                    sequence_number: rand::random(),
+                    sequence_number: Some(rand::random()),
                     topics,
                     signature: None,
                     key: None,
@@ -2524,3 +2527,35 @@ fn validate_config(authenticity: &MessageAuthenticity, validation_mode: &Validat
         _ => {}
     }
 }
+
+
+
+impl fmt::Debug for Gossipsub {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Gossipsub")
+         .field("config", &self.config)
+         .field("events", &self.events)
+         .field("control_pool", &self.control_pool)
+         .field("publish_config", &self.publish_config)
+         .field("topic_peers", &self.topic_peers)
+         .field("peer_topics", &self.peer_topics)
+         .field("mesh", &self.mesh)
+         .field("fanout", &self.fanout)
+         .field("fanout_last_pub", &self.fanout_last_pub)
+         .field("mcache", &self.mcache)
+         .field("heartbeat", &self.heartbeat)
+         .finish()
+    }
+}
+
+impl fmt::Debug for PublishConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PublishConfig::Signing { author, .. } => f.write_fmt(format_args!("PublishConfig::Signing({})", author)),
+            PublishConfig::Author(author) => f.write_fmt(format_args!("PublishConfig::Author({})", author)),
+            PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
+            PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
+        }
+    }
+}
+

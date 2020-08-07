@@ -3167,7 +3167,7 @@ mod tests {
 
         //peer 0 delivers invalid message from self
         let mut m = random_message(&mut seq, &topics);
-        m.source = Some(gs.publish_info.get_own_id().unwrap().clone());
+        m.source = Some(gs.publish_config.get_own_id().unwrap().clone());
 
         deliver_message(&mut gs, 0, m.clone());
         assert_eq!(
