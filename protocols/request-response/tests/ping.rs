@@ -35,7 +35,7 @@ use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc};
 use rand::{self, Rng};
-use std::{io, iter};
+use std::{collections::HashSet, io, iter};
 
 /// Exercises a simple ping protocol.
 #[test]
@@ -49,11 +49,11 @@ fn ping_protocol() {
     let cfg = RequestResponseConfig::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone()).throttled();
     let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
 
     let (peer2_id, trans) = mk_transport();
-    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg).throttled();
     let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id.clone());
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
@@ -72,10 +72,10 @@ fn ping_protocol() {
 
         loop {
             match swarm1.next().await {
-                RequestResponseEvent::Message {
+                throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel }
-                } => {
+                }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
                     swarm1.send_response(channel, pong.clone());
@@ -89,24 +89,33 @@ fn ping_protocol() {
         let mut count = 0;
         let addr = rx.next().await.unwrap();
         swarm2.add_address(&peer1_id, addr.clone());
-        let mut req_id = swarm2.send_request(&peer1_id, ping.clone());
+        let mut blocked = false;
+        let mut req_ids = HashSet::new();
 
         loop {
+            if !blocked {
+                while let Some(id) = swarm2.send_request(&peer1_id, ping.clone()).ok() {
+                    req_ids.insert(id);
+                }
+                blocked = true;
+            }
             match swarm2.next().await {
-                RequestResponseEvent::Message {
+                throttled::Event::ResumeSending(peer) => {
+                    assert_eq!(peer, peer1_id);
+                    blocked = false
+                }
+                throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Response { request_id, response }
-                } => {
+                }) => {
                     count += 1;
                     assert_eq!(&response, &expected_pong);
                     assert_eq!(&peer, &peer1_id);
-                    assert_eq!(req_id, request_id);
+                    assert!(req_ids.remove(&request_id));
                     if count >= num_pings {
                         return
-                    } else {
-                        req_id = swarm2.send_request(&peer1_id, ping.clone());
                     }
-                },
+                }
                 e => panic!("Peer2: Unexpected event: {:?}", e)
             }
         }
@@ -135,7 +144,7 @@ fn mk_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox), io::Error>) {
 
 #[derive(Debug, Clone)]
 struct PingProtocol();
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct PingCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Ping(Vec<u8>);

@@ -26,16 +26,9 @@
 use crate::RequestId;
 use crate::codec::RequestResponseCodec;
 
-use futures::{
-    future::BoxFuture,
-    prelude::*,
-};
-use libp2p_core::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-};
-use libp2p_swarm::{
-    NegotiatedSubstream,
-};
+use futures::{future::BoxFuture, prelude::*};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
 use std::io;
 

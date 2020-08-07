@@ -70,9 +70,11 @@
 
 pub mod codec;
 pub mod handler;
+pub mod throttled;
 
 pub use codec::{RequestResponseCodec, ProtocolName};
 pub use handler::ProtocolSupport;
+pub use throttled::Throttled;
 
 use handler::{
     RequestProtocol,
@@ -304,6 +306,11 @@ where
             pending_responses: HashMap::new(),
             addresses: HashMap::new(),
         }
+    }
+
+    /// Wrap this behaviour in another one that limits the number of requests.
+    pub fn throttled(self) -> Throttled<TCodec> {
+        Throttled::new(self)
     }
 
     /// Initiates sending a request.
