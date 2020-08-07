@@ -2528,34 +2528,35 @@ fn validate_config(authenticity: &MessageAuthenticity, validation_mode: &Validat
     }
 }
 
-
-
 impl fmt::Debug for Gossipsub {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
-         .field("config", &self.config)
-         .field("events", &self.events)
-         .field("control_pool", &self.control_pool)
-         .field("publish_config", &self.publish_config)
-         .field("topic_peers", &self.topic_peers)
-         .field("peer_topics", &self.peer_topics)
-         .field("mesh", &self.mesh)
-         .field("fanout", &self.fanout)
-         .field("fanout_last_pub", &self.fanout_last_pub)
-         .field("mcache", &self.mcache)
-         .field("heartbeat", &self.heartbeat)
-         .finish()
+            .field("config", &self.config)
+            .field("events", &self.events)
+            .field("control_pool", &self.control_pool)
+            .field("publish_config", &self.publish_config)
+            .field("topic_peers", &self.topic_peers)
+            .field("peer_topics", &self.peer_topics)
+            .field("mesh", &self.mesh)
+            .field("fanout", &self.fanout)
+            .field("fanout_last_pub", &self.fanout_last_pub)
+            .field("mcache", &self.mcache)
+            .field("heartbeat", &self.heartbeat)
+            .finish()
     }
 }
 
 impl fmt::Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PublishConfig::Signing { author, .. } => f.write_fmt(format_args!("PublishConfig::Signing({})", author)),
-            PublishConfig::Author(author) => f.write_fmt(format_args!("PublishConfig::Author({})", author)),
+            PublishConfig::Signing { author, .. } => {
+                f.write_fmt(format_args!("PublishConfig::Signing({})", author))
+            }
+            PublishConfig::Author(author) => {
+                f.write_fmt(format_args!("PublishConfig::Author({})", author))
+            }
             PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
             PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
         }
     }
 }
-
