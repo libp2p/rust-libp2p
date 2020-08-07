@@ -23,7 +23,18 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.23.0 (2020-??-??)
+# Version 0.24.0 [unreleased]
+
+- Update `libp2p-core`, `libp2p-swarm` and dependent crates.
+
+# Version 0.23.0 (2020-08-03)
+
+**NOTE**: For a smooth upgrade path from `0.21` to `> 0.22`
+on an existing deployment, this version must not be skipped
+or the provided legacy configuration for `libp2p-noise` used!
+
+- Bump `libp2p-noise` dependency to `0.22`. See the `libp2p-noise`
+changelog for details about the `LegacyConfig`.
 
 - Refactored bandwidth logging ([PR 1670](https://github.com/libp2p/rust-libp2p/pull/1670)).
 

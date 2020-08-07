@@ -76,6 +76,7 @@ use zeroize::Zeroize;
 pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     dh_keys: AuthenticKeypair<C>,
     params: ProtocolParams,
+    legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>
 }
@@ -85,6 +86,12 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     /// with a [`Network`](libp2p_core::Network).
     pub fn into_authenticated(self) -> NoiseAuthenticated<H, C, R> {
         NoiseAuthenticated { config: self }
+    }
+
+    /// Sets the legacy configuration options to use, if any.
+    pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
+        self.legacy = cfg;
+        self
     }
 }
 
@@ -97,6 +104,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
+            legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData
         }
@@ -112,6 +120,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_xx(),
+            legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData
         }
@@ -130,6 +139,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
+            legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData
         }
@@ -152,6 +162,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
+            legacy: LegacyConfig::default(),
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData
         }
@@ -177,7 +188,8 @@ where
             .map_err(NoiseError::from);
         handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
-            IdentityExchange::Mutual)
+            IdentityExchange::Mutual,
+            self.legacy)
     }
 }
 
@@ -198,7 +210,8 @@ where
             .map_err(NoiseError::from);
         handshake::rt1_initiator(socket, session,
                                  self.dh_keys.into_identity(),
-                                 IdentityExchange::Mutual)
+                                 IdentityExchange::Mutual,
+                                 self.legacy)
     }
 }
 
@@ -221,7 +234,8 @@ where
             .map_err(NoiseError::from);
         handshake::rt15_responder(socket, session,
             self.dh_keys.into_identity(),
-            IdentityExchange::Mutual)
+            IdentityExchange::Mutual,
+            self.legacy)
     }
 }
 
@@ -242,7 +256,8 @@ where
             .map_err(NoiseError::from);
         handshake::rt15_initiator(socket, session,
             self.dh_keys.into_identity(),
-            IdentityExchange::Mutual)
+            IdentityExchange::Mutual,
+            self.legacy)
     }
 }
 
@@ -265,7 +280,8 @@ where
             .map_err(NoiseError::from);
         handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
-            IdentityExchange::Receive)
+            IdentityExchange::Receive,
+            self.legacy)
     }
 }
 
@@ -287,7 +303,8 @@ where
             .map_err(NoiseError::from);
         handshake::rt1_initiator(socket, session,
             self.dh_keys.into_identity(),
-            IdentityExchange::Send { remote: self.remote.1 })
+            IdentityExchange::Send { remote: self.remote.1 },
+            self.legacy)
     }
 }
 
@@ -363,5 +380,23 @@ where
                 RemoteIdentity::IdentityKey(pk) => future::ok((pk.into_peer_id(), io)),
                 _ => future::err(NoiseError::AuthenticationFailed)
             }))
+    }
+}
+
+/// Legacy configuration options.
+#[derive(Clone)]
+pub struct LegacyConfig {
+    /// Whether to continue sending legacy handshake payloads,
+    /// i.e. length-prefixed protobuf payloads inside a length-prefixed
+    /// noise frame. These payloads are not interoperable with other
+    /// libp2p implementations.
+    pub send_legacy_handshake: bool,
+}
+
+impl Default for LegacyConfig {
+    fn default() -> Self {
+        Self {
+            send_legacy_handshake: false,
+        }
     }
 }

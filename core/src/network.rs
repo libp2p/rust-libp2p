@@ -405,12 +405,12 @@ where
                 }
                 event
             }
-            Poll::Ready(PoolEvent::ConnectionError { id, connected, error, num_established, .. }) => {
-                NetworkEvent::ConnectionError {
+            Poll::Ready(PoolEvent::ConnectionClosed { id, connected, error, num_established, .. }) => {
+                NetworkEvent::ConnectionClosed {
                     id,
                     connected,
-                    error,
                     num_established,
+                    error,
                 }
             }
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {

@@ -1,3 +1,15 @@
+# 0.21.0 [unreleased]
+
+- The `cause` of `SwarmEvent::ConnectionClosed` is now an `Option`,
+and `None` indicates an active connection close not caused by an
+error.
+
+- `DialError::Banned` has been added and is returned from `Swarm::dial`
+if the peer is banned, thereby also invoking the `NetworkBehaviour::inject_dial_failure`
+callback.
+
+- Update the `libp2p-core` dependency to `0.21`, fixing [1584](https://github.com/libp2p/rust-libp2p/issues/1584).
+
 # 0.20.1 [2020-07-08]
 
 - Documentation updates.
