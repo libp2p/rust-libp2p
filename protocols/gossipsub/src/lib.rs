@@ -140,6 +140,7 @@ pub mod protocol;
 
 mod behaviour;
 mod config;
+mod duplicate;
 mod handler;
 mod mcache;
 mod topic;

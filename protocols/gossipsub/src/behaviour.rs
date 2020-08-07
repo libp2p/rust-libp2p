@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::config::{GossipsubConfig, ValidationMode};
+use crate::duplicate::DuplicateCache;
 use crate::error::PublishError;
 use crate::handler::GossipsubHandler;
 use crate::mcache::MessageCache;
@@ -36,7 +37,6 @@ use libp2p_swarm::{
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, ProtocolsHandler,
 };
 use log::{debug, error, info, trace, warn};
-use lru_time_cache::LruCache;
 use prost::Message;
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
@@ -163,7 +163,7 @@ pub struct Gossipsub {
 
     /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
     /// duplicates from being propagated to the application and on the network.
-    duplication_cache: LruCache<MessageId, ()>,
+    duplication_cache: DuplicateCache<MessageId>,
 
     /// A map of all connected peers - A map of topic hash to a list of gossipsub peer Ids.
     topic_peers: HashMap<TopicHash, BTreeSet<PeerId>>,
@@ -202,7 +202,7 @@ impl Gossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
-            duplication_cache: LruCache::with_expiry_duration(config.duplicate_cache_time),
+            duplication_cache: DuplicateCache::new(config.duplicate_cache_time),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             mesh: HashMap::new(),
@@ -314,7 +314,7 @@ impl Gossipsub {
         let msg_id = (self.config.message_id_fn)(&message);
 
         // Add published message to the duplicate cache.
-        if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
+        if !self.duplication_cache.insert(msg_id.clone()) {
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
             warn!(
@@ -655,7 +655,7 @@ impl Gossipsub {
         }
 
         // Add the message to the duplication cache and memcache.
-        if self.duplication_cache.insert(msg_id.clone(), ()).is_some() {
+        if !self.duplication_cache.insert(msg_id.clone()) {
             debug!("Message already received, ignoring. Message: {:?}", msg_id);
             return;
         }
@@ -1485,34 +1485,35 @@ fn validate_config(authenticity: &MessageAuthenticity, validation_mode: &Validat
     }
 }
 
-
-
 impl fmt::Debug for Gossipsub {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
-         .field("config", &self.config)
-         .field("events", &self.events)
-         .field("control_pool", &self.control_pool)
-         .field("publish_config", &self.publish_config)
-         .field("topic_peers", &self.topic_peers)
-         .field("peer_topics", &self.peer_topics)
-         .field("mesh", &self.mesh)
-         .field("fanout", &self.fanout)
-         .field("fanout_last_pub", &self.fanout_last_pub)
-         .field("mcache", &self.mcache)
-         .field("heartbeat", &self.heartbeat)
-         .finish()
+            .field("config", &self.config)
+            .field("events", &self.events)
+            .field("control_pool", &self.control_pool)
+            .field("publish_config", &self.publish_config)
+            .field("topic_peers", &self.topic_peers)
+            .field("peer_topics", &self.peer_topics)
+            .field("mesh", &self.mesh)
+            .field("fanout", &self.fanout)
+            .field("fanout_last_pub", &self.fanout_last_pub)
+            .field("mcache", &self.mcache)
+            .field("heartbeat", &self.heartbeat)
+            .finish()
     }
 }
 
 impl fmt::Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PublishConfig::Signing { author, .. } => f.write_fmt(format_args!("PublishConfig::Signing({})", author)), 
-            PublishConfig::Author(author) => f.write_fmt(format_args!("PublishConfig::Author({})", author)), 
-            PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")), 
-            PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")), 
+            PublishConfig::Signing { author, .. } => {
+                f.write_fmt(format_args!("PublishConfig::Signing({})", author))
+            }
+            PublishConfig::Author(author) => {
+                f.write_fmt(format_args!("PublishConfig::Author({})", author))
+            }
+            PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
+            PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
         }
     }
 }
-
