@@ -184,10 +184,21 @@ pub struct GossipsubConfig {
     /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
     opportunistic_graft_peers: usize,
 
-    // Controls how many times we will allow a peer to request the same message id through IWANT
-    // gossip before we start ignoring them. This is designed to prevent peers from spamming us
-    // with requests and wasting our resources. The default is 3.
+    /// Controls how many times we will allow a peer to request the same message id through IWANT
+    /// gossip before we start ignoring them. This is designed to prevent peers from spamming us
+    /// with requests and wasting our resources. The default is 3.
     gossip_retransimission: u32,
+
+    /// The maximum number of messages to include in an IHAVE message.
+    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    max_ihave_length: usize,
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    max_ihave_messages: usize,
 }
 
 //TODO should we use a macro for getters + the builder?
@@ -387,6 +398,21 @@ impl GossipsubConfig {
     pub fn opportunistic_graft_peers(&self) -> usize {
         self.opportunistic_graft_peers
     }
+
+    /// The maximum number of messages to include in an IHAVE message.
+    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    pub fn max_ihave_length(&self) -> usize {
+        self.max_ihave_length
+    }
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    pub fn max_ihave_messages(&self) -> usize {
+        self.max_ihave_messages
+    }
 }
 
 impl Default for GossipsubConfig {
@@ -457,6 +483,8 @@ impl GossipsubConfigBuilder {
                 opportunistic_graft_ticks: 60,
                 opportunistic_graft_peers: 2,
                 gossip_retransimission: 3,
+                max_ihave_length: 5000,
+                max_ihave_messages: 10,
             },
         }
     }
@@ -676,6 +704,23 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// The maximum number of messages to include in an IHAVE message.
+    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
+    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
+    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    pub fn max_ihave_length(&mut self, max_ihave_length: usize) -> &mut Self {
+        self.config.max_ihave_length = max_ihave_length;
+        self
+    }
+
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
+    /// within a heartbeat.
+    pub fn max_ihave_messages(&mut self, max_ihave_messages: usize) -> &mut Self {
+        self.config.max_ihave_messages = max_ihave_messages;
+        self
+    }
+
     /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
     pub fn build(&self) -> Result<GossipsubConfig, &str> {
         //check all constraints on config
@@ -730,7 +775,8 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
-        let _ = builder.field("gossip_retransimission", &self.gossip_retransimission);
+        let _ = builder.field("max_ihave_length", &self.max_ihave_length);
+        let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         builder.finish()
     }
 }

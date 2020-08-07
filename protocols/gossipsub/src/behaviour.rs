@@ -386,6 +386,12 @@ pub struct Gossipsub {
 
     /// stores optional peer score data together with thresholds and decay interval
     peer_score: Option<(PeerScore, PeerScoreThresholds, Interval)>,
+
+    /// Counts the number of ihave received from each peer since the last heartbeat
+    count_peer_have: HashMap<PeerId, usize>,
+
+    /// Counts the number of iwant that we sent the each peer since the last heartbeat
+    count_iasked: HashMap<PeerId, usize>,
 }
 
 impl Gossipsub {
@@ -429,6 +435,8 @@ impl Gossipsub {
             px_peers: HashSet::new(),
             outbound_peers: HashSet::new(),
             peer_score: None,
+            count_peer_have: HashMap::new(),
+            count_iasked: HashMap::new(),
         }
     }
 
@@ -900,6 +908,28 @@ impl Gossipsub {
             return;
         }
 
+        //IHAVE flood protection
+        let peer_have = self.count_peer_have.entry(peer_id.clone()).or_insert(0);
+        *peer_have += 1;
+        if *peer_have > self.config.max_ihave_messages() {
+            debug!(
+                "IHAVE: peer {} has advertised too many times ({}) within this heartbeat \
+            interval; ignoring",
+                peer_id, *peer_have
+            );
+            return;
+        }
+
+        if let Some(iasked) = self.count_iasked.get(peer_id) {
+            if *iasked >= self.config.max_ihave_length() {
+                debug!(
+                    "IHAVE: peer {} has already advertised too many messages ({}); ignoring",
+                    peer_id, *iasked
+                );
+                return;
+            }
+        }
+
         debug!("Handling IHAVE for peer: {:?}", peer_id);
 
         // use a hashset to avoid duplicates efficiently
@@ -924,13 +954,33 @@ impl Gossipsub {
         }
 
         if !iwant_ids.is_empty() {
+            let iasked = self.count_iasked.entry(peer_id.clone()).or_insert(0);
+            let mut iask = iwant_ids.len();
+            if *iasked + iask > self.config.max_ihave_length() {
+                iask = self.config.max_ihave_length() - *iasked;
+            }
+
             // Send the list of IWANT control messages
-            debug!("IHAVE: Sending IWANT message");
+            debug!(
+                "IHAVE: Asking for {} out of {} messages from {}",
+                iask,
+                iwant_ids.len(),
+                peer_id
+            );
+
+            //ask in random order
+            let mut iwant_ids_vec: Vec<_> = iwant_ids.iter().collect();
+            let mut rng = thread_rng();
+            iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
+
+            iwant_ids_vec.truncate(iask as usize);
+            *iasked += iask;
+
             Self::control_pool_add(
                 &mut self.control_pool,
                 peer_id.clone(),
                 GossipsubControlAction::IWant {
-                    message_ids: iwant_ids.iter().cloned().collect(),
+                    message_ids: iwant_ids_vec.into_iter().cloned().collect(),
                 },
             );
         }
@@ -1397,7 +1447,9 @@ impl Gossipsub {
         //clean up expired backoffs
         self.backoffs.heartbeat();
 
-        //TODO do we need to clear i have counters (see go)
+        // clean up ihave counters
+        self.count_iasked.clear();
+        self.count_peer_have.clear();
 
         //TODO implement I want penalties (see go)
 
@@ -1705,10 +1757,23 @@ impl Gossipsub {
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
     /// and fanout peers
     fn emit_gossip(&mut self) {
+        let mut rng = thread_rng();
         for (topic_hash, peers) in self.mesh.iter().chain(self.fanout.iter()) {
-            let message_ids = self.mcache.get_gossip_ids(&topic_hash);
+            let mut message_ids = self.mcache.get_gossip_ids(&topic_hash);
             if message_ids.is_empty() {
                 return;
+            }
+
+            // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
+            if message_ids.len() > self.config.max_ihave_length() {
+                // we do the truncation (with shuffling) per peer below
+                debug!(
+                    "too many messages for gossip; will truncate IHAVE list ({} messages)",
+                    message_ids.len()
+                );
+            } else {
+                // shuffle to emit in random order
+                message_ids.shuffle(&mut rng);
             }
 
             // dynamic number of peers to gossip based on `gossip_factor` with minimum `gossip_lazy`
@@ -1729,13 +1794,23 @@ impl Gossipsub {
             debug!("Gossiping IHAVE to {} peers.", to_msg_peers.len());
 
             for peer in to_msg_peers {
+                let mut peer_message_ids = message_ids.clone();
+
+                if peer_message_ids.len() > self.config.max_ihave_length() {
+                    // we do this per peer so that we emit a different set for each peer.
+                    // we have enough redundancy in the system that this will significantly increase
+                    // the message coverage when we do truncate.
+                    peer_message_ids.partial_shuffle(&mut rng, self.config.max_ihave_length());
+                    peer_message_ids.truncate(self.config.max_ihave_length());
+                }
+
                 // send an IHAVE message
                 Self::control_pool_add(
                     &mut self.control_pool,
                     peer.clone(),
                     GossipsubControlAction::IHave {
                         topic_hash: topic_hash.clone(),
-                        message_ids: message_ids.clone(),
+                        message_ids: peer_message_ids,
                     },
                 );
             }
