@@ -20,6 +20,7 @@
 
 use crate::behaviour::GossipsubRpc;
 use crate::config::ValidationMode;
+use crate::error::GossipsubHandlerError;
 use crate::rpc_proto;
 use crate::topic::TopicHash;
 use byteorder::{BigEndian, ByteOrder};
@@ -31,7 +32,7 @@ use futures_codec::{Decoder, Encoder, Framed};
 use libp2p_core::{identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, fmt, io, iter, pin::Pin};
+use std::{borrow::Cow, fmt, iter, pin::Pin};
 use unsigned_varint::codec;
 
 pub const SIGNING_PREFIX: &'static [u8] = b"libp2p-pubsub:";
@@ -77,7 +78,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = Framed<TSocket, GossipsubCodec>;
-    type Error = io::Error;
+    type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
@@ -95,7 +96,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = Framed<TSocket, GossipsubCodec>;
-    type Error = io::Error;
+    type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
@@ -192,7 +193,7 @@ impl GossipsubCodec {
 
 impl Encoder for GossipsubCodec {
     type Item = GossipsubRpc;
-    type Error = io::Error;
+    type Error = GossipsubHandlerError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // Messages
@@ -280,21 +281,29 @@ impl Encoder for GossipsubCodec {
             .expect("Buffer has sufficient capacity");
 
         // length prefix the protobuf message, ensuring the max limit is not hit
-        self.length_codec.encode(Bytes::from(buf), dst)
+        self.length_codec
+            .encode(Bytes::from(buf), dst)
+            .map_err(|_| GossipsubHandlerError::MaxTransmissionSize)
     }
 }
 
 impl Decoder for GossipsubCodec {
     type Item = GossipsubRpc;
-    type Error = io::Error;
+    type Error = GossipsubHandlerError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let packet = match self.length_codec.decode(src)? {
+        let packet = match self.length_codec.decode(src).map_err(|e| {
+            if let std::io::ErrorKind::PermissionDenied = e.kind() {
+                GossipsubHandlerError::MaxTransmissionSize
+            } else {
+                GossipsubHandlerError::Io(e)
+            }
+        })? {
             Some(p) => p,
             None => return Ok(None),
         };
 
-        let rpc = rpc_proto::Rpc::decode(&packet[..])?;
+        let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(|e| std::io::Error::from(e))?;
 
         let mut messages = Vec::with_capacity(rpc.publish.len());
         for message in rpc.publish.into_iter() {
@@ -354,15 +363,11 @@ impl Decoder for GossipsubCodec {
             // ensure the sequence number is a u64
             let sequence_number = if verify_sequence_no {
                 let seq_no = message.seqno.ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "sequence number was not provided",
-                    )
+                    GossipsubHandlerError::InvalidMessage("Empty sequence number")
                 })?;
                 if seq_no.len() != 8 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "sequence number has an incorrect size",
+                    return Err(GossipsubHandlerError::InvalidMessage(
+                        "Invalid sequence number",
                     ));
                 }
                 Some(BigEndian::read_u64(&seq_no))
@@ -372,9 +377,8 @@ impl Decoder for GossipsubCodec {
 
             let source = if verify_source {
                 Some(
-                    PeerId::from_bytes(message.from.unwrap_or_default()).map_err(|_| {
-                        io::Error::new(io::ErrorKind::InvalidData, "Invalid Peer Id")
-                    })?,
+                    PeerId::from_bytes(message.from.unwrap_or_default())
+                        .map_err(|_| GossipsubHandlerError::InvalidMessage("Invalid Peer Id"))?,
                 )
             } else {
                 None
@@ -523,7 +527,10 @@ pub struct GossipsubMessage {
 impl fmt::Debug for GossipsubMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GossipsubMessage")
-            .field("data",&format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)))
+            .field(
+                "data",
+                &format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)),
+            )
             .field("source", &self.source)
             .field("sequence_number", &self.sequence_number)
             .field("topics", &self.topics)
