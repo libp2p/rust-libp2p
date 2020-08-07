@@ -51,6 +51,10 @@ impl<TBehaviour> Toggle<TBehaviour> {
     pub fn is_enabled(&self) -> bool {
         self.inner.is_some()
     }
+
+    pub fn get_behaviour(&self) -> &Option<TBehaviour>{
+        &self.inner
+    }
 }
 
 impl<TBehaviour> From<Option<TBehaviour>> for Toggle<TBehaviour> {
