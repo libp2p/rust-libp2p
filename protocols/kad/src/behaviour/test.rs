@@ -32,6 +32,7 @@ use futures::{
 };
 use futures_timer::Delay;
 use libp2p_core::{
+    connection::{ConnectedPoint, ConnectionId},
     PeerId,
     Transport,
     identity,
@@ -1098,4 +1099,42 @@ fn manual_bucket_inserts() {
         }
         Poll::Pending
     }));
+}
+
+#[test]
+fn network_behaviour_inject_address_change() {
+    let local_peer_id = PeerId::random();
+
+    let remote_peer_id = PeerId::random();
+    let connection_id = ConnectionId::new(1);
+    let old_address: Multiaddr = Protocol::Memory(1).into();
+    let new_address: Multiaddr = Protocol::Memory(2).into();
+
+    let mut kademlia = Kademlia::new(
+        local_peer_id.clone(),
+        MemoryStore::new(local_peer_id),
+    );
+
+    kademlia.inject_connection_established(
+        &remote_peer_id,
+        &connection_id,
+        &ConnectedPoint::Dialer { address:  old_address.clone() },
+    );
+
+    assert_eq!(
+        vec![old_address.clone()],
+        kademlia.addresses_of_peer(&remote_peer_id),
+    );
+
+    kademlia.inject_address_change(
+        &remote_peer_id,
+        &connection_id,
+        &ConnectedPoint::Dialer { address: old_address.clone() },
+        &ConnectedPoint::Dialer {  address: new_address.clone() },
+    );
+
+    assert_eq!(
+        vec![new_address.clone()],
+        kademlia.addresses_of_peer(&remote_peer_id),
+    );
 }

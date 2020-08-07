@@ -6,6 +6,9 @@
   `Distance` for the bucket
   ([PR 1680](https://github.com/libp2p/rust-libp2p/pull/1680)).
 
+- Add `NetworkBehaviour::inject_address_change` implementation
+  ([PR 1649](https://github.com/libp2p/rust-libp2p/pull/1649)).
+
 # 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`
