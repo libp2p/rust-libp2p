@@ -901,6 +901,7 @@ mod tests {
     fn test_public_api() {
         let (gs, peers, topic_hashes) =
             build_and_inject_nodes(4, vec![String::from("topic1")], true);
+        let peers = peers.into_iter().collect::<BTreeSet<_>>();
 
         assert_eq!(
             gs.topics().cloned().collect::<Vec<_>>(), topic_hashes,
@@ -908,12 +909,12 @@ mod tests {
         );
 
         assert_eq!(
-            gs.peers(&TopicHash::from_raw("topic1")).cloned().collect::<Vec<_>>(), peers,
+            gs.peers(&TopicHash::from_raw("topic1")).cloned().collect::<BTreeSet<_>>(), peers,
             "Expected peers for a registered topic to contain all peers."
         );
 
         assert_eq!(
-            gs.all_peers().cloned().collect::<BTreeSet<_>>(), peers.into_iter().collect::<BTreeSet<_>>(),
+            gs.all_peers().cloned().collect::<BTreeSet<_>>(), peers,
             "Expected all_peers to contain all peers."
         );
     }

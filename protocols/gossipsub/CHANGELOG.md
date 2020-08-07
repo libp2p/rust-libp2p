@@ -1,6 +1,6 @@
 # 0.21.0 [unreleased]
 
-- public API to list topics and peers. [PR 1677](https://github.com/libp2p/rust-libp2p/pull/1677).
+- Add public API to list topics and peers. [PR 1677](https://github.com/libp2p/rust-libp2p/pull/1677).
 
 - `Debug` instance for `Gossipsub`. [PR 1673](https://github.com/libp2p/rust-libp2p/pull/1673).
 
