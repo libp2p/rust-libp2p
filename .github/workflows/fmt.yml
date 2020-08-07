@@ -1,0 +1,29 @@
+name: Check formatting
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  fmt:
+    name: Test formatting (partial)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: cargo-registry-${{ hashFiles('Cargo.toml') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: cargo-index-${{ hashFiles('Cargo.toml') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
+      - name: Check fmt for gossipsub
+        run: cargo fmt -p libp2p-gossipsub -- --check
