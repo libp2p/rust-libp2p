@@ -282,6 +282,7 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
 }
 
 impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
+    /// Map the handler event.
     pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) =>
@@ -301,6 +302,7 @@ impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
         }
     }
 
+    /// Map the event the swarm will return.
     pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) =>
