@@ -211,9 +211,7 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
 
 impl<C> NetworkBehaviour for Throttled<C>
 where
-    C: RequestResponseCodec + Send + std::fmt::Debug + Clone + 'static,
-    C::Request: std::fmt::Debug,
-    C::Response: std::fmt::Debug
+    C: RequestResponseCodec + Send + Clone + 'static
 {
     type ProtocolsHandler = RequestResponseHandler<C>;
     type OutEvent = Event<C::Request, C::Response>;
@@ -258,7 +256,6 @@ where
     }
 
     fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<C>) {
-        log::trace!("{:08x}: event for {}: {:?}", self.id, p, e);
         match e {
             // Cases where an outbound request has been resolved.
             | RequestResponseHandlerEvent::Response {..}
