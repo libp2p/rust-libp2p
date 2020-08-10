@@ -1,5 +1,8 @@
 # 0.21.0 [unreleased]
 
+- Add as_ref and as_mut functions to Toggle
+[PR 1684](https://github.com/libp2p/rust-libp2p/pull/1684).
+
 - The `cause` of `SwarmEvent::ConnectionClosed` is now an `Option`,
 and `None` indicates an active connection close not caused by an
 error.
