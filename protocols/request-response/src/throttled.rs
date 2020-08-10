@@ -142,7 +142,7 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     ///
     /// If the limit of outbound requests has been reached, the request is
     /// returned. Sending more outbound requests should only be attempted
-    /// once [`Event::ResumeSending`] has been received from [`Throttled::poll`].
+    /// once [`Event::ResumeSending`] has been received from [`NetworkBehaviour::poll`].
     pub fn send_request(&mut self, id: &PeerId, req: C::Request) -> Result<RequestId, C::Request> {
         log::trace!("{:08x}: sending request to {}", self.id, id);
 
