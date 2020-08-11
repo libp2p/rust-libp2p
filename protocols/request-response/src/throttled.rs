@@ -32,7 +32,7 @@ use super::{
     ResponseChannel
 };
 
-/// Wrapper around [`RequestResponse`] which adds request limits.
+/// A wrapper around [`RequestResponse`] which adds request limits per peer.
 ///
 /// Each peer is assigned a default limit of concurrent requests and
 /// responses, which can be overriden per peer.
@@ -244,7 +244,7 @@ where
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
         log::trace!("{:08x}: disconnected from {}", self.id, peer);
-        self.behaviour.inject_connected(peer);
+        self.behaviour.inject_disconnected(peer);
         // Save the limit in case the peer reconnects soon.
         if let Some(limit) = self.limits.remove(peer) {
             self.previous.put(peer.clone(), limit);

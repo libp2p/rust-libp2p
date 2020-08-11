@@ -308,7 +308,7 @@ where
         }
     }
 
-    /// Wrap this behaviour in another one that limits the number of requests.
+    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
     pub fn throttled(self) -> Throttled<TCodec> {
         Throttled::new(self)
     }
@@ -608,4 +608,3 @@ struct Connection {
     id: ConnectionId,
     address: Option<Multiaddr>,
 }
-
