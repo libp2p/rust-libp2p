@@ -39,7 +39,7 @@ mod dht_proto {
 }
 
 pub use addresses::Addresses;
-pub use behaviour::{Kademlia, KademliaConfig, KademliaEvent, Quorum};
+pub use behaviour::{Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent, Quorum};
 pub use behaviour::{
     QueryRef,
     QueryMut,
@@ -47,6 +47,8 @@ pub use behaviour::{
     QueryResult,
     QueryInfo,
     QueryStats,
+
+    PeerRecord,
 
     BootstrapResult,
     BootstrapOk,
@@ -107,4 +109,3 @@ pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 ///
 /// The current value is `3`.
 pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
-

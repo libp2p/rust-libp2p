@@ -244,7 +244,7 @@ where
 {
     type Output = Result<TOut, TInnerFut::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let item = match TryFuture::try_poll(this.inner, cx) {
             Poll::Ready(Ok(v)) => v,
@@ -271,7 +271,7 @@ where
 {
     type Output = Result<T::Ok, A>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match TryFuture::try_poll(this.fut, cx) {
             Poll::Pending => Poll::Pending,

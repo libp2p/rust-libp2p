@@ -51,6 +51,16 @@ impl<TBehaviour> Toggle<TBehaviour> {
     pub fn is_enabled(&self) -> bool {
         self.inner.is_some()
     }
+
+    /// Returns a reference to the inner `NetworkBehaviour`.
+    pub fn as_ref(&self) -> Option<&TBehaviour> {
+        self.inner.as_ref()
+    }
+
+    /// Returns a mutable reference to the inner `NetworkBehaviour`.
+    pub fn as_mut(&mut self) -> Option<&mut TBehaviour> {
+        self.inner.as_mut()
+    }
 }
 
 impl<TBehaviour> From<Option<TBehaviour>> for Toggle<TBehaviour> {
@@ -141,7 +151,7 @@ where
         }
     }
 
-    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
         if let Some(inner) = self.inner.as_mut() {
@@ -252,7 +262,7 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     > {

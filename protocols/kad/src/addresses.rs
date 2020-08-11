@@ -91,10 +91,23 @@ impl Addresses {
             false
         }
     }
+
+    /// Replaces an old address with a new address.
+    ///
+    /// Returns true if the previous address was found and replaced with a clone
+    /// of the new address, returns false otherwise.
+    pub fn replace(&mut self, old: &Multiaddr, new: &Multiaddr) -> bool {
+        if let Some(a) = self.addrs.iter_mut().find(|a| *a == old) {
+            *a = new.clone();
+            return true
+        }
+
+        false
+    }
 }
 
 impl fmt::Debug for Addresses {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list()
             .entries(self.addrs.iter())
             .finish()

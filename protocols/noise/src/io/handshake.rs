@@ -24,16 +24,16 @@ mod payload_proto {
     include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
 }
 
+use bytes::Bytes;
+use crate::LegacyConfig;
 use crate::error::NoiseError;
 use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
-use crate::io::SnowState;
+use crate::io::{NoiseOutput, framed::NoiseFramed};
 use libp2p_core::identity;
 use futures::prelude::*;
 use futures::task;
-use futures::io::AsyncReadExt;
 use prost::Message;
-use std::{pin::Pin, task::Context};
-use super::NoiseOutput;
+use std::{io, pin::Pin, task::Context};
 
 /// The identity of the remote established during a handshake.
 pub enum RemoteIdentity<C> {
@@ -126,14 +126,15 @@ pub fn rt1_initiator<T, C>(
     io: T,
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
-    identity_x: IdentityExchange
+    identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         send_identity(&mut state).await?;
         recv_identity(&mut state).await?;
         state.finish()
@@ -161,13 +162,14 @@ pub fn rt1_responder<T, C>(
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         recv_identity(&mut state).await?;
         send_identity(&mut state).await?;
         state.finish()
@@ -196,14 +198,15 @@ pub fn rt15_initiator<T, C>(
     io: T,
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
-    identity_x: IdentityExchange
+    identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         send_empty(&mut state).await?;
         recv_identity(&mut state).await?;
         send_identity(&mut state).await?;
@@ -233,14 +236,15 @@ pub fn rt15_responder<T, C>(
     io: T,
     session: Result<snow::HandshakeState, NoiseError>,
     identity: KeypairIdentity,
-    identity_x: IdentityExchange
+    identity_x: IdentityExchange,
+    legacy: LegacyConfig,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy)?;
         recv_empty(&mut state).await?;
         send_identity(&mut state).await?;
         recv_identity(&mut state).await?;
@@ -254,7 +258,7 @@ where
 /// Handshake state.
 struct State<T> {
     /// The underlying I/O resource.
-    io: NoiseOutput<T>,
+    io: NoiseFramed<T, snow::HandshakeState>,
     /// The associated public identity of the local node's static DH keypair,
     /// which can be sent to the remote as part of an authenticated handshake.
     identity: KeypairIdentity,
@@ -264,6 +268,8 @@ struct State<T> {
     id_remote_pubkey: Option<identity::PublicKey>,
     /// Whether to send the public identity key of the local node to the remote.
     send_identity: bool,
+    /// Legacy configuration parameters.
+    legacy: LegacyConfig,
 }
 
 impl<T> State<T> {
@@ -276,7 +282,8 @@ impl<T> State<T> {
         io: T,
         session: Result<snow::HandshakeState, NoiseError>,
         identity: KeypairIdentity,
-        identity_x: IdentityExchange
+        identity_x: IdentityExchange,
+        legacy: LegacyConfig,
     ) -> Result<Self, NoiseError> {
         let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
@@ -287,10 +294,11 @@ impl<T> State<T> {
         session.map(|s|
             State {
                 identity,
-                io: NoiseOutput::new(io, SnowState::Handshake(s)),
+                io: NoiseFramed::new(io, s),
                 dh_remote_pubkey_sig: None,
                 id_remote_pubkey,
-                send_identity
+                send_identity,
+                legacy,
             }
         )
     }
@@ -304,42 +312,48 @@ impl<T> State<T>
     where
         C: Protocol<C> + AsRef<[u8]>
     {
-        let dh_remote_pubkey = match self.io.session.get_remote_static() {
-            None => None,
-            Some(k) => match C::public_from_bytes(k) {
-                Err(e) => return Err(e),
-                Ok(dh_pk) => Some(dh_pk)
+        let (pubkey, io) = self.io.into_transport()?;
+        let remote = match (self.id_remote_pubkey, pubkey) {
+            (_, None) => RemoteIdentity::Unknown,
+            (None, Some(dh_pk)) => RemoteIdentity::StaticDhKey(dh_pk),
+            (Some(id_pk), Some(dh_pk)) => {
+                if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
+                    RemoteIdentity::IdentityKey(id_pk)
+                } else {
+                    return Err(NoiseError::InvalidKey)
+                }
             }
         };
-        match self.io.session.into_transport_mode() {
-            Err(e) => Err(e.into()),
-            Ok(s) => {
-                let remote = match (self.id_remote_pubkey, dh_remote_pubkey) {
-                    (_, None) => RemoteIdentity::Unknown,
-                    (None, Some(dh_pk)) => RemoteIdentity::StaticDhKey(dh_pk),
-                    (Some(id_pk), Some(dh_pk)) => {
-                        if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
-                            RemoteIdentity::IdentityKey(id_pk)
-                        } else {
-                            return Err(NoiseError::InvalidKey)
-                        }
-                    }
-                };
-                Ok((remote, NoiseOutput { session: SnowState::Transport(s), .. self.io }))
-            }
-        }
+        Ok((remote, io))
     }
 }
 
 //////////////////////////////////////////////////////////////////////////////
 // Handshake Message Futures
 
+/// A future for receiving a Noise handshake message.
+async fn recv<T>(state: &mut State<T>) -> Result<Bytes, NoiseError>
+where
+    T: AsyncRead + Unpin
+{
+    match state.io.next().await {
+        None => Err(io::Error::new(io::ErrorKind::UnexpectedEof, "eof").into()),
+        Some(Err(e)) => Err(e.into()),
+        Some(Ok(m)) => Ok(m),
+    }
+}
+
 /// A future for receiving a Noise handshake message with an empty payload.
 async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin
 {
-    state.io.read(&mut []).await?;
+    let msg = recv(state).await?;
+    if !msg.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Unexpected handshake payload.").into())
+    }
     Ok(())
 }
 
@@ -348,8 +362,7 @@ async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin
 {
-    state.io.write(&[]).await?;
-    state.io.flush().await?;
+    state.io.send(&Vec::new()).await?;
     Ok(())
 }
 
@@ -359,13 +372,42 @@ async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin,
 {
-    let mut len_buf = [0,0];
-    state.io.read_exact(&mut len_buf).await?;
-    let len = u16::from_be_bytes(len_buf) as usize;
+    let msg = recv(state).await?;
 
-    let mut payload_buf = vec![0; len];
-    state.io.read_exact(&mut payload_buf).await?;
-    let pb = payload_proto::NoiseHandshakePayload::decode(&payload_buf[..])?;
+    // NOTE: We first try to decode the entire frame as a protobuf message,
+    // as required by the libp2p-noise spec. As long as the frame length
+    // is less than 256 bytes, which is the case for all protobuf payloads
+    // not containing RSA keys, there is no room for misinterpretation,
+    // since if a two-bytes length prefix is present the first byte will
+    // be 0, which is always an unexpected protobuf tag value because the
+    // fields in the .proto file start with 1 and decoding thus expects
+    // a non-zero first byte. We will therefore always correctly fall back to
+    // the legacy protobuf parsing in these cases (again, not considering
+    // RSA keys, for which there may be a probabilistically very small chance
+    // of misinterpretation).
+    //
+    // This is only temporary! Once a release is made that supports
+    // decoding without a length prefix, a follow-up release will
+    // change `send_identity` such that no length prefix is sent.
+    // In yet another release the fallback protobuf parsing can then
+    // be removed.
+    let pb = payload_proto::NoiseHandshakePayload::decode(&msg[..])
+        .or_else(|e| {
+            if msg.len() > 2 {
+                let mut buf = [0, 0];
+                buf.copy_from_slice(&msg[.. 2]);
+                // If there is a second length it must be 2 bytes shorter than the
+                // frame length, because each length is encoded as a `u16`.
+                if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
+                    log::debug!("Attempting fallback legacy protobuf decoding.");
+                    payload_proto::NoiseHandshakePayload::decode(&msg[2 ..])
+                } else {
+                    Err(e)
+                }
+            } else {
+                Err(e)
+            }
+        })?;
 
     if !pb.identity_key.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
@@ -377,6 +419,7 @@ where
         }
         state.id_remote_pubkey = Some(pk);
     }
+
     if !pb.identity_sig.is_empty() {
         state.dh_remote_pubkey_sig = Some(pb.identity_sig);
     }
@@ -390,17 +433,26 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = payload_proto::NoiseHandshakePayload::default();
+
     if state.send_identity {
         pb.identity_key = state.identity.public.clone().into_protobuf_encoding()
     }
+
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
     }
-    let mut buf = Vec::with_capacity(pb.encoded_len());
-    pb.encode(&mut buf).expect("Vec<u8> provides capacity as needed");
-    let len = (buf.len() as u16).to_be_bytes();
-    state.io.write_all(&len).await?;
-    state.io.write_all(&buf).await?;
-    state.io.flush().await?;
+
+    let mut msg =
+        if state.legacy.send_legacy_handshake {
+            let mut msg = Vec::with_capacity(2 + pb.encoded_len());
+            msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+            msg
+        } else {
+            Vec::with_capacity(pb.encoded_len())
+        };
+
+    pb.encode(&mut msg).expect("Vec<u8> provides capacity as needed");
+    state.io.send(&msg).await?;
+
     Ok(())
 }

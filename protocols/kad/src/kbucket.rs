@@ -116,6 +116,18 @@ impl BucketIndex {
         self.0
     }
 
+    /// Returns the minimum inclusive and maximum inclusive [`Distance`]
+    /// included in the bucket for this index.
+    fn range(&self) -> (Distance, Distance) {
+        let min = Distance(U256::pow(U256::from(2), U256::from(self.0)));
+        if self.0 == u8::MAX.into() {
+            (min, Distance(U256::MAX))
+        } else {
+            let max = Distance(U256::pow(U256::from(2), U256::from(self.0 + 1)) - 1);
+            (min, max)
+        }
+    }
+
     /// Generates a random distance that falls into the bucket for this index.
     fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         let mut bytes = [0u8; 32];
@@ -170,31 +182,11 @@ where
         }
     }
 
-    /// Returns an iterator over all the entries in the routing table.
-    pub fn iter<'a>(&'a mut self) -> impl Iterator<Item = EntryRefView<'a, TKey, TVal>> {
-        let applied_pending = &mut self.applied_pending;
-        self.buckets.iter_mut().flat_map(move |table| {
-            if let Some(applied) = table.apply_pending() {
-                applied_pending.push_back(applied)
-            }
-            let table = &*table;
-            table.iter().map(move |(n, status)| {
-                EntryRefView {
-                    node: NodeRefView {
-                        key: &n.key,
-                        value: &n.value
-                    },
-                    status
-                }
-            })
-        })
-    }
-
-    /// Returns a by-reference iterator over all buckets.
+    /// Returns an iterator over all buckets.
     ///
     /// The buckets are ordered by proximity to the `local_key`, i.e. the first
     /// bucket is the closest bucket (containing at most one key).
-    pub fn buckets<'a>(&'a mut self) -> impl Iterator<Item = KBucketRef<'a, TKey, TVal>> + 'a {
+    pub fn iter<'a>(&'a mut self) -> impl Iterator<Item = KBucketRef<'a, TKey, TVal>> + 'a {
         let applied_pending = &mut self.applied_pending;
         self.buckets.iter_mut().enumerate().map(move |(i, b)| {
             if let Some(applied) = b.apply_pending() {
@@ -205,6 +197,25 @@ where
                 bucket: b
             }
         })
+    }
+
+    /// Returns the bucket for the distance to the given key.
+    ///
+    /// Returns `None` if the given key refers to the local key.
+    pub fn bucket<K>(&mut self, key: &K) -> Option<KBucketRef<'_, TKey, TVal>>
+    where
+        K: AsRef<KeyBytes>,
+    {
+        let d = self.local_key.as_ref().distance(key);
+        if let Some(index) = BucketIndex::new(&d) {
+            let bucket = &mut self.buckets[index.0];
+            if let Some(applied) = bucket.apply_pending() {
+                self.applied_pending.push_back(applied)
+            }
+            Some(KBucketRef { bucket, index })
+        } else {
+            None
+        }
     }
 
     /// Consumes the next applied pending entry, if any.
@@ -437,17 +448,28 @@ where
     }
 }
 
-/// A reference to a bucket in a `KBucketsTable`.
-pub struct KBucketRef<'a, TPeerId, TVal> {
+/// A reference to a bucket in a [`KBucketsTable`].
+pub struct KBucketRef<'a, TKey, TVal> {
     index: BucketIndex,
-    bucket: &'a mut KBucket<TPeerId, TVal>
+    bucket: &'a mut KBucket<TKey, TVal>
 }
 
-impl<TKey, TVal> KBucketRef<'_, TKey, TVal>
+impl<'a, TKey, TVal> KBucketRef<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone
 {
+    /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+    /// this bucket.
+    pub fn range(&self) -> (Distance, Distance) {
+        self.index.range()
+    }
+
+    /// Checks whether the bucket is empty.
+    pub fn is_empty(&self) -> bool {
+        self.num_entries() == 0
+    }
+
     /// Returns the number of entries in the bucket.
     pub fn num_entries(&self) -> usize {
         self.bucket.num_entries()
@@ -471,6 +493,19 @@ where
     /// rise to a random key falling into this bucket. See [`key::Key::for_distance`].
     pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         self.index.rand_distance(rng)
+    }
+
+    /// Returns an iterator over the entries in the bucket.
+    pub fn iter(&'a self) -> impl Iterator<Item = EntryRefView<'a, TKey, TVal>> {
+        self.bucket.iter().map(move |(n, status)| {
+            EntryRefView {
+                node: NodeRefView {
+                    key: &n.key,
+                    value: &n.value
+                },
+                status
+            }
+        })
     }
 }
 
@@ -506,6 +541,47 @@ mod tests {
             }
             table
         }
+    }
+
+    #[test]
+    fn buckets_are_non_overlapping_and_exhaustive() {
+        let local_key = Key::from(PeerId::random());
+        let timeout = Duration::from_secs(0);
+        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+
+        let mut prev_max = U256::from(0);
+
+        for bucket in table.iter() {
+            let (min, max) = bucket.range();
+            assert_eq!(Distance(prev_max + U256::from(1)), min);
+            prev_max = max.0;
+        }
+
+        assert_eq!(U256::MAX, prev_max);
+    }
+
+    #[test]
+    fn bucket_contains_range() {
+        fn prop(ix: u8) {
+            let index = BucketIndex(ix as usize);
+            let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(0));
+            let bucket_ref = KBucketRef {
+                index,
+                bucket: &mut bucket,
+            };
+
+            let (min, max) = bucket_ref.range();
+
+            assert!(min <= max);
+
+            assert!(bucket_ref.contains(&min));
+            assert!(bucket_ref.contains(&max));
+
+            assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
+            assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
+        }
+
+        quickcheck(prop as fn(_));
     }
 
     #[test]

@@ -33,13 +33,14 @@ use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
-    record::Key,
     Kademlia,
     KademliaEvent,
+    PeerRecord,
     PutRecordOk,
     QueryResult,
     Quorum,
-    Record
+    Record,
+    record::Key,
 };
 use libp2p::{
     NetworkBehaviour,
@@ -86,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             match message {
                 KademliaEvent::QueryResult { result, .. } => match result {
                     QueryResult::GetRecord(Ok(ok)) => {
-                        for Record { key, value, .. } in ok.records {
+                        for PeerRecord { record: Record { key, value, .. }, ..} in ok.records {
                             println!(
                                 "Got record {:?} {:?}",
                                 std::str::from_utf8(key.as_ref()).unwrap(),
@@ -131,7 +132,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Kick it off.
     let mut listening = false;
-    task::block_on(future::poll_fn(move |cx: &mut Context| {
+    task::block_on(future::poll_fn(move |cx: &mut Context<'_>| {
         loop {
             match stdin.try_poll_next_unpin(cx)? {
                 Poll::Ready(Some(line)) => handle_input_line(&mut swarm.kademlia, line),

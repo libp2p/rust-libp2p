@@ -65,4 +65,3 @@ pub enum PeersIterState<'a> {
     /// The iterator finished.
     Finished
 }
-

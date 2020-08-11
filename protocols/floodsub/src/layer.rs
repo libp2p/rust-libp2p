@@ -289,7 +289,7 @@ impl NetworkBehaviour for Floodsub {
         _connection: ConnectionId,
         event: InnerMessage,
     ) {
-        // We ignore successful sends event.
+        // We ignore successful sends or timeouts.
         let event = match event {
             InnerMessage::Rx(event) => event,
             InnerMessage::Sent => return,
@@ -370,7 +370,7 @@ impl NetworkBehaviour for Floodsub {
 
     fn poll(
         &mut self,
-        _: &mut Context,
+        _: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<

@@ -20,7 +20,7 @@
 
 #![recursion_limit = "256"]
 
-extern crate proc_macro;
+
 
 use quote::quote;
 use proc_macro::TokenStream;
@@ -70,28 +70,24 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{<#(#lf,)* #(#tp,)* #(#cst,)*>}
     };
 
-    // Build the `where ...` clause of the trait implementation.
-    let where_clause = {
-        let additional = data_struct.fields.iter()
-            .filter(|x| !is_ignored(x))
-            .flat_map(|field| {
-                let ty = &field.ty;
-                vec![
-                    quote!{#ty: #trait_to_impl},
-                    quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>},
-                ]
-            })
-            .collect::<Vec<_>>();
+    // Whether or not we require the `NetworkBehaviourEventProcess` trait to be implemented.
+    let event_process = {
+        let mut event_process = true; // Default to true for backwards compatibility
 
-        if let Some(where_clause) = where_clause {
-            if where_clause.predicates.trailing_punct() {
-                Some(quote!{#where_clause #(#additional),*})
-            } else {
-                Some(quote!{#where_clause, #(#additional),*})
+        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
+            for meta_item in meta_items {
+                match meta_item {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.path.is_ident("event_process") => {
+                        if let syn::Lit::Bool(ref b) = m.lit {
+                            event_process = b.value
+                        }
+                    }
+                    _ => ()
+                }
             }
-        } else {
-            Some(quote!{where #(#additional),*})
         }
+
+        event_process
     };
 
     // The final out event.
@@ -113,6 +109,34 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
         }
         out
+    };
+
+    // Build the `where ...` clause of the trait implementation.
+    let where_clause = {
+        let additional = data_struct.fields.iter()
+            .filter(|x| !is_ignored(x))
+            .flat_map(|field| {
+                let ty = &field.ty;
+                vec![
+                    quote!{#ty: #trait_to_impl},
+                    if event_process {
+                        quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>}
+                    } else {
+                        quote!{#out_event: From< <#ty as #trait_to_impl>::OutEvent >}
+                    }
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        if let Some(where_clause) = where_clause {
+            if where_clause.predicates.trailing_punct() {
+                Some(quote!{#where_clause #(#additional),*})
+            } else {
+                Some(quote!{#where_clause, #(#additional),*})
+            }
+        } else {
+            Some(quote!{where #(#additional),*})
+        }
     };
 
     // Build the list of statements to put in the body of `addresses_of_peer()`.
@@ -164,6 +188,19 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             Some(match field.ident {
                 Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint); },
                 None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint); },
+            })
+        })
+    };
+
+    // Build the list of statements to put in the body of `inject_address_change()`.
+    let inject_address_change_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_address_change(peer_id, connection_id, old, new); },
+                None => quote!{ self.#field_n.inject_address_change(peer_id, connection_id, old, new); },
             })
         })
     };
@@ -382,12 +419,24 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
+        let generate_event_match_arm = if event_process {
+            quote! {
+                std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
+                    #net_behv_event_proc::inject_event(self, event)
+                }
+            }
+        } else {
+            quote! {
+                std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event.into()))
+                }
+            }
+        };
+
         Some(quote!{
             loop {
-                match #field_name.poll(cx, poll_params) {
-                    std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                        #net_behv_event_proc::inject_event(self, event)
-                    }
+                match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
+                    #generate_event_match_arm
                     std::task::Poll::Ready(#network_behaviour_action::DialAddress { address }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::DialAddress { address });
                     }
@@ -439,6 +488,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {
                 #(#inject_connection_established_stmts);*
+            }
+
+            fn inject_address_change(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, old: &#connected_point, new: &#connected_point) {
+                #(#inject_address_change_stmts);*
             }
 
             fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point) {

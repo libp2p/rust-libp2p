@@ -32,11 +32,13 @@ use std::{
     collections::hash_map,
     error,
     fmt,
+    mem,
     pin::Pin,
     task::{Context, Poll},
 };
 use super::{
     Connected,
+    ConnectedPoint,
     Connection,
     ConnectionError,
     ConnectionHandler,
@@ -123,7 +125,7 @@ impl<I, O, H, E, HE, C> fmt::Debug for Manager<I, O, H, E, HE, C>
 where
     C: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries(self.tasks.iter().map(|(id, task)| (id, &task.state)))
             .finish()
@@ -194,18 +196,19 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
         handler: H
     },
 
-    /// An established connection has encountered an error.
-    ConnectionError {
+    /// An established connection has been closed.
+    ConnectionClosed {
         /// The connection ID.
         ///
-        /// As a result of the error, the connection has been removed
-        /// from the `Manager` and is being closed. Hence this ID will
-        /// no longer resolve to a valid entry in the manager.
+        /// > **Note**: Closed connections are removed from the `Manager`.
+        /// > Hence this ID will no longer resolve to a valid entry in
+        /// > the manager.
         id: ConnectionId,
-        /// Information about the connection that encountered the error.
+        /// Information about the closed connection.
         connected: Connected<C>,
-        /// The error that occurred.
-        error: ConnectionError<HE>,
+        /// The error that occurred, if any. If `None`, the connection
+        /// has been actively closed.
+        error: Option<ConnectionError<HE>>,
     },
 
     /// A connection has been established.
@@ -220,7 +223,17 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
         entry: EstablishedEntry<'a, I, C>,
         /// The produced event.
         event: O
-    }
+    },
+
+    /// A connection to a node has changed its address.
+    AddressChange {
+        /// The entry associated with the connection that changed address.
+        entry: EstablishedEntry<'a, I, C>,
+        /// The former [`ConnectedPoint`].
+        old_endpoint: ConnectedPoint,
+        /// The new [`ConnectedPoint`].
+        new_endpoint: ConnectedPoint,
+    },
 }
 
 impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
@@ -334,13 +347,13 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
     }
 
     /// Polls the manager for events relating to the managed connections.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<Event<'a, I, O, H, TE, HE, C>> {
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<Event<'a, I, O, H, TE, HE, C>> {
         // Advance the content of `local_spawns`.
-        while let Poll::Ready(Some(_)) = Stream::poll_next(Pin::new(&mut self.local_spawns), cx) {}
+        while let Poll::Ready(Some(_)) = self.local_spawns.poll_next_unpin(cx) {}
 
         // Poll for the first event for which the manager still has a registered task, if any.
         let event = loop {
-            match Stream::poll_next(Pin::new(&mut self.events_rx), cx) {
+            match self.events_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
                     if self.tasks.contains_key(event.id()) { // (1)
                         break event
@@ -369,18 +382,34 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
                     let _ = task.remove();
                     Event::PendingConnectionError { id, error, handler }
                 }
-                task::Event::Error { id, error } => {
+                task::Event::AddressChange { id: _, new_address } => {
+                    let (new, old) = if let TaskState::Established(c) = &mut task.get_mut().state {
+                        let mut new_endpoint = c.endpoint.clone();
+                        new_endpoint.set_remote_address(new_address);
+                        let old_endpoint = mem::replace(&mut c.endpoint, new_endpoint.clone());
+                        (new_endpoint, old_endpoint)
+                    } else {
+                        unreachable!(
+                            "`Event::AddressChange` implies (2) occurred on that task and thus (3)."
+                        )
+                    };
+                    Event::AddressChange {
+                        entry: EstablishedEntry { task },
+                        old_endpoint: old,
+                        new_endpoint: new,
+                    }
+                }
+                task::Event::Closed { id, error } => {
                     let id = ConnectionId(id);
                     let task = task.remove();
                     match task.state {
                         TaskState::Established(connected) =>
-                            Event::ConnectionError { id, connected, error },
+                            Event::ConnectionClosed { id, connected, error },
                         TaskState::Pending => unreachable!(
-                            "`Event::Error` implies (2) occurred on that task and thus (3)."
+                            "`Event::Closed` implies (2) occurred on that task and thus (3)."
                             ),
                     }
                 }
-
             })
         } else {
             unreachable!("By (1)")
@@ -426,10 +455,11 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
     /// > task _may not be notified_ if sending the event fails due to
     /// > the connection handler not being ready at this time.
     pub fn notify_handler(&mut self, event: I) -> Result<(), I> {
-        let cmd = task::Command::NotifyHandler(event);
+        let cmd = task::Command::NotifyHandler(event); // (*)
         self.task.get_mut().sender.try_send(cmd)
             .map_err(|e| match e.into_inner() {
-                task::Command::NotifyHandler(event) => event
+                task::Command::NotifyHandler(event) => event,
+                _ => panic!("Unexpected command. Expected `NotifyHandler`") // see (*)
             })
     }
 
@@ -439,8 +469,24 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context) -> Poll<Result<(),()>> {
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(),()>> {
         self.task.get_mut().sender.poll_ready(cx).map_err(|_| ())
+    }
+
+    /// Sends a close command to the associated background task,
+    /// thus initiating a graceful active close of the connection.
+    ///
+    /// Has no effect if the connection is already closing.
+    ///
+    /// When the connection is ultimately closed, [`Event::ConnectionClosed`]
+    /// is emitted by [`Manager::poll`].
+    pub fn start_close(mut self) {
+        // Clone the sender so that we are guaranteed to have
+        // capacity for the close command (every sender gets a slot).
+        match self.task.get_mut().sender.clone().try_send(task::Command::Close) {
+            Ok(()) => {},
+            Err(e) => assert!(e.is_disconnected(), "No capacity for close command.")
+        }
     }
 
     /// Obtains information about the established connection.
@@ -451,16 +497,18 @@ impl<'a, I, C> EstablishedEntry<'a, I, C> {
         }
     }
 
-    /// Closes the connection represented by this entry,
-    /// returning the connection information.
-    pub fn close(self) -> Connected<C> {
+    /// Instantly removes the entry from the manager, dropping
+    /// the command channel to the background task of the connection,
+    /// which will thus drop the connection asap without an orderly
+    /// close or emitting another event.
+    pub fn remove(self) -> Connected<C> {
         match self.task.remove().state {
             TaskState::Established(c) => c,
             TaskState::Pending => unreachable!("By Entry::new()")
         }
     }
 
-    /// Returns the connection id.
+    /// Returns the connection ID.
     pub fn id(&self) -> ConnectionId {
         ConnectionId(*self.task.key())
     }
@@ -484,3 +532,4 @@ impl<'a, I, C> PendingEntry<'a, I, C> {
         self.task.remove();
     }
 }
+
