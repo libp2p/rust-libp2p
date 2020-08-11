@@ -35,13 +35,90 @@ use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc};
 use rand::{self, Rng};
-use std::{collections::HashSet, io, iter};
+use std::{collections::HashSet, io, iter, num::NonZeroU16};
 
 /// Exercises a simple ping protocol.
 #[test]
 fn ping_protocol() {
+    let ping = Ping("ping".to_string().into_bytes());
+    let pong = Pong("pong".to_string().into_bytes());
+
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
+
+    let (peer1_id, trans) = mk_transport();
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
+
+    let (peer2_id, trans) = mk_transport();
+    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id.clone());
+
+    let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
+
+    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+    Swarm::listen_on(&mut swarm1, addr).unwrap();
+
+    let expected_ping = ping.clone();
+    let expected_pong = pong.clone();
+
+    let peer1 = async move {
+        while let Some(_) = swarm1.next().now_or_never() {}
+
+        let l = Swarm::listeners(&swarm1).next().unwrap();
+        tx.send(l.clone()).await.unwrap();
+
+        loop {
+            match swarm1.next().await {
+                RequestResponseEvent::Message {
+                    peer,
+                    message: RequestResponseMessage::Request { request, channel }
+                } => {
+                    assert_eq!(&request, &expected_ping);
+                    assert_eq!(&peer, &peer2_id);
+                    swarm1.send_response(channel, pong.clone());
+                },
+                e => panic!("Peer1: Unexpected event: {:?}", e)
+            }
+        }
+    };
+
     let num_pings: u8 = rand::thread_rng().gen_range(1, 100);
 
+    let peer2 = async move {
+        let mut count = 0;
+        let addr = rx.next().await.unwrap();
+        swarm2.add_address(&peer1_id, addr.clone());
+        let mut req_id = swarm2.send_request(&peer1_id, ping.clone());
+
+        loop {
+            match swarm2.next().await {
+                RequestResponseEvent::Message {
+                    peer,
+                    message: RequestResponseMessage::Response { request_id, response }
+                } => {
+                    count += 1;
+                    assert_eq!(&response, &expected_pong);
+                    assert_eq!(&peer, &peer1_id);
+                    assert_eq!(req_id, request_id);
+                    if count >= num_pings {
+                        return
+                    } else {
+                        req_id = swarm2.send_request(&peer1_id, ping.clone());
+                    }
+                },
+                e => panic!("Peer2: Unexpected event: {:?}", e)
+            }
+        }
+    };
+
+    async_std::task::spawn(Box::pin(peer1));
+    let () = async_std::task::block_on(peer2);
+}
+
+/// Like `ping_protocol`, but throttling concurrent requests.
+#[test]
+fn ping_protocol_throttled() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
 
@@ -64,6 +141,10 @@ fn ping_protocol() {
     let expected_ping = ping.clone();
     let expected_pong = pong.clone();
 
+    let limit: u16 = rand::thread_rng().gen_range(1, 10);
+    swarm1.set_default_limit(NonZeroU16::new(limit).unwrap());
+    swarm2.set_default_limit(NonZeroU16::new(limit).unwrap());
+
     let peer1 = async move {
         while let Some(_) = swarm1.next().now_or_never() {}
 
@@ -84,6 +165,8 @@ fn ping_protocol() {
             }
         }
     };
+
+    let num_pings: u8 = rand::thread_rng().gen_range(1, 100);
 
     let peer2 = async move {
         let mut count = 0;
@@ -144,7 +227,7 @@ fn mk_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox), io::Error>) {
 
 #[derive(Debug, Clone)]
 struct PingProtocol();
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct PingCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Ping(Vec<u8>);
