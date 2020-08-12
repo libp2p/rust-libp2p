@@ -245,3 +245,30 @@ impl Default for OneShotHandlerConfig {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use futures::executor::block_on;
+    use futures::future::poll_fn;
+    use libp2p_core::upgrade::DeniedUpgrade;
+    use void::Void;
+
+    #[test]
+    fn do_not_keep_idle_connection_alive() {
+        let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
+            SubstreamProtocol::new(DeniedUpgrade{}),
+            Default::default(),
+        );
+
+        block_on(poll_fn(|cx| {
+            loop {
+                if let Poll::Pending = handler.poll(cx) {
+                    return Poll::Ready(())
+                }
+            }
+        }));
+
+        assert!(matches!(handler.connection_keep_alive(), KeepAlive::Until(_)));
+    }
+}
