@@ -2459,9 +2459,10 @@ impl NetworkBehaviour for Gossipsub {
     ) {
         match handler_event {
             HandlerEvent::PeerKind(kind) => {
-                //TODO: There is now a PeerKind::NotSupported. This happens if the peer doesn't
-                //support gossipsub.
-                if let Some(old_kind) = self.peer_protocols.get_mut(&propagation_source) {
+                if let PeerKind::NotSupported = kind {
+                    //we treat this peer as disconnected
+                    self.inject_disconnected(&propagation_source);
+                } else if let Some(old_kind) = self.peer_protocols.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
                     // inject_connected). All other PeerKind changes are ignored.
                     if let PeerKind::Floodsub = *old_kind {
