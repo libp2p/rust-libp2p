@@ -281,6 +281,44 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     },
 }
 
+impl<TInEvent, TOutEvent> NetworkBehaviourAction<TInEvent, TOutEvent> {
+    /// Map the handler event.
+    pub fn map_in<E>(self, f: impl FnOnce(TInEvent) -> E) -> NetworkBehaviourAction<E, TOutEvent> {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) =>
+                NetworkBehaviourAction::GenerateEvent(e),
+            NetworkBehaviourAction::DialAddress { address } =>
+                NetworkBehaviourAction::DialAddress { address },
+            NetworkBehaviourAction::DialPeer { peer_id, condition } =>
+                NetworkBehaviourAction::DialPeer { peer_id, condition },
+            NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event: f(event)
+                },
+            NetworkBehaviourAction::ReportObservedAddr { address } =>
+                NetworkBehaviourAction::ReportObservedAddr { address }
+        }
+    }
+
+    /// Map the event the swarm will return.
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<TInEvent, E> {
+        match self {
+            NetworkBehaviourAction::GenerateEvent(e) =>
+                NetworkBehaviourAction::GenerateEvent(f(e)),
+            NetworkBehaviourAction::DialAddress { address } =>
+                NetworkBehaviourAction::DialAddress { address },
+            NetworkBehaviourAction::DialPeer { peer_id, condition } =>
+                NetworkBehaviourAction::DialPeer { peer_id, condition },
+            NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
+                NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
+            NetworkBehaviourAction::ReportObservedAddr { address } =>
+                NetworkBehaviourAction::ReportObservedAddr { address }
+        }
+    }
+}
+
 /// The options w.r.t. which connection handlers to notify of an event.
 #[derive(Debug, Clone)]
 pub enum NotifyHandler {
