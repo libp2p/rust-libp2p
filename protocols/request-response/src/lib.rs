@@ -76,6 +76,9 @@ pub use codec::{RequestResponseCodec, ProtocolName};
 pub use handler::ProtocolSupport;
 pub use throttled::Throttled;
 
+use futures::{
+    channel::oneshot,
+};
 use handler::{
     RequestProtocol,
     RequestResponseHandler,
@@ -111,7 +114,7 @@ pub enum RequestResponseMessage<TRequest, TResponse> {
         /// The sender of the request who is awaiting a response.
         ///
         /// See [`RequestResponse::send_response`].
-        channel: ResponseChannel<TRequest, TResponse>,
+        channel: ResponseChannel<TResponse>,
     },
     /// A response message.
     Response {
@@ -189,12 +192,12 @@ pub enum InboundFailure {
 ///
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
-pub struct ResponseChannel<TRequest, TResponse> {
+pub struct ResponseChannel<TResponse> {
     peer: PeerId,
-    reply: scambio::Right<TRequest, TResponse>,
+    sender: oneshot::Sender<TResponse>,
 }
 
-impl<TRequest, TResponse> ResponseChannel<TRequest, TResponse> {
+impl<TResponse> ResponseChannel<TResponse> {
     /// Checks whether the response channel is still open, i.e.
     /// the `RequestResponse` behaviour is still waiting for a
     /// a response to be sent via [`RequestResponse::send_response`]
@@ -203,7 +206,7 @@ impl<TRequest, TResponse> ResponseChannel<TRequest, TResponse> {
     /// If the response channel is no longer open then the inbound
     /// request timed out waiting for the response.
     pub fn is_open(&self) -> bool {
-        !self.reply.is_closed()
+        !self.sender.is_canceled()
     }
 }
 
@@ -353,11 +356,11 @@ where
     ///
     /// The provided `ResponseChannel` is obtained from a
     /// [`RequestResponseMessage::Request`].
-    pub fn send_response(&mut self, mut ch: ResponseChannel<TCodec::Request, TCodec::Response>, rs: TCodec::Response) {
+    pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response) {
         // Fails only if the inbound upgrade timed out waiting for the response,
         // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
         // which in turn results in `RequestResponseEvent::InboundFailure`.
-        let _ = ch.reply.send_now(rs);
+        let _ = ch.sender.send(rs);
     }
 
     /// Adds a known address for a peer that can be used for
@@ -535,8 +538,8 @@ where
                     NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::Message { peer, message }));
             }
-            RequestResponseHandlerEvent::Request { request, reply } => {
-                let channel = ResponseChannel { peer: peer.clone(), reply };
+            RequestResponseHandlerEvent::Request { request, sender } => {
+                let channel = ResponseChannel { peer: peer.clone(), sender };
                 let message = RequestResponseMessage::Request { request, channel };
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(

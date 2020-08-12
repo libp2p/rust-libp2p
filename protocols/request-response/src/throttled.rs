@@ -172,7 +172,7 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<C::Request, C::Response>, rs: C::Response) {
+    pub fn send_response(&mut self, ch: ResponseChannel<C::Response>, rs: C::Response) {
         if let Some(limit) = self.limits.get_mut(&ch.peer) {
             limit.recv_budget += 1;
             debug_assert!(limit.recv_budget <= limit.maximum.get())
