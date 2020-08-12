@@ -72,7 +72,7 @@ where
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             max_dial_negotiated: 8,
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Until(Instant::now() + config.keep_alive_timeout),
             config,
         }
     }
