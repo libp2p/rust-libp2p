@@ -70,9 +70,11 @@
 
 pub mod codec;
 pub mod handler;
+pub mod throttled;
 
 pub use codec::{RequestResponseCodec, ProtocolName};
 pub use handler::ProtocolSupport;
+pub use throttled::Throttled;
 
 use futures::{
     channel::oneshot,
@@ -307,6 +309,11 @@ where
             pending_responses: HashMap::new(),
             addresses: HashMap::new(),
         }
+    }
+
+    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
+    pub fn throttled(self) -> Throttled<TCodec> {
+        Throttled::new(self)
     }
 
     /// Initiates sending a request.
@@ -604,4 +611,3 @@ struct Connection {
     id: ConnectionId,
     address: Option<Multiaddr>,
 }
-

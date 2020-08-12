@@ -133,6 +133,19 @@ impl ConnectedPoint {
         }
     }
 
+    /// Returns the address of the remote stored in this struct.
+    ///
+    /// For `Dialer`, this returns `address`. For `Listener`, this returns `send_back_addr`.
+    ///
+    /// Note that the remote node might not be listening on this address and hence the address might
+    /// not be usable to establish new connections.
+    pub fn get_remote_address(&self) -> &Multiaddr {
+        match self {
+            ConnectedPoint::Dialer { address } => address,
+            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
+        }
+    }
+
     /// Modifies the address of the remote stored in this struct.
     ///
     /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.

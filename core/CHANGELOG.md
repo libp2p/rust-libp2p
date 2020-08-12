@@ -11,6 +11,9 @@
   a peer takes effect immediately without an orderly connection shutdown.
   See [PR 1619](https://github.com/libp2p/rust-libp2p/pull/1619) for further details.
 
+- Add `ConnectedPoint::get_remote_address`
+  ([PR 1649](https://github.com/libp2p/rust-libp2p/pull/1649)).
+
 # 0.20.1 [2020-07-17]
 
 - Update ed25519-dalek dependency.
