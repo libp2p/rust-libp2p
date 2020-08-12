@@ -21,6 +21,7 @@
 //! Error types that can result from gossipsub.
 
 use libp2p_core::identity::error::SigningError;
+use libp2p_core::upgrade::ProtocolError;
 use std::fmt;
 
 /// Error associated with publishing a gossipsub message.
@@ -49,10 +50,30 @@ pub enum GossipsubHandlerError {
     MaxOutboundSubstreams,
     /// The message exceeds the maximum transmission size.
     MaxTransmissionSize,
-    /// The message is invalid.
-    InvalidMessage(&'static str),
+    /// Protocol negotiation timeout.
+    NegotiationTimeout,
+    /// Protocol negotiation failed.
+    NegotiationProtocolError(ProtocolError),
     /// IO error.
     Io(std::io::Error),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ValidationError {
+    /// The message has an invalid signature,
+    InvalidSignature,
+    /// The sequence number was empty, expected a value.
+    EmptySequenceNumber,
+    /// The sequence number was the incorrect size
+    InvalidSequenceNumber,
+    /// The PeerId was invalid
+    InvalidPeerId,
+    /// Signature existed when validation has been sent to `Anonymous`.
+    SignaturePresent,
+    /// Sequence number existed when validation has been sent to `Anonymous`.
+    SequenceNumberPresent,
+    /// Message source existed when validation has been sent to `Anonymous`.
+    MessageSourcePresent,
 }
 
 impl From<std::io::Error> for GossipsubHandlerError {

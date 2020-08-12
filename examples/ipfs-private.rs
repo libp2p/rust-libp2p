@@ -189,7 +189,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Called when `gossipsub` produces an event.
         fn inject_event(&mut self, event: GossipsubEvent) {
             match event {
-                GossipsubEvent::Message(peer_id, id, message) => println!(
+                GossipsubEvent::Message {
+                    propagation_source: peer_id,
+                    message_id: id,
+                    message
+                } => println!(
                     "Got message: {} with id: {} from peer: {:?}",
                     String::from_utf8_lossy(&message.data),
                     id,

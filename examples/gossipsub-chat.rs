@@ -49,7 +49,7 @@
 use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;
-use libp2p::gossipsub::protocol::MessageId;
+use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
 };
@@ -142,7 +142,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(gossip_event)) => match gossip_event {
-                    GossipsubEvent::Message(peer_id, id, message) => println!(
+                    GossipsubEvent::Message{
+                        propagation_source: peer_id,
+                        message_id: id,
+                        message
+                    } => println!(
                         "Got message: {} with id: {} from peer: {:?}",
                         String::from_utf8_lossy(&message.data),
                         id,

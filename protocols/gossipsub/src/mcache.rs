@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{GossipsubMessage, MessageId};
 use crate::topic::TopicHash;
+use crate::types::{GossipsubMessage, MessageId};
 use libp2p_core::PeerId;
 use log::warn;
 use std::{collections::HashMap, fmt};

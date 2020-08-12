@@ -1,4 +1,5 @@
-use crate::peer_score::RejectMsg;
+use crate::error::ValidationError;
+use crate::peer_score::RejectReason;
 use crate::MessageId;
 use libp2p_core::PeerId;
 use rand::seq::SliceRandom;
@@ -36,15 +37,14 @@ impl GossipPromises {
         self.promises.remove(message_id);
     }
 
-    pub fn reject_message(&mut self, message_id: &MessageId, reason: &RejectMsg) {
+    pub fn reject_message(&mut self, message_id: &MessageId, reason: &RejectReason) {
         // A message got rejected, so we can stop tracking promises and let the score penalty apply
         // from invalid message delivery.
         // We do take exception and apply promise penalty regardless in the following cases, where
         // the peer delivered an obviously invalid message.
         match reason {
-            RejectMsg::MissingSignature => return,
-            RejectMsg::InvalidSignature => return,
-            RejectMsg::SelfOrigin => return,
+            RejectReason::ProtocolValidationError(ValidationError::InvalidSignature) => return,
+            RejectReason::SelfOrigin => return,
             _ => self.promises.remove(message_id),
         };
     }

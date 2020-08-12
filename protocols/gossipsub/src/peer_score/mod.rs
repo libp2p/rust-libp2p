@@ -1,14 +1,15 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
+use crate::time_cache::TimeCache;
 use crate::{GossipsubMessage, MessageId, TopicHash};
 use libp2p_core::PeerId;
 use log::warn;
-use lru_time_cache::LruCache;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 mod params;
+use crate::error::ValidationError;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
@@ -27,7 +28,7 @@ pub(crate) struct PeerScore {
     /// Tracking peers per IP.
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
     /// Message delivery tracking. This is a time-cache of `DeliveryRecord`s.
-    deliveries: LruCache<MessageId, DeliveryRecord>,
+    deliveries: TimeCache<MessageId, DeliveryRecord>,
     /// The message id function.
     msg_id: fn(&GossipsubMessage) -> MessageId,
 }
@@ -162,8 +163,6 @@ enum DeliveryStatus {
     Invalid,
     /// Instructed by the validator to ignore the message.
     Ignored,
-    /// Can't tell if the message is valid because validation was throttled.
-    Throttled,
 }
 
 impl Default for DeliveryRecord {
@@ -184,7 +183,7 @@ impl PeerScore {
             params,
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
-            deliveries: LruCache::with_expiry_duration(Duration::from_secs(TIME_CACHE_DURATION)),
+            deliveries: TimeCache::new(Duration::from_secs(TIME_CACHE_DURATION)),
             msg_id,
         }
     }
@@ -533,71 +532,50 @@ impl PeerScore {
         }
     }
 
-    pub fn reject_message(&mut self, from: &PeerId, msg: &GossipsubMessage, reason: RejectMsg) {
+    pub fn reject_message(&mut self, from: &PeerId, msg: &GossipsubMessage, reason: RejectReason) {
         match reason {
             // these messages are not tracked, but the peer is penalized as they are invalid
-            RejectMsg::MissingSignature => {}
-            RejectMsg::InvalidSignature => {}
-            RejectMsg::SelfOrigin => {
+            RejectReason::ProtocolValidationError(_) | RejectReason::SelfOrigin => {
                 self.mark_invalid_message_delivery(from, msg);
                 return;
             }
-            RejectMsg::BlacklistedPeer => {}
-            RejectMsg::BlackListenSource => {
-                return;
-            }
-            RejectMsg::ValidationQueueFull => {
-                // the message was rejected before it entered the validation pipeline;
-                // we don't know if this message has a valid signature, and thus we also don't know if
-                // it has a valid message ID; all we can do is ignore it.
+            // we ignore those messages, so do nothing.
+            RejectReason::BlacklistedPeer | RejectReason::BlackListenSource => {
                 return;
             }
             _ => {} // the rest are handled after record creation
         }
 
-        let mut record = self
-            .deliveries
-            .remove(&(self.msg_id)(msg))
-            .unwrap_or_else(|| DeliveryRecord::default());
-        // this should be the first delivery trace
-        if record.status != DeliveryStatus::Unknown {
-            warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
-            self.deliveries.insert((self.msg_id)(msg), record);
-            return;
-        }
+        let peers: Vec<_> = {
+            let mut record = self
+                .deliveries
+                .entry((self.msg_id)(msg))
+                .or_insert_with(|| DeliveryRecord::default());
 
-        match reason {
-            RejectMsg::ValidationThrottled => {
-                // if we reject with "validation throttled" we don't penalize the peer(s) that forward it
-                // because we don't know if it was valid.
-                record.status = DeliveryStatus::Throttled;
-                // release the delivery time tracking map to free some memory early
-                record.peers.clear();
-                self.deliveries.insert((self.msg_id)(msg), record);
+            // this should be the first delivery trace
+            if record.status != DeliveryStatus::Unknown {
+                warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
                 return;
             }
-            RejectMsg::ValidationIgnored => {
+
+            if let RejectReason::ValidationIgnored = reason {
                 // we were explicitly instructed by the validator to ignore the message but not penalize
                 // the peer
                 record.status = DeliveryStatus::Ignored;
                 record.peers.clear();
-                self.deliveries.insert((self.msg_id)(msg), record);
                 return;
             }
-            _ => {}
-        }
 
-        // mark the message as invalid and penalize peers that have already forwarded it.
-        record.status = DeliveryStatus::Invalid;
+            // mark the message as invalid and penalize peers that have already forwarded it.
+            record.status = DeliveryStatus::Invalid;
+            // release the delivery time tracking map to free some memory early
+            record.peers.drain().collect()
+        };
 
         self.mark_invalid_message_delivery(from, msg);
-        for peer_id in record.peers.iter() {
+        for peer_id in peers.iter() {
             self.mark_invalid_message_delivery(peer_id, msg)
         }
-
-        // release the delivery time tracking map to free some memory early
-        record.peers.clear();
-        self.deliveries.insert((self.msg_id)(msg), record);
     }
 
     pub fn duplicated_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
@@ -627,8 +605,8 @@ impl PeerScore {
                 // we no longer track delivery time
                 self.mark_invalid_message_delivery(from, msg);
             }
-            DeliveryStatus::Throttled | DeliveryStatus::Ignored => {
-                // the message was throttled or ignored; do nothing (we don't know if it was valid)
+            DeliveryStatus::Ignored => {
+                // the message was ignored; do nothing (we don't know if it was valid)
             }
         }
     }
@@ -754,16 +732,13 @@ impl PeerScore {
     }
 }
 
-//TODO do we need all variants? If yes some of them are never used yet (missing something).
+//TODO implement blacklisting
 #[derive(Clone, Copy)]
-pub(crate) enum RejectMsg {
-    MissingSignature,
-    InvalidSignature,
+pub(crate) enum RejectReason {
+    ProtocolValidationError(ValidationError),
     SelfOrigin,
     BlacklistedPeer,
     BlackListenSource,
-    ValidationQueueFull,
-    ValidationThrottled,
     ValidationIgnored,
     ValidationFailed,
 }

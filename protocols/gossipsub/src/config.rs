@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use libp2p_core::PeerId;
 
-use crate::protocol::{GossipsubMessage, MessageId};
+use crate::types::{GossipsubMessage, MessageId};
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -204,9 +204,12 @@ pub struct GossipsubConfig {
     /// If the message is not received within this window, a broken promise is declared and
     /// the router may apply behavioural penalties. The default is 3 seconds.
     iwant_followup_time: Duration,
+
+    /// Enable support for flooodsub peers. Default false.
+    support_floodsub: bool,
 }
 
-//TODO should we use a macro for getters + the builder?
+//TODO use a macro for getters + the builder
 impl GossipsubConfig {
     //all the getters
 
@@ -425,6 +428,11 @@ impl GossipsubConfig {
     pub fn iwant_followup_time(&self) -> Duration {
         self.iwant_followup_time
     }
+
+    /// Enable support for flooodsub peers. Default false.
+    pub fn support_floodsub(&self) -> bool {
+        self.support_floodsub
+    }
 }
 
 impl Default for GossipsubConfig {
@@ -498,6 +506,7 @@ impl GossipsubConfigBuilder {
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
+                support_floodsub: false,
             },
         }
     }
@@ -739,6 +748,12 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    /// Enable support for flooodsub peers.
+    pub fn support_floodsub(&mut self) -> &mut Self {
+        self.config.support_floodsub = true;
+        self
+    }
+
     /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
     pub fn build(&self) -> Result<GossipsubConfig, &str> {
         //check all constraints on config
@@ -796,6 +811,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
+        let _ = builder.field("support_floodsub", &self.support_floodsub);
         builder.finish()
     }
 }
