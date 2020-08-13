@@ -72,7 +72,7 @@ where
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             max_dial_negotiated: 8,
-            keep_alive: KeepAlive::Until(Instant::now() + config.keep_alive_timeout),
+            keep_alive: KeepAlive::Yes,
             config,
         }
     }
@@ -161,11 +161,6 @@ where
         _: Self::OutboundOpenInfo,
     ) {
         self.dial_negotiated -= 1;
-
-        if self.dial_negotiated == 0 && self.dial_queue.is_empty() {
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
-        }
-
         self.events_out.push(out.into());
     }
 
@@ -221,6 +216,10 @@ where
             }
         } else {
             self.dial_queue.shrink_to_fit();
+
+            if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
+                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+            }
         }
 
         Poll::Pending
