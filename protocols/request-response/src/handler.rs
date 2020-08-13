@@ -110,6 +110,7 @@ where
 
 /// The events emitted by the [`RequestResponseHandler`].
 #[doc(hidden)]
+#[derive(Debug)]
 pub enum RequestResponseHandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec

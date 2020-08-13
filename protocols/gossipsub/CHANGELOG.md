@@ -1,5 +1,7 @@
 # 0.21.0 [unreleased]
 
+- Add message signing and extended privacy/validation configurations. [PR 1583](https://github.com/libp2p/rust-libp2p/pull/1583).
+
 - `Debug` instance for `Gossipsub`. [PR 1673](https://github.com/libp2p/rust-libp2p/pull/1673).
 
 - Bump `libp2p-core` and `libp2p-swarm` dependency.
