@@ -13,6 +13,9 @@ callback.
 
 - Update the `libp2p-core` dependency to `0.21`, fixing [1584](https://github.com/libp2p/rust-libp2p/issues/1584).
 
+- Fix connections being kept alive by `OneShotHandler` when not handling any
+  requests [PR 1698](https://github.com/libp2p/rust-libp2p/pull/1698).
+
 # 0.20.1 [2020-07-08]
 
 - Documentation updates.
