@@ -221,6 +221,25 @@ impl Gossipsub {
         }
     }
 
+    /// Lists the hashes of the topics we are currently subscribed to.
+    pub fn topics(&self) -> impl Iterator<Item = &TopicHash> {
+        self.mesh.keys()
+    }
+
+    /// Lists peers for a certain topic hash.
+    pub fn peers(&self, topic_hash: &TopicHash) -> impl Iterator<Item = &PeerId> {
+        self.mesh.get(topic_hash).into_iter().map(|x| x.into_iter()).flatten()
+    }
+
+    /// Lists all peers for any topic.
+    pub fn all_peers(&self) -> impl Iterator<Item = &PeerId> {
+        let mut res = BTreeSet::new();
+        for peers in self.mesh.values() {
+            res.extend(peers);
+        }
+        res.into_iter()
+    }
+
     /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
@@ -1508,10 +1527,10 @@ impl fmt::Debug for Gossipsub {
 impl fmt::Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PublishConfig::Signing { author, .. } => f.write_fmt(format_args!("PublishConfig::Signing({})", author)), 
-            PublishConfig::Author(author) => f.write_fmt(format_args!("PublishConfig::Author({})", author)), 
-            PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")), 
-            PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")), 
+            PublishConfig::Signing { author, .. } => f.write_fmt(format_args!("PublishConfig::Signing({})", author)),
+            PublishConfig::Author(author) => f.write_fmt(format_args!("PublishConfig::Author({})", author)),
+            PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
+            PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
         }
     }
 }
