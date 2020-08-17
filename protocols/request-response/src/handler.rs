@@ -313,7 +313,7 @@ where
             self.outbound.shrink_to_fit();
         }
 
-        if self.inbound.is_empty() {
+        if self.inbound.is_empty() && self.keep_alive.is_yes() {
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.

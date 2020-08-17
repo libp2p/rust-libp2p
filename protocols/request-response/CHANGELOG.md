@@ -1,5 +1,7 @@
 # 0.2.0 // unreleased
 
+- Fixed connection keep-alive, permitting connections to close due
+  to inactivity.
 - Added `RequestResponse::throttled` to wrap the behaviour into one that
   enforces limits on inbound and outbound requests per peer. The limits
   have to be known upfront by all nodes.

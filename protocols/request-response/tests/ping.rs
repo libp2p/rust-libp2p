@@ -356,8 +356,11 @@ impl RequestResponseCodec for PingCodec {
         T: AsyncRead + Unpin + Send
     {
         read_one(io, 1024)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .map_ok(Ping)
+            .map(|res| match res {
+                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
+                Ok(vec) => Ok(Ping(vec))
+            })
             .await
     }
 
@@ -367,8 +370,11 @@ impl RequestResponseCodec for PingCodec {
         T: AsyncRead + Unpin + Send
     {
         read_one(io, 1024)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .map_ok(Pong)
+            .map(|res| match res {
+                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
+                Ok(vec) => Ok(Pong(vec))
+            })
             .await
     }
 
