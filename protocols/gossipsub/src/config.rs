@@ -457,6 +457,12 @@ impl Default for GossipsubConfigBuilder {
     }
 }
 
+impl From<GossipsubConfig> for GossipsubConfigBuilder {
+    fn from(config: GossipsubConfig) -> Self {
+        GossipsubConfigBuilder { config }
+    }
+}
+
 impl GossipsubConfigBuilder {
     // set default values
     pub fn new() -> GossipsubConfigBuilder {

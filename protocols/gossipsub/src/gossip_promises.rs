@@ -2,6 +2,7 @@ use crate::error::ValidationError;
 use crate::peer_score::RejectReason;
 use crate::MessageId;
 use libp2p_core::PeerId;
+use log::debug;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
@@ -56,11 +57,15 @@ impl GossipPromises {
     pub fn get_broken_promises(&mut self) -> HashMap<PeerId, usize> {
         let now = Instant::now();
         let mut result = HashMap::new();
-        self.promises.retain(|_, peers| {
+        self.promises.retain(|msg, peers| {
             peers.retain(|peer_id, expires| {
                 if *expires < now {
                     let count = result.entry(peer_id.clone()).or_insert(0);
                     *count += 1;
+                    debug!(
+                        "The peer {} broke the promise to deliver message {} in time!",
+                        peer_id, msg
+                    );
                     false
                 } else {
                     true

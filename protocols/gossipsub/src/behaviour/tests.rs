@@ -3186,7 +3186,7 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //message m1 gets validated
-        gs.validate_message(&id(&m1), &peers[0], MessageAcceptance::Accept);
+        gs.report_message_validation_result(&id(&m1), &peers[0], MessageAcceptance::Accept);
 
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
     }
@@ -3348,7 +3348,7 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //message m1 gets ignored
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Ignore,
@@ -3404,7 +3404,7 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //message m1 gets rejected
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
@@ -3467,7 +3467,7 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[1]), 0.0);
 
         //message m1 gets rejected
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
@@ -3534,17 +3534,17 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //messages gets rejected
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
         );
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m2),
             &peers[0],
             MessageAcceptance::Reject,
         );
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m3),
             &peers[0],
             MessageAcceptance::Reject,
@@ -3604,7 +3604,7 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //message m1 gets rejected
-        gs.validate_message(
+        gs.report_message_validation_result(
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,

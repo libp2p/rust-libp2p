@@ -55,7 +55,6 @@ use crate::handler::{GossipsubHandler, HandlerEvent};
 use crate::mcache::MessageCache;
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
-use crate::rpc_proto;
 use crate::time_cache::DuplicateCache;
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::types::{
@@ -63,6 +62,7 @@ use crate::types::{
     MessageId, PeerInfo,
 };
 use crate::types::{GossipsubRpc, PeerKind};
+use crate::{rpc_proto, TopicScoreParams};
 use std::cmp::Ordering::Equal;
 
 mod tests;
@@ -344,6 +344,7 @@ impl BackoffStorage {
     }
 }
 
+#[derive(Debug)]
 pub enum MessageAcceptance {
     /// The message is considered valid, and it should be delivered and forwarded to the network
     Accept,
@@ -686,9 +687,10 @@ impl Gossipsub {
     }
 
     /// This function should be called when `config.validate_messages()` is `true` after the
-    /// message got validated by the caller. Messages are stored in the ['Memcache'] and validation
-    /// is expected to be fast enough that the messages should still exist in the cache.There are
-    /// three possible validation outcomes and the outcome is given in acceptance.
+    /// message got validated by the caller. Messages are stored in the
+    /// ['Memcache'] and validation is expected to be fast enough that the messages should still
+    /// exist in the cache. There are three possible validation outcomes and the outcome is given
+    /// in acceptance.
     ///
     /// If acceptance = Accept the message will get propagated to the network. The
     /// `propagation_source` parameter indicates who the message was received by and will not
@@ -704,7 +706,7 @@ impl Gossipsub {
     /// in the cache anymore.
     ///
     /// This should only be called once per message.
-    pub fn validate_message(
+    pub fn report_message_validation_result(
         &mut self,
         message_id: &MessageId,
         propagation_source: &PeerId,
@@ -730,14 +732,7 @@ impl Gossipsub {
         };
 
         if let Some(message) = self.mcache.remove(message_id) {
-            //tell peer_score and gossip promises about reject
-            Self::reject_message(
-                &mut self.peer_score,
-                propagation_source,
-                &message,
-                message_id,
-                reject_reason,
-            );
+            //tell peer_score about reject
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.reject_message(propagation_source, &message, reject_reason);
             }
@@ -780,6 +775,12 @@ impl Gossipsub {
         let peer_score = PeerScore::new(params, self.config.message_id_fn());
         self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
         Ok(())
+    }
+
+    pub fn set_topic_params(&mut self, topic_hash: TopicHash, params: TopicScoreParams) {
+        if let Some((peer_score, ..)) = &mut self.peer_score {
+            peer_score.set_topic_params(topic_hash, params);
+        }
     }
 
     /// Sets the application specific score for a peer. Returns true if scoring is active and
@@ -1315,20 +1316,6 @@ impl Gossipsub {
         }
     }
 
-    /// informs peer score and gossip_promises about a rejected message
-    fn reject_message(
-        peer_score: &mut Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
-        from: &PeerId,
-        msg: &GossipsubMessage,
-        id: &MessageId,
-        reason: RejectReason,
-    ) {
-        if let Some((peer_score, _, _, gossip_promises)) = peer_score {
-            peer_score.reject_message(from, &msg, reason);
-            gossip_promises.reject_message(id, &reason);
-        }
-    }
-
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(&mut self, mut msg: GossipsubMessage, propagation_source: &PeerId) {
@@ -1348,18 +1335,21 @@ impl Gossipsub {
 
         // reject messages claiming to be from ourselves but not locally published
         if let Some(own_id) = self.publish_config.get_own_id() {
-            if own_id != propagation_source && msg.source.as_ref().map_or(false, |s| s == own_id) {
+            //TODO remove this "hack" as soon as lighthouse uses Anonymous instead of this fixed
+            // PeerId.
+            let lighthouse_anonymous_id = PeerId::from_bytes(vec![0, 1, 0]).expect("Valid peer id");
+            if own_id != &lighthouse_anonymous_id
+                && own_id != propagation_source
+                && msg.source.as_ref().map_or(false, |s| s == own_id)
+            {
                 debug!(
-                    "Dropping message claiming to be from self but forwarded from {:?}",
-                    propagation_source
+                    "Dropping message {:?} claiming to be from self but forwarded from {:?}",
+                    msg_id, propagation_source
                 );
-                Self::reject_message(
-                    &mut self.peer_score,
-                    propagation_source,
-                    &msg,
-                    &msg_id,
-                    RejectReason::SelfOrigin,
-                );
+                if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
+                    peer_score.reject_message(propagation_source, &msg, RejectReason::SelfOrigin);
+                    gossip_promises.reject_message(&msg_id, &RejectReason::SelfOrigin);
+                }
                 return;
             }
         }
@@ -1374,8 +1364,10 @@ impl Gossipsub {
         }
 
         //tells score that message arrived (but is maybe not fully validated yet)
-        if let Some((peer_score, ..)) = &mut self.peer_score {
+        //Consider message as delivered for gossip promises
+        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             peer_score.validate_message(propagation_source, &msg);
+            gossip_promises.deliver_message(&msg_id);
         }
 
         self.mcache.put(msg.clone());
@@ -1885,6 +1877,7 @@ impl Gossipsub {
         self.mcache.shift();
 
         debug!("Completed Heartbeat");
+        debug!("peer_scores: {:?}", scores);
     }
 
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
@@ -2032,12 +2025,11 @@ impl Gossipsub {
     fn forward_msg(&mut self, message: GossipsubMessage, source: Option<&PeerId>) -> bool {
         let msg_id = (self.config.message_id_fn())(&message);
 
-        //message is fully validated, inform peer_score and gossip promises
+        //message is fully validated inform peer_score
         if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
             if let Some(peer) = source {
                 peer_score.deliver_message(peer, &message);
             }
-            gossip_promises.deliver_message(&msg_id);
         }
 
         debug!("Forwarding message: {:?}", msg_id);
@@ -2058,7 +2050,7 @@ impl Gossipsub {
         //add explicit peers
         for p in &self.explicit_peers {
             if let Some(topics) = self.peer_topics.get(p) {
-                if message.topics.iter().any(|t| topics.contains(t)) {
+                if Some(p) != source && message.topics.iter().any(|t| topics.contains(t)) {
                     recipient_peers.insert(p.clone());
                 }
             }
@@ -2475,10 +2467,12 @@ impl NetworkBehaviour for Gossipsub {
                 invalid_messages,
             } => {
                 // Handle any invalid messages from this peer
-                if let Some((peer_score, ..)) = &mut self.peer_score {
+                if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+                    let mut id_fn = self.config.message_id_fn();
                     for (_message, validation_error) in invalid_messages {
                         let reason = RejectReason::ProtocolValidationError(validation_error);
                         peer_score.reject_message(&propagation_source, &_message, reason);
+                        gossip_promises.reject_message(&id_fn(&_message), &reason);
                     }
                 }
 

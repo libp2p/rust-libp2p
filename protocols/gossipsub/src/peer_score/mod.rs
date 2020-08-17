@@ -3,7 +3,7 @@
 use crate::time_cache::TimeCache;
 use crate::{GossipsubMessage, MessageId, TopicHash};
 use libp2p_core::PeerId;
-use log::warn;
+use log::{debug, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
@@ -217,9 +217,7 @@ impl PeerScore {
                             topic_params.time_in_mesh_cap
                         }
                     };
-                    dbg!(topic_score);
                     topic_score += p1 * topic_params.time_in_mesh_weight;
-                    dbg!(topic_score);
                 }
 
                 // P2: first message deliveries
@@ -232,7 +230,6 @@ impl PeerScore {
                     }
                 };
                 topic_score += p2 * topic_params.first_message_deliveries_weight;
-                dbg!(topic_score);
 
                 // P3: mesh message deliveries
                 if topic_stats.mesh_message_deliveries_active {
@@ -243,9 +240,16 @@ impl PeerScore {
                             - topic_stats.mesh_message_deliveries;
                         let p3 = deficit * deficit;
                         topic_score += p3 * topic_params.mesh_message_deliveries_weight;
+                        debug!(
+                            "The peer {} has a mesh message delivieries deficit of {} in topic\
+                         {} and will get penalized by {}",
+                            peer_id,
+                            deficit,
+                            topic,
+                            p3 * topic_params.mesh_message_deliveries_weight
+                        );
                     }
                 }
-                dbg!(topic_score);
 
                 // P3b:
                 // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so this detracts.
@@ -257,11 +261,9 @@ impl PeerScore {
                 let p4 =
                     topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
                 topic_score += p4 * topic_params.invalid_message_deliveries_weight;
-                dbg!(topic_score);
 
                 // update score, mixing with topic weight
                 score += topic_score * topic_params.topic_weight;
-                dbg!(topic_score);
             }
         }
 
@@ -269,8 +271,6 @@ impl PeerScore {
         if self.params.topic_score_cap > 0f64 && score > self.params.topic_score_cap {
             score = self.params.topic_score_cap;
         }
-        dbg!("after");
-        dbg!(score);
 
         // P5: application-specific score
         let p5 = peer_stats.application_score;
@@ -290,6 +290,11 @@ impl PeerScore {
                 if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
+                    debug!(
+                        "The peer {} gets penalized because of too many peers with the ip {}. \
+                        The surplus is {}. ",
+                        peer_id, ip, surplus
+                    );
                     score += p6 * self.params.ip_colocation_factor_weight;
                 }
             }
@@ -303,6 +308,10 @@ impl PeerScore {
 
     pub fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
+            debug!(
+                "Behavioral penalty for peer {}, count = {}.",
+                peer_id, count
+            );
             peer_stats.behaviour_penalty += count as f64;
         }
     }
@@ -622,6 +631,10 @@ impl PeerScore {
         }
     }
 
+    pub fn set_topic_params(&mut self, topic_hash: TopicHash, params: TopicScoreParams) {
+        self.params.topics.insert(topic_hash, params);
+    }
+
     /// Increments the "invalid message deliveries" counter for all scored topics the message
     /// is published in.
     fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, msg: &GossipsubMessage) {
@@ -630,6 +643,11 @@ impl PeerScore {
                 if let Some(topic_stats) =
                     peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
                 {
+                    debug!(
+                        "Peer {} delivered an invalid messag in topic {} and gets penalized \
+                    for it",
+                        peer_id, topic_hash
+                    );
                     topic_stats.invalid_message_deliveries += 1f64;
                 }
             }
