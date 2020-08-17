@@ -36,7 +36,7 @@ use crate::upgrade::{
     UpgradeInfoSend
 };
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{ConnectedPoint, PeerId, upgrade::ProtocolName};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, upgrade::ProtocolName};
 use rand::Rng;
 use std::{
     collections::{HashMap, HashSet},
@@ -135,6 +135,12 @@ where
         }
     }
 
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        for h in self.handlers.values_mut() {
+            h.inject_address_change(addr)
+        }
+    }
+
     fn inject_dial_upgrade_error (
         &mut self,
         (key, arg): Self::OutboundOpenInfo,
@@ -145,6 +151,13 @@ where
         } else {
             log::error!("inject_dial_upgrade_error: no handler for protocol")
         }
+    }
+
+    fn inject_listen_upgrade_error(
+        &mut self,
+        _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
+    ) {
+        // TODO: ???
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
