@@ -706,7 +706,7 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`KademliaEvent::QueryResult{QueryResult::AddProvider}`].
+    /// reported via [`KademliaEvent::QueryResult{QueryResult::StartProviding}`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         self.store.add_provider(record)?;

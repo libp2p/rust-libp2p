@@ -1,5 +1,8 @@
 # 0.21.0 [unreleased]
 
+- Add `transport::Builder::multiplex_ext` for further customisation during
+`StreamMuxer` creation. [PR 1691](https://github.com/libp2p/rust-libp2p/pull/1691).
+
 - Refactoring of connection close and disconnect behaviour.  In particular, the former
   `NetworkEvent::ConnectionError` is now `NetworkEvent::ConnectionClosed` with the `error`
   field being an `Option` and `None` indicating an active (but not necessarily orderly) close.
