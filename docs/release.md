@@ -24,21 +24,23 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 
 2. Once merged, create and push a tag for each updated crate.
 
-    ```
-    $ tag="<CRATE-NAME>-X.Y.Z"
+    ```bash
+    cd $CRATE-PATH
+    tag="$(sed -En 's/^name = \"(.*)\"$/\1/p' Cargo.toml)-$(sed -En 's/^version = \"(.*)\"$/\1/p' Cargo.toml)"
     # Use `-s` for a GPG signed tag or `-a` for an annotated tag.
-    $ git tag -s "${tag}" -m "${tag}"
-    $ git push origin "${tag}"
+    git tag -s "${tag}" -m "${tag}"
+    git push origin "${tag}"
     ```
     
 3. Create and push a tag for the top level `libp2p` crate, if it is being
    released.
 
-    ```
+    ```bash
+    cd $REPOSITORY-ROOT
     # Note the additional `v` here.
-    $ tag="vX.Y.Z"
-    $ git tag -s "${tag}" -m "${tag}"
-    $ git push origin "${tag}"
+    tag="v$(sed -En 's/^version = \"(.*)\"$/\1/p' Cargo.toml)"
+    git tag -s "${tag}" -m "${tag}"
+    git push origin "${tag}"
     ```
     
 4. Publish each tagged crate to crates.io. `cargo` assists in getting the order
