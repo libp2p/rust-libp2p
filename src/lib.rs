@@ -195,8 +195,8 @@ pub use libp2p_gossipsub as gossipsub;
 #[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
 #[doc(inline)]
 pub use libp2p_mplex as mplex;
-#[cfg(feature = "mdns")]
-#[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
+#[cfg(any(feature = "mdns-async-std", feature = "mdns-tokio"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "mdns-async-std", feature = "mdns-tokio"))))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;

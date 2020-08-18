@@ -70,11 +70,13 @@
 
 pub mod codec;
 pub mod handler;
-pub mod throttled;
+
+// Disabled until #1706 is fixed:
+// pub mod throttled;
+// pub use throttled::Throttled;
 
 pub use codec::{RequestResponseCodec, ProtocolName};
 pub use handler::ProtocolSupport;
-pub use throttled::Throttled;
 
 use futures::{
     channel::oneshot,
@@ -311,10 +313,11 @@ where
         }
     }
 
-    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
-    pub fn throttled(self) -> Throttled<TCodec> {
-        Throttled::new(self)
-    }
+// Disabled until #1706 is fixed.
+//    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
+//    pub fn throttled(self) -> Throttled<TCodec> {
+//        Throttled::new(self)
+//    }
 
     /// Initiates sending a request.
     ///
