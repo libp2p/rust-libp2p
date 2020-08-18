@@ -26,7 +26,7 @@ use crate::protocols_handler::{
     ProtocolsHandlerEvent,
     ProtocolsHandlerUpgrErr
 };
-
+use libp2p_core::Multiaddr;
 use std::task::{Context, Poll};
 
 /// Wrapper around a protocol handler that turns the output event into something else.
@@ -37,7 +37,6 @@ pub struct MapOutEvent<TProtoHandler, TMap> {
 
 impl<TProtoHandler, TMap> MapOutEvent<TProtoHandler, TMap> {
     /// Creates a `MapOutEvent`.
-    #[inline]
     pub(crate) fn new(inner: TProtoHandler, map: TMap) -> Self {
         MapOutEvent {
             inner,
@@ -60,12 +59,10 @@ where
     type OutboundProtocol = TProtoHandler::OutboundProtocol;
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
-    #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.inner.listen_protocol()
     }
 
-    #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output
@@ -73,7 +70,6 @@ where
         self.inner.inject_fully_negotiated_inbound(protocol)
     }
 
-    #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
@@ -82,22 +78,29 @@ where
         self.inner.inject_fully_negotiated_outbound(protocol, info)
     }
 
-    #[inline]
     fn inject_event(&mut self, event: Self::InEvent) {
         self.inner.inject_event(event)
     }
 
-    #[inline]
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        self.inner.inject_address_change(addr)
+    }
+
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
 
-    #[inline]
+    fn inject_listen_upgrade_error(
+        &mut self,
+        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
+    ) {
+        self.inner.inject_listen_upgrade_error(error)
+    }
+
     fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.connection_keep_alive()
     }
 
-    #[inline]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
