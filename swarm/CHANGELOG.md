@@ -1,5 +1,8 @@
 # 0.21.0 [unreleased]
 
+- Add missing delegation calls in some `ProtocolsHandler` wrappers.
+See [PR 1710](https://github.com/libp2p/rust-libp2p/pull/1710).
+
 - Add as_ref and as_mut functions to Toggle
 [PR 1684](https://github.com/libp2p/rust-libp2p/pull/1684).
 
