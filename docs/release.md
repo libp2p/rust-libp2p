@@ -25,6 +25,7 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 
     ```
     $ tag="<CRATE-NAME>-X.Y.Z"
+    # Use `-s` for a GPG signed tag or `-a` for an annotated tag.
     $ git tag -s "${tag}" -m "${tag}"
     $ git push origin "${tag}"
     ```
