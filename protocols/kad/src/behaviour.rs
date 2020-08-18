@@ -2554,7 +2554,7 @@ pub enum RoutingUpdate {
     Failed,
 }
 
-/// The maximum number of local addresses as reported by
-/// other peers that the behaviour tracks. The behaviour
-/// always tracks all its listen addresses.
+/// The maximum number of local external addresses. When reached any
+/// further externally reported addresses are ignored. The behaviour always
+/// tracks all its listen addresses.
 const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
