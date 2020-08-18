@@ -1,4 +1,4 @@
-# 0.2.0 // unreleased
+# 0.2.0 [2020-08-18]
 
 - Fixed connection keep-alive, permitting connections to close due
   to inactivity.
