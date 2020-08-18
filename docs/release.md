@@ -11,7 +11,8 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
   
   In case there is no `[unreleased]` section yet, create one with an increased
   major, minor or patch version depending on your change. In addition update the
-  corresponding entry of the crate in the root level `Cargo.toml`.
+  version in the crate's `Cargo.toml` as well as the corresponding entry of the
+  crate in the root level `Cargo.toml`.
 
 
 ## Releasing one or more crates
