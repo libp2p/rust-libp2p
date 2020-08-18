@@ -1,4 +1,4 @@
-# 0.21.0 [unreleased]
+# 0.21.0 [2020-08-18]
 
 - Add as_ref and as_mut functions to Toggle
 [PR 1684](https://github.com/libp2p/rust-libp2p/pull/1684).

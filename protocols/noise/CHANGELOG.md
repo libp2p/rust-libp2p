@@ -1,4 +1,4 @@
-# 0.23.0 [unreleased]
+# 0.23.0 [2020-08-18]
 
 - Bump `libp2p-core` dependency.
 

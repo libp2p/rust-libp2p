@@ -1,4 +1,4 @@
-# 0.22.0 [unreleased]
+# 0.22.0 [2020-08-18]
 
 - Store addresses in provider records.
   See [PR 1708](https://github.com/libp2p/rust-libp2p/pull/1708).
