@@ -70,13 +70,11 @@
 
 pub mod codec;
 pub mod handler;
-
-// Disabled until #1706 is fixed:
-// pub mod throttled;
-// pub use throttled::Throttled;
+pub mod throttled;
 
 pub use codec::{RequestResponseCodec, ProtocolName};
 pub use handler::ProtocolSupport;
+pub use throttled::Throttled;
 
 use futures::{
     channel::oneshot,
@@ -103,6 +101,7 @@ use smallvec::SmallVec;
 use std::{
     collections::{VecDeque, HashMap},
     time::Duration,
+    sync::{atomic::AtomicU64, Arc},
     task::{Context, Poll}
 };
 
@@ -111,6 +110,8 @@ use std::{
 pub enum RequestResponseMessage<TRequest, TResponse> {
     /// A request message.
     Request {
+        /// The ID of this request.
+        request_id: RequestId,
         /// The request message.
         request: TRequest,
         /// The sender of the request who is awaiting a response.
@@ -152,6 +153,8 @@ pub enum RequestResponseEvent<TRequest, TResponse> {
     InboundFailure {
         /// The peer from whom the request was received.
         peer: PeerId,
+        /// The ID of the failed inbound request.
+        request_id: RequestId,
         /// The error that occurred.
         error: InboundFailure,
     },
@@ -195,6 +198,7 @@ pub enum InboundFailure {
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
 pub struct ResponseChannel<TResponse> {
+    request_id: RequestId,
     peer: PeerId,
     sender: oneshot::Sender<TResponse>,
 }
@@ -209,6 +213,11 @@ impl<TResponse> ResponseChannel<TResponse> {
     /// request timed out waiting for the response.
     pub fn is_open(&self) -> bool {
         !self.sender.is_canceled()
+    }
+
+    /// Get the request ID of this response.
+    pub(crate) fn request_id(&self) -> RequestId {
+        self.request_id
     }
 }
 
@@ -259,6 +268,8 @@ where
     outbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The next (local) request ID.
     next_request_id: RequestId,
+    /// The next (inbound) request ID.
+    next_inbound_id: Arc<AtomicU64>,
     /// The protocol configuration.
     config: RequestResponseConfig,
     /// The protocol codec for reading and writing requests and responses.
@@ -303,6 +314,7 @@ where
             inbound_protocols,
             outbound_protocols,
             next_request_id: RequestId(1),
+            next_inbound_id: Arc::new(AtomicU64::new(1)),
             config: cfg,
             codec,
             pending_events: VecDeque::new(),
@@ -313,11 +325,10 @@ where
         }
     }
 
-// Disabled until #1706 is fixed.
-//    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
-//    pub fn throttled(self) -> Throttled<TCodec> {
-//        Throttled::new(self)
-//    }
+    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
+    pub fn throttled(self) -> Throttled<TCodec> {
+        Throttled::new(self)
+    }
 
     /// Initiates sending a request.
     ///
@@ -441,6 +452,7 @@ where
             self.codec.clone(),
             self.config.connection_keep_alive,
             self.config.request_timeout,
+            self.next_inbound_id.clone()
         )
     }
 
@@ -541,9 +553,9 @@ where
                     NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::Message { peer, message }));
             }
-            RequestResponseHandlerEvent::Request { request, sender } => {
-                let channel = ResponseChannel { peer: peer.clone(), sender };
-                let message = RequestResponseMessage::Request { request, channel };
+            RequestResponseHandlerEvent::Request { request_id, request, sender } => {
+                let channel = ResponseChannel { request_id, peer: peer.clone(), sender };
+                let message = RequestResponseMessage::Request { request_id, request, channel };
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::Message { peer, message }));
@@ -559,11 +571,12 @@ where
                             }));
                 }
             }
-            RequestResponseHandlerEvent::InboundTimeout => {
+            RequestResponseHandlerEvent::InboundTimeout(request_id) => {
                     self.pending_events.push_back(
                         NetworkBehaviourAction::GenerateEvent(
                             RequestResponseEvent::InboundFailure {
                                 peer,
+                                request_id,
                                 error: InboundFailure::Timeout,
                             }));
             }
@@ -576,11 +589,12 @@ where
                             error: OutboundFailure::UnsupportedProtocols,
                         }));
             }
-            RequestResponseHandlerEvent::InboundUnsupportedProtocols => {
+            RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => {
                 self.pending_events.push_back(
                     NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
                             peer,
+                            request_id,
                             error: InboundFailure::UnsupportedProtocols,
                         }));
             }

@@ -19,16 +19,17 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
+use futures::ready;
 use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use lru::LruCache;
-use std::{collections::{HashMap, VecDeque}, task::{Context, Poll}};
-use std::{cmp::min, num::NonZeroU16};
+use std::{collections::{HashMap, HashSet, VecDeque}, task::{Context, Poll}};
+use std::num::NonZeroU16;
 use super::{
     RequestId,
     RequestResponse,
     RequestResponseCodec,
     RequestResponseEvent,
+    RequestResponseMessage,
     ResponseChannel
 };
 
@@ -46,35 +47,37 @@ pub struct Throttled<C: RequestResponseCodec> {
     id: u32,
     /// The wrapped behaviour.
     behaviour: RequestResponse<C>,
-    /// Limits per peer.
-    limits: HashMap<PeerId, Limit>,
-    /// After disconnects we keep limits around to prevent circumventing
-    /// them by successive reconnects.
-    previous: LruCache<PeerId, Limit>,
-    /// The default limit applied to all peers unless overriden.
-    default: Limit,
+    /// Information per peer.
+    limits: HashMap<PeerId, Info>,
+    /// The default limits applied to all peers unless overriden.
+    default: Info,
     /// Pending events to report in `Throttled::poll`.
-    events: VecDeque<Event<C::Request, C::Response>>
+    events: VecDeque<Event<C::Request, C::Response>>,
 }
 
-/// A `Limit` of inbound and outbound requests.
 #[derive(Clone, Debug)]
-struct Limit {
+struct Info {
     /// The remaining number of outbound requests that can be send.
     send_budget: u16,
     /// The remaining number of inbound requests that can be received.
     recv_budget: u16,
     /// The original limit which applies to inbound and outbound requests.
-    maximum: NonZeroU16
+    maximum: NonZeroU16,
+    /// Current outbound requests.
+    outbound: HashSet<RequestId>,
+    /// Current inbound requests.
+    inbound: HashSet<RequestId>
 }
 
-impl Default for Limit {
+impl Default for Info {
     fn default() -> Self {
         let maximum = NonZeroU16::new(1).expect("1 > 0");
-        Limit {
+        Info {
             send_budget: maximum.get(),
             recv_budget: maximum.get(),
-            maximum
+            maximum,
+            outbound: HashSet::new(),
+            inbound: HashSet::new()
         }
     }
 }
@@ -99,8 +102,7 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
             id: rand::random(),
             behaviour,
             limits: HashMap::new(),
-            previous: LruCache::new(2048),
-            default: Limit::default(),
+            default: Info::default(),
             events: VecDeque::new()
         }
     }
@@ -111,26 +113,15 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     }
 
     /// Override the global default limit.
-    ///
-    /// See [`Throttled::set_limit`] to override limits for individual peers.
     pub fn set_default_limit(&mut self, limit: NonZeroU16) {
         log::trace!("{:08x}: new default limit: {:?}", self.id, limit);
-        self.default = Limit {
+        self.default = Info {
             send_budget: limit.get(),
             recv_budget: limit.get(),
-            maximum: limit
+            maximum: limit,
+            outbound: HashSet::new(),
+            inbound: HashSet::new()
         }
-    }
-
-    /// Specify the send and receive limit for a single peer.
-    pub fn set_limit(&mut self, id: &PeerId, limit: NonZeroU16) {
-        log::trace!("{:08x}: new limit for {}: {:?}", self.id, id, limit);
-        self.previous.pop(id);
-        self.limits.insert(id.clone(), Limit {
-            send_budget: limit.get(),
-            recv_budget: limit.get(),
-            maximum: limit
-        });
     }
 
     /// Has the limit of outbound requests been reached for the given peer?
@@ -146,17 +137,11 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     pub fn send_request(&mut self, id: &PeerId, req: C::Request) -> Result<RequestId, C::Request> {
         log::trace!("{:08x}: sending request to {}", self.id, id);
 
-        // Getting the limit is somewhat complicated due to the connection state.
-        // Applications may try to send a request to a peer we have never been connected
-        // to, or a peer we have previously been connected to. In the first case, the
-        // default limit applies and in the latter, the cached limit from the previous
-        // connection (if still available).
         let mut limit =
             if let Some(limit) = self.limits.get_mut(id) {
                 limit
             } else {
-                let limit = self.previous.pop(id).unwrap_or_else(|| self.default.clone());
-                self.limits.entry(id.clone()).or_insert(limit)
+                self.limits.entry(id.clone()).or_insert(self.default.clone())
             };
 
         if limit.send_budget == 0 {
@@ -166,7 +151,9 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
 
         limit.send_budget -= 1;
 
-        Ok(self.behaviour.send_request(id, req))
+        let rid = self.behaviour.send_request(id, req);
+        limit.outbound.insert(rid);
+        Ok(rid)
     }
 
     /// Answer an inbound request with a response.
@@ -174,8 +161,10 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     /// See [`RequestResponse::send_response`] for details.
     pub fn send_response(&mut self, ch: ResponseChannel<C::Response>, rs: C::Response) {
         if let Some(limit) = self.limits.get_mut(&ch.peer) {
-            limit.recv_budget += 1;
-            debug_assert!(limit.recv_budget <= limit.maximum.get())
+            if limit.inbound.remove(&ch.request_id()) {
+                limit.recv_budget += 1;
+                debug_assert!(limit.recv_budget <= limit.maximum.get());
+            }
         }
         self.behaviour.send_response(ch, rs)
     }
@@ -207,6 +196,20 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     pub fn is_pending(&self, id: &RequestId) -> bool {
         self.behaviour.is_pending(id)
     }
+
+    /// Update the limits when a request resolved.
+    fn on_outbound_request_end(&mut self, p: &PeerId, r: &RequestId) {
+        if let Some(limit) = self.limits.get_mut(p) {
+            if limit.outbound.remove(r) {
+                if limit.send_budget == 0 {
+                    log::trace!("{:08x}: sending to peer {} can resume", self.id, p);
+                    self.events.push_back(Event::ResumeSending(p.clone()))
+                }
+                limit.send_budget += 1;
+                debug_assert!(limit.send_budget <= limit.maximum.get())
+            }
+        }
+    }
 }
 
 impl<C> NetworkBehaviour for Throttled<C>
@@ -229,26 +232,22 @@ where
     }
 
     fn inject_connection_closed(&mut self, p: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
-        self.behaviour.inject_connection_closed(p, id, end);
+        self.behaviour.inject_connection_closed(p, id, end)
     }
 
     fn inject_connected(&mut self, peer: &PeerId) {
         log::trace!("{:08x}: connected to {}", self.id, peer);
         self.behaviour.inject_connected(peer);
-        // The limit may have been added by [`Throttled::send_request`] already.
+        // The limit may have been added by `Throttled::send_request` already.
         if !self.limits.contains_key(peer) {
-            let limit = self.previous.pop(peer).unwrap_or_else(|| self.default.clone());
-            self.limits.insert(peer.clone(), limit);
+            self.limits.insert(peer.clone(), self.default.clone());
         }
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
         log::trace!("{:08x}: disconnected from {}", self.id, peer);
+        self.limits.remove(peer);
         self.behaviour.inject_disconnected(peer);
-        // Save the limit in case the peer reconnects soon.
-        if let Some(limit) = self.limits.remove(peer) {
-            self.previous.put(peer.clone(), limit);
-        }
     }
 
     fn inject_dial_failure(&mut self, peer: &PeerId) {
@@ -256,35 +255,6 @@ where
     }
 
     fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<C>) {
-        match e {
-            // Cases where an outbound request has been resolved.
-            | RequestResponseHandlerEvent::Response {..}
-            | RequestResponseHandlerEvent::OutboundTimeout (_)
-            | RequestResponseHandlerEvent::OutboundUnsupportedProtocols (_) =>
-                if let Some(limit) = self.limits.get_mut(&p) {
-                    if limit.send_budget == 0 {
-                        log::trace!("{:08x}: sending to peer {} can resume", self.id, p);
-                        self.events.push_back(Event::ResumeSending(p.clone()))
-                    }
-                    limit.send_budget = min(limit.send_budget + 1, limit.maximum.get())
-                }
-            // A new inbound request.
-            | RequestResponseHandlerEvent::Request {..} =>
-                if let Some(limit) = self.limits.get_mut(&p) {
-                    if limit.recv_budget == 0 {
-                        log::error!("{:08x}: peer {} exceeds its budget", self.id, p);
-                        return self.events.push_back(Event::TooManyInboundRequests(p))
-                    }
-                    limit.recv_budget -= 1
-                }
-            // The inbound request has expired so grant more budget to receive another one.
-            | RequestResponseHandlerEvent::InboundTimeout =>
-                if let Some(limit) = self.limits.get_mut(&p) {
-                    limit.recv_budget = min(limit.recv_budget + 1, limit.maximum.get())
-                }
-            // Nothing to do here ...
-            | RequestResponseHandlerEvent::InboundUnsupportedProtocols => {}
-        }
         self.behaviour.inject_event(p, i, e)
     }
 
@@ -297,6 +267,49 @@ where
             self.events.shrink_to_fit()
         }
 
-        self.behaviour.poll(cx, p).map(|a| a.map_out(Event::Event))
+        loop {
+            let event = ready!(self.behaviour.poll(cx, p));
+
+            match event {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::Message { ref peer, ref message }) =>
+                    match message {
+                        RequestResponseMessage::Response { ref request_id, .. } =>
+                            self.on_outbound_request_end(peer, request_id),
+                        RequestResponseMessage::Request { ref request_id, .. } =>
+                            if let Some(limit) = self.limits.get_mut(peer) {
+                                if limit.recv_budget == 0 {
+                                    log::error!("{:08x}: peer {} exceeds its budget", self.id, peer);
+                                    self.events.push_back(Event::TooManyInboundRequests(peer.clone()));
+                                    continue
+                                }
+                                limit.inbound.insert(*request_id);
+                                limit.recv_budget -= 1
+                            }
+                    }
+
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::OutboundFailure {
+                    ref peer,
+                    ref request_id,
+                    ..
+                }) => self.on_outbound_request_end(peer, request_id),
+
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFailure {
+                    ref peer,
+                    ref request_id,
+                    ..
+                }) => {
+                    if let Some(limit) = self.limits.get_mut(peer) {
+                        if limit.inbound.remove(request_id) {
+                            limit.recv_budget += 1;
+                            debug_assert!(limit.recv_budget <= limit.maximum.get())
+                        }
+                    }
+                }
+
+                _ => ()
+            };
+
+            return Poll::Ready(event.map_out(Event::Event))
+        }
     }
 }
