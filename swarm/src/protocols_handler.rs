@@ -156,9 +156,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
     fn inject_listen_upgrade_error(
         &mut self,
-        _: ProtocolsHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgradeSend>::Error
-        >
+        _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
     ) {}
 
     /// Returns until when the connection should be kept alive.
@@ -189,7 +187,6 @@ pub trait ProtocolsHandler: Send + 'static {
     >;
 
     /// Adds a closure that turns the input event into something else.
-    #[inline]
     fn map_in_event<TNewIn, TMap>(self, map: TMap) -> MapInEvent<Self, TNewIn, TMap>
     where
         Self: Sized,
@@ -199,7 +196,6 @@ pub trait ProtocolsHandler: Send + 'static {
     }
 
     /// Adds a closure that turns the output event into something else.
-    #[inline]
     fn map_out_event<TMap, TNewOut>(self, map: TMap) -> MapOutEvent<Self, TMap>
     where
         Self: Sized,
@@ -214,7 +210,6 @@ pub trait ProtocolsHandler: Send + 'static {
     /// > **Note**: The largest `KeepAlive` returned by the two handlers takes precedence,
     /// > i.e. is returned from [`ProtocolsHandler::connection_keep_alive`] by the returned
     /// > handler.
-    #[inline]
     fn select<TProto2>(self, other: TProto2) -> ProtocolsHandlerSelect<Self, TProto2>
     where
         Self: Sized,
@@ -226,7 +221,6 @@ pub trait ProtocolsHandler: Send + 'static {
     /// exclusively.
     ///
     /// > **Note**: This method should not be redefined in a custom `ProtocolsHandler`.
-    #[inline]
     fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
     where
         Self: Sized,
@@ -331,7 +325,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 {
     /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a
     /// `TOutboundOpenInfo` to something else.
-    #[inline]
     pub fn map_outbound_open_info<F, I>(
         self,
         map: F,
@@ -353,7 +346,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 
     /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`)
     /// to something else.
-    #[inline]
     pub fn map_protocol<F, I>(
         self,
         map: F,
@@ -374,7 +366,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
     }
 
     /// If this is a `Custom` event, maps the content to something else.
-    #[inline]
     pub fn map_custom<F, I>(
         self,
         map: F,
@@ -392,7 +383,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
     }
 
     /// If this is a `Close` event, maps the content to something else.
-    #[inline]
     pub fn map_close<F, I>(
         self,
         map: F,
@@ -419,6 +409,20 @@ pub enum ProtocolsHandlerUpgrErr<TUpgrErr> {
     Timer,
     /// Error while upgrading the substream to the protocol we want.
     Upgrade(UpgradeError<TUpgrErr>),
+}
+
+impl<TUpgrErr> ProtocolsHandlerUpgrErr<TUpgrErr> {
+    /// Map the inner [`UpgradeError`] type.
+    pub fn map_upgrade_err<F, E>(self, f: F) -> ProtocolsHandlerUpgrErr<E>
+    where
+        F: FnOnce(UpgradeError<TUpgrErr>) -> UpgradeError<E>
+    {
+        match self {
+            ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
+            ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
+            ProtocolsHandlerUpgrErr::Upgrade(e) => ProtocolsHandlerUpgrErr::Upgrade(f(e))
+        }
+    }
 }
 
 impl<TUpgrErr> fmt::Display for ProtocolsHandlerUpgrErr<TUpgrErr>

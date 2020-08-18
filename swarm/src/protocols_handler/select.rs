@@ -30,9 +30,10 @@ use crate::protocols_handler::{
 
 use libp2p_core::{
     ConnectedPoint,
+    Multiaddr,
     PeerId,
     either::{EitherError, EitherOutput},
-    upgrade::{EitherUpgrade, SelectUpgrade, UpgradeError}
+    upgrade::{EitherUpgrade, SelectUpgrade, UpgradeError, NegotiationError, ProtocolError}
 };
 use std::{cmp, task::Context, task::Poll};
 
@@ -47,7 +48,6 @@ pub struct IntoProtocolsHandlerSelect<TProto1, TProto2> {
 
 impl<TProto1, TProto2> IntoProtocolsHandlerSelect<TProto1, TProto2> {
     /// Builds a `IntoProtocolsHandlerSelect`.
-    #[inline]
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
         IntoProtocolsHandlerSelect {
             proto1,
@@ -86,7 +86,6 @@ pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
 
 impl<TProto1, TProto2> ProtocolsHandlerSelect<TProto1, TProto2> {
     /// Builds a `ProtocolsHandlerSelect`.
-    #[inline]
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
         ProtocolsHandlerSelect {
             proto1,
@@ -107,7 +106,6 @@ where
     type OutboundProtocol = EitherUpgrade<SendWrapper<TProto1::OutboundProtocol>, SendWrapper<TProto2::OutboundProtocol>>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
-    #[inline]
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         let proto1 = self.proto1.listen_protocol();
         let proto2 = self.proto2.listen_protocol();
@@ -138,7 +136,6 @@ where
         }
     }
 
-    #[inline]
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
             EitherOutput::First(event) => self.proto1.inject_event(event),
@@ -146,7 +143,11 @@ where
         }
     }
 
-    #[inline]
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        self.proto1.inject_address_change(addr);
+        self.proto2.inject_address_change(addr)
+    }
+
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         match (info, error) {
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timer) => {
@@ -182,7 +183,52 @@ where
         }
     }
 
-    #[inline]
+    fn inject_listen_upgrade_error(&mut self, error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+        match error {
+            ProtocolsHandlerUpgrErr::Timer => {
+                self.proto1.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timer);
+                self.proto2.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timer);
+            }
+            ProtocolsHandlerUpgrErr::Timeout => {
+                self.proto1.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timeout);
+                self.proto2.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timeout);
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                self.proto1.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)));
+                self.proto2.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)));
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::ProtocolError(e))) => {
+                let (e1, e2);
+                match e {
+                    ProtocolError::IoError(e) => {
+                        e1 = NegotiationError::ProtocolError(ProtocolError::IoError(e.kind().into()));
+                        e2 = NegotiationError::ProtocolError(ProtocolError::IoError(e))
+                    }
+                    ProtocolError::InvalidMessage => {
+                        e1 = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
+                        e2 = NegotiationError::ProtocolError(ProtocolError::InvalidMessage)
+                    }
+                    ProtocolError::InvalidProtocol => {
+                        e1 = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
+                        e2 = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol)
+                    }
+                    ProtocolError::TooManyProtocols => {
+                        e1 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
+                        e2 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols)
+                    }
+                }
+                self.proto1.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e1)));
+                self.proto2.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e2)))
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+                self.proto1.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)))
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
+                self.proto2.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)))
+            }
+        }
+    }
+
     fn connection_keep_alive(&self) -> KeepAlive {
         cmp::max(self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive())
     }

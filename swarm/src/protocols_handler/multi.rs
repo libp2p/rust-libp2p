@@ -36,7 +36,8 @@ use crate::upgrade::{
     UpgradeInfoSend
 };
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{ConnectedPoint, PeerId, upgrade::ProtocolName};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::upgrade::{ProtocolName, UpgradeError, NegotiationError, ProtocolError};
 use rand::Rng;
 use std::{
     collections::{HashMap, HashSet},
@@ -135,6 +136,12 @@ where
         }
     }
 
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        for h in self.handlers.values_mut() {
+            h.inject_address_change(addr)
+        }
+    }
+
     fn inject_dial_upgrade_error (
         &mut self,
         (key, arg): Self::OutboundOpenInfo,
@@ -144,6 +151,53 @@ where
             h.inject_dial_upgrade_error(arg, error)
         } else {
             log::error!("inject_dial_upgrade_error: no handler for protocol")
+        }
+    }
+
+    fn inject_listen_upgrade_error(
+        &mut self,
+        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
+    ) {
+        match error {
+            ProtocolsHandlerUpgrErr::Timer =>
+                for h in self.handlers.values_mut() {
+                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timer)
+                }
+            ProtocolsHandlerUpgrErr::Timeout =>
+                for h in self.handlers.values_mut() {
+                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timeout)
+                }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) =>
+                for h in self.handlers.values_mut() {
+                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)))
+                }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::ProtocolError(e))) =>
+                match e {
+                    ProtocolError::IoError(e) =>
+                        for h in self.handlers.values_mut() {
+                            let e = NegotiationError::ProtocolError(ProtocolError::IoError(e.kind().into()));
+                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        }
+                    ProtocolError::InvalidMessage =>
+                        for h in self.handlers.values_mut() {
+                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
+                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        }
+                    ProtocolError::InvalidProtocol =>
+                        for h in self.handlers.values_mut() {
+                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
+                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        }
+                    ProtocolError::TooManyProtocols =>
+                        for h in self.handlers.values_mut() {
+                            let e = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
+                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        }
+                }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) =>
+                if let Some(h) = self.handlers.get_mut(&k) {
+                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)))
+                }
         }
     }
 
