@@ -2,9 +2,6 @@
 
 - Fixed connection keep-alive, permitting connections to close due
   to inactivity.
-- Added `RequestResponse::throttled` to wrap the behaviour into one that
-  enforces limits on inbound and outbound requests per peer. The limits
-  have to be known upfront by all nodes.
 - Bump `libp2p-core` and `libp2p-swarm` dependencies.
 
 # 0.1.1
