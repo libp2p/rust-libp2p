@@ -361,7 +361,7 @@ where
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
-            local_addrs: HashSet::with_capacity(6)
+            local_addrs: HashSet::new()
         }
     }
 
