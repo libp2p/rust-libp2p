@@ -207,12 +207,13 @@ impl ProtocolsHandler for PingHandler {
     type InboundProtocol = protocol::Ping;
     type OutboundProtocol = protocol::Ping;
     type OutboundOpenInfo = ();
+    type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<protocol::Ping> {
-        SubstreamProtocol::new(protocol::Ping)
+    fn listen_protocol(&self) -> SubstreamProtocol<protocol::Ping, ()> {
+        SubstreamProtocol::new(protocol::Ping, ())
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, stream: NegotiatedSubstream) {
+    fn inject_fully_negotiated_inbound(&mut self, stream: NegotiatedSubstream, (): ()) {
         self.inbound = Some(protocol::recv_ping(stream).boxed());
     }
 
@@ -329,11 +330,10 @@ impl ProtocolsHandler for PingHandler {
                 }
                 None => {
                     self.outbound = Some(PingState::OpenStream);
-                    let protocol = SubstreamProtocol::new(protocol::Ping)
+                    let protocol = SubstreamProtocol::new(protocol::Ping, ())
                         .with_timeout(self.config.timeout);
                     return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        protocol,
-                        info: (),
+                        protocol
                     })
                 }
             }

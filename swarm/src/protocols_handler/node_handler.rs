@@ -95,8 +95,11 @@ where
     /// The underlying handler.
     handler: TProtoHandler,
     /// Futures that upgrade incoming substreams.
-    negotiating_in:
-        Vec<(InboundUpgradeApply<Substream<StreamMuxerBox>, SendWrapper<TProtoHandler::InboundProtocol>>, Delay)>,
+    negotiating_in: Vec<(
+        TProtoHandler::InboundOpenInfo,
+        InboundUpgradeApply<Substream<StreamMuxerBox>, SendWrapper<TProtoHandler::InboundProtocol>>,
+        Delay
+    )>,
     /// Futures that upgrade outgoing substreams. The first element of the tuple is the userdata
     /// to pass back once successfully opened.
     negotiating_out: Vec<(
@@ -192,9 +195,10 @@ where
             SubstreamEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
                 let timeout = protocol.timeout().clone();
-                let upgrade = upgrade::apply_inbound(substream, SendWrapper(protocol.into_upgrade().1));
+                let (_, upgrade, info) = protocol.into_upgrade();
+                let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
                 let timeout = Delay::new(timeout);
-                self.negotiating_in.push((upgrade, timeout));
+                self.negotiating_in.push((info, upgrade, timeout));
             }
             SubstreamEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
                 let pos = match self
@@ -231,27 +235,27 @@ where
         // Continue negotiation of newly-opened substreams on the listening side.
         // We remove each element from `negotiating_in` one by one and add them back if not ready.
         for n in (0..self.negotiating_in.len()).rev() {
-            let (mut in_progress, mut timeout) = self.negotiating_in.swap_remove(n);
+            let (info, mut in_progress, mut timeout) = self.negotiating_in.swap_remove(n);
             match Future::poll(Pin::new(&mut timeout), cx) {
                 Poll::Ready(Ok(_)) => {
                     let err = ProtocolsHandlerUpgrErr::Timeout;
-                    self.handler.inject_listen_upgrade_error(err);
+                    self.handler.inject_listen_upgrade_error(info, err);
                     continue
                 }
                 Poll::Ready(Err(_)) => {
                     let err = ProtocolsHandlerUpgrErr::Timer;
-                    self.handler.inject_listen_upgrade_error(err);
+                    self.handler.inject_listen_upgrade_error(info, err);
                     continue;
                 }
                 Poll::Pending => {},
             }
             match Future::poll(Pin::new(&mut in_progress), cx) {
                 Poll::Ready(Ok(upgrade)) =>
-                    self.handler.inject_fully_negotiated_inbound(upgrade),
-                Poll::Pending => self.negotiating_in.push((in_progress, timeout)),
+                    self.handler.inject_fully_negotiated_inbound(upgrade, info),
+                Poll::Pending => self.negotiating_in.push((info, in_progress, timeout)),
                 Poll::Ready(Err(err)) => {
                     let err = ProtocolsHandlerUpgrErr::Upgrade(err);
-                    self.handler.inject_listen_upgrade_error(err);
+                    self.handler.inject_listen_upgrade_error(info, err);
                 }
             }
         }
@@ -308,14 +312,11 @@ where
             Poll::Ready(ProtocolsHandlerEvent::Custom(event)) => {
                 return Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event)));
             }
-            Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                protocol,
-                info,
-            }) => {
+            Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 let id = self.unique_dial_upgrade_id;
                 let timeout = protocol.timeout().clone();
                 self.unique_dial_upgrade_id += 1;
-                let (version, upgrade) = protocol.into_upgrade();
+                let (version, upgrade, info) = protocol.into_upgrade();
                 self.queued_dial_upgrades.push((id, (version, SendWrapper(upgrade))));
                 return Poll::Ready(Ok(
                     ConnectionHandlerEvent::OutboundSubstreamRequest((id, info, timeout)),
