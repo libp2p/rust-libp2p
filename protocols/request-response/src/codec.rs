@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub(crate) mod header;
+
 pub use libp2p_core::ProtocolName;
 
 use async_trait::async_trait;
@@ -64,3 +66,4 @@ pub trait RequestResponseCodec {
     where
         T: AsyncWrite + Unpin + Send;
 }
+
