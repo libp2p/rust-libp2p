@@ -1,9 +1,9 @@
-# Release Process
+# Release process
 
 This project follows [semantic versioning](https://semver.org/). The following
 documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 
-## Before the Release
+## Development between releases
 
 - Every substantial pull request should add an entry to the `[unreleased]`
   section of the corresponding crate `CHANGELOG.md` file. See
@@ -14,12 +14,13 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
   corresponding entry of the crate in the root level `Cargo.toml`.
 
 
-## Cutting a Release
+## Releasing one or more crates
 
-1. For each crate's `CHANGELOG.md` including the top level `libp2p` crate
-   replace `# X.Y.Z [unreleased]` with `# X.Y.Z [yyyy-mm-dd]` and create a
-   combined pull request against the rust-libp2p `master` branch.
-   
+1. Set the release date for each crate to be released in the respective
+   `CHANGELOG.md` by replacing `# X.Y.Z [unreleased]` with
+   `# X.Y.Z [yyyy-mm-dd]` and create a pull request against the rust-libp2p
+   `master` branch.
+
 2. Once merged, create and push a tag for each updated crate.
 
     ```
@@ -28,7 +29,8 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
     $ git push origin "${tag}"
     ```
     
-3. Create and push a tag for the top level `libp2p` crate.
+3. Create and push a tag for the top level `libp2p` crate, if it is being
+   released.
 
     ```
     # Note the additional `v` here.
@@ -37,7 +39,8 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
     $ git push origin "${tag}"
     ```
     
-4. Publish each crate including the top level `libp2p` crate to crates.io.
+4. Publish each tagged crate to crates.io. `cargo` assists in getting the order
+   of the releases correct.
 
     ```
     cd <CRATE-SUBDIRECTORY>
