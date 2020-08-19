@@ -58,6 +58,8 @@ mod error;
 mod io;
 mod protocol;
 
+pub use webpki::{EndEntityCert, TrustAnchor};
+
 pub use error::NoiseError;
 pub use io::NoiseOutput;
 pub use io::handshake;
@@ -78,10 +80,12 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     params: ProtocolParams,
     legacy: LegacyConfig,
     remote: R,
+    anchors: Option<Vec<TrustAnchor<'static>>>,
+    cert: Option<EndEntityCert<'static>>,
     _marker: std::marker::PhantomData<P>
 }
 
-impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
+impl<'a, H, C: Zeroize, R> NoiseConfig<H, C, R> {
     /// Turn the `NoiseConfig` into an authenticated upgrade for use
     /// with a [`Network`](libp2p_core::Network).
     pub fn into_authenticated(self) -> NoiseAuthenticated<H, C, R> {
@@ -106,6 +110,8 @@ where
             params: C::params_ix(),
             legacy: LegacyConfig::default(),
             remote: (),
+            anchors: None,
+            cert: None,
             _marker: std::marker::PhantomData
         }
     }
@@ -122,6 +128,8 @@ where
             params: C::params_xx(),
             legacy: LegacyConfig::default(),
             remote: (),
+            anchors: None,
+            cert: None,
             _marker: std::marker::PhantomData
         }
     }
@@ -141,6 +149,8 @@ where
             params: C::params_ik(),
             legacy: LegacyConfig::default(),
             remote: (),
+            anchors: None,
+            cert: None,
             _marker: std::marker::PhantomData
         }
     }
@@ -164,6 +174,8 @@ where
             params: C::params_ik(),
             legacy: LegacyConfig::default(),
             remote: (remote_dh, remote_id),
+            anchors: None,
+            cert: None,
             _marker: std::marker::PhantomData
         }
     }
@@ -209,9 +221,9 @@ where
             .build_initiator()
             .map_err(NoiseError::from);
         handshake::rt1_initiator(socket, session,
-                                 self.dh_keys.into_identity(),
-                                 IdentityExchange::Mutual,
-                                 self.legacy)
+                                self.dh_keys.into_identity(),
+                                IdentityExchange::Mutual,
+                                self.legacy)
     }
 }
 
