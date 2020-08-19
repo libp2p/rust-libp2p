@@ -221,9 +221,7 @@ impl<TResponse> ResponseChannel<TResponse> {
     }
 }
 
-/// The (local) ID of an outgoing request.
-///
-/// See [`RequestResponse::send_request`].
+/// The ID of an inbound or outbound request.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 
