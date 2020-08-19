@@ -1,3 +1,7 @@
+# 0.23.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
 # 0.22.0 [2020-08-18]
 
 - Store addresses in provider records.
