@@ -23,6 +23,7 @@
 mod payload_proto {
     include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
 }
+pub use webpki::{EndEntityCert, TLSServerTrustAnchors};
 
 use bytes::Bytes;
 use crate::LegacyConfig;
@@ -34,6 +35,10 @@ use futures::prelude::*;
 use futures::task;
 use prost::Message;
 use std::{io, pin::Pin, task::Context};
+
+static ALL_SIGALGS: &[&webpki::SignatureAlgorithm] = &[
+    &webpki::ED25519,
+];
 
 /// The identity of the remote established during a handshake.
 pub enum RemoteIdentity<C> {
@@ -128,13 +133,15 @@ pub fn rt1_initiator<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
+    anchors: Option<TLSServerTrustAnchors<'static>>,
+    cert: Option<Vec<u8>>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x, legacy)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy, anchors, cert)?;
         send_identity(&mut state).await?;
         recv_identity(&mut state).await?;
         state.finish()
@@ -163,13 +170,15 @@ pub fn rt1_responder<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
+    anchors: Option<TLSServerTrustAnchors<'static>>,
+    cert: Option<Vec<u8>>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x, legacy)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy, anchors, cert)?;
         recv_identity(&mut state).await?;
         send_identity(&mut state).await?;
         state.finish()
@@ -200,13 +209,15 @@ pub fn rt15_initiator<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
+    anchors: Option<TLSServerTrustAnchors<'static>>,
+    cert: Option<Vec<u8>>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x, legacy)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy, anchors, cert)?;
         send_empty(&mut state).await?;
         recv_identity(&mut state).await?;
         send_identity(&mut state).await?;
@@ -238,13 +249,15 @@ pub fn rt15_responder<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
+    anchors: Option<TLSServerTrustAnchors<'static>>,
+    cert: Option<Vec<u8>>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]>
 {
     Handshake(Box::pin(async move {
-        let mut state = State::new(io, session, identity, identity_x, legacy)?;
+        let mut state = State::new(io, session, identity, identity_x, legacy, anchors, cert)?;
         recv_empty(&mut state).await?;
         send_identity(&mut state).await?;
         recv_identity(&mut state).await?;
@@ -270,6 +283,8 @@ struct State<T> {
     send_identity: bool,
     /// Legacy configuration parameters.
     legacy: LegacyConfig,
+    anchors: Option<TLSServerTrustAnchors<'static>>,
+    cert: Option<Vec<u8>>,
 }
 
 impl<T> State<T> {
@@ -284,6 +299,8 @@ impl<T> State<T> {
         identity: KeypairIdentity,
         identity_x: IdentityExchange,
         legacy: LegacyConfig,
+        anchors: Option<TLSServerTrustAnchors<'static>>,
+        cert: Option<Vec<u8>>,
     ) -> Result<Self, NoiseError> {
         let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
@@ -299,6 +316,8 @@ impl<T> State<T> {
                 id_remote_pubkey,
                 send_identity,
                 legacy,
+                anchors,
+                cert,
             }
         )
     }
@@ -424,6 +443,17 @@ where
         state.dh_remote_pubkey_sig = Some(pb.identity_sig);
     }
 
+    if !pb.data.is_empty() {
+        let time = webpki::Time::try_from(std::time::SystemTime::now())
+            .map_err(|_| NoiseError::InvalidKey)?;
+        let remote_cert = webpki::EndEntityCert::from(&pb.data)
+            .map_err(|_| NoiseError::InvalidKey)?;
+
+        remote_cert
+            .verify_is_valid_tls_server_cert(ALL_SIGALGS, state.anchors.as_ref().unwrap(), &[], time)
+            .map_err(|_| NoiseError::InvalidKey)?;
+    }
+
     Ok(())
 }
 
@@ -440,6 +470,11 @@ where
 
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
+    }
+
+    // for CA support
+    if let Some(cert) = &state.cert{
+        pb.data = cert.clone();
     }
 
     let mut msg =

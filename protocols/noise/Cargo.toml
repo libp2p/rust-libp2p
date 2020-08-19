@@ -20,7 +20,8 @@ sha2 = "0.8.0"
 static_assertions = "1"
 x25519-dalek = "0.6.0"
 zeroize = "1"
-webpki = { git = "https://github.com/ParityAsia/webpki", branch = "parity-asia"}
+# webpki = { git = "https://github.com/ParityAsia/webpki", branch = "parity-asia"}
+webpki = { path = "../../../asia-webpki"}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 snow = { version = "0.7.1", features = ["ring-resolver"], default-features = false }

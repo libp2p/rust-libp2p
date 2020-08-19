@@ -58,7 +58,7 @@ mod error;
 mod io;
 mod protocol;
 
-pub use webpki::{EndEntityCert, TrustAnchor};
+pub use webpki::{EndEntityCert, TrustAnchor, TLSServerTrustAnchors};
 
 pub use error::NoiseError;
 pub use io::NoiseOutput;
@@ -80,8 +80,9 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     params: ProtocolParams,
     legacy: LegacyConfig,
     remote: R,
-    anchors: Option<Vec<TrustAnchor<'static>>>,
-    cert: Option<EndEntityCert<'static>>,
+    anchors: Option<TLSServerTrustAnchors<'static>>,
+    // cert: Option<EndEntityCert<'static>>,
+    cert: Option<Vec<u8>>,
     _marker: std::marker::PhantomData<P>
 }
 
@@ -201,7 +202,7 @@ where
         handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual,
-            self.legacy)
+            self.legacy, self.anchors, self.cert)
     }
 }
 
@@ -223,7 +224,7 @@ where
         handshake::rt1_initiator(socket, session,
                                 self.dh_keys.into_identity(),
                                 IdentityExchange::Mutual,
-                                self.legacy)
+                                self.legacy, self.anchors, self.cert)
     }
 }
 
@@ -247,7 +248,7 @@ where
         handshake::rt15_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual,
-            self.legacy)
+            self.legacy, self.anchors, self.cert)
     }
 }
 
@@ -269,7 +270,7 @@ where
         handshake::rt15_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Mutual,
-            self.legacy)
+            self.legacy, self.anchors, self.cert)
     }
 }
 
@@ -293,7 +294,7 @@ where
         handshake::rt1_responder(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Receive,
-            self.legacy)
+            self.legacy, self.anchors, self.cert)
     }
 }
 
@@ -316,7 +317,7 @@ where
         handshake::rt1_initiator(socket, session,
             self.dh_keys.into_identity(),
             IdentityExchange::Send { remote: self.remote.1 },
-            self.legacy)
+            self.legacy, self.anchors, self.cert)
     }
 }
 
