@@ -206,7 +206,7 @@ where
         THandler: 'a,
     {
         let mut addrs: Vec<_> = self.listen_addrs()
-            .flat_map(move |server| address_translation(server, observed_addr))
+            .filter_map(move |server| address_translation(server, observed_addr))
             .collect();
 
         // remove duplicates
