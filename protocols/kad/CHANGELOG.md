@@ -1,3 +1,8 @@
+# 0.22.1 [2020-08-19]
+
+- Explicitly convert from u8 to usize in `BucketIndex::range` to prevent type
+  inference issues ([PR 1716](https://github.com/libp2p/rust-libp2p/pull/1716)).
+
 # 0.22.0 [2020-08-18]
 
 - Store addresses in provider records.
