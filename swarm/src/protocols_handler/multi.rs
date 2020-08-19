@@ -337,6 +337,7 @@ impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
     }
 }
 
+/// The aggregated `InboundOpenInfo`s of supported inbound substream protocols.
 #[derive(Clone)]
 pub struct Info<K, I> {
     infos: Vec<(K, I)>
@@ -485,4 +486,3 @@ impl fmt::Display for DuplicateProtonameError {
 }
 
 impl error::Error for DuplicateProtonameError {}
-
