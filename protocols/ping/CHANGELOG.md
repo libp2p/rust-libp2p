@@ -1,4 +1,4 @@
-# 0.21.0 [unreleased]
+# 0.21.0 [2020-08-18]
 
 - Refactor the ping protocol for conformity by (re)using
 a single substream for outbound pings, addressing

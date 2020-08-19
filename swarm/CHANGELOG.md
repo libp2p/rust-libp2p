@@ -1,4 +1,4 @@
-# 0.21.0 [unreleased]
+# 0.21.0 [2020-08-18]
 
 - Add missing delegation calls in some `ProtocolsHandler` wrappers.
 See [PR 1710](https://github.com/libp2p/rust-libp2p/pull/1710).
