@@ -29,6 +29,7 @@ use futures::{
     stream::FuturesUnordered
 };
 use std::{
+    borrow::Cow,
     collections::hash_map,
     error,
     fmt,
@@ -234,6 +235,12 @@ pub enum Event<'a, I, O, H, TE, HE, C> {
         /// The new [`ConnectedPoint`].
         new_endpoint: ConnectedPoint,
     },
+
+    /// A connection is being kept alive by a different protocol.
+    KeepAliveProtocolChange{
+        entry: EstablishedEntry<'a, I, C>,
+        new_protocol: Cow<'static, [u8]>,
+    },
 }
 
 impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
@@ -399,6 +406,12 @@ impl<I, O, H, TE, HE, C> Manager<I, O, H, TE, HE, C> {
                         new_endpoint: new,
                     }
                 }
+                task::Event::KeepAliveProtocolChange { id: _, new_protocol } => {
+                    Event::KeepAliveProtocolChange {
+                        entry: EstablishedEntry { task },
+                        new_protocol,
+                    }
+                }
                 task::Event::Closed { id, error } => {
                     let id = ConnectionId(id);
                     let task = task.remove();
@@ -532,4 +545,3 @@ impl<'a, I, C> PendingEntry<'a, I, C> {
         self.task.remove();
     }
 }
-

@@ -78,7 +78,7 @@ impl ProtocolsHandler for DummyProtocolsHandler {
     fn inject_listen_upgrade_error(&mut self, _: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error>) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        self.keep_alive.clone()
     }
 
     fn poll(

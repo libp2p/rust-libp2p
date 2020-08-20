@@ -57,7 +57,7 @@ use libp2p_core::{
     PeerId,
     upgrade::{self, UpgradeError},
 };
-use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
+use std::{borrow::Cow, cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
 
 pub use dummy::DummyProtocolsHandler;
@@ -502,12 +502,26 @@ where T: ProtocolsHandler
 }
 
 /// How long the connection should be kept alive.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+///
+/// [`KeepAlive::Until`] and [`KeepAlive::Yes`] carry an additional protocol identifier specifying
+/// which protocol is keeping the connection alive. A [`ProtocolsHandler`] that wraps other
+/// [`ProtocolHandler`]s should return the protocol identifier of the [`ProtocolHandler`] that
+/// returned the longest [`KeepAlive`].
+//
+// TODO: Instead of using a primitive type, how about a new-type to represent a protocol id?
+//
+// TODO: One might need to be able to specify multiple protocols, e.g. for request_response.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeepAlive {
     /// If nothing new happens, the connection should be closed at the given `Instant`.
-    Until(Instant),
+    Until {
+        deadline: Instant,
+        protocol: Cow<'static, [u8]>,
+    },
     /// Keep the connection alive.
-    Yes,
+    Yes {
+        protocol: Cow<'static, [u8]>,
+    },
     /// Close the connection as soon as possible.
     No,
 }
@@ -516,8 +530,16 @@ impl KeepAlive {
     /// Returns true for `Yes`, false otherwise.
     pub fn is_yes(&self) -> bool {
         match *self {
-            KeepAlive::Yes => true,
+            KeepAlive::Yes { .. } => true,
             _ => false,
+        }
+    }
+
+    pub fn protocol(&self) -> Option<&Cow<'static, [u8]>> {
+        match self {
+            KeepAlive::Until { protocol, .. } => Some(protocol),
+            KeepAlive::Yes { protocol, .. } => Some(protocol),
+            KeepAlive::No => None,
         }
     }
 }
@@ -533,10 +555,10 @@ impl Ord for KeepAlive {
         use self::KeepAlive::*;
 
         match (self, other) {
-            (No, No) | (Yes, Yes)  => Ordering::Equal,
-            (No,  _) | (_,   Yes)  => Ordering::Less,
-            (_,  No) | (Yes,   _)  => Ordering::Greater,
-            (Until(t1), Until(t2)) => t1.cmp(t2),
+            (No, No) | (Yes { .. }, Yes { .. })  => Ordering::Equal,
+            (No,  _) | (_,   Yes { .. })  => Ordering::Less,
+            (_,  No) | (Yes { .. },   _)  => Ordering::Greater,
+            (Until { deadline: d1, .. }, Until { deadline: d2, .. }) => d1.cmp(d2),
         }
     }
 }

@@ -30,6 +30,9 @@ use prost::Message;
 use std::convert::TryFrom;
 use std::{fmt, io, iter, pin::Pin};
 
+/// The protocol name used for negotiating with multistream-select.
+pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/id/1.0.0";
+
 /// Configuration for an upgrade to the `Identify` protocol.
 #[derive(Debug, Clone)]
 pub struct IdentifyProtocolConfig;
@@ -115,7 +118,7 @@ impl UpgradeInfo for IdentifyProtocolConfig {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/1.0.0")
+        iter::once(DEFAULT_PROTO_NAME)
     }
 }
 

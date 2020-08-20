@@ -50,12 +50,15 @@ pub struct Ping;
 
 const PING_SIZE: usize = 32;
 
+/// The protocol name used for negotiating with multistream-select.
+pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/ping/1.0.0";
+
 impl UpgradeInfo for Ping {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/ping/1.0.0")
+        iter::once(DEFAULT_PROTO_NAME)
     }
 }
 

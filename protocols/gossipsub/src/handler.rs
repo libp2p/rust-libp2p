@@ -90,9 +90,10 @@ impl GossipsubHandler {
         max_transmit_size: usize,
         validation_mode: ValidationMode,
     ) -> Self {
+        let protocol_id = protocol_id.into();
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
-                protocol_id,
+                protocol_id.clone(),
                 max_transmit_size,
                 validation_mode,
             )),
@@ -100,7 +101,7 @@ impl GossipsubHandler {
             outbound_substream: None,
             outbound_substream_establishing: false,
             send_queue: SmallVec::new(),
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Yes { protocol: protocol_id },
         }
     }
 }
@@ -161,7 +162,7 @@ impl ProtocolsHandler for GossipsubHandler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        self.keep_alive.clone()
     }
 
     fn poll(

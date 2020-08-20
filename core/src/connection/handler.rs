@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Multiaddr, PeerId};
-use std::{task::Context, task::Poll};
+use std::{borrow::Cow, task::Context, task::Poll};
 use super::{Connected, SubstreamEndpoint};
 
 /// The interface of a connection handler.
@@ -92,10 +92,13 @@ where
 }
 
 /// Event produced by a handler.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// Require a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest(TOutboundOpenInfo),
+
+    /// The protocol keeping the connection alive changed.
+    KeepAliveProtocolChange(Cow<'static, [u8]>),
 
     /// Other event.
     Custom(TCustom),
@@ -112,6 +115,9 @@ impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCust
                 ConnectionHandlerEvent::OutboundSubstreamRequest(map(val))
             },
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
+            ConnectionHandlerEvent::KeepAliveProtocolChange(p) => {
+                ConnectionHandlerEvent::KeepAliveProtocolChange(p)
+            },
         }
     }
 
@@ -123,8 +129,10 @@ impl<TOutboundOpenInfo, TCustom> ConnectionHandlerEvent<TOutboundOpenInfo, TCust
             ConnectionHandlerEvent::OutboundSubstreamRequest(val) => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest(val)
             },
+            ConnectionHandlerEvent::KeepAliveProtocolChange(p) => {
+                ConnectionHandlerEvent::KeepAliveProtocolChange(p)
+            },
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
         }
     }
 }
-

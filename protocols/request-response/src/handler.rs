@@ -45,12 +45,18 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 use std::{
+    borrow::Cow,
     collections::VecDeque,
     io,
     time::Duration,
     task::{Context, Poll}
 };
 use wasm_timer::Instant;
+
+/// The protocol name used for negotiating with multistream-select.
+//
+// TODO: Derive this from [`RequestResponseHandler.inbound_protocols`].
+pub const DEFAULT_PROTO_NAME: &[u8] = b"request_response";
 
 /// A connection handler of a `RequestResponse` protocol.
 #[doc(hidden)]
@@ -94,10 +100,11 @@ where
         keep_alive_timeout: Duration,
         substream_timeout: Duration,
     ) -> Self {
+        let keep_alive = KeepAlive::Yes { protocol: Cow::Borrowed(DEFAULT_PROTO_NAME)};
         Self {
             inbound_protocols,
             codec,
-            keep_alive: KeepAlive::Yes,
+            keep_alive: keep_alive,
             keep_alive_timeout,
             substream_timeout,
             outbound: VecDeque::new(),
@@ -196,7 +203,7 @@ where
     }
 
     fn inject_event(&mut self, request: Self::InEvent) {
-        self.keep_alive = KeepAlive::Yes;
+        self.keep_alive = KeepAlive::Yes { protocol: Cow::Borrowed(DEFAULT_PROTO_NAME)};
         self.outbound.push_back(request);
     }
 
@@ -254,7 +261,7 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        self.keep_alive.clone()
     }
 
     fn poll(
@@ -281,7 +288,7 @@ where
             match result {
                 Ok((rq, rs_sender)) => {
                     // We received an inbound request.
-                    self.keep_alive = KeepAlive::Yes;
+                    self.keep_alive = KeepAlive::Yes { protocol: Cow::Borrowed(DEFAULT_PROTO_NAME) };
                     return Poll::Ready(ProtocolsHandlerEvent::Custom(
                         RequestResponseHandlerEvent::Request {
                             request: rq, sender: rs_sender
@@ -318,10 +325,9 @@ where
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.
             let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
-            self.keep_alive = KeepAlive::Until(until);
+            self.keep_alive = KeepAlive::Until { deadline: until, protocol: Cow::Borrowed(DEFAULT_PROTO_NAME) };
         }
 
         Poll::Pending
     }
 }
-

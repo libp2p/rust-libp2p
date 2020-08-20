@@ -30,6 +30,7 @@ use libp2p_swarm::{
     ProtocolsHandlerEvent
 };
 use std::{
+    borrow::Cow,
     error::Error,
     io,
     fmt,
@@ -235,7 +236,7 @@ impl ProtocolsHandler for PingHandler {
 
     fn connection_keep_alive(&self) -> KeepAlive {
         if self.config.keep_alive {
-            KeepAlive::Yes
+            KeepAlive::Yes { protocol: Cow::Borrowed(protocol::DEFAULT_PROTO_NAME) }
         } else {
             KeepAlive::No
         }
@@ -355,4 +356,3 @@ enum PingState {
     /// A ping is being sent and the response awaited.
     Ping(PingFuture),
 }
-

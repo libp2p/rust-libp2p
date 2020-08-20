@@ -506,6 +506,9 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                     let connection = connection.id();
                     this.behaviour.inject_address_change(&peer, &connection, &old_endpoint, &new_endpoint);
                 },
+                Poll::Ready(NetworkEvent::KeepAliveProtocolChange { connection, new_protocol }) => {
+                    this.behaviour.inject_keep_alive_protocol_change(&connection.id(), new_protocol);
+                },
                 Poll::Ready(NetworkEvent::ConnectionEstablished { connection, num_established }) => {
                     let peer_id = connection.peer_id().clone();
                     let endpoint = connection.endpoint().clone();

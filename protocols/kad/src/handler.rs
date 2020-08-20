@@ -381,7 +381,10 @@ struct UniqueConnecId(u64);
 impl<TUserData> KademliaHandler<TUserData> {
     /// Create a [`KademliaHandler`] using the given configuration.
     pub fn new(config: KademliaHandlerConfig) -> Self {
-        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
+        let keep_alive = KeepAlive::Until {
+            deadline: Instant::now() + config.idle_timeout,
+            protocol: config.protocol_config.protocol_name().clone(),
+        };
 
         KademliaHandler {
             config,
@@ -607,7 +610,7 @@ where
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        self.keep_alive.clone()
     }
 
     fn poll(
@@ -632,7 +635,10 @@ where
                     }
                     (None, Some(event), _) => {
                         if self.substreams.is_empty() {
-                            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
+                            self.keep_alive = KeepAlive::Until {
+                                deadline: Instant::now() + self.config.idle_timeout,
+                                protocol: self.config.protocol_config.protocol_name().clone(),
+                            };
                         }
                         return Poll::Ready(event);
                     }
@@ -653,9 +659,14 @@ where
 
         if self.substreams.is_empty() {
             // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
+            self.keep_alive = KeepAlive::Until {
+                deadline: Instant::now() + self.config.idle_timeout,
+                protocol: self.config.protocol_config.protocol_name().clone(),
+            }
         } else {
-            self.keep_alive = KeepAlive::Yes;
+            self.keep_alive = KeepAlive::Yes {
+                protocol: self.config.protocol_config.protocol_name().clone(),
+            };
         }
 
         Poll::Pending

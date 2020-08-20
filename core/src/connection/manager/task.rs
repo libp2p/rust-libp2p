@@ -34,7 +34,7 @@ use crate::{
     },
 };
 use futures::{prelude::*, channel::mpsc, stream};
-use std::{pin::Pin, task::Context, task::Poll};
+use std::{borrow::Cow, pin::Pin, task::Context, task::Poll};
 use super::ConnectResult;
 
 /// Identifier of a [`Task`] in a [`Manager`](super::Manager).
@@ -60,6 +60,8 @@ pub enum Event<T, H, TE, HE, C> {
     Failed { id: TaskId, error: PendingConnectionError<TE>, handler: H },
     /// A node we are connected to has changed its address.
     AddressChange { id: TaskId, new_address: Multiaddr },
+    /// The protocol keeping the connection alive changed.
+    KeepAliveProtocolChange{ id: TaskId, new_protocol: Cow<'static, [u8]> },
     /// Notify the manager of an event from the connection.
     Notify { id: TaskId, event: T },
     /// A connection closed, possibly due to an error.
@@ -75,6 +77,7 @@ impl<T, H, TE, HE, C> Event<T, H, TE, HE, C> {
             Event::Established { id, .. } => id,
             Event::Failed { id, .. } => id,
             Event::AddressChange { id, .. } => id,
+            Event::KeepAliveProtocolChange { id, .. } => id,
             Event::Notify { id, .. } => id,
             Event::Closed { id, .. } => id,
         }
@@ -298,6 +301,12 @@ where
                                 this.state = State::Established {
                                     connection,
                                     event: Some(Event::AddressChange { id, new_address })
+                                };
+                            }
+                            Poll::Ready(Ok(connection::Event::KeepAliveProtocolChange(new_protocol))) => {
+                                this.state = State::Established {
+                                    connection,
+                                    event: Some(Event::KeepAliveProtocolChange{ id, new_protocol })
                                 };
                             }
                             Poll::Ready(Err(error)) => {

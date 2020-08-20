@@ -147,7 +147,7 @@ pub struct KademliaProtocolConfig {
 
 impl KademliaProtocolConfig {
     /// Returns the configured protocol name.
-    pub fn protocol_name(&self) -> &[u8] {
+    pub fn protocol_name(&self) -> &Cow<'static, [u8]> {
         &self.protocol_name
     }
 

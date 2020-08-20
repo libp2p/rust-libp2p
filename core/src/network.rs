@@ -426,6 +426,12 @@ where
                     old_endpoint,
                 }
             }
+            Poll::Ready(PoolEvent::KeepAliveProtocolChange { connection, new_protocol }) => {
+                NetworkEvent::KeepAliveProtocolChange {
+                    connection,
+                    new_protocol,
+                }
+            }
         };
 
         Poll::Ready(event)

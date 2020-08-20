@@ -42,7 +42,7 @@ use crate::{
     transport::{Transport, TransportError},
 };
 use futures::prelude::*;
-use std::{error, fmt, hash::Hash, num::NonZeroU32};
+use std::{borrow::Cow, error, fmt, hash::Hash, num::NonZeroU32};
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
@@ -174,6 +174,14 @@ where
         /// Old endpoint of this connection.
         old_endpoint: ConnectedPoint,
     },
+
+    /// An established connection is being kept alive by a different protocol.
+    KeepAliveProtocolChange {
+        /// The connection whose address has changed.
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
+        /// New endpoint of this connection.
+        new_protocol: Cow<'static, [u8]>,
+    },
 }
 
 impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId> fmt::Debug for
@@ -265,6 +273,12 @@ where
                     .field("connection", connection)
                     .field("new_endpoint", new_endpoint)
                     .field("old_endpoint", old_endpoint)
+                    .finish()
+            }
+            NetworkEvent::KeepAliveProtocolChange { connection, new_protocol } => {
+                f.debug_struct("KeepAliveProtocolChange")
+                    .field("connection", connection)
+                    .field("new_protocol", new_protocol)
                     .finish()
             }
         }

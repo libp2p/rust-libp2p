@@ -43,7 +43,7 @@ use either::Either;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{convert::TryFrom as _, error, fmt, hash::Hash, num::NonZeroU32, task::Context, task::Poll};
+use std::{borrow::Cow, convert::TryFrom as _, error, fmt, hash::Hash, num::NonZeroU32, task::Context, task::Poll};
 
 /// A connection `Pool` manages a set of connections for each peer.
 pub struct Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo = PeerId, TPeerId = PeerId> {
@@ -152,6 +152,14 @@ pub enum PoolEvent<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TC
         /// The old endpoint.
         old_endpoint: ConnectedPoint,
     },
+
+    /// The connection to a node is being kept alive by a different protocol.
+    KeepAliveProtocolChange {
+        /// The connection that is being kept alive by a different protocol.
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
+        /// The identifier of the protocol keeping the connection alive.
+        new_protocol: Cow<'static, [u8]>,
+    }
 }
 
 impl<'a, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId> fmt::Debug
@@ -194,6 +202,12 @@ where
                     .field("conn_info", connection.info())
                     .field("new_endpoint", new_endpoint)
                     .field("old_endpoint", old_endpoint)
+                    .finish()
+            },
+            PoolEvent::KeepAliveProtocolChange { ref connection, ref new_protocol } => {
+                f.debug_struct("PoolEvent::KeepAliveProtocolChange")
+                    .field("conn_info", connection.info())
+                    .field("new_protocol", new_protocol)
                     .finish()
             },
         }
@@ -734,6 +748,17 @@ where
                                 connection,
                                 new_endpoint,
                                 old_endpoint,
+                            }),
+                        _ => unreachable!("since `entry` is an `EstablishedEntry`.")
+                    }
+                },
+                manager::Event::KeepAliveProtocolChange { entry, new_protocol } => {
+                    let id = entry.id();
+                    match self.get(id) {
+                        Some(PoolConnection::Established(connection)) =>
+                            return Poll::Ready(PoolEvent::KeepAliveProtocolChange {
+                                connection,
+                                new_protocol
                             }),
                         _ => unreachable!("since `entry` is an `EstablishedEntry`.")
                     }

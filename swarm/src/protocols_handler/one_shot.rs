@@ -28,8 +28,11 @@ use crate::protocols_handler::{
 };
 
 use smallvec::SmallVec;
-use std::{error, task::Context, task::Poll, time::Duration};
+use std::{borrow::Cow, error, task::Context, task::Poll, time::Duration};
 use wasm_timer::Instant;
+
+// TODO: Use the protocol identifier of the protocol using [`OneShotHandler`].
+const PROTOCOL_ID: &[u8]  = b"one-shot";
 
 /// A `ProtocolsHandler` that opens a new substream for each request.
 // TODO: Debug
@@ -72,7 +75,7 @@ where
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             max_dial_negotiated: 8,
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Yes { protocol: Cow::Borrowed(PROTOCOL_ID) },
             config,
         }
     }
@@ -100,7 +103,7 @@ where
 
     /// Opens an outbound substream with `upgrade`.
     pub fn send_request(&mut self, upgrade: TOutbound) {
-        self.keep_alive = KeepAlive::Yes;
+        self.keep_alive = KeepAlive::Yes { protocol: Cow::Borrowed(PROTOCOL_ID)};
         self.dial_queue.push(upgrade);
     }
 }
@@ -149,7 +152,10 @@ where
     ) {
         // If we're shutting down the connection for inactivity, reset the timeout.
         if !self.keep_alive.is_yes() {
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+            self.keep_alive = KeepAlive::Until {
+                deadline: Instant::now() + self.config.keep_alive_timeout,
+                protocol: Cow::Borrowed(PROTOCOL_ID),
+            };
         }
 
         self.events_out.push(out.into());
@@ -181,7 +187,7 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        self.keep_alive.clone()
     }
 
     fn poll(
@@ -218,7 +224,10 @@ where
             self.dial_queue.shrink_to_fit();
 
             if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+                self.keep_alive = KeepAlive::Until {
+                    deadline: Instant::now() + self.config.keep_alive_timeout,
+                    protocol: Cow::Borrowed(PROTOCOL_ID),
+                };
             }
         }
 

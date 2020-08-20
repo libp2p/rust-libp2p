@@ -35,7 +35,7 @@ pub use pool::{EstablishedConnection, EstablishedConnectionIter, PendingConnecti
 
 use crate::muxing::StreamMuxer;
 use crate::{Multiaddr, PeerId};
-use std::{error::Error, fmt, pin::Pin, task::Context, task::Poll};
+use std::{borrow::Cow, error::Error, fmt, pin::Pin, task::Context, task::Poll};
 use std::hash::Hash;
 use substream::{Muxing, SubstreamEvent};
 
@@ -199,6 +199,8 @@ pub enum Event<T> {
     Handler(T),
     /// Address of the remote has changed.
     AddressChange(Multiaddr),
+    /// The protocol keeping the connection alive changed.
+    KeepAliveProtocolChange(Cow<'static, [u8]>),
 }
 
 /// A multiplexed connection to a peer with an associated `ConnectionHandler`.
@@ -306,6 +308,9 @@ where
                 }
                 Poll::Ready(Ok(ConnectionHandlerEvent::Custom(event))) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
+                }
+                Poll::Ready(Ok(ConnectionHandlerEvent::KeepAliveProtocolChange(p))) => {
+                    return Poll::Ready(Ok(Event::KeepAliveProtocolChange(p)))
                 }
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::Handler(err))),
             }

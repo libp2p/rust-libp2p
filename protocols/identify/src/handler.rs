@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{RemoteInfo, IdentifyProtocolConfig, ReplySubstream};
+use crate::protocol::{DEFAULT_PROTO_NAME, RemoteInfo, IdentifyProtocolConfig, ReplySubstream};
 use futures::prelude::*;
 use libp2p_core::upgrade::{
     InboundUpgrade,
@@ -34,7 +34,7 @@ use libp2p_swarm::{
     ProtocolsHandlerUpgrErr
 };
 use smallvec::SmallVec;
-use std::{pin::Pin, task::Context, task::Poll, time::Duration};
+use std::{borrow::Cow, pin::Pin, task::Context, task::Poll, time::Duration};
 use wasm_timer::Delay;
 
 /// Delay between the moment we connect and the first time we identify.
@@ -81,7 +81,7 @@ impl IdentifyHandler {
             config: IdentifyProtocolConfig,
             events: SmallVec::new(),
             next_id: Delay::new(DELAY_TO_FIRST_ID),
-            keep_alive: KeepAlive::Yes,
+            keep_alive: KeepAlive::Yes { protocol: Cow::Borrowed(DEFAULT_PROTO_NAME) },
         }
     }
 }
@@ -129,7 +129,7 @@ impl ProtocolsHandler for IdentifyHandler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        self.keep_alive.clone()
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<
