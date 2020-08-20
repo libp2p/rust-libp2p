@@ -82,6 +82,7 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     remote: R,
     anchors: Option<TLSServerTrustAnchors<'static>>,
     // cert: Option<EndEntityCert<'static>>,
+    // exchange certificate and check the validity if some(_)
     cert: Option<Vec<u8>>,
     _marker: std::marker::PhantomData<P>
 }
@@ -105,14 +106,14 @@ where
     C: Protocol<C> + Zeroize
 {
     /// Create a new `NoiseConfig` for the `IX` handshake pattern.
-    pub fn ix(dh_keys: AuthenticKeypair<C>) -> Self {
+    pub fn ix(dh_keys: AuthenticKeypair<C>, anchors: Option<TLSServerTrustAnchors<'static>>, cert: Option<Vec<u8>>) -> Self {
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
             legacy: LegacyConfig::default(),
             remote: (),
-            anchors: None,
-            cert: None,
+            anchors: anchors,
+            cert: cert,
             _marker: std::marker::PhantomData
         }
     }

@@ -38,6 +38,14 @@ pub enum NoiseError {
     InvalidPayload(prost::DecodeError),
     /// A signature was required and could not be created.
     SigningError(identity::error::SigningError),
+    /// Invalid certificate
+    InvalidCertificate,
+    /// Certificate verification failed
+    CertificateVarificationFailed,
+    /// Invalid timestamp
+    InvalidTimestamp,
+    /// No certificate in handshake message
+    NoCertificate,
     #[doc(hidden)]
     __Nonexhaustive
 }
@@ -47,11 +55,15 @@ impl fmt::Display for NoiseError {
         match self {
             NoiseError::Io(e) => write!(f, "{}", e),
             NoiseError::Noise(e) => write!(f, "{}", e),
-            NoiseError::InvalidKey => f.write_str("invalid public key"),
+            NoiseError::InvalidKey => f.write_str("Invalid public key"),
             NoiseError::InvalidPayload(e) => write!(f, "{}", e),
             NoiseError::AuthenticationFailed => f.write_str("Authentication failed"),
             NoiseError::SigningError(e) => write!(f, "{}", e),
-            NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive")
+            NoiseError::InvalidCertificate => f.write_str("Invalid certificate"),
+            NoiseError::CertificateVarificationFailed => f.write_str("Certificate verification failed"),
+            NoiseError::InvalidTimestamp => f.write_str("Invalid timestamp"),
+            NoiseError::NoCertificate => f.write_str("No Certificate"),
+            NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive"),
         }
     }
 }
@@ -65,6 +77,10 @@ impl Error for NoiseError {
             NoiseError::AuthenticationFailed => None,
             NoiseError::InvalidPayload(e) => Some(e),
             NoiseError::SigningError(e) => Some(e),
+            NoiseError::InvalidCertificate => None,
+            NoiseError::CertificateVarificationFailed => None,
+            NoiseError::InvalidTimestamp => None,
+            NoiseError::NoCertificate => None,
             NoiseError::__Nonexhaustive => None
         }
     }

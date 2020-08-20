@@ -35,6 +35,7 @@ use futures::prelude::*;
 use futures::task;
 use prost::Message;
 use std::{io, pin::Pin, task::Context};
+use log::{info, trace};
 
 static ALL_SIGALGS: &[&webpki::SignatureAlgorithm] = &[
     &webpki::ED25519,
@@ -444,14 +445,22 @@ where
     }
 
     if !pb.data.is_empty() {
+        info!("+++++++++++++++++++++++++++++");
+        info!("get the certificate message");
+        info!("length of anchors is {:?}, data len is {:?}", 
+        state.anchors.unwrap().0.len(),
+        pb.data.len());
+
         let time = webpki::Time::try_from(std::time::SystemTime::now())
-            .map_err(|_| NoiseError::InvalidKey)?;
+            .map_err(|_| NoiseError::InvalidTimestamp)?;
         let remote_cert = webpki::EndEntityCert::from(&pb.data)
-            .map_err(|_| NoiseError::InvalidKey)?;
+            .map_err(|_| NoiseError::InvalidCertificate)?;
 
         remote_cert
             .verify_is_valid_tls_server_cert(ALL_SIGALGS, state.anchors.as_ref().unwrap(), &[], time)
-            .map_err(|_| NoiseError::InvalidKey)?;
+            .map_err(|_| NoiseError::CertificateVarificationFailed)?;
+    } else {
+        return Err(NoiseError::NoCertificate)
     }
 
     Ok(())

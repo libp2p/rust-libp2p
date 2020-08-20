@@ -17,6 +17,8 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+#[macro_use]
+extern crate lazy_static;
 
 use futures::{future::{self, Either}, prelude::*};
 use libp2p_core::identity;
@@ -27,6 +29,21 @@ use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
 use std::{convert::TryInto, io};
+
+use webpki;
+
+lazy_static! {
+    static ref trust_anchors: Box<Vec<webpki::TrustAnchor<'static>>> = {
+        // let ca = include_bytes!("../../../scripts/ca.der");
+        let ca = include_bytes!("/tmp/cert/ca.der");
+        let tmp_anchors = vec![webpki::trust_anchor_util::cert_der_as_trust_anchor(ca).unwrap()];
+        Box::new(tmp_anchors)
+    };
+
+    static ref anchors: webpki::TLSServerTrustAnchors<'static> = {
+        webpki::TLSServerTrustAnchors(&trust_anchors)
+    };
+}
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -114,14 +131,14 @@ fn ix() {
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::ix(server_dh), endpoint, upgrade::Version::V1)
+                upgrade::apply(output, NoiseConfig::ix(server_dh, Some(*anchors), Some(include_bytes!("../../../scripts/alice.der").to_vec()) ), endpoint, upgrade::Version::V1)
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::ix(client_dh), endpoint, upgrade::Version::V1)
+                upgrade::apply(output, NoiseConfig::ix(client_dh, Some(*anchors), Some(include_bytes!("../../../scripts/bob.der").to_vec())), endpoint, upgrade::Version::V1)
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
