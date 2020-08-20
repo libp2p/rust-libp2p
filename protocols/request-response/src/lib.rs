@@ -191,6 +191,8 @@ pub enum InboundFailure {
     Timeout,
     /// The local peer supports none of the requested protocols.
     UnsupportedProtocols,
+    /// The connection closed before a response was delivered.
+    ConnectionClosed
 }
 
 /// A channel for sending a response to an inbound request.
@@ -286,6 +288,8 @@ where
     pending_requests: HashMap<PeerId, SmallVec<[RequestProtocol<TCodec>; 10]>>,
     /// Responses that have not yet been received.
     pending_responses: HashMap<RequestId, (PeerId, ConnectionId)>,
+    /// Active inbound requests.
+    inbound_requests: HashMap<RequestId, (PeerId, ConnectionId)>
 }
 
 impl<TCodec> RequestResponse<TCodec>
@@ -319,6 +323,7 @@ where
             connected: HashMap::new(),
             pending_requests: HashMap::new(),
             pending_responses: HashMap::new(),
+            inbound_requests: HashMap::new(),
             addresses: HashMap::new(),
         }
     }
@@ -369,6 +374,7 @@ where
     /// The provided `ResponseChannel` is obtained from a
     /// [`RequestResponseMessage::Request`].
     pub fn send_response(&mut self, ch: ResponseChannel<TCodec::Response>, rs: TCodec::Response) {
+        self.inbound_requests.remove(&ch.request_id());
         // Fails only if the inbound upgrade timed out waiting for the response,
         // in which case the handler emits `RequestResponseHandlerEvent::InboundTimeout`
         // which in turn results in `RequestResponseEvent::InboundFailure`.
@@ -404,8 +410,13 @@ where
     /// Checks whether an outbound request initiated by
     /// [`RequestResponse::send_request`] is still pending, i.e. waiting
     /// for a response.
-    pub fn is_pending(&self, req_id: &RequestId) -> bool {
+    pub fn is_pending_outbound(&self, req_id: &RequestId) -> bool {
         self.pending_responses.contains_key(req_id)
+    }
+
+    /// Checks whether an inbound request is still being processed.
+    pub fn is_pending_inbound(&self, req_id: &RequestId) -> bool {
+        self.inbound_requests.contains_key(req_id)
     }
 
     /// Returns the next request ID.
@@ -490,27 +501,37 @@ where
             }
         }
 
-        // Any pending responses of requests sent over this connection
-        // must be considered failed.
-        let failed = self.pending_responses.iter()
-            .filter_map(|(r, (p, c))|
-                if conn == c {
-                    Some((p.clone(), *r))
-                } else {
-                    None
-                })
-            .collect::<Vec<_>>();
+        let pending_events = &mut self.pending_events;
 
-        for (peer, request_id) in failed {
-            self.pending_responses.remove(&request_id);
-            self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
+        // Any pending responses of requests sent over this connection must be considered failed.
+        self.pending_responses.retain(|rid, (peer, cid)| {
+            if conn != cid {
+                return true
+            }
+            pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 RequestResponseEvent::OutboundFailure {
-                    peer,
-                    request_id,
+                    peer: peer.clone(),
+                    request_id: *rid,
                     error: OutboundFailure::ConnectionClosed
                 }
             ));
-        }
+            false
+        });
+
+        // Any inbound requests of this connection must be considered failed.
+        self.inbound_requests.retain(|rid, (peer, cid)| {
+            if conn != cid {
+                return true
+            }
+            pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                RequestResponseEvent::InboundFailure {
+                    peer: peer.clone(),
+                    request_id: *rid,
+                    error: InboundFailure::ConnectionClosed
+                }
+            ));
+            false
+        });
     }
 
     fn inject_disconnected(&mut self, peer: &PeerId) {
@@ -540,7 +561,7 @@ where
     fn inject_event(
         &mut self,
         peer: PeerId,
-        _: ConnectionId,
+        conn: ConnectionId,
         event: RequestResponseHandlerEvent<TCodec>,
     ) {
         match event {
@@ -554,9 +575,10 @@ where
             RequestResponseHandlerEvent::Request { request_id, request, sender } => {
                 let channel = ResponseChannel { request_id, peer: peer.clone(), sender };
                 let message = RequestResponseMessage::Request { request_id, request, channel };
-                self.pending_events.push_back(
-                    NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message }));
+                self.inbound_requests.insert(request_id, (peer.clone(), conn));
+                self.pending_events.push_back(NetworkBehaviourAction::GenerateEvent(
+                    RequestResponseEvent::Message { peer, message }
+                ));
             }
             RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
                 if let Some((peer, _conn)) = self.pending_responses.remove(&request_id) {
@@ -570,13 +592,14 @@ where
                 }
             }
             RequestResponseHandlerEvent::InboundTimeout(request_id) => {
-                    self.pending_events.push_back(
-                        NetworkBehaviourAction::GenerateEvent(
-                            RequestResponseEvent::InboundFailure {
-                                peer,
-                                request_id,
-                                error: InboundFailure::Timeout,
-                            }));
+                self.inbound_requests.remove(&request_id);
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::InboundFailure {
+                            peer,
+                            request_id,
+                            error: InboundFailure::Timeout,
+                        }));
             }
             RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
                 self.pending_events.push_back(

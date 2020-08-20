@@ -192,9 +192,16 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
 
     /// Are we waiting for a response to the given request?
     ///
-    /// See [`RequestResponse::is_pending`] for details.
-    pub fn is_pending(&self, id: &RequestId) -> bool {
-        self.behaviour.is_pending(id)
+    /// See [`RequestResponse::is_pending_outbound`] for details.
+    pub fn is_pending_outbound(&self, id: &RequestId) -> bool {
+        self.behaviour.is_pending_outbound(id)
+    }
+
+    /// Are we still processing and inbound request?
+    ///
+    /// See [`RequestResponse::is_pending_inbound`] for details.
+    pub fn is_pending_inbound(&self, id: &RequestId) -> bool {
+        self.behaviour.is_pending_inbound(id)
     }
 
     /// Update the limits when a request resolved.
