@@ -20,11 +20,16 @@
 #[macro_use]
 extern crate lazy_static;
 
-use futures::{future::{self, Either}, prelude::*};
+use futures::{
+    future::{self, Either},
+    prelude::*,
+};
 use libp2p_core::identity;
-use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
-use libp2p_core::transport::{Transport, ListenerEvent};
-use libp2p_noise::{Keypair, X25519, X25519Spec, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
+use libp2p_core::transport::{ListenerEvent, Transport};
+use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
+use libp2p_noise::{
+    Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
+};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
 use log::info;
 use quickcheck::QuickCheck;
@@ -34,8 +39,7 @@ use webpki;
 
 lazy_static! {
     static ref trust_anchors: Box<Vec<webpki::TrustAnchor<'static>>> = {
-        // let ca = include_bytes!("../../../scripts/ca.der");
-        let ca = include_bytes!("/tmp/cert/ca.der");
+        let ca = include_bytes!("../../../scripts/ca.der");
         let tmp_anchors = vec![webpki::trust_anchor_util::cert_der_as_trust_anchor(ca).unwrap()];
         Box::new(tmp_anchors)
     };
@@ -51,8 +55,15 @@ fn core_upgrade_compat() {
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
-    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-    let _ = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
+    let noise = NoiseConfig::xx(
+        dh_keys,
+        *anchors,
+        include_bytes!("../../../scripts/alice.der").to_vec(),
+    )
+    .into_authenticated();
+    let _ = TcpConfig::new()
+        .upgrade(upgrade::Version::V1)
+        .authenticate(noise);
 }
 
 #[test]
@@ -66,24 +77,48 @@ fn xx_spec() {
         let server_id_public = server_id.public();
         let client_id_public = client_id.public();
 
-        let server_dh = Keypair::<X25519Spec>::new().into_authentic(&server_id).unwrap();
+        let server_dh = Keypair::<X25519Spec>::new()
+            .into_authentic(&server_id)
+            .unwrap();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::xx(server_dh), endpoint, upgrade::Version::V1)
+                upgrade::apply(
+                    output,
+                    NoiseConfig::xx(
+                        server_dh,
+                        *anchors,
+                        include_bytes!("../../../scripts/alice.der").to_vec(),
+                    ),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
-        let client_dh = Keypair::<X25519Spec>::new().into_authentic(&client_id).unwrap();
+        let client_dh = Keypair::<X25519Spec>::new()
+            .into_authentic(&client_id)
+            .unwrap();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::xx(client_dh), endpoint, upgrade::Version::V1)
+                upgrade::apply(
+                    output,
+                    NoiseConfig::xx(
+                        client_dh,
+                        *anchors,
+                        include_bytes!("../../../scripts/bob.der").to_vec(),
+                    ),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[test]
@@ -100,21 +135,41 @@ fn xx() {
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::xx(server_dh), endpoint, upgrade::Version::V1)
+                upgrade::apply(
+                    output,
+                    NoiseConfig::xx(
+                        server_dh,
+                        *anchors,
+                        include_bytes!("../../../scripts/alice.der").to_vec(),
+                    ),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::xx(client_dh), endpoint, upgrade::Version::V1)
+                upgrade::apply(
+                    output,
+                    NoiseConfig::xx(
+                        client_dh,
+                        *anchors,
+                        include_bytes!("../../../scripts/bob.der").to_vec(),
+                    ),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[test]
@@ -131,21 +186,41 @@ fn ix() {
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::ix(server_dh, Some(*anchors), Some(include_bytes!("../../../scripts/alice.der").to_vec()) ), endpoint, upgrade::Version::V1)
+                upgrade::apply(
+                    output,
+                    NoiseConfig::ix(
+                        server_dh,
+                        *anchors,
+                        include_bytes!("../../../scripts/alice.der").to_vec(),
+                    ),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
-                upgrade::apply(output, NoiseConfig::ix(client_dh, Some(*anchors), Some(include_bytes!("../../../scripts/bob.der").to_vec())), endpoint, upgrade::Version::V1)
+                upgrade::apply(
+                    output,
+                    NoiseConfig::ix(
+                        client_dh,
+                        *anchors,
+                        include_bytes!("../../../scripts/bob.der").to_vec(),
+                    ),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[test]
@@ -164,10 +239,24 @@ fn ik_xx() {
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
-                    Either::Left(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
+                    Either::Left(apply_inbound(
+                        output,
+                        NoiseConfig::ik_listener(
+                            server_dh,
+                            *anchors,
+                            include_bytes!("../../../scripts/alice.der").to_vec(),
+                        ),
+                    ))
                 } else {
-                    Either::Right(apply_outbound(output, NoiseConfig::xx(server_dh),
-                        upgrade::Version::V1))
+                    Either::Right(apply_outbound(
+                        output,
+                        NoiseConfig::xx(
+                            server_dh,
+                            *anchors,
+                            include_bytes!("../../../scripts/alice.der").to_vec(),
+                        ),
+                        upgrade::Version::V1,
+                    ))
                 }
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
@@ -177,11 +266,26 @@ fn ik_xx() {
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
-                    Either::Left(apply_outbound(output,
-                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public),
-                        upgrade::Version::V1))
+                    Either::Left(apply_outbound(
+                        output,
+                        NoiseConfig::ik_dialer(
+                            client_dh,
+                            server_id_public,
+                            server_dh_public,
+                            *anchors,
+                            include_bytes!("../../../scripts/alice.der").to_vec(),
+                        ),
+                        upgrade::Version::V1,
+                    ))
                 } else {
-                    Either::Right(apply_inbound(output, NoiseConfig::xx(client_dh)))
+                    Either::Right(apply_inbound(
+                        output,
+                        NoiseConfig::xx(
+                            client_dh,
+                            *anchors,
+                            include_bytes!("../../../scripts/bob.der").to_vec(),
+                        ),
+                    ))
                 }
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public2));
@@ -189,7 +293,9 @@ fn ik_xx() {
         run(server_transport, client_transport, messages);
         true
     }
-    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<Message>) -> bool)
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<TcpTransStream>>);
@@ -204,14 +310,15 @@ where
     U::Dial: Send + 'static,
     U::Listener: Send + 'static,
     U::ListenerUpgrade: Send + 'static,
-    I: IntoIterator<Item = Message> + Clone
+    I: IntoIterator<Item = Message> + Clone,
 {
     futures::executor::block_on(async {
         let mut server: T::Listener = server_transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let server_address = server.try_next()
+        let server_address = server
+            .try_next()
             .await
             .expect("some event")
             .expect("no error")
@@ -220,7 +327,8 @@ where
 
         let outbound_msgs = messages.clone();
         let client_fut = async {
-            let mut client_session = client_transport.dial(server_address.clone())
+            let mut client_session = client_transport
+                .dial(server_address.clone())
                 .unwrap()
                 .await
                 .map(|(_, session)| session)
@@ -235,7 +343,8 @@ where
         };
 
         let server_fut = async {
-            let mut server_session = server.try_next()
+            let mut server_session = server
+                .try_next()
                 .await
                 .expect("some event")
                 .map(ListenerEvent::into_upgrade)
@@ -252,12 +361,15 @@ where
                     match server_session.read_exact(&mut n).await {
                         Ok(()) => u64::from_be_bytes(n),
                         Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => 0,
-                        Err(e) => panic!("error reading len: {}", e)
+                        Err(e) => panic!("error reading len: {}", e),
                     }
                 };
                 info!("server: reading message ({} bytes)", len);
                 let mut server_buffer = vec![0; len.try_into().unwrap()];
-                server_session.read_exact(&mut server_buffer).await.expect("no error");
+                server_session
+                    .read_exact(&mut server_buffer)
+                    .await
+                    .expect("no error");
                 assert_eq!(server_buffer, m.0)
             }
         };
@@ -266,12 +378,13 @@ where
     })
 }
 
-fn expect_identity<C>(output: Output<C>, pk: &identity::PublicKey)
-    -> impl Future<Output = Result<Output<C>, NoiseError>>
-{
+fn expect_identity<C>(
+    output: Output<C>,
+    pk: &identity::PublicKey,
+) -> impl Future<Output = Result<Output<C>, NoiseError>> {
     match output.0 {
         RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),
-        _ => panic!("Unexpected remote identity")
+        _ => panic!("Unexpected remote identity"),
     }
 }
 

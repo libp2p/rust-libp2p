@@ -80,10 +80,8 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     params: ProtocolParams,
     legacy: LegacyConfig,
     remote: R,
-    anchors: Option<TLSServerTrustAnchors<'static>>,
-    // cert: Option<EndEntityCert<'static>>,
-    // exchange certificate and check the validity if some(_)
-    cert: Option<Vec<u8>>,
+    anchors: TLSServerTrustAnchors<'static>,
+    cert: Vec<u8>,
     _marker: std::marker::PhantomData<P>
 }
 
@@ -106,7 +104,7 @@ where
     C: Protocol<C> + Zeroize
 {
     /// Create a new `NoiseConfig` for the `IX` handshake pattern.
-    pub fn ix(dh_keys: AuthenticKeypair<C>, anchors: Option<TLSServerTrustAnchors<'static>>, cert: Option<Vec<u8>>) -> Self {
+    pub fn ix(dh_keys: AuthenticKeypair<C>, anchors: TLSServerTrustAnchors<'static>, cert: Vec<u8>) -> Self {
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
@@ -124,14 +122,14 @@ where
     C: Protocol<C> + Zeroize
 {
     /// Create a new `NoiseConfig` for the `XX` handshake pattern.
-    pub fn xx(dh_keys: AuthenticKeypair<C>) -> Self {
+    pub fn xx(dh_keys: AuthenticKeypair<C>, anchors: TLSServerTrustAnchors<'static>, cert: Vec<u8>) -> Self {
         NoiseConfig {
             dh_keys,
             params: C::params_xx(),
             legacy: LegacyConfig::default(),
             remote: (),
-            anchors: None,
-            cert: None,
+            anchors: anchors,
+            cert: cert,
             _marker: std::marker::PhantomData
         }
     }
@@ -145,14 +143,14 @@ where
     ///
     /// Since the identity of the local node is known to the remote, this configuration
     /// does not transmit a static DH public key or public identity key to the remote.
-    pub fn ik_listener(dh_keys: AuthenticKeypair<C>) -> Self {
+    pub fn ik_listener(dh_keys: AuthenticKeypair<C>, anchors: TLSServerTrustAnchors<'static>, cert: Vec<u8>) -> Self {
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
             legacy: LegacyConfig::default(),
             remote: (),
-            anchors: None,
-            cert: None,
+            anchors: anchors,
+            cert: cert,
             _marker: std::marker::PhantomData
         }
     }
@@ -169,15 +167,16 @@ where
     pub fn ik_dialer(
         dh_keys: AuthenticKeypair<C>,
         remote_id: identity::PublicKey,
-        remote_dh: PublicKey<C>
+        remote_dh: PublicKey<C>,
+        anchors: TLSServerTrustAnchors<'static>, cert: Vec<u8>
     ) -> Self {
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
             legacy: LegacyConfig::default(),
             remote: (remote_dh, remote_id),
-            anchors: None,
-            cert: None,
+            anchors: anchors,
+            cert: cert,
             _marker: std::marker::PhantomData
         }
     }

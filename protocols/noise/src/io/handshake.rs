@@ -134,8 +134,8 @@ pub fn rt1_initiator<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
-    anchors: Option<TLSServerTrustAnchors<'static>>,
-    cert: Option<Vec<u8>>,
+    anchors: TLSServerTrustAnchors<'static>,
+    cert: Vec<u8>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
@@ -171,8 +171,8 @@ pub fn rt1_responder<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
-    anchors: Option<TLSServerTrustAnchors<'static>>,
-    cert: Option<Vec<u8>>,
+    anchors: TLSServerTrustAnchors<'static>,
+    cert: Vec<u8>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Send + Unpin + 'static,
@@ -210,8 +210,8 @@ pub fn rt15_initiator<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
-    anchors: Option<TLSServerTrustAnchors<'static>>,
-    cert: Option<Vec<u8>>,
+    anchors: TLSServerTrustAnchors<'static>,
+    cert: Vec<u8>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
@@ -250,8 +250,8 @@ pub fn rt15_responder<T, C>(
     identity: KeypairIdentity,
     identity_x: IdentityExchange,
     legacy: LegacyConfig,
-    anchors: Option<TLSServerTrustAnchors<'static>>,
-    cert: Option<Vec<u8>>,
+    anchors: TLSServerTrustAnchors<'static>,
+    cert: Vec<u8>,
 ) -> Handshake<T, C>
 where
     T: AsyncWrite + AsyncRead + Unpin + Send + 'static,
@@ -284,8 +284,8 @@ struct State<T> {
     send_identity: bool,
     /// Legacy configuration parameters.
     legacy: LegacyConfig,
-    anchors: Option<TLSServerTrustAnchors<'static>>,
-    cert: Option<Vec<u8>>,
+    anchors: TLSServerTrustAnchors<'static>,
+    cert: Vec<u8>,
 }
 
 impl<T> State<T> {
@@ -300,8 +300,8 @@ impl<T> State<T> {
         identity: KeypairIdentity,
         identity_x: IdentityExchange,
         legacy: LegacyConfig,
-        anchors: Option<TLSServerTrustAnchors<'static>>,
-        cert: Option<Vec<u8>>,
+        anchors: TLSServerTrustAnchors<'static>,
+        cert: Vec<u8>,
     ) -> Result<Self, NoiseError> {
         let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
@@ -446,10 +446,6 @@ where
 
     if !pb.data.is_empty() {
         info!("+++++++++++++++++++++++++++++");
-        info!("get the certificate message");
-        info!("length of anchors is {:?}, data len is {:?}", 
-        state.anchors.unwrap().0.len(),
-        pb.data.len());
 
         let time = webpki::Time::try_from(std::time::SystemTime::now())
             .map_err(|_| NoiseError::InvalidTimestamp)?;
@@ -457,7 +453,7 @@ where
             .map_err(|_| NoiseError::InvalidCertificate)?;
 
         remote_cert
-            .verify_is_valid_tls_server_cert(ALL_SIGALGS, state.anchors.as_ref().unwrap(), &[], time)
+            .verify_is_valid_tls_server_cert(ALL_SIGALGS, &state.anchors, &[], time)
             .map_err(|_| NoiseError::CertificateVarificationFailed)?;
     } else {
         return Err(NoiseError::NoCertificate)
@@ -482,9 +478,7 @@ where
     }
 
     // for CA support
-    if let Some(cert) = &state.cert{
-        pb.data = cert.clone();
-    }
+    pb.data = state.cert.clone();
 
     let mut msg =
         if state.legacy.send_legacy_handshake {
