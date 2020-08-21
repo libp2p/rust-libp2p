@@ -22,6 +22,7 @@ mod protocol;
 
 use crate::{EMPTY_QUEUE_SHRINK_THRESHOLD, RequestId};
 use crate::codec::RequestResponseCodec;
+use protocol::InboundError;
 
 pub use protocol::{RequestProtocol, ResponseProtocol, ProtocolSupport};
 
@@ -138,6 +139,8 @@ where
     InboundTimeout(RequestId),
     /// An inbound request failed to negotiate a mutually supported protocol.
     InboundUnsupportedProtocols(RequestId),
+    /// An inbound request was not answered with a response.
+    InboundResponseOmission(RequestId)
 }
 
 impl<TCodec> ProtocolsHandler for RequestResponseHandler<TCodec>
@@ -240,7 +243,7 @@ where
     fn inject_listen_upgrade_error(
         &mut self,
         info: RequestId,
-        error: ProtocolsHandlerUpgrErr<io::Error>
+        error: ProtocolsHandlerUpgrErr<InboundError>
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timeout => {
@@ -255,10 +258,21 @@ where
                 self.pending_events.push_back(
                     RequestResponseHandlerEvent::InboundUnsupportedProtocols(info));
             }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)) => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+            }
+            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => match e {
+                InboundError::Io(e) => {
+                    let e = UpgradeError::Apply(e);
+                    self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(e))
+                }
+                InboundError::ResponseOmission(id) => {
+                    let e = RequestResponseHandlerEvent::InboundResponseOmission(id);
+                    self.pending_events.push_back(e)
+                }
+            }
+            ProtocolsHandlerUpgrErr::Timer => {
+                self.pending_error = Some(ProtocolsHandlerUpgrErr::Timer)
             }
         }
     }

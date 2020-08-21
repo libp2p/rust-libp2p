@@ -61,6 +61,17 @@ impl ProtocolSupport {
     }
 }
 
+/// Possible inbound upgrade errors.
+#[derive(Debug, thiserror::Error)]
+pub enum InboundError {
+    /// Some I/O error occured.
+    #[error("inbound i/o error: {0}")]
+    Io(#[from] io::Error),
+    /// The request was not answered with a response.
+    #[error("no response to request {0:?}")]
+    ResponseOmission(RequestId)
+}
+
 /// Response substream upgrade protocol.
 ///
 /// Receives a request and sends a response.
@@ -94,7 +105,7 @@ where
     TCodec: RequestResponseCodec + Send + 'static,
 {
     type Output = ();
-    type Error = io::Error;
+    type Error = InboundError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(mut self, mut io: NegotiatedSubstream, protocol: Self::Info) -> Self::Future {
@@ -105,6 +116,9 @@ where
                 if let Ok(response) = self.response_receiver.await {
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
+                } else {
+                    io.close().await?;
+                    return Err(InboundError::ResponseOmission(self.request_id))
                 }
             }
             io.close().await?;

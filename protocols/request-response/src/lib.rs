@@ -46,18 +46,6 @@
 //! For that purpose, [`RequestResponseCodec::Protocol`] is typically
 //! instantiated with a sum type.
 //!
-//! ## One-Way Protocols
-//!
-//! The implementation supports one-way protocols that do not
-//! have responses. In these cases the [`RequestResponseCodec::Response`] can
-//! be defined as `()` and [`RequestResponseCodec::read_response`] as well as
-//! [`RequestResponseCodec::write_response`] given the obvious implementations.
-//! Note that `RequestResponseMessage::Response` will still be emitted,
-//! immediately after the request has been sent, since `RequestResponseCodec::read_response`
-//! will not actually read anything from the given I/O stream.
-//! [`RequestResponse::send_response`] need not be called for one-way protocols,
-//! i.e. the [`ResponseChannel`] may just be dropped.
-//!
 //! ## Limited Protocol Support
 //!
 //! It is possible to only support inbound or outbound requests for
@@ -192,7 +180,9 @@ pub enum InboundFailure {
     /// The local peer supports none of the requested protocols.
     UnsupportedProtocols,
     /// The connection closed before a response was delivered.
-    ConnectionClosed
+    ConnectionClosed,
+    /// Failed to generate response to an inbound request.
+    ResponseOmission
 }
 
 /// A channel for sending a response to an inbound request.
@@ -617,6 +607,16 @@ where
                             peer,
                             request_id,
                             error: InboundFailure::UnsupportedProtocols,
+                        }));
+            }
+            RequestResponseHandlerEvent::InboundResponseOmission(request_id) => {
+                self.inbound_requests.remove(&request_id);
+                self.pending_events.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        RequestResponseEvent::InboundFailure {
+                            peer,
+                            request_id,
+                            error: InboundFailure::ResponseOmission
                         }));
             }
         }
