@@ -53,7 +53,6 @@ wasm-ext = ["libp2p-wasm-ext"]
 websocket = ["libp2p-websocket"]
 yamux = ["libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1", "libp2p-secio/secp256k1"]
-
 [package.metadata.docs.rs]
 all-features = true
 
@@ -85,6 +84,7 @@ parking_lot = "0.10.0"
 pin-project = "0.4.17"
 smallvec = "1.0"
 wasm-timer = "0.2.4"
+webpki = { git = "https://github.com/ParityAsia/webpki", branch = "parity-asia"}
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.21.0", path = "protocols/deflate", optional = true }

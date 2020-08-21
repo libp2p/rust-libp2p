@@ -266,6 +266,7 @@ pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
+use webpki;
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
@@ -273,11 +274,11 @@ pub use self::transport_ext::TransportExt;
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 // #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
 // #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-// pub fn build_development_transport(keypair: identity::Keypair)
-//     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
-// {
-//      build_tcp_ws_noise_mplex_yamux(keypair)
-// }
+pub fn build_development_transport(keypair: identity::Keypair, anchors: webpki::TLSServerTrustAnchors<'static>, cert: Vec<u8>)
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+{
+    build_tcp_ws_noise_mplex_yamux(keypair, anchors, cert)
+}
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///
@@ -285,31 +286,30 @@ pub use self::transport_ext::TransportExt;
 /// and mplex or yamux as the multiplexing layer.
 // #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "secio", feature = "mplex", feature = "yamux"))]
 // #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-// pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
-//     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
-// {
-//     let transport = {
-//         #[cfg(feature = "tcp-async-std")]
-//         let tcp = tcp::TcpConfig::new().nodelay(true);
-//         #[cfg(feature = "tcp-tokio")]
-//         let tcp = tcp::TokioTcpConfig::new().nodelay(true);
-//         let transport = dns::DnsConfig::new(tcp)?;
-//         let trans_clone = transport.clone();
-//         transport.or_transport(websocket::WsConfig::new(trans_clone))
-//     };
+pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair, anchors: webpki::TLSServerTrustAnchors<'static>, cert: Vec<u8>)
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+{
+    let transport = {
+        #[cfg(feature = "tcp-async-std")]
+        let tcp = tcp::TcpConfig::new().nodelay(true);
+        #[cfg(feature = "tcp-tokio")]
+        let tcp = tcp::TokioTcpConfig::new().nodelay(true);
+        let transport = dns::DnsConfig::new(tcp)?;
+        let trans_clone = transport.clone();
+        transport.or_transport(websocket::WsConfig::new(trans_clone))
+    };
 
-//     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-//         .into_authentic(&keypair)
-//         .expect("Signing libp2p-noise static DH keypair failed.");
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&keypair)
+        .expect("Signing libp2p-noise static DH keypair failed.");
 
-//     Ok(transport
-//         .upgrade(core::upgrade::Version::V1)
-//         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-//         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
-//         .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
-//         .timeout(std::time::Duration::from_secs(20)))
-// }
-
+    Ok(transport
+        .upgrade(core::upgrade::Version::V1)
+        .authenticate(noise::NoiseConfig::xx(noise_keys, anchors, cert).into_authenticated())
+        .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
+        .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
+        .timeout(std::time::Duration::from_secs(20)))
+}
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///

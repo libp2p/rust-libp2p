@@ -35,7 +35,7 @@ use futures::prelude::*;
 use futures::task;
 use prost::Message;
 use std::{io, pin::Pin, task::Context};
-use log::{info, trace};
+use log::info;
 
 static ALL_SIGALGS: &[&webpki::SignatureAlgorithm] = &[
     &webpki::ED25519,
