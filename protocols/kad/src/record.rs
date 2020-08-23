@@ -23,7 +23,7 @@
 pub mod store;
 
 use bytes::Bytes;
-use libp2p_core::PeerId;
+use libp2p_core::{PeerId, Multiaddr};
 use multihash::Multihash;
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
@@ -112,6 +112,8 @@ pub struct ProviderRecord {
     pub provider: PeerId,
     /// The expiration time as measured by a local, monotonic clock.
     pub expires: Option<Instant>,
+    /// The known addresses that the provider may be listening on.
+    pub addresses: Vec<Multiaddr>
 }
 
 impl Hash for ProviderRecord {
@@ -123,12 +125,15 @@ impl Hash for ProviderRecord {
 
 impl ProviderRecord {
     /// Creates a new provider record for insertion into a `RecordStore`.
-    pub fn new<K>(key: K, provider: PeerId) -> Self
+    pub fn new<K>(key: K, provider: PeerId, addresses: Vec<Multiaddr>) -> Self
     where
         K: Into<Key>
     {
         ProviderRecord {
-            key: key.into(), provider, expires: None
+            key: key.into(),
+            provider,
+            expires: None,
+            addresses,
         }
     }
 
@@ -178,6 +183,7 @@ mod tests {
                 } else {
                     None
                 },
+                addresses: vec![],
             }
         }
     }

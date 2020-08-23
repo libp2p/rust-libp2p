@@ -23,9 +23,17 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.24.0 [unreleased]
+# Version 0.25.0 [unreleased]
 
-- Update `libp2p-core`, `libp2p-swarm` and dependent crates.
+- The `ProtocolsHandler` in `libp2p-swarm` has a new associated type
+  `InboundOpenInfo` ([PR 1714]).
+
+[PR 1714]: https://github.com/libp2p/rust-libp2p/pull/1714
+
+# Version 0.24.0 [2020-08-18]
+
+- Update `libp2p-core`, `libp2p-gossipsub`, `libp2p-kad`, `libp2p-mdns`,
+  `libp2p-ping`, `libp2p-request-response`, `libp2p-swarm` and dependent crates.
 
 # Version 0.23.0 (2020-08-03)
 
