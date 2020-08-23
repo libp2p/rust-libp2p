@@ -1,3 +1,7 @@
+# 0.22.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
 # 0.21.0 [2020-08-18]
 
 - Refactor the ping protocol for conformity by (re)using

@@ -261,7 +261,6 @@ impl error::Error for KademliaHandlerQueryErr {
 }
 
 impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    #[inline]
     fn from(err: ProtocolsHandlerUpgrErr<io::Error>) -> Self {
         KademliaHandlerQueryErr::Upgrade(err)
     }
@@ -409,13 +408,13 @@ where
     type OutboundProtocol = KademliaProtocolConfig;
     // Message of the request to send to the remote, and user data if we expect an answer.
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
+    type InboundOpenInfo = ();
 
-    #[inline]
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         if self.config.allow_listening {
-            SubstreamProtocol::new(self.config.protocol_config.clone()).map_upgrade(upgrade::EitherUpgrade::A)
+            SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(upgrade::EitherUpgrade::A)
         } else {
-            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade))
+            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
         }
     }
 
@@ -431,6 +430,7 @@ where
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        (): Self::InboundOpenInfo
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
@@ -591,7 +591,6 @@ where
         }
     }
 
-    #[inline]
     fn inject_dial_upgrade_error(
         &mut self,
         (_, user_data): Self::OutboundOpenInfo,
@@ -605,7 +604,6 @@ where
         }
     }
 
-    #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
     }
@@ -696,8 +694,7 @@ fn advance_substream<TUserData>(
     match state {
         SubstreamState::OutPendingOpen(msg, user_data) => {
             let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(upgrade),
-                info: (msg, user_data),
+                protocol: SubstreamProtocol::new(upgrade, (msg, user_data))
             };
             (None, Some(ev), false)
         }

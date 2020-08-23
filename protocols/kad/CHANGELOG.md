@@ -1,3 +1,7 @@
+# 0.23.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
 # 0.22.1 [2020-08-19]
 
 - Explicitly convert from u8 to usize in `BucketIndex::range` to prevent type

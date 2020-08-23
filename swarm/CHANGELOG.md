@@ -1,3 +1,14 @@
+# 0.22.0 [unreleased]
+
+- Adds `ProtocolsHandler::InboundOpenInfo` type which mirrors the existing
+  `OutboundOpenInfo` type. A value of this type is passed as an extra argument
+  to `ProtocolsHandler::inject_fully_negotiated_inbound` and
+  `ProtocolsHandler::inject_listen_upgrade_error`.
+- `SubstreamProtocol` now has a second type parameter corresponding to
+  inbound or outbound information, a value of which is part of `SubstreamProtocol`
+  now. Consequently `ProtocolsHandlerEvent::OutboundSubstreamRequest` no longer
+  has a separate `info` field.
+
 # 0.21.0 [2020-08-18]
 
 - Add missing delegation calls in some `ProtocolsHandler` wrappers.
