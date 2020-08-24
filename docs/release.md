@@ -17,10 +17,9 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 
 ## Releasing one or more crates
 
-1. Set the release date for each crate to be released in the respective
-   `CHANGELOG.md` by replacing `# X.Y.Z [unreleased]` with
-   `# X.Y.Z [yyyy-mm-dd]` and create a pull request against the rust-libp2p
-   `master` branch.
+1. Remove the `[unreleased]` tag for each crate to be released in the respective
+   `CHANGELOG.md` and create a pull request against the rust-libp2p `master`
+   branch.
 
 2. Once merged, create and push a tag for each updated crate.
 
