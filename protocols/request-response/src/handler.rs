@@ -110,6 +110,7 @@ where
 
 /// The events emitted by the [`RequestResponseHandler`].
 #[doc(hidden)]
+#[derive(Debug)]
 pub enum RequestResponseHandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec
@@ -144,8 +145,9 @@ where
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;
+    type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         // A channel for notifying the handler when the inbound
         // upgrade received the request.
         let (rq_send, rq_recv) = oneshot::channel();
@@ -172,12 +174,13 @@ where
         // `ResponseChannel`.
         self.inbound.push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
 
-        SubstreamProtocol::new(proto).with_timeout(self.substream_timeout)
+        SubstreamProtocol::new(proto, ()).with_timeout(self.substream_timeout)
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
         (): (),
+        (): ()
     ) {
         // Nothing to do, as the response has already been sent
         // as part of the upgrade.
@@ -228,6 +231,7 @@ where
 
     fn inject_listen_upgrade_error(
         &mut self,
+        (): Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<io::Error>
     ) {
         match error {
@@ -299,9 +303,8 @@ where
             let info = request.request_id;
             return Poll::Ready(
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(request)
-                        .with_timeout(self.substream_timeout),
-                    info,
+                    protocol: SubstreamProtocol::new(request, info)
+                        .with_timeout(self.substream_timeout)
                 },
             )
         }
@@ -312,7 +315,7 @@ where
             self.outbound.shrink_to_fit();
         }
 
-        if self.inbound.is_empty() {
+        if self.inbound.is_empty() && self.keep_alive.is_yes() {
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.

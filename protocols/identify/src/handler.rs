@@ -93,14 +93,16 @@ impl ProtocolsHandler for IdentifyHandler {
     type InboundProtocol = IdentifyProtocolConfig;
     type OutboundProtocol = IdentifyProtocolConfig;
     type OutboundOpenInfo = ();
+    type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        SubstreamProtocol::new(self.config.clone())
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(self.config.clone(), ())
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        _info: Self::InboundOpenInfo
     ) {
         self.events.push(IdentifyHandlerEvent::Identify(protocol))
     }
@@ -152,8 +154,7 @@ impl ProtocolsHandler for IdentifyHandler {
             Poll::Ready(Ok(())) => {
                 self.next_id.reset(DELAY_TO_NEXT_ID);
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(self.config.clone()),
-                    info: (),
+                    protocol: SubstreamProtocol::new(self.config.clone(), ())
                 };
                 Poll::Ready(ev)
             }

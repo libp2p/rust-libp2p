@@ -1,5 +1,11 @@
-# 0.2.0
+# 0.3.0 [unreleased]
 
+- Update `libp2p-swarm`.
+
+# 0.2.0 [2020-08-18]
+
+- Fixed connection keep-alive, permitting connections to close due
+  to inactivity.
 - Bump `libp2p-core` and `libp2p-swarm` dependencies.
 
 # 0.1.1

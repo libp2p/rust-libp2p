@@ -168,6 +168,37 @@ where
             Multiplex { info: Some(i), upgrade }
         })
     }
+
+    /// Like [`Builder::multiplex`] but accepts a function which returns the upgrade.
+    ///
+    /// The supplied function is applied to [`ConnectionInfo`] and [`ConnectedPoint`]
+    /// and returns an upgrade which receives the I/O resource `C` and must
+    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
+    /// This ends the (regular) transport upgrade process, yielding the underlying,
+    /// configured transport.
+    ///
+    /// ## Transitions
+    ///
+    ///   * I/O upgrade: `C -> M`.
+    ///   * Transport output: `(I, C) -> (I, M)`.
+    pub fn multiplex_ext<C, M, U, I, E, F>(self, up: F)
+        -> AndThen<T, impl FnOnce((I, C), ConnectedPoint) -> Multiplex<C, U, I> + Clone>
+    where
+        T: Transport<Output = (I, C)>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        M: StreamMuxer,
+        I: ConnectionInfo,
+        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        E: Error + 'static,
+        F: for<'a> FnOnce(&'a I, &'a ConnectedPoint) -> U + Clone
+    {
+        let version = self.version;
+        self.inner.and_then(move |(i, c), endpoint| {
+            let upgrade = upgrade::apply(c, up(&i, &endpoint), endpoint, version);
+            Multiplex { info: Some(i), upgrade }
+        })
+    }
 }
 
 /// An upgrade that authenticates the remote peer, typically
