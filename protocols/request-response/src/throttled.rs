@@ -48,15 +48,15 @@ pub struct Throttled<C: RequestResponseCodec> {
     /// The wrapped behaviour.
     behaviour: RequestResponse<C>,
     /// Information per peer.
-    limits: HashMap<PeerId, Info>,
+    limits: HashMap<PeerId, PeerInfo>,
     /// The default limits applied to all peers unless overriden.
-    default: Info,
+    default: PeerInfo,
     /// Pending events to report in `Throttled::poll`.
     events: VecDeque<Event<C::Request, C::Response>>,
 }
 
 #[derive(Clone, Debug)]
-struct Info {
+struct PeerInfo {
     /// The remaining number of outbound requests that can be send.
     send_budget: u16,
     /// The remaining number of inbound requests that can be received.
@@ -69,10 +69,10 @@ struct Info {
     inbound: HashSet<RequestId>
 }
 
-impl Default for Info {
+impl Default for PeerInfo {
     fn default() -> Self {
         let maximum = NonZeroU16::new(1).expect("1 > 0");
-        Info {
+        PeerInfo {
             send_budget: maximum.get(),
             recv_budget: maximum.get(),
             maximum,
@@ -102,7 +102,7 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
             id: rand::random(),
             behaviour,
             limits: HashMap::new(),
-            default: Info::default(),
+            default: PeerInfo::default(),
             events: VecDeque::new()
         }
     }
@@ -115,7 +115,7 @@ impl<C: RequestResponseCodec + Clone> Throttled<C> {
     /// Override the global default limit.
     pub fn set_default_limit(&mut self, limit: NonZeroU16) {
         log::trace!("{:08x}: new default limit: {:?}", self.id, limit);
-        self.default = Info {
+        self.default = PeerInfo {
             send_budget: limit.get(),
             recv_budget: limit.get(),
             maximum: limit,
