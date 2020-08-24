@@ -1,5 +1,8 @@
 # 0.21.0 [2020-08-18]
 
+- Remove duplicates when performing address translation
+  [PR 1697](https://github.com/libp2p/rust-libp2p/pull/1697).
+
 - Add `transport::Builder::multiplex_ext` for further customisation during
 `StreamMuxer` creation. [PR 1691](https://github.com/libp2p/rust-libp2p/pull/1691).
 
