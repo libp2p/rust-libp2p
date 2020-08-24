@@ -93,10 +93,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .heartbeat_interval(Duration::from_secs(10))
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
             //same content will be propagated.
-            .build().expect("Valid config");
+            .build()
+            .expect("Valid config");
         // build a gossipsub network behaviour
         let mut gossipsub =
-            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config);
+            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
+                .expect("Correct configuration");
         gossipsub.subscribe(topic.clone());
         if let Some(explicit) = std::env::args().nth(2) {
             let explicit = explicit.clone();
@@ -142,10 +144,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(gossip_event)) => match gossip_event {
-                    GossipsubEvent::Message{
+                    GossipsubEvent::Message {
                         propagation_source: peer_id,
                         message_id: id,
-                        message
+                        message,
                     } => println!(
                         "Got message: {} with id: {} from peer: {:?}",
                         String::from_utf8_lossy(&message.data),

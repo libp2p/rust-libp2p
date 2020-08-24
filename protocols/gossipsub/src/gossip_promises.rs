@@ -1,3 +1,23 @@
+// Copyright 2020 Sigma Prime Pty Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 use crate::error::ValidationError;
 use crate::peer_score::RejectReason;
 use crate::MessageId;
@@ -8,23 +28,23 @@ use rand::thread_rng;
 use std::collections::HashMap;
 use wasm_timer::Instant;
 
-///struct that tracks recently sent iwant messages and checks if peers respond to them
-///for each iwant message we track one random requested message id
+/// Tracks recently sent `IWANT` messages and checks if peers respond to them
+/// for each `IWANT` message we track one random requested message id.
 #[derive(Default)]
 pub(crate) struct GossipPromises {
-    // stores for each tracked message id and peer the instant when this promise expires
-    // if the peer didn't respond until then we consider the promise as broken and penalize the
+    // Stores for each tracked message id and peer the instant when this promise expires.
+    // If the peer didn't respond until then we consider the promise as broken and penalize the
     // peer.
     promises: HashMap<MessageId, HashMap<PeerId, Instant>>,
 }
 
 impl GossipPromises {
     /// Track a promise to deliver a message from a list of msgIDs we are requesting.
-    pub fn add_promise(&mut self, peer: PeerId, messages: &Vec<MessageId>, expires: Instant) {
-        //randomly select a message id
+    pub fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
+        // Randomly select a message id
         let mut rng = thread_rng();
         if let Some(message_id) = messages.choose(&mut rng) {
-            //if a promise for this message id and peer already exists we don't update expires!
+            // If a promise for this message id and peer already exists we don't update expires!
             self.promises
                 .entry(message_id.clone())
                 .or_insert_with(|| HashMap::new())
@@ -34,7 +54,7 @@ impl GossipPromises {
     }
 
     pub fn deliver_message(&mut self, message_id: &MessageId) {
-        //someone delivered a message, we can stop tracking all promises for it
+        // Someone delivered a message, we can stop tracking all promises for it
         self.promises.remove(message_id);
     }
 

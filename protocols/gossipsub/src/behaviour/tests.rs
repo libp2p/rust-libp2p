@@ -108,7 +108,8 @@ mod tests {
     ) -> (Gossipsub, Vec<PeerId>, Vec<TopicHash>) {
         let keypair = libp2p_core::identity::Keypair::generate_secp256k1();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Signed(keypair), gs_config);
+        let mut gs: Gossipsub =
+            Gossipsub::new(MessageAuthenticity::Signed(keypair), gs_config).unwrap();
 
         if let Some((scoring_params, scoring_thresholds)) = scoring {
             gs.with_peer_score(scoring_params, scoring_thresholds)
@@ -709,7 +710,7 @@ mod tests {
             .build()
             .unwrap();
         // create a gossipsub struct
-        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config);
+        let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config).unwrap();
 
         // create a topic and fill it with some peers
         let topic_hash = Topic::new("Test").hash().clone();
@@ -2118,9 +2119,13 @@ mod tests {
 
     #[test]
     fn test_only_send_nonnegative_scoring_peers_in_px() {
-        let config = GossipsubConfig::default();
+        let config = GossipsubConfigBuilder::new()
+            .prune_peers(16)
+            .do_px()
+            .build()
+            .unwrap();
 
-        //build mesh with three peer
+        // Build mesh with three peer
         let (mut gs, peers, topics) =
             build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
                 3,
@@ -2132,10 +2137,10 @@ mod tests {
                 Some((PeerScoreParams::default(), PeerScoreThresholds::default())),
             );
 
-        //penalize first peer
+        // Penalize first peer
         gs.peer_score.as_mut().unwrap().0.add_penalty(&peers[0], 1);
 
-        //prune second peer
+        // Prune second peer
         gs.send_graft_prune(
             HashMap::new(),
             vec![(peers[1].clone(), vec![topics[0].clone()])]
@@ -2144,7 +2149,7 @@ mod tests {
             HashSet::new(),
         );
 
-        //check that px in prune message only contains third peer
+        // Check that px in prune message only contains third peer
         assert_eq!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
                 && match m {
@@ -2169,7 +2174,7 @@ mod tests {
         let mut peer_score_thresholds = PeerScoreThresholds::default();
         peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
-        //build full mesh
+        // Build full mesh
         let (mut gs, peers, topics) =
             build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
                 config.mesh_n_high(),
@@ -2181,24 +2186,24 @@ mod tests {
                 Some((peer_score_params, peer_score_thresholds)),
             );
 
-        // graft all the peer
+        // Graft all the peer
         for peer in peers {
             gs.handle_graft(&peer, topics.clone());
         }
 
-        //add two additional peers that will not be part of the mesh
+        // Add two additional peers that will not be part of the mesh
         let p1 = add_peer(&mut gs, &topics, false, false);
         let p2 = add_peer(&mut gs, &topics, false, false);
 
-        //reduce score of p1 below peer_score_thresholds.gossip_threshold
-        //note that penalties get squared so two penalties means a score of
+        // Reduce score of p1 below peer_score_thresholds.gossip_threshold
+        // note that penalties get squared so two penalties means a score of
         // 4 * peer_score_params.behaviour_penalty_weight.
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-        //reduce score of p2 below 0 but not below peer_score_thresholds.gossip_threshold
+        // Reduce score of p2 below 0 but not below peer_score_thresholds.gossip_threshold
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-        //receive message
+        // Receive message
         let message = GossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
@@ -2210,11 +2215,11 @@ mod tests {
         };
         gs.handle_received_message(message.clone(), &PeerId::random());
 
-        //emit gossip
+        // Emit gossip
         gs.emit_gossip();
 
         let msg_id = (gs.config.message_id_fn())(&message);
-        //check that exactly one gossip messages got sent and it got sent to p2
+        // Check that exactly one gossip messages got sent and it got sent to p2
         assert_eq!(
             count_control_msgs(&gs, |peer, action| match action {
                 GossipsubControlAction::IHave {
@@ -2241,7 +2246,7 @@ mod tests {
         let mut peer_score_thresholds = PeerScoreThresholds::default();
         peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
 
-        //build full mesh
+        // Build full mesh
         let (mut gs, peers, topics) =
             build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
                 config.mesh_n_high(),
@@ -2253,24 +2258,24 @@ mod tests {
                 Some((peer_score_params, peer_score_thresholds)),
             );
 
-        // graft all the peer
+        // Graft all the peer
         for peer in peers {
             gs.handle_graft(&peer, topics.clone());
         }
 
-        //add two additional peers that will not be part of the mesh
+        // Add two additional peers that will not be part of the mesh
         let p1 = add_peer(&mut gs, &topics, false, false);
         let p2 = add_peer(&mut gs, &topics, false, false);
 
-        //reduce score of p1 below peer_score_thresholds.gossip_threshold
-        //note that penalties get squared so two penalties means a score of
+        // Reduce score of p1 below peer_score_thresholds.gossip_threshold
+        // note that penalties get squared so two penalties means a score of
         // 4 * peer_score_params.behaviour_penalty_weight.
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-        //reduce score of p2 below 0 but not below peer_score_thresholds.gossip_threshold
+        // Reduce score of p2 below 0 but not below peer_score_thresholds.gossip_threshold
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-        //receive message
+        // Rreceive message
         let message = GossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
@@ -2634,12 +2639,15 @@ mod tests {
 
     #[test]
     fn test_ignore_px_from_peers_below_accept_px_threshold() {
-        let config = GossipsubConfig::default();
+        let config = GossipsubConfigBuilder::new()
+            .prune_peers(16)
+            .build()
+            .unwrap();
         let peer_score_params = PeerScoreParams::default();
         let mut peer_score_thresholds = PeerScoreThresholds::default();
         peer_score_thresholds.accept_px_threshold = peer_score_params.app_specific_weight;
 
-        //build mesh with two peer
+        // Build mesh with two peers
         let (mut gs, peers, topics) =
             build_and_inject_nodes_with_config_and_explicit_and_outbound_and_scoring(
                 2,
@@ -2651,13 +2659,13 @@ mod tests {
                 Some((peer_score_params, peer_score_thresholds)),
             );
 
-        //increase score of first peer to less than accept_px_threshold
+        // Decrease score of first peer to less than accept_px_threshold
         gs.set_application_score(&peers[0], 0.99);
 
-        //increase score of second peer to accept_px_threshold
+        // Increase score of second peer to accept_px_threshold
         gs.set_application_score(&peers[1], 1.0);
 
-        //handle prune from peer peers[0] with px peers
+        // Handle prune from peer peers[0] with px peers
         let px = vec![PeerInfo {
             peer_id: Some(PeerId::random()),
         }];
@@ -2670,7 +2678,7 @@ mod tests {
             )],
         );
 
-        //assert no dials
+        // Assert no dials
         assert_eq!(
             gs.events
                 .iter()
@@ -2745,13 +2753,8 @@ mod tests {
 
         assert_eq!(gs.mesh[&topics[0]].len(), n);
 
-        dbg!(&peers);
-        dbg!(&gs.mesh[&topics[0]]);
-
         //heartbeat to prune some peers
         gs.heartbeat();
-
-        dbg!(&gs.mesh[&topics[0]]);
 
         assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n());
 

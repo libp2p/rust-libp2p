@@ -673,7 +673,8 @@ mod tests {
             let gs = Gossipsub::new(
                 crate::MessageAuthenticity::Signed(keypair.0.clone()),
                 config,
-            );
+            )
+            .unwrap();
             let data = (0..g.gen_range(1, 1024)).map(|_| g.gen()).collect();
             let topics = Vec::arbitrary(g)
                 .into_iter()

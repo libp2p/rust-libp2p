@@ -192,7 +192,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 GossipsubEvent::Message {
                     propagation_source: peer_id,
                     message_id: id,
-                    message
+                    message,
                 } => println!(
                     "Got message: {} with id: {} from peer: {:?}",
                     String::from_utf8_lossy(&message.data),
@@ -245,12 +245,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let gossipsub_config = GossipsubConfigBuilder::new()
             .max_transmit_size(262144)
-            .build().expect("valid config");
+            .build()
+            .expect("valid config");
         let mut behaviour = MyBehaviour {
             gossipsub: Gossipsub::new(
                 MessageAuthenticity::Signed(local_key.clone()),
                 gossipsub_config,
-            ),
+            )
+            .expect("Valid configuration"),
             identify: Identify::new(
                 "/ipfs/0.1.0".into(),
                 "rust-ipfs-example".into(),
