@@ -87,10 +87,7 @@ impl PeerId {
     /// back the data as an error.
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match Multihash::from_bytes(data) {
-            Ok(multihash) => match multihash.algorithm() {
-                Code::Sha2_256 | Code::Identity => Ok(PeerId { multihash }),
-                _ => Err(multihash.into_bytes())
-            },
+            Ok(multihash) => PeerId::from_multihash(multihash).map_err(Multihash::into_bytes),
             Err(err) => Err(err.data),
         }
     }
