@@ -95,12 +95,17 @@ impl PeerId {
         }
     }
 
-    /// Turns a `Multihash` into a `PeerId`. If the multihash doesn't use the correct algorithm,
-    /// returns back the data as an error.
-    pub fn from_multihash(data: Multihash) -> Result<PeerId, Multihash> {
-        match data.algorithm() {
-            Code::Sha2_256 | Code::Identity => Ok(PeerId { multihash: data }),
-            _ => Err(data)
+    /// Tries to turn a `Multihash` into a `PeerId`.
+    ///
+    /// If the multihash does not use a valid hashing algorithm for peer IDs,
+    /// or the hash value does not satisfy the constraints for a hashed
+    /// peer ID, it is returned as an `Err`.
+    pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
+        match multihash.algorithm() {
+            Code::Sha2_256 => Ok(PeerId { multihash }),
+            Code::Identity if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH
+                => Ok(PeerId { multihash }),
+            _ => Err(multihash)
         }
     }
 
@@ -230,7 +235,6 @@ impl FromStr for PeerId {
 #[cfg(test)]
 mod tests {
     use crate::{PeerId, identity};
-    use std::{convert::TryFrom as _, hash::{self, Hasher as _}};
 
     #[test]
     fn peer_id_is_public_key() {
