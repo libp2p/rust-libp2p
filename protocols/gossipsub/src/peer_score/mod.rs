@@ -565,12 +565,12 @@ impl PeerScore {
     pub fn reject_message(&mut self, from: &PeerId, msg: &GossipsubMessage, reason: RejectReason) {
         match reason {
             // these messages are not tracked, but the peer is penalized as they are invalid
-            RejectReason::ProtocolValidationError(_) | RejectReason::SelfOrigin => {
+            RejectReason::ValidationError(_) | RejectReason::SelfOrigin => {
                 self.mark_invalid_message_delivery(from, msg);
                 return;
             }
             // we ignore those messages, so do nothing.
-            RejectReason::BlacklistedPeer | RejectReason::BlackListenSource => {
+            RejectReason::BlackListedPeer | RejectReason::BlackListedSource => {
                 return;
             }
             _ => {} // the rest are handled after record creation
@@ -772,13 +772,19 @@ impl PeerScore {
     }
 }
 
-//TODO implement blacklisting
+/// The reason a Gossipsub message has been rejected.
 #[derive(Clone, Copy)]
 pub(crate) enum RejectReason {
-    ProtocolValidationError(ValidationError),
+    /// The message failed the configured validation during decoding.
+    ValidationError(ValidationError),
+    /// The message source is us.
     SelfOrigin,
-    BlacklistedPeer,
-    BlackListenSource,
+    /// The peer that sent the message was blacklisted.
+    BlackListedPeer,
+    /// The source (from field) of the message was blacklisted.
+    BlackListedSource,
+    /// The validation was ignored.
     ValidationIgnored,
+    /// The validation failed.
     ValidationFailed,
 }

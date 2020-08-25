@@ -680,8 +680,8 @@ fn test_score_reject_message_deliveries() {
     let msg = make_test_message(1);
 
     // these should have no effect in the score
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlacklistedPeer);
-    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlackListenSource);
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlackListedPeer);
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlackListedSource);
     peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
 
     peer_score.refresh_scores();

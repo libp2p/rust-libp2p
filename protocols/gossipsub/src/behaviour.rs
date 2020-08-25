@@ -377,8 +377,12 @@ pub struct Gossipsub {
     /// A map of all connected peers to their subscribed topics.
     peer_topics: HashMap<PeerId, BTreeSet<TopicHash>>,
 
-    ///A set of all explicit peers
+    /// A set of all explicit peers.
     explicit_peers: HashSet<PeerId>,
+
+    /// A list of peers that have been blacklisted by the user.
+    /// Messages are not sent to and are rejected from these peers.
+    blacklisted_peers: HashSet<PeerId>,
 
     /// Overlay network of connected peers - Maps topics to connected gossipsub peers.
     mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
@@ -445,6 +449,7 @@ impl Gossipsub {
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
+            blacklisted_peers: HashSet::new(),
             mesh: HashMap::new(),
             fanout: HashMap::new(),
             fanout_last_pub: HashMap::new(),
@@ -738,7 +743,7 @@ impl Gossipsub {
 
     /// Adds a new peer to the list of explicitly connected peers.
     pub fn add_explicit_peer(&mut self, peer_id: &PeerId) {
-        debug!("Adding explicit peer {:?}", peer_id);
+        debug!("Adding explicit peer {}", peer_id);
 
         self.explicit_peers.insert(peer_id.clone());
 
@@ -748,9 +753,23 @@ impl Gossipsub {
     /// This removes the peer from explicitly connected peers, note that this does not disconnect
     /// the peer.
     pub fn remove_explicit_peer(&mut self, peer_id: &PeerId) {
-        debug!("Removing explicit peer {:?}", peer_id);
-
+        debug!("Removing explicit peer {}", peer_id);
         self.explicit_peers.remove(peer_id);
+    }
+
+    /// Blacklists a peer. All messages from this peer will be rejected and any message that was
+    /// created by this peer will be rejected.
+    pub fn blacklist_peer(&mut self, peer_id: &PeerId) {
+        if self.blacklisted_peers.insert(peer_id.clone()) {
+            debug!("Peer has been blacklisted: {}", peer_id);
+        }
+    }
+
+    /// Removes a blacklisted peer if it has previously been blacklisted.
+    pub fn remove_blacklisted_peer(&mut self, peer_id: &PeerId) {
+        if self.blacklisted_peers.remove(peer_id) {
+            debug!("Peer has been removed from the blacklist: {}", peer_id);
+        }
     }
 
     /// Activates the peer scoring system with the given parameters. This will reset all scores
@@ -1352,6 +1371,34 @@ impl Gossipsub {
             msg_id,
             propagation_source.to_string()
         );
+
+        // Reject any message from a blacklisted peer
+        if self.blacklisted_peers.contains(propagation_source) {
+            debug!(
+                "Rejecting message from blacklisted peer: {}",
+                propagation_source
+            );
+            if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+                peer_score.reject_message(propagation_source, &msg, RejectReason::BlackListedPeer);
+                gossip_promises.reject_message(&msg_id, &RejectReason::BlackListedPeer);
+            }
+            return;
+        }
+
+        // Also reject any message that originated from a blacklisted peer
+        if let Some(source) = msg.source.as_ref() {
+            if self.blacklisted_peers.contains(source) {
+                if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+                    peer_score.reject_message(
+                        propagation_source,
+                        &msg,
+                        RejectReason::BlackListedSource,
+                    );
+                    gossip_promises.reject_message(&msg_id, &RejectReason::BlackListedSource);
+                }
+                return;
+            }
+        }
 
         // If we are not validating messages, assume this message is validated
         // This will allow the message to be gossiped without explicitly calling
@@ -2336,6 +2383,12 @@ impl NetworkBehaviour for Gossipsub {
     }
 
     fn inject_connected(&mut self, peer_id: &PeerId) {
+        // Ignore connections from blacklisted peers.
+        if self.blacklisted_peers.contains(peer_id) {
+            debug!("Ignoring connection from blacklisted peer: {}", peer_id);
+            return;
+        }
+
         info!("New peer connected: {}", peer_id);
         // We need to send our subscriptions to the newly-connected node.
         let mut subscriptions = vec![];
@@ -2382,7 +2435,9 @@ impl NetworkBehaviour for Gossipsub {
             let topics = match self.peer_topics.get(peer_id) {
                 Some(topics) => (topics),
                 None => {
-                    warn!("Disconnected node, not in connected nodes");
+                    if !self.blacklisted_peers.contains(peer_id) {
+                        warn!("Disconnected node, not in connected nodes");
+                    }
                     return;
                 }
             };
@@ -2435,10 +2490,15 @@ impl NetworkBehaviour for Gossipsub {
 
     fn inject_connection_established(
         &mut self,
-        peer: &PeerId,
+        peer_id: &PeerId,
         _: &ConnectionId,
         endpoint: &ConnectedPoint,
     ) {
+        // Ignore connections from blacklisted peers.
+        if self.blacklisted_peers.contains(peer_id) {
+            return;
+        }
+
         // Check if the peer is an outbound peer
         if let ConnectedPoint::Dialer { .. } = endpoint {
             // Diverging from the go implementation we only want to consider a peer as outbound peer
@@ -2446,17 +2506,17 @@ impl NetworkBehaviour for Gossipsub {
             // check if the peer isn't connected yet. This only works because the
             // `inject_connection_established` event for the first connection gets called immediately
             // before `inject_connected` gets called.
-            if !self.peer_topics.contains_key(peer) && !self.px_peers.contains(peer) {
+            if !self.peer_topics.contains_key(peer_id) && !self.px_peers.contains(peer_id) {
                 // The first connection is outbound and it is not a peer from peer exchange => mark
                 // it as outbound peer
-                self.outbound_peers.insert(peer.clone());
+                self.outbound_peers.insert(peer_id.clone());
             }
         }
 
         // Add the IP to the peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint)) {
-                peer_score.add_ip(&peer, ip);
+                peer_score.add_ip(&peer_id, ip);
             }
         }
     }
@@ -2520,11 +2580,11 @@ impl NetworkBehaviour for Gossipsub {
                 // Handle any invalid messages from this peer
                 if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
                     let id_fn = self.config.message_id_fn();
-                    for (_message, validation_error) in invalid_messages {
+                    for (message, validation_error) in invalid_messages {
                         warn!("Message rejected. Reason: {:?}", validation_error);
-                        let reason = RejectReason::ProtocolValidationError(validation_error);
-                        peer_score.reject_message(&propagation_source, &_message, reason);
-                        gossip_promises.reject_message(&id_fn(&_message), &reason);
+                        let reason = RejectReason::ValidationError(validation_error);
+                        peer_score.reject_message(&propagation_source, &message, reason);
+                        gossip_promises.reject_message(&id_fn(&message), &reason);
                     }
                 }
 

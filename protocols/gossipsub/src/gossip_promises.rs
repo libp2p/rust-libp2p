@@ -64,7 +64,7 @@ impl GossipPromises {
         // We do take exception and apply promise penalty regardless in the following cases, where
         // the peer delivered an obviously invalid message.
         match reason {
-            RejectReason::ProtocolValidationError(ValidationError::InvalidSignature) => return,
+            RejectReason::ValidationError(ValidationError::InvalidSignature) => return,
             RejectReason::SelfOrigin => return,
             _ => self.promises.remove(message_id),
         };
