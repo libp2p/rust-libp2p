@@ -400,552 +400,569 @@ fn test_score_mesh_message_deliveries() {
         expected
     );
 }
-/*
-func TestScoreMeshMessageDeliveriesDecay(t *testing.T) {
+
+#[test]
+fn test_score_mesh_message_deliveries_decay() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:                     1,
-        MeshMessageDeliveriesWeight:     -1,
-        MeshMessageDeliveriesActivation: 0,
-        MeshMessageDeliveriesWindow:     10 * time.Millisecond,
-        MeshMessageDeliveriesThreshold:  20,
-        MeshMessageDeliveriesCap:        100,
-        MeshMessageDeliveriesDecay:      0.9,
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
-        FirstMessageDeliveriesWeight: 0,
-        TimeInMeshQuantum:            time.Second,
-    }
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = -1.0;
+    topic_params.mesh_message_deliveries_activation = Duration::from_secs(0);
+    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
+    topic_params.mesh_message_deliveries_threshold = 20.0;
+    topic_params.mesh_message_deliveries_cap = 100.0;
+    topic_params.mesh_message_deliveries_decay = 0.9;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
+    topic_params.mesh_failure_penalty_weight = 0.0;
 
-    params.Topics[mytopic] = topicScoreParams
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
 
-    peerA := peer.ID("A")
+    let peer_id_a = PeerId::random();
+    peer_score.add_peer(peer_id_a.clone());
+    peer_score.graft(&peer_id_a, topic.clone());
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
-
-    // deliver messages from peer A
-    nMessages := 40
-    for i := 0; i < nMessages; i++ {
-        pbMsg := makeTestMessage(i)
-        pbMsg.TopicIDs = []string{mytopic}
-        msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-        ps.ValidateMessage(&msg)
-        ps.DeliverMessage(&msg)
+    // deliver a bunch of messages from peer A
+    let messages = 100;
+    for seq in 0..messages {
+        let msg = make_test_message(seq);
+        peer_score.validate_message(&peer_id_a, &msg);
+        peer_score.deliver_message(&peer_id_a, &msg);
     }
 
     // we should have a positive score, since we delivered more messages than the threshold
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    if aScore < 0 {
-        t.Fatalf("Expected non-negative score for peer A, got %f", aScore)
+    peer_score.refresh_scores();
+
+    let score_a = peer_score.score(&peer_id_a);
+    assert!(
+        score_a >= 0.0,
+        "expected non-negative score for Peer A, got score {}",
+        score_a
+    );
+
+    let mut decayed_delivery_count = (messages as f64) * topic_params.mesh_message_deliveries_decay;
+    for _ in 0..20 {
+        peer_score.refresh_scores();
+        decayed_delivery_count *= topic_params.mesh_message_deliveries_decay;
     }
 
-    // we need to refresh enough times for the decay to bring us below the threshold
-    decayedDeliveryCount := float64(nMessages) * topicScoreParams.MeshMessageDeliveriesDecay
-    for i := 0; i < 20; i++ {
-        ps.refreshScores()
-        decayedDeliveryCount *= topicScoreParams.MeshMessageDeliveriesDecay
-    }
-    aScore = ps.Score(peerA)
+    let score_a = peer_score.score(&peer_id_a);
     // the penalty is the difference between the threshold and the (decayed) mesh deliveries, squared.
-    deficit := topicScoreParams.MeshMessageDeliveriesThreshold - decayedDeliveryCount
-    penalty := deficit * deficit
-    expected := topicScoreParams.TopicWeight * topicScoreParams.MeshMessageDeliveriesWeight * penalty
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    let deficit = topic_params.mesh_message_deliveries_threshold - decayed_delivery_count;
+    let penalty = deficit * deficit;
+    let expected =
+        topic_params.topic_weight * topic_params.mesh_message_deliveries_weight * penalty;
+
+    assert_eq!(score_a, expected, "Invalid score");
 }
 
-func TestScoreMeshFailurePenalty(t *testing.T) {
+#[test]
+fn test_score_mesh_failure_penalty() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
+    let mut topic_params = TopicScoreParams::default();
     // the mesh failure penalty is applied when a peer is pruned while their
     // mesh deliveries are under the threshold.
     // for this test, we set the mesh delivery threshold, but set
-    // MeshMessageDeliveriesWeight to zero, so the only affect on the score
+    // mesh_message_deliveries to zero, so the only affect on the score
     // is from the mesh failure penalty
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:              1,
-        MeshFailurePenaltyWeight: -1,
-        MeshFailurePenaltyDecay:  1.0,
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.mesh_message_deliveries_activation = Duration::from_secs(0);
+    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
+    topic_params.mesh_message_deliveries_threshold = 20.0;
+    topic_params.mesh_message_deliveries_cap = 100.0;
+    topic_params.mesh_message_deliveries_decay = 1.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
+    topic_params.mesh_failure_penalty_weight = -1.0;
+    topic_params.mesh_failure_penalty_decay = 1.0;
 
-        MeshMessageDeliveriesActivation: 0,
-        MeshMessageDeliveriesWindow:     10 * time.Millisecond,
-        MeshMessageDeliveriesThreshold:  20,
-        MeshMessageDeliveriesCap:        100,
-        MeshMessageDeliveriesDecay:      1.0,
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
 
-        MeshMessageDeliveriesWeight:  0,
-        FirstMessageDeliveriesWeight: 0,
-        TimeInMeshQuantum:            time.Second,
+    let peer_id_a = PeerId::random();
+    let peer_id_b = PeerId::random();
+
+    let peers = vec![peer_id_a.clone(), peer_id_b.clone()];
+
+    for peer_id in &peers {
+        peer_score.add_peer(peer_id.clone());
+        peer_score.graft(&peer_id, topic.clone());
     }
 
-    params.Topics[mytopic] = topicScoreParams
-
-    peerA := peer.ID("A")
-    peerB := peer.ID("B")
-    peers := []peer.ID{peerA, peerB}
-
-    ps := newPeerScore(params)
-    for _, p := range peers {
-        ps.AddPeer(p, "myproto")
-        ps.Graft(p, mytopic)
-    }
-
-    // deliver messages from peer A. peer B does nothing
-    nMessages := 100
-    for i := 0; i < nMessages; i++ {
-        pbMsg := makeTestMessage(i)
-        pbMsg.TopicIDs = []string{mytopic}
-        msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-        ps.ValidateMessage(&msg)
-        ps.DeliverMessage(&msg)
+    // deliver a bunch of messages from peer A
+    let messages = 100;
+    for seq in 0..messages {
+        let msg = make_test_message(seq);
+        peer_score.validate_message(&peer_id_a, &msg);
+        peer_score.deliver_message(&peer_id_a, &msg);
     }
 
     // peers A and B should both have zero scores, since the failure penalty hasn't been applied yet
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    bScore := ps.Score(peerB)
-    if aScore != 0 {
-        t.Errorf("expected peer A to have score 0.0, got %f", aScore)
-    }
-    if bScore != 0 {
-        t.Errorf("expected peer B to have score 0.0, got %f", bScore)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
+    assert!(
+        score_a >= 0.0,
+        "expected non-negative score for Peer A, got score {}",
+        score_a
+    );
+    assert!(
+        score_b >= 0.0,
+        "expected non-negative score for Peer B, got score {}",
+        score_b
+    );
 
     // prune peer B to apply the penalty
-    ps.Prune(peerB, mytopic)
-    ps.refreshScores()
-    aScore = ps.Score(peerA)
-    bScore = ps.Score(peerB)
+    peer_score.prune(&peer_id_b, topic.hash());
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
 
-    if aScore != 0 {
-        t.Errorf("expected peer A to have score 0.0, got %f", aScore)
-    }
+    assert_eq!(score_a, 0.0, "expected Peer A to have a 0");
 
-    // penalty calculation is the same as for MeshMessageDeliveries, but multiplied by MeshFailurePenaltyWeight
-    // instead of MeshMessageDeliveriesWeight
-    penalty := topicScoreParams.MeshMessageDeliveriesThreshold * topicScoreParams.MeshMessageDeliveriesThreshold
-    expected := topicScoreParams.TopicWeight * topicScoreParams.MeshFailurePenaltyWeight * penalty
-    if bScore != expected {
-        t.Fatalf("Score: %f. Expected %f", bScore, expected)
-    }
+    // penalty calculation is the same as for mesh_message_deliveries, but multiplied by
+    // mesh_failure_penalty_weigh
+    // instead of mesh_message_deliveries_weight
+    let penalty = topic_params.mesh_message_deliveries_threshold
+        * topic_params.mesh_message_deliveries_threshold;
+    let expected = topic_params.topic_weight * topic_params.mesh_failure_penalty_weight * penalty;
+
+    let score_b = peer_score.score(&peer_id_b);
+
+    assert_eq!(score_b, expected, "Peer B should have expected score",);
 }
 
-func TestScoreInvalidMessageDeliveries(t *testing.T) {
+#[test]
+fn test_score_invalid_message_deliveries() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:                    1,
-        TimeInMeshQuantum:              time.Second,
-        InvalidMessageDeliveriesWeight: -1,
-        InvalidMessageDeliveriesDecay:  1.0,
-    }
-    params.Topics[mytopic] = topicScoreParams
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
-    peerA := peer.ID("A")
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
+    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
+    topic_params.mesh_message_deliveries_threshold = 20.0;
+    topic_params.mesh_message_deliveries_cap = 100.0;
+    topic_params.mesh_message_deliveries_decay = 1.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.mesh_failure_penalty_weight = 0.0;
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
+    topic_params.invalid_message_deliveries_weight = -1.0;
+    topic_params.invalid_message_deliveries_decay = 1.0;
 
-    nMessages := 100
-    for i := 0; i < nMessages; i++ {
-        pbMsg := makeTestMessage(i)
-        pbMsg.TopicIDs = []string{mytopic}
-        msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-        ps.RejectMessage(&msg, rejectInvalidSignature)
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
+
+    let peer_id_a = PeerId::random();
+    peer_score.add_peer(peer_id_a.clone());
+    peer_score.graft(&peer_id_a, topic.clone());
+
+    // reject a bunch of messages from peer A
+    let messages = 100;
+    for seq in 0..messages {
+        let msg = make_test_message(seq);
+        peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
     }
 
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * float64(nMessages*nMessages)
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+
+    let expected = topic_params.topic_weight
+        * topic_params.invalid_message_deliveries_weight
+        * (messages * messages) as f64;
+
+    assert_eq!(score_a, expected, "Peer has unexpected score",);
 }
 
-func TestScoreInvalidMessageDeliveriesDecay(t *testing.T) {
+#[test]
+fn test_score_invalid_message_deliveris_decay() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
-    }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:                    1,
-        TimeInMeshQuantum:              time.Second,
-        InvalidMessageDeliveriesWeight: -1,
-        InvalidMessageDeliveriesDecay:  0.9,
-    }
-    params.Topics[mytopic] = topicScoreParams
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
 
-    peerA := peer.ID("A")
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
+    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
+    topic_params.mesh_message_deliveries_threshold = 20.0;
+    topic_params.mesh_message_deliveries_cap = 100.0;
+    topic_params.mesh_message_deliveries_decay = 1.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.mesh_failure_penalty_weight = 0.0;
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
+    topic_params.invalid_message_deliveries_weight = -1.0;
+    topic_params.invalid_message_deliveries_decay = 0.9;
 
-    nMessages := 100
-    for i := 0; i < nMessages; i++ {
-        pbMsg := makeTestMessage(i)
-        pbMsg.TopicIDs = []string{mytopic}
-        msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-        ps.RejectMessage(&msg, rejectInvalidSignature)
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
+
+    let peer_id_a = PeerId::random();
+    peer_score.add_peer(peer_id_a.clone());
+    peer_score.graft(&peer_id_a, topic.clone());
+
+    // reject a bunch of messages from peer A
+    let messages = 100;
+    for seq in 0..messages {
+        let msg = make_test_message(seq);
+        peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
     }
 
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    expected := topicScoreParams.TopicWeight * topicScoreParams.InvalidMessageDeliveriesWeight * math.Pow(topicScoreParams.InvalidMessageDeliveriesDecay*float64(nMessages), 2)
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+
+    let decay = topic_params.invalid_message_deliveries_decay * messages as f64;
+
+    let mut expected =
+        topic_params.topic_weight * topic_params.invalid_message_deliveries_weight * decay * decay;
+
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(score_a, expected, "Peer has unexpected score");
 
     // refresh scores a few times to apply decay
-    for i := 0; i < 10; i++ {
-        ps.refreshScores()
-        expected *= math.Pow(topicScoreParams.InvalidMessageDeliveriesDecay, 2)
+    for _ in 0..10 {
+        peer_score.refresh_scores();
+        expected *= topic_params.invalid_message_deliveries_decay
+            * topic_params.invalid_message_deliveries_decay;
     }
-    aScore = ps.Score(peerA)
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(score_a, expected, "Peer has unexpected score");
 }
 
-func TestScoreRejectMessageDeliveries(t *testing.T) {
-    // this tests adds coverage for the dark corners of rejection tracing
-    mytopic := "mytopic"
-    params := &PeerScoreParams{
-        AppSpecificScore: func(peer.ID) float64 { return 0 },
-        Topics:           make(map[string]*TopicScoreParams),
+#[test]
+fn test_score_reject_message_deliveries() {
+    // This tests adds coverage for the dark corners of rejection tracing
+
+    // Create parameters with reasonable default values
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
+
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.mesh_failure_penalty_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
+    topic_params.invalid_message_deliveries_weight = -1.0;
+    topic_params.invalid_message_deliveries_decay = 1.0;
+
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
+
+    let peer_id_a = PeerId::random();
+    let peer_id_b = PeerId::random();
+
+    let peers = vec![peer_id_a.clone(), peer_id_b.clone()];
+
+    for peer_id in &peers {
+        peer_score.add_peer(peer_id.clone());
     }
-    topicScoreParams := &TopicScoreParams{
-        TopicWeight:                    1,
-        TimeInMeshQuantum:              time.Second,
-        InvalidMessageDeliveriesWeight: -1,
-        InvalidMessageDeliveriesDecay:  1.0,
-    }
-    params.Topics[mytopic] = topicScoreParams
 
-    peerA := peer.ID("A")
-    peerB := peer.ID("B")
-
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.AddPeer(peerB, "myproto")
-
-    pbMsg := makeTestMessage(0)
-    pbMsg.TopicIDs = []string{mytopic}
-    msg := Message{ReceivedFrom: peerA, Message: pbMsg}
-    msg2 := Message{ReceivedFrom: peerB, Message: pbMsg}
+    let msg = make_test_message(1);
 
     // these should have no effect in the score
-    ps.RejectMessage(&msg, rejectBlacklstedPeer)
-    ps.RejectMessage(&msg, rejectBlacklistedSource)
-    ps.RejectMessage(&msg, rejectValidationQueueFull)
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlacklistedPeer);
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::BlackListenSource);
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
 
-    aScore := ps.Score(peerA)
-    expected := 0.0
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
+
+    assert_eq!(score_a, 0.0, "Should have no effect on the score");
+    assert_eq!(score_b, 0.0, "Should have no effect on the score");
 
     // insert a record in the message deliveries
-    ps.ValidateMessage(&msg)
+    peer_score.validate_message(&peer_id_a, &msg);
 
     // this should have no effect in the score, and subsequent duplicate messages should have no
     // effect either
-    ps.RejectMessage(&msg, rejectValidationThrottled)
-    ps.DuplicateMessage(&msg2)
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
+    peer_score.duplicated_message(&peer_id_b, &msg);
 
-    aScore = ps.Score(peerA)
-    expected = 0.0
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
 
-    bScore := ps.Score(peerB)
-    expected = 0.0
-    if bScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    assert_eq!(score_a, 0.0, "Should have no effect on the score");
+    assert_eq!(score_b, 0.0, "Should have no effect on the score");
 
     // now clear the delivery record
-    ps.deliveries.head.expire = time.Now()
-    time.Sleep(1 * time.Millisecond)
-    ps.deliveries.gc()
+    peer_score.deliveries.clear();
 
     // insert a record in the message deliveries
-    ps.ValidateMessage(&msg)
+    peer_score.validate_message(&peer_id_a, &msg);
 
     // this should have no effect in the score, and subsequent duplicate messages should have no
     // effect either
-    ps.RejectMessage(&msg, rejectValidationIgnored)
-    ps.DuplicateMessage(&msg2)
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationIgnored);
+    peer_score.duplicated_message(&peer_id_b, &msg);
 
-    aScore = ps.Score(peerA)
-    expected = 0.0
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
 
-    bScore = ps.Score(peerB)
-    expected = 0.0
-    if bScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    assert_eq!(score_a, 0.0, "Should have no effect on the score");
+    assert_eq!(score_b, 0.0, "Should have no effect on the score");
 
     // now clear the delivery record
-    ps.deliveries.head.expire = time.Now()
-    time.Sleep(1 * time.Millisecond)
-    ps.deliveries.gc()
+    peer_score.deliveries.clear();
 
     // insert a new record in the message deliveries
-    ps.ValidateMessage(&msg)
+    peer_score.validate_message(&peer_id_a, &msg);
 
     // and reject the message to make sure duplicates are also penalized
-    ps.RejectMessage(&msg, rejectValidationFailed)
-    ps.DuplicateMessage(&msg2)
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
+    peer_score.duplicated_message(&peer_id_b, &msg);
 
-    aScore = ps.Score(peerA)
-    expected = -1.0
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
 
-    bScore = ps.Score(peerB)
-    expected = -1.0
-    if bScore != expected {
-        t.Fatalf("Score: %f. Expected %f", bScore, expected)
-    }
+    assert_eq!(score_a, -1.0, "Score should be effected");
+    assert_eq!(score_b, -1.0, "Score should be effected");
 
     // now clear the delivery record again
-    ps.deliveries.head.expire = time.Now()
-    time.Sleep(1 * time.Millisecond)
-    ps.deliveries.gc()
+    peer_score.deliveries.clear();
 
     // insert a new record in the message deliveries
-    ps.ValidateMessage(&msg)
+    peer_score.validate_message(&peer_id_a, &msg);
 
-    // and reject the message after a duplciate has arrived
-    ps.DuplicateMessage(&msg2)
-    ps.RejectMessage(&msg, rejectValidationFailed)
+    // and reject the message after a duplicate has arrived
+    peer_score.duplicated_message(&peer_id_b, &msg);
+    peer_score.reject_message(&peer_id_a, &msg, RejectReason::ValidationFailed);
 
-    aScore = ps.Score(peerA)
-    expected = -4.0
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
 
-    bScore = ps.Score(peerB)
-    expected = -4.0
-    if bScore != expected {
-        t.Fatalf("Score: %f. Expected %f", bScore, expected)
+    assert_eq!(score_a, -4.0, "Score should be effected");
+    assert_eq!(score_b, -4.0, "Score should be effected");
+}
+
+#[test]
+fn test_application_score() {
+    // Create parameters with reasonable default values
+    let app_specific_weight = 0.5;
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
+    params.app_specific_weight = app_specific_weight;
+
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.mesh_failure_penalty_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
+    topic_params.invalid_message_deliveries_weight = 0.0;
+    topic_params.invalid_message_deliveries_decay = 1.0;
+
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
+
+    let peer_id_a = PeerId::random();
+    peer_score.add_peer(peer_id_a.clone());
+    peer_score.graft(&peer_id_a, topic.clone());
+
+    let messages = 100;
+    for i in -100..messages {
+        let app_score_value = i as f64;
+        peer_score.set_application_score(&peer_id_a, app_score_value);
+        peer_score.refresh_scores();
+        let score_a = peer_score.score(&peer_id_a);
+        let expected = (i as f64) * app_specific_weight;
+        assert_eq!(score_a, expected, "Peer has unexpected score");
     }
 }
 
-func TestScoreApplicationScore(t *testing.T) {
+#[test]
+fn test_score_ip_colocation() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
+    let ip_colocation_factor_weight = -1.0;
+    let ip_colocation_factor_threshold = 1.0;
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
+    params.ip_colocation_factor_weight = ip_colocation_factor_weight;
+    params.ip_colocation_factor_threshold = ip_colocation_factor_threshold;
 
-    var appScoreValue float64
-    params := &PeerScoreParams{
-        AppSpecificScore:  func(peer.ID) float64 { return appScoreValue },
-        AppSpecificWeight: 0.5,
-        Topics:            make(map[string]*TopicScoreParams),
-    }
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.mesh_failure_penalty_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
+    topic_params.invalid_message_deliveries_weight = 0.0;
 
-    peerA := peer.ID("A")
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
+    let peer_id_a = PeerId::random();
+    let peer_id_b = PeerId::random();
+    let peer_id_c = PeerId::random();
+    let peer_id_d = PeerId::random();
 
-    for i := -100; i < 100; i++ {
-        appScoreValue = float64(i)
-        ps.refreshScores()
-        aScore := ps.Score(peerA)
-        expected := float64(i) * params.AppSpecificWeight
-        if aScore != expected {
-            t.Errorf("expected peer score to equal app-specific score %f, got %f", expected, aScore)
-        }
-    }
-}
-
-func TestScoreIPColocation(t *testing.T) {
-    // Create parameters with reasonable default values
-    mytopic := "mytopic"
-
-    params := &PeerScoreParams{
-        AppSpecificScore:            func(peer.ID) float64 { return 0 },
-        IPColocationFactorThreshold: 1,
-        IPColocationFactorWeight:    -1,
-        Topics:                      make(map[string]*TopicScoreParams),
-    }
-
-    peerA := peer.ID("A")
-    peerB := peer.ID("B")
-    peerC := peer.ID("C")
-    peerD := peer.ID("D")
-    peers := []peer.ID{peerA, peerB, peerC, peerD}
-
-    ps := newPeerScore(params)
-    for _, p := range peers {
-        ps.AddPeer(p, "myproto")
-        ps.Graft(p, mytopic)
+    let peers = vec![
+        peer_id_a.clone(),
+        peer_id_b.clone(),
+        peer_id_c.clone(),
+        peer_id_d.clone(),
+    ];
+    for peer_id in &peers {
+        peer_score.add_peer(peer_id.clone());
+        peer_score.graft(&peer_id, topic.clone());
     }
 
     // peerA should have no penalty, but B, C, and D should be penalized for sharing an IP
-    setIPsForPeer(t, ps, peerA, "1.2.3.4")
-    setIPsForPeer(t, ps, peerB, "2.3.4.5")
-    setIPsForPeer(t, ps, peerC, "2.3.4.5", "3.4.5.6")
-    setIPsForPeer(t, ps, peerD, "2.3.4.5")
+    peer_score.add_ip(&peer_id_a, "1.2.3.4".parse().unwrap());
+    peer_score.add_ip(&peer_id_b, "2.3.4.5".parse().unwrap());
+    peer_score.add_ip(&peer_id_c, "2.3.4.5".parse().unwrap());
+    peer_score.add_ip(&peer_id_c, "3.4.5.6".parse().unwrap());
+    peer_score.add_ip(&peer_id_d, "2.3.4.5".parse().unwrap());
 
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    bScore := ps.Score(peerB)
-    cScore := ps.Score(peerC)
-    dScore := ps.Score(peerD)
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    let score_b = peer_score.score(&peer_id_b);
+    let score_c = peer_score.score(&peer_id_c);
+    let score_d = peer_score.score(&peer_id_d);
 
-    if aScore != 0 {
-        t.Errorf("expected peer A to have score 0.0, got %f", aScore)
-    }
+    assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
-    nShared := 3
-    ipSurplus := nShared - params.IPColocationFactorThreshold
-    penalty := ipSurplus * ipSurplus
-    expected := params.IPColocationFactorWeight * float64(penalty)
-    for _, score := range []float64{bScore, cScore, dScore} {
-        if score != expected {
-            t.Fatalf("Score: %f. Expected %f", score, expected)
-        }
-    }
+    let n_shared = 3.0;
+    let ip_surplus = n_shared - ip_colocation_factor_threshold;
+    let penalty = ip_surplus * ip_surplus;
+    let expected = ip_colocation_factor_weight * penalty as f64;
+
+    assert_eq!(score_b, expected, "Peer B should have expected score");
+    assert_eq!(score_c, expected, "Peer C should have expected score");
+    assert_eq!(score_d, expected, "Peer D should have expected score");
 }
 
-func TestScoreBehaviourPenalty(t *testing.T) {
-    params := &PeerScoreParams{
-        AppSpecificScore:       func(peer.ID) float64 { return 0 },
-        BehaviourPenaltyWeight: -1,
-        BehaviourPenaltyDecay:  0.99,
-    }
+#[test]
+fn test_score_behaviour_penality() {
+    // Create parameters with reasonable default values
+    let behaviour_penalty_weight = -1.0;
+    let behaviour_penalty_decay = 0.99;
 
-    peerA := peer.ID("A")
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let mut params = PeerScoreParams::default();
+    params.behaviour_penalty_decay = behaviour_penalty_decay;
+    params.behaviour_penalty_weight = behaviour_penalty_weight;
 
-    var ps *peerScore
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 1.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.mesh_failure_penalty_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
+    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
+    topic_params.invalid_message_deliveries_weight = 0.0;
 
-    // first check AddPenalty on a nil peerScore
-    ps.AddPenalty(peerA, 1)
-    aScore := ps.Score(peerA)
-    if aScore != 0 {
-        t.Errorf("expected peer score to be 0, got %f", aScore)
-    }
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
 
-    // instantiate the peerScore
-    ps = newPeerScore(params)
+    let peer_id_a = PeerId::random();
 
-    // next AddPenalty on a non-existent peer
-    ps.AddPenalty(peerA, 1)
-    aScore = ps.Score(peerA)
-    if aScore != 0 {
-        t.Errorf("expected peer score to be 0, got %f", aScore)
-    }
+    // add a penalty to a non-existent peer.
+    peer_score.add_penalty(&peer_id_a, 1);
+
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
     // add the peer and test penalties
-    ps.AddPeer(peerA, "myproto")
+    peer_score.add_peer(peer_id_a.clone());
+    assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
-    aScore = ps.Score(peerA)
-    if aScore != 0 {
-        t.Errorf("expected peer score to be 0, got %f", aScore)
-    }
+    peer_score.add_penalty(&peer_id_a, 1);
 
-    ps.AddPenalty(peerA, 1)
-    aScore = ps.Score(peerA)
-    if aScore != -1 {
-        t.Errorf("expected peer score to be -1, got %f", aScore)
-    }
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(score_a, -1.0, "Peer A should have been penalized");
 
-    ps.AddPenalty(peerA, 1)
-    aScore = ps.Score(peerA)
-    if aScore != -4 {
-        t.Errorf("expected peer score to be -4, got %f", aScore)
-    }
+    peer_score.add_penalty(&peer_id_a, 1);
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(score_a, -4.0, "Peer A should have been penalized");
 
-    ps.refreshScores()
+    peer_score.refresh_scores();
 
-    aScore = ps.Score(peerA)
-    if aScore != -3.9204 {
-        t.Errorf("expected peer score to be -3.9204, got %f", aScore)
-    }
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(score_a, -3.9204, "Peer A should have been penalized");
 }
 
-func TestScoreRetention(t *testing.T) {
+#[test]
+fn test_score_retention() {
     // Create parameters with reasonable default values
-    mytopic := "mytopic"
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+    let app_specific_weight = 1.0;
+    let app_score_value = -1000.0;
+    let retain_score = Duration::from_secs(1);
+    let mut params = PeerScoreParams::default();
+    params.app_specific_weight = app_specific_weight;
+    params.retain_score = retain_score;
 
-    params := &PeerScoreParams{
-        AppSpecificScore:  func(peer.ID) float64 { return -1000 },
-        AppSpecificWeight: 1.0,
-        Topics:            make(map[string]*TopicScoreParams),
-        RetainScore:       time.Second,
-    }
+    let mut topic_params = TopicScoreParams::default();
+    topic_params.topic_weight = 0.0;
+    topic_params.mesh_message_deliveries_weight = 0.0;
+    topic_params.mesh_message_deliveries_activation = Duration::from_secs(0);
+    topic_params.first_message_deliveries_weight = 0.0;
+    topic_params.time_in_mesh_weight = 0.0;
 
-    peerA := peer.ID("A")
+    params.topics.insert(topic_hash, topic_params.clone());
+    let mut peer_score = PeerScore::new(params, default_message_id());
 
-    ps := newPeerScore(params)
-    ps.AddPeer(peerA, "myproto")
-    ps.Graft(peerA, mytopic)
+    let peer_id_a = PeerId::random();
+    peer_score.add_peer(peer_id_a.clone());
+    peer_score.graft(&peer_id_a, topic.clone());
+
+    peer_score.set_application_score(&peer_id_a, app_score_value);
 
     // score should equal -1000 (app specific score)
-    expected := float64(-1000)
-    ps.refreshScores()
-    aScore := ps.Score(peerA)
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(
+        score_a, app_score_value,
+        "Score should be the application specific score"
+    );
 
-    // disconnect & wait half of RetainScore time. should still have negative score
-    ps.RemovePeer(peerA)
-    delay := params.RetainScore / time.Duration(2)
-    time.Sleep(delay)
-    ps.refreshScores()
-    aScore = ps.Score(peerA)
-    if aScore != expected {
-        t.Fatalf("Score: %f. Expected %f", aScore, expected)
-    }
+    // disconnect & wait half of RetainScore time. Should still have negative score
+    peer_score.remove_peer(&peer_id_a);
+    std::thread::sleep(retain_score / 2);
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(
+        score_a, app_score_value,
+        "Score should be the application specific score"
+    );
 
     // wait remaining time (plus a little slop) and the score should reset to zero
-    time.Sleep(delay + (50 * time.Millisecond))
-    ps.refreshScores()
-    aScore = ps.Score(peerA)
-    if aScore != 0 {
-        t.Fatalf("Score: %f. Expected 0.0", aScore)
-    }
+    std::thread::sleep(retain_score / 2 + Duration::from_millis(50));
+    peer_score.refresh_scores();
+    let score_a = peer_score.score(&peer_id_a);
+    assert_eq!(
+        score_a, 0.0,
+        "Score should be the application specific score"
+    );
 }
-
-
-// hack to set IPs for a peer without having to spin up real hosts with shared IPs
-func setIPsForPeer(t *testing.T, ps *peerScore, p peer.ID, ips ...string) {
-    t.Helper()
-    ps.setIPs(p, ips, []string{})
-    pstats, ok := ps.peerStats[p]
-    if !ok {
-        t.Fatal("unable to get peerStats")
-    }
-    pstats.ips = ips
-}
-*/

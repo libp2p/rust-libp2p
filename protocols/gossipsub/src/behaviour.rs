@@ -2456,7 +2456,7 @@ impl NetworkBehaviour for Gossipsub {
         // Add the IP to the peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint)) {
-                peer_score.add_ip(peer.clone(), ip);
+                peer_score.add_ip(&peer, ip);
             }
         }
     }
@@ -2488,7 +2488,7 @@ impl NetworkBehaviour for Gossipsub {
                 peer_score.remove_ip(peer, &ip);
             }
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint_new)) {
-                peer_score.add_ip(peer.clone(), ip);
+                peer_score.add_ip(&peer, ip);
             }
         }
     }

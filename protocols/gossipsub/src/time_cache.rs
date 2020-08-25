@@ -163,6 +163,12 @@ where
             }),
         }
     }
+
+    /// Empties the entire cache.
+    pub fn clear(&mut self) {
+        self.map.clear();
+        self.list.clear();
+    }
 }
 
 pub struct DuplicateCache<Key>(TimeCache<Key, ()>);

@@ -426,19 +426,19 @@ impl PeerScore {
     }
 
     /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
-    pub fn add_ip(&mut self, peer_id: PeerId, ip: IpAddr) {
+    pub fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
         let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
 
-        //mark the peer as connected (currently the default is connected, but we don't want to
+        // Mark the peer as connected (currently the default is connected, but we don't want to
         // rely on the default).
         peer_stats.status = ConnectionStatus::Connected;
 
-        //insert the ip
+        // Insert the ip
         peer_stats.known_ips.insert(ip.clone());
         self.peer_ips
             .entry(ip)
             .or_insert_with(|| HashSet::new())
-            .insert(peer_id);
+            .insert(peer_id.clone());
     }
 
     /// Removes an ip from a peer

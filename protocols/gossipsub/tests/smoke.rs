@@ -201,7 +201,7 @@ fn multi_hop_propagation() {
     let _ = env_logger::try_init();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
-        if num_nodes < 2 || num_nodes > 100 {
+        if num_nodes < 2 || num_nodes > 50 {
             return TestResult::discard();
         }
 
@@ -253,6 +253,6 @@ fn multi_hop_propagation() {
     }
 
     QuickCheck::new()
-        .max_tests(10)
+        .max_tests(5)
         .quickcheck(prop as fn(u8, u64) -> TestResult)
 }
