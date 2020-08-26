@@ -267,6 +267,7 @@ impl Encoder for GossipsubCodec {
                 signature: message.signature,
                 key: message.key,
             };
+
             publish.push(message);
         }
 
@@ -675,7 +676,7 @@ mod tests {
                 config,
             )
             .unwrap();
-            let data = (0..g.gen_range(1, 1024)).map(|_| g.gen()).collect();
+            let data = (0..g.gen_range(1, 10024)).map(|_| g.gen()).collect();
             let topics = Vec::arbitrary(g)
                 .into_iter()
                 .map(|id: TopicId| id.0)
@@ -746,6 +747,33 @@ mod tests {
                 }
                 _ => panic!("Must decode a message"),
             }
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_) -> _)
+    }
+
+    #[test]
+    // Estimate the size of the protobuf messages
+    fn size_estimation() {
+        fn prop(message: Message) {
+            let message = message.0;
+
+            let rpc = GossipsubRpc {
+                messages: vec![message],
+                subscriptions: vec![],
+                control_msgs: vec![],
+            };
+
+            let estimated_size = rpc.size();
+
+            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
+            let mut buf = BytesMut::new();
+            codec.encode(rpc.clone(), &mut buf).unwrap();
+            // The estimate should be within 10% of the actual size
+            assert!(
+                (estimated_size as f64 * 1.1) as usize >= buf.len(),
+                "Estimated size should be within 10%"
+            );
         }
 
         QuickCheck::new().quickcheck(prop as fn(_) -> _)

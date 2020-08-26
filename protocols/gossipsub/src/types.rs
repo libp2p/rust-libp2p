@@ -103,6 +103,41 @@ pub struct GossipsubMessage {
     pub validated: bool,
 }
 
+impl GossipsubMessage {
+    // Estimates the size in bytes of this gossipsub message when protobuf encoded.
+    //
+    // NOTE: This should be a slight under-estimation as it doesn't account fully for the unsigned varint
+    // protobuf structures for length prefixing.
+    //
+    // This is primarily used to give an estimate of the size to inform the user if the message is
+    // over the transmission limit. This avoids doing full encoding at the behaviour level rather
+    // than in the protocols handler.
+    pub fn size(&self) -> usize {
+        let mut size = 0;
+        if self.source.is_some() {
+            size += 40;
+        }
+
+        // As the data increases, more bytes are required to store the length prefixes. This is an
+        // under-estimate.
+        size += self.data.len() + 2;
+
+        if self.sequence_number.is_some() {
+            size += 8 + 2;
+        }
+
+        // This too ignores the extra bytes required for added length prefixes.
+        for topic_hash in &self.topics {
+            size += topic_hash.as_str().bytes().len() + 2;
+        }
+
+        if let Some(sig) = &self.signature {
+            size += sig.len() + 2;
+        }
+        size
+    }
+}
+
 impl fmt::Debug for GossipsubMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GossipsubMessage")
@@ -124,6 +159,13 @@ pub struct GossipsubSubscription {
     pub action: GossipsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
     pub topic_hash: TopicHash,
+}
+
+impl GossipsubSubscription {
+    /// Estimate the size of the subscription in bytes.
+    pub fn size(&self) -> usize {
+        self.topic_hash.as_str().as_bytes().len() + 4 // four bytes for protobuf encoding
+    }
 }
 
 /// Action that a subscription wants to perform.
@@ -174,6 +216,45 @@ pub enum GossipsubControlAction {
     },
 }
 
+impl GossipsubControlAction {
+    /// Estimates the byte size of the action.
+    pub fn size(&self) -> usize {
+        let mut size = 0;
+
+        match self {
+            Self::IHave {
+                topic_hash,
+                message_ids,
+            } => {
+                size += topic_hash.as_str().as_bytes().len();
+                for message in message_ids {
+                    size += message.0.len();
+                }
+            }
+            Self::IWant { message_ids } => {
+                for message in message_ids {
+                    size += message.0.len();
+                }
+            }
+            Self::Graft { topic_hash } => {
+                size += topic_hash.as_str().as_bytes().len();
+            }
+            Self::Prune {
+                topic_hash,
+                peers,
+                backoff,
+            } => {
+                size += topic_hash.as_str().as_bytes().len();
+                size += peers.len() * 34;
+                if backoff.is_some() {
+                    size += 8;
+                }
+            }
+        }
+        size + 4 // 4 bytes for protobuf encoding
+    }
+}
+
 /// An RPC received/sent.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubRpc {
@@ -183,6 +264,35 @@ pub struct GossipsubRpc {
     pub subscriptions: Vec<GossipsubSubscription>,
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<GossipsubControlAction>,
+}
+
+impl GossipsubRpc {
+    /// Estimates the size in bytes of this RPC message.
+    ///
+    // NOTE: This should be a slight under-estimation as it doesn't account fully for the unsigned varint
+    // protobuf structures for length prefixing.
+    //
+    // This is primarily used to give an estimate of the size to inform the user if the message is
+    // over the transmission limit. This avoids doing full encoding at the behaviour level rather
+    // than in the protocols handler.
+    pub fn size(&self) -> usize {
+        let mut size = 0;
+        for message in &self.messages {
+            size += message.size();
+        }
+
+        for subscription in &self.subscriptions {
+            size += subscription.size();
+        }
+
+        for control_msg in &self.control_msgs {
+            size += control_msg.size();
+        }
+
+        // two bytes for the protobuf length prefix, and extra bytes as the payload grows.
+        size += 2 + (64 - (size as u64).leading_zeros() as usize) / 8;
+        size
+    }
 }
 
 impl fmt::Debug for GossipsubRpc {

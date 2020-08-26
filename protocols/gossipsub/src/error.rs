@@ -33,6 +33,9 @@ pub enum PublishError {
     SigningError(SigningError),
     /// There were no peers to send this message to.
     InsufficientPeers,
+    /// The overall message was too large. This could be due to excessive topics or an excessive
+    /// message size.
+    MessageTooLarge,
 }
 
 impl From<SigningError> for PublishError {

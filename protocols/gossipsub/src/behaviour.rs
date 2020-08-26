@@ -674,6 +674,16 @@ impl Gossipsub {
             messages: vec![message],
             control_msgs: Vec::new(),
         });
+
+        // check that the size doesn't exceed the max transmission size
+        if event.size() > self.config.max_transmit_size() {
+            // NOTE: The size limit can be reached by excessive topics or an excessive message.
+            // This is an estimate that should be within 10% of the true encoded value. It is
+            // possible to have a message that exceeds the RPC limit and is not caught here. A
+            // warning log will be emitted in this case.
+            return Err(PublishError::MessageTooLarge);
+        }
+
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.iter() {
             debug!("Sending message to peer: {:?}", peer_id);

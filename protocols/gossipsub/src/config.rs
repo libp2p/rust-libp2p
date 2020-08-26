@@ -101,7 +101,12 @@ pub struct GossipsubConfig {
     /// reconnecting if necessary (default 300).
     check_explicit_peers_ticks: u64,
 
-    /// The maximum byte size for each gossip (default is 2048 bytes).
+    /// The maximum byte size for each gossip (default is 65536 bytes).
+    ///
+    /// This represents the maximum size of the entire protobuf payload. It must be at least
+    /// large enough to support basic control messages. If Peer eXchange is enabled, this
+    /// must be large enough to transmit the desired peer information on pruning. It must be at
+    /// least 100 bytes. Default is 65536 bytes.
     max_transmit_size: usize,
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
@@ -294,7 +299,12 @@ impl GossipsubConfig {
         self.check_explicit_peers_ticks
     }
 
-    /// The maximum byte size for each gossip (default is 2048 bytes).
+    /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
+    ///
+    /// This represents the maximum size of the entire protobuf payload. It must be at least
+    /// large enough to support basic control messages. If Peer eXchange is enabled, this
+    /// must be large enough to transmit the desired peer information on pruning. It must be at
+    /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
         self.max_transmit_size
     }
@@ -493,7 +503,7 @@ impl GossipsubConfigBuilder {
                 heartbeat_interval: Duration::from_secs(1),
                 fanout_ttl: Duration::from_secs(60),
                 check_explicit_peers_ticks: 300,
-                max_transmit_size: 2048,
+                max_transmit_size: 65536,
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
                 validation_mode: ValidationMode::Strict,
@@ -775,13 +785,19 @@ impl GossipsubConfigBuilder {
 
     /// Constructs a `GossipsubConfig` from the given configuration and validates the settings.
     pub fn build(&self) -> Result<GossipsubConfig, &str> {
-        //check all constraints on config
+        // check all constraints on config
+
+        if self.config.max_transmit_size < 100 {
+            return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
+        }
+
         if !(self.config.history_length >= self.config.history_gossip) {
             return Err(
                 "The history_length must be greater than or equal to the history_gossip \
                 length",
             );
         }
+
         if !(self.config.mesh_outbound_min < self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)

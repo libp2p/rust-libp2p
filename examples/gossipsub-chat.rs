@@ -35,7 +35,7 @@
 //! cargo run --example gossipsub-chat
 //! ```
 //!
-//! It will print the PeerId and the listening address, e.g. `Listening on
+//! It will print the `PeerId` and the listening address, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
@@ -51,7 +51,7 @@ use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
-    GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
+    GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
 use libp2p::{gossipsub, identity, PeerId};
 use std::collections::hash_map::DefaultHasher;
@@ -78,9 +78,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        // to set default parameters for gossipsub use:
-        // let gossipsub_config = gossipsub::GossipsubConfig::default();
-
         // To content-address message, we can take the hash of message and use it as an ID.
         let message_id_fn = |message: &GossipsubMessage| {
             let mut s = DefaultHasher::new();
@@ -88,18 +85,25 @@ fn main() -> Result<(), Box<dyn Error>> {
             MessageId::from(s.finish().to_string())
         };
 
-        // set custom gossipsub
+        // Set a custom gossipsub
         let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
-            .heartbeat_interval(Duration::from_secs(10))
+            .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+            .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
             .message_id_fn(message_id_fn) // content-address messages. No two messages of the
-            //same content will be propagated.
+            // same content will be propagated.
             .build()
             .expect("Valid config");
         // build a gossipsub network behaviour
-        let mut gossipsub =
-            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
-                .expect("Correct configuration");
+        let mut gossipsub = gossipsub::Gossipsub::new(
+            MessageAuthenticity::Author(local_peer_id.clone()),
+            gossipsub_config,
+        )
+        .expect("Correct configuration");
+
+        // subscribes to our topic
         gossipsub.subscribe(topic.clone());
+
+        // add an explicit peer if one was provided
         if let Some(explicit) = std::env::args().nth(2) {
             let explicit = explicit.clone();
             match explicit.parse() {
@@ -107,6 +111,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Err(err) => println!("Failed to parse explicit peer id: {:?}", err),
             }
         }
+
+        // build the swarm
         libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };
 
