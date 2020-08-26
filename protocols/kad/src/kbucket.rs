@@ -106,9 +106,7 @@ impl BucketIndex {
     /// `local_key` is the `local_key` itself, which does not belong in any
     /// bucket.
     fn new(d: &Distance) -> Option<BucketIndex> {
-        (NUM_BUCKETS - d.0.leading_zeros() as usize)
-            .checked_sub(1)
-            .map(BucketIndex)
+        d.ilog2().map(|i| BucketIndex(i as usize))
     }
 
     /// Gets the index value as an unsigned integer.
