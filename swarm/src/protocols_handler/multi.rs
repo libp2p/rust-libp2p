@@ -96,13 +96,21 @@ where
     type Error = <H as ProtocolsHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ProtocolsHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ProtocolsHandler>::OutboundProtocol;
+    type InboundOpenInfo = Info<K, <H as ProtocolsHandler>::InboundOpenInfo>;
     type OutboundOpenInfo = (K, <H as ProtocolsHandler>::OutboundOpenInfo);
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
-        let upgrades = self.handlers.iter()
-            .map(|(k, h)| (k.clone(), h.listen_protocol().into_upgrade().1))
-            .collect();
-        SubstreamProtocol::new(Upgrade { upgrades })
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        let (upgrade, info) = self.handlers.iter()
+            .map(|(k, h)| {
+                let (_, u, i) = h.listen_protocol().into_upgrade();
+                (k.clone(), (u, i))
+            })
+            .fold((Upgrade::new(), Info::new()), |(mut upg, mut inf), (k, (u, i))| {
+                upg.upgrades.push((k.clone(), u));
+                inf.infos.push((k, i));
+                (upg, inf)
+            });
+        SubstreamProtocol::new(upgrade, info)
     }
 
     fn inject_fully_negotiated_outbound (
@@ -119,10 +127,13 @@ where
 
     fn inject_fully_negotiated_inbound (
         &mut self,
-        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output
+        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        mut info: Self::InboundOpenInfo
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
-            h.inject_fully_negotiated_inbound(arg)
+            if let Some(i) = info.take(&key) {
+                h.inject_fully_negotiated_inbound(arg, i)
+            }
         } else {
             log::error!("inject_fully_negotiated_inbound: no handler for key")
         }
@@ -156,47 +167,64 @@ where
 
     fn inject_listen_upgrade_error(
         &mut self,
+        mut info: Self::InboundOpenInfo,
         error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
     ) {
         match error {
             ProtocolsHandlerUpgrErr::Timer =>
-                for h in self.handlers.values_mut() {
-                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timer)
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Timer)
+                    }
                 }
             ProtocolsHandlerUpgrErr::Timeout =>
-                for h in self.handlers.values_mut() {
-                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Timeout)
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Timeout)
+                    }
                 }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) =>
-                for h in self.handlers.values_mut() {
-                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)))
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)))
+                    }
                 }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::ProtocolError(e))) =>
                 match e {
                     ProtocolError::IoError(e) =>
-                        for h in self.handlers.values_mut() {
-                            let e = NegotiationError::ProtocolError(ProtocolError::IoError(e.kind().into()));
-                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::IoError(e.kind().into()));
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
                         }
                     ProtocolError::InvalidMessage =>
-                        for h in self.handlers.values_mut() {
-                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
-                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
                         }
                     ProtocolError::InvalidProtocol =>
-                        for h in self.handlers.values_mut() {
-                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
-                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
                         }
                     ProtocolError::TooManyProtocols =>
-                        for h in self.handlers.values_mut() {
-                            let e = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
-                            h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                        for (k, h) in &mut self.handlers {
+                            if let Some(i) = info.take(k) {
+                                let e = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
+                                h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(e)))
+                            }
                         }
                 }
             ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) =>
                 if let Some(h) = self.handlers.get_mut(&k) {
-                    h.inject_listen_upgrade_error(ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)))
+                    if let Some(i) = info.take(&k) {
+                        h.inject_listen_upgrade_error(i, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)))
+                    }
                 }
         }
     }
@@ -309,10 +337,35 @@ impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
     }
 }
 
+/// The aggregated `InboundOpenInfo`s of supported inbound substream protocols.
+#[derive(Clone)]
+pub struct Info<K, I> {
+    infos: Vec<(K, I)>
+}
+
+impl<K: Eq, I> Info<K, I> {
+    fn new() -> Self {
+        Info { infos: Vec::new() }
+    }
+
+    pub fn take(&mut self, k: &K) -> Option<I> {
+        if let Some(p) = self.infos.iter().position(|(key, _)| key == k) {
+            return Some(self.infos.remove(p).1)
+        }
+        None
+    }
+}
+
 /// Inbound and outbound upgrade for all `ProtocolsHandler`s.
 #[derive(Clone)]
 pub struct Upgrade<K, H> {
     upgrades: Vec<(K, H)>
+}
+
+impl<K, H> Upgrade<K, H> {
+    fn new() -> Self {
+        Upgrade { upgrades: Vec::new() }
+    }
 }
 
 impl<K, H> fmt::Debug for Upgrade<K, H>
@@ -433,4 +486,3 @@ impl fmt::Display for DuplicateProtonameError {
 }
 
 impl error::Error for DuplicateProtonameError {}
-

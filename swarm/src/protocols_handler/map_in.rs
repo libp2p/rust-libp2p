@@ -59,17 +59,19 @@ where
     type Error = TProtoHandler::Error;
     type InboundProtocol = TProtoHandler::InboundProtocol;
     type OutboundProtocol = TProtoHandler::OutboundProtocol;
+    type InboundOpenInfo = TProtoHandler::InboundOpenInfo;
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         self.inner.listen_protocol()
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output
+        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        info: Self::InboundOpenInfo
     ) {
-        self.inner.inject_fully_negotiated_inbound(protocol)
+        self.inner.inject_fully_negotiated_inbound(protocol, info)
     }
 
     fn inject_fully_negotiated_outbound(
@@ -94,11 +96,8 @@ where
         self.inner.inject_dial_upgrade_error(info, error)
     }
 
-    fn inject_listen_upgrade_error(
-        &mut self,
-        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>
-    ) {
-        self.inner.inject_listen_upgrade_error(error)
+    fn inject_listen_upgrade_error(&mut self, info: Self::InboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+        self.inner.inject_listen_upgrade_error(info, error)
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {

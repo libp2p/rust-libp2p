@@ -1,3 +1,7 @@
+# 0.22.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
 # 0.21.0 [2020-08-18]
 
 - Add public API to list topics and peers. [PR 1677](https://github.com/libp2p/rust-libp2p/pull/1677).
