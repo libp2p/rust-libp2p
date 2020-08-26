@@ -11,7 +11,7 @@
   this release, that will no longer be the case and it is assumed that peer IDs
   whose length is less or equal to 42 bytes always use the "identity" hash so
   two peer IDs are equal if and only if they use the same hash algorithm and
-  have the same hash digest.
+  have the same hash digest. [PR 1608](https://github.com/libp2p/rust-libp2p/pull/1608).
 
 # 0.21.0 [2020-08-18]
 
