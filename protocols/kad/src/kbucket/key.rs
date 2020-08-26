@@ -170,8 +170,10 @@ impl AsRef<KeyBytes> for KeyBytes {
 pub struct Distance(pub(super) U256);
 
 impl Distance {
-    /// Returns the base 2 logarithm of the [`Distance`].
-    pub fn log2(&self) -> Option<u32> {
+    /// Returns the integer part of the base 2 logarithm of the [`Distance`].
+    ///
+    /// Returns `None` if the distance is zero.
+    pub fn ilog2(&self) -> Option<u32> {
         (256 - self.0.leading_zeros()).checked_sub(1)
     }
 }
