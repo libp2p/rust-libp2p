@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Correct configuration");
 
         // subscribes to our topic
-        gossipsub.subscribe(topic.clone());
+        gossipsub.subscribe(topic.clone()).unwrap();
 
         // add an explicit peer if one was provided
         if let Some(explicit) = std::env::args().nth(2) {
