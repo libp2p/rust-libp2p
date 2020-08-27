@@ -22,6 +22,7 @@
 
 #[cfg(test)]
 mod tests {
+    use byteorder::{BigEndian, ByteOrder};
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -121,7 +122,7 @@ mod tests {
         // subscribe to the topics
         for t in topics {
             let topic = Topic::new(t);
-            gs.subscribe(topic.clone());
+            gs.subscribe(topic.clone()).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
 
@@ -216,6 +217,112 @@ mod tests {
         peer
     }
 
+    // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
+    fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
+        // Store valid messages.
+        let mut messages = Vec::with_capacity(rpc.publish.len());
+        let rpc = rpc.clone();
+        for message in rpc.publish.into_iter() {
+            messages.push(GossipsubMessage {
+                source: message.from.map(|x| PeerId::from_bytes(x).unwrap()),
+                data: message.data.unwrap_or_default(),
+                sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
+                topics: message
+                    .topic_ids
+                    .into_iter()
+                    .map(TopicHash::from_raw)
+                    .collect(),
+                signature: message.signature, // don't inform the application
+                key: None,
+                validated: false,
+            });
+        }
+        let mut control_msgs = Vec::new();
+        if let Some(rpc_control) = rpc.control {
+            // Collect the gossipsub control messages
+            let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+                .ihave
+                .into_iter()
+                .map(|ihave| GossipsubControlAction::IHave {
+                    topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
+                    message_ids: ihave
+                        .message_ids
+                        .into_iter()
+                        .map(MessageId::from)
+                        .collect::<Vec<_>>(),
+                })
+                .collect();
+
+            let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+                .iwant
+                .into_iter()
+                .map(|iwant| GossipsubControlAction::IWant {
+                    message_ids: iwant
+                        .message_ids
+                        .into_iter()
+                        .map(MessageId::from)
+                        .collect::<Vec<_>>(),
+                })
+                .collect();
+
+            let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+                .graft
+                .into_iter()
+                .map(|graft| GossipsubControlAction::Graft {
+                    topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                })
+                .collect();
+
+            let mut prune_msgs = Vec::new();
+
+            for prune in rpc_control.prune {
+                // filter out invalid peers
+                let peers = prune
+                    .peers
+                    .into_iter()
+                    .filter_map(|info| {
+                        info.peer_id
+                            .and_then(|id| PeerId::from_bytes(id).ok())
+                            .map(|peer_id|
+                                    //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
+                                    PeerInfo {
+                                        peer_id: Some(peer_id),
+                                    })
+                    })
+                    .collect::<Vec<PeerInfo>>();
+
+                let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
+                prune_msgs.push(GossipsubControlAction::Prune {
+                    topic_hash,
+                    peers,
+                    backoff: prune.backoff,
+                });
+            }
+
+            control_msgs.extend(ihave_msgs);
+            control_msgs.extend(iwant_msgs);
+            control_msgs.extend(graft_msgs);
+            control_msgs.extend(prune_msgs);
+        }
+
+        GossipsubRpc {
+            messages,
+            subscriptions: rpc
+                .subscriptions
+                .into_iter()
+                .map(|sub| GossipsubSubscription {
+                    action: if Some(true) == sub.subscribe {
+                        GossipsubSubscriptionAction::Subscribe
+                    } else {
+                        GossipsubSubscriptionAction::Unsubscribe
+                    },
+                    topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
+                })
+                .collect(),
+            control_msgs,
+        }
+    }
+
     #[test]
     /// Test local node subscribing to a topic
     fn test_subscribe() {
@@ -239,10 +346,8 @@ mod tests {
                 .fold(vec![], |mut collected_subscriptions, e| match e {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => {
                         for s in &event.subscriptions {
-                            match s.action {
-                                GossipsubSubscriptionAction::Subscribe => {
-                                    collected_subscriptions.push(s.clone())
-                                }
+                            match s.subscribe {
+                                Some(true) => collected_subscriptions.push(s.clone()),
                                 _ => {}
                             };
                         }
@@ -288,11 +393,11 @@ mod tests {
 
         // unsubscribe from both topics
         assert!(
-            gs.unsubscribe(topics[0].clone()),
+            gs.unsubscribe(topics[0].clone()).unwrap(),
             "should be able to unsubscribe successfully from each topic",
         );
         assert!(
-            gs.unsubscribe(topics[1].clone()),
+            gs.unsubscribe(topics[1].clone()).unwrap(),
             "should be able to unsubscribe successfully from each topic",
         );
 
@@ -302,10 +407,8 @@ mod tests {
                 .fold(vec![], |mut collected_subscriptions, e| match e {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => {
                         for s in &event.subscriptions {
-                            match s.action {
-                                GossipsubSubscriptionAction::Unsubscribe => {
-                                    collected_subscriptions.push(s.clone())
-                                }
+                            match s.subscribe {
+                                Some(false) => collected_subscriptions.push(s.clone()),
                                 _ => {}
                             };
                         }
@@ -351,17 +454,17 @@ mod tests {
 
         // unsubscribe, then call join to invoke functionality
         assert!(
-            gs.unsubscribe(topics[0].clone()),
+            gs.unsubscribe(topics[0].clone()).unwrap(),
             "should be able to unsubscribe successfully"
         );
         assert!(
-            gs.unsubscribe(topics[1].clone()),
+            gs.unsubscribe(topics[1].clone()).unwrap(),
             "should be able to unsubscribe successfully"
         );
 
         // re-subscribe - there should be peers associated with the topic
         assert!(
-            gs.subscribe(topics[0].clone()),
+            gs.subscribe(topics[0].clone()).unwrap(),
             "should be able to subscribe successfully"
         );
 
@@ -406,7 +509,7 @@ mod tests {
         }
 
         // subscribe to topic1
-        gs.subscribe(topics[1].clone());
+        gs.subscribe(topics[1].clone()).unwrap();
 
         // the three new peers should have been added, along with 3 more from the pool.
         assert!(
@@ -469,6 +572,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    let event = proto_to_message(event);
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -517,7 +621,7 @@ mod tests {
         );
         // Unsubscribe from topic
         assert!(
-            gs.unsubscribe(Topic::new(fanout_topic.clone())),
+            gs.unsubscribe(Topic::new(fanout_topic.clone())).unwrap(),
             "should be able to unsubscribe successfully from topic"
         );
 
@@ -541,6 +645,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    let event = proto_to_message(event);
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -575,7 +680,7 @@ mod tests {
 
         // check that our subscriptions are sent to each of the peers
         // collect all the SendEvents
-        let send_events: Vec<&NetworkBehaviourAction<Arc<GossipsubRpc>, GossipsubEvent>> = gs
+        let send_events: Vec<&NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GossipsubEvent>> = gs
             .events
             .iter()
             .filter(|e| match e {
@@ -810,6 +915,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_messages, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    let event = proto_to_message(event);
                     for c in &event.messages {
                         collected_messages.push(c.clone())
                     }
@@ -852,6 +958,7 @@ mod tests {
             // is the message is being sent?
             let message_exists = gs.events.iter().any(|e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    let event = proto_to_message(event);
                     event.messages.iter().any(|msg| id(msg) == msg_id)
                 }
                 _ => false,
@@ -1057,11 +1164,14 @@ mod tests {
             + gs.events
                 .iter()
                 .map(|e| match e {
-                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => event
-                        .control_msgs
-                        .iter()
-                        .filter(|m| filter(peer_id, m))
-                        .count(),
+                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
+                        let event = proto_to_message(event);
+                        event
+                            .control_msgs
+                            .iter()
+                            .filter(|m| filter(peer_id, m))
+                            .count()
+                    }
                     _ => 0,
                 })
                 .sum::<usize>()
@@ -1083,7 +1193,7 @@ mod tests {
         //add peer as explicit peer
         gs.add_explicit_peer(&peer);
 
-        let dial_events: Vec<&NetworkBehaviourAction<Arc<GossipsubRpc>, GossipsubEvent>> = gs
+        let dial_events: Vec<&NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GossipsubEvent>> = gs
             .events
             .iter()
             .filter(|e| match e {
@@ -1268,7 +1378,7 @@ mod tests {
 
         let message = GossipsubMessage {
             source: Some(peers[1].clone()),
-            data: vec![],
+            data: vec![12],
             sequence_number: Some(0),
             topics: vec![topic_hashes[0].clone()],
             signature: None,
@@ -1281,9 +1391,16 @@ mod tests {
             gs.events
                 .iter()
                 .filter(|e| match e {
-                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } =>
+                    NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
+                        let event = proto_to_message(event);
                         peer_id == &peers[0]
-                            && event.messages.iter().filter(|m| *m == &message).count() > 0,
+                            && event
+                                .messages
+                                .iter()
+                                .filter(|m| m.data == message.data)
+                                .count()
+                                > 0
+                    }
                     _ => false,
                 })
                 .count(),
@@ -1316,7 +1433,7 @@ mod tests {
         }
 
         //subscribe now to topic
-        gs.subscribe(topic.clone());
+        gs.subscribe(topic.clone()).unwrap();
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
         assert_eq!(
@@ -1374,7 +1491,7 @@ mod tests {
         gs.publish(topic.clone(), vec![1, 2, 3]).unwrap();
 
         //subscribe now to topic
-        gs.subscribe(topic.clone());
+        gs.subscribe(topic.clone()).unwrap();
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
         assert_eq!(
@@ -1758,7 +1875,7 @@ mod tests {
         let other_topic = Topic::new("test2");
 
         // subscribe an additional new peer to test2
-        gs.subscribe(other_topic.clone());
+        gs.subscribe(other_topic.clone()).unwrap();
         add_peer(&mut gs, &vec![other_topic.hash()], false, false);
 
         //publish message
@@ -1772,6 +1889,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                    let event = proto_to_message(event);
                     for s in &event.messages {
                         collected_publish.push(s.clone());
                     }
@@ -2299,6 +2417,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_messages, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
+                    let event = proto_to_message(event);
                     for c in &event.messages {
                         collected_messages.push((peer_id.clone(), c.clone()))
                     }
@@ -2438,6 +2557,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
+                    let event = proto_to_message(event);
                     for s in &event.messages {
                         collected_publish.push((peer_id.clone(), s.clone()));
                     }
@@ -2496,6 +2616,7 @@ mod tests {
             .iter()
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
+                    let event = proto_to_message(event);
                     for s in &event.messages {
                         collected_publish.push((peer_id.clone(), s.clone()));
                     }
@@ -3189,7 +3310,8 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //message m1 gets validated
-        gs.report_message_validation_result(&id(&m1), &peers[0], MessageAcceptance::Accept);
+        gs.report_message_validation_result(&id(&m1), &peers[0], MessageAcceptance::Accept)
+            .unwrap();
 
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
     }
@@ -3355,7 +3477,8 @@ mod tests {
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Ignore,
-        );
+        )
+        .unwrap();
 
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
     }
@@ -3411,7 +3534,8 @@ mod tests {
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
@@ -3474,7 +3598,8 @@ mod tests {
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
@@ -3541,17 +3666,20 @@ mod tests {
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
-        );
+        )
+        .unwrap();
         gs.report_message_validation_result(
             &(config.message_id_fn())(&m2),
             &peers[0],
             MessageAcceptance::Reject,
-        );
+        )
+        .unwrap();
         gs.report_message_validation_result(
             &(config.message_id_fn())(&m3),
             &peers[0],
             MessageAcceptance::Reject,
-        );
+        )
+        .unwrap();
 
         //number of invalid messages gets squared
         assert_eq!(
@@ -3611,7 +3739,8 @@ mod tests {
             &(config.message_id_fn())(&m1),
             &peers[0],
             MessageAcceptance::Reject,
-        );
+        )
+        .unwrap();
 
         assert_eq!(
             gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
@@ -3981,6 +4110,7 @@ mod tests {
                 .iter()
                 .map(|e| match e {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => {
+                        let event = proto_to_message(event);
                         event.messages.len()
                     }
                     _ => 0,
@@ -4390,6 +4520,7 @@ mod tests {
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                     if peer_id == &p1 || peer_id == &p2 {
+                        let event = proto_to_message(event);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
                         }
@@ -4441,6 +4572,7 @@ mod tests {
             .fold(vec![], |mut collected_publish, e| match e {
                 NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                     if peer_id == &p1 || peer_id == &p2 {
+                        let event = proto_to_message(event);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
                         }

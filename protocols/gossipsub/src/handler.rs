@@ -76,7 +76,7 @@ pub struct GossipsubHandler {
     inbound_substream: Option<InboundSubstreamState>,
 
     /// Queue of values that we want to send to the remote.
-    send_queue: SmallVec<[GossipsubRpc; 16]>,
+    send_queue: SmallVec<[crate::rpc_proto::Rpc; 16]>,
 
     /// Flag indicating that an outbound substream is being established to prevent duplicate
     /// requests.
@@ -123,7 +123,10 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<NegotiatedSubstream, GossipsubCodec>, GossipsubRpc),
+    PendingSend(
+        Framed<NegotiatedSubstream, GossipsubCodec>,
+        crate::rpc_proto::Rpc,
+    ),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// The substream is being closed. Used by either substream.
@@ -163,12 +166,12 @@ impl GossipsubHandler {
 }
 
 impl ProtocolsHandler for GossipsubHandler {
-    type InEvent = GossipsubRpc;
+    type InEvent = crate::rpc_proto::Rpc;
     type OutEvent = HandlerEvent;
     type Error = GossipsubHandlerError;
     type InboundProtocol = ProtocolConfig;
     type OutboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = GossipsubRpc;
+    type OutboundOpenInfo = Self::InEvent;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.listen_protocol.clone()
@@ -224,7 +227,7 @@ impl ProtocolsHandler for GossipsubHandler {
         }
     }
 
-    fn inject_event(&mut self, message: GossipsubRpc) {
+    fn inject_event(&mut self, message: crate::rpc_proto::Rpc) {
         if !self.protocol_unsupported {
             self.send_queue.push(message);
         }
@@ -407,6 +410,7 @@ impl ProtocolsHandler for GossipsubHandler {
             }
         }
 
+        // process outbound stream
         loop {
             match std::mem::replace(
                 &mut self.outbound_substream,

@@ -46,7 +46,7 @@ pub(crate) const SIGNING_PREFIX: &'static [u8] = b"libp2p-pubsub:";
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
 #[derive(Clone)]
 pub struct ProtocolConfig {
-    /// The gossipsub protocol id to listen on.
+    /// The Gossipsub protocol id to listen on.
     protocol_ids: Vec<ProtocolId>,
     /// The maximum transmit size for a packet.
     max_transmit_size: usize,
@@ -247,110 +247,13 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item = GossipsubRpc;
+    type Item = rpc_proto::Rpc;
     type Error = GossipsubHandlerError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        // Messages
-        let mut publish = Vec::new();
+        let mut buf = Vec::with_capacity(item.encoded_len());
 
-        for message in item.messages.into_iter() {
-            let message = rpc_proto::Message {
-                from: message.source.map(|m| m.into_bytes()),
-                data: Some(message.data),
-                seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
-                topic_ids: message
-                    .topics
-                    .into_iter()
-                    .map(TopicHash::into_string)
-                    .collect(),
-                signature: message.signature,
-                key: message.key,
-            };
-
-            publish.push(message);
-        }
-
-        // subscriptions
-        let subscriptions = item
-            .subscriptions
-            .into_iter()
-            .map(|sub| rpc_proto::rpc::SubOpts {
-                subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
-                topic_id: Some(sub.topic_hash.into_string()),
-            })
-            .collect::<Vec<_>>();
-
-        // control messages
-        let mut control = rpc_proto::ControlMessage {
-            ihave: Vec::new(),
-            iwant: Vec::new(),
-            graft: Vec::new(),
-            prune: Vec::new(),
-        };
-
-        let empty_control_msg = item.control_msgs.is_empty();
-
-        for action in item.control_msgs {
-            match action {
-                // collect all ihave messages
-                GossipsubControlAction::IHave {
-                    topic_hash,
-                    message_ids,
-                } => {
-                    let rpc_ihave = rpc_proto::ControlIHave {
-                        topic_id: Some(topic_hash.into_string()),
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.ihave.push(rpc_ihave);
-                }
-                GossipsubControlAction::IWant { message_ids } => {
-                    let rpc_iwant = rpc_proto::ControlIWant {
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
-                    control.iwant.push(rpc_iwant);
-                }
-                GossipsubControlAction::Graft { topic_hash } => {
-                    let rpc_graft = rpc_proto::ControlGraft {
-                        topic_id: Some(topic_hash.into_string()),
-                    };
-                    control.graft.push(rpc_graft);
-                }
-                GossipsubControlAction::Prune {
-                    topic_hash,
-                    peers,
-                    backoff,
-                } => {
-                    let rpc_prune = rpc_proto::ControlPrune {
-                        topic_id: Some(topic_hash.into_string()),
-                        peers: peers
-                            .into_iter()
-                            .map(|info| rpc_proto::PeerInfo {
-                                peer_id: info.peer_id.map(|id| id.into_bytes()),
-                                /// TODO, see https://github.com/libp2p/specs/pull/217
-                                signed_peer_record: None,
-                            })
-                            .collect(),
-                        backoff,
-                    };
-                    control.prune.push(rpc_prune);
-                }
-            }
-        }
-
-        let rpc = rpc_proto::Rpc {
-            subscriptions,
-            publish,
-            control: if empty_control_msg {
-                None
-            } else {
-                Some(control)
-            },
-        };
-
-        let mut buf = Vec::with_capacity(rpc.encoded_len());
-
-        rpc.encode(&mut buf)
+        item.encode(&mut buf)
             .expect("Buffer has sufficient capacity");
 
         // length prefix the protobuf message, ensuring the max limit is not hit
@@ -676,7 +579,7 @@ mod tests {
                 config,
             )
             .unwrap();
-            let data = (0..g.gen_range(1, 10024)).map(|_| g.gen()).collect();
+            let data = (0..g.gen_range(10, 10024)).map(|_| g.gen()).collect();
             let topics = Vec::arbitrary(g)
                 .into_iter()
                 .map(|id: TopicId| id.0)
@@ -690,7 +593,7 @@ mod tests {
 
     impl Arbitrary for TopicId {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            let topic_string: String = (0..g.gen_range(0, 1024))
+            let topic_string: String = (0..g.gen_range(20, 1024))
                 .map(|_| g.gen::<char>())
                 .collect::<String>()
                 .into();
@@ -724,6 +627,7 @@ mod tests {
     }
 
     #[test]
+    /// Test that RPC messages can be encoded and decoded successfully.
     fn encode_decode() {
         fn prop(message: Message) {
             let message = message.0;
@@ -736,7 +640,7 @@ mod tests {
 
             let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
             let mut buf = BytesMut::new();
-            codec.encode(rpc.clone(), &mut buf).unwrap();
+            codec.encode(rpc.clone().into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
             // mark as validated as its a published message
             match decoded_rpc {
@@ -747,33 +651,6 @@ mod tests {
                 }
                 _ => panic!("Must decode a message"),
             }
-        }
-
-        QuickCheck::new().quickcheck(prop as fn(_) -> _)
-    }
-
-    #[test]
-    // Estimate the size of the protobuf messages
-    fn size_estimation() {
-        fn prop(message: Message) {
-            let message = message.0;
-
-            let rpc = GossipsubRpc {
-                messages: vec![message],
-                subscriptions: vec![],
-                control_msgs: vec![],
-            };
-
-            let estimated_size = rpc.size();
-
-            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
-            let mut buf = BytesMut::new();
-            codec.encode(rpc.clone(), &mut buf).unwrap();
-            // The estimate should be within 10% of the actual size
-            assert!(
-                (estimated_size as f64 * 1.1) as usize >= buf.len(),
-                "Estimated size should be within 10%"
-            );
         }
 
         QuickCheck::new().quickcheck(prop as fn(_) -> _)

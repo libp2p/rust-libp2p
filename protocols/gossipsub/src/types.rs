@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::PeerId;
 use std::fmt;
@@ -103,41 +104,6 @@ pub struct GossipsubMessage {
     pub validated: bool,
 }
 
-impl GossipsubMessage {
-    // Estimates the size in bytes of this gossipsub message when protobuf encoded.
-    //
-    // NOTE: This should be a slight under-estimation as it doesn't account fully for the unsigned varint
-    // protobuf structures for length prefixing.
-    //
-    // This is primarily used to give an estimate of the size to inform the user if the message is
-    // over the transmission limit. This avoids doing full encoding at the behaviour level rather
-    // than in the protocols handler.
-    pub fn size(&self) -> usize {
-        let mut size = 0;
-        if self.source.is_some() {
-            size += 40;
-        }
-
-        // As the data increases, more bytes are required to store the length prefixes. This is an
-        // under-estimate.
-        size += self.data.len() + 2;
-
-        if self.sequence_number.is_some() {
-            size += 8 + 2;
-        }
-
-        // This too ignores the extra bytes required for added length prefixes.
-        for topic_hash in &self.topics {
-            size += topic_hash.as_str().bytes().len() + 2;
-        }
-
-        if let Some(sig) = &self.signature {
-            size += sig.len() + 2;
-        }
-        size
-    }
-}
-
 impl fmt::Debug for GossipsubMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GossipsubMessage")
@@ -159,13 +125,6 @@ pub struct GossipsubSubscription {
     pub action: GossipsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
     pub topic_hash: TopicHash,
-}
-
-impl GossipsubSubscription {
-    /// Estimate the size of the subscription in bytes.
-    pub fn size(&self) -> usize {
-        self.topic_hash.as_str().as_bytes().len() + 4 // four bytes for protobuf encoding
-    }
 }
 
 /// Action that a subscription wants to perform.
@@ -216,45 +175,6 @@ pub enum GossipsubControlAction {
     },
 }
 
-impl GossipsubControlAction {
-    /// Estimates the byte size of the action.
-    pub fn size(&self) -> usize {
-        let mut size = 0;
-
-        match self {
-            Self::IHave {
-                topic_hash,
-                message_ids,
-            } => {
-                size += topic_hash.as_str().as_bytes().len();
-                for message in message_ids {
-                    size += message.0.len();
-                }
-            }
-            Self::IWant { message_ids } => {
-                for message in message_ids {
-                    size += message.0.len();
-                }
-            }
-            Self::Graft { topic_hash } => {
-                size += topic_hash.as_str().as_bytes().len();
-            }
-            Self::Prune {
-                topic_hash,
-                peers,
-                backoff,
-            } => {
-                size += topic_hash.as_str().as_bytes().len();
-                size += peers.len() * 34;
-                if backoff.is_some() {
-                    size += 8;
-                }
-            }
-        }
-        size + 4 // 4 bytes for protobuf encoding
-    }
-}
-
 /// An RPC received/sent.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GossipsubRpc {
@@ -267,31 +187,112 @@ pub struct GossipsubRpc {
 }
 
 impl GossipsubRpc {
-    /// Estimates the size in bytes of this RPC message.
-    ///
-    // NOTE: This should be a slight under-estimation as it doesn't account fully for the unsigned varint
-    // protobuf structures for length prefixing.
-    //
-    // This is primarily used to give an estimate of the size to inform the user if the message is
-    // over the transmission limit. This avoids doing full encoding at the behaviour level rather
-    // than in the protocols handler.
-    pub fn size(&self) -> usize {
-        let mut size = 0;
-        for message in &self.messages {
-            size += message.size();
+    /// Converts the GossipsubRPC into its protobuf format.
+    // A convenience function to avoid explicitly specifying types.
+    pub fn into_protobuf(self) -> rpc_proto::Rpc {
+        self.into()
+    }
+}
+
+impl Into<rpc_proto::Rpc> for GossipsubRpc {
+    /// Converts the RPC into protobuf format.
+    fn into(self) -> rpc_proto::Rpc {
+        // Messages
+        let mut publish = Vec::new();
+
+        for message in self.messages.into_iter() {
+            let message = rpc_proto::Message {
+                from: message.source.map(|m| m.into_bytes()),
+                data: Some(message.data),
+                seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
+                topic_ids: message
+                    .topics
+                    .into_iter()
+                    .map(TopicHash::into_string)
+                    .collect(),
+                signature: message.signature,
+                key: message.key,
+            };
+
+            publish.push(message);
         }
 
-        for subscription in &self.subscriptions {
-            size += subscription.size();
+        // subscriptions
+        let subscriptions = self
+            .subscriptions
+            .into_iter()
+            .map(|sub| rpc_proto::rpc::SubOpts {
+                subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
+                topic_id: Some(sub.topic_hash.into_string()),
+            })
+            .collect::<Vec<_>>();
+
+        // control messages
+        let mut control = rpc_proto::ControlMessage {
+            ihave: Vec::new(),
+            iwant: Vec::new(),
+            graft: Vec::new(),
+            prune: Vec::new(),
+        };
+
+        let empty_control_msg = self.control_msgs.is_empty();
+
+        for action in self.control_msgs {
+            match action {
+                // collect all ihave messages
+                GossipsubControlAction::IHave {
+                    topic_hash,
+                    message_ids,
+                } => {
+                    let rpc_ihave = rpc_proto::ControlIHave {
+                        topic_id: Some(topic_hash.into_string()),
+                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
+                    };
+                    control.ihave.push(rpc_ihave);
+                }
+                GossipsubControlAction::IWant { message_ids } => {
+                    let rpc_iwant = rpc_proto::ControlIWant {
+                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
+                    };
+                    control.iwant.push(rpc_iwant);
+                }
+                GossipsubControlAction::Graft { topic_hash } => {
+                    let rpc_graft = rpc_proto::ControlGraft {
+                        topic_id: Some(topic_hash.into_string()),
+                    };
+                    control.graft.push(rpc_graft);
+                }
+                GossipsubControlAction::Prune {
+                    topic_hash,
+                    peers,
+                    backoff,
+                } => {
+                    let rpc_prune = rpc_proto::ControlPrune {
+                        topic_id: Some(topic_hash.into_string()),
+                        peers: peers
+                            .into_iter()
+                            .map(|info| rpc_proto::PeerInfo {
+                                peer_id: info.peer_id.map(|id| id.into_bytes()),
+                                /// TODO, see https://github.com/libp2p/specs/pull/217
+                                signed_peer_record: None,
+                            })
+                            .collect(),
+                        backoff,
+                    };
+                    control.prune.push(rpc_prune);
+                }
+            }
         }
 
-        for control_msg in &self.control_msgs {
-            size += control_msg.size();
+        rpc_proto::Rpc {
+            subscriptions,
+            publish,
+            control: if empty_control_msg {
+                None
+            } else {
+                Some(control)
+            },
         }
-
-        // two bytes for the protobuf length prefix, and extra bytes as the payload grows.
-        size += 2 + (64 - (size as u64).leading_zeros() as usize) / 8;
-        size
     }
 }
 
