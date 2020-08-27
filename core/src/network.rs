@@ -205,7 +205,15 @@ where
         TMuxer: 'a,
         THandler: 'a,
     {
-        self.listen_addrs().flat_map(move |server| address_translation(server, observed_addr))
+        let mut addrs: Vec<_> = self.listen_addrs()
+            .filter_map(move |server| address_translation(server, observed_addr))
+            .collect();
+
+        // remove duplicates
+        addrs.sort_unstable();
+        addrs.dedup();
+
+        addrs.into_iter()
     }
 
     /// Returns the peer id of the local node.

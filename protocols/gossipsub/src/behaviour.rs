@@ -478,6 +478,29 @@ impl Gossipsub {
         })
     }
 
+    /// Lists the hashes of the topics we are currently subscribed to.
+    pub fn topics(&self) -> impl Iterator<Item = &TopicHash> {
+        self.mesh.keys()
+    }
+
+    /// Lists peers for a certain topic hash.
+    pub fn peers(&self, topic_hash: &TopicHash) -> impl Iterator<Item = &PeerId> {
+        self.mesh
+            .get(topic_hash)
+            .into_iter()
+            .map(|x| x.into_iter())
+            .flatten()
+    }
+
+    /// Lists all peers for any topic.
+    pub fn all_peers(&self) -> impl Iterator<Item = &PeerId> {
+        let mut res = BTreeSet::new();
+        for peers in self.mesh.values() {
+            res.extend(peers);
+        }
+        res.into_iter()
+    }
+
     /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
@@ -2429,7 +2452,9 @@ impl Gossipsub {
             ($object_size: ident ) => {
                 let list_index = rpc_list.len() - 1; // the list is never empty
 
-                if rpc_list[list_index].encoded_len() + $object_size + 2
+                // create a new RPC if the new object plus 5% of its size (for length prefix
+                // buffers) exceeds the max transmit size.
+                if rpc_list[list_index].encoded_len() + (($object_size as f64) * 1.05) as usize
                     > self.config.max_transmit_size()
                     && rpc_list[list_index] != new_rpc
                 {
@@ -2949,6 +2974,7 @@ impl fmt::Debug for PublishConfig {
 mod local_test {
     use super::*;
     use crate::IdentTopic;
+    use futures_codec::Encoder;
     use quickcheck::*;
     use rand::Rng;
 
@@ -3062,16 +3088,21 @@ mod local_test {
                 .unwrap();
             let gs = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
+            let mut length_codec = unsigned_varint::codec::UviBytes::default();
+            length_codec.set_max_len(max_transmit_size);
+            let mut codec =
+                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs
                 .fragment_message(Arc::new(rpc_proto.clone()))
                 .expect("Messages must be valid");
 
-            if rpc_proto.encoded_len() <= max_transmit_size {
+            if rpc_proto.encoded_len() < max_transmit_size {
                 assert_eq!(
                     fragmented_messages.len(),
                     1,
-                    "the message should be fragmented"
+                    "the message should not be fragmented"
                 );
             } else {
                 assert!(
@@ -3084,12 +3115,18 @@ mod local_test {
             for message in fragmented_messages {
                 assert!(
                     message.encoded_len() < max_transmit_size,
-                    "all messages should be less than the transmission size"
+                    "all messages should be less than the transmission size: list size {} max size{}", message.encoded_len(), max_transmit_size
                 );
+
+                // ensure they can all be encoded
+                let mut buf = bytes::BytesMut::with_capacity(message.encoded_len());
+                codec
+                    .encode(Arc::try_unwrap(message).unwrap(), &mut buf)
+                    .unwrap()
             }
         }
         QuickCheck::new()
-            .max_tests(30)
+            .max_tests(100)
             .quickcheck(prop as fn(_) -> _)
     }
 }

@@ -1,6 +1,9 @@
-# 0.21.0 [unreleased]
+# 0.21.0 [2020-08-18]
 
 - Bump `libp2p-core` dependency.
+
+- Allow overriding the mode (client/server), e.g. in the context
+of TCP hole punching. [PR 1691](https://github.com/libp2p/rust-libp2p/pull/1691).
 
 # 0.20.0 [2020-07-01]
 

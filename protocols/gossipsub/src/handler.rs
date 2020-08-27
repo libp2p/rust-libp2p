@@ -67,7 +67,7 @@ const MAX_SUBSTREAM_CREATION: usize = 5;
 /// Protocol Handler that manages a single long-lived substream with a peer.
 pub struct GossipsubHandler {
     /// Upgrade configuration for the gossipsub protocol.
-    listen_protocol: SubstreamProtocol<ProtocolConfig>,
+    listen_protocol: SubstreamProtocol<ProtocolConfig, ()>,
 
     /// The single long-lived outbound substream.
     outbound_substream: Option<OutboundSubstreamState>,
@@ -144,12 +144,15 @@ impl GossipsubHandler {
         support_floodsub: bool,
     ) -> Self {
         GossipsubHandler {
-            listen_protocol: SubstreamProtocol::new(ProtocolConfig::new(
-                protocol_id_prefix,
-                max_transmit_size,
-                validation_mode,
-                support_floodsub,
-            )),
+            listen_protocol: SubstreamProtocol::new(
+                ProtocolConfig::new(
+                    protocol_id_prefix,
+                    max_transmit_size,
+                    validation_mode,
+                    support_floodsub,
+                ),
+                (),
+            ),
             inbound_substream: None,
             outbound_substream: None,
             outbound_substream_establishing: false,
@@ -169,17 +172,19 @@ impl ProtocolsHandler for GossipsubHandler {
     type InEvent = crate::rpc_proto::Rpc;
     type OutEvent = HandlerEvent;
     type Error = GossipsubHandlerError;
+    type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
     type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = Self::InEvent;
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         self.listen_protocol.clone()
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
         (substream, peer_kind): <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        _info: Self::InboundOpenInfo,
     ) {
         // If the peer doesn't support the protocol, reject all substreams
         if self.protocol_unsupported {
@@ -329,8 +334,7 @@ impl ProtocolsHandler for GossipsubHandler {
             self.send_queue.shrink_to_fit();
             self.outbound_substream_establishing = true;
             return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                protocol: self.listen_protocol.clone(),
-                info: message,
+                protocol: self.listen_protocol.clone().map_info(|()| message),
             });
         }
 

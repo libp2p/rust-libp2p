@@ -120,7 +120,7 @@ impl BucketIndex {
     /// included in the bucket for this index.
     fn range(&self) -> (Distance, Distance) {
         let min = Distance(U256::pow(U256::from(2), U256::from(self.0)));
-        if self.0 == u8::MAX.into() {
+        if self.0 == usize::from(u8::MAX) {
             (min, Distance(U256::MAX))
         } else {
             let max = Distance(U256::pow(U256::from(2), U256::from(self.0 + 1)) - 1);
