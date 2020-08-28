@@ -262,10 +262,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         println!("Subscribing to {:?}", gossipsub_topic);
-        behaviour
-            .gossipsub
-            .subscribe(gossipsub_topic.clone())
-            .unwrap();
+        behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
         Swarm::new(transport, behaviour, local_peer_id.clone())
     };
 

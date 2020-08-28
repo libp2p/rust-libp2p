@@ -311,3 +311,14 @@ impl fmt::Debug for GossipsubRpc {
         b.finish()
     }
 }
+
+impl fmt::Display for PeerKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotSupported => write!(f, "Not Supported"),
+            Self::Floodsub => write!(f, "Floodsub"),
+            Self::Gossipsub => write!(f, "Gossipsub v1.0"),
+            Self::Gossipsubv1_1 => write!(f, "Gossipsub v1.1"),
+        }
+    }
+}

@@ -122,7 +122,7 @@ mod tests {
         // subscribe to the topics
         for t in topics {
             let topic = Topic::new(t);
-            gs.subscribe(topic.clone()).unwrap();
+            gs.subscribe(&topic).unwrap();
             topic_hashes.push(topic.hash().clone());
         }
 
@@ -393,11 +393,11 @@ mod tests {
 
         // unsubscribe from both topics
         assert!(
-            gs.unsubscribe(topics[0].clone()).unwrap(),
+            gs.unsubscribe(&topics[0]).unwrap(),
             "should be able to unsubscribe successfully from each topic",
         );
         assert!(
-            gs.unsubscribe(topics[1].clone()).unwrap(),
+            gs.unsubscribe(&topics[1]).unwrap(),
             "should be able to unsubscribe successfully from each topic",
         );
 
@@ -454,17 +454,17 @@ mod tests {
 
         // unsubscribe, then call join to invoke functionality
         assert!(
-            gs.unsubscribe(topics[0].clone()).unwrap(),
+            gs.unsubscribe(&topics[0]).unwrap(),
             "should be able to unsubscribe successfully"
         );
         assert!(
-            gs.unsubscribe(topics[1].clone()).unwrap(),
+            gs.unsubscribe(&topics[1]).unwrap(),
             "should be able to unsubscribe successfully"
         );
 
         // re-subscribe - there should be peers associated with the topic
         assert!(
-            gs.subscribe(topics[0].clone()).unwrap(),
+            gs.subscribe(&topics[0]).unwrap(),
             "should be able to subscribe successfully"
         );
 
@@ -509,7 +509,7 @@ mod tests {
         }
 
         // subscribe to topic1
-        gs.subscribe(topics[1].clone()).unwrap();
+        gs.subscribe(&topics[1]).unwrap();
 
         // the three new peers should have been added, along with 3 more from the pool.
         assert!(
@@ -621,7 +621,7 @@ mod tests {
         );
         // Unsubscribe from topic
         assert!(
-            gs.unsubscribe(Topic::new(fanout_topic.clone())).unwrap(),
+            gs.unsubscribe(&Topic::new(fanout_topic.clone())).unwrap(),
             "should be able to unsubscribe successfully from topic"
         );
 
@@ -1433,7 +1433,7 @@ mod tests {
         }
 
         //subscribe now to topic
-        gs.subscribe(topic.clone()).unwrap();
+        gs.subscribe(&topic).unwrap();
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
         assert_eq!(
@@ -1491,7 +1491,7 @@ mod tests {
         gs.publish(topic.clone(), vec![1, 2, 3]).unwrap();
 
         //subscribe now to topic
-        gs.subscribe(topic.clone()).unwrap();
+        gs.subscribe(&topic).unwrap();
 
         //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
         assert_eq!(
@@ -1875,7 +1875,7 @@ mod tests {
         let other_topic = Topic::new("test2");
 
         // subscribe an additional new peer to test2
-        gs.subscribe(other_topic.clone()).unwrap();
+        gs.subscribe(&other_topic).unwrap();
         add_peer(&mut gs, &vec![other_topic.hash()], false, false);
 
         //publish message

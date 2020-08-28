@@ -213,7 +213,7 @@ fn multi_hop_propagation() {
         // Subscribe each node to the same topic.
         let topic = Topic::new("test-net");
         for (_addr, node) in &mut graph.nodes {
-            node.subscribe(topic.clone()).unwrap();
+            node.subscribe(&topic).unwrap();
         }
 
         // Wait for all nodes to be subscribed.

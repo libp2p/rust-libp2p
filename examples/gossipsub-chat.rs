@@ -94,14 +94,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .build()
             .expect("Valid config");
         // build a gossipsub network behaviour
-        let mut gossipsub = gossipsub::Gossipsub::new(
-            MessageAuthenticity::Author(local_peer_id.clone()),
-            gossipsub_config,
-        )
-        .expect("Correct configuration");
+        let mut gossipsub =
+            gossipsub::Gossipsub::new(MessageAuthenticity::Signed(local_key), gossipsub_config)
+                .expect("Correct configuration");
 
         // subscribes to our topic
-        gossipsub.subscribe(topic.clone()).unwrap();
+        gossipsub.subscribe(&topic).unwrap();
 
         // add an explicit peer if one was provided
         if let Some(explicit) = std::env::args().nth(2) {

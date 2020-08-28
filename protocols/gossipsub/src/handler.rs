@@ -284,6 +284,7 @@ impl ProtocolsHandler for GossipsubHandler {
                                 // clear all substreams so the keep alive returns false
                                 self.inbound_substream = None;
                                 self.outbound_substream = None;
+                                self.keep_alive = KeepAlive::No;
                                 return Poll::Ready(ProtocolsHandlerEvent::Custom(
                                     HandlerEvent::PeerKind(PeerKind::NotSupported),
                                 ));

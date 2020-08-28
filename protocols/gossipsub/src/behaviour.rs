@@ -18,18 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::cmp::{max, Ordering};
-use std::collections::hash_map::Entry;
-use std::iter::FromIterator;
-use std::net::IpAddr;
-use std::time::Duration;
 use std::{
+    cmp::{max, Ordering},
     collections::HashSet,
     collections::VecDeque,
-    collections::{hash_map::HashMap, BTreeSet},
+    collections::{BTreeSet, HashMap},
     fmt, iter,
+    iter::FromIterator,
+    net::IpAddr,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use futures::StreamExt;
@@ -48,6 +47,7 @@ use libp2p_swarm::{
     ProtocolsHandler,
 };
 
+use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::PublishError;
 use crate::gossip_promises::GossipPromises;
@@ -195,153 +195,6 @@ impl From<MessageAuthenticity> for PublishConfig {
             MessageAuthenticity::RandomAuthor => PublishConfig::RandomAuthor,
             MessageAuthenticity::Anonymous => PublishConfig::Anonymous,
         }
-    }
-}
-
-/// Stores backoffs in an efficient manner.
-struct BackoffStorage {
-    /// Stores backoffs and the index in backoffs_by_heartbeat per peer per topic.
-    backoffs: HashMap<TopicHash, HashMap<PeerId, (Instant, usize)>>,
-    /// Stores peer topic pairs per heartbeat (this is cyclic the current index is
-    /// heartbeat_index).
-    backoffs_by_heartbeat: Vec<HashSet<(TopicHash, PeerId)>>,
-    /// The index in the backoffs_by_heartbeat vector corresponding to the current heartbeat.
-    heartbeat_index: usize,
-    /// The heartbeat interval duration from the config.
-    heartbeat_interval: Duration,
-    /// Backoff slack from the config.
-    backoff_slack: u32,
-}
-
-impl BackoffStorage {
-    fn heartbeats(d: &Duration, heartbeat_interval: &Duration) -> usize {
-        ((d.as_nanos() + heartbeat_interval.as_nanos() - 1) / heartbeat_interval.as_nanos())
-            as usize
-    }
-
-    pub fn new(
-        prune_backoff: &Duration,
-        heartbeat_interval: Duration,
-        backoff_slack: u32,
-    ) -> BackoffStorage {
-        // We add one additional slot for partial heartbeat
-        let max_heartbeats =
-            Self::heartbeats(prune_backoff, &heartbeat_interval) + backoff_slack as usize + 1;
-        BackoffStorage {
-            backoffs: HashMap::new(),
-            backoffs_by_heartbeat: vec![HashSet::new(); max_heartbeats],
-            heartbeat_index: 0,
-            heartbeat_interval,
-            backoff_slack,
-        }
-    }
-
-    /// Updates the backoff for a peer (if there is already a more restrictive backoff than this call
-    /// doesn't change anything).
-    pub fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
-        let instant = Instant::now() + time;
-        let insert_into_backoffs_by_heartbeat =
-            |heartbeat_index: usize,
-             backoffs_by_heartbeat: &mut Vec<HashSet<_>>,
-             heartbeat_interval,
-             backoff_slack| {
-                let pair = (topic.clone(), peer.clone());
-                let index = (heartbeat_index
-                    + Self::heartbeats(&time, heartbeat_interval)
-                    + backoff_slack as usize)
-                    % backoffs_by_heartbeat.len();
-                backoffs_by_heartbeat[index].insert(pair);
-                index
-            };
-        match self
-            .backoffs
-            .entry(topic.clone())
-            .or_insert_with(HashMap::new)
-            .entry(peer.clone())
-        {
-            Entry::Occupied(mut o) => {
-                let &(backoff, index) = o.get();
-                if backoff < instant {
-                    let pair = (topic.clone(), peer.clone());
-                    if let Some(s) = self.backoffs_by_heartbeat.get_mut(index) {
-                        s.remove(&pair);
-                    }
-                    let index = insert_into_backoffs_by_heartbeat(
-                        self.heartbeat_index,
-                        &mut self.backoffs_by_heartbeat,
-                        &self.heartbeat_interval,
-                        self.backoff_slack,
-                    );
-                    o.insert((instant, index));
-                }
-            }
-            Entry::Vacant(v) => {
-                let index = insert_into_backoffs_by_heartbeat(
-                    self.heartbeat_index,
-                    &mut self.backoffs_by_heartbeat,
-                    &self.heartbeat_interval,
-                    self.backoff_slack,
-                );
-                v.insert((instant, index));
-            }
-        };
-    }
-
-    /// Checks if a given peer is backoffed for the given topic. This method respects the
-    /// configured BACKOFF_SLACK and may return true even if the backup is already over.
-    /// It is guaranteed to return false if the backoff is not over and eventually if enough time
-    /// passed true if the backoff is over.
-    ///
-    /// This method should be used for deciding if we can already send a GRAFT to a previously
-    /// backoffed peer.
-    pub fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
-        self.backoffs
-            .get(topic)
-            .map_or(false, |m| m.contains_key(peer))
-    }
-
-    pub fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {
-        Self::get_backoff_time_from_backoffs(&self.backoffs, topic, peer)
-    }
-
-    fn get_backoff_time_from_backoffs(
-        backoffs: &HashMap<TopicHash, HashMap<PeerId, (Instant, usize)>>,
-        topic: &TopicHash,
-        peer: &PeerId,
-    ) -> Option<Instant> {
-        backoffs
-            .get(topic)
-            .and_then(|m| m.get(peer).map(|(i, _)| *i))
-    }
-
-    /// Applies a heartbeat. That should be called regularly in intervals of length
-    /// `heartbeat_interval`.
-    pub fn heartbeat(&mut self) {
-        // Clean up backoffs_by_heartbeat
-        if let Some(s) = self.backoffs_by_heartbeat.get_mut(self.heartbeat_index) {
-            let backoffs = &mut self.backoffs;
-            let slack = self.heartbeat_interval * self.backoff_slack;
-            let now = Instant::now();
-            s.retain(|(topic, peer)| {
-                let keep = match Self::get_backoff_time_from_backoffs(backoffs, topic, peer) {
-                    Some(backoff_time) => backoff_time + slack > now,
-                    None => false,
-                };
-                if !keep {
-                    //remove from backoffs
-                    if let Entry::Occupied(mut m) = backoffs.entry(topic.clone()) {
-                        if m.get_mut().remove(peer).is_some() && m.get().is_empty() {
-                            m.remove();
-                        }
-                    }
-                }
-
-                keep
-            });
-        }
-
-        // Increase heartbeat index
-        self.heartbeat_index = (self.heartbeat_index + 1) % self.backoffs_by_heartbeat.len();
     }
 }
 
@@ -504,7 +357,7 @@ impl Gossipsub {
     /// Subscribe to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
-    pub fn subscribe<H: Hasher>(&mut self, topic: Topic<H>) -> Result<bool, PublishError> {
+    pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
         debug!("Subscribing to topic: {}", topic);
         let topic_hash = topic.hash();
         if self.mesh.get(&topic_hash).is_some() {
@@ -543,11 +396,11 @@ impl Gossipsub {
     /// Unsubscribes from a topic.
     ///
     /// Returns true if we were subscribed to this topic.
-    pub fn unsubscribe<H: Hasher>(&mut self, topic: Topic<H>) -> Result<bool, PublishError> {
+    pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
         debug!("Unsubscribing from topic: {}", topic);
-        let topic_hash = &topic.hash();
+        let topic_hash = topic.hash();
 
-        if self.mesh.get(topic_hash).is_none() {
+        if self.mesh.get(&topic_hash).is_none() {
             debug!("Already unsubscribed from topic: {:?}", topic_hash);
             // we are not subscribed
             return Ok(false);
@@ -2642,7 +2495,7 @@ impl NetworkBehaviour for Gossipsub {
                 Some(topics) => (topics),
                 None => {
                     if !self.blacklisted_peers.contains(peer_id) {
-                        warn!("Disconnected node, not in connected nodes");
+                        debug!("Disconnected node, not in connected nodes");
                     }
                     return;
                 }
@@ -2769,11 +2622,19 @@ impl NetworkBehaviour for Gossipsub {
             HandlerEvent::PeerKind(kind) => {
                 // We have identified the protocol this peer is using
                 if let PeerKind::NotSupported = kind {
+                    debug!(
+                        "Peer does not support gossipsub protocols. {}",
+                        propagation_source
+                    );
                     // We treat this peer as disconnected
                     self.inject_disconnected(&propagation_source);
                 } else if let Some(old_kind) = self.peer_protocols.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
                     // inject_connected). All other PeerKind changes are ignored.
+                    debug!(
+                        "New peer type found: {} for peer: {}",
+                        kind, propagation_source
+                    );
                     if let PeerKind::Floodsub = *old_kind {
                         *old_kind = kind;
                     }
