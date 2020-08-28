@@ -21,7 +21,7 @@
 use crate::topic::TopicHash;
 use crate::types::{GossipsubMessage, MessageId};
 use libp2p_core::PeerId;
-use log::warn;
+use log::debug;
 use std::{collections::HashMap, fmt};
 
 /// CacheEntry stored in the history.
@@ -155,12 +155,11 @@ impl MessageCache {
         for entry in self.history.pop().expect("history is always > 1") {
             if let Some(msg) = self.msgs.remove(&entry.mid) {
                 if !msg.validated {
-                    warn!(
-                        "The message with id {} got removed from the cache without being
-                    validated. If GossipsubConfig::validate_messages is true, the implementing
-                    application has to ensure that Gossipsub::validate_message gets called for
-                    each received message within the cache timeout time.",
-                        &entry.mid
+                    // If GossipsubConfig::validate_messages is true, the implementing
+                    // application has to ensure that Gossipsub::validate_message gets called for
+                    // each received message within the cache timeout time."
+                    debug!("The message with id {} got removed from the cache without being validated.",
+                    &entry.mid
                     );
                 }
             }

@@ -376,7 +376,11 @@ impl Decoder for GossipsubCodec {
             let sequence_number = if verify_sequence_no {
                 if let Some(seq_no) = message.seqno {
                     if seq_no.len() != 8 {
-                        warn!("Invalid sequence number length for received message");
+                        debug!(
+                            "Invalid sequence number length for received message. SeqNo: {:?} Size: {}",
+                            seq_no,
+                            seq_no.len()
+                        );
                         let message = GossipsubMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
@@ -399,7 +403,7 @@ impl Decoder for GossipsubCodec {
                     }
                 } else {
                     // sequence number was not present
-                    warn!("Sequence number not present but expected");
+                    debug!("Sequence number not present but expected");
                     let message = GossipsubMessage {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
@@ -427,7 +431,7 @@ impl Decoder for GossipsubCodec {
                     Ok(peer_id) => Some(peer_id), // valid peer id
                     Err(_) => {
                         // invalid peer id, add to invalid messages
-                        warn!("Message source has an invalid PeerId");
+                        debug!("Message source has an invalid PeerId");
                         let message = GossipsubMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),

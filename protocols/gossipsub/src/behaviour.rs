@@ -1863,7 +1863,9 @@ impl Gossipsub {
         self.mcache.shift();
 
         debug!("Completed Heartbeat");
-        debug!("peer_scores: {:?}", scores);
+        if self.peer_score.is_some() {
+            trace!("Peer_scores: {:?}", scores);
+        }
     }
 
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
@@ -2648,10 +2650,19 @@ impl NetworkBehaviour for Gossipsub {
                 if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
                     let id_fn = self.config.message_id_fn();
                     for (message, validation_error) in invalid_messages {
-                        warn!("Message rejected. Reason: {:?}", validation_error);
                         let reason = RejectReason::ValidationError(validation_error);
                         peer_score.reject_message(&propagation_source, &message, reason);
                         gossip_promises.reject_message(&id_fn(&message), &reason);
+                    }
+                } else {
+                    // log the invalid messages
+                    for (message, validation_error) in invalid_messages {
+                        warn!(
+                            "Invalid message. Reason: {:?} propagation_peer {} source {:?}",
+                            validation_error,
+                            propagation_source.to_string(),
+                            message.source
+                        );
                     }
                 }
 
