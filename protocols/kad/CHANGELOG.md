@@ -1,5 +1,7 @@
 # 0.23.0 [unreleased]
 
+- Add `Distance::log2` ([PR 1719](https://github.com/libp2p/rust-libp2p/pull/1719)).
+
 - Update `libp2p-swarm`.
 
 # 0.22.1 [2020-08-19]
