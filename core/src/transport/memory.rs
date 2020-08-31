@@ -350,4 +350,37 @@ mod tests {
 
         futures::executor::block_on(futures::future::join(listener, dialer));
     }
+
+    #[test]
+    fn dialer_address_unequal_to_listener_address() {
+        let listener_addr: Multiaddr = Protocol::Memory(
+            rand::random::<u64>().saturating_add(1),
+        ).into();
+        let listener_addr_cloned = listener_addr.clone();
+
+        let listener_transport = MemoryTransport::default();
+
+        let listener = async move {
+            let mut listener = listener_transport.listen_on(listener_addr.clone())
+                .unwrap();
+            while let Some(ev) = listener.next().await {
+                if let ListenerEvent::Upgrade { remote_addr, .. } = ev.unwrap() {
+                    assert!(
+                        remote_addr != listener_addr,
+                        "Expect dialer address not to equal listener address."
+                    );
+                    return;
+                }
+            }
+        };
+
+        let dialer = async move {
+            MemoryTransport::default().dial(listener_addr_cloned)
+                .unwrap()
+                .await
+                .unwrap();
+        };
+
+        futures::executor::block_on(futures::future::join(listener, dialer));
+    }
 }
