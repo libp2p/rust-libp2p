@@ -35,7 +35,7 @@ use futures::prelude::*;
 use futures::task;
 use prost::Message;
 use std::{io, pin::Pin, task::Context};
-use log::info;
+use log::{warn, debug};
 
 static ALL_SIGALGS: &[&webpki::SignatureAlgorithm] = &[
     &webpki::ED25519,
@@ -445,7 +445,7 @@ where
     }
 
     if !pb.data.is_empty() {
-        info!("+++++++++++++++++++++++++++++");
+        debug!("Certificate data found.");
 
         let time = webpki::Time::try_from(std::time::SystemTime::now())
             .map_err(|_| NoiseError::InvalidTimestamp)?;
@@ -455,7 +455,10 @@ where
         remote_cert
             .verify_is_valid_tls_server_cert(ALL_SIGALGS, &state.anchors, &[], time)
             .map_err(|_| NoiseError::CertificateVarificationFailed)?;
+        
+        debug!("Certificate verified against anchors.");
     } else {
+        warn!("No certificate found in handshake data field.");
         return Err(NoiseError::NoCertificate)
     }
 
@@ -479,6 +482,7 @@ where
 
     // for CA support
     pb.data = state.cert.clone();
+    debug!("Certificate set in handshake data length is {}.", pb.data.len());
 
     let mut msg =
         if state.legacy.send_legacy_handshake {
