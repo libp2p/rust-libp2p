@@ -165,8 +165,7 @@ impl<C> Codec<C> {
         assert!(self.buffer.len() < u32_to_usize(u32::MAX));
         let header_len = unsigned_varint::encode::u32(self.buffer.len() as u32, &mut b);
         io.write_all(header_len).await?;
-        io.write_all(&self.buffer).await?;
-        Ok(())
+        io.write_all(&self.buffer).await
     }
 }
 
@@ -188,12 +187,12 @@ where
         match msg.header.typ {
             Some(Type::Request) => {
                 msg.data = Some(self.inner.read_request(&p.0, io).await?);
-                return Ok(msg)
+                Ok(msg)
             }
-            Some(Type::Credit) => return Ok(msg),
+            Some(Type::Credit) => Ok(msg),
             Some(Type::Response) | Some(Type::Ack) | None => {
                 log::debug!("unexpected {:?} when expecting request or credit grant", msg.header.typ);
-                return Err(io::ErrorKind::InvalidData.into())
+                Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
@@ -206,12 +205,12 @@ where
         match msg.header.typ {
             Some(Type::Response) => {
                 msg.data = Some(self.inner.read_response(&p.0, io).await?);
-                return Ok(msg)
+                Ok(msg)
             }
-            Some(Type::Ack) => return Ok(msg),
+            Some(Type::Ack) => Ok(msg),
             Some(Type::Request) | Some(Type::Credit) | None => {
                 log::debug!("unexpected {:?} when expecting response or ack", msg.header.typ);
-                return Err(io::ErrorKind::InvalidData.into())
+                Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
