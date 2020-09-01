@@ -71,7 +71,7 @@ libp2p-gossipsub = { version = "0.22.0", path = "./protocols/gossipsub", optiona
 libp2p-identify = { version = "0.22.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.23.0", path = "protocols/kad", optional = true }
 libp2p-mplex = { version = "0.21.0", path = "muxers/mplex", optional = true }
-libp2p-noise = { version = "0.23.0", path = "protocols/noise", optional = true }
+libp2p-noise = { version = "0.24.0", path = "protocols/noise", optional = true }
 libp2p-ping = { version = "0.22.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.21.0", path = "protocols/plaintext", optional = true }
 libp2p-pnet = { version = "0.19.1", path = "protocols/pnet", optional = true }

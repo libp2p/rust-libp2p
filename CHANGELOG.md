@@ -25,6 +25,9 @@
 
 # Version 0.25.0 [unreleased]
 
+- Bump `libp2p-noise` to `0.24`. See the `libp2p-noise`
+changelog for details about the `LegacyConfig`.
+
 - The `ProtocolsHandler` in `libp2p-swarm` has a new associated type
   `InboundOpenInfo` ([PR 1714]).
 
