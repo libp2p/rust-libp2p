@@ -264,7 +264,7 @@ where
     /// Create a new credit message ID.
     fn next_credit_id(&mut self) -> u64 {
         let n = self.counter;
-        self.counter = self.counter.wrapping_add(1);
+        self.counter += 1;
         n
     }
 }
@@ -302,8 +302,17 @@ where
         self.behaviour.inject_connection_established(p, id, end)
     }
 
-    fn inject_connection_closed(&mut self, p: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
-        self.behaviour.inject_connection_closed(p, id, end)
+    fn inject_connection_closed(&mut self, peer: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
+        if let Some(credit) = self.credit_messages.get_mut(peer) {
+            log::debug! { "{:08x}: resending credit grant {} to {} after connection closed",
+                self.id,
+                credit.id,
+                peer
+            };
+            let msg = Message::credit(credit.amount, credit.id);
+            credit.request = self.behaviour.send_request(peer, msg)
+        }
+        self.behaviour.inject_connection_closed(peer, id, end)
     }
 
     fn inject_connected(&mut self, p: &PeerId) {
@@ -422,7 +431,7 @@ where
                                         peer
                                     };
                                     if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        if info.send_budget_id == Some(id) {
+                                        if info.send_budget_id >= Some(id) {
                                             log::trace!("{:08x}: ignoring duplicate credit {} from {}", self.id, id, peer);
                                             continue
                                         }
@@ -495,12 +504,6 @@ where
                             };
                             let msg = Message::credit(credit.amount, credit.id);
                             credit.request = self.behaviour.send_request(&peer, msg)
-                        } else {
-                            log::debug! { "{:08x}: ignoring failed credit message {} to {}",
-                                self.id,
-                                credit.id,
-                                peer
-                            }
                         }
                     }
                     let event = RequestResponseEvent::OutboundFailure { peer, request_id, error };
