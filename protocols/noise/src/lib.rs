@@ -391,12 +391,18 @@ pub struct LegacyConfig {
     /// noise frame. These payloads are not interoperable with other
     /// libp2p implementations.
     pub send_legacy_handshake: bool,
+    /// Whether to support receiving legacy handshake payloads,
+    /// i.e. length-prefixed protobuf payloads inside a length-prefixed
+    /// noise frame. These payloads are not interoperable with other
+    /// libp2p implementations.
+    pub recv_legacy_handshake: bool,
 }
 
 impl Default for LegacyConfig {
     fn default() -> Self {
         Self {
             send_legacy_handshake: false,
+            recv_legacy_handshake: false,
         }
     }
 }

@@ -28,13 +28,13 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr,
     IntoProtocolsHandler
 };
-
+use either::Either;
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
     connection::ConnectionId,
-    either::EitherOutput,
+    either::{EitherError, EitherOutput},
     upgrade::{DeniedUpgrade, EitherUpgrade}
 };
 use std::{error, task::Context, task::Poll};
@@ -50,6 +50,16 @@ impl<TBehaviour> Toggle<TBehaviour> {
     /// Returns `true` if `Toggle` is enabled and `false` if it's disabled.
     pub fn is_enabled(&self) -> bool {
         self.inner.is_some()
+    }
+
+    /// Returns a reference to the inner `NetworkBehaviour`.
+    pub fn as_ref(&self) -> Option<&TBehaviour> {
+        self.inner.as_ref()
+    }
+
+    /// Returns a mutable reference to the inner `NetworkBehaviour`.
+    pub fn as_mut(&mut self) -> Option<&mut TBehaviour> {
+        self.inner.as_mut()
     }
 }
 
@@ -204,26 +214,35 @@ where
     type InboundProtocol = EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
+    type InboundOpenInfo = Either<TInner::InboundOpenInfo, ()>;
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         if let Some(inner) = self.inner.as_ref() {
-            inner.listen_protocol().map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+            inner.listen_protocol()
+                .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                .map_info(Either::Left)
         } else {
-            SubstreamProtocol::new(EitherUpgrade::B(SendWrapper(DeniedUpgrade)))
+            SubstreamProtocol::new(EitherUpgrade::B(SendWrapper(DeniedUpgrade)), Either::Right(()))
         }
     }
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        out: <Self::InboundProtocol as InboundUpgradeSend>::Output
+        out: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        info: Self::InboundOpenInfo
     ) {
         let out = match out {
             EitherOutput::First(out) => out,
             EitherOutput::Second(v) => void::unreachable(v),
         };
 
-        self.inner.as_mut().expect("Can't receive an inbound substream if disabled; QED")
-            .inject_fully_negotiated_inbound(out)
+        if let Either::Left(info) = info {
+            self.inner.as_mut()
+                .expect("Can't receive an inbound substream if disabled; QED")
+                .inject_fully_negotiated_inbound(out, info)
+        } else {
+            panic!("Unpexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
+        }
     }
 
     fn inject_fully_negotiated_outbound(
@@ -240,9 +259,34 @@ where
             .inject_event(event)
     }
 
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_address_change(addr)
+        }
+    }
+
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
+    }
+
+    fn inject_listen_upgrade_error(&mut self, info: Self::InboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+        let err = match err {
+            ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
+            ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
+            ProtocolsHandlerUpgrErr::Upgrade(err) =>
+                ProtocolsHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
+                    EitherError::A(e) => e,
+                    EitherError::B(v) => void::unreachable(v)
+                }))
+        };
+        if let Either::Left(info) = info {
+            self.inner.as_mut()
+                .expect("Can't receive an inbound substream if disabled; QED")
+                .inject_listen_upgrade_error(info, err)
+        } else {
+            panic!("Unexpected Either::Right on enabled `inject_listen_upgrade_error`.")
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {

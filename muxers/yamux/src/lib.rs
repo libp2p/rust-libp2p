@@ -28,7 +28,7 @@ use parking_lot::Mutex;
 use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
 use thiserror::Error;
 
-pub use yamux::WindowUpdateMode;
+pub use yamux::{Mode, WindowUpdateMode};
 
 /// A Yamux connection.
 ///
@@ -165,7 +165,10 @@ where
 
 /// The yamux configuration.
 #[derive(Clone)]
-pub struct Config(yamux::Config);
+pub struct Config {
+    config: yamux::Config,
+    mode: Option<yamux::Mode>
+}
 
 /// The yamux configuration for upgrading I/O resources which are ![`Send`].
 #[derive(Clone)]
@@ -173,7 +176,15 @@ pub struct LocalConfig(Config);
 
 impl Config {
     pub fn new(cfg: yamux::Config) -> Self {
-        Config(cfg)
+        Config { config: cfg, mode: None }
+    }
+
+    /// Override the connection mode.
+    ///
+    /// This will always use the provided mode during the connection upgrade,
+    /// irrespective of whether an inbound or outbound upgrade happens.
+    pub fn override_mode(&mut self, mode: yamux::Mode) {
+        self.mode = Some(mode)
     }
 
     /// Turn this into a [`LocalConfig`] for use with upgrades of ![`Send`] resources.
@@ -184,7 +195,7 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config(yamux::Config::default())
+        Config::new(yamux::Config::default())
     }
 }
 
@@ -192,13 +203,13 @@ impl Deref for Config {
     type Target = yamux::Config;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.config
     }
 }
 
 impl DerefMut for Config {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.config
     }
 }
 
@@ -229,7 +240,7 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Server)))
+        future::ready(Ok(Yamux::new(io, self.config, self.mode.unwrap_or(yamux::Mode::Server))))
     }
 }
 
@@ -242,7 +253,8 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Server)))
+        let cfg = self.0;
+        future::ready(Ok(Yamux::local(io, cfg.config, cfg.mode.unwrap_or(yamux::Mode::Server))))
     }
 }
 
@@ -255,7 +267,7 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Client)))
+        future::ready(Ok(Yamux::new(io, self.config, self.mode.unwrap_or(yamux::Mode::Client))))
     }
 }
 
@@ -268,7 +280,8 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Client)))
+        let cfg = self.0;
+        future::ready(Ok(Yamux::local(io, cfg.config, cfg.mode.unwrap_or(yamux::Mode::Client))))
     }
 }
 

@@ -101,25 +101,34 @@ where
         error: PendingConnectionError<TTrans::Error>,
     },
 
-    /// A new connection to a peer has been opened.
+    /// A new connection to a peer has been established.
     ConnectionEstablished {
         /// The newly established connection.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
-        /// The total number of established connections to the same peer, including the one that
-        /// has just been opened.
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
+        /// The total number of established connections to the same peer,
+        /// including the one that has just been opened.
         num_established: NonZeroU32,
     },
 
-    /// An established connection to a peer has encountered an error.
+    /// An established connection to a peer has been closed.
     ///
-    /// The connection is closed as a result of the error.
-    ConnectionError {
+    /// A connection may close if
+    ///
+    ///   * it encounters an error, which includes the connection being
+    ///     closed by the remote. In this case `error` is `Some`.
+    ///   * it was actively closed by [`EstablishedConnection::start_close`],
+    ///     i.e. a successful, orderly close. In this case `error` is `None`.
+    ///   * it was actively closed by [`super::peer::ConnectedPeer::disconnect`] or
+    ///     [`super::peer::DialingPeer::disconnect`], i.e. dropped without an
+    ///     orderly close. In this case `error` is `None`.
+    ///
+    ConnectionClosed {
         /// The ID of the connection that encountered an error.
         id: ConnectionId,
         /// Information about the connection that encountered the error.
         connected: Connected<TConnInfo>,
         /// The error that occurred.
-        error: ConnectionError<<THandler::Handler as ConnectionHandler>::Error>,
+        error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// The remaining number of established connections to the same peer.
         num_established: u32,
     },
@@ -151,7 +160,7 @@ where
     /// An established connection produced an event.
     ConnectionEvent {
         /// The connection on which the event occurred.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
         /// Event that was produced by the node.
         event: TOutEvent,
     },
@@ -159,7 +168,7 @@ where
     /// An established connection has changed its address.
     AddressChange {
         /// The connection whose address has changed.
-        connection: EstablishedConnection<'a, TInEvent, TConnInfo, TPeerId>,
+        connection: EstablishedConnection<'a, TInEvent, TConnInfo>,
         /// New endpoint of this connection.
         new_endpoint: ConnectedPoint,
         /// Old endpoint of this connection.
@@ -224,8 +233,9 @@ where
                     .field("connection", connection)
                     .finish()
             }
-            NetworkEvent::ConnectionError { connected, error, .. } => {
-                f.debug_struct("ConnectionError")
+            NetworkEvent::ConnectionClosed { id, connected, error, .. } => {
+                f.debug_struct("ConnectionClosed")
+                    .field("id", id)
                     .field("connected", connected)
                     .field("error", error)
                     .finish()

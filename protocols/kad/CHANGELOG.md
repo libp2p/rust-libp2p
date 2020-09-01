@@ -1,3 +1,28 @@
+# 0.23.0 [unreleased]
+
+- Add `Distance::log2` ([PR 1719](https://github.com/libp2p/rust-libp2p/pull/1719)).
+
+- Update `libp2p-swarm`.
+
+# 0.22.1 [2020-08-19]
+
+- Explicitly convert from u8 to usize in `BucketIndex::range` to prevent type
+  inference issues ([PR 1716](https://github.com/libp2p/rust-libp2p/pull/1716)).
+
+# 0.22.0 [2020-08-18]
+
+- Store addresses in provider records.
+  See [PR 1708](https://github.com/libp2p/rust-libp2p/pull/1708).
+
+- Update `libp2p-core` and `libp2p-swarm` dependencies.
+
+- Add `KBucketRef::range` exposing the minimum inclusive and maximum inclusive
+  `Distance` for the bucket
+  ([PR 1680](https://github.com/libp2p/rust-libp2p/pull/1680)).
+
+- Add `NetworkBehaviour::inject_address_change` implementation
+  ([PR 1649](https://github.com/libp2p/rust-libp2p/pull/1649)).
+
 # 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`

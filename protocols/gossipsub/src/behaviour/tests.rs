@@ -895,4 +895,27 @@ mod tests {
         // Peers should be removed to reach mesh_n
         assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), config.mesh_n);
     }
+
+    // Some very basic test of public api methods.
+    #[test]
+    fn test_public_api() {
+        let (gs, peers, topic_hashes) =
+            build_and_inject_nodes(4, vec![String::from("topic1")], true);
+        let peers = peers.into_iter().collect::<BTreeSet<_>>();
+
+        assert_eq!(
+            gs.topics().cloned().collect::<Vec<_>>(), topic_hashes,
+            "Expected topics to match registered topic."
+        );
+
+        assert_eq!(
+            gs.peers(&TopicHash::from_raw("topic1")).cloned().collect::<BTreeSet<_>>(), peers,
+            "Expected peers for a registered topic to contain all peers."
+        );
+
+        assert_eq!(
+            gs.all_peers().cloned().collect::<BTreeSet<_>>(), peers,
+            "Expected all_peers to contain all peers."
+        );
+    }
 }

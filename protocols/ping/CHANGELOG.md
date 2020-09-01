@@ -1,3 +1,15 @@
+# 0.22.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.21.0 [2020-08-18]
+
+- Refactor the ping protocol for conformity by (re)using
+a single substream for outbound pings, addressing
+[#1601](https://github.com/libp2p/rust-libp2p/issues/1601).
+
+- Bump `libp2p-core` and `libp2p-swarm` dependencies.
+
 # 0.20.0 [2020-07-01]
 
 - Updated dependencies.
