@@ -39,7 +39,7 @@ use crate::codec::header::{self, Message};
 use futures::ready;
 use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use std::{collections::{HashMap, HashSet, VecDeque}, task::{Context, Poll}};
+use std::{collections::{HashMap, VecDeque}, task::{Context, Poll}};
 use std::num::NonZeroU16;
 use super::{
     RequestId,
@@ -126,11 +126,7 @@ struct PeerInfo {
     /// Remaining number of inbound requests that can be received.
     recv_budget: u16,
     /// The ID of the originating credit message.
-    send_budget_id: Option<u64>,
-    /// Current set of outbound requests.
-    outbound: HashSet<RequestId>,
-    /// Current set of inbound requests.
-    inbound: HashSet<RequestId>
+    send_budget_id: Option<u64>
 }
 
 impl PeerInfo {
@@ -139,9 +135,7 @@ impl PeerInfo {
             limit,
             send_budget: 1,
             recv_budget: 1,
-            send_budget_id: None,
-            outbound: HashSet::new(),
-            inbound: HashSet::new()
+            send_budget_id: None
         }
     }
 }
@@ -213,7 +207,6 @@ where
         info.send_budget -= 1;
 
         let rid = self.behaviour.send_request(p, Message::request(req));
-        info.outbound.insert(rid);
 
         log::trace! { "{:08x}: sending request {} to {} (send budget = {})",
             self.id,
@@ -338,17 +331,15 @@ where
     fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<header::Codec<C>>) {
         if let RequestResponseHandlerEvent::ResponseSent(r) = &e {
             if let Some(info) = self.peer_info.get_mut(&p) {
-                if info.inbound.remove(r) {
-                    log::trace!("{:08x}: response {} sent", self.id, r);
-                    if info.recv_budget == 0 { // need to send more credit to the remote peer
-                        let crd = info.limit.switch();
-                        info.recv_budget = info.limit.max_recv.get();
-                        let cid = self.next_credit_id();
-                        let rid = self.behaviour.send_request(&p, Message::credit(crd, cid));
-                        log::trace!("{:08x}: sending {} as credit {} to {}", self.id, crd, cid, p);
-                        let credit = Credit { id: cid, request: rid, amount: crd };
-                        self.credit_messages.insert(p.clone(), credit);
-                    }
+                log::trace!("{:08x}: response {} sent", self.id, r);
+                if info.recv_budget == 0 { // need to send more credit to the remote peer
+                    let crd = info.limit.switch();
+                    info.recv_budget = info.limit.max_recv.get();
+                    let cid = self.next_credit_id();
+                    let rid = self.behaviour.send_request(&p, Message::credit(crd, cid));
+                    log::trace!("{:08x}: sending {} as credit {} to {}", self.id, crd, cid, p);
+                    let credit = Credit { id: cid, request: rid, amount: crd };
+                    self.credit_messages.insert(p.clone(), credit);
                 }
             }
         }
@@ -379,28 +370,19 @@ where
                                     }
                                     continue
                                 }
-                                | Some(header::Type::Response) =>
-                                    if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        if info.outbound.remove(&request_id) {
-                                            log::trace!("{:08x}: received response {} from {}", self.id, request_id, peer);
-                                            if let Some(rs) = response.into_parts().1 {
-                                                RequestResponseMessage::Response { request_id, response: rs }
-                                            } else {
-                                                log::error! { "{:08x}: missing data for response {} from peer {}",
-                                                    self.id,
-                                                    request_id,
-                                                    peer
-                                                }
-                                                continue
-                                            }
-                                        } else {
-                                            log::warn!("{:08x}: unexpected response {} from {}", self.id, request_id, peer);
-                                            continue
-                                        }
+                                | Some(header::Type::Response) => {
+                                    log::trace!("{:08x}: received response {} from {}", self.id, request_id, peer);
+                                    if let Some(rs) = response.into_parts().1 {
+                                        RequestResponseMessage::Response { request_id, response: rs }
                                     } else {
-                                        log::warn!("{:08x}: response {} from unknown peer {}", self.id, request_id, peer);
+                                        log::error! { "{:08x}: missing data for response {} from peer {}",
+                                            self.id,
+                                            request_id,
+                                            peer
+                                        }
                                         continue
                                     }
+                                }
                                 | ty => {
                                     log::trace! {
                                         "{:08x}: unknown message type: {:?} from {}; expected response or credit",
@@ -457,7 +439,6 @@ where
                                             self.events.push_back(Event::TooManyInboundRequests(peer.clone()));
                                             continue
                                         }
-                                        info.inbound.insert(request_id);
                                         info.recv_budget -= 1;
                                         // We consider a request as proof that our credit grant has
                                         // reached the peer. Usually, an ACK has already been
