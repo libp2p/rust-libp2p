@@ -415,6 +415,7 @@ where
                                     if let Some(info) = self.peer_info.get_mut(&peer) {
                                         if info.send_budget_id >= Some(id) {
                                             log::trace!("{:08x}: ignoring duplicate credit {} from {}", self.id, id, peer);
+                                            self.behaviour.send_response(channel, Message::ack(id));
                                             continue
                                         }
                                         if info.send_budget == 0 && c > 0 {
