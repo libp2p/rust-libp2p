@@ -396,36 +396,33 @@ where
                         | RequestResponseMessage::Request { request_id, request, channel } =>
                             match &request.header().typ {
                                 | Some(header::Type::Credit) => {
-                                    let id = if let Some(n) = request.header().ident {
-                                        n
-                                    } else {
-                                        log::warn! { "{:08x}: missing credit id in message from {}",
-                                            self.id,
-                                            peer
-                                        }
-                                        continue
-                                    };
-                                    let c = request.header().credit.unwrap_or(0);
-                                    log::trace! { "{:08x}: received {} additional credit {} from {}",
-                                        self.id,
-                                        c,
-                                        id,
-                                        peer
-                                    };
                                     if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        if info.send_budget_id >= Some(id) {
-                                            log::trace!("{:08x}: ignoring duplicate credit {} from {}", self.id, id, peer);
-                                            self.behaviour.send_response(channel, Message::ack(id));
+                                        let id = if let Some(n) = request.header().ident {
+                                            n
+                                        } else {
+                                            log::warn! { "{:08x}: missing credit id in message from {}",
+                                                self.id,
+                                                peer
+                                            }
                                             continue
+                                        };
+                                        let credit = request.header().credit.unwrap_or(0);
+                                        log::trace! { "{:08x}: received {} additional credit {} from {}",
+                                            self.id,
+                                            credit,
+                                            id,
+                                            peer
+                                        };
+                                        if info.send_budget_id < Some(id) {
+                                            if info.send_budget == 0 && credit > 0 {
+                                                log::trace!("{:08x}: sending to peer {} can resume", self.id, peer);
+                                                self.events.push_back(Event::ResumeSending(peer.clone()))
+                                            }
+                                            info.send_budget += credit;
+                                            info.send_budget_id = Some(id)
                                         }
-                                        if info.send_budget == 0 && c > 0 {
-                                            log::trace!("{:08x}: sending to peer {} can resume", self.id, peer);
-                                            self.events.push_back(Event::ResumeSending(peer.clone()))
-                                        }
-                                        info.send_budget += c;
-                                        info.send_budget_id = Some(id)
+                                        self.behaviour.send_response(channel, Message::ack(id))
                                     }
-                                    self.behaviour.send_response(channel, Message::ack(id));
                                     continue
                                 }
                                 | Some(header::Type::Request) => {
