@@ -28,11 +28,11 @@
 // retried until they have reached the peer which is assumed once a
 // corresponding ack or a new request has been received from the peer.
 //
-// The `Throttled` behaviour wraps an existing `RequestResponse` behaviour.
+// The `Throttled` behaviour wraps an existing `RequestResponse` behaviour
 // and uses a codec implementation that sends ordinary requests and responses
 // as well as a special credit message to which an ack message is expected
-// as response. It does so by putting a small CBOR encoded header in front of
-// each message the inner codec produces.
+// as a response. It does so by putting a small CBOR encoded header in front
+// of each message the inner codec produces.
 
 use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use crate::codec::header::{self, Message};
