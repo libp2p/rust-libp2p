@@ -36,7 +36,7 @@
 
 mod codec;
 
-use codec::{Codec, Message, Type};
+use codec::{Codec, Message, ProtocolWrapper, Type};
 use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use futures::ready;
 use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
@@ -156,7 +156,7 @@ where
         C: Send,
         C::Protocol: Sync
     {
-        let protos = protos.into_iter().map(|(p, ps)| (codec::ProtocolWrapper::v1(p), ps));
+        let protos = protos.into_iter().map(|(p, ps)| (ProtocolWrapper::new(b"/t/1", p), ps));
         Throttled::from(RequestResponse::new(Codec::new(c), protos, cfg))
     }
 

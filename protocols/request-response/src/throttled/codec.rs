@@ -109,8 +109,8 @@ impl<T> Message<T> {
 pub struct ProtocolWrapper<P>(P, Bytes);
 
 impl<P: ProtocolName> ProtocolWrapper<P> {
-    pub fn v1(p: P) -> Self {
-        let mut full = BytesMut::from(b"/request-response/throttled/1".as_ref());
+    pub fn new(prefix: &[u8], p: P) -> Self {
+        let mut full = BytesMut::from(prefix);
         full.extend_from_slice(p.protocol_name());
         ProtocolWrapper(p, full.freeze())
     }
