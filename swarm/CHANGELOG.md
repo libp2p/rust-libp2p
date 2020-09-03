@@ -1,9 +1,12 @@
 # 0.22.0 [unreleased]
 
+- Bump `libp2p-core` dependency.
+
 - Adds `ProtocolsHandler::InboundOpenInfo` type which mirrors the existing
   `OutboundOpenInfo` type. A value of this type is passed as an extra argument
   to `ProtocolsHandler::inject_fully_negotiated_inbound` and
   `ProtocolsHandler::inject_listen_upgrade_error`.
+
 - `SubstreamProtocol` now has a second type parameter corresponding to
   inbound or outbound information, a value of which is part of `SubstreamProtocol`
   now. Consequently `ProtocolsHandlerEvent::OutboundSubstreamRequest` no longer
