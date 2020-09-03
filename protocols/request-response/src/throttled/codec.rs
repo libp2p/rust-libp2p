@@ -128,13 +128,15 @@ pub struct Codec<C> {
     /// The wrapped codec.
     inner: C,
     /// Encoding/decoding buffer.
-    buffer: Vec<u8>
+    buffer: Vec<u8>,
+    /// Max. header length.
+    max_header_len: u32
 }
 
 impl<C> Codec<C> {
     /// Create a codec by wrapping an existing one.
-    pub fn new(c: C) -> Self {
-        Codec { inner: c, buffer: Vec::new() }
+    pub fn new(c: C, max_header_len: u32) -> Self {
+        Codec { inner: c, buffer: Vec::new(), max_header_len }
     }
 
     /// Read and decode a request header.
@@ -148,6 +150,9 @@ impl<C> Codec<C> {
                 ReadError::Io(e) => e,
                 other => io::Error::new(io::ErrorKind::Other, other)
             })?;
+        if header_len > self.max_header_len {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "header too large to read"))
+        }
         self.buffer.resize(u32_to_usize(header_len), 0u8);
         io.read_exact(&mut self.buffer).await?;
         minicbor::decode(&self.buffer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
@@ -161,8 +166,10 @@ impl<C> Codec<C> {
     {
         self.buffer.clear();
         minicbor::encode(hdr, &mut self.buffer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        if self.buffer.len() > u32_to_usize(self.max_header_len) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "header too large to write"))
+        }
         let mut b = unsigned_varint::encode::u32_buffer();
-        assert!(self.buffer.len() < u32_to_usize(u32::MAX));
         let header_len = unsigned_varint::encode::u32(self.buffer.len() as u32, &mut b);
         io.write_all(header_len).await?;
         io.write_all(&self.buffer).await

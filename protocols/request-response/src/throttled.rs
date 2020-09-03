@@ -157,7 +157,7 @@ where
         C::Protocol: Sync
     {
         let protos = protos.into_iter().map(|(p, ps)| (ProtocolWrapper::new(b"/t/1", p), ps));
-        Throttled::from(RequestResponse::new(Codec::new(c), protos, cfg))
+        Throttled::from(RequestResponse::new(Codec::new(c, 8192), protos, cfg))
     }
 
     /// Wrap an existing `RequestResponse` behaviour and apply send/recv limits.
