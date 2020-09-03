@@ -18,21 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// Limit the number of requests peers can send to each other.
-//
-// Each peer is assigned a budget for sending and a budget for receiving
-// requests. Initially a peer assumes it has a send budget of 1. When its
-// budget has been used up its remote peer will send a credit message which
-// informs it how many more requests it can send before it needs to wait for
-// the next credit message. Credit messages which error or time out are
-// retried until they have reached the peer which is assumed once a
-// corresponding ack or a new request has been received from the peer.
-//
-// The `Throttled` behaviour wraps an existing `RequestResponse` behaviour
-// and uses a codec implementation that sends ordinary requests and responses
-// as well as a special credit message to which an ack message is expected
-// as a response. It does so by putting a small CBOR encoded header in front
-// of each message the inner codec produces.
+//! Limit the number of requests peers can send to each other.
+//!
+//! Each peer is assigned a budget for sending and a budget for receiving
+//! requests. Initially a peer assumes it has a send budget of 1. When its
+//! budget has been used up its remote peer will send a credit message which
+//! informs it how many more requests it can send before it needs to wait for
+//! the next credit message. Credit messages which error or time out are
+//! retried until they have reached the peer which is assumed once a
+//! corresponding ack or a new request has been received from the peer.
+//!
+//! The `Throttled` behaviour wraps an existing `RequestResponse` behaviour
+//! and uses a codec implementation that sends ordinary requests and responses
+//! as well as a special credit message to which an ack message is expected
+//! as a response. It does so by putting a small CBOR encoded header in front
+//! of each message the inner codec produces.
 
 mod codec;
 
@@ -83,7 +83,7 @@ where
 struct Credit {
     /// A credit ID. Used to deduplicate retransmitted credit messages.
     id: u64,
-    /// The ID of the request carrying the credit grant.
+    /// The ID of the outbound credit grant message.
     request: RequestId,
     /// The number of requests the remote is allowed to send.
     amount: u16
@@ -120,7 +120,7 @@ impl Limit {
     }
 }
 
-/// Information about a peer.
+/// Budget information about a peer.
 #[derive(Clone, Debug)]
 struct PeerInfo {
     /// Limit that applies to this peer.
