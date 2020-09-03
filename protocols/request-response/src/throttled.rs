@@ -129,7 +129,7 @@ struct PeerInfo {
     send_budget: u16,
     /// Remaining number of inbound requests that can be received.
     recv_budget: u16,
-    /// The ID of the originating credit message.
+    /// The ID of the credit message that granted the current `send_budget`.
     send_budget_id: Option<u64>
 }
 
