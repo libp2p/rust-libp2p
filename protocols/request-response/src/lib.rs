@@ -416,7 +416,11 @@ where
 
     /// Checks whether a peer is currently connected.
     pub fn is_connected(&self, peer: &PeerId) -> bool {
-        self.connected.contains_key(peer)
+        if let Some(connections) = self.connected.get(peer) {
+            !connections.is_empty()
+        } else {
+            false
+        }
     }
 
     /// Checks whether an outbound request initiated by
@@ -440,6 +444,9 @@ where
         -> Option<RequestProtocol<TCodec>>
     {
         if let Some(connections) = self.connected.get(peer) {
+            if connections.is_empty() {
+                return Some(request)
+            }
             let ix = (request.request_id.0 as usize) % connections.len();
             let conn = connections[ix].id;
             self.pending_responses.insert(request.request_id, (peer.clone(), conn));
@@ -609,7 +616,6 @@ where
                             error: InboundFailure::UnsupportedProtocols,
                         }));
             }
-            RequestResponseHandlerEvent::ResponseSent(_) => {} // nothing to do
         }
     }
 

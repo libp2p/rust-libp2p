@@ -223,6 +223,17 @@ where
     /// See [`RequestResponse::send_response`] for details.
     pub fn send_response(&mut self, ch: ResponseChannel<header::Message<C::Response>>, res: C::Response) {
         log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
+        if let Some(info) = self.peer_info.get_mut(&ch.peer) {
+            if info.recv_budget == 0 { // need to send more credit to the remote peer
+                let crd = info.limit.switch();
+                info.recv_budget = info.limit.max_recv.get();
+                let cid = self.next_credit_id();
+                let rid = self.behaviour.send_request(&ch.peer, Message::credit(crd, cid));
+                log::trace!("{:08x}: sending {} as credit {} to {}", self.id, crd, cid, ch.peer);
+                let credit = Credit { id: cid, request: rid, amount: crd };
+                self.credit_messages.insert(ch.peer.clone(), credit);
+            }
+        }
         self.behaviour.send_response(ch, Message::response(res))
     }
 
@@ -296,16 +307,18 @@ where
     }
 
     fn inject_connection_closed(&mut self, peer: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
-        if let Some(credit) = self.credit_messages.get_mut(peer) {
-            log::debug! { "{:08x}: resending credit grant {} to {} after connection closed",
-                self.id,
-                credit.id,
-                peer
-            };
-            let msg = Message::credit(credit.amount, credit.id);
-            credit.request = self.behaviour.send_request(peer, msg)
+        self.behaviour.inject_connection_closed(peer, id, end);
+        if self.is_connected(peer) {
+            if let Some(credit) = self.credit_messages.get_mut(peer) {
+                log::debug! { "{:08x}: resending credit grant {} to {} after connection closed",
+                    self.id,
+                    credit.id,
+                    peer
+                };
+                let msg = Message::credit(credit.amount, credit.id);
+                credit.request = self.behaviour.send_request(peer, msg)
+            }
         }
-        self.behaviour.inject_connection_closed(peer, id, end)
     }
 
     fn inject_connected(&mut self, p: &PeerId) {
@@ -321,6 +334,7 @@ where
     fn inject_disconnected(&mut self, p: &PeerId) {
         log::trace!("{:08x}: disconnected from {}", self.id, p);
         self.peer_info.remove(p);
+        self.credit_messages.remove(p);
         self.behaviour.inject_disconnected(p)
     }
 
@@ -329,20 +343,6 @@ where
     }
 
     fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<header::Codec<C>>) {
-        if let RequestResponseHandlerEvent::ResponseSent(r) = &e {
-            if let Some(info) = self.peer_info.get_mut(&p) {
-                log::trace!("{:08x}: response {} sent", self.id, r);
-                if info.recv_budget == 0 { // need to send more credit to the remote peer
-                    let crd = info.limit.switch();
-                    info.recv_budget = info.limit.max_recv.get();
-                    let cid = self.next_credit_id();
-                    let rid = self.behaviour.send_request(&p, Message::credit(crd, cid));
-                    log::trace!("{:08x}: sending {} as credit {} to {}", self.id, crd, cid, p);
-                    let credit = Credit { id: cid, request: rid, amount: crd };
-                    self.credit_messages.insert(p.clone(), credit);
-                }
-            }
-        }
         self.behaviour.inject_event(p, i, e)
     }
 
@@ -433,7 +433,7 @@ where
                                             info.recv_budget
                                         };
                                         if info.recv_budget == 0 {
-                                            log::error!("{:08x}: peer {} exceeds its budget", self.id, peer);
+                                            log::debug!("{:08x}: peer {} exceeds its budget", self.id, peer);
                                             self.events.push_back(Event::TooManyInboundRequests(peer.clone()));
                                             continue
                                         }
