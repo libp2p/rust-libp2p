@@ -33,6 +33,7 @@ use libp2p_core::{
     transport,
     upgrade,
 };
+use libp2p_noise as noise;
 use rand::Rng;
 use rand::seq::SliceRandom;
 use std::{io, error::Error, fmt, task::Poll};
@@ -55,9 +56,10 @@ impl fmt::Display for BoxError {
 fn new_network(cfg: NetworkConfig) -> TestNetwork {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
     let transport: TestTransport = libp2p_tcp::TcpConfig::new()
         .upgrade(upgrade::Version::V1)
-        .authenticate(libp2p_secio::SecioConfig::new(local_key))
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_mplex::MplexConfig::new())
         .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)))
         .and_then(|(peer, mplex), _| {

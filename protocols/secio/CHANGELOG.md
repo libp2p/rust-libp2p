@@ -1,5 +1,8 @@
 # 0.22.0 [unreleased]
 
+- As of this release, SECIO is deprecated. Please use `libp2p-noise` instead.
+  For some more context, [see here](https://blog.ipfs.io/2020-08-07-deprecating-secio/).
+
 - Bump `libp2p-core` dependency.
 
 # 0.21.0 [2020-08-18]
