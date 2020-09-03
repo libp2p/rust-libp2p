@@ -174,7 +174,7 @@ where
         }
     }
 
-    /// Set the global default receive limit.
+    /// Set the global default receive limit per peer.
     pub fn set_receive_limit(&mut self, limit: NonZeroU16) {
         log::trace!("{:08x}: new default limit: {:?}", self.id, limit);
         self.default_limit = Limit::new(limit)
