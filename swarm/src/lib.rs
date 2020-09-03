@@ -89,7 +89,7 @@ use protocols_handler::{
 };
 use futures::{
     prelude::*,
-    executor::{ThreadPool, ThreadPoolBuilder},
+    executor::ThreadPoolBuilder,
     stream::FusedStream,
 };
 use libp2p_core::{
@@ -1095,19 +1095,13 @@ where TBehaviour: NetworkBehaviour,
 
         // If no executor has been explicitly configured, try to set up a thread pool.
         if network_cfg.executor().is_none() {
-            struct PoolWrapper(ThreadPool);
-            impl Executor for PoolWrapper {
-                fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-                    self.0.spawn_ok(f)
-                }
-            }
-
             match ThreadPoolBuilder::new()
                 .name_prefix("libp2p-swarm-task-")
                 .create()
-                .map(|tp| Box::new(PoolWrapper(tp)) as Box<_>)
             {
-                Ok(executor) => { network_cfg.set_executor(Box::new(executor)); },
+                Ok(tp) => {
+                    network_cfg.set_executor(Box::new(move |f| tp.spawn_ok(f)));
+                },
                 Err(err) => log::warn!("Failed to create executor thread pool: {:?}", err)
             }
         }

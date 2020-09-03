@@ -1,5 +1,8 @@
 # 0.22.0 [unreleased]
 
+- Allow any closure to be passed as an executor.
+  [PR 1686](https://github.com/libp2p/rust-libp2p/pull/1686)
+
 - Remove `PeerId` compatibility mode for "identity" and SHA2 hashes.
   Historically, before 0.12, `PeerId`s were incorrectly always hashed with SHA2.
   Starting from version 0.13, rust-libp2p accepted both hashed and non-hashed keys as
