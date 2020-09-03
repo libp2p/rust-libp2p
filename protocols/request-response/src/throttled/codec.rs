@@ -110,7 +110,7 @@ pub struct ProtocolWrapper<P>(P, Bytes);
 
 impl<P: ProtocolName> ProtocolWrapper<P> {
     pub fn v1(p: P) -> Self {
-        let mut full = BytesMut::from(b"/request-response/header/1".as_ref());
+        let mut full = BytesMut::from(b"/request-response/throttled/1".as_ref());
         full.extend_from_slice(p.protocol_name());
         ProtocolWrapper(p, full.freeze())
     }

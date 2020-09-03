@@ -74,8 +74,8 @@ where
     events: VecDeque<Event<C::Request, C::Response, Message<C::Response>>>,
     /// Current outbound credit grants in flight.
     credit_messages: HashMap<PeerId, Credit>,
-    /// Counter of credit IDs.
-    counter: u64
+    /// The current credit ID.
+    credit_id: u64
 }
 
 /// Credit information that is sent to remote peers.
@@ -170,7 +170,7 @@ where
             limit_overrides: HashMap::new(),
             events: VecDeque::new(),
             credit_messages: HashMap::new(),
-            counter: 0
+            credit_id: 0
         }
     }
 
@@ -282,8 +282,8 @@ where
 
     /// Create a new credit message ID.
     fn next_credit_id(&mut self) -> u64 {
-        let n = self.counter;
-        self.counter += 1;
+        let n = self.credit_id;
+        self.credit_id += 1;
         n
     }
 }
