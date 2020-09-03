@@ -34,17 +34,21 @@
 // as a response. It does so by putting a small CBOR encoded header in front
 // of each message the inner codec produces.
 
+mod codec;
+
+use codec::{Codec, Message, Type};
 use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
-use crate::codec::header::{self, Message};
 use futures::ready;
 use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use std::{collections::{HashMap, VecDeque}, task::{Context, Poll}};
 use std::num::NonZeroU16;
 use super::{
+    ProtocolSupport,
     RequestId,
     RequestResponse,
     RequestResponseCodec,
+    RequestResponseConfig,
     RequestResponseEvent,
     RequestResponseMessage,
     ResponseChannel
@@ -59,7 +63,7 @@ where
     /// A random id used for logging.
     id: u32,
     /// The wrapped behaviour.
-    behaviour: RequestResponse<header::Codec<C>>,
+    behaviour: RequestResponse<Codec<C>>,
     /// Information per peer.
     peer_info: HashMap<PeerId, PeerInfo>,
     /// The default limit applies to all peers unless overriden.
@@ -67,7 +71,7 @@ where
     /// Permanent limit overrides per peer.
     limit_overrides: HashMap<PeerId, Limit>,
     /// Pending events to report in `Throttled::poll`.
-    events: VecDeque<Event<C::Request, C::Response, header::Message<C::Response>>>,
+    events: VecDeque<Event<C::Request, C::Response, Message<C::Response>>>,
     /// Current outbound credit grants in flight.
     credit_messages: HashMap<PeerId, Credit>,
     /// Counter of credit IDs.
@@ -145,8 +149,19 @@ where
     C: RequestResponseCodec + Send + Clone,
     C::Protocol: Sync
 {
+    /// Create a new throttled request-response behaviour.
+    pub fn new<I>(c: C, protos: I, cfg: RequestResponseConfig) -> Self
+    where
+        I: IntoIterator<Item = (C::Protocol, ProtocolSupport)>,
+        C: Send,
+        C::Protocol: Sync
+    {
+        let protos = protos.into_iter().map(|(p, ps)| (codec::ProtocolWrapper::v1(p), ps));
+        Throttled::from(RequestResponse::new(Codec::new(c), protos, cfg))
+    }
+
     /// Wrap an existing `RequestResponse` behaviour and apply send/recv limits.
-    pub fn new(behaviour: RequestResponse<header::Codec<C>>) -> Self {
+    pub fn from(behaviour: RequestResponse<Codec<C>>) -> Self {
         Throttled {
             id: rand::random(),
             behaviour,
@@ -221,7 +236,7 @@ where
     /// Answer an inbound request with a response.
     ///
     /// See [`RequestResponse::send_response`] for details.
-    pub fn send_response(&mut self, ch: ResponseChannel<header::Message<C::Response>>, res: C::Response) {
+    pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response) {
         log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
         if let Some(info) = self.peer_info.get_mut(&ch.peer) {
             if info.recv_budget == 0 { // need to send more credit to the remote peer
@@ -291,8 +306,8 @@ where
     C: RequestResponseCodec + Send + Clone + 'static,
     C::Protocol: Sync
 {
-    type ProtocolsHandler = RequestResponseHandler<header::Codec<C>>;
-    type OutEvent = Event<C::Request, C::Response, header::Message<C::Response>>;
+    type ProtocolsHandler = RequestResponseHandler<Codec<C>>;
+    type OutEvent = Event<C::Request, C::Response, Message<C::Response>>;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         self.behaviour.new_handler()
@@ -342,12 +357,12 @@ where
         self.behaviour.inject_dial_failure(p)
     }
 
-    fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<header::Codec<C>>) {
+    fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<Codec<C>>) {
         self.behaviour.inject_event(p, i, e)
     }
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<RequestProtocol<header::Codec<C>>, Self::OutEvent>>
+        -> Poll<NetworkBehaviourAction<RequestProtocol<Codec<C>>, Self::OutEvent>>
     {
         loop {
             if let Some(ev) = self.events.pop_front() {
@@ -361,7 +376,7 @@ where
                     let message = match message {
                         | RequestResponseMessage::Response { request_id, response } =>
                             match &response.header().typ {
-                                | Some(header::Type::Ack) => {
+                                | Some(Type::Ack) => {
                                     if let Some(id) = self.credit_messages.get(&peer).map(|c| c.id) {
                                         if Some(id) == response.header().ident {
                                             log::trace!("{:08x}: received ack {} from {}", self.id, id, peer);
@@ -370,7 +385,7 @@ where
                                     }
                                     continue
                                 }
-                                | Some(header::Type::Response) => {
+                                | Some(Type::Response) => {
                                     log::trace!("{:08x}: received response {} from {}", self.id, request_id, peer);
                                     if let Some(rs) = response.into_parts().1 {
                                         RequestResponseMessage::Response { request_id, response: rs }
@@ -395,7 +410,7 @@ where
                             }
                         | RequestResponseMessage::Request { request_id, request, channel } =>
                             match &request.header().typ {
-                                | Some(header::Type::Credit) => {
+                                | Some(Type::Credit) => {
                                     if let Some(info) = self.peer_info.get_mut(&peer) {
                                         let id = if let Some(n) = request.header().ident {
                                             n
@@ -425,7 +440,7 @@ where
                                     }
                                     continue
                                 }
-                                | Some(header::Type::Request) => {
+                                | Some(Type::Request) => {
                                     if let Some(info) = self.peer_info.get_mut(&peer) {
                                         log::trace! { "{:08x}: received request {} (recv. budget = {})",
                                             self.id,

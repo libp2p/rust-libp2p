@@ -342,8 +342,7 @@ where
         TCodec: Send,
         TCodec::Protocol: Sync
     {
-        let protos = protos.into_iter().map(|(p, ps)| (codec::header::ProtocolWrapper::v1(p), ps));
-        Throttled::new(RequestResponse::new(codec::header::Codec::new(c), protos, cfg))
+        Throttled::new(c, protos, cfg)
     }
 
     /// Initiates sending a request.
