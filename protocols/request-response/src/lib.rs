@@ -218,7 +218,7 @@ impl<TResponse> ResponseChannel<TResponse> {
         !self.sender.is_canceled()
     }
 
-    /// Get the request ID of this response.
+    /// Get the ID of the inbound request waiting for a response.
     pub(crate) fn request_id(&self) -> RequestId {
         self.request_id
     }
