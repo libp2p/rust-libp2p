@@ -102,7 +102,14 @@ struct Limit {
 impl Limit {
     /// Create a new limit.
     fn new(max: NonZeroU16) -> Self {
-        Limit { max_recv: max, next_max: max }
+        // The max. limit provided will be effective after the initial request
+        // from a peer which is always allowed has been answered. Values greater
+        // than 1 would prevent sending the credit grant, leading to a stalling
+        // sender so we must not use `max` right away.
+        Limit {
+            max_recv: NonZeroU16::new(1).expect("1 > 0"),
+            next_max: max
+        }
     }
 
     /// Set a new limit.
