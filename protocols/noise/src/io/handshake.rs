@@ -374,25 +374,20 @@ where
 {
     let msg = recv(state).await?;
 
-    // NOTE: We first try to decode the entire frame as a protobuf message,
-    // as required by the libp2p-noise spec. As long as the frame length
-    // is less than 256 bytes, which is the case for all protobuf payloads
-    // not containing RSA keys, there is no room for misinterpretation,
-    // since if a two-bytes length prefix is present the first byte will
-    // be 0, which is always an unexpected protobuf tag value because the
-    // fields in the .proto file start with 1 and decoding thus expects
-    // a non-zero first byte. We will therefore always correctly fall back to
-    // the legacy protobuf parsing in these cases (again, not considering
-    // RSA keys, for which there may be a probabilistically very small chance
-    // of misinterpretation).
-    //
-    // This is only temporary! Once a release is made that supports
-    // decoding without a length prefix, a follow-up release will
-    // change `send_identity` such that no length prefix is sent.
-    // In yet another release the fallback protobuf parsing can then
-    // be removed.
-    let pb = payload_proto::NoiseHandshakePayload::decode(&msg[..])
-        .or_else(|e| {
+    let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
+
+    if pb_result.is_err() && state.legacy.recv_legacy_handshake {
+        // NOTE: This is support for legacy handshake payloads. As long as
+        // the frame length is less than 256 bytes, which is the case for
+        // all protobuf payloads not containing RSA keys, there is no room
+        // for misinterpretation, since if a two-bytes length prefix is present
+        // the first byte will be 0, which is always an unexpected protobuf tag
+        // value because the fields in the .proto file start with 1 and decoding
+        // thus expects a non-zero first byte. We will therefore always correctly
+        // fall back to the legacy protobuf parsing in these cases (again, not
+        // considering RSA keys, for which there may be a probabilistically
+        // very small chance of misinterpretation).
+        pb_result = pb_result.or_else(|e| {
             if msg.len() > 2 {
                 let mut buf = [0, 0];
                 buf.copy_from_slice(&msg[.. 2]);
@@ -407,7 +402,9 @@ where
             } else {
                 Err(e)
             }
-        })?;
+        });
+    }
+    let pb = pb_result?;
 
     if !pb.identity_key.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
