@@ -77,7 +77,7 @@ impl Hub {
     }
 
     fn get(&self, port: &NonZeroU64) -> Option<ChannelSender> {
-        self.0.lock().get(port).map(Clone::clone)
+        self.0.lock().get(port).cloned()
     }
 }
 
@@ -87,10 +87,14 @@ pub struct MemoryTransport;
 
 /// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
+    /// Ephemeral source port.
+    ///
+    /// These ports mimic TCP ephemeral source ports but are not actually used
+    /// by the memory transport due to the direct use of channels. They merely
+    /// ensure that every connection has a unique address for each dialer, which
+    /// is not at the same time a listen address (analogous to TCP).
     dial_port: NonZeroU64,
-
     sender: ChannelSender,
-
     channel_to_send: Option<Channel<Vec<u8>>>,
     channel_to_return: Option<Channel<Vec<u8>>>,
 }
