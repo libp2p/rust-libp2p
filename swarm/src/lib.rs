@@ -1201,6 +1201,7 @@ mod tests {
         transport::{self, dummy::*}
     };
     use libp2p_mplex::Multiplex;
+    use libp2p_noise as noise;
     use super::*;
 
     fn get_random_id() -> identity::PublicKey {
@@ -1213,17 +1214,18 @@ mod tests {
         T::OutEvent: Clone,
         O: Send + 'static
     {
-        let keypair1 = identity::Keypair::generate_ed25519();
-        let pubkey1 = keypair1.public();
-        let transport1 = transport::MemoryTransport::default()
+        let id_keys = identity::Keypair::generate_ed25519();
+        let pubkey = id_keys.public();
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
+        let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
-            .authenticate(libp2p_secio::SecioConfig::new(keypair1))
+            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(libp2p_mplex::MplexConfig::new())
             .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
             .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })
             .boxed();
-        let behaviour1 = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        SwarmBuilder::new(transport1, behaviour1, pubkey1.into()).build()
+        let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
+        SwarmBuilder::new(transport, behaviour, pubkey.into()).build()
     }
 
     #[test]

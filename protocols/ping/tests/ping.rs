@@ -28,8 +28,8 @@ use libp2p_core::{
     transport::{Transport, boxed::Boxed},
     upgrade
 };
+use libp2p_noise as noise;
 use libp2p_ping::*;
-use libp2p_secio::SecioConfig;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc};
@@ -201,10 +201,11 @@ fn mk_transport() -> (
 ) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
     let transport = TcpConfig::new()
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
-        .authenticate(SecioConfig::new(id_keys))
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_yamux::Config::default())
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
