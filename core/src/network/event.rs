@@ -79,6 +79,8 @@ where
     },
 
     /// A new connection arrived on a listener.
+    ///
+    /// To accept the connection, see [`Network::accept`](crate::Network::accept).
     IncomingConnection {
         /// The listener who received the connection.
         listener_id: ListenerId,
