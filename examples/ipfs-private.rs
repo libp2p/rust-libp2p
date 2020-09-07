@@ -41,7 +41,7 @@ use libp2p::{
     multiaddr::Protocol,
     ping::{self, Ping, PingConfig, PingEvent},
     pnet::{PnetConfig, PreSharedKey},
-    secio::SecioConfig,
+    noise,
     swarm::NetworkBehaviourEventProcess,
     tcp::TcpConfig,
     yamux::Config as YamuxConfig,
@@ -76,7 +76,8 @@ pub fn build_transport(
     Dial = impl Send,
     ListenerUpgrade = impl Send,
 > + Clone {
-    let secio_config = SecioConfig::new(key_pair);
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&key_pair).unwrap();
+    let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
     let yamux_config = YamuxConfig::default();
 
     let base_transport = TcpConfig::new().nodelay(true);
@@ -88,7 +89,7 @@ pub fn build_transport(
     };
     maybe_encrypted
         .upgrade(Version::V1)
-        .authenticate(secio_config)
+        .authenticate(noise_config)
         .multiplex(yamux_config)
         .timeout(Duration::from_secs(20))
 }
