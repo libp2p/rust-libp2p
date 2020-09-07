@@ -76,7 +76,7 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 25) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 24) {
              0 => Proto(Dccp(g.gen())),
              1 => Proto(Dns(Cow::Owned(SubString::arbitrary(g).0))),
              2 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
@@ -97,7 +97,7 @@ impl Arbitrary for Proto {
             16 => Proto(Tcp(g.gen())),
             17 => Proto(Udp(g.gen())),
             18 => Proto(Udt),
-            19 => Proto(Unix(Cow::Owned(SubString::arbitrary(g).0))),
+            //19 => Proto(Unix(Cow::Owned(SubString::arbitrary(g).0))),
             20 => Proto(Utp),
             21 => Proto(Ws("/".into())),
             22 => Proto(Wss("/".into())),
@@ -106,7 +106,7 @@ impl Arbitrary for Proto {
                 g.fill(&mut a);
                 Proto(Onion(Cow::Owned(a), g.gen_range(1, std::u16::MAX)))
             },
-            24 => {
+            19 => {
                 let mut a = [0; 35];
                 g.fill_bytes(&mut a);
                 Proto(Onion3((a, g.gen_range(1, std::u16::MAX)).into()))

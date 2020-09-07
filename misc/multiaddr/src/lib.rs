@@ -164,6 +164,37 @@ impl Multiaddr {
 
         if replaced { Some(address) } else { None }
     }
+
+    /// Used to determine if a listening address can be used for dialing
+    /// the provided `Multiaddr`.
+    pub fn can_dial(&self, other: &Multiaddr) -> bool {
+        enum Ty {
+            Ip4,
+            Ip6,
+            Other,
+        }
+        fn ty(p: &Protocol) -> Ty {
+            match p {
+                Protocol::Ip4(addr) if !addr.is_loopback() => Ty::Ip4,
+                Protocol::Dns4(_) => Ty::Ip4,
+                Protocol::Ip6(addr) if !addr.is_loopback() => Ty::Ip6,
+                Protocol::Dns6(_) => Ty::Ip6,
+                _ => Ty::Other,
+            }
+        }
+        for (a, b) in self.into_iter().zip(other.into_iter()) {
+            let can_dial = match (ty(&a), ty(&b)) {
+                (Ty::Ip4, Ty::Ip4) => true,
+                (Ty::Ip6, Ty::Ip6) => true,
+                (Ty::Other, Ty::Other) => core::mem::discriminant(&a) == core::mem::discriminant(&b),
+                _ => false,
+            };
+            if !can_dial {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 impl fmt::Debug for Multiaddr {
@@ -409,6 +440,42 @@ macro_rules! multiaddr {
                 };
             )+
             elem.collect::<$crate::Multiaddr>()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_can_dial() {
+        let t = vec![
+            ("/ip4/127.0.0.1/tcp/3000", "/ip4/127.0.0.1/tcp/8000/ws"),
+            ("/ip4/0.0.0.0/tcp/3000", "/ip4/0.0.0.0/tcp/8000/ws"),
+            ("/ip6/::1/tcp/4566", "/ip6/::1/tcp/77"),
+            ("/ip6/::2/tcp/4566", "/ip6/::3/tcp/77"),
+            ("/memory/42", "/memory/96"),
+            ("/unix/other/path", "/unix/path/to/socket"),
+        ];
+        let f = vec![
+            ("/ip4/127.0.0.1/tcp/3000", "/ip4/127.0.0.1/udp/8000/quic"),
+            ("/ip4/127.0.0.1/tcp/3000", "/ip4/0.0.0.0/tcp/8000/ws"),
+            ("/ip6/::1/tcp/4566", "/ip6/::2/tcp/77"),
+            ("/ip6/::2/tcp/4566", "/ip6/::1/tcp/77"),
+            ("/memory/42", "/unix/path/to/socket"),
+            ("/unix/path", "/ip4/127.0.0.1"),
+            ("/unix/path", "/ip4/0.0.0.0"),
+        ];
+        for (a, b) in t {
+            let ma: Multiaddr = a.parse().expect(a);
+            let mb: Multiaddr = b.parse().expect(b);
+            assert!(ma.can_dial(&mb));
+        }
+        for (a, b) in f {
+            let ma: Multiaddr = a.parse().expect(a);
+            let mb: Multiaddr = b.parse().expect(b);
+            assert!(!ma.can_dial(&mb));
         }
     }
 }

@@ -150,8 +150,12 @@ impl<'a> Protocol<'a> {
             "udt" => Ok(Protocol::Udt),
             "utp" => Ok(Protocol::Utp),
             "unix" => {
-                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
-                Ok(Protocol::Unix(Cow::Borrowed(s)))
+                let mut path = iter.next().ok_or(Error::InvalidProtocolString)?.to_string();
+                while let Some(s) = iter.next() {
+                    path.push('/');
+                    path.push_str(s);
+                }
+                Ok(Protocol::Unix(Cow::Owned(path)))
             }
             "p2p" => {
                 let s = iter.next().ok_or(Error::InvalidProtocolString)?;
