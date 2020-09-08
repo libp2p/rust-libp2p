@@ -277,8 +277,8 @@ mod tests {
         Transport,
         upgrade
     };
+    use libp2p_noise as noise;
     use libp2p_tcp::TcpConfig;
-    use libp2p_secio::SecioConfig;
     use libp2p_swarm::{Swarm, SwarmEvent};
     use libp2p_mplex::MplexConfig;
     use std::{fmt, io};
@@ -291,11 +291,12 @@ mod tests {
         Error = impl fmt::Debug
     > + Clone) {
         let id_keys = identity::Keypair::generate_ed25519();
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
         let pubkey = id_keys.public();
         let transport = TcpConfig::new()
             .nodelay(true)
             .upgrade(upgrade::Version::V1)
-            .authenticate(SecioConfig::new(id_keys))
+            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new());
         (pubkey, transport)
     }
