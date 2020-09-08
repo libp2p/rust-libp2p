@@ -16,6 +16,10 @@
   two peer IDs are equal if and only if they use the same hash algorithm and
   have the same hash digest. [PR 1608](https://github.com/libp2p/rust-libp2p/pull/1608).
 
+- Return dialer address instead of listener address as `remote_addr` in
+  `MemoryTransport` `Listener` `ListenerEvent::Upgrade`
+  [PR 1724](https://github.com/libp2p/rust-libp2p/pull/1724).
+
 # 0.21.0 [2020-08-18]
 
 - Remove duplicates when performing address translation
