@@ -103,11 +103,11 @@
 //! #extern crate futures;
 //! #extern crate tokio;
 //! #use libp2p::gossipsub::GossipsubEvent;
-//! #use libp2p::{gossipsub, secio,
+//! #use libp2p::{identity, gossipsub,
 //! #    tokio_codec::{FramedRead, LinesCodec},
 //! #};
-//! let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-//! let local_pub_key = local_key.to_public_key();
+//! let local_key = identity::Keypair::generate_ed25519();
+//! let local_pub_key = local_key.public();
 //!
 //! // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
 //! let transport = libp2p::build_development_transport(local_key);
