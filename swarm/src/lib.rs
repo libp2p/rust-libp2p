@@ -550,11 +550,11 @@ where TBehaviour: NetworkBehaviour<ProtocolsHandler = THandler>,
                         num_established,
                     });
                 },
-                Poll::Ready(NetworkEvent::IncomingConnection(incoming)) => {
+                Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
                     let handler = this.behaviour.new_handler();
-                    let local_addr = incoming.local_addr().clone();
-                    let send_back_addr = incoming.send_back_addr().clone();
-                    if let Err(e) = incoming.accept(handler.into_node_handler_builder()) {
+                    let local_addr = connection.local_addr.clone();
+                    let send_back_addr = connection.send_back_addr.clone();
+                    if let Err(e) = this.network.accept(connection, handler.into_node_handler_builder()) {
                         log::warn!("Incoming connection rejected: {:?}", e);
                     }
                     return Poll::Ready(SwarmEvent::IncomingConnection {

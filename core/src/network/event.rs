@@ -27,22 +27,15 @@ use crate::{
         ConnectedPoint,
         ConnectionError,
         ConnectionHandler,
-        ConnectionInfo,
-        ConnectionLimit,
         Connected,
         EstablishedConnection,
-        IncomingInfo,
         IntoConnectionHandler,
         ListenerId,
         PendingConnectionError,
-        Substream,
-        pool::Pool,
     },
-    muxing::StreamMuxer,
-    transport::{Transport, TransportError},
+    transport::Transport,
 };
-use futures::prelude::*;
-use std::{error, fmt, hash::Hash, num::NonZeroU32};
+use std::{fmt, num::NonZeroU32};
 
 /// Event that can happen on the `Network`.
 pub enum NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
@@ -86,7 +79,14 @@ where
     },
 
     /// A new connection arrived on a listener.
-    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>),
+    ///
+    /// To accept the connection, see [`Network::accept`](crate::Network::accept).
+    IncomingConnection {
+        /// The listener who received the connection.
+        listener_id: ListenerId,
+        /// The pending incoming connection.
+        connection: IncomingConnection<TTrans::ListenerUpgrade>,
+    },
 
     /// An error happened on a connection during its initial handshake.
     ///
@@ -215,10 +215,10 @@ where
                     .field("error", error)
                     .finish()
             }
-            NetworkEvent::IncomingConnection(event) => {
+            NetworkEvent::IncomingConnection { connection, .. } => {
                 f.debug_struct("IncomingConnection")
-                    .field("local_addr", &event.local_addr)
-                    .field("send_back_addr", &event.send_back_addr)
+                    .field("local_addr", &connection.local_addr)
+                    .field("send_back_addr", &connection.send_back_addr)
                     .finish()
             }
             NetworkEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
@@ -271,103 +271,12 @@ where
     }
 }
 
-/// A new connection arrived on a listener.
-pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-where
-    TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
-{
-    /// The listener who received the connection.
-    pub(super) listener_id: ListenerId,
-    /// The produced upgrade.
-    pub(super) upgrade: TTrans::ListenerUpgrade,
+/// A pending incoming connection produced by a listener.
+pub struct IncomingConnection<TUpgrade> {
+    /// The connection upgrade.
+    pub(crate) upgrade: TUpgrade,
     /// Local connection address.
-    pub(super) local_addr: Multiaddr,
+    pub local_addr: Multiaddr,
     /// Address used to send back data to the remote.
-    pub(super) send_back_addr: Multiaddr,
-    /// Reference to the `peers` field of the `Network`.
-    pub(super) pool: &'a mut Pool<
-        TInEvent,
-        TOutEvent,
-        THandler,
-        TTrans::Error,
-        <THandler::Handler as ConnectionHandler>::Error,
-        TConnInfo,
-        TPeerId
-    >,
-}
-
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, TConnInfo, TPeerId>
-    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-where
-    TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-    TTrans::Error: Send + 'static,
-    TTrans::ListenerUpgrade: Send + 'static,
-    THandler: IntoConnectionHandler<TConnInfo> + Send + 'static,
-    THandler::Handler: ConnectionHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
-    <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-    <THandler::Handler as ConnectionHandler>::Error: error::Error + Send + 'static,
-    TMuxer: StreamMuxer + Send + Sync + 'static,
-    TMuxer::OutboundSubstream: Send,
-    TMuxer::Substream: Send,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    TConnInfo: fmt::Debug + ConnectionInfo<PeerId = TPeerId> + Send + 'static,
-    TPeerId: Eq + Hash + Clone + Send + 'static,
-{
-    /// The ID of the listener with the incoming connection.
-    pub fn listener_id(&self) -> ListenerId {
-        self.listener_id
-    }
-
-    /// Starts processing the incoming connection and sets the handler to use for it.
-    pub fn accept(self, handler: THandler) -> Result<ConnectionId, ConnectionLimit> {
-        self.accept_with_builder(|_| handler)
-    }
-
-    /// Same as `accept`, but accepts a closure that turns a `IncomingInfo` into a handler.
-    pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
-        -> Result<ConnectionId, ConnectionLimit>
-    where
-        TBuilder: FnOnce(IncomingInfo<'_>) -> THandler
-    {
-        let handler = builder(self.info());
-        let upgrade = self.upgrade
-            .map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
-        let info = IncomingInfo {
-            local_addr: &self.local_addr,
-            send_back_addr: &self.send_back_addr,
-        };
-        self.pool.add_incoming(upgrade, handler, info)
-    }
-}
-
-impl<TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-    IncomingConnectionEvent<'_, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>
-where
-    TTrans: Transport,
-    THandler: IntoConnectionHandler<TConnInfo>,
-{
-    /// Returns the `IncomingInfo` corresponding to this incoming connection.
-    pub fn info(&self) -> IncomingInfo<'_> {
-        IncomingInfo {
-            local_addr: &self.local_addr,
-            send_back_addr: &self.send_back_addr,
-        }
-    }
-
-    /// Local connection address.
-    pub fn local_addr(&self) -> &Multiaddr {
-        &self.local_addr
-    }
-
-    /// Address used to send back data to the dialer.
-    pub fn send_back_addr(&self) -> &Multiaddr {
-        &self.send_back_addr
-    }
-
-    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
-    pub fn to_connected_point(&self) -> ConnectedPoint {
-        self.info().to_connected_point()
-    }
+    pub send_back_addr: Multiaddr,
 }

@@ -1,5 +1,10 @@
 # 0.22.0 [unreleased]
 
+- Simplify incoming connection handling. The `IncomingConnectionEvent`
+  has been removed. Instead, pass the `IncomingConnection` obtained
+  from `NetworkEvent::IncomingConnection` to `Network::accept()`.
+  [PR 1732](https://github.com/libp2p/rust-libp2p/pull/1732).
+
 - Allow any closure to be passed as an executor.
   [PR 1686](https://github.com/libp2p/rust-libp2p/pull/1686)
 
