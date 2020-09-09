@@ -1,4 +1,4 @@
-# 0.3.0 [unreleased]
+# 0.3.0 [2020-09-09]
 
 - Add support for opt-in request-based flow-control to any
   request-response protocol via `RequestResponse::throttled()`.
