@@ -41,7 +41,7 @@ use libp2p_core::{
     muxing::StreamMuxerBox,
     upgrade
 };
-use libp2p_secio::SecioConfig;
+use libp2p_noise as noise;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
@@ -58,9 +58,10 @@ fn build_node() -> (Multiaddr, TestSwarm) {
 fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
+    let noise_keys = noise::Keypair::<noise::X25519>::new().into_authentic(&local_key).unwrap();
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(SecioConfig::new(local_key))
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(yamux::Config::default())
         .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
         .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })

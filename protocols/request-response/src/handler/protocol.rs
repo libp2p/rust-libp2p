@@ -71,8 +71,10 @@ where
 {
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
-    pub(crate) request_sender: oneshot::Sender<TCodec::Request>,
-    pub(crate) response_receiver: oneshot::Receiver<TCodec::Response>
+    pub(crate) request_sender: oneshot::Sender<(RequestId, TCodec::Request)>,
+    pub(crate) response_receiver: oneshot::Receiver<TCodec::Response>,
+    pub(crate) request_id: RequestId
+
 }
 
 impl<TCodec> UpgradeInfo for ResponseProtocol<TCodec>
@@ -99,7 +101,7 @@ where
         async move {
             let read = self.codec.read_request(&protocol, &mut io);
             let request = read.await?;
-            if let Ok(()) = self.request_sender.send(request) {
+            if let Ok(()) = self.request_sender.send((self.request_id, request)) {
                 if let Ok(response) = self.response_receiver.await {
                     let write = self.codec.write_response(&protocol, &mut io, response);
                     write.await?;
