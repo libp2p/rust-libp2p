@@ -23,7 +23,7 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.27.0 [unreleased]
+# Version 0.27.0 [2020-09-09]
 
 - Update `libp2p-yamux` to `0.24.0`. *Step 3 of 4 in a multi-release
   upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
