@@ -96,7 +96,7 @@ fn deny_incoming_connec() {
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         match swarm1.poll(cx) {
-            Poll::Ready(NetworkEvent::IncomingConnection(inc)) => drop(inc),
+            Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => drop(connection),
             Poll::Ready(_) => unreachable!(),
             Poll::Pending => (),
         }
@@ -175,9 +175,9 @@ fn dial_self() {
                        return Poll::Ready(Ok(()))
                     }
                 },
-                Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
-                    assert_eq!(*inc.local_addr(), local_address);
-                    inc.accept(TestHandler()).unwrap();
+                Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
+                    assert_eq!(&connection.local_addr, &local_address);
+                    swarm.accept(connection, TestHandler()).unwrap();
                 },
                 Poll::Ready(ev) => {
                     panic!("Unexpected event: {:?}", ev)
