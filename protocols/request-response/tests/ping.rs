@@ -151,7 +151,7 @@ fn ping_protocol_throttled() {
 
         let l = Swarm::listeners(&swarm1).next().unwrap();
         tx.send(l.clone()).await.unwrap();
-        for i in 1.. {
+        for i in 1 .. {
             match swarm1.next().await {
                 throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
