@@ -1,3 +1,8 @@
+# 0.24.0 [unreleased]
+
+- Update to `yamux-0.7.0`. Upgrade step 3 of 4. This version sets the flag but will
+  always interpret initial window updates as additive.
+
 # 0.23.0 [2020-09-09]
 
 - Update to `yamux-0.6.0`. As explain below, this is step 2 of 4 in a multi-release
