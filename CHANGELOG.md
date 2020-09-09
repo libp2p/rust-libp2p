@@ -25,6 +25,9 @@
 
 # Version 0.25.0 [unreleased]
 
+- Update `libp2p-yamux` to `0.22.0`. *This version starts a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
 - Bump `libp2p-noise` to `0.24`. See the `libp2p-noise`
 changelog for details about the `LegacyConfig`.
 
