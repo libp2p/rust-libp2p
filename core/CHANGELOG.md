@@ -1,4 +1,4 @@
-# 0.22.0 [unreleased]
+# 0.22.0 [2020-09-09]
 
 - Simplify incoming connection handling. The `IncomingConnectionEvent`
   has been removed. Instead, pass the `IncomingConnection` obtained
