@@ -1,3 +1,10 @@
+# 0.25.0 [unreleased]
+
+- Update to `yamux-0.8.0`. Upgrade step 4 of 4. This version always implements
+  the additive meaning w.r.t. initial window updates. The configuration option
+  `lazy_open` is removed. Yamux will automatically send an initial window update
+  if the receive window is configured to be larger than the default.
+
 # 0.24.0 [2020-09-09]
 
 - Update to `yamux-0.7.0`. Upgrade step 3 of 4. This version sets the flag but will
