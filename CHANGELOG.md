@@ -28,7 +28,11 @@
 - Update `libp2p-yamux` to `0.23.0`. *Step 2 of 4 in a multi-release
   upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
 
-# Version 0.25.0 [unreleased]
+# Version 0.25.0 [2020-09-09]
+
+- Remove the deprecated `libp2p-secio` dependency. To continue to use
+  SECIO, add an explicit dependency on `libp2p-secio`. However,
+  transitioning to `libp2p-noise` is strongly recommended.
 
 - Update `libp2p-yamux` to `0.22.0`. *This version starts a multi-release
   upgrade process.* See the `libp2p-yamux` CHANGELOG for details.

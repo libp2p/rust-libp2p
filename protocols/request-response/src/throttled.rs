@@ -41,8 +41,9 @@ use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHan
 use futures::ready;
 use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use lru::LruCache;
 use std::{collections::{HashMap, VecDeque}, task::{Context, Poll}};
-use std::num::NonZeroU16;
+use std::{cmp::max, num::NonZeroU16};
 use super::{
     ProtocolSupport,
     RequestId,
@@ -66,6 +67,8 @@ where
     behaviour: RequestResponse<Codec<C>>,
     /// Information per peer.
     peer_info: HashMap<PeerId, PeerInfo>,
+    /// Information about previously connected peers.
+    offline_peer_info: LruCache<PeerId, PeerInfo>,
     /// The default limit applies to all peers unless overriden.
     default_limit: Limit,
     /// Permanent limit overrides per peer.
@@ -173,6 +176,7 @@ where
             id: rand::random(),
             behaviour,
             peer_info: HashMap::new(),
+            offline_peer_info: LruCache::new(8192),
             default_limit: Limit::new(NonZeroU16::new(1).expect("1 > 0")),
             limit_overrides: HashMap::new(),
             events: VecDeque::new(),
@@ -191,6 +195,8 @@ where
     pub fn override_receive_limit(&mut self, p: &PeerId, limit: NonZeroU16) {
         log::debug!("{:08x}: override limit for {}: {:?}", self.id, p, limit);
         if let Some(info) = self.peer_info.get_mut(p) {
+            info.limit.set(limit)
+        } else if let Some(info) = self.offline_peer_info.get_mut(p) {
             info.limit.set(limit)
         }
         self.limit_overrides.insert(p.clone(), Limit::new(limit));
@@ -216,6 +222,11 @@ where
         let info =
             if let Some(info) = self.peer_info.get_mut(p) {
                 info
+            } else if let Some(info) = self.offline_peer_info.pop(p) {
+                if info.recv_budget > 1 {
+                    self.send_credit(p, info.recv_budget - 1)
+                }
+                self.peer_info.entry(p.clone()).or_insert(info)
             } else {
                 let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
                 self.peer_info.entry(p.clone()).or_insert(PeerInfo::new(limit))
@@ -249,11 +260,7 @@ where
             if info.recv_budget == 0 { // need to send more credit to the remote peer
                 let crd = info.limit.switch();
                 info.recv_budget = info.limit.max_recv.get();
-                let cid = self.next_credit_id();
-                let rid = self.behaviour.send_request(&ch.peer, Message::credit(crd, cid));
-                log::trace!("{:08x}: sending {} as credit {} to {}", self.id, crd, cid, ch.peer);
-                let credit = Credit { id: cid, request: rid, amount: crd };
-                self.credit_messages.insert(ch.peer.clone(), credit);
+                self.send_credit(&ch.peer, crd)
             }
         }
         self.behaviour.send_response(ch, Message::response(res))
@@ -285,6 +292,15 @@ where
     /// See [`RequestResponse::is_pending_outbound`] for details.
     pub fn is_pending_outbound(&self, p: &RequestId) -> bool {
         self.behaviour.is_pending_outbound(p)
+    }
+
+    /// Send a credit grant to the given peer.
+    fn send_credit(&mut self, p: &PeerId, amount: u16) {
+        let cid = self.next_credit_id();
+        let rid = self.behaviour.send_request(p, Message::credit(amount, cid));
+        log::trace!("{:08x}: sending {} as credit {} to {}", self.id, amount, cid, p);
+        let credit = Credit { id: cid, request: rid, amount };
+        self.credit_messages.insert(p.clone(), credit);
     }
 
     /// Create a new credit message ID.
@@ -348,14 +364,27 @@ where
         self.behaviour.inject_connected(p);
         // The limit may have been added by `Throttled::send_request` already.
         if !self.peer_info.contains_key(p) {
-            let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
-            self.peer_info.insert(p.clone(), PeerInfo::new(limit));
+            let info =
+                if let Some(info) = self.offline_peer_info.pop(p) {
+                    if info.recv_budget > 1 {
+                        self.send_credit(p, info.recv_budget - 1)
+                    }
+                    info
+                } else {
+                    let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
+                    PeerInfo::new(limit)
+                };
+            self.peer_info.insert(p.clone(), info);
         }
     }
 
     fn inject_disconnected(&mut self, p: &PeerId) {
         log::trace!("{:08x}: disconnected from {}", self.id, p);
-        self.peer_info.remove(p);
+        if let Some(mut info) = self.peer_info.remove(p) {
+            info.send_budget = 1;
+            info.recv_budget = max(1, info.recv_budget);
+            self.offline_peer_info.put(p.clone(), info);
+        }
         self.credit_messages.remove(p);
         self.behaviour.inject_disconnected(p)
     }
