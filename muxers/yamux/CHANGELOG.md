@@ -1,4 +1,4 @@
-# 0.23.0 [unreleased]
+# 0.23.0 [2020-09-09]
 
 - Update to `yamux-0.6.0`. As explain below, this is step 2 of 4 in a multi-release
   upgrade. This version recognises and sets the flag that causes the new semantics
