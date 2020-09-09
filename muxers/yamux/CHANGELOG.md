@@ -3,13 +3,13 @@
 - Update to `yamux-0.7.0`. Upgrade step 3 of 4. This version sets the flag but will
   always interpret initial window updates as additive.
 
-# 0.23.0 [unreleased]
+# 0.23.0 [2020-09-09]
 
 - Update to `yamux-0.6.0`. As explain below, this is step 2 of 4 in a multi-release
   upgrade. This version recognises and sets the flag that causes the new semantics
   for the initial window update.
 
-# 0.22.0 [unreleased]
+# 0.22.0 [2020-09-09]
 
 - Update to `yamux-0.5.0`. *This is the start of a multi-release transition* to a
   different behaviour w.r.t. the initial window update frame. Tracked in [[1]],
