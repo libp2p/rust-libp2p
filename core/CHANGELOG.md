@@ -1,4 +1,4 @@
-# 0.22.1 [unreleased]
+# 0.22.1 [2020-09-10]
 
 - Require at least parity-multiaddr v0.9.2 in order to fulfill `Ord` bound on
   `Multiaddr`. [PR 1742](https://github.com/libp2p/rust-libp2p/pull/1742).
