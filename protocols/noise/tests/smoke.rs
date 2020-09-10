@@ -17,8 +17,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-#[macro_use]
-extern crate lazy_static;
 
 use futures::{
     future::{self, Either},
@@ -35,20 +33,6 @@ use log::info;
 use quickcheck::QuickCheck;
 use std::{convert::TryInto, io};
 
-use webpki;
-
-lazy_static! {
-    static ref trust_anchors: Box<Vec<webpki::TrustAnchor<'static>>> = {
-        let ca = include_bytes!("../../../scripts/ca.der");
-        let tmp_anchors = vec![webpki::trust_anchor_util::cert_der_as_trust_anchor(ca).unwrap()];
-        Box::new(tmp_anchors)
-    };
-
-    static ref anchors: webpki::TLSServerTrustAnchors<'static> = {
-        webpki::TLSServerTrustAnchors(&trust_anchors)
-    };
-}
-
 #[allow(dead_code)]
 fn core_upgrade_compat() {
     // Tests API compaibility with the libp2p-core upgrade API,
@@ -57,8 +41,9 @@ fn core_upgrade_compat() {
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
     let noise = NoiseConfig::xx(
         dh_keys,
-        *anchors,
-        include_bytes!("../../../scripts/alice.der").to_vec(),
+        true,
+        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+        Some(include_bytes!("../../../scripts/alice.der").to_vec()),
     )
     .into_authenticated();
     let _ = TcpConfig::new()
@@ -86,8 +71,9 @@ fn xx_spec() {
                     output,
                     NoiseConfig::xx(
                         server_dh,
-                        *anchors,
-                        include_bytes!("../../../scripts/alice.der").to_vec(),
+                        true,
+                        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                        Some(include_bytes!("../../../scripts/alice.der").to_vec()),
                     ),
                     endpoint,
                     upgrade::Version::V1,
@@ -104,8 +90,9 @@ fn xx_spec() {
                     output,
                     NoiseConfig::xx(
                         client_dh,
-                        *anchors,
-                        include_bytes!("../../../scripts/bob.der").to_vec(),
+                        true,
+                        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                        Some(include_bytes!("../../../scripts/bob.der").to_vec()),
                     ),
                     endpoint,
                     upgrade::Version::V1,
@@ -139,8 +126,9 @@ fn xx() {
                     output,
                     NoiseConfig::xx(
                         server_dh,
-                        *anchors,
-                        include_bytes!("../../../scripts/alice.der").to_vec(),
+                        true,
+                        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                        Some(include_bytes!("../../../scripts/alice.der").to_vec()),
                     ),
                     endpoint,
                     upgrade::Version::V1,
@@ -155,8 +143,9 @@ fn xx() {
                     output,
                     NoiseConfig::xx(
                         client_dh,
-                        *anchors,
-                        include_bytes!("../../../scripts/bob.der").to_vec(),
+                        true,
+                        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                        Some(include_bytes!("../../../scripts/bob.der").to_vec()),
                     ),
                     endpoint,
                     upgrade::Version::V1,
@@ -190,8 +179,9 @@ fn ix() {
                     output,
                     NoiseConfig::ix(
                         server_dh,
-                        *anchors,
-                        include_bytes!("../../../scripts/alice.der").to_vec(),
+                        true,
+                        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                        Some(include_bytes!("../../../scripts/alice.der").to_vec()),
                     ),
                     endpoint,
                     upgrade::Version::V1,
@@ -206,8 +196,9 @@ fn ix() {
                     output,
                     NoiseConfig::ix(
                         client_dh,
-                        *anchors,
-                        include_bytes!("../../../scripts/bob.der").to_vec(),
+                        true,
+                        Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                        Some(include_bytes!("../../../scripts/bob.der").to_vec()),
                     ),
                     endpoint,
                     upgrade::Version::V1,
@@ -243,8 +234,9 @@ fn ik_xx() {
                         output,
                         NoiseConfig::ik_listener(
                             server_dh,
-                            *anchors,
-                            include_bytes!("../../../scripts/alice.der").to_vec(),
+                            true,
+                            Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                            Some(include_bytes!("../../../scripts/alice.der").to_vec()),
                         ),
                     ))
                 } else {
@@ -252,8 +244,9 @@ fn ik_xx() {
                         output,
                         NoiseConfig::xx(
                             server_dh,
-                            *anchors,
-                            include_bytes!("../../../scripts/alice.der").to_vec(),
+                            true,
+                            Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                            Some(include_bytes!("../../../scripts/alice.der").to_vec()),
                         ),
                         upgrade::Version::V1,
                     ))
@@ -272,8 +265,9 @@ fn ik_xx() {
                             client_dh,
                             server_id_public,
                             server_dh_public,
-                            *anchors,
-                            include_bytes!("../../../scripts/alice.der").to_vec(),
+                            true,
+                            Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                            Some(include_bytes!("../../../scripts/alice.der").to_vec()),
                         ),
                         upgrade::Version::V1,
                     ))
@@ -282,8 +276,9 @@ fn ik_xx() {
                         output,
                         NoiseConfig::xx(
                             client_dh,
-                            *anchors,
-                            include_bytes!("../../../scripts/bob.der").to_vec(),
+                            true,
+                            Some(include_bytes!("../../../scripts/ca.der").to_vec()),
+                            Some(include_bytes!("../../../scripts/bob.der").to_vec()),
                         ),
                     ))
                 }

@@ -46,6 +46,10 @@ pub enum NoiseError {
     InvalidTimestamp,
     /// No certificate in handshake message
     NoCertificate,
+    /// No anchors provided
+    NoAnchorsProvided,
+    /// No certificate provided
+    NoCertificateProvided,
     #[doc(hidden)]
     __Nonexhaustive
 }
@@ -62,7 +66,9 @@ impl fmt::Display for NoiseError {
             NoiseError::InvalidCertificate => f.write_str("Invalid certificate"),
             NoiseError::CertificateVarificationFailed => f.write_str("Certificate verification failed"),
             NoiseError::InvalidTimestamp => f.write_str("Invalid timestamp"),
-            NoiseError::NoCertificate => f.write_str("No Certificate"),
+            NoiseError::NoCertificate => f.write_str("No certificate in hankshake message"),
+            NoiseError::NoAnchorsProvided => f.write_str("No anchors provided"),
+            NoiseError::NoCertificateProvided => f.write_str("No certificate provided"),
             NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive"),
         }
     }
@@ -81,7 +87,9 @@ impl Error for NoiseError {
             NoiseError::CertificateVarificationFailed => None,
             NoiseError::InvalidTimestamp => None,
             NoiseError::NoCertificate => None,
-            NoiseError::__Nonexhaustive => None
+            NoiseError::NoAnchorsProvided => None,
+            NoiseError::NoCertificateProvided => None,
+            NoiseError::__Nonexhaustive => None,
         }
     }
 }
