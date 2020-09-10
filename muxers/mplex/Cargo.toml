@@ -2,7 +2,7 @@
 name = "libp2p-mplex"
 edition = "2018"
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.21.0"
+version = "0.22.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,7 +14,7 @@ bytes = "0.5"
 fnv = "1.0"
 futures = "0.3.1"
 futures_codec = "0.4"
-libp2p-core = { version = "0.21.0", path = "../../core" }
+libp2p-core = { version = "0.22.0", path = "../../core" }
 log = "0.4"
 parking_lot = "0.10"
 unsigned-varint = { version = "0.4", features = ["futures-codec"] }

@@ -46,7 +46,7 @@
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let dh_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
-//! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+//! let noise = NoiseConfig::xx(dh_keys, false, None, None).into_authenticated();
 //! let builder = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
@@ -478,12 +478,18 @@ pub struct LegacyConfig {
     /// noise frame. These payloads are not interoperable with other
     /// libp2p implementations.
     pub send_legacy_handshake: bool,
+    /// Whether to support receiving legacy handshake payloads,
+    /// i.e. length-prefixed protobuf payloads inside a length-prefixed
+    /// noise frame. These payloads are not interoperable with other
+    /// libp2p implementations.
+    pub recv_legacy_handshake: bool,
 }
 
 impl Default for LegacyConfig {
     fn default() -> Self {
         Self {
             send_legacy_handshake: false,
+            recv_legacy_handshake: false,
         }
     }
 }

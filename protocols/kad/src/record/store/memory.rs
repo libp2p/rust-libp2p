@@ -259,7 +259,7 @@ mod tests {
             let key = Key::from(random_multihash());
 
             let mut records = providers.into_iter().map(|p| {
-                ProviderRecord::new(key.clone(), p.into_preimage())
+                ProviderRecord::new(key.clone(), p.into_preimage(), Vec::new())
             }).collect::<Vec<_>>();
 
             for r in &records {
@@ -280,7 +280,7 @@ mod tests {
         let id = PeerId::random();
         let mut store = MemoryStore::new(id.clone());
         let key = random_multihash();
-        let rec = ProviderRecord::new(key, id.clone());
+        let rec = ProviderRecord::new(key, id.clone(), Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![Cow::Borrowed(&rec)], store.provided().collect::<Vec<_>>());
         store.remove_provider(&rec.key, &id);
@@ -292,7 +292,7 @@ mod tests {
         let mut store = MemoryStore::new(PeerId::random());
         let key = random_multihash();
         let prv = PeerId::random();
-        let mut rec = ProviderRecord::new(key, prv);
+        let mut rec = ProviderRecord::new(key, prv, Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![rec.clone()], store.providers(&rec.key).to_vec());
         rec.expires = Some(Instant::now());
@@ -306,12 +306,12 @@ mod tests {
         for _ in 0 .. store.config.max_provided_keys {
             let key = random_multihash();
             let prv = PeerId::random();
-            let rec = ProviderRecord::new(key, prv);
+            let rec = ProviderRecord::new(key, prv, Vec::new());
             let _ = store.add_provider(rec);
         }
         let key = random_multihash();
         let prv = PeerId::random();
-        let rec = ProviderRecord::new(key, prv);
+        let rec = ProviderRecord::new(key, prv, Vec::new());
         match store.add_provider(rec) {
             Err(Error::MaxProvidedKeys) => {}
             _ => panic!("Unexpected result"),

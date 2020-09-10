@@ -106,9 +106,7 @@ impl BucketIndex {
     /// `local_key` is the `local_key` itself, which does not belong in any
     /// bucket.
     fn new(d: &Distance) -> Option<BucketIndex> {
-        (NUM_BUCKETS - d.0.leading_zeros() as usize)
-            .checked_sub(1)
-            .map(BucketIndex)
+        d.ilog2().map(|i| BucketIndex(i as usize))
     }
 
     /// Gets the index value as an unsigned integer.
@@ -120,7 +118,7 @@ impl BucketIndex {
     /// included in the bucket for this index.
     fn range(&self) -> (Distance, Distance) {
         let min = Distance(U256::pow(U256::from(2), U256::from(self.0)));
-        if self.0 == u8::MAX.into() {
+        if self.0 == usize::from(u8::MAX) {
             (min, Distance(U256::MAX))
         } else {
             let max = Distance(U256::pow(U256::from(2), U256::from(self.0 + 1)) - 1);
