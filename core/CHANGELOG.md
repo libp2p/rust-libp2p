@@ -1,3 +1,8 @@
+# 0.22.1 [unreleased]
+
+- Require at least parity-multiaddr v0.9.2 in order to fulfill `Ord` bound on
+  `Multiaddr`.
+
 # 0.22.0 [2020-09-09]
 
 - Simplify incoming connection handling. The `IncomingConnectionEvent`
