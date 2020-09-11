@@ -22,7 +22,7 @@ wasm-timer = "0.2.4"
 unsigned-varint = { version = "0.4.0", features = ["futures-codec"] }
 log = "0.4.8"
 sha2 = "0.8.1"
-base64 = "0.11.0"
+base64 = "0.12.3"
 smallvec = "1.1.0"
 prost = "0.6.1"
 hex_fmt = "0.3.0"
