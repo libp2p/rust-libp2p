@@ -1,3 +1,7 @@
+# 0.23.1 [unreleased]
+
+- Update `sha2` dependency.
+
 # 0.23.0 [2020-09-09]
 
 - Increase default max packet size from 4KiB to 16KiB.
