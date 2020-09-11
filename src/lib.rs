@@ -273,7 +273,7 @@ pub use self::transport_ext::TransportExt;
 pub fn build_development_transport(keypair: identity::Keypair)
     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
-    build_tcp_ws_noise_mplex_yamux(keypair, false, None, None)
+    build_tcp_ws_noise_ca_mplex_yamux(keypair, false, None, None)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
@@ -282,7 +282,20 @@ pub fn build_development_transport(keypair: identity::Keypair)
 /// and mplex or yamux as the multiplexing layer.
 #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
-pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair, enable_ca: bool, anchors: Option<Vec<u8>>, cert: Option<Vec<u8>>)
+pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+{
+    build_tcp_ws_noise_ca_mplex_yamux(keypair, false, None, None)
+}
+
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer, and support CA exchange and verification,
+/// and mplex or yamux as the multiplexing layer.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux"))))]
+pub fn build_tcp_ws_noise_ca_mplex_yamux(keypair: identity::Keypair, enable_ca: bool, anchors: Option<Vec<u8>>, cert: Option<Vec<u8>>)
     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     let transport = {
@@ -313,7 +326,19 @@ pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair, enable_ca: boo
 /// and mplex or yamux as the multiplexing layer.
 #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))]
 #[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))))]
-pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey, enable_ca: bool, anchors: Option<Vec<u8>>, cert: Option<Vec<u8>>)
+pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey)
+    -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
+{
+    build_tcp_ws_pnet_noise_ca_mplex_yamux(keypair, psk, false, None, None)
+}
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer, and support CA exchange and verification,
+/// and mplex or yamux as the multiplexing layer.
+#[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))]
+#[cfg_attr(docsrs, doc(cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), any(feature = "tcp-async-std", feature = "tcp-tokio"), feature = "websocket", feature = "noise", feature = "mplex", feature = "yamux", feature = "pnet"))))]
+pub fn build_tcp_ws_pnet_noise_ca_mplex_yamux(keypair: identity::Keypair, psk: PreSharedKey, enable_ca: bool, anchors: Option<Vec<u8>>, cert: Option<Vec<u8>>)
     -> std::io::Result<impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send, Error = impl Into<std::io::Error>> + Send + Sync), Error = impl std::error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone>
 {
     let transport = {
