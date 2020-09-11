@@ -30,7 +30,7 @@ use crate::algo_support::Digest;
 use decode::DecoderMiddleware;
 use encode::EncoderMiddleware;
 use futures::prelude::*;
-use hmac::{self, Mac};
+use hmac::{self, Mac, NewMac};
 use sha2::{Sha256, Sha512};
 
 pub use len_prefix::LenPrefixCodec;
@@ -61,9 +61,9 @@ impl Hmac {
         // TODO: it would be nice to tweak the hmac crate to add an equivalent to new_varkey that
         //       never errors
         match algorithm {
-            Digest::Sha256 => Hmac::Sha256(Mac::new_varkey(key)
+            Digest::Sha256 => Hmac::Sha256(hmac::Hmac::new_varkey(key)
                 .expect("Hmac::new_varkey accepts any key length")),
-            Digest::Sha512 => Hmac::Sha512(Mac::new_varkey(key)
+            Digest::Sha512 => Hmac::Sha512(hmac::Hmac::new_varkey(key)
                 .expect("Hmac::new_varkey accepts any key length")),
         }
     }
@@ -74,13 +74,13 @@ impl Hmac {
         match *self {
             Hmac::Sha256(ref hmac) => {
                 let mut hmac = hmac.clone();
-                hmac.input(crypted_data);
-                hmac.result().code().to_vec()
+                hmac.update(crypted_data);
+                hmac.finalize().into_bytes().to_vec()
             },
             Hmac::Sha512(ref hmac) => {
                 let mut hmac = hmac.clone();
-                hmac.input(crypted_data);
-                hmac.result().code().to_vec()
+                hmac.update(crypted_data);
+                hmac.finalize().into_bytes().to_vec()
             },
         }
     }
@@ -91,12 +91,12 @@ impl Hmac {
         match *self {
             Hmac::Sha256(ref hmac) => {
                 let mut hmac = hmac.clone();
-                hmac.input(crypted_data);
+                hmac.update(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
             },
             Hmac::Sha512(ref hmac) => {
                 let mut hmac = hmac.clone();
-                hmac.input(crypted_data);
+                hmac.update(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
             },
         }
