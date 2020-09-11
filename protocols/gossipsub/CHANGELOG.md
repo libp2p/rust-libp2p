@@ -1,3 +1,8 @@
+# 0.22.1 [unreleased]
+
+- Update lru-time-cache dependency.
+  [PR 1746](https://github.com/libp2p/rust-libp2p/pull/1746).
+
 # 0.22.0 [2020-09-09]
 
 - Update `libp2p-swarm` and `libp2p-core`.
