@@ -23,6 +23,8 @@ use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
+use pnet::datalink;
+use pnet::ipnetwork::IpNetwork;
 use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
@@ -165,8 +167,10 @@ impl $service_name {
 
         socket.set_multicast_loop_v4(true)?;
         socket.set_multicast_ttl_v4(255)?;
-        // TODO: correct interfaces?
-        socket.join_multicast_v4(From::from([224, 0, 0, 251]), Ipv4Addr::UNSPECIFIED)?;
+        // Join multicast on all avaliable interfaces:
+        for addr in get_interface_addresses() {
+            socket.join_multicast_v4(From::from([224, 0, 0, 251]), addr)?;
+        }
 
         Ok($service_name {
             socket,
@@ -276,6 +280,23 @@ impl $service_name {
             };
         }
     }
+}
+
+
+/// Get IPv4 addresses of all external network interfaces.
+fn get_interface_addresses() -> impl Iterator<Item = Ipv4Addr> {
+    datalink::interfaces()
+        .into_iter()
+        .filter(|i| i.is_up() && !i.is_loopback())
+        .filter_map(|i| {
+            i.ips
+                .into_iter()
+                .filter_map(|n| match n {
+                    IpNetwork::V4(n4) => Some(n4.ip()),
+                    _ => None,
+                })
+                .next() // Simply get the first valid IPv4.
+        })
 }
 
 impl fmt::Debug for $service_name {
