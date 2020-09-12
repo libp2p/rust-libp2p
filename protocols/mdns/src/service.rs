@@ -282,6 +282,16 @@ impl $service_name {
     }
 }
 
+impl fmt::Debug for $service_name {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("$service_name")
+            .field("silent", &self.silent)
+            .finish()
+    }
+}
+
+};
+}
 
 /// Get IPv4 addresses of all external network interfaces.
 fn get_interface_addresses() -> impl Iterator<Item = Ipv4Addr> {
@@ -297,17 +307,6 @@ fn get_interface_addresses() -> impl Iterator<Item = Ipv4Addr> {
                 })
                 .next() // Simply get the first valid IPv4.
         })
-}
-
-impl fmt::Debug for $service_name {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("$service_name")
-            .field("silent", &self.silent)
-            .finish()
-    }
-}
-
-};
 }
 
 #[cfg(feature = "async-std")]
