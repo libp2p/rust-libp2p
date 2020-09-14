@@ -131,19 +131,19 @@ where
     let hashes_ordering = {
         let oh1 = {
             let mut ctx = Sha256::new();
-            ctx.input(&remote_public_key_encoded);
-            ctx.input(&local_nonce);
-            ctx.result()
+            ctx.update(&remote_public_key_encoded);
+            ctx.update(&local_nonce);
+            ctx.finalize()
         };
 
         let oh2 = {
             let mut ctx = Sha256::new();
-            ctx.input(&local_public_key_encoded);
-            ctx.input(&remote_nonce);
-            ctx.result()
+            ctx.update(&local_public_key_encoded);
+            ctx.update(&remote_nonce);
+            ctx.finalize()
         };
 
-        oh1.as_ref().cmp(&oh2.as_ref())
+        oh1.cmp(&oh2)
     };
 
     let chosen_exchange = {
@@ -333,7 +333,7 @@ fn stretch_key(hmac: Hmac, result: &mut [u8]) {
 }
 
 fn stretch_key_inner<D>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
-where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
+where D: ::hmac::digest::Update + ::hmac::digest::BlockInput +
           ::hmac::digest::FixedOutput + ::hmac::digest::Reset + Default + Clone,
     ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac
 {
@@ -341,15 +341,15 @@ where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
     const SEED: &[u8] = b"key expansion";
 
     let mut init_ctxt = hmac.clone();
-    init_ctxt.input(SEED);
-    let mut a = init_ctxt.result().code();
+    init_ctxt.update(SEED);
+    let mut a = init_ctxt.finalize().into_bytes();
 
     let mut j = 0;
     while j < result.len() {
         let mut context = hmac.clone();
-        context.input(a.as_ref());
-        context.input(SEED);
-        let b = context.result().code();
+        context.update(a.as_ref());
+        context.update(SEED);
+        let b = context.finalize().into_bytes();
 
         let todo = cmp::min(b.as_ref().len(), result.len() - j);
 
@@ -358,8 +358,8 @@ where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
         j += todo;
 
         let mut context = hmac.clone();
-        context.input(a.as_ref());
-        a = context.result().code();
+        context.update(a.as_ref());
+        a = context.finalize().into_bytes();
     }
 }
 

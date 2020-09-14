@@ -1,3 +1,7 @@
+# 0.24.1 [unreleased]
+
+- Update `sha2` dependency.
+
 # 0.24.0 [2020-09-09]
 
 - Bump `libp2p-core` dependency.
