@@ -21,7 +21,7 @@ futures_codec = "0.4.0"
 wasm-timer = "0.2.4"
 unsigned-varint = { version = "0.4.0", features = ["futures-codec"] }
 log = "0.4.8"
-sha2 = "0.8.1"
+sha2 = "0.9.1"
 base64 = "0.12.3"
 smallvec = "1.1.0"
 prost = "0.6.1"
