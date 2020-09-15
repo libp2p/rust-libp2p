@@ -18,7 +18,7 @@ prost = "0.6.1"
 rand = "0.7.2"
 sha2 = "0.9.1"
 static_assertions = "1"
-x25519-dalek = "0.6.0"
+x25519-dalek = "1.1.0"
 zeroize = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
