@@ -1,3 +1,7 @@
+# 0.22.1 [unreleased]
+
+- Improve error logging.
+
 # 0.22.0 [2020-09-09]
 
 - Bump `libp2p-core` dependency.

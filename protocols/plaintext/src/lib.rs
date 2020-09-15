@@ -152,22 +152,18 @@ impl PlainText2Config {
     where
         T: AsyncRead + AsyncWrite + Send + Unpin + 'static
     {
-        debug!("Starting plaintext upgrade");
+        debug!("Starting plaintext handshake.");
         let (stream_sink, remote) = PlainTextMiddleware::handshake(socket, self).await?;
-        let mapped = stream_sink.map_err(map_err as fn(_) -> _);
+        debug!("Finished plaintext handshake.");
+
         Ok((
             remote.peer_id,
             PlainTextOutput {
-                stream: RwStreamSink::new(mapped),
+                stream: RwStreamSink::new(stream_sink),
                 remote_key: remote.public_key,
             }
         ))
     }
-}
-
-fn map_err(err: io::Error) -> io::Error {
-    debug!("error during plaintext handshake {:?}", err);
-    io::Error::new(io::ErrorKind::InvalidData, err)
 }
 
 pub struct PlainTextMiddleware<S> {
@@ -226,7 +222,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     /// The plaintext stream.
-    pub stream: RwStreamSink<futures::stream::MapErr<PlainTextMiddleware<S>, fn(io::Error) -> io::Error>>,
+    pub stream: RwStreamSink<PlainTextMiddleware<S>>,
     /// The public key of the remote.
     pub remote_key: PublicKey,
 }
