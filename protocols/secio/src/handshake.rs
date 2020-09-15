@@ -33,7 +33,6 @@ use rand::{self, RngCore};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::{cmp::{self, Ordering}, io};
 
-
 /// Performs a handshake on the given socket.
 ///
 /// This function expects that the remote is identified with `remote_public_key`, and the remote
