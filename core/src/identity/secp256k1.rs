@@ -20,7 +20,10 @@
 
 //! Secp256k1 keys.
 
-use asn1_der::{FromDerObject, DerObject};
+use asn1_der::{DerObject, typed::DerDecodable};
+// TODO: sort
+use serde_derive::{Serialize, Deserialize};
+use serde_asn1_der::{ to_vec, from_bytes };
 use rand::RngCore;
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use secp256k1::{Message, Signature};
@@ -83,6 +86,9 @@ impl fmt::Debug for SecretKey {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct ECPrivateKey(Vec<Vec<u8>>);
+
 impl SecretKey {
     /// Generate a new Secp256k1 secret key.
     pub fn generate() -> SecretKey {
@@ -114,15 +120,17 @@ impl SecretKey {
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     pub fn from_der(mut der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
-        // TODO: Stricter parsing.
         let der_obj = der.as_mut();
-        let obj: Vec<DerObject> = FromDerObject::deserialize((&*der_obj).iter())
-            .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey").source(e))?;
+        // TODO: Stricter parsing.
+        //
+        // TODO: Handle error.
+        let mut ec_private_key: ECPrivateKey = from_bytes(der_obj).unwrap();
+        // .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey").source(e))?;
+
         der_obj.zeroize();
-        let sk_obj = obj.into_iter().nth(1)
+
+        let mut sk_bytes = ec_private_key.0.pop()
             .ok_or_else(|| DecodingError::new("Not enough elements in DER"))?;
-        let mut sk_bytes: Vec<u8> = FromDerObject::from_der_object(sk_obj)
-            .map_err(DecodingError::new)?;
         let sk = SecretKey::from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
         Ok(sk)
