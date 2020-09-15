@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asn1_der = "0.6.1"
+asn1_der = "0.7.1"
 bs58 = "0.3.0"
 ed25519-dalek = "1.0.0-pre.4"
 either = "1.5"
