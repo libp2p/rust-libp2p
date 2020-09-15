@@ -25,7 +25,7 @@
 
 # Version 0.28.2 [unreleased]
 
-- Update `libp2p-gossipsub` and `libp2p-noise`.
+- Update `libp2p-gossipsub`, `libp2p-noise` and `libp2p-websocket`.
 
 # Version 0.28.1 [2020-09-10]
 

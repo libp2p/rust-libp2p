@@ -2,7 +2,7 @@
 name = "libp2p-websocket"
 edition = "2018"
 description = "WebSocket transport for libp2p"
-version = "0.23.0"
+version = "0.23.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -21,7 +21,7 @@ rw-stream-sink = "0.2.0"
 soketto = { version = "0.4.1", features = ["deflate"] }
 url = "2.1"
 webpki = "0.21"
-webpki-roots = "0.18"
+webpki-roots = "0.20"
 
 [dev-dependencies]
 libp2p-tcp = { path = "../tcp", features = ["async-std"] }
