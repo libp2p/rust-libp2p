@@ -1,6 +1,6 @@
 # 0.24.1 [unreleased]
 
-- Update `sha2` dependency.
+- Update dependencies.
 
 # 0.24.0 [2020-09-09]
 
