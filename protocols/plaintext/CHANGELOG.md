@@ -1,6 +1,9 @@
 # 0.22.1 [unreleased]
 
-- Improve error logging.
+- Improve error logging
+  [PR 1759](https://github.com/libp2p/rust-libp2p/pull/1759).
+
+- Update dependencies.
 
 # 0.22.0 [2020-09-09]
 

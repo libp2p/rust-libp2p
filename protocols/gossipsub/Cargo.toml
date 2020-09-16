@@ -19,7 +19,7 @@ futures = "0.3.1"
 rand = "0.7.3"
 futures_codec = "0.4.0"
 wasm-timer = "0.2.4"
-unsigned-varint = { version = "0.4.0", features = ["futures-codec"] }
+unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 log = "0.4.8"
 sha2 = "0.9.1"
 base64 = "0.12.3"

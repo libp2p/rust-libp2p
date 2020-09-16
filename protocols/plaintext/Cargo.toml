@@ -17,7 +17,7 @@ libp2p-core = { version = "0.22.0", path = "../../core" }
 log = "0.4.8"
 prost = "0.6.1"
 rw-stream-sink = "0.2.0"
-unsigned-varint = { version = "0.4.0", features = ["futures-codec"] }
+unsigned-varint = { version = "0.5.1", features = ["futures-codec"] }
 void = "1.0.2"
 
 [dev-dependencies]
