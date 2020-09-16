@@ -17,7 +17,7 @@ futures_codec = "0.4"
 libp2p-core = { version = "0.22.0", path = "../../core" }
 log = "0.4"
 parking_lot = "0.10"
-unsigned-varint = { version = "0.4", features = ["futures-codec"] }
+unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 
 [dev-dependencies]
 async-std = "1.6.2"

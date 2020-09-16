@@ -15,7 +15,7 @@ futures = "0.3"
 log = "0.4"
 pin-project = "0.4.17"
 smallvec = "1.0"
-unsigned-varint = "0.4"
+unsigned-varint = "0.5"
 
 [dev-dependencies]
 async-std = "1.6.2"

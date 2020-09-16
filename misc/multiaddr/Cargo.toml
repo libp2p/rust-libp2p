@@ -17,7 +17,7 @@ multihash = "0.11.0"
 percent-encoding = "2.1.0"
 serde = "1.0.70"
 static_assertions = "1.1"
-unsigned-varint = "0.4"
+unsigned-varint = "0.5"
 url = { version = "2.1.0", default-features = false }
 
 [dev-dependencies]
