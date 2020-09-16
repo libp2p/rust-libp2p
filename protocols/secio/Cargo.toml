@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 maintenance = { status = "deprecated" }
 
 [dependencies]
-aes-ctr = "0.3"
+aes-ctr = "0.5"
 aesni = { version = "0.6", features = ["nocheck"], optional = true }
 ctr = "0.3"
 futures = "0.3.1"
