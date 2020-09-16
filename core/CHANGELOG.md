@@ -1,3 +1,7 @@
+# 0.22.2 [unreleased]
+
+- Update dependencies.
+
 # 0.22.1 [2020-09-10]
 
 - Require at least parity-multiaddr v0.9.2 in order to fulfill `Ord` bound on
