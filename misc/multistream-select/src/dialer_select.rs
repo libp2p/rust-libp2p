@@ -34,12 +34,11 @@ use std::{convert::TryFrom as _, io, iter, mem, pin::Pin, task::{Context, Poll}}
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
 ///
-/// The chosen message flow for protocol negotiation depends on the numbers
-/// of supported protocols given. That is, this function delegates to
-/// [`dialer_select_proto_serial`] or [`dialer_select_proto_parallel`]
-/// based on the number of protocols given. The number of protocols is
-/// determined through the `size_hint` of the given iterator and thus
-/// an inaccurate size estimate may result in a suboptimal choice.
+/// The chosen message flow for protocol negotiation depends on the numbers of
+/// supported protocols given. That is, this function delegates to serial or
+/// parallel variant based on the number of protocols given. The number of
+/// protocols is determined through the `size_hint` of the given iterator and
+/// thus an inaccurate size estimate may result in a suboptimal choice.
 ///
 /// Within the scope of this library, a dialer always commits to a specific
 /// multistream-select protocol [`Version`], whereas a listener always supports
@@ -401,4 +400,3 @@ where
         }
     }
 }
-
