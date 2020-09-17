@@ -44,7 +44,7 @@ use crate::{PeerId, keys_proto};
 /// Loading the keys:
 ///
 /// ```text
-/// let mut bytes = std::fs::read("private.pem").unwrap();
+/// let mut bytes = std::fs::read("private.pk8").unwrap();
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
 ///
