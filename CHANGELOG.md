@@ -23,9 +23,10 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.28.2 [unreleased]
+# Version 0.29.0 [unreleased]
 
-- Update `libp2p-core`, `libp2p-gossipsub`, `libp2p-mplex`, `libp2p-noise`, `libp2p-websocket` and `parity-multiaddr`.
+- Update `libp2p-core`, `libp2p-gossipsub`, `libp2p-mplex`, `libp2p-noise`,
+  `libp2p-plaintext`, `libp2p-websocket` and `parity-multiaddr`.
 
 # Version 0.28.1 [2020-09-10]
 

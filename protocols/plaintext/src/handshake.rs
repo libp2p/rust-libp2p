@@ -111,21 +111,21 @@ impl HandshakeContext<Local> {
 }
 
 pub async fn handshake<S>(socket: S, config: PlainText2Config)
-    -> Result<(Framed<S, UviBytes<BytesMut>>, Remote), PlainTextError>
+    -> Result<(S, Remote), PlainTextError>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {
     // The handshake messages all start with a variable-length integer indicating the size.
-    let mut socket = Framed::new(socket, UviBytes::default());
+    let mut framed_socket = Framed::new(socket, UviBytes::default());
 
     trace!("starting handshake");
     let context = HandshakeContext::new(config)?;
 
     trace!("sending exchange to remote");
-    socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
+    framed_socket.send(BytesMut::from(&context.state.exchange_bytes[..])).await?;
 
     trace!("receiving the remote's exchange");
-    let context = match socket.next().await {
+    let context = match framed_socket.next().await {
         Some(p) => context.with_remote(p?)?,
         None => {
             debug!("unexpected eof while waiting for remote's exchange");
@@ -135,5 +135,5 @@ where
     };
 
     trace!("received exchange from remote; pubkey = {:?}", context.state.public_key);
-    Ok((socket, context.state))
+    Ok((framed_socket.into_inner(), context.state))
 }

@@ -19,13 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::error::PlainTextError;
-use crate::handshake::Remote;
 
-use bytes::BytesMut;
 use futures::future::{self, Ready};
 use futures::prelude::*;
-use futures::{future::BoxFuture, Sink, Stream};
-use futures_codec::Framed;
+use futures::future::BoxFuture;
 use libp2p_core::{
     identity,
     InboundUpgrade,
@@ -35,9 +32,7 @@ use libp2p_core::{
     PublicKey,
 };
 use log::debug;
-use rw_stream_sink::RwStreamSink;
 use std::{io, iter, pin::Pin, task::{Context, Poll}};
-use unsigned_varint::codec::UviBytes;
 use void::Void;
 
 mod error;
@@ -153,66 +148,16 @@ impl PlainText2Config {
         T: AsyncRead + AsyncWrite + Send + Unpin + 'static
     {
         debug!("Starting plaintext handshake.");
-        let (stream_sink, remote) = PlainTextMiddleware::handshake(socket, self).await?;
+        let (socket, remote) = handshake::handshake(socket, self).await?;
         debug!("Finished plaintext handshake.");
 
         Ok((
             remote.peer_id,
             PlainTextOutput {
-                stream: RwStreamSink::new(stream_sink),
+                socket,
                 remote_key: remote.public_key,
             }
         ))
-    }
-}
-
-pub struct PlainTextMiddleware<S> {
-    inner: Framed<S, UviBytes<BytesMut>>,
-}
-
-impl<S> PlainTextMiddleware<S>
-where
-    S: AsyncRead + AsyncWrite + Send + Unpin,
-{
-    async fn handshake(socket: S, config: PlainText2Config)
-        -> Result<(PlainTextMiddleware<S>, Remote), PlainTextError>
-    {
-        let (inner, remote) = handshake::handshake(socket, config).await?;
-        Ok((PlainTextMiddleware { inner }, remote))
-    }
-}
-
-impl<S> Sink<BytesMut> for PlainTextMiddleware<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    type Error = io::Error;
-
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Sink::poll_ready(Pin::new(&mut self.inner), cx)
-    }
-
-    fn start_send(mut self: Pin<&mut Self>, item: BytesMut) -> Result<(), Self::Error> {
-        Sink::start_send(Pin::new(&mut self.inner), item)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Sink::poll_flush(Pin::new(&mut self.inner), cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Sink::poll_close(Pin::new(&mut self.inner), cx)
-    }
-}
-
-impl<S> Stream for PlainTextMiddleware<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    type Item = Result<BytesMut, io::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Stream::poll_next(Pin::new(&mut self.inner), cx)
     }
 }
 
@@ -222,7 +167,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     /// The plaintext stream.
-    pub stream: RwStreamSink<PlainTextMiddleware<S>>,
+    pub socket: S,
     /// The public key of the remote.
     pub remote_key: PublicKey,
 }
@@ -231,7 +176,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PlainTextOutput<S> {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8])
         -> Poll<Result<usize, io::Error>>
     {
-        AsyncRead::poll_read(Pin::new(&mut self.stream), cx, buf)
+        AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }
 
@@ -239,18 +184,18 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PlainTextOutput<S> {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8])
         -> Poll<Result<usize, io::Error>>
     {
-        AsyncWrite::poll_write(Pin::new(&mut self.stream), cx, buf)
+        AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     {
-        AsyncWrite::poll_flush(Pin::new(&mut self.stream), cx)
+        AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<(), io::Error>>
     {
-        AsyncWrite::poll_close(Pin::new(&mut self.stream), cx)
+        AsyncWrite::poll_close(Pin::new(&mut self.socket), cx)
     }
 }
