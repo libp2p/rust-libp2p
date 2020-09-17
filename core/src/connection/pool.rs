@@ -750,7 +750,7 @@ pub enum PoolConnection<'a, TInEvent, TConnInfo, TPeerId> {
     Established(EstablishedConnection<'a, TInEvent, TConnInfo>),
 }
 
-/// A pending connection in a [`Pool`].
+/// A pending connection in a pool.
 pub struct PendingConnection<'a, TInEvent, TConnInfo, TPeerId> {
     entry: manager::PendingEntry<'a, TInEvent, TConnInfo>,
     pending: &'a mut FnvHashMap<ConnectionId, (ConnectedPoint, Option<TPeerId>)>,
@@ -781,7 +781,7 @@ impl<TInEvent, TConnInfo, TPeerId>
     }
 }
 
-/// An established connection in a [`Pool`].
+/// An established connection in a pool.
 pub struct EstablishedConnection<'a, TInEvent, TConnInfo> {
     entry: manager::EstablishedEntry<'a, TInEvent, TConnInfo>,
 }
@@ -861,7 +861,7 @@ where
     }
 }
 
-/// An iterator over established connections in a [`Pool`].
+/// An iterator over established connections in a pool.
 pub struct EstablishedConnectionIter<'a, I, TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId> {
     pool: &'a mut Pool<TInEvent, TOutEvent, THandler, TTransErr, THandlerErr, TConnInfo, TPeerId>,
     ids: I

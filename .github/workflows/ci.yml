@@ -85,9 +85,9 @@ jobs:
     - name: Install nightly Rust
       # TODO: intra-doc links are available on nightly only
       # see https://doc.rust-lang.org/nightly/rustdoc/lints.html#intra_doc_link_resolution_failure
-      run: rustup default nightly-2020-05-20
+      run: rustup default nightly-2020-09-17
     - name: Check rustdoc links
-      run: RUSTDOCFLAGS="--deny intra_doc_link_resolution_failure" cargo doc --verbose --workspace --no-deps --document-private-items
+      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items
 
   integration-test:
     name: Integration tests
