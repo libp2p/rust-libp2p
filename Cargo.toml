@@ -68,7 +68,7 @@ libp2p-floodsub = { version = "0.22.0", path = "protocols/floodsub", optional = 
 libp2p-gossipsub = { version = "0.22.1", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.22.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.23.1", path = "protocols/kad", optional = true }
-libp2p-mplex = { version = "0.22.1", path = "muxers/mplex", optional = true }
+libp2p-mplex = { version = "0.23.0", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.24.1", path = "protocols/noise", optional = true }
 libp2p-ping = { version = "0.22.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.23.0", path = "protocols/plaintext", optional = true }
