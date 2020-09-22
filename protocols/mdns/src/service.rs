@@ -111,12 +111,30 @@ macro_rules! codegen {
 /// # }
 #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
 pub struct $service_name {
-    /// Main socket for listening.
+    /// Sockets for sending messages.
+    ///
+    /// We have one socket per interface. Sending via the `receiving` socket would only send on the
+    /// default interfaces, which is picked by the operating system. This is usually what one
+    /// wants, but not always. The better approach to just picking some arbitrary interface is to
+    /// pick all interfaces, we do this by using a "sending" socket for each interfaces, which gets
+    /// bound to the interface IP address. Those sockets are therefore unsuited for receiving
+    /// multicast messages and will only be used for sending.
+    ///
+    /// Considerations: Having sockets only used for sending is obviously not ideal, as there are
+    /// input queues managed by the kernel which occupy memory. Nevertheless this approach is the
+    /// easiest to implement in a platform independent way.
+    ///
+    /// Other approaches evaluated:
+    ///
+    /// Using something like the [multicast-socket
+    /// crate](https://crates.io/crates/multicast-socket), which works by means of platform
+    /// specific functions like [sendmsg](https://linux.die.net/man/2/sendmsg)
+    ///
+    /// TODO: Correct above comment.
+    ///
     socket: $udp_socket,
-
-    /// Socket for sending queries on the network.
-    query_socket: $udp_socket,
-
+    /// IP addresses of the interfaces this implementation is sending packets out.
+    interfaces: Vec<Ipv4Addr>,
     /// Interval for sending queries.
     query_interval: Interval,
     /// Whether we send queries on the network at all.
@@ -159,22 +177,18 @@ impl $service_name {
         };
 
         let socket = $udp_socket_from_std(std_socket)?;
-        // Given that we pass an IP address to bind, which does not need to be resolved, we can
-        // use std::net::UdpSocket::bind, instead of its async counterpart from async-std.
-        let query_socket = $udp_socket_from_std(
-            std::net::UdpSocket::bind((Ipv4Addr::from([0u8, 0, 0, 0]), 0u16))?,
-        )?;
 
         socket.set_multicast_loop_v4(true)?;
         socket.set_multicast_ttl_v4(255)?;
+        let interfaces = get_interface_addresses().collect();
         // Join multicast on all avaliable interfaces:
-        for addr in get_interface_addresses() {
+        for &addr in &interfaces {
             socket.join_multicast_v4(From::from([224, 0, 0, 251]), addr)?;
         }
 
         Ok($service_name {
             socket,
-            query_socket,
+            interfaces,
             query_interval: Interval::new_at(Instant::now(), Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 2048],
@@ -211,36 +225,39 @@ impl $service_name {
     // resolves, not forcing self-referential structures on the caller.
     pub async fn next(mut self) -> (Self, MdnsPacket) {
         loop {
-            // Flush the send buffer of the main socket.
-            while !self.send_buffers.is_empty() {
-                let to_send = self.send_buffers.remove(0);
+            let send_buffers = self.send_buffers;
+            self.send_buffers = Vec::new();
+            let query_send_buffers = self.query_send_buffers;
+            self.query_send_buffers = Vec::new();
 
-                match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
-                    Ok(bytes_written) => {
-                        debug_assert_eq!(bytes_written, to_send.len());
-                    }
-                    Err(_) => {
-                        // Errors are non-fatal because they can happen for example if we lose
-                        // connection to the network.
-                        self.send_buffers.clear();
-                        break;
+            for interface in &self.interfaces {
+                set_multicast_if_v4(&self.socket, interface)
+                    .expect("set_multicast_if_v4 should work");
+                // Flush the send buffer of the main socket.
+                for to_send in &send_buffers {
+                    match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                        Ok(bytes_written) => {
+                            debug_assert_eq!(bytes_written, to_send.len());
+                        }
+                        Err(_) => {
+                            // Errors are non-fatal because they can happen for example if we lose
+                            // connection to the network.
+                            break;
+                        }
                     }
                 }
-            }
 
-            // Flush the query send buffer.
-            while !self.query_send_buffers.is_empty() {
-                let to_send = self.query_send_buffers.remove(0);
-
-                match self.query_socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
-                    Ok(bytes_written) => {
-                        debug_assert_eq!(bytes_written, to_send.len());
-                    }
-                    Err(_) => {
-                        // Errors are non-fatal because they can happen for example if we lose
-                        // connection to the network.
-                        self.query_send_buffers.clear();
-                        break;
+                // Flush the query send buffer.
+                for to_send in &query_send_buffers {
+                    match self.socket.send_to(&to_send, *IPV4_MDNS_MULTICAST_ADDRESS).await {
+                        Ok(bytes_written) => {
+                            debug_assert_eq!(bytes_written, to_send.len());
+                        }
+                        Err(_) => {
+                            // Errors are non-fatal because they can happen for example if we lose
+                            // connection to the network.
+                            break;
+                        }
                     }
                 }
             }
@@ -268,7 +285,7 @@ impl $service_name {
                         // The query interval will wake up the task at some point so that we can try again.
                     },
                 },
-                Right(_) => {
+                Right(()) => {
                     // Ensure underlying task is woken up on the next interval tick.
                     while let Some(_) = self.query_interval.next().now_or_never() {};
 
@@ -293,6 +310,52 @@ impl fmt::Debug for $service_name {
 };
 }
 
+// Hack to make set_multicast_if_v4 available on asynchronous sockets:
+#[cfg(feature = "async-std")]
+fn set_multicast_if_v4(socket: &async_std::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
+        use std::net::UdpSocket;
+        use net2::UdpSocketExt;
+        use async_std::os::unix::io::AsRawFd;
+        use std::os::unix::io::IntoRawFd;
+        use std::os::unix::io::FromRawFd;
+        // Temporary unsafe double ownership:
+        #[cfg(windows)]
+        let std_sock: UdpSocket = unsafe {
+            FromRawSocket::from_raw_socket(socket.as_raw_socket())
+        };
+        #[cfg(not(windows))]
+        let std_sock: UdpSocket = unsafe {
+            FromRawFd::from_raw_fd(socket.as_raw_fd())
+        };
+        // Don't use ? here, we need to drop the ownership in the end!
+        let r = std_sock.set_multicast_if_v4(interface);
+        // Drop ownership again, thus avoid double free!
+        std_sock.into_raw_fd();
+        r
+}
+#[cfg(feature = "async-std")]
+codegen!("async-std", MdnsService, async_std::net::UdpSocket, (|socket| Ok::<_, std::io::Error>(async_std::net::UdpSocket::from(socket))));
+
+// Hack to make set_multicast_if_v4 available on asynchronous sockets:
+#[cfg(feature = "tokio")]
+fn set_multicast_if_v4(socket: tokio::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
+        use std::net::UdpSocket;
+        use net2::UdpSocketExt;
+        // Temporary unsafe double ownership:
+        #[cfg(windows)]
+        let std_sock = UdpSocket::from_raw_socket(socket.as_raw_socket());
+        #[cfg(!windows)]
+        let std_sock = UdpSocket::from_raw_fd(socket.as_raw_fd());
+        // Don't use ? here, we need to drop the ownership in the end!
+        let r = std_sock.set_multicast_if_v4(interface);
+        // Drop ownership again!
+        std_sock.to_raw_fd();
+        r
+}
+#[cfg(feature = "tokio")]
+codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket| tokio::net::UdpSocket::from_std(socket)));
+
+
 /// Get IPv4 addresses of all external network interfaces.
 fn get_interface_addresses() -> impl Iterator<Item = Ipv4Addr> {
     datalink::interfaces()
@@ -308,13 +371,6 @@ fn get_interface_addresses() -> impl Iterator<Item = Ipv4Addr> {
                 .next() // Simply get the first valid IPv4.
         })
 }
-
-#[cfg(feature = "async-std")]
-codegen!("async-std", MdnsService, async_std::net::UdpSocket, (|socket| Ok::<_, std::io::Error>(async_std::net::UdpSocket::from(socket))));
-
-#[cfg(feature = "tokio")]
-codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket| tokio::net::UdpSocket::from_std(socket)));
-
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
