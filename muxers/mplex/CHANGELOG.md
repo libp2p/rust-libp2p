@@ -11,7 +11,7 @@
   with a task wakeup once an existing substream closes, i.e. the limit
   results in back-pressure for new outbound substreams. New inbound
   substreams beyond the limit are immediately answered with a `Reset`.
-  If too many (by some internal threshold) pending `Reset` frames accumulate,
+  If too many (by some internal threshold) pending frames accumulate,
   e.g. as a result of an aggressive number of inbound substreams being
   opened beyond the configured limit, the connection is closed ("DoS protection").
 

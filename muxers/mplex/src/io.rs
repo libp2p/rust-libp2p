@@ -44,8 +44,14 @@ pub struct Multiplexed<C> {
     buffer: Vec<Frame<RemoteStreamId>>,
     /// Whether a flush is pending before reading frames can proceed.
     pending_flush: bool,
-    /// Streams for which a `Reset` frame should be sent.
-    pending_reset: Vec<LocalStreamId>,
+    /// Pending frames to send at the next opportunity.
+    ///
+    /// An opportunity for sending pending frames is every flush
+    /// or read operation. In the former case, sending of all
+    /// pending frames must complete before the flush can complete.
+    /// In the latter case, the read operation can proceed even
+    /// if some or all of the pending frames cannot be sent.
+    pending_frames: Vec<Frame<LocalStreamId>>,
     /// The substreams that are considered at least half-open.
     open_substreams: FnvHashMap<LocalStreamId, SubstreamState>,
     /// The ID for the next outbound substream.
@@ -84,7 +90,7 @@ where
             buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
             open_substreams: Default::default(),
             pending_flush: false,
-            pending_reset: Vec::new(),
+            pending_frames: Vec::new(),
             next_outbound_stream_id: LocalStreamId::dialer(0),
             notifier_read: Arc::new(NotifierRead {
                 pending: Mutex::new(Default::default()),
@@ -106,8 +112,8 @@ where
             Status::Ok => {}
         }
 
-        // Send any pending reset frames.
-        ready!(self.send_pending_reset(cx))?;
+        // Send any pending frames.
+        ready!(self.send_pending_frames(cx))?;
 
         // Flush the underlying I/O stream.
         let waker = NotifierWrite::register(&self.notifier_write, cx.waker());
@@ -140,7 +146,7 @@ where
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(e)) => self.on_error(e),
             Poll::Ready(Ok(())) => {
-                self.pending_reset = Vec::new();
+                self.pending_frames = Vec::new();
                 // We do not support read-after-close on the underlying
                 // I/O stream, hence clearing the buffer and substreams.
                 self.buffer = Vec::new();
@@ -199,28 +205,65 @@ where
     }
 
 
-    /// Resets an open substream, immediately closing it both for reading and writing.
+    /// Immediately drops a substream.
     ///
-    /// As opposed to a regular close, resetting a stream does not give the
-    /// remote the opportunity to cleanly finish writing.
-    pub fn reset_stream(&mut self, id: LocalStreamId) {
-        let at_limit = self.open_substreams.len() >= self.config.max_substreams;
-        if self.open_substreams.remove(&id).is_some() {
-            if let Err(e) = self.guard_ok() {
-                log::trace!("Cannot reset stream: {:?}", e);
-                return
+    /// All locally allocated resources for the dropped substream
+    /// are freed and the substream becomes unavailable for both
+    /// reading and writing immediately. The remote is informed
+    /// based on the current state of the substream:
+    ///
+    /// * If the substream was open, a `Reset` frame is sent at
+    ///   the next opportunity.
+    /// * If the substream was half-closed, i.e. a `Close` frame
+    ///   has already been sent, nothing further happens.
+    /// * If the substream was half-closed by the remote, i.e.
+    ///   a `Close` frame has already been received, a `Close`
+    ///   frame is sent at the next opportunity.
+    ///
+    /// If the multiplexed stream is closed or encountered
+    /// an error earlier, or there is no known substream with
+    /// the given ID, this is a no-op.
+    pub fn drop_stream(&mut self, id: LocalStreamId) {
+        // Check if the underlying stream is ok.
+        match self.status {
+            Status::Closed | Status::Err(_) => return,
+            Status::Ok => {},
+        }
+        // Remove the substream, scheduling pending frames as necessary.
+        match self.open_substreams.remove(&id) {
+            None => return,
+            Some(state) => {
+                // Remove any frames still buffered for that stream.
+                self.buffer.retain(|frame| frame.local_id() != id);
+                // If we fell below the substream limit, notify tasks that had
+                // interest in opening a substream earlier.
+                let below_limit = self.open_substreams.len() == self.config.max_substreams - 1;
+                if below_limit {
+                    ArcWake::wake_by_ref(&self.notifier_open);
+                }
+                // Schedule any pending final frames to send, if necessary.
+                match state {
+                    SubstreamState::SendClosed => {}
+                    SubstreamState::RecvClosed => {
+                        if self.pending_frames.len() >= MAX_PENDING_FRAMES {
+                            let _ = self.on_error::<()>(io::Error::new(io::ErrorKind::Other,
+                                "Too many pending frames."));
+                            return
+                        }
+                        log::trace!("Pending close for stream {:?}", id);
+                        self.pending_frames.push(Frame::Close { stream_id: id });
+                    }
+                    SubstreamState::Open => {
+                        if self.pending_frames.len() >= MAX_PENDING_FRAMES {
+                            let _ = self.on_error::<()>(io::Error::new(io::ErrorKind::Other,
+                                "Too many pending frames."));
+                            return
+                        }
+                        log::trace!("Pending reset for stream {:?}", id);
+                        self.pending_frames.push(Frame::Reset { stream_id: id });
+                    }
+                }
             }
-            self.buffer.retain(|elem| elem.local_id() != id);
-            if at_limit && self.open_substreams.len() < self.config.max_substreams {
-                // Notify tasks that had interest in opening a substream.
-                ArcWake::wake_by_ref(&self.notifier_open);
-            }
-            if self.pending_reset.len() >= MAX_PENDING_RESETS {
-                log::debug!("Too many pending resets. Ignoring reset for {:?}", id);
-                return
-            }
-            log::debug!("Scheduling reset for stream {:?}", id);
-            self.pending_reset.push(id);
         }
     }
 
@@ -285,7 +328,6 @@ where
     {
         self.guard_ok()?;
 
-        let at_limit = self.open_substreams.len() >= self.config.max_substreams;
         match self.open_substreams.get(&id) {
             None | Some(SubstreamState::SendClosed) => Poll::Ready(Ok(())),
             Some(&state) => {
@@ -296,7 +338,8 @@ where
                 } else if state == SubstreamState::RecvClosed {
                     debug!("Closed substream {:?}", id);
                     self.open_substreams.remove(&id);
-                    if at_limit && self.open_substreams.len() < self.config.max_substreams {
+                    let below_limit = self.open_substreams.len() == self.config.max_substreams - 1;
+                    if below_limit {
                         ArcWake::wake_by_ref(&self.notifier_open);
                     }
                 }
@@ -350,8 +393,8 @@ where
     where
         F: FnMut(&Frame<RemoteStreamId>) -> Option<O>,
     {
-        // Try to send pending reset frames, if there are any, without blocking,
-        if let Poll::Ready(Err(e)) = self.send_pending_reset(cx) {
+        // Try to send pending frames, if there are any, without blocking,
+        if let Poll::Ready(Err(e)) = self.send_pending_frames(cx) {
             return Poll::Ready(Err(e))
         }
 
@@ -448,18 +491,17 @@ where
 
                     if self.open_substreams.len() >= self.config.max_substreams {
                         debug!("Maximum number of substreams exceeded: {}", self.config.max_substreams);
-                        if self.pending_reset.len() >= MAX_PENDING_RESETS {
+                        if self.pending_frames.len() >= MAX_PENDING_FRAMES {
                             return self.on_error(io::Error::new(io::ErrorKind::Other,
-                                "Too many pending stream resets."))
+                                "Too many pending frames."))
                         }
-                        self.pending_reset.push(stream_id.into_local());
+                        self.pending_frames.push(Frame::Reset { stream_id: stream_id.into_local() });
                         continue
                     }
 
                     self.open_substreams.insert(id, SubstreamState::Open);
                 }
                 Frame::Close { stream_id } => {
-                    let at_limit = self.open_substreams.len() >= self.config.max_substreams;
                     if let Entry::Occupied(mut e) = self.open_substreams.entry(stream_id.into_local()) {
                         match e.get() {
                             SubstreamState::RecvClosed => {
@@ -468,7 +510,8 @@ where
                             SubstreamState::SendClosed => {
                                 debug!("Substream closed by remote: {:?}", stream_id);
                                 e.remove();
-                                if at_limit && self.open_substreams.len() < self.config.max_substreams {
+                                let below_limit = self.open_substreams.len() == self.config.max_substreams - 1;
+                                if below_limit {
                                     ArcWake::wake_by_ref(&self.notifier_open);
                                 }
                             },
@@ -480,10 +523,10 @@ where
                     }
                 }
                 Frame::Reset { stream_id } => {
-                    let at_limit = self.open_substreams.len() >= self.config.max_substreams;
                     if let Some(state) = self.open_substreams.remove(&stream_id.into_local()) {
                         debug!("Substream {:?} in state {:?} reset by remote", stream_id, state);
-                        if at_limit && self.open_substreams.len() < self.config.max_substreams {
+                        let below_limit = self.open_substreams.len() == self.config.max_substreams - 1;
+                        if below_limit {
                             ArcWake::wake_by_ref(&self.notifier_open);
                         }
                     } else {
@@ -526,11 +569,11 @@ where
         }
     }
 
-    /// Sends pending `Reset` frames, without flushing.
-    fn send_pending_reset(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        while let Some(id) = self.pending_reset.pop() {
-            if self.poll_send_frame(cx, || Frame::Reset { stream_id: id })?.is_pending() {
-                self.pending_reset.push(id);
+    /// Sends pending frames, without flushing.
+    fn send_pending_frames(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        while let Some(frame) = self.pending_frames.pop() {
+            if self.poll_send_frame(cx, || frame.clone())?.is_pending() {
+                self.pending_frames.push(frame);
                 return Poll::Pending
             }
         }
@@ -540,8 +583,9 @@ where
 
     /// Records a fatal error for the multiplexed I/O stream.
     fn on_error<T>(&mut self, e: io::Error) -> Poll<io::Result<T>> {
+        log::debug!("Multiplexed connection failed: {:?}", e);
         self.status = Status::Err(io::Error::new(e.kind(), e.to_string()));
-        self.pending_reset =  Vec::new();
+        self.pending_frames =  Vec::new();
         self.open_substreams = Default::default();
         self.buffer = Default::default();
         Poll::Ready(Err(e))
@@ -678,10 +722,7 @@ impl ArcWake for NotifierOpen {
     }
 }
 
-
-/// The maximum number of pending stream resets we are willing
-/// to buffer. If this limit is exceeded as a result of an
-/// inbound `Open` frame that exceeds the substream limits,
-/// the remote is too ill-behaved and the multiplexed stream
-/// terminates with an error.
-const MAX_PENDING_RESETS: usize = 1000;
+/// The maximum number of pending frames to send we are willing
+/// to buffer. If this limit is exceeded, the multiplexed stream is
+/// considered unhealthy and terminates with an error.
+const MAX_PENDING_FRAMES: usize = 1000;

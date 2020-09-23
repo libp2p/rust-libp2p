@@ -151,7 +151,7 @@ where
     }
 
     fn destroy_substream(&self, sub: Self::Substream) {
-        self.io.lock().reset_stream(sub.id);
+        self.io.lock().drop_stream(sub.id);
     }
 
     fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
