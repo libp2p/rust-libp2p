@@ -240,10 +240,10 @@ where
         self.buffer.retain(|frame| frame.local_id() != id);
 
         // If there is still a task waker interested in reading from that
-        // stream, remove it to avoid leaving it dangling. In contrast,
-        // wakers for write operations are all woken on every new write
-        // opportunity.
-        self.notifier_read.unregister(&Some(id));
+        // stream, wake it to avoid leaving it dangling and notice that
+        // the stream is gone. In contrast, wakers for write operations
+        // are all woken on every new write opportunity.
+        self.notifier_read.wake_by_id(id);
 
         // Remove the substream, scheduling pending frames as necessary.
         match self.open_substreams.remove(&id) {
@@ -689,11 +689,6 @@ impl NotifierRead {
         let mut pending = self.pending.lock();
         pending.insert(stream, waker.clone());
         waker_ref(self)
-    }
-
-    /// Unregister interest of a pending task in a stream, if any.
-    fn unregister(self: &Arc<Self>, stream: &Option<LocalStreamId>) {
-        self.pending.lock().remove(stream);
     }
 
     /// Wakes the last task that has previously registered interest
