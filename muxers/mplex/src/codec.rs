@@ -204,7 +204,6 @@ impl Decoder for Codec {
 
                     let buf = src.split_to(len);
                     let num = (header >> 3) as u32;
-                    // let stream_id = RemoteStreamId { num, role: None };
                     let out = match header & 7 {
                         0 => Frame::Open { stream_id: RemoteStreamId::dialer(num) },
                         1 => Frame::Data { stream_id: RemoteStreamId::listener(num), data: buf.freeze() },
