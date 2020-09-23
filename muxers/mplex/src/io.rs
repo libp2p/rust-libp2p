@@ -223,18 +223,24 @@ where
     /// If the multiplexed stream is closed or encountered
     /// an error earlier, or there is no known substream with
     /// the given ID, this is a no-op.
+    ///
+    /// > **Note**: If a substream is not read until EOF,
+    /// > `drop_substream` _must_ eventually be called to avoid
+    /// > leaving unread frames in the receive buffer.
     pub fn drop_stream(&mut self, id: LocalStreamId) {
         // Check if the underlying stream is ok.
         match self.status {
             Status::Closed | Status::Err(_) => return,
             Status::Ok => {},
         }
+        // Remove any frames still buffered for that stream. The stream
+        // may already be fully closed (i.e. not in `open_substreams`)
+        // but still have unread buffered frames.
+        self.buffer.retain(|frame| frame.local_id() != id);
         // Remove the substream, scheduling pending frames as necessary.
         match self.open_substreams.remove(&id) {
             None => return,
             Some(state) => {
-                // Remove any frames still buffered for that stream.
-                self.buffer.retain(|frame| frame.local_id() != id);
                 // If we fell below the substream limit, notify tasks that had
                 // interest in opening a substream earlier.
                 let below_limit = self.open_substreams.len() == self.config.max_substreams - 1;
@@ -430,9 +436,8 @@ where
         loop {
             // Check if the targeted substream (if any) reached EOF.
             if let Some(id) = &stream_id {
-                match self.open_substreams.get(id) {
-                    Some(SubstreamState::RecvClosed) | None => return Poll::Ready(Ok(None)),
-                    _ => {}
+                if !self.can_read(id) {
+                    return Poll::Ready(Ok(None))
                 }
             }
 
