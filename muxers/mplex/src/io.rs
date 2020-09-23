@@ -321,7 +321,7 @@ where
     /// Flushes a substream.
     ///
     /// > **Note**: This is equivalent to `poll_flush()`, i.e. to flushing
-    /// > all substreams, except that this operation is an error on if
+    /// > all substreams, except that this operation returns an error if
     /// > the underlying I/O stream is already closed.
     pub fn poll_flush_stream(&mut self, cx: &mut Context<'_>, id: LocalStreamId)
         -> Poll<io::Result<()>>
@@ -751,4 +751,3 @@ impl ArcWake for NotifierOpen {
 /// to buffer. If this limit is exceeded, the multiplexed stream is
 /// considered unhealthy and terminates with an error.
 const MAX_PENDING_FRAMES: usize = 1000;
-
