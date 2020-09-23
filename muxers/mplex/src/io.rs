@@ -27,7 +27,7 @@ use futures::{prelude::*, ready, stream::Fuse};
 use futures::task::{ArcWake, waker_ref, WakerRef};
 use futures_codec::Framed;
 use parking_lot::Mutex;
-use std::collections::hash_map::Entry;
+use std::collections::{VecDeque, hash_map::Entry};
 use std::{cmp, io, mem, sync::Arc, task::{Context, Poll, Waker}};
 
 pub use std::io::{Result, Error, ErrorKind};
@@ -51,7 +51,7 @@ pub struct Multiplexed<C> {
     /// pending frames must complete before the flush can complete.
     /// In the latter case, the read operation can proceed even
     /// if some or all of the pending frames cannot be sent.
-    pending_frames: Vec<Frame<LocalStreamId>>,
+    pending_frames: VecDeque<Frame<LocalStreamId>>,
     /// The substreams that are considered at least half-open.
     open_substreams: FnvHashMap<LocalStreamId, SubstreamState>,
     /// The ID for the next outbound substream.
@@ -90,7 +90,7 @@ where
             buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
             open_substreams: Default::default(),
             pending_flush: false,
-            pending_frames: Vec::new(),
+            pending_frames: Default::default(),
             next_outbound_stream_id: LocalStreamId::dialer(0),
             notifier_read: Arc::new(NotifierRead {
                 pending: Mutex::new(Default::default()),
@@ -146,7 +146,7 @@ where
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(e)) => self.on_error(e),
             Poll::Ready(Ok(())) => {
-                self.pending_frames = Vec::new();
+                self.pending_frames = VecDeque::new();
                 // We do not support read-after-close on the underlying
                 // I/O stream, hence clearing the buffer and substreams.
                 self.buffer = Vec::new();
@@ -162,7 +162,7 @@ where
         self.guard_ok()?;
 
         // Wait for the next inbound `Open` frame.
-        let stream_id = ready!(self.poll_recv_frame(cx, None, |frame| match frame {
+        let stream_id = ready!(self.poll_read_frame(cx, None, |frame| match frame {
             Frame::Open { stream_id } => Some(stream_id.into_local()),
             _ => None,
         }))?.expect("Unexpected end of substream.");
@@ -233,10 +233,18 @@ where
             Status::Closed | Status::Err(_) => return,
             Status::Ok => {},
         }
+
         // Remove any frames still buffered for that stream. The stream
         // may already be fully closed (i.e. not in `open_substreams`)
         // but still have unread buffered frames.
         self.buffer.retain(|frame| frame.local_id() != id);
+
+        // If there is still a task waker interested in reading from that
+        // stream, remove it to avoid leaving it dangling. In contrast,
+        // wakers for write operations are all woken on every new write
+        // opportunity.
+        self.notifier_read.unregister(&Some(id));
+
         // Remove the substream, scheduling pending frames as necessary.
         match self.open_substreams.remove(&id) {
             None => return,
@@ -257,7 +265,7 @@ where
                             return
                         }
                         log::trace!("Pending close for stream {:?}", id);
-                        self.pending_frames.push(Frame::Close { stream_id: id });
+                        self.pending_frames.push_front(Frame::Close { stream_id: id });
                     }
                     SubstreamState::Open => {
                         if self.pending_frames.len() >= MAX_PENDING_FRAMES {
@@ -266,7 +274,7 @@ where
                             return
                         }
                         log::trace!("Pending reset for stream {:?}", id);
-                        self.pending_frames.push(Frame::Reset { stream_id: id });
+                        self.pending_frames.push_front(Frame::Reset { stream_id: id });
                     }
                 }
             }
@@ -304,7 +312,7 @@ where
     {
         self.guard_ok()?;
 
-        self.poll_recv_frame(cx, Some(id), |frame| match frame {
+        self.poll_read_frame(cx, Some(id), |frame| match frame {
             Frame::Data { data, .. } => Some(data.clone()),
             _ => None
         })
@@ -390,7 +398,7 @@ where
     /// that substream. If `None` is given for the stream ID,
     /// `Ok(None)` is never returned. If the underlying connection
     /// encounters EOF, a corresponding error is returned.
-    fn poll_recv_frame<F, O>(
+    fn poll_read_frame<F, O>(
         &mut self,
         cx: &mut Context<'_>,
         stream_id: Option<LocalStreamId>,
@@ -500,7 +508,9 @@ where
                             return self.on_error(io::Error::new(io::ErrorKind::Other,
                                 "Too many pending frames."))
                         }
-                        self.pending_frames.push(Frame::Reset { stream_id: stream_id.into_local() });
+                        self.pending_frames.push_front(Frame::Reset {
+                            stream_id: stream_id.into_local()
+                        });
                         continue
                     }
 
@@ -515,14 +525,20 @@ where
                             SubstreamState::SendClosed => {
                                 debug!("Substream closed by remote: {:?}", stream_id);
                                 e.remove();
+                                // Notify tasks interested in opening new streams, if we fell
+                                // below the limit.
                                 let below_limit = self.open_substreams.len() == self.config.max_substreams - 1;
                                 if below_limit {
                                     ArcWake::wake_by_ref(&self.notifier_open);
                                 }
+                                // Notify tasks interested in reading, so they may read the EOF.
+                                NotifierRead::wake_by_id(&self.notifier_read, stream_id.into_local());
                             },
                             SubstreamState::Open => {
                                 debug!("Substream half-closed by remote: {:?}", stream_id);
                                 e.insert(SubstreamState::RecvClosed);
+                                // Notify tasks interested in reading, so they may read the EOF.
+                                NotifierRead::wake_by_id(&self.notifier_read, stream_id.into_local());
                             },
                         }
                     }
@@ -534,6 +550,8 @@ where
                         if below_limit {
                             ArcWake::wake_by_ref(&self.notifier_open);
                         }
+                        // Notify tasks interested in reading, so they may read the EOF.
+                        NotifierRead::wake_by_id(&self.notifier_read, stream_id.into_local());
                     } else {
                         trace!("Received reset for unknown stream: {:?}", stream_id);
                     }
@@ -576,9 +594,11 @@ where
 
     /// Sends pending frames, without flushing.
     fn send_pending_frames(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        while let Some(frame) = self.pending_frames.pop() {
-            if self.poll_send_frame(cx, || frame.clone())?.is_pending() {
-                self.pending_frames.push(frame);
+        while let Some(frame) = self.pending_frames.pop_back() {
+            if self.poll_send_frame(cx, || {
+                frame.clone()
+            })?.is_pending() {
+                self.pending_frames.push_back(frame);
                 return Poll::Pending
             }
         }
@@ -590,7 +610,7 @@ where
     fn on_error<T>(&mut self, e: io::Error) -> Poll<io::Result<T>> {
         log::debug!("Multiplexed connection failed: {:?}", e);
         self.status = Status::Err(io::Error::new(e.kind(), e.to_string()));
-        self.pending_frames =  Vec::new();
+        self.pending_frames =  Default::default();
         self.open_substreams = Default::default();
         self.buffer = Default::default();
         Poll::Ready(Err(e))
@@ -671,6 +691,11 @@ impl NotifierRead {
         waker_ref(self)
     }
 
+    /// Unregister interest of a pending task in a stream, if any.
+    fn unregister(self: &Arc<Self>, stream: &Option<LocalStreamId>) {
+        self.pending.lock().remove(stream);
+    }
+
     /// Wakes the last task that has previously registered interest
     /// in reading data from a particular stream (or any stream).
     ///
@@ -731,3 +756,4 @@ impl ArcWake for NotifierOpen {
 /// to buffer. If this limit is exceeded, the multiplexed stream is
 /// considered unhealthy and terminates with an error.
 const MAX_PENDING_FRAMES: usize = 1000;
+
