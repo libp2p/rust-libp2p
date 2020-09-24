@@ -21,7 +21,7 @@
 use libp2p_core::Endpoint;
 use futures_codec::{Decoder, Encoder};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::mem;
+use std::{fmt, mem};
 use bytes::{BufMut, Bytes, BytesMut};
 use unsigned_varint::{codec, encode};
 
@@ -50,6 +50,15 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 pub struct LocalStreamId {
     num: u32,
     role: Endpoint,
+}
+
+impl fmt::Display for LocalStreamId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.role {
+            Endpoint::Dialer => write!(f, "({}/initiator)", self.num),
+            Endpoint::Listener => write!(f, "({}/receiver)", self.num),
+        }
+    }
 }
 
 /// A unique identifier used by the remote node for a substream.
