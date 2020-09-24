@@ -23,9 +23,7 @@ use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
-use pnet::datalink;
-use pnet::ipnetwork::IpNetwork;
-use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
+use std::{convert::TryFrom as _, fmt, io, net::IpAddr, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -180,7 +178,7 @@ impl $service_name {
 
         socket.set_multicast_loop_v4(true)?;
         socket.set_multicast_ttl_v4(255)?;
-        let interfaces = get_interface_addresses().collect();
+        let interfaces = get_interface_addresses()?.collect();
         // Join multicast on all avaliable interfaces:
         for &addr in &interfaces {
             socket.join_multicast_v4(From::from([224, 0, 0, 251]), addr)?;
@@ -372,19 +370,17 @@ fn set_multicast_if_v4_tokio(socket: &tokio::net::UdpSocket, interface: &Ipv4Add
 
 
 /// Get IPv4 addresses of all external network interfaces.
-fn get_interface_addresses() -> impl Iterator<Item = Ipv4Addr> {
-    datalink::interfaces()
+fn get_interface_addresses() -> io::Result<impl Iterator<Item = Ipv4Addr>> {
+    Ok(if_addrs::get_if_addrs()?
         .into_iter()
-        .filter(|i| i.is_up() && !i.is_loopback())
+        .filter(|i| !i.is_loopback())
         .filter_map(|i| {
-            i.ips
-                .into_iter()
-                .filter_map(|n| match n {
-                    IpNetwork::V4(n4) => Some(n4.ip()),
-                    _ => None,
-                })
-                .next() // Simply get the first valid IPv4.
+            match i.ip() {
+                IpAddr::V4(addr) => Some(addr),
+                _ => None,
+            }
         })
+      )
 }
 
 /// A valid mDNS packet received by the service.
@@ -716,7 +712,7 @@ mod tests {
         // properties.
         #[test]
         fn respect_query_interval() {
-            let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
+            let own_ips: Vec<std::net::IpAddr> = if_addrs::get_if_addrs().unwrap()
                 .into_iter()
                 .map(|i| i.addr.ip())
                 .collect();
