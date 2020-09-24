@@ -39,7 +39,7 @@ lazy_static! {
 }
 
 macro_rules! codegen {
-    ($feature_name:expr, $service_name:ident, $udp_socket:ty, $udp_socket_from_std:tt) => {
+    ($feature_name:expr, $service_name:ident, $udp_socket:ty, $udp_socket_from_std:tt, $set_multicast_if_v4:tt) => {
 
 /// A running service that discovers libp2p peers and responds to other libp2p peers' queries on
 /// the local network.
@@ -231,7 +231,7 @@ impl $service_name {
             self.query_send_buffers = Vec::new();
 
             for interface in &self.interfaces {
-                set_multicast_if_v4(&self.socket, interface)
+                $set_multicast_if_v4(&self.socket, interface)
                     .expect("set_multicast_if_v4 should work");
                 // Flush the send buffer of the main socket.
                 for to_send in &send_buffers {
@@ -310,13 +310,22 @@ impl fmt::Debug for $service_name {
 };
 }
 
-// Hack to make set_multicast_if_v4 available on asynchronous sockets:
+#[cfg(feature = "async-std")]
+codegen!("async-std", MdnsService, async_std::net::UdpSocket, (|socket| Ok::<_, std::io::Error>(async_std::net::UdpSocket::from(socket))), set_multicast_if_v4);
+
+#[cfg(feature = "tokio")]
+codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket| tokio::net::UdpSocket::from_std(socket)), set_multicast_if_v4_tokio);
+
+// Make set_multicast_if_v4 available on asynchronous sockets:
 #[cfg(feature = "async-std")]
 fn set_multicast_if_v4(socket: &async_std::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
         use std::net::UdpSocket;
         use net2::UdpSocketExt;
+        #[cfg(not(windows))]
         use async_std::os::unix::io::AsRawFd;
+        #[cfg(not(windows))]
         use std::os::unix::io::IntoRawFd;
+        #[cfg(not(windows))]
         use std::os::unix::io::FromRawFd;
         // Temporary unsafe double ownership:
         #[cfg(windows)]
@@ -333,27 +342,33 @@ fn set_multicast_if_v4(socket: &async_std::net::UdpSocket, interface: &Ipv4Addr)
         std_sock.into_raw_fd();
         r
 }
-#[cfg(feature = "async-std")]
-codegen!("async-std", MdnsService, async_std::net::UdpSocket, (|socket| Ok::<_, std::io::Error>(async_std::net::UdpSocket::from(socket))));
 
-// Hack to make set_multicast_if_v4 available on asynchronous sockets:
+// Make set_multicast_if_v4 available on asynchronous sockets:
 #[cfg(feature = "tokio")]
-fn set_multicast_if_v4(socket: tokio::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
+fn set_multicast_if_v4_tokio(socket: &tokio::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
         use std::net::UdpSocket;
         use net2::UdpSocketExt;
+        #[cfg(not(windows))]
+        use std::os::unix::io::AsRawFd;
+        #[cfg(not(windows))]
+        use std::os::unix::io::IntoRawFd;
+        #[cfg(not(windows))]
+        use std::os::unix::io::FromRawFd;
         // Temporary unsafe double ownership:
         #[cfg(windows)]
-        let std_sock = UdpSocket::from_raw_socket(socket.as_raw_socket());
-        #[cfg(!windows)]
-        let std_sock = UdpSocket::from_raw_fd(socket.as_raw_fd());
+        let std_sock: UdpSocket = unsafe {
+            FromRawSocket::from_raw_socket(socket.as_raw_socket())
+        };
+        #[cfg(not(windows))]
+        let std_sock: UdpSocket = unsafe {
+            FromRawFd::from_raw_fd(socket.as_raw_fd())
+        };
         // Don't use ? here, we need to drop the ownership in the end!
         let r = std_sock.set_multicast_if_v4(interface);
-        // Drop ownership again!
-        std_sock.to_raw_fd();
+        // Drop ownership again, thus avoid double free!
+        std_sock.into_raw_fd();
         r
 }
-#[cfg(feature = "tokio")]
-codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket| tokio::net::UdpSocket::from_std(socket)));
 
 
 /// Get IPv4 addresses of all external network interfaces.
