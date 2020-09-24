@@ -64,7 +64,7 @@ futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.22.2", path = "core" }
 libp2p-core-derive = { version = "0.20.2", path = "misc/core-derive" }
-libp2p-floodsub = { version = "0.22.0", path = "protocols/floodsub", optional = true }
+libp2p-floodsub = { version = "0.23.0", path = "protocols/floodsub", optional = true }
 libp2p-gossipsub = { version = "0.22.1", path = "./protocols/gossipsub", optional = true }
 libp2p-identify = { version = "0.22.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.23.1", path = "protocols/kad", optional = true }
