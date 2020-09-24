@@ -149,7 +149,7 @@ where
                 self.pending_frames = VecDeque::new();
                 // We do not support read-after-close on the underlying
                 // I/O stream, hence clearing the buffer and substreams.
-                self.buffer = Vec::new();
+                self.buffer = Default::default();
                 self.open_substreams = Default::default();
                 self.status = Status::Closed;
                 Poll::Ready(Ok(()))
