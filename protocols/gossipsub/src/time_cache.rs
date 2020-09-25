@@ -169,6 +169,10 @@ where
         self.map.clear();
         self.list.clear();
     }
+
+    pub fn contains_key(&mut self, key: &Key) -> bool {
+        self.map.contains_key(key)
+    }
 }
 
 pub struct DuplicateCache<Key>(TimeCache<Key, ()>);
@@ -192,6 +196,10 @@ where
         } else {
             false
         }
+    }
+
+    pub fn contains(&mut self, key: &Key) -> bool {
+        self.0.contains_key(key)
     }
 }
 

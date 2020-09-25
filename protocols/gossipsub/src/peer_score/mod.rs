@@ -52,6 +52,8 @@ pub(crate) struct PeerScore {
     deliveries: TimeCache<MessageId, DeliveryRecord>,
     /// The message id function.
     msg_id: fn(&GossipsubMessage) -> MessageId,
+    /// callback for monitoring message delivery times
+    message_delivery_time_callback: Option<fn(&PeerId, &TopicHash, f64)>,
 }
 
 /// General statistics for a given gossipsub peer.
@@ -170,7 +172,6 @@ impl Default for TopicStats {
 struct DeliveryRecord {
     status: DeliveryStatus,
     first_seen: Instant,
-    validated: Instant,
     peers: HashSet<PeerId>,
 }
 
@@ -178,8 +179,8 @@ struct DeliveryRecord {
 enum DeliveryStatus {
     /// Don't know (yet) if the message is valid.
     Unknown,
-    /// The message is valid.
-    Valid,
+    /// The message is valid together with the validated time.
+    Valid(Instant),
     /// The message is invalid.
     Invalid,
     /// Instructed by the validator to ignore the message.
@@ -191,7 +192,6 @@ impl Default for DeliveryRecord {
         DeliveryRecord {
             status: DeliveryStatus::Unknown,
             first_seen: Instant::now(),
-            validated: Instant::now(),
             peers: HashSet::new(),
         }
     }
@@ -200,12 +200,20 @@ impl Default for DeliveryRecord {
 impl PeerScore {
     /// Creates a new `PeerScore` using a given set of peer scoring parameters.
     pub fn new(params: PeerScoreParams, msg_id: fn(&GossipsubMessage) -> MessageId) -> Self {
+        Self::new_with_message_delivery_time_callback(params, msg_id, None)
+    }
+
+    pub fn new_with_message_delivery_time_callback(params: PeerScoreParams,
+                                                   msg_id: fn(&GossipsubMessage) -> MessageId,
+                                                   callback: Option<fn(&PeerId, &TopicHash, f64)>)
+        -> Self {
         PeerScore {
             params,
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
             deliveries: TimeCache::new(Duration::from_secs(TIME_CACHE_DURATION)),
             msg_id,
+            message_delivery_time_callback: callback,
         }
     }
 
@@ -322,8 +330,11 @@ impl PeerScore {
         }
 
         // P7: behavioural pattern penalty
-        let p7 = peer_stats.behaviour_penalty * peer_stats.behaviour_penalty;
-        score += p7 * self.params.behaviour_penalty_weight;
+        if peer_stats.behaviour_penalty > self.params.behaviour_penalty_threshold {
+            let excess = peer_stats.behaviour_penalty - self.params.behaviour_penalty_threshold;
+            let p7 = excess * excess;
+            score += p7 * self.params.behaviour_penalty_weight;
+        }
         score
     }
 
@@ -485,6 +496,7 @@ impl PeerScore {
                 }
 
                 topic_stats.mesh_status = MeshStatus::InActive;
+                topic_stats.mesh_message_deliveries_active = false;
             }
 
             peer_stats.status = ConnectionStatus::Disconnected {
@@ -525,6 +537,7 @@ impl PeerScore {
                     topic_stats.mesh_failure_penalty += deficit * deficit;
                 }
                 topic_stats.mesh_message_deliveries_active = false;
+                topic_stats.mesh_status = MeshStatus::InActive;
             }
         }
     }
@@ -534,6 +547,19 @@ impl PeerScore {
         self.deliveries
             .entry((self.msg_id)(_msg))
             .or_insert_with(|| DeliveryRecord::default());
+
+        if let Some(callback) = self.message_delivery_time_callback {
+            for topic in &_msg.topics {
+                if self
+                    .peer_stats
+                    .get(_from)
+                    .and_then(|s| s.topics.get(topic))
+                    .map(|ts| ts.in_mesh())
+                    .unwrap_or(false) {
+                    callback(_from, topic, 0.0);
+                }
+            }
+        }
     }
 
     pub fn deliver_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
@@ -551,8 +577,7 @@ impl PeerScore {
         }
 
         // mark the message as valid and reward mesh peers that have already forwarded it to us
-        record.status = DeliveryStatus::Valid;
-        record.validated = Instant::now();
+        record.status = DeliveryStatus::Valid(Instant::now());
         for peer in record.peers.iter().cloned().collect::<Vec<_>>() {
             // this check is to make sure a peer can't send us a message twice and get a double
             // count if it is a first delivery
@@ -619,16 +644,33 @@ impl PeerScore {
             return;
         }
 
+        if let Some(callback) = self.message_delivery_time_callback {
+            let time = if let DeliveryStatus::Valid(validated) = record.status {
+                validated.elapsed().as_secs_f64()
+            } else {
+                0.0
+            };
+            for topic in &msg.topics {
+                if self
+                    .peer_stats
+                    .get(from)
+                    .and_then(|s| s.topics.get(topic))
+                    .map(|ts| ts.in_mesh())
+                    .unwrap_or(false) {
+                    callback(from, topic, time);
+                }
+            }
+        }
+
         match record.status {
             DeliveryStatus::Unknown => {
                 // the message is being validated; track the peer delivery and wait for
                 // the Deliver/Reject notification.
                 record.peers.insert(from.clone());
             }
-            DeliveryStatus::Valid => {
+            DeliveryStatus::Valid(validated) => {
                 // mark the peer delivery time to only count a duplicate delivery once.
                 record.peers.insert(from.clone());
-                let validated = record.validated.clone();
                 self.mark_duplicate_message_delivery(from, msg, Some(validated));
             }
             DeliveryStatus::Invalid => {
@@ -654,7 +696,37 @@ impl PeerScore {
 
     /// Sets scoring parameters for a topic.
     pub fn set_topic_params(&mut self, topic_hash: TopicHash, params: TopicScoreParams) {
-        self.params.topics.insert(topic_hash, params);
+        use hash_map::Entry::*;
+        match self.params.topics.entry(topic_hash.clone()) {
+            Occupied(mut entry) => {
+                let first_message_deliveries_cap = params.first_message_deliveries_cap;
+                let mesh_message_delivieries_cap = params.mesh_message_deliveries_cap;
+                let old_params = entry.insert(params);
+
+                if old_params.first_message_deliveries_cap > first_message_deliveries_cap {
+                    for (_, stats) in &mut self.peer_stats {
+                        if let Some(tstats) = stats.topics.get_mut(&topic_hash) {
+                            if tstats.first_message_deliveries > first_message_deliveries_cap {
+                                tstats.first_message_deliveries = first_message_deliveries_cap;
+                            }
+                        }
+                    }
+                }
+
+                if old_params.mesh_message_deliveries_cap > mesh_message_delivieries_cap {
+                    for (_, stats) in &mut self.peer_stats {
+                        if let Some(tstats) = stats.topics.get_mut(&topic_hash) {
+                            if tstats.mesh_message_deliveries > mesh_message_delivieries_cap {
+                                tstats.mesh_message_deliveries = mesh_message_delivieries_cap;
+                            }
+                        }
+                    }
+                }
+            },
+            Vacant(entry) => {
+                entry.insert(params);
+            }
+        }
     }
 
     /// Increments the "invalid message deliveries" counter for all scored topics the message
@@ -769,6 +841,14 @@ impl PeerScore {
                 }
             }
         }
+    }
+
+    pub(crate) fn mesh_message_deliveries(&self, peer: &PeerId, topic: &TopicHash) -> Option<f64> {
+        self
+            .peer_stats
+            .get(peer)
+            .and_then(|s| s.topics.get(topic))
+            .map(|t| t.mesh_message_deliveries)
     }
 }
 

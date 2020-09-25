@@ -73,6 +73,7 @@ impl MessageCache {
     /// Returns the message if it already exists.
     pub fn put(&mut self, msg: GossipsubMessage) -> Option<GossipsubMessage> {
         let message_id = (self.msg_id)(&msg);
+        debug!("Put message {:?} in mcache", &message_id);
         let cache_entry = CacheEntry {
             mid: message_id.clone(),
             topics: msg.topics.clone(),
@@ -163,6 +164,7 @@ impl MessageCache {
                     );
                 }
             }
+            debug!("Remove message from the cache: {}", &entry.mid);
 
             self.iwant_counts.remove(&entry.mid);
         }

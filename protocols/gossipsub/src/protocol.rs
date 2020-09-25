@@ -375,7 +375,9 @@ impl Decoder for GossipsubCodec {
             // ensure the sequence number is a u64
             let sequence_number = if verify_sequence_no {
                 if let Some(seq_no) = message.seqno {
-                    if seq_no.len() != 8 {
+                    if seq_no.len() == 0 {
+                        None
+                    } else if seq_no.len() != 8 {
                         debug!(
                             "Invalid sequence number length for received message. SeqNo: {:?} Size: {}",
                             seq_no,
@@ -427,27 +429,35 @@ impl Decoder for GossipsubCodec {
 
             // Verify the message source if required
             let source = if verify_source {
-                match PeerId::from_bytes(message.from.unwrap_or_default()) {
-                    Ok(peer_id) => Some(peer_id), // valid peer id
-                    Err(_) => {
-                        // invalid peer id, add to invalid messages
-                        debug!("Message source has an invalid PeerId");
-                        let message = GossipsubMessage {
-                            source: None, // don't bother inform the application
-                            data: message.data.unwrap_or_default(),
-                            sequence_number,
-                            topics: message
-                                .topic_ids
-                                .into_iter()
-                                .map(TopicHash::from_raw)
-                                .collect(),
-                            signature: message.signature, // don't inform the application
-                            key: message.key,
-                            validated: false,
-                        };
-                        invalid_messages.push((message, ValidationError::InvalidPeerId));
-                        continue;
+                if let Some(bytes) = message.from {
+                    if bytes.len() > 0 {
+                        match PeerId::from_bytes(bytes) {
+                            Ok(peer_id) => Some(peer_id), // valid peer id
+                            Err(_) => {
+                                // invalid peer id, add to invalid messages
+                                debug!("Message source has an invalid PeerId");
+                                let message = GossipsubMessage {
+                                    source: None, // don't bother inform the application
+                                    data: message.data.unwrap_or_default(),
+                                    sequence_number,
+                                    topics: message
+                                        .topic_ids
+                                        .into_iter()
+                                        .map(TopicHash::from_raw)
+                                        .collect(),
+                                    signature: message.signature, // don't inform the application
+                                    key: message.key,
+                                    validated: false,
+                                };
+                                invalid_messages.push((message, ValidationError::InvalidPeerId));
+                                continue;
+                            }
+                        }
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
             } else {
                 None

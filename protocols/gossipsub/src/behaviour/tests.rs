@@ -2732,8 +2732,15 @@ mod tests {
             },
         );
 
-        //no events got processed
-        assert!(gs.events.is_empty());
+        //only the subscription event gets processed, the rest is dropped
+        assert_eq!(gs.events.len(), 1);
+        assert!(match &gs.events[0] {
+            NetworkBehaviourAction::GenerateEvent(event) => match event {
+                GossipsubEvent::Subscribed { .. } => true,
+                _ => false
+            }
+            _ => false
+        });
 
         let control_action = GossipsubControlAction::IHave {
             topic_hash: topics[0].clone(),
@@ -2755,7 +2762,7 @@ mod tests {
         );
 
         //events got processed
-        assert!(!gs.events.is_empty());
+        assert!(gs.events.len() > 1);
     }
 
     #[test]
@@ -4728,7 +4735,7 @@ mod tests {
         );
 
         assert_eq!(
-            gs.peers(&TopicHash::from_raw("topic1"))
+            gs.mesh_peers(&TopicHash::from_raw("topic1"))
                 .cloned()
                 .collect::<BTreeSet<_>>(),
             peers,
@@ -4736,7 +4743,7 @@ mod tests {
         );
 
         assert_eq!(
-            gs.all_peers().cloned().collect::<BTreeSet<_>>(),
+            gs.all_mesh_peers().cloned().collect::<BTreeSet<_>>(),
             peers,
             "Expected all_peers to contain all peers."
         );

@@ -132,9 +132,11 @@ pub struct PeerScoreParams {
     ///  - attempting to re-graft before the prune backoff time has elapsed.
     ///  - not following up in IWANT requests for messages advertised with IHAVE.
     ///
-    ///  The value of the parameter is the square of the counter, which decays with  BehaviourPenaltyDecay.
+    ///  The value of the parameter is the square of the counter over the threshold, which decays
+    ///  with BehaviourPenaltyDecay.
     ///  The weight of the parameter MUST be negative (or zero to disable).
     pub behaviour_penalty_weight: f64,
+    pub behaviour_penalty_threshold: f64,
     pub behaviour_penalty_decay: f64,
 
     /// The decay interval for parameter counters.
@@ -157,6 +159,7 @@ impl Default for PeerScoreParams {
             ip_colocation_factor_threshold: 10.0,
             ip_colocation_factor_whitelist: HashSet::new(),
             behaviour_penalty_weight: -10.0,
+            behaviour_penalty_threshold: 0.0,
             behaviour_penalty_decay: 0.2,
             decay_interval: Duration::from_secs(DEFAULT_DECAY_INTERVAL),
             decay_to_zero: DEFAULT_DECAY_TO_ZERO,
@@ -202,6 +205,10 @@ impl PeerScoreParams {
             && (self.behaviour_penalty_decay <= 0f64 || self.behaviour_penalty_decay >= 1f64)
         {
             return Err("invalid behaviour_penalty_decay; must be between 0 and 1".into());
+        }
+
+        if self.behaviour_penalty_threshold < 0f64 {
+            return Err("invalid behaviour_penalty_threshold; must be >= 0".into());
         }
 
         // check the decay parameters
