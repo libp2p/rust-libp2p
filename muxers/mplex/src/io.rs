@@ -42,8 +42,9 @@ pub struct Multiplexed<C> {
     config: MplexConfig,
     /// Buffer of received frames that have not yet been consumed.
     buffer: Vec<Frame<RemoteStreamId>>,
-    /// Whether a flush is pending before reading frames can proceed.
-    pending_flush: bool,
+    /// Whether a flush is pending due to one or more new outbound
+    /// `Open` frames, before reading frames can proceed.
+    pending_flush_open: bool,
     /// Pending frames to send at the next opportunity.
     ///
     /// An opportunity for sending pending frames is every flush
@@ -89,7 +90,7 @@ where
             io: Framed::new(io, Codec::new()).fuse(),
             buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
             open_substreams: Default::default(),
-            pending_flush: false,
+            pending_flush_open: false,
             pending_frames: Default::default(),
             next_outbound_stream_id: LocalStreamId::dialer(0),
             notifier_read: Arc::new(NotifierRead {
@@ -120,7 +121,7 @@ where
         match ready!(self.io.poll_flush_unpin(&mut Context::from_waker(&waker))) {
             Err(e) => Poll::Ready(self.on_error(e)),
             Ok(()) => {
-                self.pending_flush = false;
+                self.pending_flush_open = false;
                 Poll::Ready(Ok(()))
             }
         }
@@ -231,7 +232,7 @@ where
                         self.open_substreams.insert(stream_id, SubstreamState::Open);
                         // The flush is delayed and the `Open` frame may be sent
                         // together with other frames in the same transport packet.
-                        self.pending_flush = true;
+                        self.pending_flush_open = true;
                         Poll::Ready(Ok(stream_id))
                     }
                     Err(e) => Poll::Ready(self.on_error(e)),
@@ -477,10 +478,10 @@ where
         }
 
         // Perform any pending flush before reading.
-        if self.pending_flush {
+        if self.pending_flush_open {
             trace!("Executing pending flush.");
             ready!(self.poll_flush(cx))?;
-            debug_assert!(!self.pending_flush);
+            debug_assert!(!self.pending_flush_open);
         }
 
         // Check if the inbound frame buffer is full.
