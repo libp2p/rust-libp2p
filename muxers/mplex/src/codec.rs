@@ -128,23 +128,6 @@ impl Frame<RemoteStreamId> {
     pub fn local_id(&self) -> LocalStreamId {
         self.remote_id().into_local()
     }
-
-    /// Returns true if this is a `Data` frame.
-    pub fn is_data(&self) -> bool {
-        match self {
-            Frame::Data { .. } => true,
-            _ => false,
-        }
-    }
-
-    /// Returns true if this is an `Open` frame.
-    pub fn is_open(&self) -> bool {
-        if let Frame::Open { .. } = self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 pub struct Codec {
