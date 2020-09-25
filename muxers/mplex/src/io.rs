@@ -69,7 +69,7 @@ pub struct Multiplexed<C> {
 #[derive(Debug)]
 enum Status {
     /// The stream is considered open and healthy.
-    Ok,
+    Open,
     /// The stream has been actively closed.
     Closed,
     /// The stream has encountered a fatal error.
@@ -85,7 +85,7 @@ where
         let max_buffer_len = config.max_buffer_len;
         Multiplexed {
             config,
-            status: Status::Ok,
+            status: Status::Open,
             io: Framed::new(io, Codec::new()).fuse(),
             buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
             open_substreams: Default::default(),
@@ -109,7 +109,7 @@ where
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
-            Status::Ok => {}
+            Status::Open => {}
         }
 
         // Send any pending frames.
@@ -135,7 +135,7 @@ where
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
-            Status::Ok => {}
+            Status::Open => {}
         }
 
         // Note: We do not make the effort to send pending `Reset` frames
@@ -159,7 +159,7 @@ where
 
     /// Waits for a new inbound substream, returning the corresponding `LocalStreamId`.
     pub fn poll_next_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
-        self.guard_ok()?;
+        self.guard_open()?;
 
         // Try to read from the buffer first.
         if let Some((pos, stream_id)) = self.buffer.iter()
@@ -211,7 +211,7 @@ where
 
     /// Creates a new (outbound) substream, returning the allocated stream ID.
     pub fn poll_open_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
-        self.guard_ok()?;
+        self.guard_open()?;
 
         // Check the stream limits.
         if self.open_substreams.len() >= self.config.max_substreams {
@@ -267,7 +267,7 @@ where
         // Check if the underlying stream is ok.
         match self.status {
             Status::Closed | Status::Err(_) => return,
-            Status::Ok => {},
+            Status::Open => {},
         }
 
         // Remove any frames still buffered for that stream. The stream
@@ -317,7 +317,7 @@ where
     pub fn poll_write_stream(&mut self, cx: &mut Context<'_>, id: LocalStreamId, buf: &[u8])
         -> Poll<io::Result<usize>>
     {
-        self.guard_ok()?;
+        self.guard_open()?;
 
         // Check if the stream is open for writing.
         match self.open_substreams.get(&id) {
@@ -342,7 +342,7 @@ where
     pub fn poll_read_stream(&mut self, cx: &mut Context<'_>, id: LocalStreamId)
         -> Poll<io::Result<Option<Bytes>>>
     {
-        self.guard_ok()?;
+        self.guard_open()?;
 
         // Try to read from the buffer first.
         if let Some((pos, data)) = self.buffer.iter()
@@ -403,7 +403,7 @@ where
     pub fn poll_flush_stream(&mut self, cx: &mut Context<'_>, id: LocalStreamId)
         -> Poll<io::Result<()>>
     {
-        self.guard_ok()?;
+        self.guard_open()?;
 
         ready!(self.poll_flush(cx))?;
         trace!("Flushed substream {}", id);
@@ -417,7 +417,7 @@ where
     pub fn poll_close_stream(&mut self, cx: &mut Context<'_>, id: LocalStreamId)
         -> Poll<io::Result<()>>
     {
-        self.guard_ok()?;
+        self.guard_open()?;
 
         match self.open_substreams.get(&id) {
             None | Some(SubstreamState::SendClosed) => Poll::Ready(Ok(())),
@@ -643,11 +643,11 @@ where
 
     /// Checks that the multiplexed stream has status `Ok`,
     /// i.e. is not closed and did not encounter a fatal error.
-    fn guard_ok(&self) -> io::Result<()> {
+    fn guard_open(&self) -> io::Result<()> {
         match &self.status {
             Status::Closed => Err(io::Error::new(io::ErrorKind::Other, "Connection is closed")),
             Status::Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
-            Status::Ok => Ok(())
+            Status::Open => Ok(())
         }
     }
 
