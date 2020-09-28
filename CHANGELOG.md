@@ -26,7 +26,8 @@
 # Version 0.29.0 [unreleased]
 
 - Update `libp2p-core`, `libp2p-gossipsub`, `libp2p-mplex`, `libp2p-noise`,
-  `libp2p-plaintext`, `libp2p-websocket` and `parity-multiaddr`.
+  `libp2p-plaintext`, `libp2p-request-response`, `libp2p-websocket` and
+  `parity-multiaddr`.
 
 # Version 0.28.1 [2020-09-10]
 
