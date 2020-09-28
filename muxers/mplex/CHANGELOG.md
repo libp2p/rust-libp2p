@@ -1,4 +1,20 @@
-# 0.22.1 [unreleased]
+# 0.23.0 [unreleased]
+
+- Address a potential stall when reading from substreams.
+
+- Send a `Reset` or `Close` to the remote when a substream is dropped,
+  as appropriate for the current state of the substream,
+  removing that substream from the tracked open substreams,
+  to avoid artificially running into substream limits.
+
+- Change the semantics of the `max_substreams` configuration. Now,
+  outbound substream attempts beyond the configured limit are delayed,
+  with a task wakeup once an existing substream closes, i.e. the limit
+  results in back-pressure for new outbound substreams. New inbound
+  substreams beyond the limit are immediately answered with a `Reset`.
+  If too many (by some internal threshold) pending frames accumulate,
+  e.g. as a result of an aggressive number of inbound substreams being
+  opened beyond the configured limit, the connection is closed ("DoS protection").
 
 - Update dependencies.
 
