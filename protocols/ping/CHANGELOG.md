@@ -1,3 +1,10 @@
+# 0.22.1 [unreleased]
+
+- Ensure the outbound ping is flushed before awaiting
+  the response. Otherwise the behaviour depends on
+  implementation details of the stream muxer used.
+  The current behaviour resulted in stalls with Mplex.
+
 # 0.22.0 [2020-09-09]
 
 - Update `libp2p-swarm` and `libp2p-core`.

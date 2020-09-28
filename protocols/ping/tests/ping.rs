@@ -28,25 +28,28 @@ use libp2p_core::{
     transport::{Transport, boxed::Boxed},
     upgrade
 };
+use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping::*;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
+use libp2p_yamux as yamux;
 use futures::{prelude::*, channel::mpsc};
 use quickcheck::*;
+use rand::prelude::*;
 use std::{io, num::NonZeroU8, time::Duration};
 
 #[test]
 fn ping_pong() {
-    fn prop(count: NonZeroU8) {
+    fn prop(count: NonZeroU8, muxer: MuxerChoice) {
         let cfg = PingConfig::new()
             .with_keep_alive(true)
             .with_interval(Duration::from_millis(10));
 
-        let (peer1_id, trans) = mk_transport();
+        let (peer1_id, trans) = mk_transport(muxer);
         let mut swarm1 = Swarm::new(trans, Ping::new(cfg.clone()), peer1_id.clone());
 
-        let (peer2_id, trans) = mk_transport();
+        let (peer2_id, trans) = mk_transport(muxer);
         let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
 
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
@@ -103,25 +106,24 @@ fn ping_pong() {
         assert!(rtt < Duration::from_millis(50));
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_))
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_,_))
 }
-
 
 /// Tests that the connection is closed upon a configurable
 /// number of consecutive ping failures.
 #[test]
 fn max_failures() {
-    fn prop(max_failures: NonZeroU8) {
+    fn prop(max_failures: NonZeroU8, muxer: MuxerChoice) {
         let cfg = PingConfig::new()
             .with_keep_alive(true)
             .with_interval(Duration::from_millis(10))
             .with_timeout(Duration::from_millis(0))
             .with_max_failures(max_failures.into());
 
-        let (peer1_id, trans) = mk_transport();
+        let (peer1_id, trans) = mk_transport(muxer);
         let mut swarm1 = Swarm::new(trans, Ping::new(cfg.clone()), peer1_id.clone());
 
-        let (peer2_id, trans) = mk_transport();
+        let (peer2_id, trans) = mk_transport(muxer);
         let mut swarm2 = Swarm::new(trans, Ping::new(cfg), peer2_id.clone());
 
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
@@ -188,11 +190,11 @@ fn max_failures() {
         assert_eq!(u8::max(count1, count2), max_failures.get() - 1);
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_))
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_,_))
 }
 
 
-fn mk_transport() -> (
+fn mk_transport(muxer: MuxerChoice) -> (
     PeerId,
     Boxed<
         (PeerId, StreamMuxerBox),
@@ -202,13 +204,32 @@ fn mk_transport() -> (
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
+
     let transport = TcpConfig::new()
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(libp2p_yamux::Config::default())
+        .multiplex(match muxer {
+            MuxerChoice::Yamux =>
+                upgrade::EitherUpgrade::A(yamux::Config::default()),
+            MuxerChoice::Mplex =>
+                upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
+        })
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
         .boxed();
+
     (peer_id, transport)
+}
+
+#[derive(Debug, Copy, Clone)]
+enum MuxerChoice {
+    Mplex,
+    Yamux,
+}
+
+impl Arbitrary for MuxerChoice {
+    fn arbitrary<G: Gen>(g: &mut G) -> MuxerChoice {
+        *[MuxerChoice::Mplex, MuxerChoice::Yamux].choose(g).unwrap()
+    }
 }
