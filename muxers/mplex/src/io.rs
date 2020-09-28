@@ -163,7 +163,7 @@ where
         self.guard_open()?;
 
         // Try to read from the buffer first.
-        if let Some((pos, stream_id)) = self.buffer.iter()
+        while let Some((pos, stream_id)) = self.buffer.iter()
             .enumerate()
             .find_map(|(pos, frame)| match frame {
                 Frame::Open { stream_id } => Some((pos, stream_id.into_local())),
@@ -682,36 +682,6 @@ struct NotifierRead {
     pending: Mutex<FnvHashMap<Option<LocalStreamId>, Waker>>,
 }
 
-struct NotifierWrite {
-    /// List of wakers to wake when write operations on the
-    /// underlying I/O stream can proceed.
-    pending: Mutex<Vec<Waker>>,
-}
-
-impl NotifierWrite {
-    /// Registers interest of a task in writing to some substream.
-    ///
-    /// The returned waker should be passed to an I/O write operation
-    /// that schedules a wakeup, if necessary.
-    #[must_use]
-    fn register<'a>(self: &'a Arc<Self>, waker: &Waker) -> WakerRef<'a> {
-        let mut pending = self.pending.lock();
-        if pending.iter().all(|w| !w.will_wake(waker)) {
-            pending.push(waker.clone());
-        }
-        waker_ref(self)
-    }
-}
-
-impl ArcWake for NotifierWrite {
-    fn wake_by_ref(this: &Arc<Self>) {
-        let wakers = mem::replace(&mut *this.pending.lock(), Default::default());
-        for waker in wakers {
-            waker.wake();
-        }
-    }
-}
-
 impl NotifierRead {
     /// Registers interest of a task in reading from a particular
     /// stream, or any stream if `stream` is `None`.
@@ -753,6 +723,36 @@ impl ArcWake for NotifierRead {
     fn wake_by_ref(this: &Arc<Self>) {
         let wakers = mem::replace(&mut *this.pending.lock(), Default::default());
         for (_, waker) in wakers {
+            waker.wake();
+        }
+    }
+}
+
+struct NotifierWrite {
+    /// List of wakers to wake when write operations on the
+    /// underlying I/O stream can proceed.
+    pending: Mutex<Vec<Waker>>,
+}
+
+impl NotifierWrite {
+    /// Registers interest of a task in writing to some substream.
+    ///
+    /// The returned waker should be passed to an I/O write operation
+    /// that schedules a wakeup, if necessary.
+    #[must_use]
+    fn register<'a>(self: &'a Arc<Self>, waker: &Waker) -> WakerRef<'a> {
+        let mut pending = self.pending.lock();
+        if pending.iter().all(|w| !w.will_wake(waker)) {
+            pending.push(waker.clone());
+        }
+        waker_ref(self)
+    }
+}
+
+impl ArcWake for NotifierWrite {
+    fn wake_by_ref(this: &Arc<Self>) {
+        let wakers = mem::replace(&mut *this.pending.lock(), Default::default());
+        for waker in wakers {
             waker.wake();
         }
     }
