@@ -114,19 +114,13 @@ pub enum Frame<T> {
 }
 
 impl Frame<RemoteStreamId> {
-    fn remote_id(&self) -> RemoteStreamId {
+    pub fn remote_id(&self) -> RemoteStreamId {
         match *self {
             Frame::Open { stream_id } => stream_id,
             Frame::Data { stream_id, .. } => stream_id,
             Frame::Close { stream_id, .. } => stream_id,
             Frame::Reset { stream_id, .. } => stream_id,
         }
-    }
-
-    /// Gets the `LocalStreamId` corresponding to the `RemoteStreamId`
-    /// received with this frame.
-    pub fn local_id(&self) -> LocalStreamId {
-        self.remote_id().into_local()
     }
 }
 

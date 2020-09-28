@@ -41,10 +41,14 @@ impl MplexConfig {
         Default::default()
     }
 
-    /// Sets the maximum number of simultaneously open substreams.
+    /// Sets the maximum number of simultaneously used substreams.
+    ///
+    /// A substream is used as long as it has not been dropped,
+    /// even if it may already be closed or reset at the protocol
+    /// level.
     ///
     /// When the limit is reached, opening of outbound substreams
-    /// is delayed until another substream closes, whereas new
+    /// is delayed until another substream is dropped, whereas new
     /// inbound substreams are immediately answered with a `Reset`.
     /// If the number of inbound substreams that need to be reset
     /// accumulates too quickly (judged by internal bounds), the
@@ -84,9 +88,10 @@ impl MplexConfig {
 /// Behaviour when the maximum length of the buffer is reached.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MaxBufferBehaviour {
-    /// Produce an error on all the substreams.
-    CloseAll,
-    /// No new message will be read from the underlying connection if the buffer is full.
+    /// Reset the substream whose frame buffer overflowed.
+    ResetStream,
+    /// No new message can be read from any substream as long as the buffer
+    /// for a single substream is full.
     ///
     /// This can potentially introduce a deadlock if you are waiting for a message from a substream
     /// before processing the messages received on another substream.
@@ -98,7 +103,7 @@ impl Default for MplexConfig {
         MplexConfig {
             max_substreams: 128,
             max_buffer_len: 4096,
-            max_buffer_behaviour: MaxBufferBehaviour::CloseAll,
+            max_buffer_behaviour: MaxBufferBehaviour::ResetStream,
             split_send_size: 1024,
         }
     }
