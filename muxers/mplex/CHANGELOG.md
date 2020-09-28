@@ -2,8 +2,9 @@
 
 - Address a potential stall when reading from substreams.
 
-- Send a `Reset` to the remote when a substream is dropped
-  and remove that substream from the tracked open substreams,
+- Send a `Reset` or `Close` to the remote when a substream is dropped,
+  as appropriate for the current state of the substream,
+  removing that substream from the tracked open substreams,
   to avoid artificially running into substream limits.
 
 - Change the semantics of the `max_substreams` configuration. Now,
