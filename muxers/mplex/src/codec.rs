@@ -21,7 +21,7 @@
 use libp2p_core::Endpoint;
 use futures_codec::{Decoder, Encoder};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::mem;
+use std::{fmt, mem};
 use bytes::{BufMut, Bytes, BytesMut};
 use unsigned_varint::{codec, encode};
 
@@ -30,51 +30,103 @@ use unsigned_varint::{codec, encode};
 // send a 4 TB-long packet full of zeroes that we kill our process with an OOM error.
 pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 
-#[derive(Debug, Clone)]
-pub enum Elem {
-    Open { substream_id: u32 },
-    Data { substream_id: u32, endpoint: Endpoint, data: Bytes },
-    Close { substream_id: u32, endpoint: Endpoint },
-    Reset { substream_id: u32, endpoint: Endpoint },
+/// A unique identifier used by the local node for a substream.
+///
+/// `LocalStreamId`s are sent with frames to the remote, where
+/// they are received as `RemoteStreamId`s.
+///
+/// > **Note**: Streams are identified by a number and a role encoded as a flag
+/// > on each frame that is either odd (for receivers) or even (for initiators).
+/// > `Open` frames do not have a flag, but are sent unidirectionally. As a
+/// > consequence, we need to remember if a stream was initiated by us or remotely
+/// > and we store the information from our point of view as a `LocalStreamId`,
+/// > i.e. receiving an `Open` frame results in a local ID with role `Endpoint::Listener`,
+/// > whilst sending an `Open` frame results in a local ID with role `Endpoint::Dialer`.
+/// > Receiving a frame with a flag identifying the remote as a "receiver" means that
+/// > we initiated the stream, so the local ID has the role `Endpoint::Dialer`.
+/// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
+/// > the corresponding local ID has the role `Endpoint::Listener`.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct LocalStreamId {
+    num: u32,
+    role: Endpoint,
 }
 
-impl Elem {
-    /// Returns the ID of the substream of the message.
-    pub fn substream_id(&self) -> u32 {
+impl fmt::Display for LocalStreamId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.role {
+            Endpoint::Dialer => write!(f, "({}/initiator)", self.num),
+            Endpoint::Listener => write!(f, "({}/receiver)", self.num),
+        }
+    }
+}
+
+/// A unique identifier used by the remote node for a substream.
+///
+/// `RemoteStreamId`s are received with frames from the remote
+/// and mapped by the receiver to `LocalStreamId`s via
+/// [`RemoteStreamId::into_local()`].
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct RemoteStreamId {
+    num: u32,
+    role: Endpoint,
+}
+
+impl LocalStreamId {
+    pub fn dialer(num: u32) -> Self {
+        Self { num, role: Endpoint::Dialer }
+    }
+
+    pub fn next(self) -> Self {
+        Self {
+            num: self.num.checked_add(1).expect("Mplex substream ID overflowed"),
+            .. self
+        }
+    }
+}
+
+impl RemoteStreamId {
+    fn dialer(num: u32) -> Self {
+        Self { num, role: Endpoint::Dialer }
+    }
+
+    fn listener(num: u32) -> Self {
+        Self { num, role: Endpoint::Listener }
+    }
+
+    /// Converts this `RemoteStreamId` into the corresponding `LocalStreamId`
+    /// that identifies the same substream.
+    pub fn into_local(self) -> LocalStreamId {
+        LocalStreamId {
+            num: self.num,
+            role: !self.role,
+        }
+    }
+}
+
+/// An Mplex protocol frame.
+#[derive(Debug, Clone)]
+pub enum Frame<T> {
+    Open { stream_id: T },
+    Data { stream_id: T, data: Bytes },
+    Close { stream_id: T },
+    Reset { stream_id: T },
+}
+
+impl Frame<RemoteStreamId> {
+    fn remote_id(&self) -> RemoteStreamId {
         match *self {
-            Elem::Open { substream_id } => substream_id,
-            Elem::Data { substream_id, .. } => substream_id,
-            Elem::Close { substream_id, .. } => substream_id,
-            Elem::Reset { substream_id, .. } => substream_id,
+            Frame::Open { stream_id } => stream_id,
+            Frame::Data { stream_id, .. } => stream_id,
+            Frame::Close { stream_id, .. } => stream_id,
+            Frame::Reset { stream_id, .. } => stream_id,
         }
     }
 
-    pub fn endpoint(&self) -> Option<Endpoint> {
-        match *self {
-            Elem::Open { .. } => None,
-            Elem::Data { endpoint, .. } => Some(endpoint),
-            Elem::Close { endpoint, .. } => Some(endpoint),
-            Elem::Reset { endpoint, .. } => Some(endpoint)
-        }
-    }
-
-    /// Returns true if this message is `Close` or `Reset`.
-    #[inline]
-    pub fn is_close_or_reset_msg(&self) -> bool {
-        match self {
-            Elem::Close { .. } | Elem::Reset { .. } => true,
-            _ => false,
-        }
-    }
-
-    /// Returns true if this message is `Open`.
-    #[inline]
-    pub fn is_open_msg(&self) -> bool {
-        if let Elem::Open { .. } = self {
-            true
-        } else {
-            false
-        }
+    /// Gets the `LocalStreamId` corresponding to the `RemoteStreamId`
+    /// received with this frame.
+    pub fn local_id(&self) -> LocalStreamId {
+        self.remote_id().into_local()
     }
 }
 
@@ -101,7 +153,7 @@ impl Codec {
 }
 
 impl Decoder for Codec {
-    type Item = Elem;
+    type Item = Frame<RemoteStreamId>;
     type Error = IoError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -143,15 +195,15 @@ impl Decoder for Codec {
                     }
 
                     let buf = src.split_to(len);
-                    let substream_id = (header >> 3) as u32;
+                    let num = (header >> 3) as u32;
                     let out = match header & 7 {
-                        0 => Elem::Open { substream_id },
-                        1 => Elem::Data { substream_id, endpoint: Endpoint::Listener, data: buf.freeze() },
-                        2 => Elem::Data { substream_id, endpoint: Endpoint::Dialer, data: buf.freeze() },
-                        3 => Elem::Close { substream_id, endpoint: Endpoint::Listener },
-                        4 => Elem::Close { substream_id, endpoint: Endpoint::Dialer },
-                        5 => Elem::Reset { substream_id, endpoint: Endpoint::Listener },
-                        6 => Elem::Reset { substream_id, endpoint: Endpoint::Dialer },
+                        0 => Frame::Open { stream_id: RemoteStreamId::dialer(num) },
+                        1 => Frame::Data { stream_id: RemoteStreamId::listener(num), data: buf.freeze() },
+                        2 => Frame::Data { stream_id: RemoteStreamId::dialer(num), data: buf.freeze() },
+                        3 => Frame::Close { stream_id: RemoteStreamId::listener(num) },
+                        4 => Frame::Close { stream_id: RemoteStreamId::dialer(num) },
+                        5 => Frame::Reset { stream_id: RemoteStreamId::listener(num) },
+                        6 => Frame::Reset { stream_id: RemoteStreamId::dialer(num) },
                         _ => {
                             let msg = format!("Invalid mplex header value 0x{:x}", header);
                             return Err(IoError::new(IoErrorKind::InvalidData, msg));
@@ -171,31 +223,31 @@ impl Decoder for Codec {
 }
 
 impl Encoder for Codec {
-    type Item = Elem;
+    type Item = Frame<LocalStreamId>;
     type Error = IoError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
-            Elem::Open { substream_id } => {
-                (u64::from(substream_id) << 3, Bytes::new())
+            Frame::Open { stream_id } => {
+                (u64::from(stream_id.num) << 3, Bytes::new())
             },
-            Elem::Data { substream_id, endpoint: Endpoint::Listener, data } => {
-                (u64::from(substream_id) << 3 | 1, data)
+            Frame::Data { stream_id: LocalStreamId { num, role: Endpoint::Listener }, data } => {
+                (u64::from(num) << 3 | 1, data)
             },
-            Elem::Data { substream_id, endpoint: Endpoint::Dialer, data } => {
-                (u64::from(substream_id) << 3 | 2, data)
+            Frame::Data { stream_id: LocalStreamId { num, role: Endpoint::Dialer }, data } => {
+                (u64::from(num) << 3 | 2, data)
             },
-            Elem::Close { substream_id, endpoint: Endpoint::Listener } => {
-                (u64::from(substream_id) << 3 | 3, Bytes::new())
+            Frame::Close { stream_id: LocalStreamId { num, role: Endpoint::Listener } } => {
+                (u64::from(num) << 3 | 3, Bytes::new())
             },
-            Elem::Close { substream_id, endpoint: Endpoint::Dialer } => {
-                (u64::from(substream_id) << 3 | 4, Bytes::new())
+            Frame::Close { stream_id: LocalStreamId { num, role: Endpoint::Dialer } } => {
+                (u64::from(num) << 3 | 4, Bytes::new())
             },
-            Elem::Reset { substream_id, endpoint: Endpoint::Listener } => {
-                (u64::from(substream_id) << 3 | 5, Bytes::new())
+            Frame::Reset { stream_id: LocalStreamId { num, role: Endpoint::Listener } } => {
+                (u64::from(num) << 3 | 5, Bytes::new())
             },
-            Elem::Reset { substream_id, endpoint: Endpoint::Dialer } => {
-                (u64::from(substream_id) << 3 | 6, Bytes::new())
+            Frame::Reset { stream_id: LocalStreamId { num, role: Endpoint::Dialer } } => {
+                (u64::from(num) << 3 | 6, Bytes::new())
             },
         };
 
@@ -225,9 +277,9 @@ mod tests {
     #[test]
     fn encode_large_messages_fails() {
         let mut enc = Codec::new();
-        let endpoint = Endpoint::Dialer;
+        let role = Endpoint::Dialer;
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE + 1][..]);
-        let bad_msg = Elem::Data{ substream_id: 123, endpoint, data };
+        let bad_msg = Frame::Data { stream_id: LocalStreamId { num: 123, role }, data };
         let mut out = BytesMut::new();
         match enc.encode(bad_msg, &mut out) {
             Err(e) => assert_eq!(e.to_string(), "data size exceed maximum"),
@@ -235,7 +287,7 @@ mod tests {
         }
 
         let data = Bytes::from(&[123u8; MAX_FRAME_SIZE][..]);
-        let ok_msg = Elem::Data{ substream_id: 123, endpoint, data };
+        let ok_msg = Frame::Data { stream_id: LocalStreamId { num: 123, role }, data };
         assert!(enc.encode(ok_msg, &mut out).is_ok());
     }
 }
