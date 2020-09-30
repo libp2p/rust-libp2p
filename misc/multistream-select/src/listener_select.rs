@@ -88,7 +88,10 @@ where
         message: Message,
         protocol: Option<N>
     },
-    Flush { io: MessageIO<R> },
+    Flush {
+        io: MessageIO<R>,
+        protocol: Option<N>
+    },
     Done
 }
 
@@ -141,7 +144,7 @@ where
                     }
 
                     *this.state = match version {
-                        Version::V1 => State::Flush { io },
+                        Version::V1 => State::Flush { io, protocol: None },
                         Version::V1Lazy => State::RecvMessage { io },
                     }
                 }
@@ -204,28 +207,28 @@ where
                         return Poll::Ready(Err(From::from(err)));
                     }
 
-                    // If a protocol has been selected, finish negotiation.
-                    // Otherwise flush the sink and expect to receive another
-                    // message.
-                    *this.state = match protocol {
-                        Some(protocol) => {
-                            log::debug!("Listener: sent confirmed protocol: {}",
-                                String::from_utf8_lossy(protocol.as_ref()));
-                            let (io, remaining) = io.into_inner();
-                            let io = Negotiated::completed(io, remaining);
-                            return Poll::Ready(Ok((protocol, io)));
-                        }
-                        None => State::Flush { io }
-                    };
+                    *this.state = State::Flush { io, protocol };
                 }
 
-                State::Flush { mut io } => {
+                State::Flush { mut io, protocol } => {
                     match Pin::new(&mut io).poll_flush(cx) {
                         Poll::Pending => {
-                            *this.state = State::Flush { io };
+                            *this.state = State::Flush { io, protocol };
                             return Poll::Pending
                         },
-                        Poll::Ready(Ok(())) => *this.state = State::RecvMessage { io },
+                        Poll::Ready(Ok(())) => {
+                            // If a protocol has been selected, finish negotiation.
+                            // Otherwise expect to receive another message.
+                            match protocol {
+                                Some(protocol) => {
+                                    log::debug!("Listener: sent confirmed protocol: {}",
+                                        String::from_utf8_lossy(protocol.as_ref()));
+                                    let io = Negotiated::completed(io.into_inner());
+                                    return Poll::Ready(Ok((protocol, io)))
+                                }
+                                None => *this.state = State::RecvMessage { io }
+                            }
+                        }
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
                 }
