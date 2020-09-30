@@ -43,7 +43,7 @@ use futures::prelude::*;
 use libp2p::{
     Multiaddr,
     PeerId,
-    Swarm,
+    Swarm, swarm::SwarmBuilder,
     NetworkBehaviour,
     identity,
     floodsub::{self, Floodsub, FloodsubEvent},
@@ -118,7 +118,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        Swarm::new(transport, behaviour, local_peer_id)
+        SwarmBuilder::new(transport, behaviour, local_peer_id)
+        .executor(Box::new(|fut| { tokio::spawn(fut); }))
+        .build()
+        //Swarm::new(transport, behaviour, local_peer_id)
     };
 
     // Reach out to another node if specified
