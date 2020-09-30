@@ -105,7 +105,7 @@ impl<TInner> Negotiated<TInner> {
         let mut this = self.project();
 
         match this.state.as_mut().project() {
-            StateProj::Completed { .. } => return Poll::Ready(Ok(()))
+            StateProj::Completed { .. } => return Poll::Ready(Ok(())),
             _ => {}
         }
 
