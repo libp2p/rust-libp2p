@@ -46,3 +46,6 @@ mod behaviour;
 mod dns;
 
 pub mod service;
+
+/// Network related helper functions.
+mod network;

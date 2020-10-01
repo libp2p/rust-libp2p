@@ -18,12 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
+use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns, network::get_interface_addresses};
+#[cfg(feature = "async-std")]
+use crate::network::set_multicast_if_v4;
+#[cfg(feature = "tokio")]
+use crate::network::set_multicast_if_v4_tokio;
 use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
-use std::{convert::TryFrom as _, fmt, io, net::IpAddr, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
+use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
 
@@ -314,74 +318,6 @@ codegen!("async-std", MdnsService, async_std::net::UdpSocket, (|socket| Ok::<_, 
 #[cfg(feature = "tokio")]
 codegen!("tokio", TokioMdnsService, tokio::net::UdpSocket, (|socket| tokio::net::UdpSocket::from_std(socket)), set_multicast_if_v4_tokio);
 
-// Make set_multicast_if_v4 available on asynchronous sockets:
-#[cfg(feature = "async-std")]
-fn set_multicast_if_v4(socket: &async_std::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
-        use std::net::UdpSocket;
-        use net2::UdpSocketExt;
-        #[cfg(not(windows))]
-        use async_std::os::unix::io::AsRawFd;
-        #[cfg(not(windows))]
-        use std::os::unix::io::IntoRawFd;
-        #[cfg(not(windows))]
-        use std::os::unix::io::FromRawFd;
-        // Temporary unsafe double ownership:
-        #[cfg(windows)]
-        let std_sock: UdpSocket = unsafe {
-            FromRawSocket::from_raw_socket(socket.as_raw_socket())
-        };
-        #[cfg(not(windows))]
-        let std_sock: UdpSocket = unsafe {
-            FromRawFd::from_raw_fd(socket.as_raw_fd())
-        };
-        // Don't use ? here, we need to drop the ownership in the end!
-        let r = std_sock.set_multicast_if_v4(interface);
-        // Drop ownership again, thus avoid double free!
-        std_sock.into_raw_fd();
-        r
-}
-
-// Make set_multicast_if_v4 available on asynchronous sockets:
-#[cfg(feature = "tokio")]
-fn set_multicast_if_v4_tokio(socket: &tokio::net::UdpSocket, interface: &Ipv4Addr) -> std::io::Result<()>  {
-        use std::net::UdpSocket;
-        use net2::UdpSocketExt;
-        #[cfg(not(windows))]
-        use std::os::unix::io::AsRawFd;
-        #[cfg(not(windows))]
-        use std::os::unix::io::IntoRawFd;
-        #[cfg(not(windows))]
-        use std::os::unix::io::FromRawFd;
-        // Temporary unsafe double ownership:
-        #[cfg(windows)]
-        let std_sock: UdpSocket = unsafe {
-            FromRawSocket::from_raw_socket(socket.as_raw_socket())
-        };
-        #[cfg(not(windows))]
-        let std_sock: UdpSocket = unsafe {
-            FromRawFd::from_raw_fd(socket.as_raw_fd())
-        };
-        // Don't use ? here, we need to drop the ownership in the end!
-        let r = std_sock.set_multicast_if_v4(interface);
-        // Drop ownership again, thus avoid double free!
-        std_sock.into_raw_fd();
-        r
-}
-
-
-/// Get IPv4 addresses of all external network interfaces.
-fn get_interface_addresses() -> io::Result<impl Iterator<Item = Ipv4Addr>> {
-    Ok(if_addrs::get_if_addrs()?
-        .into_iter()
-        .filter(|i| !i.is_loopback())
-        .filter_map(|i| {
-            match i.ip() {
-                IpAddr::V4(addr) => Some(addr),
-                _ => None,
-            }
-        })
-      )
-}
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
