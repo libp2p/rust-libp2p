@@ -76,22 +76,18 @@ impl<R> LengthDelimited<R> {
         }
     }
 
-    /// Drops the [`LengthDelimited`] resource, yielding the underlying I/O stream
-    /// together with the remaining write buffer containing the uvi-framed data
-    /// that has not yet been written to the underlying I/O stream.
-    ///
-    /// The returned remaining write buffer may be prepended to follow-up
-    /// protocol data to send with a single `write`. Either way, if non-empty,
-    /// the write buffer _must_ eventually be written to the I/O stream
-    /// _before_ any follow-up data, in order to maintain a correct data stream.
+    /// Drops the [`LengthDelimited`] resource, yielding the underlying I/O stream.
     ///
     /// # Panic
     ///
-    /// Will panic if called while there is data in the read buffer. The read buffer is
-    /// guaranteed to be empty whenever `Stream::poll` yields a new `Bytes` frame.
-    pub fn into_inner(self) -> (R, BytesMut) {
+    /// Will panic if called while there is data in the read or write buffer.
+    /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
+    /// a new `Bytes` frame. The write buffer is guaranteed to be empty after
+    /// flushing.
+    pub fn into_inner(self) -> R {
         assert!(self.read_buffer.is_empty());
-        (self.inner, self.write_buffer)
+        assert!(self.write_buffer.is_empty());
+        self.inner
     }
 
     /// Converts the [`LengthDelimited`] into a [`LengthDelimitedReader`], dropping the
@@ -303,7 +299,7 @@ impl<R> LengthDelimitedReader<R> {
     /// yield a new `Message`. The write buffer is guaranteed to be empty whenever
     /// [`LengthDelimited::poll_write_buffer`] yields [`Poll::Ready`] or after
     /// the [`Sink`] has been completely flushed via [`Sink::poll_flush`].
-    pub fn into_inner(self) -> (R, BytesMut) {
+    pub fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }
