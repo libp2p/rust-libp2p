@@ -2737,9 +2737,9 @@ mod tests {
         assert!(match &gs.events[0] {
             NetworkBehaviourAction::GenerateEvent(event) => match event {
                 GossipsubEvent::Subscribed { .. } => true,
-                _ => false
-            }
-            _ => false
+                _ => false,
+            },
+            _ => false,
         });
 
         let control_action = GossipsubControlAction::IHave {

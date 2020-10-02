@@ -278,6 +278,9 @@ pub struct Gossipsub {
 
     /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
     count_iasked: HashMap<PeerId, usize>,
+
+    /// short term cache for published messsage ids
+    published_message_ids: DuplicateCache<MessageId>,
 }
 
 impl Gossipsub {
@@ -321,13 +324,14 @@ impl Gossipsub {
                 config.heartbeat_interval(),
             ),
             heartbeat_ticks: 0,
-            config,
             px_peers: HashSet::new(),
             outbound_peers: HashSet::new(),
             peer_score: None,
             count_peer_have: HashMap::new(),
             count_iasked: HashMap::new(),
             peer_protocols: HashMap::new(),
+            published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
+            config,
         })
     }
 
@@ -506,6 +510,12 @@ impl Gossipsub {
         self.mcache.put(message.clone());
 
         debug!("Publishing message: {:?}", msg_id);
+
+        // If the message is anonymous or has a random author add it to the published message ids
+        // cache.
+        if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
+            self.published_message_ids.insert(msg_id.clone());
+        }
 
         // If we are not flood publishing forward the message to mesh peers.
         let mesh_peers_sent =
@@ -713,8 +723,11 @@ impl Gossipsub {
         }
 
         let interval = Interval::new(params.decay_interval);
-        let peer_score = PeerScore::new_with_message_delivery_time_callback(params, self.config
-            .message_id_fn(), callback);
+        let peer_score = PeerScore::new_with_message_delivery_time_callback(
+            params,
+            self.config.message_id_fn(),
+            callback,
+        );
         self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
         Ok(())
     }
@@ -1025,8 +1038,7 @@ impl Gossipsub {
             }
             debug!(
                 "IHAVE: Asking for the following messages from {}: {:?}",
-                peer_id,
-                message_ids
+                peer_id, message_ids
             );
 
             Self::control_pool_add(
@@ -1340,8 +1352,7 @@ impl Gossipsub {
             if self.blacklisted_peers.contains(source) {
                 debug!(
                     "Rejecting message from peer {} because of blacklisted source: {}",
-                    propagation_source,
-                    source
+                    propagation_source, source
                 );
                 if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
                     peer_score.reject_message(
@@ -1363,21 +1374,24 @@ impl Gossipsub {
         }
 
         // reject messages claiming to be from ourselves but not locally published
-        if let Some(own_id) = self.publish_config.get_own_id() {
-            if !self.config.allow_self_origin()
+        let self_published = if let Some(own_id) = self.publish_config.get_own_id() {
+            !self.config.allow_self_origin()
                 && own_id != propagation_source
                 && msg.source.as_ref().map_or(false, |s| s == own_id)
-            {
-                debug!(
-                    "Dropping message {} claiming to be from self but forwarded from {}",
-                    msg_id, propagation_source
-                );
-                if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
-                    peer_score.reject_message(propagation_source, &msg, RejectReason::SelfOrigin);
-                    gossip_promises.reject_message(&msg_id, &RejectReason::SelfOrigin);
-                }
-                return;
+        } else {
+            self.published_message_ids.contains(&msg_id)
+        };
+
+        if self_published {
+            debug!(
+                "Dropping message {} claiming to be from self but forwarded from {}",
+                msg_id, propagation_source
+            );
+            if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
+                peer_score.reject_message(propagation_source, &msg, RejectReason::SelfOrigin);
+                gossip_promises.reject_message(&msg_id, &RejectReason::SelfOrigin);
             }
+            return;
         }
 
         // Add the message to the duplication cache and memcache.
@@ -1388,7 +1402,10 @@ impl Gossipsub {
             }
             return;
         }
-        debug!("Put message {:?} in duplication_cache and resolve promises", &msg_id);
+        debug!(
+            "Put message {:?} in duplication_cache and resolve promises",
+            &msg_id
+        );
 
         // Tells score that message arrived (but is maybe not fully validated yet)
         // Consider message as delivered for gossip promises
@@ -1911,14 +1928,28 @@ impl Gossipsub {
                 scores
             });
             trace!("Mesh message deliveries: {:?}", {
-                self.mesh.iter().map(|(t, peers)| {
-                    (t.clone(), peers.iter().map(|p| {
-                        (p.clone(),
-                         peer_score.as_ref().expect("peer_score.is_some()").0
-                             .mesh_message_deliveries(p, t)
-                             .unwrap_or(0.0))
-                    }).collect::<HashMap<PeerId, f64>>())
-                }).collect::<HashMap<TopicHash, HashMap<PeerId, f64>>>()
+                self.mesh
+                    .iter()
+                    .map(|(t, peers)| {
+                        (
+                            t.clone(),
+                            peers
+                                .iter()
+                                .map(|p| {
+                                    (
+                                        p.clone(),
+                                        peer_score
+                                            .as_ref()
+                                            .expect("peer_score.is_some()")
+                                            .0
+                                            .mesh_message_deliveries(p, t)
+                                            .unwrap_or(0.0),
+                                    )
+                                })
+                                .collect::<HashMap<PeerId, f64>>(),
+                        )
+                    })
+                    .collect::<HashMap<TopicHash, HashMap<PeerId, f64>>>()
             })
         }
 
@@ -1936,7 +1967,6 @@ impl Gossipsub {
         self.mcache.shift();
 
         debug!("Completed Heartbeat");
-
     }
 
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
@@ -2649,6 +2679,12 @@ impl NetworkBehaviour for Gossipsub {
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint)) {
                 peer_score.add_ip(&peer_id, ip);
+            } else {
+                trace!(
+                    "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
+                    peer_id,
+                    endpoint
+                )
             }
         }
     }
@@ -2663,6 +2699,12 @@ impl NetworkBehaviour for Gossipsub {
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint)) {
                 peer_score.remove_ip(peer, &ip);
+            } else {
+                trace!(
+                    "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
+                    peer,
+                    endpoint
+                )
             }
         }
     }
@@ -2678,9 +2720,21 @@ impl NetworkBehaviour for Gossipsub {
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint_old)) {
                 peer_score.remove_ip(peer, &ip);
+            } else {
+                trace!(
+                    "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
+                    peer,
+                    endpoint_old
+                )
             }
             if let Some(ip) = get_ip_addr(get_remote_addr(endpoint_new)) {
                 peer_score.add_ip(&peer, ip);
+            } else {
+                trace!(
+                    "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
+                    peer,
+                    endpoint_new
+                )
             }
         }
     }
@@ -2727,7 +2781,7 @@ impl NetworkBehaviour for Gossipsub {
 
                 // Check if peer is graylisted in which case we ignore the event
                 if let (true, _) =
-                self.score_below_threshold(&propagation_source, |pst| pst.graylist_threshold)
+                    self.score_below_threshold(&propagation_source, |pst| pst.graylist_threshold)
                 {
                     debug!("RPC Dropped from greylisted peer {}", propagation_source);
                     return;

@@ -24,7 +24,7 @@
 use crate::time_cache::TimeCache;
 use crate::{GossipsubMessage, MessageId, TopicHash};
 use libp2p_core::PeerId;
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
@@ -203,10 +203,11 @@ impl PeerScore {
         Self::new_with_message_delivery_time_callback(params, msg_id, None)
     }
 
-    pub fn new_with_message_delivery_time_callback(params: PeerScoreParams,
-                                                   msg_id: fn(&GossipsubMessage) -> MessageId,
-                                                   callback: Option<fn(&PeerId, &TopicHash, f64)>)
-        -> Self {
+    pub fn new_with_message_delivery_time_callback(
+        params: PeerScoreParams,
+        msg_id: fn(&GossipsubMessage) -> MessageId,
+        callback: Option<fn(&PeerId, &TopicHash, f64)>,
+    ) -> Self {
         PeerScore {
             params,
             peer_stats: HashMap::new(),
@@ -438,6 +439,7 @@ impl PeerScore {
 
     /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
     pub fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
+        trace!("Add ip for peer {}, ip: {}", peer_id, ip);
         let peer_stats = self.peer_stats.entry(peer_id.clone()).or_default();
 
         // Mark the peer as connected (currently the default is connected, but we don't want to
@@ -457,8 +459,21 @@ impl PeerScore {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.known_ips.remove(ip);
             if let Some(peer_ids) = self.peer_ips.get_mut(ip) {
+                trace!("Remove ip for peer {}, ip: {}", peer_id, ip);
                 peer_ids.remove(peer_id);
+            } else {
+                trace!(
+                    "No entry in peer_ips for ip {} which should get removed for peer {}",
+                    ip,
+                    peer_id
+                );
             }
+        } else {
+            trace!(
+                "No peer_stats for peer {} which should remove the ip {}",
+                peer_id,
+                ip
+            );
         }
     }
 
@@ -555,7 +570,8 @@ impl PeerScore {
                     .get(_from)
                     .and_then(|s| s.topics.get(topic))
                     .map(|ts| ts.in_mesh())
-                    .unwrap_or(false) {
+                    .unwrap_or(false)
+                {
                     callback(_from, topic, 0.0);
                 }
             }
@@ -591,6 +607,10 @@ impl PeerScore {
         match reason {
             // these messages are not tracked, but the peer is penalized as they are invalid
             RejectReason::ValidationError(_) | RejectReason::SelfOrigin => {
+                debug!(
+                    "Message from {} rejected because of ValidationError or SelfOrigin",
+                    from
+                );
                 self.mark_invalid_message_delivery(from, msg);
                 return;
             }
@@ -656,7 +676,8 @@ impl PeerScore {
                     .get(from)
                     .and_then(|s| s.topics.get(topic))
                     .map(|ts| ts.in_mesh())
-                    .unwrap_or(false) {
+                    .unwrap_or(false)
+                {
                     callback(from, topic, time);
                 }
             }
@@ -722,7 +743,7 @@ impl PeerScore {
                         }
                     }
                 }
-            },
+            }
             Vacant(entry) => {
                 entry.insert(params);
             }
@@ -844,8 +865,7 @@ impl PeerScore {
     }
 
     pub(crate) fn mesh_message_deliveries(&self, peer: &PeerId, topic: &TopicHash) -> Option<f64> {
-        self
-            .peer_stats
+        self.peer_stats
             .get(peer)
             .and_then(|s| s.topics.get(topic))
             .map(|t| t.mesh_message_deliveries)
