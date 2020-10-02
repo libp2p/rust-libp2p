@@ -241,8 +241,7 @@ where
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
                             log::debug!("Dialer: Received confirmation for protocol: {}", p);
-                            let (io, remaining) = io.into_inner();
-                            let io = Negotiated::completed(io, remaining);
+                            let io = Negotiated::completed(io.into_inner());
                             return Poll::Ready(Ok((protocol, io)));
                         }
                         Message::NotAvailable => {
