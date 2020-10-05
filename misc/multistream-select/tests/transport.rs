@@ -130,7 +130,5 @@ impl ConnectionHandler for TestHandler {
         -> Poll<Result<ConnectionHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>>
     {
         Poll::Pending
-        // Poll::Ready(Ok(ConnectionHandlerEvent::Custom(())))
     }
 }
-
