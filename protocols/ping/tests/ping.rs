@@ -25,7 +25,7 @@ use libp2p_core::{
     PeerId,
     identity,
     muxing::StreamMuxerBox,
-    transport::{Transport, boxed::Boxed},
+    transport::{self, Transport},
     upgrade
 };
 use libp2p_mplex as mplex;
@@ -196,7 +196,7 @@ fn max_failures() {
 
 fn mk_transport(muxer: MuxerChoice) -> (
     PeerId,
-    Boxed<
+    transport::Boxed<
         (PeerId, StreamMuxerBox),
         io::Error
     >
@@ -204,8 +204,7 @@ fn mk_transport(muxer: MuxerChoice) -> (
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&id_keys).unwrap();
-
-    let transport = TcpConfig::new()
+    (peer_id, TcpConfig::new()
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
@@ -215,11 +214,7 @@ fn mk_transport(muxer: MuxerChoice) -> (
             MuxerChoice::Mplex =>
                 upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
         })
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-        .boxed();
-
-    (peer_id, transport)
+        .boxed())
 }
 
 #[derive(Debug, Copy, Clone)]

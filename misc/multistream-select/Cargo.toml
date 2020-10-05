@@ -19,6 +19,10 @@ unsigned-varint = "0.5"
 
 [dev-dependencies]
 async-std = "1.6.2"
+env_logger = "*"
+libp2p-core = { path = "../../core" }
+libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-plaintext = { path = "../../protocols/plaintext" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
 rw-stream-sink = "0.2.1"

@@ -303,8 +303,8 @@ pub fn build_tcp_ws_noise_mplex_yamux(keypair: identity::Keypair)
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
-        .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
-        .timeout(std::time::Duration::from_secs(20)))
+        .timeout(std::time::Duration::from_secs(20))
+        .boxed())
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
@@ -335,6 +335,6 @@ pub fn build_tcp_ws_pnet_noise_mplex_yamux(keypair: identity::Keypair, psk: PreS
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new()))
-        .map(|(peer, muxer), _| (peer, core::muxing::StreamMuxerBox::new(muxer)))
-        .timeout(std::time::Duration::from_secs(20)))
+        .timeout(std::time::Duration::from_secs(20))
+        .boxed())
 }
