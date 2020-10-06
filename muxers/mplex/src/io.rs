@@ -191,8 +191,8 @@ where
                     let id = stream_id.into_local();
                     if let Some(state) = self.substreams.get_mut(&id) {
                         if let Some(buf) = state.recv_buf_open() {
+                            trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
                             buf.push(data);
-                            trace!("Buffered {:?} for stream {} (total: {})", data, id, buf.len());
                             self.notifier_read.wake_read_stream(id);
                         } else {
                             trace!("Dropping data {:?} for closed or reset substream {}", data, id);
@@ -409,8 +409,8 @@ where
                     if let Some(state) = self.substreams.get_mut(&id) {
                         if let Some(buf) = state.recv_buf_open() {
                             debug_assert!(buf.len() <= self.config.max_buffer_len);
+                            trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
                             buf.push(data);
-                            trace!("Buffered {:?} for stream {} (total: {})", data, id, buf.len());
                             self.notifier_read.wake_read_stream(id);
                             if buf.len() > self.config.max_buffer_len {
                                 debug!("Frame buffer of stream {} is full.", id);
