@@ -191,8 +191,8 @@ where
                     let id = stream_id.into_local();
                     if let Some(state) = self.substreams.get_mut(&id) {
                         if let Some(buf) = state.recv_buf_open() {
-                            trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
                             buf.push(data);
+                            trace!("Buffered {:?} for stream {} (total: {})", data, id, buf.len());
                             self.notifier_read.wake_read_stream(id);
                         } else {
                             trace!("Dropping data {:?} for closed or reset substream {}", data, id);
@@ -233,6 +233,8 @@ where
                         self.substreams.insert(stream_id, SubstreamState::Open {
                             buf: Default::default()
                         });
+                        log::debug!("New outbound substream: {} (total {})",
+                            stream_id, self.substreams.len());
                         // The flush is delayed and the `Open` frame may be sent
                         // together with other frames in the same transport packet.
                         self.pending_flush_open = true;
@@ -407,8 +409,8 @@ where
                     if let Some(state) = self.substreams.get_mut(&id) {
                         if let Some(buf) = state.recv_buf_open() {
                             debug_assert!(buf.len() <= self.config.max_buffer_len);
-                            trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
                             buf.push(data);
+                            trace!("Buffered {:?} for stream {} (total: {})", data, id, buf.len());
                             self.notifier_read.wake_read_stream(id);
                             if buf.len() > self.config.max_buffer_len {
                                 debug!("Frame buffer of stream {} is full.", id);
@@ -436,9 +438,8 @@ where
                 }
                 frame @ Frame::Open { .. } => {
                     if let Some(id) = self.on_open(frame.remote_id())? {
-                        let new_len = self.open_buffer.len() + 1;
-                        trace!("Buffering new inbound stream {} (total: {})", id, new_len);
                         self.open_buffer.push_front(id);
+                        trace!("Buffered new inbound stream {} (total: {})", id, self.open_buffer.len());
                         self.notifier_read.wake_next_stream();
                     }
                 }
@@ -600,11 +601,11 @@ where
             return Ok(None)
         }
 
-        log::debug!("New inbound stream: {}", id);
-
         self.substreams.insert(id, SubstreamState::Open {
             buf: Default::default()
         });
+
+        log::debug!("New inbound substream: {} (total {})", id, self.substreams.len());
 
         Ok(Some(id))
     }
