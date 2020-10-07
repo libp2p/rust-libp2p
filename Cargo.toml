@@ -123,3 +123,7 @@ members = [
     "transports/websocket",
     "transports/wasm-ext"
 ]
+
+[[example]]
+name = "chat-tokio"
+required-features = ["tcp-tokio", "mdns-tokio"]

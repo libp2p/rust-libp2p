@@ -18,67 +18,78 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic chat application demonstrating libp2p and the mDNS and floodsub protocols using tokio::select instead of Poll and async_std
+//! A basic chat application demonstrating libp2p with the mDNS and floodsub protocols
+//! using tokio for all asynchronous tasks and I/O. In order for all used libp2p
+//! crates to use tokio, it enables tokio-specific features for some crates.
 //!
-//! Using two terminal windows, start two instances. If you local network allows mDNS,
-//! they will automatically connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. Close with Ctrl-c.
-//!
-//! You can of course open more terminal windows and add more participants.
-//! Dialing any of the other peers will propagate the new participant to all
-//! chat members and everyone will receive all messages.
-//!
-//! # If they don't automatically connect
-//!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
+//! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat
+//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
+//! ```
+//!
+//! Alternatively, to run with the minimal set of features and crates:
+//!
+//! ```sh
+//!cargo run --example chat-tokio \\
+//!    --no-default-features \\
+//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
+//! ```
 
-use std::error::Error;
-use tokio::io;
 use futures::prelude::*;
 use libp2p::{
     Multiaddr,
-    PeerId,
-    Swarm, swarm::SwarmBuilder,
     NetworkBehaviour,
+    PeerId,
+    Swarm,
+    Transport,
+    core::upgrade,
     identity,
     floodsub::{self, Floodsub, FloodsubEvent},
-    mdns::{Mdns, MdnsEvent},
-    swarm::NetworkBehaviourEventProcess
+    // `TokioMdns` is available through the `mdns-tokio` feature.
+    mdns::{TokioMdns, MdnsEvent},
+    mplex,
+    noise,
+    swarm::{NetworkBehaviourEventProcess, SwarmBuilder},
+    // `TokioTcpConfig` is available through the `tcp-tokio` feature.
+    tcp::TokioTcpConfig,
 };
+use std::error::Error;
+use tokio::io::{self, AsyncBufReadExt};
 
+/// The `tokio::main` attribute sets up a tokio runtime.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // Create a random PeerId
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    let id_keys = identity::Keypair::generate_ed25519();
+    let peer_id = PeerId::from(id_keys.public());
+    println!("Local peer id: {:?}", peer_id);
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key)?;
+    // Create a keypair for authenticated encryption of the transport.
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+        .into_authentic(&id_keys)
+        .expect("Signing libp2p-noise static DH keypair failed.");
+
+    // Create a tokio-based TCP transport use noise for authenticated
+    // encryption and Mplex for multiplexing of substreams on a TCP stream.
+    let transport = TokioTcpConfig::new().nodelay(true)
+        .upgrade(upgrade::Version::V1)
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(mplex::MplexConfig::new());
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");
 
     // We create a custom network behaviour that combines floodsub and mDNS.
-    // In the future, we want to improve libp2p to make this easier to do.
-    // Use the derive to generate delegating NetworkBehaviour impl and require the
-    // NetworkBehaviourEventProcess implementations below.
+    // The derive generates a delegating `NetworkBehaviour` impl which in turn
+    // requires the implementations of `NetworkBehaviourEventProcess` for
+    // the events of each behaviour.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: Mdns,
-
-        // Struct fields which do not implement NetworkBehaviour need to be ignored
-        #[behaviour(ignore)]
-        #[allow(dead_code)]
-        ignored_member: bool,
+        mdns: TokioMdns,
     }
 
     impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
@@ -108,21 +119,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Create a Swarm to manage peers and events
+    // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = Mdns::new()?;
+        let mdns = TokioMdns::new()?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(local_peer_id.clone()),
+            floodsub: Floodsub::new(peer_id.clone()),
             mdns,
-            ignored_member: false,
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
 
-        // Create Swarm and Specify Tokio executor
-        SwarmBuilder::new(transport, behaviour, local_peer_id)
-        .executor(Box::new(|fut| { tokio::spawn(fut); }))
-        .build()
+        SwarmBuilder::new(transport, behaviour, peer_id)
+            // We want the connection background tasks to be spawned
+            // onto the tokio runtime.
+            .executor(Box::new(|fut| { tokio::spawn(fut); }))
+            .build()
     };
 
     // Reach out to another node if specified
@@ -133,7 +144,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Read full lines from stdin
-    use io::AsyncBufReadExt;
     let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
