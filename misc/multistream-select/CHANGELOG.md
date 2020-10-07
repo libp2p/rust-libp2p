@@ -1,5 +1,8 @@
 # 0.8.3 [unreleased]
 
+- Fix a regression resulting in a panic with the `V1Lazy` protocol.
+  [PR 1783](https://github.com/libp2p/rust-libp2p/pull/1783).
+
 - Fix a potential deadlock during protocol negotiation due
   to a missing flush, potentially resulting in sporadic protocol
   upgrade timeouts.

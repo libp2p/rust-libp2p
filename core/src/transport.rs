@@ -25,14 +25,13 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::ConnectedPoint;
+use crate::{ConnectedPoint, ConnectionInfo, muxing::{StreamMuxer, StreamMuxerBox}};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
 use std::time::Duration;
 
 pub mod and_then;
-pub mod boxed;
 pub mod choice;
 pub mod dummy;
 pub mod map;
@@ -41,8 +40,10 @@ pub mod memory;
 pub mod timeout;
 pub mod upgrade;
 
+mod boxed;
 mod optional;
 
+pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
@@ -128,14 +129,24 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// Turns the transport into an abstract boxed (i.e. heap-allocated) transport.
-    fn boxed(self) -> boxed::Boxed<Self::Output, Self::Error>
-    where Self: Sized + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
+    /// Boxes an authenticated, multiplexed transport, including the
+    /// `StreamMuxer` and transport errors.
+    fn boxed<I, M>(self) -> boxed::Boxed<(I, StreamMuxerBox), std::io::Error>
+    where
+        Self: Transport<Output = (I, M)> + Sized + Clone + Send + Sync + 'static,
+        Self::Dial: Send + 'static,
+        Self::Listener: Send + 'static,
+        Self::ListenerUpgrade: Send + 'static,
+        Self::Error: Send + Sync,
+        I: ConnectionInfo,
+        M: StreamMuxer + Send + Sync + 'static,
+        M::Substream: Send + 'static,
+        M::OutboundSubstream: Send + 'static
+
     {
-        boxed::boxed(self)
+        boxed::boxed(
+            self.map(|(i, m), _| (i, StreamMuxerBox::new(m)))
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)))
     }
 
     /// Applies a function on the connections created by the transport.

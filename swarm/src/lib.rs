@@ -110,7 +110,7 @@ use libp2p_core::{
         PendingConnectionError,
         Substream
     },
-    transport::{TransportError, boxed::Boxed as BoxTransport},
+    transport::{self, TransportError},
     muxing::{StreamMuxer, StreamMuxerBox},
     network::{
         Network,
@@ -261,7 +261,7 @@ where
     TConnInfo: ConnectionInfo<PeerId = PeerId>,
 {
     network: Network<
-        BoxTransport<(TConnInfo, StreamMuxerBox), io::Error>,
+        transport::Boxed<(TConnInfo, StreamMuxerBox), io::Error>,
         TInEvent,
         TOutEvent,
         NodeHandlerWrapperBuilder<THandler>,
@@ -972,7 +972,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 /// including the underlying [`Network`].
 pub struct SwarmBuilder<TBehaviour, TConnInfo> {
     local_peer_id: PeerId,
-    transport: BoxTransport<(TConnInfo, StreamMuxerBox), io::Error>,
+    transport: transport::Boxed<(TConnInfo, StreamMuxerBox), io::Error>,
     behaviour: TBehaviour,
     network_config: NetworkConfig,
 }
@@ -996,14 +996,9 @@ where TBehaviour: NetworkBehaviour,
         TTrans::ListenerUpgrade: Send + 'static,
         TTrans::Dial: Send + 'static,
     {
-        let transport = transport
-            .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)))
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-            .boxed();
-
         SwarmBuilder {
             local_peer_id,
-            transport,
+            transport: transport.boxed(),
             behaviour,
             network_config: Default::default(),
         }
@@ -1220,10 +1215,7 @@ mod tests {
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(libp2p_mplex::MplexConfig::new())
-            .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-            .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })
-            .boxed();
+            .multiplex(libp2p_mplex::MplexConfig::new());
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         SwarmBuilder::new(transport, behaviour, pubkey.into()).build()
     }

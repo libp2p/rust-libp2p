@@ -127,6 +127,7 @@ impl<TInner> Negotiated<TInner> {
 
                     if let Message::Header(v) = &msg {
                         if *v == version {
+                            *this.state = State::Expecting { io, protocol, version };
                             continue
                         }
                     }
