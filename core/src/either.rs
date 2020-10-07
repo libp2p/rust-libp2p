@@ -21,7 +21,7 @@
 use crate::{
     muxing::{StreamMuxer, StreamMuxerEvent},
     ProtocolName,
-    transport::{Transport, ListenerEvent, TransportError},
+    transport::{Dialer, Transport, ListenerEvent, TransportError},
     Multiaddr
 };
 use futures::{prelude::*, io::{IoSlice, IoSliceMut}};
@@ -430,6 +430,38 @@ impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub enum EitherDialer<A, B> {
+    Left(A),
+    Right(B),
+}
+
+impl<A, B> Dialer for EitherDialer<A, B>
+where
+    B: Dialer,
+    A: Dialer,
+{
+    type Output = EitherOutput<A::Output, B::Output>;
+    type Error = EitherError<A::Error, B::Error>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        use TransportError::*;
+        match self {
+            EitherDialer::Left(a) => match a.dial(addr) {
+                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::A(err))),
+            },
+            EitherDialer::Right(b) => match b.dial(addr) {
+                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
+                Err(Other(err)) => Err(Other(EitherError::B(err))),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum EitherTransport<A, B> {
     Left(A),
     Right(B),
@@ -442,39 +474,31 @@ where
 {
     type Output = EitherOutput<A::Output, B::Output>;
     type Error = EitherError<A::Error, B::Error>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
+    type Dialer = EitherDialer<A::Dialer, B::Dialer>;
     type Listener = EitherListenStream<A::Listener, B::Listener>;
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         use TransportError::*;
         match self {
             EitherTransport::Left(a) => match a.listen_on(addr) {
-                Ok(listener) => Ok(EitherListenStream::First(listener)),
+                Ok((listener, dialer)) => Ok((EitherListenStream::First(listener), EitherDialer::Left(dialer))),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::A(err))),
             },
             EitherTransport::Right(b) => match b.listen_on(addr) {
-                Ok(listener) => Ok(EitherListenStream::Second(listener)),
+                Ok((listener, dialer)) => Ok((EitherListenStream::Second(listener), EitherDialer::Right(dialer))),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::B(err))),
             },
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        use TransportError::*;
+    fn dialer(&self) -> Self::Dialer {
         match self {
-            EitherTransport::Left(a) => match a.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::A(err))),
-            },
-            EitherTransport::Right(b) => match b.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::B(err))),
-            },
+            EitherTransport::Left(a) => EitherDialer::Left(a.dialer()),
+            EitherTransport::Right(b) => EitherDialer::Right(b.dialer()),
         }
     }
 }

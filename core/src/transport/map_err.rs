@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError, ListenerEvent};
+use crate::transport::{Dialer, Transport, TransportError, ListenerEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, pin::Pin, task::Context, task::Poll};
@@ -45,23 +45,47 @@ where
 {
     type Output = T::Output;
     type Error = TErr;
+    type Dial = MapErrDial<T::Dialer, F>;
+    type Dialer = MapErrDialer<T::Dialer, F>;
     type Listener = MapErrListener<T, F>;
     type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
-    type Dial = MapErrDial<T, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         let map = self.map;
         match self.transport.listen_on(addr) {
-            Ok(stream) => Ok(MapErrListener { inner: stream, map }),
+            Ok((stream, dialer)) => {
+                Ok((MapErrListener { inner: stream, map: map.clone() }, MapErrDialer { dialer, map }))
+            }
             Err(err) => Err(err.map(map))
         }
     }
 
+    fn dialer(&self) -> Self::Dialer {
+        MapErrDialer { dialer: self.transport.dialer(), map: self.map.clone() }
+    }
+}
+
+/// See `Transport::map_err`.
+#[derive(Debug, Copy, Clone)]
+pub struct MapErrDialer<D, F> {
+    dialer: D,
+    map: F,
+}
+
+impl<D, F, TErr> Dialer for MapErrDialer<D, F>
+where
+    D: Dialer,
+    F: FnOnce(D::Error) -> TErr + Clone,
+    TErr: error::Error,
+{
+    type Output = D::Output;
+    type Error = TErr;
+    type Dial = MapErrDial<D, F>;
+
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let map = self.map;
-        match self.transport.dial(addr) {
-            Ok(future) => Ok(MapErrDial { inner: future, map: Some(map) }),
-            Err(err) => Err(err.map(map)),
+        match self.dialer.dial(addr) {
+            Ok(future) => Ok(MapErrDial { inner: future, map: Some(self.map.clone()) }),
+            Err(err) => Err(err.map(self.map.clone())),
         }
     }
 }
@@ -133,7 +157,7 @@ where T: Transport,
 
 /// Dialing future for `MapErr`.
 #[pin_project::pin_project]
-pub struct MapErrDial<T: Transport, F> {
+pub struct MapErrDial<T: Dialer, F> {
     #[pin]
     inner: T::Dial,
     map: Option<F>,
@@ -141,7 +165,7 @@ pub struct MapErrDial<T: Transport, F> {
 
 impl<T, F, TErr> Future for MapErrDial<T, F>
 where
-    T: Transport,
+    T: Dialer,
     F: FnOnce(T::Error) -> TErr,
 {
     type Output = Result<T::Output, TErr>;

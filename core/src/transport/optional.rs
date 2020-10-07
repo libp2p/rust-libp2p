@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
+use crate::transport::{Dialer, Transport, TransportError};
 use multiaddr::Multiaddr;
 
 /// Transport that is possibly disabled.
@@ -55,17 +55,39 @@ where
 {
     type Output = T::Output;
     type Error = T::Error;
+    type Dial = T::Dial;
+    type Dialer = OptionalDialer<T::Dialer>;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = T::Dial;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         if let Some(inner) = self.0 {
-            inner.listen_on(addr)
+            let (listener, dialer) = inner.listen_on(addr)?;
+            Ok((listener, OptionalDialer(Some(dialer))))
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
+
+    fn dialer(&self) -> Self::Dialer {
+        if let Some(inner) = self.0.as_ref() {
+            OptionalDialer(Some(inner.dialer()))
+        } else {
+            OptionalDialer(None)
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct OptionalDialer<D>(Option<D>);
+
+impl<D> Dialer for OptionalDialer<D>
+where
+    D: Dialer,
+{
+    type Output = D::Output;
+    type Error = D::Error;
+    type Dial = D::Dial;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0 {

@@ -47,7 +47,7 @@ use crate::{
         pool::{Pool, PoolEvent, PoolLimits},
     },
     muxing::StreamMuxer,
-    transport::{Transport, TransportError},
+    transport::{Dialer, Transport, TransportError},
 };
 use fnv::{FnvHashMap};
 use futures::{prelude::*, future};
@@ -240,7 +240,7 @@ where
         TPeerId: Send + 'static,
     {
         let info = OutgoingInfo { address, peer_id: None };
-        match self.transport().clone().dial(address.clone()) {
+        match self.transport().dialer().dial(address.clone()) {
             Ok(f) => {
                 let f = f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
                 self.pool.add_outgoing(f, handler, info)
@@ -521,7 +521,7 @@ where
     TPeerId: Eq + Hash + Send + Clone + 'static,
     TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
 {
-    let result = match transport.dial(opts.address.clone()) {
+    let result = match transport.dialer().dial(opts.address.clone()) {
         Ok(fut) => {
             let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
             let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };

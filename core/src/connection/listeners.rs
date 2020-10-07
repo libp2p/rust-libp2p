@@ -110,6 +110,8 @@ where
     /// The object that actually listens.
     #[pin]
     listener: TTrans::Listener,
+    /// The object that dials.
+    dialer: TTrans::Dialer,
     /// Addresses it is listening on.
     addresses: SmallVec<[Multiaddr; 4]>
 }
@@ -196,10 +198,11 @@ where
     where
         TTrans: Clone,
     {
-        let listener = self.transport.clone().listen_on(addr)?;
+        let (listener, dialer) = self.transport.clone().listen_on(addr)?;
         self.listeners.push_back(Box::pin(Listener {
             id: self.next_id,
             listener,
+            dialer,
             addresses: SmallVec::new()
         }));
         let id = self.next_id;
@@ -373,7 +376,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport;
+    use crate::transport::{self, Dialer, ListenerEvent};
 
     #[test]
     fn incoming_event() {
@@ -414,21 +417,38 @@ mod tests {
 
         #[derive(Clone)]
         struct DummyTrans;
-        impl transport::Transport for DummyTrans {
+        impl transport::Dialer for DummyTrans {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>>>>;
-            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
             type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
-                Ok(Box::pin(stream::unfold((), |()| async move {
-                    Some((Ok(ListenerEvent::Error(std::io::Error::from(std::io::ErrorKind::Other))), ()))
-                })))
-            }
-
-            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
+            }
+        }
+        impl transport::Transport for DummyTrans {
+            type Listener = DummyListener;
+            type ListenerUpgrade = future::Ready<Result<Self::Output, Self::Error>>;
+
+            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
+                Ok(DummyListener)
+            }
+        }
+        struct DummyListener;
+        impl transport::Dialer for DummyListener {
+            type Output = ();
+            type Error = std::io::Error;
+            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+
+            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+                panic!()
+            }
+        }
+        impl Stream for DummyListener {
+            type Item = Result<ListenerEvent<future::Ready<Result<<Self as Dialer>::Output, <Self as Dialer>::Error>>, <Self as Dialer>::Error>, <Self as Dialer>::Error>;
+
+            fn poll_next(self: Pin<&mut Self>, _: &mut Context) -> Poll<Option<Self::Item>> {
+                Poll::Ready(Some(Ok(ListenerEvent::Error(std::io::Error::from(std::io::ErrorKind::Other)))))
             }
         }
 
@@ -452,21 +472,38 @@ mod tests {
 
         #[derive(Clone)]
         struct DummyTrans;
-        impl transport::Transport for DummyTrans {
+        impl transport::Dialer for DummyTrans {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = Pin<Box<dyn Stream<Item = Result<ListenerEvent<Self::ListenerUpgrade, std::io::Error>, std::io::Error>>>>;
-            type ListenerUpgrade = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
             type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
-                Ok(Box::pin(stream::unfold((), |()| async move {
-                    Some((Err(std::io::Error::from(std::io::ErrorKind::Other)), ()))
-                })))
-            }
-
-            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
+            }
+        }
+        impl transport::Transport for DummyTrans {
+            type Listener = DummyListener;
+            type ListenerUpgrade = future::Ready<Result<Self::Output, Self::Error>>;
+
+            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
+                Ok(DummyListener)
+            }
+        }
+        struct DummyListener;
+        impl transport::Dialer for DummyListener {
+            type Output = ();
+            type Error = std::io::Error;
+            type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
+
+            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+                panic!()
+            }
+        }
+        impl Stream for DummyListener {
+            type Item = Result<ListenerEvent<future::Ready<Result<<Self as Dialer>::Output, <Self as Dialer>::Error>>, <Self as Dialer>::Error>, <Self as Dialer>::Error>;
+
+            fn poll_next(self: Pin<&mut Self>, _: &mut Context) -> Poll<Option<Self::Item>> {
+                Poll::Ready(Some(Err(std::io::Error::from(std::io::ErrorKind::Other))))
             }
         }
 

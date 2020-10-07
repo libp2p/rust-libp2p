@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Transport, transport::{TransportError, ListenerEvent}};
+use crate::{Dialer, Transport, transport::{TransportError, ListenerEvent}};
 use fnv::FnvHashMap;
 use futures::{future::{self, Ready}, prelude::*, channel::mpsc, task::Context, task::Poll};
 use lazy_static::lazy_static;
@@ -81,9 +81,9 @@ impl Hub {
     }
 }
 
-/// Transport that supports `/memory/N` multiaddresses.
+/// Dialer that supports `/memory/N` multiaddresses.
 #[derive(Debug, Copy, Clone, Default)]
-pub struct MemoryTransport;
+pub struct MemoryDialer;
 
 /// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
@@ -149,14 +149,39 @@ impl Future for DialFuture {
     }
 }
 
+impl Dialer for MemoryDialer {
+    type Output = Channel<Vec<u8>>;
+    type Error = MemoryTransportError;
+    type Dial = DialFuture;
+
+    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+        let port = if let Ok(port) = parse_memory_addr(&addr) {
+            if let Some(port) = NonZeroU64::new(port) {
+                port
+            } else {
+                return Err(TransportError::Other(MemoryTransportError::Unreachable));
+            }
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+
+        DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
+    }
+}
+
+/// Transport that supports `/memory/N` multiaddresses.
+#[derive(Debug, Copy, Clone, Default)]
+pub struct MemoryTransport;
+
 impl Transport for MemoryTransport {
     type Output = Channel<Vec<u8>>;
     type Error = MemoryTransportError;
+    type Dial = DialFuture;
+    type Dialer = MemoryDialer;
     type Listener = Listener;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = DialFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -175,21 +200,11 @@ impl Transport for MemoryTransport {
             tell_listen_addr: true
         };
 
-        Ok(listener)
+        Ok((listener, MemoryDialer))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
-        let port = if let Ok(port) = parse_memory_addr(&addr) {
-            if let Some(port) = NonZeroU64::new(port) {
-                port
-            } else {
-                return Err(TransportError::Other(MemoryTransportError::Unreachable));
-            }
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
-
-        DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
+    fn dialer(&self) -> Self::Dialer {
+        MemoryDialer
     }
 }
 

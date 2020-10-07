@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerEvent, Transport, TransportError};
+use crate::transport::{Dialer, ListenerEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, fmt, pin::Pin, sync::Arc};
@@ -28,6 +28,7 @@ pub fn boxed<T>(transport: T) -> Boxed<T::Output, T::Error>
 where
     T: Transport + Clone + Send + Sync + 'static,
     T::Dial: Send + 'static,
+    T::Dialer: Clone + Send + Sync + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
@@ -46,7 +47,11 @@ type Listener<O, E> = Pin<Box<dyn Stream<Item = Result<ListenerEvent<ListenerUpg
 type ListenerUpgrade<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
 
 trait Abstract<O, E> {
-    fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>>;
+    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, BoxedDialer<O, E>), TransportError<E>>;
+    fn dialer(&self) -> BoxedDialer<O, E>;
+}
+
+trait AbstractDialer<O, E> {
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>>;
 }
 
@@ -55,19 +60,31 @@ where
     T: Transport<Output = O, Error = E> + Clone + 'static,
     E: error::Error,
     T::Dial: Send + 'static,
+    T::Dialer: Clone + Send + Sync + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
-    fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>> {
-        let listener = Transport::listen_on(self.clone(), addr)?;
+    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, BoxedDialer<O, E>), TransportError<E>> {
+        let (listener, dialer) = Transport::listen_on(self.clone(), addr)?;
         let fut = listener.map_ok(|event| event.map(|upgrade| {
             Box::pin(upgrade) as ListenerUpgrade<O, E>
         }));
-        Ok(Box::pin(fut))
+        Ok((Box::pin(fut), BoxedDialer::new(dialer)))
     }
 
+    fn dialer(&self) -> BoxedDialer<O, E> {
+        BoxedDialer::new(Transport::dialer(self))
+    }
+}
+
+impl<D, O, E> AbstractDialer<O, E> for D
+where
+    D: Dialer<Output = O, Error = E> + Clone + Send + 'static,
+    E: error::Error,
+    D::Dial: Send + 'static,
+{
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
-        let fut = Transport::dial(self.clone(), addr)?;
+        let fut = Dialer::dial(self.clone(), addr)?;
         Ok(Box::pin(fut) as Dial<_, _>)
     }
 }
@@ -91,13 +108,53 @@ where E: error::Error,
 {
     type Output = O;
     type Error = E;
+    type Dial = Dial<O, E>;
+    type Dialer = BoxedDialer<O, E>;
     type Listener = Listener<O, E>;
     type ListenerUpgrade = ListenerUpgrade<O, E>;
-    type Dial = Dial<O, E>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         self.inner.listen_on(addr)
     }
+
+    fn dialer(&self) -> Self::Dialer {
+        self.inner.dialer()
+    }
+}
+
+/// See the `Transport::boxed` method.
+pub struct BoxedDialer<O, E> {
+    inner: Arc<dyn AbstractDialer<O, E> + Send + Sync>,
+}
+
+impl<O, E> BoxedDialer<O, E> {
+    fn new<D: AbstractDialer<O, E> + Send + Sync + 'static>(dialer: D) -> Self {
+        BoxedDialer {
+            inner: Arc::new(dialer),
+        }
+    }
+}
+
+impl<O, E> fmt::Debug for BoxedDialer<O, E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BoxedDialer")
+    }
+}
+
+impl<O, E> Clone for BoxedDialer<O, E> {
+    fn clone(&self) -> Self {
+        BoxedDialer {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<O, E> Dialer for BoxedDialer<O, E>
+where E: error::Error,
+{
+    type Output = O;
+    type Error = E;
+    type Dial = Dial<O, E>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.dial(addr)

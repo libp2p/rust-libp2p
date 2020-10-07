@@ -27,6 +27,7 @@ use crate::{
     ConnectionInfo,
     Negotiated,
     transport::{
+        Dialer,
         Transport,
         TransportError,
         ListenerEvent,
@@ -101,11 +102,13 @@ where
         AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>
     > where
         T: Transport<Output = C>,
+        T::Listener: Unpin,
         I: ConnectionInfo,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         U: InboundUpgrade<Negotiated<C>, Output = (I, D), Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = (I, D), Error = E> + Clone,
+        U: OutboundUpgrade<Negotiated<C>, Output = (I, D), Error = E>,
+        U: Clone,
         E: Error + 'static,
     {
         let version = self.version;
@@ -130,11 +133,13 @@ where
     pub fn apply<C, D, U, I, E>(self, upgrade: U) -> Builder<Upgrade<T, U>>
     where
         T: Transport<Output = (I, C)>,
+        T::Listener: Unpin,
         C: AsyncRead + AsyncWrite + Unpin,
         D: AsyncRead + AsyncWrite + Unpin,
         I: ConnectionInfo,
         U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
+        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E>,
+        U: Clone,
         E: Error + 'static,
     {
         Builder::new(Upgrade::new(self.inner, upgrade), self.version)
@@ -155,11 +160,13 @@ where
         -> AndThen<T, impl FnOnce((I, C), ConnectedPoint) -> Multiplex<C, U, I> + Clone>
     where
         T: Transport<Output = (I, C)>,
+        T::Listener: Unpin,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         I: ConnectionInfo,
         U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: Clone,
         E: Error + 'static,
     {
         let version = self.version;
@@ -185,11 +192,13 @@ where
         -> AndThen<T, impl FnOnce((I, C), ConnectedPoint) -> Multiplex<C, U, I> + Clone>
     where
         T: Transport<Output = (I, C)>,
+        T::Listener: Unpin,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
         I: ConnectionInfo,
         U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E>,
+        U: Clone,
         E: Error + 'static,
         F: for<'a> FnOnce(&'a I, &'a ConnectedPoint) -> U + Clone
     {
@@ -268,6 +277,35 @@ where
 /// An inbound or outbound upgrade.
 type EitherUpgrade<C, U> = future::Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>;
 
+/// An upgrade on an authenticated, non-multiplexed [`Dialer`].
+///
+/// See [`Transport::upgrade`]
+#[derive(Debug, Copy, Clone)]
+pub struct UpgradeDialer<T, U> { dialer: T, upgrade: U }
+
+impl<T, C, D, U, I, E> Dialer for UpgradeDialer<T, U>
+where
+    T: Dialer<Output = (I, C)>,
+    T::Error: 'static,
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
+    U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
+    E: Error + 'static
+{
+    type Output = (I, D);
+    type Error = TransportUpgradeError<T::Error, E>;
+    type Dial = DialUpgradeFuture<T::Dial, U, I, C>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.dialer.dial(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
+        Ok(DialUpgradeFuture {
+            future: Box::pin(future),
+            upgrade: future::Either::Left(Some(self.upgrade))
+        })
+    }
+}
+
 /// An upgrade on an authenticated, non-multiplexed [`Transport`].
 ///
 /// See [`Transport::upgrade`]
@@ -283,6 +321,7 @@ impl<T, U> Upgrade<T, U> {
 impl<T, C, D, U, I, E> Transport for Upgrade<T, U>
 where
     T: Transport<Output = (I, C)>,
+    T::Listener: Unpin,
     T::Error: 'static,
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
@@ -291,26 +330,27 @@ where
 {
     type Output = (I, D);
     type Error = TransportUpgradeError<T::Error, E>;
+    type Dial = DialUpgradeFuture<T::Dial, U, I, C>;
+    type Dialer = UpgradeDialer<T::Dialer, U>;
     type Listener = ListenerStream<T::Listener, U>;
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, I, C>;
-    type Dial = DialUpgradeFuture<T::Dial, U, I, C>;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.inner.dial(addr.clone())
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        let (stream, dialer) = self.inner.listen_on(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(DialUpgradeFuture {
-            future: Box::pin(future),
-            upgrade: future::Either::Left(Some(self.upgrade))
-        })
+        let stream = ListenerStream {
+            stream: Box::pin(stream),
+            upgrade: self.upgrade.clone(),
+        };
+        let dialer = UpgradeDialer {
+            dialer,
+            upgrade: self.upgrade,
+        };
+        Ok((stream, dialer))
     }
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let stream = self.inner.listen_on(addr)
-            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(ListenerStream {
-            stream: Box::pin(stream),
-            upgrade: self.upgrade
-        })
+    fn dialer(&self) -> Self::Dialer {
+        UpgradeDialer { dialer: self.inner.dialer(), upgrade: self.upgrade.clone() }
     }
 }
 

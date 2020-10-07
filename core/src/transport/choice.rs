@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::either::{EitherListenStream, EitherOutput, EitherError, EitherFuture};
-use crate::transport::{Transport, TransportError};
+use crate::transport::{Dialer, Transport, TransportError};
 use multiaddr::Multiaddr;
 
 /// Struct returned by `or_transport()`.
@@ -39,19 +39,28 @@ where
 {
     type Output = EitherOutput<A::Output, B::Output>;
     type Error = EitherError<A::Error, B::Error>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
+    type Dialer = OrDialer<A::Dialer, B::Dialer>;
     type Listener = EitherListenStream<A::Listener, B::Listener>;
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         let addr = match self.0.listen_on(addr) {
-            Ok(listener) => return Ok(EitherListenStream::First(listener)),
+            Ok((listener, dialer)) => {
+                let dialer = OrDialer(Some(dialer), None);
+                let listener = EitherListenStream::First(listener);
+                return Ok((listener, dialer));
+            }
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
         };
 
         let addr = match self.1.listen_on(addr) {
-            Ok(listener) => return Ok(EitherListenStream::Second(listener)),
+            Ok((listener, dialer)) => {
+                let dialer = OrDialer(None, Some(dialer));
+                let listener = EitherListenStream::Second(listener);
+                return Ok((listener, dialer));
+            }
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
         };
@@ -59,17 +68,42 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
+    fn dialer(&self) -> Self::Dialer {
+        OrDialer(Some(self.0.dialer()), Some(self.1.dialer()))
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct OrDialer<A, B>(Option<A>, Option<B>);
+
+impl<A, B> Dialer for OrDialer<A, B>
+where
+    B: Dialer,
+    A: Dialer,
+{
+    type Output = EitherOutput<A::Output, B::Output>;
+    type Error = EitherError<A::Error, B::Error>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
+
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = match self.0.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
+        let addr = if let Some(dialer) = self.0 {
+            match dialer.dial(addr) {
+                Ok(connec) => return Ok(EitherFuture::First(connec)),
+                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+                Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
+            }
+        } else {
+            addr
         };
 
-        let addr = match self.1.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
+        let addr = if let Some(dialer) = self.1 {
+            match dialer.dial(addr) {
+                Ok(connec) => return Ok(EitherFuture::Second(connec)),
+                Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+                Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
+            }
+        } else {
+            addr
         };
 
         Err(TransportError::MultiaddrNotSupported(addr))

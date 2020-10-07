@@ -21,7 +21,7 @@
 use crate::{
     ConnectedPoint,
     either::EitherError,
-    transport::{Transport, TransportError, ListenerEvent}
+    transport::{Dialer, Transport, TransportError, ListenerEvent}
 };
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
@@ -46,25 +46,46 @@ where
 {
     type Output = O;
     type Error = EitherError<T::Error, F::Error>;
+    type Dial = AndThenFuture<T::Dial, C, F>;
+    type Dialer = AndThenDialer<T::Dialer, C>;
     type Listener = AndThenStream<T::Listener, C>;
     type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F>;
-    type Dial = AndThenFuture<T::Dial, C, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self.transport.listen_on(addr).map_err(|err| err.map(EitherError::A))?;
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        let (listener, dialer) = self.transport.listen_on(addr).map_err(|err| err.map(EitherError::A))?;
         // Try to negotiate the protocol.
         // Note that failing to negotiate a protocol will never produce a future with an error.
         // Instead the `stream` will produce `Ok(Err(...))`.
         // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
-        let stream = AndThenStream { stream: listener, fun: self.fun };
-        Ok(stream)
+        let stream = AndThenStream { stream: listener, fun: self.fun.clone() };
+        let dialer = AndThenDialer { dialer, fun: self.fun };
+        Ok((stream, dialer))
     }
 
+    fn dialer(&self) -> Self::Dialer {
+        AndThenDialer { dialer: self.transport.dialer(), fun: self.fun.clone() }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AndThenDialer<D, C> { dialer: D, fun: C }
+
+impl<D, C, F, O> Dialer for AndThenDialer<D, C>
+where
+    D: Dialer,
+    C: FnOnce(D::Output, ConnectedPoint) -> F + Clone,
+    F: TryFuture<Ok = O>,
+    F::Error: error::Error,
+{
+    type Output = O;
+    type Error = EitherError<D::Error, F::Error>;
+    type Dial = AndThenFuture<D::Dial, C, F>;
+
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dialed_fut = self.transport.dial(addr.clone()).map_err(|err| err.map(EitherError::A))?;
+        let dialed_fut = self.dialer.dial(addr.clone()).map_err(|err| err.map(EitherError::A))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
-            args: Some((self.fun, ConnectedPoint::Dialer { address: addr })),
+            args: Some((self.fun.clone(), ConnectedPoint::Dialer { address: addr })),
             marker: PhantomPinned,
         };
         Ok(future)

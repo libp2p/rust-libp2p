@@ -24,7 +24,7 @@
 //! underlying `Transport`.
 // TODO: add example
 
-use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
+use crate::{Dialer, Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
@@ -70,31 +70,23 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
     }
 }
 
-impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
+#[derive(Debug, Copy, Clone)]
+pub struct TimeoutDialer<D> {
+    dialer: D,
+    outgoing_timeout: Duration,
+}
+
+impl<D> Dialer for TimeoutDialer<D>
 where
-    InnerTrans: Transport,
-    InnerTrans::Error: 'static,
+    D: Dialer,
+    D::Error: 'static,
 {
-    type Output = InnerTrans::Output;
-    type Error = TransportTimeoutError<InnerTrans::Error>;
-    type Listener = TimeoutListener<InnerTrans::Listener>;
-    type ListenerUpgrade = Timeout<InnerTrans::ListenerUpgrade>;
-    type Dial = Timeout<InnerTrans::Dial>;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self.inner.listen_on(addr)
-            .map_err(|err| err.map(TransportTimeoutError::Other))?;
-
-        let listener = TimeoutListener {
-            inner: listener,
-            timeout: self.incoming_timeout,
-        };
-
-        Ok(listener)
-    }
+    type Output = D::Output;
+    type Error = TransportTimeoutError<D::Error>;
+    type Dial = Timeout<D::Dial>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dial = self.inner.dial(addr)
+        let dial = self.dialer.dial(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,
@@ -103,13 +95,47 @@ where
     }
 }
 
+impl<T> Transport for TransportTimeout<T>
+where
+    T: Transport,
+    T::Error: 'static,
+{
+    type Output = T::Output;
+    type Error = TransportTimeoutError<T::Error>;
+    type Dial = Timeout<T::Dial>;
+    type Dialer = TimeoutDialer<T::Dialer>;
+    type Listener = TimeoutListener<T::Listener>;
+    type ListenerUpgrade = Timeout<T::ListenerUpgrade>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        let (listener, dialer) = self.inner.listen_on(addr)
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
+
+        let listener = TimeoutListener {
+            inner: listener,
+            incoming_timeout: self.incoming_timeout,
+        };
+
+        let dialer = TimeoutDialer {
+            dialer,
+            outgoing_timeout: self.outgoing_timeout,
+        };
+
+        Ok((listener, dialer))
+    }
+
+    fn dialer(&self) -> Self::Dialer {
+        TimeoutDialer { dialer: self.inner.dialer(), outgoing_timeout: self.outgoing_timeout }
+    }
+}
+
 // TODO: can be removed and replaced with an `impl Stream` once impl Trait is fully stable
 //       in Rust (https://github.com/rust-lang/rust/issues/34511)
 #[pin_project::pin_project]
-pub struct TimeoutListener<InnerStream> {
+pub struct TimeoutListener<S> {
     #[pin]
-    inner: InnerStream,
-    timeout: Duration,
+    inner: S,
+    incoming_timeout: Duration,
 }
 
 impl<InnerStream, O, E> Stream for TimeoutListener<InnerStream>
@@ -128,7 +154,7 @@ where
             Poll::Pending => return Poll::Pending,
         };
 
-        let timeout = *this.timeout;
+        let timeout = *this.incoming_timeout;
         let event = poll_out
             .map(move |inner_fut| {
                 Timeout {

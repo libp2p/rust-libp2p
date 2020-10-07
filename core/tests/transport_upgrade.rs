@@ -22,7 +22,7 @@ mod util;
 
 use futures::prelude::*;
 use libp2p_core::identity;
-use libp2p_core::transport::{Transport, MemoryTransport};
+use libp2p_core::transport::{Dialer, Transport, MemoryTransport};
 use libp2p_core::upgrade::{self, UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
@@ -136,4 +136,3 @@ fn upgrade_pipeline() {
     async_std::task::spawn(server);
     async_std::task::block_on(client);
 }
-

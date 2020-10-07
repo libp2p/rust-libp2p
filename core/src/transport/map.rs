@@ -20,7 +20,7 @@
 
 use crate::{
     ConnectedPoint,
-    transport::{Transport, TransportError, ListenerEvent}
+    transport::{Dialer, Transport, TransportError, ListenerEvent}
 };
 use futures::prelude::*;
 use multiaddr::Multiaddr;
@@ -36,26 +36,45 @@ impl<T, F> Map<T, F> {
     }
 }
 
-impl<T, F, D> Transport for Map<T, F>
+impl<T, F, O> Transport for Map<T, F>
 where
     T: Transport,
-    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
+    F: FnOnce(T::Output, ConnectedPoint) -> O + Clone
 {
-    type Output = D;
+    type Output = O;
     type Error = T::Error;
+    type Dial = MapFuture<T::Dial, F>;
+    type Dialer = MapDialer<T::Dialer, F>;
     type Listener = MapStream<T::Listener, F>;
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
-    type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let stream = self.transport.listen_on(addr)?;
-        Ok(MapStream { stream, fun: self.fun })
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        let (stream, dialer) = self.transport.listen_on(addr)?;
+        Ok((MapStream { stream, fun: self.fun.clone() }, MapDialer { dialer, fun: self.fun }))
     }
 
+    fn dialer(&self) -> Self::Dialer {
+        MapDialer { dialer: self.transport.dialer(), fun: self.fun.clone() }
+    }
+}
+
+/// See `Transport::map`.
+#[derive(Debug, Copy, Clone)]
+pub struct MapDialer<D, F> { dialer: D, fun: F }
+
+impl<D, F, O> Dialer for MapDialer<D, F>
+where
+    D: Dialer,
+    F: FnOnce(D::Output, ConnectedPoint) -> O + Clone
+{
+    type Output = O;
+    type Error = D::Error;
+    type Dial = MapFuture<D::Dial, F>;
+
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial(addr.clone())?;
+        let future = self.dialer.dial(addr.clone())?;
         let p = ConnectedPoint::Dialer { address: addr };
-        Ok(MapFuture { inner: future, args: Some((self.fun, p)) })
+        Ok(MapFuture { inner: future, args: Some((self.fun.clone(), p)) })
     }
 }
 
