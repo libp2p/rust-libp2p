@@ -27,4 +27,4 @@ void = "1.0"
 wasm-timer = "0.2.4"
 
 [dev-dependencies]
-get_if_addrs = "0.5.3"
+if-addrs = "0.6.4"
