@@ -33,7 +33,7 @@
 //!
 
 use futures::{prelude::*, future::Ready};
-use libp2p_core::{transport::ListenerEvent, transport::TransportError, Multiaddr, Transport};
+use libp2p_core::{transport::ListenerEvent, transport::TransportError, Dialer, Multiaddr, Transport};
 use parity_send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{JsCast, prelude::*};
@@ -164,31 +164,10 @@ impl Clone for ExtTransport {
     }
 }
 
-impl Transport for ExtTransport {
+impl Dialer for ExtTransport {
     type Output = Connection;
     type Error = JsErr;
-    type Listener = Listen;
-    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Dial;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let iter = self
-            .inner
-            .listen_on(&addr.to_string())
-            .map_err(|err| {
-                if is_not_supported_error(&err) {
-                    TransportError::MultiaddrNotSupported(addr)
-                } else {
-                    TransportError::Other(JsErr::from(err))
-                }
-            })?;
-
-        Ok(Listen {
-            iterator: SendWrapper::new(iter),
-            next_event: None,
-            pending_events: VecDeque::new(),
-        })
-    }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let promise = self
@@ -205,6 +184,40 @@ impl Transport for ExtTransport {
         Ok(Dial {
             inner: SendWrapper::new(promise.into()),
         })
+    }
+}
+
+impl Transport for ExtTransport {
+    type Output = Connection;
+    type Error = JsErr;
+    type Dial = Dial;
+    type Dialer = Self;
+    type Listener = Listen;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+
+    fn dialer(&self) -> Self::Dialer {
+        self.clone()
+    }
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        let iter = self
+            .inner
+            .listen_on(&addr.to_string())
+            .map_err(|err| {
+                if is_not_supported_error(&err) {
+                    TransportError::MultiaddrNotSupported(addr)
+                } else {
+                    TransportError::Other(JsErr::from(err))
+                }
+            })?;
+
+        let listener = Listen {
+            iterator: SendWrapper::new(iter),
+            next_event: None,
+            pending_events: VecDeque::new(),
+        };
+        let dialer = self.clone();
+        Ok((listener, dialer))
     }
 }
 
