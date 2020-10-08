@@ -34,101 +34,110 @@
 #![cfg(all(unix, not(target_os = "emscripten")))]
 #![cfg_attr(docsrs, doc(cfg(all(unix, not(target_os = "emscripten")))))]
 
+use async_io::Async;
 use futures::{prelude::*, future::{BoxFuture, Ready}};
-use futures::stream::BoxStream;
 use libp2p_core::{
-    Transport,
+    Dialer, Transport,
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
 };
 use log::debug;
-use std::{io, path::PathBuf};
-
-macro_rules! codegen {
-    ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
+use std::{io, path::PathBuf, pin::Pin, task::{Context, Poll}};
+use std::os::unix::net::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
-#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
 #[derive(Debug, Clone)]
-pub struct $uds_config {
+pub struct UdsConfig {
 }
 
-impl $uds_config {
+impl UdsConfig {
     /// Creates a new configuration object for Unix domain sockets.
-    pub fn new() -> $uds_config {
-        $uds_config {}
+    pub fn new() -> UdsConfig {
+        UdsConfig {}
     }
 }
 
-impl Transport for $uds_config {
-    type Output = $unix_stream;
-    type Error = io::Error;
-    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
-    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+#[derive(Debug, Clone)]
+pub struct UdsDialer {}
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if let Ok(path) = multiaddr_to_path(&addr) {
-            Ok(async move { $build_listener(&path).await }
-                .map_ok(move |listener| {
-                    stream::once({
-                        let addr = addr.clone();
-                        async move {
-                            debug!("Now listening on {}", addr);
-                            Ok(ListenerEvent::NewAddress(addr))
-                        }
-                    }).chain(stream::unfold(listener, move |$($mut_or_not)* listener| {
-                        let addr = addr.clone();
-                        async move {
-                            let (stream, _) = match listener.accept().await {
-                                Ok(v) => v,
-                                Err(err) => return Some((Err(err), listener))
-                            };
-                            debug!("incoming connection on {}", addr);
-                            let event = ListenerEvent::Upgrade {
-                                upgrade: future::ok(stream),
-                                local_addr: addr.clone(),
-                                remote_addr: addr.clone()
-                            };
-                            Some((Ok(event), listener))
-                        }
-                    }))
-                })
-                .try_flatten_stream()
-                .boxed())
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
-        }
-    }
+impl Dialer for UdsDialer {
+    type Output = Async<UnixStream>;
+    type Error = io::Error;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
+            Ok(Async::<UnixStream>::connect(path).boxed())
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 }
 
-};
+impl Transport for UdsConfig {
+    type Output = Async<UnixStream>;
+    type Error = io::Error;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dialer = UdsDialer;
+    type Listener = UdsListenStream;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+
+    fn dialer(&self) -> Self::Dialer {
+        UdsDialer {}
+    }
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        if let Ok(path) = multiaddr_to_path(&addr) {
+            let listener = Async::<UnixListener>::bind(path).map_err(TransportError::Other)?;
+            Ok((UdsListenStream { new_address: true, listener, addr }, UdsDialer {}))
+        } else {
+            Err(TransportError::MultiaddrNotSupported(addr))
+        }
+    }
 }
 
-#[cfg(feature = "async-std")]
-codegen!(
-    "async-std",
-    UdsConfig,
-    |addr| async move { async_std::os::unix::net::UnixListener::bind(addr).await },
-    async_std::os::unix::net::UnixStream,
-);
-#[cfg(feature = "tokio")]
-codegen!(
-    "tokio",
-    TokioUdsConfig,
-    |addr| async move { tokio::net::UnixListener::bind(addr) },
-    tokio::net::UnixStream,
-    mut
-);
+pub struct UdsListenStream {
+    new_address: bool,
+    listener: Async<UnixListener>,
+    addr: Multiaddr,
+}
+
+impl Stream for UdsListenStream {
+    type Item = Result<ListenerEvent<Ready<Result<Async<UnixStream>, std::io::Error>>, std::io::Error>, std::io::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        if self.new_address {
+            self.new_address = false;
+            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))));
+        }
+
+        let (stream, _) = loop {
+            match self.listener.accept().now_or_never() {
+                Some(Ok(res)) => break res,
+                Some(Err(e)) => {
+                    debug!("error accepting incoming connection: {}", e);
+                    return Poll::Ready(Some(Ok(ListenerEvent::Error(e))));
+                }
+                None => {
+                    match self.listener.poll_readable(cx) {
+                        Poll::Ready(Ok(())) => continue,
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
+                    }
+                }
+            }
+        };
+
+        debug!("incoming connection on {}", self.addr);
+        let event = ListenerEvent::Upgrade {
+            upgrade: future::ok(stream),
+            local_addr: self.addr.clone(),
+            remote_addr: self.addr.clone()
+        };
+        Poll::Ready(Some(Ok(event)))
+    }
+}
 
 /// Turns a `Multiaddr` containing a single `Unix` component into a path.
 ///
@@ -155,12 +164,12 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     Ok(out)
 }
 
-#[cfg(all(test, feature = "async-std"))]
+#[cfg(test)]
 mod tests {
     use super::{multiaddr_to_path, UdsConfig};
     use futures::{channel::oneshot, prelude::*};
     use std::{self, borrow::Cow, path::Path};
-    use libp2p_core::{Transport, multiaddr::{Protocol, Multiaddr}};
+    use libp2p_core::{Dialer, Transport, multiaddr::{Protocol, Multiaddr}};
     use tempfile;
 
     #[test]
@@ -189,7 +198,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         async_std::task::spawn(async move {
-            let mut listener = UdsConfig::new().listen_on(addr).unwrap();
+            let mut listener = UdsConfig::new().listen_on(addr).unwrap().0;
 
             let listen_addr = listener.try_next().await.unwrap()
                 .expect("some event")
@@ -213,7 +222,7 @@ mod tests {
         async_std::task::block_on(async move {
             let uds = UdsConfig::new();
             let addr = rx.await.unwrap();
-            let mut socket = uds.dial(addr).unwrap().await.unwrap();
+            let mut socket = uds.dialer().dial(addr).unwrap().await.unwrap();
             socket.write(&[1, 2, 3]).await.unwrap();
         });
     }
