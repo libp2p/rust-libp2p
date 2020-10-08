@@ -74,6 +74,7 @@ pub fn build_transport(
     Error = impl Error + Send,
     Listener = impl Send,
     Dial = impl Send,
+    Dialer = impl Clone + Send + Sync,
     ListenerUpgrade = impl Send,
 > + Clone {
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&key_pair).unwrap();

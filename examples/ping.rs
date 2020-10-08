@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = libp2p::build_development_transport(id_keys)?;
+    let transport = task::block_on(libp2p::build_development_transport(id_keys))?;
 
     // Create a ping network behaviour.
     //

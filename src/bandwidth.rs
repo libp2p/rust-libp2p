@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
+use crate::{Multiaddr, core::{Dialer, Transport, transport::{ListenerEvent, TransportError}}};
 
 use atomic::Atomic;
 use futures::{prelude::*, io::{IoSlice, IoSliceMut}, ready};
@@ -57,19 +57,40 @@ where
 {
     type Output = BandwidthConnecLogging<TInner::Output>;
     type Error = TInner::Error;
+    type Dial = BandwidthFuture<TInner::Dial>;
+    type Dialer = BandwidthDialer<TInner::Dialer>;
     type Listener = BandwidthListener<TInner::Listener>;
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
-    type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let sinks = self.sinks;
-        self.inner
-            .listen_on(addr)
-            .map(move |inner| BandwidthListener { inner, sinks })
+    fn dialer(&self) -> Self::Dialer {
+        BandwidthDialer { inner: self.inner.dialer(), sinks: self.sinks.clone() }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         let sinks = self.sinks;
+        let (listener, dialer) = self.inner.listen_on(addr)?;
+        let listener = BandwidthListener { inner: listener, sinks: sinks.clone() };
+        let dialer = BandwidthDialer { inner: dialer, sinks };
+        Ok((listener, dialer))
+    }
+}
+
+#[derive(Clone)]
+pub struct BandwidthDialer<TInner> {
+    inner: TInner,
+    sinks: Arc<BandwidthSinks>,
+}
+
+impl<TInner> Dialer for BandwidthDialer<TInner>
+where
+    TInner: Dialer,
+{
+    type Output = BandwidthConnecLogging<TInner::Output>;
+    type Error = TInner::Error;
+    type Dial = BandwidthFuture<TInner::Dial>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })

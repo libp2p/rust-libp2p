@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = build_development_transport(local_key)?;
+    let transport = task::block_on(build_development_transport(local_key))?;
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]

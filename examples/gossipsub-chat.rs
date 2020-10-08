@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key.clone())?;
+    let transport = task::block_on(libp2p::build_development_transport(local_key.clone()))?;
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net".into());
