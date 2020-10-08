@@ -23,7 +23,7 @@ use crate::{error::Error, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use libp2p_core::{
-    Transport,
+    Dialer, Transport,
     either::EitherOutput,
     multiaddr::{Protocol, Multiaddr},
     transport::{ListenerEvent, TransportError}
@@ -102,17 +102,28 @@ where
     T: Transport + Send + Clone + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
+    T::Dialer: Clone + Send + Sync + 'static,
+    T::Listener: Unpin + Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static
 {
     type Output = Connection<T::Output>;
     type Error = Error<T::Error>;
-    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
-    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Dialer = WsDialer<T::Dialer>;
+    type Listener = WsListener<T>;
+    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn dialer(&self) -> Self::Dialer {
+        WsDialer {
+            dialer: self.transport.dialer(),
+            tls_config: self.tls_config.clone(),
+            max_redirects: self.max_redirects,
+            use_deflate: self.use_deflate,
+        }
+    }
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
 
         let (use_tls, proto) = match inner_addr.pop() {
@@ -130,105 +141,167 @@ where
             }
         };
 
-        let tls_config = self.tls_config;
-        let max_size = self.max_data_size;
-        let use_deflate = self.use_deflate;
-        let transport = self.transport.listen_on(inner_addr).map_err(|e| e.map(Error::Transport))?;
-        let listen = transport
-            .map_err(Error::Transport)
-            .map_ok(move |event| match event {
-                ListenerEvent::NewAddress(mut a) => {
-                    a = a.with(proto.clone());
-                    debug!("Listening on {}", a);
-                    ListenerEvent::NewAddress(a)
-                }
-                ListenerEvent::AddressExpired(mut a) => {
-                    a = a.with(proto.clone());
-                    ListenerEvent::AddressExpired(a)
-                }
-                ListenerEvent::Error(err) => {
-                    ListenerEvent::Error(Error::Transport(err))
-                }
-                ListenerEvent::Upgrade { upgrade, mut local_addr, mut remote_addr } => {
-                    local_addr = local_addr.with(proto.clone());
-                    remote_addr = remote_addr.with(proto.clone());
-                    let remote1 = remote_addr.clone(); // used for logging
-                    let remote2 = remote_addr.clone(); // used for logging
-                    let tls_config = tls_config.clone();
+        let (listener, dialer) = self.transport
+            .listen_on(inner_addr)
+            .map_err(|e| e.map(Error::Transport))?;
+        let listener = WsListener {
+            listener,
+            use_tls,
+            proto,
+            use_deflate: self.use_deflate,
+            max_data_size: self.max_data_size,
+            tls_config: self.tls_config.clone(),
+        };
+        let dialer = WsDialer {
+            dialer,
+            tls_config: self.tls_config.clone(),
+            max_redirects: self.max_redirects,
+            use_deflate: self.use_deflate,
+        };
+        Ok((listener, dialer))
+    }
+}
 
-                    let upgrade = async move {
-                        let stream = upgrade.map_err(Error::Transport).await?;
-                        trace!("incoming connection from {}", remote1);
+pub struct WsListener<T: Transport> {
+    listener: T::Listener,
+    use_tls: bool,
+    proto: Protocol<'static>,
+    max_data_size: usize,
+    tls_config: tls::Config,
+    use_deflate: bool,
+}
 
-                        let stream =
-                            if use_tls { // begin TLS session
-                                let server = tls_config
-                                    .server
-                                    .expect("for use_tls we checked server is not none");
+impl<T> Stream for WsListener<T>
+where
+    T: Transport + Send + Clone + 'static,
+    T::Listener: Unpin + Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Dialer: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    type Item = Result<ListenerEvent<Pin<Box<dyn Future<Output = Result<Connection<T::Output>, Error<T::Error>>> + Send>>, Error<T::Error>>, Error<T::Error>>;
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let event = match self.listener.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(event))) => event,
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(Error::Transport(err)))),
+            Poll::Ready(None) => return Poll::Ready(None),
+        };
+        let event = match event {
+            ListenerEvent::NewAddress(mut a) => {
+                a = a.with(self.proto.clone());
+                debug!("Listening on {}", a);
+                ListenerEvent::NewAddress(a)
+            }
+            ListenerEvent::AddressExpired(mut a) => {
+                a = a.with(self.proto.clone());
+                ListenerEvent::AddressExpired(a)
+            }
+            ListenerEvent::Error(err) => {
+                ListenerEvent::Error(Error::Transport(err))
+            }
+            ListenerEvent::Upgrade { upgrade, mut local_addr, mut remote_addr } => {
+                local_addr = local_addr.with(self.proto.clone());
+                remote_addr = remote_addr.with(self.proto.clone());
+                let remote1 = remote_addr.clone(); // used for logging
+                let remote2 = remote_addr.clone(); // used for logging
+                let tls_config = self.tls_config.clone();
+                let use_tls = self.use_tls;
+                let use_deflate = self.use_deflate;
+                let max_size = self.max_data_size;
 
-                                trace!("awaiting TLS handshake with {}", remote1);
+                let upgrade = async move {
+                    let stream = upgrade.map_err(Error::Transport).await?;
+                    trace!("incoming connection from {}", remote1);
+                    let stream =
+                        if use_tls { // begin TLS session
+                            let server = tls_config
+                                .server
+                                .expect("for use_tls we checked server is not none");
+                            trace!("awaiting TLS handshake with {}", remote1);
 
-                                let stream = server.accept(stream)
-                                    .map_err(move |e| {
-                                        debug!("TLS handshake with {} failed: {}", remote1, e);
-                                        Error::Tls(tls::Error::from(e))
-                                    })
-                                    .await?;
-
-                                let stream: TlsOrPlain<_> =
-                                    EitherOutput::First(EitherOutput::Second(stream));
-
-                                stream
-                            } else { // continue with plain stream
-                                EitherOutput::Second(stream)
-                            };
-
-                        trace!("receiving websocket handshake request from {}", remote2);
-
-                        let mut server = handshake::Server::new(stream);
-
-                        if use_deflate {
-                            server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
-                        }
-
-                        let ws_key = {
-                            let request = server.receive_request()
-                                .map_err(|e| Error::Handshake(Box::new(e)))
+                            let stream = server.accept(stream)
+                                .map_err(move |e| {
+                                    debug!("TLS handshake with {} failed: {}", remote1, e);
+                                    Error::Tls(tls::Error::from(e))
+                                })
                                 .await?;
-                            request.into_key()
+
+                            let stream: TlsOrPlain<_> =
+                                EitherOutput::First(EitherOutput::Second(stream));
+                            stream
+                        } else { // continue with plain stream
+                            EitherOutput::Second(stream)
                         };
 
-                        trace!("accepting websocket handshake request from {}", remote2);
+                    trace!("receiving websocket handshake request from {}", remote2);
 
-                        let response =
-                            handshake::server::Response::Accept {
-                                key: &ws_key,
-                                protocol: None
-                            };
+                    let mut server = handshake::Server::new(stream);
 
-                        server.send_response(&response)
+                    if use_deflate {
+                        server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
+                    }
+
+                    let ws_key = {
+                        let request = server.receive_request()
                             .map_err(|e| Error::Handshake(Box::new(e)))
                             .await?;
-
-                        let conn = {
-                            let mut builder = server.into_builder();
-                            builder.set_max_message_size(max_size);
-                            builder.set_max_frame_size(max_size);
-                            Connection::new(builder)
-                        };
-
-                        Ok(conn)
+                        request.into_key()
                     };
 
-                    ListenerEvent::Upgrade {
-                        upgrade: Box::pin(upgrade) as BoxFuture<'static, _>,
-                        local_addr,
-                        remote_addr
-                    }
+                    trace!("accepting websocket handshake request from {}", remote2);
+
+                    let response =
+                        handshake::server::Response::Accept {
+                            key: &ws_key,
+                            protocol: None
+                        };
+
+                    server.send_response(&response)
+                        .map_err(|e| Error::Handshake(Box::new(e)))
+                        .await?;
+
+                    let conn = {
+                        let mut builder = server.into_builder();
+                        builder.set_max_message_size(max_size);
+                        builder.set_max_frame_size(max_size);
+                        Connection::new(builder)
+                    };
+
+                    Ok(conn)
+                };
+
+                ListenerEvent::Upgrade {
+                    upgrade: Box::pin(upgrade) as BoxFuture<'static, _>,
+                    local_addr,
+                    remote_addr
                 }
-            });
-        Ok(Box::pin(listen))
+            }
+        };
+        Poll::Ready(Some(Ok(event)))
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct WsDialer<T> {
+    dialer: T,
+    tls_config: tls::Config,
+    max_redirects: u8,
+    use_deflate: bool,
+}
+
+impl<T> Dialer for WsDialer<T>
+where
+    T: Dialer + Clone + Send + Sync + 'static,
+    T::Error: Send + 'static,
+    T::Dial: Send + 'static,
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+{
+    type Output = Connection<T::Output>;
+    type Error = Error<T::Error>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Quick sanity check of the provided Multiaddr.
@@ -239,13 +312,12 @@ where
             return Err(TransportError::MultiaddrNotSupported(addr))
         }
 
-        // We are looping here in order to follow redirects (if any):
-        let mut remaining_redirects = self.max_redirects;
-        let mut addr = addr;
-        let future = async move {
+        Ok(Box::pin(async move {
+            // We are looping here in order to follow redirects (if any):
+            let mut remaining_redirects = self.max_redirects;
+            let mut addr = addr;
             loop {
-                let this = self.clone();
-                match this.dial_once(addr).await {
+                match self.dial_once(addr).await {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
                             debug!("too many redirects");
@@ -258,19 +330,17 @@ where
                     Err(e) => return Err(e)
                 }
             }
-        };
-
-        Ok(Box::pin(future))
+        }))
     }
 }
 
-impl<T> WsConfig<T>
+impl<T> WsDialer<T>
 where
-    T: Transport,
+    T: Dialer + Clone + Send,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static
 {
     /// Attempty to dial the given address and perform a websocket handshake.
-    async fn dial_once(self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+    async fn dial_once(&self, address: Multiaddr) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("dial address: {}", address);
 
         let (host_port, dns_name) = host_and_dnsname(&address)?;
@@ -293,7 +363,7 @@ where
                 }
             };
 
-        let dial = self.transport.dial(inner_addr)
+        let dial = self.dialer.clone().dial(inner_addr)
             .map_err(|e| match e {
                 TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
                 TransportError::Other(e) => Error::Transport(e)
@@ -586,4 +656,3 @@ where
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
-

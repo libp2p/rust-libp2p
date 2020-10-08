@@ -31,7 +31,7 @@ use libp2p_core::{
     ConnectedPoint,
     Transport,
     multiaddr::Multiaddr,
-    transport::{map::{MapFuture, MapStream}, ListenerEvent, TransportError}
+    transport::{map::{MapDialer, MapFuture, MapStream}, ListenerEvent, TransportError}
 };
 use rw_stream_sink::RwStreamSink;
 use std::{io, pin::Pin, task::{Context, Poll}};
@@ -96,22 +96,24 @@ where
     T: Transport + Send + Clone + 'static,
     T::Error: Send + 'static,
     T::Dial: Send + 'static,
-    T::Listener: Send + 'static,
+    T::Dialer: Send + Sync + Clone + 'static,
+    T::Listener: Unpin + Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static
+    T::Output: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static
 {
     type Output = RwStreamSink<BytesConnection<T::Output>>;
     type Error = Error<T::Error>;
-    type Listener = MapStream<InnerStream<T::Output, T::Error>, WrapperFn<T::Output>>;
-    type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
+    type Dialer = MapDialer<framed::WsDialer<T::Dialer>, WrapperFn<T::Output>>;
+    type Listener = MapStream<framed::WsListener<T>, WrapperFn<T::Output>>;
+    type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        self.transport.map(wrap_connection as WrapperFn<T::Output>).listen_on(addr)
+    fn dialer(&self) -> Self::Dialer {
+        self.transport.clone().map(wrap_connection as WrapperFn<T::Output>).dialer()
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport.map(wrap_connection as WrapperFn<T::Output>).dial(addr)
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Self::Dialer), TransportError<Self::Error>> {
+        self.transport.map(wrap_connection as WrapperFn<T::Output>).listen_on(addr)
     }
 }
 
@@ -186,7 +188,7 @@ mod tests {
     use libp2p_core::Multiaddr;
     use libp2p_tcp as tcp;
     use futures::prelude::*;
-    use libp2p_core::{Transport, multiaddr::Protocol};
+    use libp2p_core::{Dialer, Transport, multiaddr::Protocol};
     use super::WsConfig;
 
     #[test]
@@ -206,7 +208,8 @@ mod tests {
 
         let mut listener = ws_config.clone()
             .listen_on(listen_addr)
-            .expect("listener");
+            .expect("listener")
+            .0;
 
         let addr = listener.try_next().await
             .expect("some event")
@@ -226,7 +229,7 @@ mod tests {
             conn.await
         };
 
-        let outbound = ws_config.dial(addr).unwrap();
+        let outbound = ws_config.dialer().dial(addr).unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);
         a.and(b).unwrap();
