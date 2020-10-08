@@ -195,7 +195,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     message,
                 } => println!(
                     "Got message: {} with id: {} from peer: {:?}",
-                    String::from_utf8_lossy(&message.data),
+                    String::from_utf8_lossy(message.data()),
                     id,
                     peer_id
                 ),

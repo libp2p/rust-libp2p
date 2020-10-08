@@ -48,7 +48,7 @@ use libp2p_swarm::{
 };
 
 use crate::backoff::BackoffStorage;
-use crate::config::{GossipsubConfig, ValidationMode};
+use crate::config::{GenericGossipsubConfig, ValidationMode};
 use crate::error::PublishError;
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, HandlerEvent};
@@ -58,12 +58,13 @@ use crate::protocol::SIGNING_PREFIX;
 use crate::time_cache::DuplicateCache;
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::types::{
-    GossipsubControlAction, GossipsubMessage, GossipsubSubscription, GossipsubSubscriptionAction,
-    MessageAcceptance, MessageId, PeerInfo,
+    GenericGossipsubMessage, GossipsubControlAction, GossipsubMessageWithId, GossipsubSubscription,
+    GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
 use std::cmp::Ordering::Equal;
+use std::fmt::Debug;
 
 mod tests;
 
@@ -72,7 +73,7 @@ mod tests;
 /// Without signing, a number of privacy preserving modes can be selected.
 ///
 /// NOTE: The default validation settings are to require signatures. The [`ValidationMode`]
-/// should be updated in the [`GossipsubConfig`] to allow for unsigned messages.
+/// should be updated in the [`GenericGossipsubConfig`] to allow for unsigned messages.
 #[derive(Clone)]
 pub enum MessageAuthenticity {
     /// Message signing is enabled. The author will be the owner of the key and the sequence number
@@ -93,7 +94,7 @@ pub enum MessageAuthenticity {
     /// The author of the message and the sequence numbers are excluded from the message.
     ///
     /// NOTE: Excluding these fields may make these messages invalid by other nodes who
-    /// enforce validation of these fields. See [`ValidationMode`] in the `GossipsubConfig`
+    /// enforce validation of these fields. See [`ValidationMode`] in the `GenericGossipsubConfig`
     /// for how to customise this for rust-libp2p gossipsub.  A custom `message_id`
     /// function will need to be set to prevent all messages from a peer being filtered
     /// as duplicates.
@@ -119,7 +120,7 @@ impl MessageAuthenticity {
 
 /// Event that can happen on the gossipsub behaviour.
 #[derive(Debug)]
-pub enum GossipsubEvent {
+pub enum GenericGossipsubEvent<T: AsRef<[u8]>> {
     /// A message has been received.    
     Message {
         /// The peer that forwarded us this message.
@@ -128,7 +129,7 @@ pub enum GossipsubEvent {
         /// validating a message (if required).
         message_id: MessageId,
         /// The message itself.
-        message: GossipsubMessage,
+        message: GossipsubMessageWithId<T>,
     },
     /// A remote subscribed to a topic.
     Subscribed {
@@ -146,6 +147,8 @@ pub enum GossipsubEvent {
         topic: TopicHash,
     },
 }
+//for backwards compatibility
+pub type GossipsubEvent = GenericGossipsubEvent<Vec<u8>>;
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
@@ -200,15 +203,15 @@ impl From<MessageAuthenticity> for PublishConfig {
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
-/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If message signing is
+/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GenericGossipsubConfig`] instance. If message signing is
 /// disabled, the [`ValidationMode`] in the config should be adjusted to an appropriate level to
 /// accept unsigned messages.
-pub struct Gossipsub {
+pub struct GenericGossipsub<T: AsRef<[u8]>> {
     /// Configuration providing gossipsub performance parameters.
-    config: GossipsubConfig,
+    config: GenericGossipsubConfig<T>,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GossipsubEvent>>,
+    events: VecDeque<NetworkBehaviourAction<Arc<rpc_proto::Rpc>, GenericGossipsubEvent<T>>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -250,7 +253,7 @@ pub struct Gossipsub {
     backoffs: BackoffStorage,
 
     /// Message cache for the last few heartbeats.
-    mcache: MessageCache,
+    mcache: MessageCache<T>,
 
     /// Heartbeat interval stream.
     heartbeat: Interval,
@@ -283,11 +286,14 @@ pub struct Gossipsub {
     published_message_ids: DuplicateCache<MessageId>,
 }
 
-impl Gossipsub {
-    /// Creates a `Gossipsub` struct given a set of parameters specified via a `GossipsubConfig`.
+// for backwards compatibility
+pub type Gossipsub = GenericGossipsub<Vec<u8>>;
+
+impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T> {
+    /// Creates a `GenericGossipsub` struct given a set of parameters specified via a `GenericGossipsubConfig`.
     pub fn new(
         privacy: MessageAuthenticity,
-        config: GossipsubConfig,
+        config: GenericGossipsubConfig<T>,
     ) -> Result<Self, &'static str> {
         // Set up the router given the configuration settings.
 
@@ -297,7 +303,7 @@ impl Gossipsub {
 
         // Set up message publishing parameters.
 
-        Ok(Gossipsub {
+        Ok(GenericGossipsub {
             events: VecDeque::new(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
@@ -314,11 +320,7 @@ impl Gossipsub {
                 config.heartbeat_interval(),
                 config.backoff_slack(),
             ),
-            mcache: MessageCache::new(
-                config.history_gossip(),
-                config.history_length(),
-                config.message_id_fn(),
-            ),
+            mcache: MessageCache::new(config.history_gossip(), config.history_length()),
             heartbeat: Interval::new_at(
                 Instant::now() + config.heartbeat_initial_delay(),
                 config.heartbeat_interval(),
@@ -462,7 +464,7 @@ impl Gossipsub {
     pub fn publish<H: Hasher>(
         &mut self,
         topic: Topic<H>,
-        data: impl Into<Vec<u8>>,
+        data: impl Into<T>,
     ) -> Result<MessageId, PublishError> {
         self.publish_many(iter::once(topic), data)
     }
@@ -471,20 +473,22 @@ impl Gossipsub {
     pub fn publish_many<H: Hasher>(
         &mut self,
         topics: impl IntoIterator<Item = Topic<H>>,
-        data: impl Into<Vec<u8>>,
+        data: impl Into<T>,
     ) -> Result<MessageId, PublishError> {
         let message =
             self.build_message(topics.into_iter().map(|t| t.hash()).collect(), data.into())?;
-        let msg_id = (self.config.message_id_fn())(&message);
+        let msg_id = self.config.message_id(&message);
 
         let event = Arc::new(
             GossipsubRpc {
                 subscriptions: Vec::new(),
-                messages: vec![message.clone()],
+                messages: vec![RawGossipsubMessage::from(message.clone())],
                 control_msgs: Vec::new(),
             }
             .into_protobuf(),
         );
+
+        let message = GossipsubMessageWithId::new(message, msg_id.clone());
 
         // check that the size doesn't exceed the max transmission size
         if event.encoded_len() > self.config.max_transmit_size() {
@@ -723,11 +727,7 @@ impl Gossipsub {
         }
 
         let interval = Interval::new(params.decay_interval);
-        let peer_score = PeerScore::new_with_message_delivery_time_callback(
-            params,
-            self.config.message_id_fn(),
-            callback,
-        );
+        let peer_score = PeerScore::new_with_message_delivery_time_callback(params, callback);
         self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
         Ok(())
     }
@@ -1085,7 +1085,10 @@ impl Gossipsub {
         if !cached_messages.is_empty() {
             debug!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
-            let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
+            let message_list = cached_messages
+                .into_iter()
+                .map(|entry| RawGossipsubMessage::from(entry.1))
+                .collect();
             if let Err(_) = self.send_message(
                 peer_id.clone(),
                 GossipsubRpc {
@@ -1326,8 +1329,10 @@ impl Gossipsub {
 
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all peers in the mesh.
-    fn handle_received_message(&mut self, mut msg: GossipsubMessage, propagation_source: &PeerId) {
-        let msg_id = (self.config.message_id_fn())(&msg);
+    fn handle_received_message(&mut self, msg: RawGossipsubMessage, propagation_source: &PeerId) {
+        let msg = GenericGossipsubMessage::from(msg);
+        let msg_id = self.config.message_id(&msg);
+        let mut msg = GossipsubMessageWithId::new(msg, msg_id.clone());
         debug!(
             "Handling message: {:?} from peer: {}",
             msg_id,
@@ -1421,9 +1426,9 @@ impl Gossipsub {
         if self.mesh.keys().any(|t| msg.topics.iter().any(|u| t == u)) {
             debug!("Sending received message to user");
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                GossipsubEvent::Message {
+                GenericGossipsubEvent::Message {
                     propagation_source: propagation_source.clone(),
-                    message_id: msg_id,
+                    message_id: msg_id.clone(),
                     message: msg.clone(),
                 },
             ));
@@ -1437,11 +1442,10 @@ impl Gossipsub {
 
         // forward the message to mesh peers, if no validation is required
         if !self.config.validate_messages() {
-            let message_id = (self.config.message_id_fn())(&msg);
             if let Err(_) = self.forward_msg(msg, Some(propagation_source)) {
                 error!("Failed to forward message. Too large");
             }
-            debug!("Completed message handling for message: {:?}", message_id);
+            debug!("Completed message handling for message: {:?}", msg_id);
         }
     }
 
@@ -1530,7 +1534,7 @@ impl Gossipsub {
                     }
                     // generates a subscription event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        GossipsubEvent::Subscribed {
+                        GenericGossipsubEvent::Subscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
                         },
@@ -1554,7 +1558,7 @@ impl Gossipsub {
 
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        GossipsubEvent::Unsubscribed {
+                        GenericGossipsubEvent::Unsubscribed {
                             peer_id: propagation_source.clone(),
                             topic: subscription.topic_hash.clone(),
                         },
@@ -2119,10 +2123,10 @@ impl Gossipsub {
     /// Returns true if at least one peer was messaged.
     fn forward_msg(
         &mut self,
-        message: GossipsubMessage,
+        message: GossipsubMessageWithId<T>,
         propagation_source: Option<&PeerId>,
     ) -> Result<bool, PublishError> {
-        let msg_id = (self.config.message_id_fn())(&message);
+        let msg_id = message.message_id();
 
         // message is fully validated inform peer_score
         if let Some((peer_score, ..)) = &mut self.peer_score {
@@ -2165,7 +2169,7 @@ impl Gossipsub {
             let event = Arc::new(
                 GossipsubRpc {
                     subscriptions: Vec::new(),
-                    messages: vec![message.clone()],
+                    messages: vec![RawGossipsubMessage::from(message.clone())],
                     control_msgs: Vec::new(),
                 }
                 .into_protobuf(),
@@ -2182,12 +2186,12 @@ impl Gossipsub {
         }
     }
 
-    /// Constructs a `GossipsubMessage` performing message signing if required.
+    /// Constructs a `GenericGossipsubMessage` performing message signing if required.
     pub(crate) fn build_message(
         &self,
         topics: Vec<TopicHash>,
-        data: Vec<u8>,
-    ) -> Result<GossipsubMessage, SigningError> {
+        data: T,
+    ) -> Result<GenericGossipsubMessage<T>, SigningError> {
         match &self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
@@ -2200,7 +2204,7 @@ impl Gossipsub {
                 let signature = {
                     let message = rpc_proto::Message {
                         from: Some(author.clone().into_bytes()),
-                        data: Some(data.clone()),
+                        data: Some(data.clone().into()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic_ids: topics
                             .clone()
@@ -2222,7 +2226,7 @@ impl Gossipsub {
                     Some(keypair.sign(&signature_bytes)?)
                 };
 
-                Ok(GossipsubMessage {
+                Ok(GenericGossipsubMessage {
                     source: Some(author.clone()),
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2235,7 +2239,7 @@ impl Gossipsub {
                 })
             }
             PublishConfig::Author(peer_id) => {
-                Ok(GossipsubMessage {
+                Ok(GenericGossipsubMessage {
                     source: Some(peer_id.clone()),
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2248,7 +2252,7 @@ impl Gossipsub {
                 })
             }
             PublishConfig::RandomAuthor => {
-                Ok(GossipsubMessage {
+                Ok(GenericGossipsubMessage {
                     source: Some(PeerId::random()),
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2261,7 +2265,7 @@ impl Gossipsub {
                 })
             }
             PublishConfig::Anonymous => {
-                Ok(GossipsubMessage {
+                Ok(GenericGossipsubMessage {
                     source: None,
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2524,9 +2528,12 @@ fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
     })
 }
 
-impl NetworkBehaviour for Gossipsub {
+impl<T> NetworkBehaviour for GenericGossipsub<T>
+where
+    T: Send + 'static + Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>,
+{
     type ProtocolsHandler = GossipsubHandler;
-    type OutEvent = GossipsubEvent;
+    type OutEvent = GenericGossipsubEvent<T>;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         GossipsubHandler::new(
@@ -2789,11 +2796,13 @@ impl NetworkBehaviour for Gossipsub {
 
                 // Handle any invalid messages from this peer
                 if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-                    let id_fn = self.config.message_id_fn();
                     for (message, validation_error) in invalid_messages {
                         let reason = RejectReason::ValidationError(validation_error);
+                        let message = GenericGossipsubMessage::from(message);
+                        let id = self.config.message_id(&message);
+                        let message = GossipsubMessageWithId::new(message, id);
                         peer_score.reject_message(&propagation_source, &message, reason);
-                        gossip_promises.reject_message(&id_fn(&message), &reason);
+                        gossip_promises.reject_message(&message.message_id(), &reason);
                     }
                 } else {
                     // log the invalid messages
@@ -2934,7 +2943,7 @@ fn validate_config(
     Ok(())
 }
 
-impl fmt::Debug for Gossipsub {
+impl<T: Debug + AsRef<[u8]>> fmt::Debug for GenericGossipsub<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
             .field("config", &self.config)
@@ -2983,8 +2992,8 @@ mod local_test {
         }
     }
 
-    fn test_message() -> GossipsubMessage {
-        GossipsubMessage {
+    fn test_message() -> RawGossipsubMessage {
+        RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![0; 100],
             sequence_number: None,
@@ -3030,7 +3039,7 @@ mod local_test {
     /// Tests RPC message fragmentation
     fn test_message_fragmentation_deterministic() {
         let max_transmit_size = 500;
-        let config = crate::GossipsubConfigBuilder::new()
+        let config = crate::GenericGossipsubConfigBuilder::new()
             .max_transmit_size(max_transmit_size)
             .validation_mode(ValidationMode::Permissive)
             .build()
@@ -3078,7 +3087,7 @@ mod local_test {
     fn test_message_fragmentation() {
         fn prop(rpc: GossipsubRpc) {
             let max_transmit_size = 500;
-            let config = crate::GossipsubConfigBuilder::new()
+            let config = crate::GenericGossipsubConfigBuilder::new()
                 .max_transmit_size(max_transmit_size)
                 .validation_mode(ValidationMode::Permissive)
                 .build()

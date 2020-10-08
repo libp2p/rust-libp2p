@@ -19,9 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::topic::TopicHash;
-use crate::types::{GossipsubMessage, MessageId};
+use crate::types::{GossipsubMessageWithId, MessageId};
 use libp2p_core::PeerId;
 use log::debug;
+use std::fmt::Debug;
 use std::{collections::HashMap, fmt};
 
 /// CacheEntry stored in the history.
@@ -33,16 +34,15 @@ pub struct CacheEntry {
 
 /// MessageCache struct holding history of messages.
 #[derive(Clone)]
-pub struct MessageCache {
-    msgs: HashMap<MessageId, GossipsubMessage>,
+pub struct MessageCache<T> {
+    msgs: HashMap<MessageId, GossipsubMessageWithId<T>>,
     /// For every message and peer the number of times this peer asked for the message
     iwant_counts: HashMap<MessageId, HashMap<PeerId, u32>>,
     history: Vec<Vec<CacheEntry>>,
     gossip: usize,
-    msg_id: fn(&GossipsubMessage) -> MessageId,
 }
 
-impl fmt::Debug for MessageCache {
+impl<T: Debug + AsRef<[u8]>> fmt::Debug for MessageCache<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MessageCache")
             .field("msgs", &self.msgs)
@@ -53,33 +53,28 @@ impl fmt::Debug for MessageCache {
 }
 
 /// Implementation of the MessageCache.
-impl MessageCache {
-    pub fn new(
-        gossip: usize,
-        history_capacity: usize,
-        msg_id: fn(&GossipsubMessage) -> MessageId,
-    ) -> MessageCache {
+impl<T> MessageCache<T> {
+    pub fn new(gossip: usize, history_capacity: usize) -> Self {
         MessageCache {
             gossip,
             msgs: HashMap::default(),
             iwant_counts: HashMap::default(),
             history: vec![Vec::new(); history_capacity],
-            msg_id,
         }
     }
 
     /// Put a message into the memory cache.
     ///
     /// Returns the message if it already exists.
-    pub fn put(&mut self, msg: GossipsubMessage) -> Option<GossipsubMessage> {
-        let message_id = (self.msg_id)(&msg);
-        debug!("Put message {:?} in mcache", &message_id);
+    pub fn put(&mut self, msg: GossipsubMessageWithId<T>) -> Option<GossipsubMessageWithId<T>> {
+        let message_id = msg.message_id();
+        debug!("Put message {:?} in mcache", message_id);
         let cache_entry = CacheEntry {
             mid: message_id.clone(),
             topics: msg.topics.clone(),
         };
 
-        let seen_message = self.msgs.insert(message_id, msg);
+        let seen_message = self.msgs.insert(message_id.clone(), msg);
         if seen_message.is_none() {
             // Don't add duplicate entries to the cache.
             self.history[0].push(cache_entry);
@@ -88,7 +83,7 @@ impl MessageCache {
     }
 
     /// Get a message with `message_id`
-    pub fn get(&self, message_id: &MessageId) -> Option<&GossipsubMessage> {
+    pub fn get(&self, message_id: &MessageId) -> Option<&GossipsubMessageWithId<T>> {
         self.msgs.get(message_id)
     }
 
@@ -98,7 +93,7 @@ impl MessageCache {
         &mut self,
         message_id: &MessageId,
         peer: &PeerId,
-    ) -> Option<(&GossipsubMessage, u32)> {
+    ) -> Option<(&GossipsubMessageWithId<T>, u32)> {
         let iwant_counts = &mut self.iwant_counts;
         self.msgs.get(message_id).map(|message| {
             (message, {
@@ -114,7 +109,7 @@ impl MessageCache {
     }
 
     /// Gets and validates a message with `message_id`.
-    pub fn validate(&mut self, message_id: &MessageId) -> Option<&GossipsubMessage> {
+    pub fn validate(&mut self, message_id: &MessageId) -> Option<&GossipsubMessageWithId<T>> {
         self.msgs.get_mut(message_id).map(|message| {
             message.validated = true;
             &*message
@@ -174,7 +169,7 @@ impl MessageCache {
     }
 
     /// Removes a message from the cache and returns it if existent
-    pub fn remove(&mut self, message_id: &MessageId) -> Option<GossipsubMessage> {
+    pub fn remove(&mut self, message_id: &MessageId) -> Option<GossipsubMessageWithId<T>> {
         //We only remove the message from msgs and iwant_count and keep the message_id in the
         // history vector. Zhe id in the history vector will simply be ignored on popping.
 
@@ -186,36 +181,38 @@ impl MessageCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{IdentTopic as Topic, TopicHash};
+    use crate::types::RawGossipsubMessage;
+    use crate::{GossipsubMessage, IdentTopic as Topic, TopicHash};
     use libp2p_core::PeerId;
 
     fn gen_testm(x: u64, topics: Vec<TopicHash>) -> GossipsubMessage {
+        let default_id = |message: &RawGossipsubMessage| {
+            // default message id is: source + sequence number
+            let mut source_string = message.source.as_ref().unwrap().to_base58();
+            source_string.push_str(&message.sequence_number.unwrap().to_string());
+            MessageId::from(source_string)
+        };
         let u8x: u8 = x as u8;
         let source = Some(PeerId::random());
         let data: Vec<u8> = vec![u8x];
         let sequence_number = Some(x);
 
-        let m = GossipsubMessage {
+        let m = RawGossipsubMessage {
             source,
             data,
             sequence_number,
             topics,
             signature: None,
             key: None,
-            validated: true,
+            validated: false,
         };
-        m
+
+        let id = default_id(&m);
+        GossipsubMessage::new(m, id)
     }
 
-    fn new_cache(gossip_size: usize, history: usize) -> MessageCache {
-        let default_id = |message: &GossipsubMessage| {
-            // default message id is: source + sequence number
-            let mut source_string = message.source.as_ref().unwrap().to_base58();
-            source_string.push_str(&message.sequence_number.unwrap().to_string());
-            MessageId::from(source_string)
-        };
-
-        MessageCache::new(gossip_size, history, default_id)
+    fn new_cache(gossip_size: usize, history: usize) -> MessageCache<Vec<u8>> {
+        MessageCache::new(gossip_size, history)
     }
 
     #[test]
@@ -241,7 +238,7 @@ mod tests {
 
         assert!(mc.history[0].len() == 1);
 
-        let fetched = mc.get(&(mc.msg_id)(&m));
+        let fetched = mc.get(m.message_id());
 
         assert_eq!(fetched.is_none(), false);
         assert_eq!(fetched.is_some(), true);
@@ -291,7 +288,7 @@ mod tests {
         let m = gen_testm(1, vec![]);
         mc.put(m.clone());
 
-        let fetched = mc.get(&(mc.msg_id)(&m));
+        let fetched = mc.get(m.message_id());
 
         // Make sure it is the same fetched message
         match fetched {

@@ -22,7 +22,7 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
 use crate::time_cache::TimeCache;
-use crate::{GossipsubMessage, MessageId, TopicHash};
+use crate::{MessageId, TopicHash};
 use libp2p_core::PeerId;
 use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 
 mod params;
 use crate::error::ValidationError;
+use crate::types::GossipsubMessageWithId;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
@@ -50,8 +51,6 @@ pub(crate) struct PeerScore {
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
     /// Message delivery tracking. This is a time-cache of `DeliveryRecord`s.
     deliveries: TimeCache<MessageId, DeliveryRecord>,
-    /// The message id function.
-    msg_id: fn(&GossipsubMessage) -> MessageId,
     /// callback for monitoring message delivery times
     message_delivery_time_callback: Option<fn(&PeerId, &TopicHash, f64)>,
 }
@@ -199,13 +198,12 @@ impl Default for DeliveryRecord {
 
 impl PeerScore {
     /// Creates a new `PeerScore` using a given set of peer scoring parameters.
-    pub fn new(params: PeerScoreParams, msg_id: fn(&GossipsubMessage) -> MessageId) -> Self {
-        Self::new_with_message_delivery_time_callback(params, msg_id, None)
+    pub fn new(params: PeerScoreParams) -> Self {
+        Self::new_with_message_delivery_time_callback(params, None)
     }
 
     pub fn new_with_message_delivery_time_callback(
         params: PeerScoreParams,
-        msg_id: fn(&GossipsubMessage) -> MessageId,
         callback: Option<fn(&PeerId, &TopicHash, f64)>,
     ) -> Self {
         PeerScore {
@@ -213,7 +211,6 @@ impl PeerScore {
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
             deliveries: TimeCache::new(Duration::from_secs(TIME_CACHE_DURATION)),
-            msg_id,
             message_delivery_time_callback: callback,
         }
     }
@@ -557,10 +554,10 @@ impl PeerScore {
         }
     }
 
-    pub fn validate_message(&mut self, _from: &PeerId, _msg: &GossipsubMessage) {
+    pub fn validate_message<T>(&mut self, _from: &PeerId, _msg: &GossipsubMessageWithId<T>) {
         // adds an empty record with the message id
         self.deliveries
-            .entry((self.msg_id)(_msg))
+            .entry(_msg.message_id().clone())
             .or_insert_with(|| DeliveryRecord::default());
 
         if let Some(callback) = self.message_delivery_time_callback {
@@ -578,12 +575,12 @@ impl PeerScore {
         }
     }
 
-    pub fn deliver_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
+    pub fn deliver_message<T>(&mut self, from: &PeerId, msg: &GossipsubMessageWithId<T>) {
         self.mark_first_message_delivery(from, msg);
 
         let record = self
             .deliveries
-            .entry((self.msg_id)(msg))
+            .entry(msg.message_id().clone())
             .or_insert_with(|| DeliveryRecord::default());
 
         // this should be the first delivery trace
@@ -603,7 +600,12 @@ impl PeerScore {
         }
     }
 
-    pub fn reject_message(&mut self, from: &PeerId, msg: &GossipsubMessage, reason: RejectReason) {
+    pub fn reject_message<T>(
+        &mut self,
+        from: &PeerId,
+        msg: &GossipsubMessageWithId<T>,
+        reason: RejectReason,
+    ) {
         match reason {
             // these messages are not tracked, but the peer is penalized as they are invalid
             RejectReason::ValidationError(_) | RejectReason::SelfOrigin => {
@@ -624,7 +626,7 @@ impl PeerScore {
         let peers: Vec<_> = {
             let mut record = self
                 .deliveries
-                .entry((self.msg_id)(msg))
+                .entry(msg.message_id().clone())
                 .or_insert_with(|| DeliveryRecord::default());
 
             // this should be the first delivery trace
@@ -653,10 +655,10 @@ impl PeerScore {
         }
     }
 
-    pub fn duplicated_message(&mut self, from: &PeerId, msg: &GossipsubMessage) {
+    pub fn duplicated_message<T>(&mut self, from: &PeerId, msg: &GossipsubMessageWithId<T>) {
         let record = self
             .deliveries
-            .entry((self.msg_id)(msg))
+            .entry(msg.message_id().clone())
             .or_insert_with(|| DeliveryRecord::default());
 
         if record.peers.get(from).is_some() {
@@ -752,7 +754,11 @@ impl PeerScore {
 
     /// Increments the "invalid message deliveries" counter for all scored topics the message
     /// is published in.
-    fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, msg: &GossipsubMessage) {
+    fn mark_invalid_message_delivery<T>(
+        &mut self,
+        peer_id: &PeerId,
+        msg: &GossipsubMessageWithId<T>,
+    ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             for topic_hash in msg.topics.iter() {
                 if let Some(topic_stats) =
@@ -772,7 +778,11 @@ impl PeerScore {
     /// Increments the "first message deliveries" counter for all scored topics the message is
     /// published in, as well as the "mesh message deliveries" counter, if the peer is in the
     /// mesh for the topic.
-    fn mark_first_message_delivery(&mut self, peer_id: &PeerId, msg: &GossipsubMessage) {
+    fn mark_first_message_delivery<T>(
+        &mut self,
+        peer_id: &PeerId,
+        msg: &GossipsubMessageWithId<T>,
+    ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             for topic_hash in msg.topics.iter() {
                 if let Some(topic_stats) =
@@ -813,10 +823,10 @@ impl PeerScore {
 
     /// Increments the "mesh message deliveries" counter for messages we've seen before, as long the
     /// message was received within the P3 window.
-    fn mark_duplicate_message_delivery(
+    fn mark_duplicate_message_delivery<T>(
         &mut self,
         peer_id: &PeerId,
-        msg: &GossipsubMessage,
+        msg: &GossipsubMessageWithId<T>,
         validated_time: Option<Instant>,
     ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {

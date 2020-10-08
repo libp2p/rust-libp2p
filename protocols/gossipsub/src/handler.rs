@@ -21,7 +21,7 @@
 use crate::config::ValidationMode;
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
-use crate::types::{GossipsubMessage, GossipsubRpc, PeerKind};
+use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
 use futures::prelude::*;
 use futures::StreamExt;
 use futures_codec::Framed;
@@ -50,7 +50,7 @@ pub enum HandlerEvent {
         rpc: GossipsubRpc,
         /// Any invalid messages that were received in the RPC, along with the associated
         /// validation error.
-        invalid_messages: Vec<(GossipsubMessage, ValidationError)>,
+        invalid_messages: Vec<(RawGossipsubMessage, ValidationError)>,
     },
     /// An inbound or outbound substream has been established with the peer and this informs over
     /// which protocol. This message only occurs once per connection.

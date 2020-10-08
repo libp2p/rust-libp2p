@@ -24,8 +24,8 @@ use crate::handler::HandlerEvent;
 use crate::rpc_proto;
 use crate::topic::TopicHash;
 use crate::types::{
-    GossipsubControlAction, GossipsubMessage, GossipsubRpc, GossipsubSubscription,
-    GossipsubSubscriptionAction, MessageId, PeerInfo, PeerKind,
+    GossipsubControlAction, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
+    MessageId, PeerInfo, PeerKind, RawGossipsubMessage,
 };
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
@@ -330,7 +330,7 @@ impl Decoder for GossipsubCodec {
             // If the initial validation logic failed, add the message to invalid messages and
             // continue processing the others.
             if let Some(validation_error) = invalid_kind.take() {
-                let message = GossipsubMessage {
+                let message = RawGossipsubMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
@@ -354,7 +354,7 @@ impl Decoder for GossipsubCodec {
 
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
-                let message = GossipsubMessage {
+                let message = RawGossipsubMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
@@ -383,7 +383,7 @@ impl Decoder for GossipsubCodec {
                             seq_no,
                             seq_no.len()
                         );
-                        let message = GossipsubMessage {
+                        let message = RawGossipsubMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
                             sequence_number: None, // don't inform the application
@@ -406,7 +406,7 @@ impl Decoder for GossipsubCodec {
                 } else {
                     // sequence number was not present
                     debug!("Sequence number not present but expected");
-                    let message = GossipsubMessage {
+                    let message = RawGossipsubMessage {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
                         sequence_number: None, // don't inform the application
@@ -436,7 +436,7 @@ impl Decoder for GossipsubCodec {
                             Err(_) => {
                                 // invalid peer id, add to invalid messages
                                 debug!("Message source has an invalid PeerId");
-                                let message = GossipsubMessage {
+                                let message = RawGossipsubMessage {
                                     source: None, // don't bother inform the application
                                     data: message.data.unwrap_or_default(),
                                     sequence_number,
@@ -464,7 +464,7 @@ impl Decoder for GossipsubCodec {
             };
 
             // This message has passed all validation, add it to the validated messages.
-            messages.push(GossipsubMessage {
+            messages.push(RawGossipsubMessage {
                 source,
                 data: message.data.unwrap_or_default(),
                 sequence_number,
@@ -573,14 +573,15 @@ impl Decoder for GossipsubCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::GossipsubConfig;
+    use crate::Gossipsub;
     use crate::IdentTopic as Topic;
-    use crate::{Gossipsub, GossipsubConfig};
     use libp2p_core::identity::Keypair;
     use quickcheck::*;
     use rand::Rng;
 
     #[derive(Clone, Debug)]
-    struct Message(GossipsubMessage);
+    struct Message(RawGossipsubMessage);
 
     impl Arbitrary for Message {
         fn arbitrary<G: Gen>(g: &mut G) -> Self {

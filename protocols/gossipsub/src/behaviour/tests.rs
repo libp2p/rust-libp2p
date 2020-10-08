@@ -29,7 +29,10 @@ mod tests {
     use async_std::net::Ipv4Addr;
     use rand::Rng;
 
-    use crate::{GossipsubConfigBuilder, IdentTopic as Topic, TopicScoreParams};
+    use crate::{
+        GossipsubConfig, GossipsubConfigBuilder, GossipsubMessage, IdentTopic as Topic,
+        TopicScoreParams,
+    };
 
     use super::super::*;
     use crate::error::ValidationError;
@@ -223,7 +226,7 @@ mod tests {
         let mut messages = Vec::with_capacity(rpc.publish.len());
         let rpc = rpc.clone();
         for message in rpc.publish.into_iter() {
-            messages.push(GossipsubMessage {
+            messages.push(RawGossipsubMessage {
                 source: message.from.map(|x| PeerId::from_bytes(x).unwrap()),
                 data: message.data.unwrap_or_default(),
                 sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
@@ -581,8 +584,9 @@ mod tests {
                 _ => collected_publish,
             });
 
-        let msg_id =
-            (gs.config.message_id_fn())(&publishes.first().expect("Should contain > 0 entries"));
+        let msg_id = gs
+            .config
+            .message_id(&publishes.first().expect("Should contain > 0 entries"));
 
         let config = GossipsubConfig::default();
         assert_eq!(
@@ -654,8 +658,9 @@ mod tests {
                 _ => collected_publish,
             });
 
-        let msg_id =
-            (gs.config.message_id_fn())(&publishes.first().expect("Should contain > 0 entries"));
+        let msg_id = gs
+            .config
+            .message_id(&publishes.first().expect("Should contain > 0 entries"));
 
         assert_eq!(
             publishes.len(),
@@ -893,9 +898,7 @@ mod tests {
     fn test_handle_iwant_msg_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
-        let id = gs.config.message_id_fn();
-
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(peers[11].clone()),
             data: vec![1, 2, 3, 4],
             sequence_number: Some(1u64),
@@ -904,8 +907,9 @@ mod tests {
             key: None,
             validated: true,
         };
-        let msg_id = id(&message);
-        gs.mcache.put(message.clone());
+        let msg_id = gs.config.message_id(&message);
+        gs.mcache
+            .put(GossipsubMessage::new(message, msg_id.clone()));
 
         gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
 
@@ -925,7 +929,9 @@ mod tests {
             });
 
         assert!(
-            sent_messages.iter().any(|msg| id(msg) == msg_id),
+            sent_messages
+                .iter()
+                .any(|msg| gs.config.message_id(msg) == msg_id),
             "Expected the cached message to be sent to an IWANT peer"
         );
     }
@@ -935,10 +941,9 @@ mod tests {
     fn test_handle_iwant_msg_cached_shifted() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
-        let id = gs.config.message_id_fn();
         // perform 10 memshifts and check that it leaves the cache
         for shift in 1..10 {
-            let message = GossipsubMessage {
+            let message = RawGossipsubMessage {
                 source: Some(peers[11].clone()),
                 data: vec![1, 2, 3, 4],
                 sequence_number: Some(shift),
@@ -947,8 +952,9 @@ mod tests {
                 key: None,
                 validated: true,
             };
-            let msg_id = id(&message);
-            gs.mcache.put(message.clone());
+            let msg_id = gs.config.message_id(&message);
+            gs.mcache
+                .put(GossipsubMessage::new(message, msg_id.clone()));
             for _ in 0..shift {
                 gs.mcache.shift();
             }
@@ -959,7 +965,10 @@ mod tests {
             let message_exists = gs.events.iter().any(|e| match e {
                 NetworkBehaviourAction::NotifyHandler { event, .. } => {
                     let event = proto_to_message(event);
-                    event.messages.iter().any(|msg| id(msg) == msg_id)
+                    event
+                        .messages
+                        .iter()
+                        .any(|msg| gs.config.message_id(msg) == msg_id)
                 }
                 _ => false,
             });
@@ -1376,7 +1385,7 @@ mod tests {
 
         let local_id = PeerId::random();
 
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(peers[1].clone()),
             data: vec![12],
             sequence_number: Some(0),
@@ -1534,7 +1543,7 @@ mod tests {
 
         let local_id = PeerId::random();
 
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(peers[1].clone()),
             data: vec![],
             sequence_number: Some(0),
@@ -1898,8 +1907,9 @@ mod tests {
                 _ => collected_publish,
             });
 
-        let msg_id =
-            (gs.config.message_id_fn())(&publishes.first().expect("Should contain > 0 entries"));
+        let msg_id = gs
+            .config
+            .message_id(&publishes.first().expect("Should contain > 0 entries"));
 
         let config = GossipsubConfig::default();
         assert_eq!(
@@ -1927,7 +1937,7 @@ mod tests {
         );
 
         //receive message
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
@@ -1942,7 +1952,7 @@ mod tests {
         gs.emit_gossip();
 
         //check that exactly config.gossip_lazy() many gossip messages were sent.
-        let msg_id = (gs.config.message_id_fn())(&message);
+        let msg_id = gs.config.message_id(&message);
         assert_eq!(
             count_control_msgs(&gs, |_, action| match action {
                 GossipsubControlAction::IHave {
@@ -1965,7 +1975,7 @@ mod tests {
         let (mut gs, _, topic_hashes) = build_and_inject_nodes(m, vec!["topic".into()], true);
 
         //receive message
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
@@ -1980,7 +1990,7 @@ mod tests {
         gs.emit_gossip();
 
         //check that exactly config.gossip_lazy() many gossip messages were sent.
-        let msg_id = (gs.config.message_id_fn())(&message);
+        let msg_id = gs.config.message_id(&message);
         assert_eq!(
             count_control_msgs(&gs, |_, action| match action {
                 GossipsubControlAction::IHave {
@@ -2322,7 +2332,7 @@ mod tests {
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
         // Receive message
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
@@ -2336,7 +2346,7 @@ mod tests {
         // Emit gossip
         gs.emit_gossip();
 
-        let msg_id = (gs.config.message_id_fn())(&message);
+        let msg_id = gs.config.message_id(&message);
         // Check that exactly one gossip messages got sent and it got sent to p2
         assert_eq!(
             count_control_msgs(&gs, |peer, action| match action {
@@ -2394,7 +2404,7 @@ mod tests {
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
         // Rreceive message
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
@@ -2405,8 +2415,7 @@ mod tests {
         };
         gs.handle_received_message(message.clone(), &PeerId::random());
 
-        let id = gs.config.message_id_fn();
-        let msg_id = id(&message);
+        let msg_id = gs.config.message_id(&message);
 
         gs.handle_iwant(&p1, vec![msg_id.clone()]);
         gs.handle_iwant(&p2, vec![msg_id.clone()]);
@@ -2429,11 +2438,11 @@ mod tests {
         //the message got sent to p2
         assert!(sent_messages
             .iter()
-            .any(|(peer_id, msg)| peer_id == &p2 && &id(msg) == &msg_id));
+            .any(|(peer_id, msg)| peer_id == &p2 && &gs.config.message_id(msg) == &msg_id));
         //the message got not sent to p1
         assert!(sent_messages
             .iter()
-            .all(|(peer_id, msg)| !(peer_id == &p1 && &id(msg) == &msg_id)));
+            .all(|(peer_id, msg)| !(peer_id == &p1 && &gs.config.message_id(msg) == &msg_id)));
     }
 
     #[test]
@@ -2473,7 +2482,7 @@ mod tests {
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
         //message that other peers have
-        let message = GossipsubMessage {
+        let message = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![],
             sequence_number: Some(0),
@@ -2483,8 +2492,7 @@ mod tests {
             validated: true,
         };
 
-        let id = gs.config.message_id_fn();
-        let msg_id = id(&message);
+        let msg_id = gs.config.message_id(&message);
 
         gs.handle_ihave(&p1, vec![(topics[0].clone(), vec![msg_id.clone()])]);
         gs.handle_ihave(&p2, vec![(topics[0].clone(), vec![msg_id.clone()])]);
@@ -2663,9 +2671,7 @@ mod tests {
         //reduce score of p2 below publish_threshold but not below graylist_threshold
         gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-        let id = gs.config.message_id_fn();
-
-        let message1 = GossipsubMessage {
+        let message1 = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4],
             sequence_number: Some(1u64),
@@ -2675,7 +2681,7 @@ mod tests {
             validated: true,
         };
 
-        let message2 = GossipsubMessage {
+        let message2 = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4, 5],
             sequence_number: Some(2u64),
@@ -2685,7 +2691,7 @@ mod tests {
             validated: true,
         };
 
-        let message3 = GossipsubMessage {
+        let message3 = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4, 5, 6],
             sequence_number: Some(3u64),
@@ -2695,7 +2701,7 @@ mod tests {
             validated: true,
         };
 
-        let message4 = GossipsubMessage {
+        let message4 = RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: vec![1, 2, 3, 4, 5, 6, 7],
             sequence_number: Some(4u64),
@@ -2712,7 +2718,7 @@ mod tests {
 
         let control_action = GossipsubControlAction::IHave {
             topic_hash: topics[0].clone(),
-            message_ids: vec![id(&message2)],
+            message_ids: vec![config.message_id(&message2)],
         };
 
         //clear events
@@ -2744,7 +2750,7 @@ mod tests {
 
         let control_action = GossipsubControlAction::IHave {
             topic_hash: topics[0].clone(),
-            message_ids: vec![id(&message4)],
+            message_ids: vec![config.message_id(&message4)],
         };
 
         //receive from p2
@@ -2961,10 +2967,10 @@ mod tests {
         );
     }
 
-    fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> GossipsubMessage {
+    fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawGossipsubMessage {
         let mut rng = rand::thread_rng();
         *seq += 1;
-        GossipsubMessage {
+        RawGossipsubMessage {
             source: Some(PeerId::random()),
             data: (0..rng.gen_range(10, 30))
                 .into_iter()
@@ -3008,7 +3014,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3109,7 +3115,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3211,7 +3217,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3305,11 +3311,10 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
-        let id = config.message_id_fn();
         //peer 0 delivers valid message
         let m1 = random_message(&mut seq, &topics);
         deliver_message(&mut gs, 0, m1.clone());
@@ -3317,8 +3322,12 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
         //message m1 gets validated
-        gs.report_message_validation_result(&id(&m1), &peers[0], MessageAcceptance::Accept)
-            .unwrap();
+        gs.report_message_validation_result(
+            &config.message_id(&m1),
+            &peers[0],
+            MessageAcceptance::Accept,
+        )
+        .unwrap();
 
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
     }
@@ -3418,7 +3427,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3469,7 +3478,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3481,7 +3490,7 @@ mod tests {
 
         //message m1 gets ignored
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m1),
+            &config.message_id(&m1),
             &peers[0],
             MessageAcceptance::Ignore,
         )
@@ -3526,7 +3535,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3538,7 +3547,7 @@ mod tests {
 
         //message m1 gets rejected
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m1),
+            &config.message_id(&m1),
             &peers[0],
             MessageAcceptance::Reject,
         )
@@ -3586,7 +3595,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3602,7 +3611,7 @@ mod tests {
 
         //message m1 gets rejected
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m1),
+            &config.message_id(&m1),
             &peers[0],
             MessageAcceptance::Reject,
         )
@@ -3654,7 +3663,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3670,19 +3679,19 @@ mod tests {
 
         //messages gets rejected
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m1),
+            &config.message_id(&m1),
             &peers[0],
             MessageAcceptance::Reject,
         )
         .unwrap();
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m2),
+            &config.message_id(&m2),
             &peers[0],
             MessageAcceptance::Reject,
         )
         .unwrap();
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m3),
+            &config.message_id(&m3),
             &peers[0],
             MessageAcceptance::Reject,
         )
@@ -3731,7 +3740,7 @@ mod tests {
             );
 
         let mut seq = 0;
-        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: GossipsubMessage| {
+        let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
             gs.handle_received_message(msg, &peers[index]);
         };
 
@@ -3743,7 +3752,7 @@ mod tests {
 
         //message m1 gets rejected
         gs.report_message_validation_result(
-            &(config.message_id_fn())(&m1),
+            &config.message_id(&m1),
             &peers[0],
             MessageAcceptance::Reject,
         )
@@ -4099,7 +4108,7 @@ mod tests {
         //receive a message
         let mut seq = 0;
         let m1 = random_message(&mut seq, &topics);
-        let id = (config.message_id_fn())(&m1);
+        let id = config.message_id(&m1);
 
         gs.handle_received_message(m1.clone(), &PeerId::random());
 
@@ -4147,15 +4156,21 @@ mod tests {
 
         //peer has 20 messages
         let mut seq = 0;
-        let id_fn = config.message_id_fn();
         let messages: Vec<_> = (0..20).map(|_| random_message(&mut seq, &topics)).collect();
 
         //peer sends us one ihave for each message in order
         for message in &messages {
-            gs.handle_ihave(&peer, vec![(topics[0].clone(), vec![id_fn(message)])]);
+            gs.handle_ihave(
+                &peer,
+                vec![(topics[0].clone(), vec![config.message_id(message)])],
+            );
         }
 
-        let first_ten: HashSet<_> = messages.iter().take(10).map(|m| id_fn(m)).collect();
+        let first_ten: HashSet<_> = messages
+            .iter()
+            .take(10)
+            .map(|m| config.message_id(m))
+            .collect();
 
         //we send iwant only for the first 10 messages
         assert_eq!(
@@ -4182,7 +4197,10 @@ mod tests {
         //after a heartbeat everything is forgotten
         gs.heartbeat();
         for message in messages[10..].iter() {
-            gs.handle_ihave(&peer, vec![(topics[0].clone(), vec![id_fn(message)])]);
+            gs.handle_ihave(
+                &peer,
+                vec![(topics[0].clone(), vec![config.message_id(message)])],
+            );
         }
 
         //we sent iwant for all 20 messages
@@ -4225,9 +4243,8 @@ mod tests {
 
         //peer has 20 messages
         let mut seq = 0;
-        let id_fn = config.message_id_fn();
         let message_ids: Vec<_> = (0..20)
-            .map(|_| id_fn(&random_message(&mut seq, &topics)))
+            .map(|_| config.message_id(&random_message(&mut seq, &topics)))
             .collect();
 
         //peer sends us three ihaves
@@ -4415,7 +4432,6 @@ mod tests {
         let mut first_messages = Vec::new();
         let mut second_messages = Vec::new();
         let mut seq = 0;
-        let id_fn = config.message_id_fn();
         for peer in &other_peers {
             for _ in 0..2 {
                 let msg1 = random_message(&mut seq, &topics);
@@ -4424,7 +4440,10 @@ mod tests {
                 second_messages.push(msg2.clone());
                 gs.handle_ihave(
                     peer,
-                    vec![(topics[0].clone(), vec![id_fn(&msg1), id_fn(&msg2)])],
+                    vec![(
+                        topics[0].clone(),
+                        vec![config.message_id(&msg1), config.message_id(&msg2)],
+                    )],
                 );
             }
         }
