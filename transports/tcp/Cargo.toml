@@ -10,16 +10,16 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-std = { version = "1.6.2", optional = true }
+async-io = "1.1.9"
 futures = "0.3.1"
 futures-timer = "3.0"
 get_if_addrs = "0.5.3"
 ipnet = "2.0.0"
+libc = "0.2.79"
 libp2p-core = { version = "0.22.0", path = "../../core" }
 log = "0.4.1"
-socket2 = "0.3.12"
-tokio = { version = "0.2", default-features = false, features = ["tcp"], optional = true }
+socket2 = { version = "0.3.12", features = ["reuseport"] }
 
 [dev-dependencies]
-libp2p-tcp = { path = ".", features = ["async-std"] }
-
+async-std = "1.6.5"
+env_logger = "0.7.1"

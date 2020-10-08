@@ -25,7 +25,7 @@ default = [
     "pnet",
     "request-response",
     "secp256k1",
-    "tcp-async-std",
+    "tcp",
     "uds",
     "wasm-ext",
     "websocket",
@@ -45,8 +45,7 @@ ping = ["libp2p-ping"]
 plaintext = ["libp2p-plaintext"]
 pnet = ["libp2p-pnet"]
 request-response = ["libp2p-request-response"]
-tcp-async-std = ["libp2p-tcp", "libp2p-tcp/async-std"]
-tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
+tcp = ["libp2p-tcp"]
 uds = ["libp2p-uds"]
 wasm-ext = ["libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
@@ -126,4 +125,4 @@ members = [
 
 [[example]]
 name = "chat-tokio"
-required-features = ["tcp-tokio", "mdns-tokio"]
+required-features = ["tcp", "mdns-tokio"]
