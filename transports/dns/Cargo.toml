@@ -10,6 +10,10 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+async-std-resolver = "0.19.5"
+futures = "0.3.1"
 libp2p-core = { version = "0.22.0", path = "../../core" }
 log = "0.4.1"
-futures = "0.3.1"
+
+[dev-dependencies]
+env_logger = "0.7.1"
