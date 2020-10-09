@@ -128,4 +128,4 @@ name = "chat-tokio"
 required-features = ["tcp", "mdns-tokio"]
 
 [patch.crates-io]
-async-io = { path = "../async-io" }
+async-io = { git = "https://github.com/stjepang/async-io", branch = "poll-methods" }
