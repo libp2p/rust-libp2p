@@ -61,7 +61,7 @@ pub trait Dialer: Clone {
     type Error: Error;
 
     /// A pending [`Output`](Transport::Output) for an outbound connection,
-    /// obtained from [dialing](Transport::dial).
+    /// obtained from [dialing](Dialer::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
     /// Dials the given [`Multiaddr`], returning a future for a pending outbound connection.
@@ -79,7 +79,7 @@ pub trait Dialer: Clone {
 /// through ordered streams of data (i.e. connections).
 ///
 /// Connections are established either by [listening](Transport::listen_on)
-/// or [dialing](Transport::dial) on a [`Transport`]. A peer that
+/// or [dialing](Dialer::dial) on a [`Transport`]. A peer that
 /// obtains a connection by listening is often referred to as the *listener* and the
 /// peer that initiated the connection through dialing as the *dialer*, in
 /// contrast to the traditional roles of *server* and *client*.
@@ -113,7 +113,7 @@ pub trait Transport {
     type Error: Error;
 
     /// A pending [`Output`](Transport::Output) for an outbound connection,
-    /// obtained from [dialing](Transport::dial).
+    /// obtained from [dialing](Dialer::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
     type Dialer: Dialer<Output = Self::Output, Error = Self::Error, Dial = Self::Dial>;
@@ -399,7 +399,7 @@ impl<TUpgr, TErr> ListenerEvent<TUpgr, TErr> {
     }
 }
 
-/// An error during [dialing][Transport::dial] or [listening][Transport::listen_on]
+/// An error during [dialing][Dialer::dial] or [listening][Transport::listen_on]
 /// on a [`Transport`].
 #[derive(Debug, Clone)]
 pub enum TransportError<TErr> {
