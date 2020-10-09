@@ -143,8 +143,8 @@ impl KeyBytes {
     where
         U: AsRef<KeyBytes>
     {
-        let a = U256::from(self.0.as_ref());
-        let b = U256::from(other.as_ref().0.as_ref());
+        let a = U256::from(self.0.as_slice());
+        let b = U256::from(other.as_ref().0.as_slice());
         Distance(a ^ b)
     }
 
@@ -154,7 +154,7 @@ impl KeyBytes {
     ///
     /// `self xor other = distance <==> other = self xor distance`
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
-        let key_int = U256::from(self.0.as_ref()) ^ d.0;
+        let key_int = U256::from(self.0.as_slice()) ^ d.0;
         KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
     }
 }
@@ -168,6 +168,15 @@ impl AsRef<KeyBytes> for KeyBytes {
 /// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(pub(super) U256);
+
+impl Distance {
+    /// Returns the integer part of the base 2 logarithm of the [`Distance`].
+    ///
+    /// Returns `None` if the distance is zero.
+    pub fn ilog2(&self) -> Option<u32> {
+        (256 - self.0.leading_zeros()).checked_sub(1)
+    }
+}
 
 #[cfg(test)]
 mod tests {

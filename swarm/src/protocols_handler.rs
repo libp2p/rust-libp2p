@@ -107,7 +107,7 @@ pub trait ProtocolsHandler: Send + 'static {
     /// The type of errors returned by [`ProtocolsHandler::poll`].
     type Error: error::Error + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
-    type InboundProtocol: InboundUpgradeSend + Send + 'static;
+    type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.
     type OutboundProtocol: OutboundUpgradeSend;
     /// The type of additional information returned from `listen_protocol`.

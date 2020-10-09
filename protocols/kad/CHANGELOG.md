@@ -1,6 +1,15 @@
-# 0.23.0 [unreleased]
+# 0.23.1 [unreleased]
 
-- Update `libp2p-swarm`.
+- Update `sha2` dependency.
+
+# 0.23.0 [2020-09-09]
+
+- Increase default max packet size from 4KiB to 16KiB.
+  See [issue 1622](https://github.com/libp2p/rust-libp2p/issues/1622).
+
+- Add `Distance::log2` ([PR 1719](https://github.com/libp2p/rust-libp2p/pull/1719)).
+
+- Update `libp2p-swarm` and `libp2p-core`.
 
 # 0.22.1 [2020-08-19]
 

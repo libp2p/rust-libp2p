@@ -1,3 +1,15 @@
+# 0.24.1 [unreleased]
+
+- Update dependencies.
+
+# 0.24.0 [2020-09-09]
+
+- Bump `libp2p-core` dependency.
+
+- Remove fallback legacy handshake payload decoding by default.
+To continue supporting inbound legacy handshake payloads,
+`recv_legacy_handshake` must be configured on the `LegacyConfig`.
+
 # 0.23.0 [2020-08-18]
 
 - Bump `libp2p-core` dependency.

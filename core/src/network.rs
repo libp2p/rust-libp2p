@@ -21,7 +21,7 @@
 mod event;
 pub mod peer;
 
-pub use event::{NetworkEvent, IncomingConnectionEvent};
+pub use event::{NetworkEvent, IncomingConnection};
 pub use peer::Peer;
 
 use crate::{
@@ -334,6 +334,35 @@ where
         Peer::new(self, peer_id)
     }
 
+    /// Accepts a pending incoming connection obtained via [`NetworkEvent::IncomingConnection`],
+    /// adding it to the `Network`s connection pool subject to the configured limits.
+    ///
+    /// Once the connection is established and all transport protocol upgrades
+    /// completed, the connection is associated with the provided `handler`.
+    pub fn accept(
+        &mut self,
+        connection: IncomingConnection<TTrans::ListenerUpgrade>,
+        handler: THandler,
+    ) -> Result<ConnectionId, ConnectionLimit>
+    where
+        TInEvent: Send + 'static,
+        TOutEvent: Send + 'static,
+        TPeerId: Send + 'static,
+        TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send,
+        TTrans: Transport<Output = (TConnInfo, TMuxer)>,
+        TTrans::Error: Send + 'static,
+        TTrans::ListenerUpgrade: Send + 'static,
+    {
+        let upgrade = connection.upgrade.map_err(|err|
+            PendingConnectionError::Transport(TransportError::Other(err)));
+        let info = IncomingInfo {
+            local_addr: &connection.local_addr,
+            send_back_addr: &connection.send_back_addr,
+        };
+        self.pool.add_incoming(upgrade, handler, info)
+    }
+
     /// Provides an API similar to `Stream`, except that it cannot error.
     pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
     where
@@ -360,14 +389,14 @@ where
                 local_addr,
                 send_back_addr
             }) => {
-                return Poll::Ready(NetworkEvent::IncomingConnection(
-                    IncomingConnectionEvent {
-                        listener_id,
+                return Poll::Ready(NetworkEvent::IncomingConnection {
+                    listener_id,
+                    connection: IncomingConnection {
                         upgrade,
                         local_addr,
                         send_back_addr,
-                        pool: &mut self.pool,
-                    }))
+                    }
+                })
             }
             Poll::Ready(ListenersEvent::NewAddress { listener_id, listen_addr }) => {
                 return Poll::Ready(NetworkEvent::NewListenerAddress { listener_id, listen_addr })
@@ -633,18 +662,6 @@ impl NetworkConfig {
         self
     }
 
-    /// Shortcut for calling `executor` with an object that calls the given closure.
-    pub fn set_executor_fn(mut self, f: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + 'static) -> Self {
-        struct SpawnImpl<F>(F);
-        impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
-            fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-                (self.0)(f)
-            }
-        }
-        self.set_executor(Box::new(SpawnImpl(f)));
-        self
-    }
-
     pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
         self.manager_config.executor.as_ref()
     }
@@ -691,4 +708,25 @@ impl NetworkConfig {
         self.pool_limits.max_outgoing_per_peer = Some(n);
         self
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Dummy;
+
+    impl Executor for Dummy {
+        fn exec(&self, _: Pin<Box<dyn Future<Output=()> + Send>>) { }
+    }
+
+    #[test]
+    fn set_executor() {
+        NetworkConfig::default()
+            .set_executor(Box::new(Dummy))
+            .set_executor(Box::new(|f| {
+                async_std::task::spawn(f);
+            }));
+    }
+
 }

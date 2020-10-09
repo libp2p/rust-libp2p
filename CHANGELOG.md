@@ -23,7 +23,42 @@
 - [`parity-multiaddr` CHANGELOG](misc/multiaddr/CHANGELOG.md)
 - [`libp2p-core-derive` CHANGELOG](misc/core-derive/CHANGELOG.md)
 
-# Version 0.25.0 [unreleased]
+# Version 0.29.0 [unreleased]
+
+- Update `libp2p-core`, `libp2p-floodsub`, `libp2p-gossipsub`, `libp2p-mplex`,
+  `libp2p-noise`, `libp2p-plaintext`, `libp2p-pnet`, `libp2p-request-response`,
+  `libp2p-websocket` and `parity-multiaddr`.
+
+# Version 0.28.1 [2020-09-10]
+
+- Update to `libp2p-core` `0.22.1`.
+
+# Version 0.28.0 [2020-09-09]
+
+- Update `libp2p-yamux` to `0.25.0`. *Step 4 of 4 in a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+# Version 0.27.0 [2020-09-09]
+
+- Update `libp2p-yamux` to `0.24.0`. *Step 3 of 4 in a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+# Version 0.26.0 [2020-09-09]
+
+- Update `libp2p-yamux` to `0.23.0`. *Step 2 of 4 in a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+# Version 0.25.0 [2020-09-09]
+
+- Remove the deprecated `libp2p-secio` dependency. To continue to use
+  SECIO, add an explicit dependency on `libp2p-secio`. However,
+  transitioning to `libp2p-noise` is strongly recommended.
+
+- Update `libp2p-yamux` to `0.22.0`. *This version starts a multi-release
+  upgrade process.* See the `libp2p-yamux` CHANGELOG for details.
+
+- Bump `libp2p-noise` to `0.24`. See the `libp2p-noise`
+changelog for details about the `LegacyConfig`.
 
 - The `ProtocolsHandler` in `libp2p-swarm` has a new associated type
   `InboundOpenInfo` ([PR 1714]).

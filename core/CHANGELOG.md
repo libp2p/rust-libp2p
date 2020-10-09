@@ -1,4 +1,21 @@
-# 0.22.0 [unreleased]
+# 0.22.2 [unreleased]
+
+- Update dependencies.
+
+# 0.22.1 [2020-09-10]
+
+- Require at least parity-multiaddr v0.9.2 in order to fulfill `Ord` bound on
+  `Multiaddr`. [PR 1742](https://github.com/libp2p/rust-libp2p/pull/1742).
+
+# 0.22.0 [2020-09-09]
+
+- Simplify incoming connection handling. The `IncomingConnectionEvent`
+  has been removed. Instead, pass the `IncomingConnection` obtained
+  from `NetworkEvent::IncomingConnection` to `Network::accept()`.
+  [PR 1732](https://github.com/libp2p/rust-libp2p/pull/1732).
+
+- Allow any closure to be passed as an executor.
+  [PR 1686](https://github.com/libp2p/rust-libp2p/pull/1686)
 
 - Remove `PeerId` compatibility mode for "identity" and SHA2 hashes.
   Historically, before 0.12, `PeerId`s were incorrectly always hashed with SHA2.
@@ -12,6 +29,10 @@
   whose length is less or equal to 42 bytes always use the "identity" hash so
   two peer IDs are equal if and only if they use the same hash algorithm and
   have the same hash digest. [PR 1608](https://github.com/libp2p/rust-libp2p/pull/1608).
+
+- Return dialer address instead of listener address as `remote_addr` in
+  `MemoryTransport` `Listener` `ListenerEvent::Upgrade`
+  [PR 1724](https://github.com/libp2p/rust-libp2p/pull/1724).
 
 # 0.21.0 [2020-08-18]
 

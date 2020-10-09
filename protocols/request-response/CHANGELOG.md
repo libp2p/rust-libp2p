@@ -1,6 +1,14 @@
-# 0.3.0 [unreleased]
+# 0.4.0 [unreleased]
 
-- Update `libp2p-swarm`.
+- Update dependencies.
+
+# 0.3.0 [2020-09-09]
+
+- Add support for opt-in request-based flow-control to any
+  request-response protocol via `RequestResponse::throttled()`.
+  [PR 1726](https://github.com/libp2p/rust-libp2p/pull/1726).
+
+- Update `libp2p-swarm` and `libp2p-core`.
 
 # 0.2.0 [2020-08-18]
 

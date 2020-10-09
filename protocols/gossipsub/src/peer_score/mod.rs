@@ -198,6 +198,7 @@ impl Default for DeliveryRecord {
 
 impl PeerScore {
     /// Creates a new `PeerScore` using a given set of peer scoring parameters.
+    #[allow(dead_code)]
     pub fn new(params: PeerScoreParams) -> Self {
         Self::new_with_message_delivery_time_callback(params, None)
     }

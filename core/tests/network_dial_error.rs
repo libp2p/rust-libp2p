@@ -33,6 +33,7 @@ use libp2p_core::{
     transport,
     upgrade,
 };
+use libp2p_noise as noise;
 use rand::Rng;
 use rand::seq::SliceRandom;
 use std::{io, error::Error, fmt, task::Poll};
@@ -55,9 +56,10 @@ impl fmt::Display for BoxError {
 fn new_network(cfg: NetworkConfig) -> TestNetwork {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
+    let noise_keys = noise::Keypair::<noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
     let transport: TestTransport = libp2p_tcp::TcpConfig::new()
         .upgrade(upgrade::Version::V1)
-        .authenticate(libp2p_secio::SecioConfig::new(local_key))
+        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_mplex::MplexConfig::new())
         .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)))
         .and_then(|(peer, mplex), _| {
@@ -94,7 +96,7 @@ fn deny_incoming_connec() {
 
     async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
         match swarm1.poll(cx) {
-            Poll::Ready(NetworkEvent::IncomingConnection(inc)) => drop(inc),
+            Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => drop(connection),
             Poll::Ready(_) => unreachable!(),
             Poll::Pending => (),
         }
@@ -173,9 +175,9 @@ fn dial_self() {
                        return Poll::Ready(Ok(()))
                     }
                 },
-                Poll::Ready(NetworkEvent::IncomingConnection(inc)) => {
-                    assert_eq!(*inc.local_addr(), local_address);
-                    inc.accept(TestHandler()).unwrap();
+                Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
+                    assert_eq!(&connection.local_addr, &local_address);
+                    swarm.accept(connection, TestHandler()).unwrap();
                 },
                 Poll::Ready(ev) => {
                     panic!("Unexpected event: {:?}", ev)
