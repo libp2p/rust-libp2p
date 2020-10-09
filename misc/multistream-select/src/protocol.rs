@@ -289,23 +289,16 @@ impl<R> MessageIO<R> {
         MessageReader { inner: self.inner.into_reader() }
     }
 
-    /// Drops the [`MessageIO`] resource, yielding the underlying I/O stream
-    /// together with the remaining write buffer containing the protocol
-    /// negotiation frame data that has not yet been written to the I/O stream.
-    ///
-    /// The returned remaining write buffer may be prepended to follow-up
-    /// protocol data to send with a single `write`. Either way, if non-empty,
-    /// the write buffer _must_ eventually be written to the I/O stream
-    /// _before_ any follow-up data, in order for protocol negotiation to
-    /// complete cleanly.
+    /// Drops the [`MessageIO`] resource, yielding the underlying I/O stream.
     ///
     /// # Panics
     ///
-    /// Panics if the read buffer is not empty, meaning that an incoming
-    /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever `MessageIO::poll` returned
-    /// a message.
-    pub fn into_inner(self) -> (R, BytesMut) {
+    /// Panics if the read buffer or write buffer is not empty, meaning that an incoming
+    /// protocol negotiation frame has been partially read or an outgoing frame
+    /// has not yet been flushed. The read buffer is guaranteed to be empty whenever
+    /// `MessageIO::poll` returned a message. The write buffer is guaranteed to be empty
+    /// when the sink has been flushed.
+    pub fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }
@@ -365,19 +358,14 @@ impl<R> MessageReader<R> {
     /// together with the remaining write buffer containing the protocol
     /// negotiation frame data that has not yet been written to the I/O stream.
     ///
-    /// The returned remaining write buffer may be prepended to follow-up
-    /// protocol data to send with a single `write`. Either way, if non-empty,
-    /// the write buffer _must_ eventually be written to the I/O stream
-    /// _before_ any follow-up data, in order for protocol negotiation to
-    /// complete cleanly.
-    ///
     /// # Panics
     ///
-    /// Panics if the read buffer is not empty, meaning that an incoming
-    /// protocol negotiation frame has been partially read. The read buffer
-    /// is guaranteed to be empty whenever `MessageReader::poll` returned
-    /// a message.
-    pub fn into_inner(self) -> (R, BytesMut) {
+    /// Panics if the read buffer or write buffer is not empty, meaning that either
+    /// an incoming protocol negotiation frame has been partially read, or an
+    /// outgoing frame has not yet been flushed. The read buffer is guaranteed to
+    /// be empty whenever `MessageReader::poll` returned a message. The write
+    /// buffer is guaranteed to be empty whenever the sink has been flushed.
+    pub fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }

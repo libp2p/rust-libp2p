@@ -36,22 +36,11 @@ use libp2p_core::{
 use libp2p_noise as noise;
 use rand::Rng;
 use rand::seq::SliceRandom;
-use std::{io, error::Error, fmt, task::Poll};
+use std::{io, task::Poll};
 use util::TestHandler;
 
 type TestNetwork = Network<TestTransport, (), (), TestHandler>;
-type TestTransport = transport::boxed::Boxed<(PeerId, StreamMuxerBox), BoxError>;
-
-#[derive(Debug)]
-struct BoxError(Box<dyn Error + Send + 'static>);
-
-impl Error for BoxError {}
-
-impl fmt::Display for BoxError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Transport error: {}", self.0)
-    }
-}
+type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox), io::Error>;
 
 fn new_network(cfg: NetworkConfig) -> TestNetwork {
     let local_key = identity::Keypair::generate_ed25519();
@@ -61,13 +50,11 @@ fn new_network(cfg: NetworkConfig) -> TestNetwork {
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_mplex::MplexConfig::new())
-        .map(|(conn_info, muxer), _| (conn_info, StreamMuxerBox::new(muxer)))
         .and_then(|(peer, mplex), _| {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
         })
-        .map_err(|e| BoxError(Box::new(e)))
         .boxed();
     TestNetwork::new(transport, local_public_key.into(), cfg)
 }

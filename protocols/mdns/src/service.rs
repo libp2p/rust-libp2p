@@ -23,6 +23,7 @@ use dns_parser::{Packet, RData};
 use either::Either::{Left, Right};
 use futures::{future, prelude::*};
 use libp2p_core::{multiaddr::{Multiaddr, Protocol}, PeerId};
+use log::warn;
 use std::{convert::TryFrom as _, fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::{Duration, Instant}};
 use wasm_timer::Interval;
 use lazy_static::lazy_static;
@@ -122,7 +123,12 @@ pub struct $service_name {
     /// regularly to recover from errors. Otherwise we could simply use an `Option<Interval>`.
     silent: bool,
     /// Buffer used for receiving data from the main socket.
-    recv_buffer: [u8; 2048],
+    /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
+    /// bytes, if it can be ensured that all participating devices can handle such large packets.
+    /// For computers with several interfaces and IP addresses responses can easily reach sizes in
+    /// the range of 3000 bytes, so 4096 seems sensible for now. For more information see
+    /// [rfc6762](https://tools.ietf.org/html/rfc6762#page-46).
+    recv_buffer: [u8; 4096],
     /// Buffers pending to send on the main socket.
     send_buffers: Vec<Vec<u8>>,
     /// Buffers pending to send on the query socket.
@@ -173,7 +179,7 @@ impl $service_name {
             query_socket,
             query_interval: Interval::new_at(Instant::now(), Duration::from_secs(20)),
             silent,
-            recv_buffer: [0; 2048],
+            recv_buffer: [0; 4096],
             send_buffers: Vec::new(),
             query_send_buffers: Vec::new(),
         })
@@ -346,7 +352,8 @@ impl MdnsPacket {
                     return Some(resp);
                 }
             }
-            Err(_) => {
+            Err(err) => {
+                warn!("Parsing mdns packet failed: {:?}", err);
                 return None;
             }
         }

@@ -26,7 +26,7 @@ use libp2p_core::{
     PeerId,
     identity,
     muxing::StreamMuxerBox,
-    transport::{Transport, boxed::Boxed},
+    transport::{self, Transport},
     upgrade::{self, read_one, write_one}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
@@ -213,19 +213,16 @@ fn ping_protocol_throttled() {
     let () = async_std::task::block_on(peer2);
 }
 
-fn mk_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox), io::Error>) {
+fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox), io::Error>) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();
     let noise_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
-    let transport = TcpConfig::new()
+    (peer_id, TcpConfig::new()
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(libp2p_yamux::Config::default())
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-        .boxed();
-    (peer_id, transport)
+        .boxed())
 }
 
 // Simple Ping-Pong Protocol

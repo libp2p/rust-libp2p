@@ -38,7 +38,6 @@ use libp2p_core::{
     identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
-    muxing::StreamMuxerBox,
     upgrade
 };
 use libp2p_noise as noise;
@@ -46,7 +45,7 @@ use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
-use std::{collections::{HashSet, HashMap}, time::Duration, io, num::NonZeroUsize, u64};
+use std::{collections::{HashSet, HashMap}, time::Duration, num::NonZeroUsize, u64};
 use multihash::{wrap, Code, Multihash};
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
@@ -62,10 +61,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(yamux::Config::default())
-        .map(|(p, m), _| (p, StreamMuxerBox::new(m)))
-        .map_err(|e| -> io::Error { panic!("Failed to create transport: {:?}", e); })
-        .boxed();
+        .multiplex(yamux::Config::default());
 
     let local_id = local_public_key.clone().into_peer_id();
     let store = MemoryStore::new(local_id.clone());
