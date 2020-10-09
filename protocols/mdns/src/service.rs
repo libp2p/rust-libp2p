@@ -632,7 +632,7 @@ mod tests {
         // properties.
         #[test]
         fn respect_query_interval() {
-            let own_ips: Vec<std::net::IpAddr> = get_if_addrs::get_if_addrs().unwrap()
+            let own_ips: Vec<std::net::IpAddr> = if_addrs::get_if_addrs().unwrap()
                 .into_iter()
                 .map(|i| i.addr.ip())
                 .collect();
