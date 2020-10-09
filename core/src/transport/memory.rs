@@ -391,9 +391,9 @@ mod tests {
     #[test]
     fn port_not_in_use() {
         let transport = MemoryTransport::default();
-        assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_err());
-        let _listener = transport.listen_on("/memory/810172461024613".parse().unwrap()).unwrap();
-        assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_ok());
+        assert!(transport.dialer().dial("/memory/810172461024613".parse().unwrap()).is_err());
+        let _listener = transport.listen_on("/memory/810172461024613".parse().unwrap()).unwrap().0;
+        assert!(transport.dialer().dial("/memory/810172461024613".parse().unwrap()).is_ok());
     }
 
     #[test]
@@ -409,7 +409,7 @@ mod tests {
         let t1 = MemoryTransport::default();
 
         let listener = async move {
-            let listener = t1.listen_on(t1_addr.clone()).unwrap();
+            let listener = t1.listen_on(t1_addr.clone()).unwrap().0;
 
             let upgrade = listener.filter_map(|ev| futures::future::ready(
                 ListenerEvent::into_upgrade(ev.unwrap())
@@ -425,7 +425,7 @@ mod tests {
 
         // Setup dialer.
 
-        let t2 = MemoryTransport::default();
+        let t2 = MemoryTransport::default().dialer();
         let dialer = async move {
             let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
             socket.write_all(&msg).await.unwrap();
@@ -447,7 +447,7 @@ mod tests {
 
         let listener = async move {
             let mut listener = listener_transport.listen_on(listener_addr.clone())
-                .unwrap();
+                .unwrap().0;
             while let Some(ev) = listener.next().await {
                 if let ListenerEvent::Upgrade { remote_addr, .. } = ev.unwrap() {
                     assert!(
@@ -460,7 +460,7 @@ mod tests {
         };
 
         let dialer = async move {
-            MemoryTransport::default().dial(listener_addr_cloned)
+            MemoryTransport::default().dialer().dial(listener_addr_cloned)
                 .unwrap()
                 .await
                 .unwrap();
@@ -483,7 +483,7 @@ mod tests {
 
         let listener = async move {
             let mut listener = listener_transport.listen_on(listener_addr.clone())
-                .unwrap();
+                .unwrap().0;
             while let Some(ev) = listener.next().await {
                 if let ListenerEvent::Upgrade { remote_addr, .. } = ev.unwrap() {
                     let dialer_port = NonZeroU64::new(
@@ -509,7 +509,7 @@ mod tests {
         };
 
         let dialer = async move {
-            let _chan = MemoryTransport::default().dial(listener_addr_cloned)
+            let _chan = MemoryTransport::default().dialer().dial(listener_addr_cloned)
                 .unwrap()
                 .await
                 .unwrap();

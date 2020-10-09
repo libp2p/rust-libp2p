@@ -397,7 +397,7 @@ mod tests {
 
             let address2 = address.clone();
             async_std::task::spawn(async move {
-                mem_transport.dial(address2).unwrap().await.unwrap();
+                mem_transport.dialer().dial(address2).unwrap().await.unwrap();
             });
 
             match listeners.next().await.unwrap() {
@@ -417,35 +417,36 @@ mod tests {
 
         #[derive(Clone)]
         struct DummyTrans;
-        impl transport::Dialer for DummyTrans {
+        impl transport::Transport for DummyTrans {
             type Output = ();
             type Error = std::io::Error;
             type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
-
-            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
-                panic!()
-            }
-        }
-        impl transport::Transport for DummyTrans {
+            type Dialer = DummyDialer;
             type Listener = DummyListener;
             type ListenerUpgrade = future::Ready<Result<Self::Output, Self::Error>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
-                Ok(DummyListener)
+            fn dialer(&self) -> Self::Dialer {
+                DummyDialer
+            }
+
+            fn listen_on(self, _: Multiaddr) -> Result<(Self::Listener, Self::Dialer), transport::TransportError<Self::Error>> {
+                Ok((DummyListener, DummyDialer))
             }
         }
-        struct DummyListener;
-        impl transport::Dialer for DummyListener {
+        #[derive(Clone)]
+        struct DummyDialer;
+        impl transport::Dialer for DummyDialer {
             type Output = ();
             type Error = std::io::Error;
             type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
-            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
         }
+        struct DummyListener;
         impl Stream for DummyListener {
-            type Item = Result<ListenerEvent<future::Ready<Result<<Self as Dialer>::Output, <Self as Dialer>::Error>>, <Self as Dialer>::Error>, <Self as Dialer>::Error>;
+            type Item = Result<ListenerEvent<future::Ready<Result<(), std::io::Error>>, std::io::Error>, std::io::Error>;
 
             fn poll_next(self: Pin<&mut Self>, _: &mut Context) -> Poll<Option<Self::Item>> {
                 Poll::Ready(Some(Ok(ListenerEvent::Error(std::io::Error::from(std::io::ErrorKind::Other)))))
@@ -472,35 +473,36 @@ mod tests {
 
         #[derive(Clone)]
         struct DummyTrans;
-        impl transport::Dialer for DummyTrans {
+        impl transport::Transport for DummyTrans {
             type Output = ();
             type Error = std::io::Error;
             type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
-
-            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
-                panic!()
-            }
-        }
-        impl transport::Transport for DummyTrans {
+            type Dialer = DummyDialer;
             type Listener = DummyListener;
             type ListenerUpgrade = future::Ready<Result<Self::Output, Self::Error>>;
 
-            fn listen_on(self, _: Multiaddr) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
-                Ok(DummyListener)
+            fn dialer(&self) -> Self::Dialer {
+                DummyDialer
+            }
+
+            fn listen_on(self, _: Multiaddr) -> Result<(Self::Listener, Self::Dialer), transport::TransportError<Self::Error>> {
+                Ok((DummyListener, DummyDialer))
             }
         }
-        struct DummyListener;
-        impl transport::Dialer for DummyListener {
+        #[derive(Clone)]
+        struct DummyDialer;
+        impl transport::Dialer for DummyDialer {
             type Output = ();
             type Error = std::io::Error;
             type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>>>>;
 
-            fn dial(&self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
+            fn dial(self, _: Multiaddr) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
         }
+        struct DummyListener;
         impl Stream for DummyListener {
-            type Item = Result<ListenerEvent<future::Ready<Result<<Self as Dialer>::Output, <Self as Dialer>::Error>>, <Self as Dialer>::Error>, <Self as Dialer>::Error>;
+            type Item = Result<ListenerEvent<future::Ready<Result<(), std::io::Error>>, std::io::Error>, std::io::Error>;
 
             fn poll_next(self: Pin<&mut Self>, _: &mut Context) -> Poll<Option<Self::Item>> {
                 Poll::Ready(Some(Err(std::io::Error::from(std::io::ErrorKind::Other))))

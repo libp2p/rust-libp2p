@@ -114,7 +114,7 @@ fn upgrade_pipeline() {
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
     let listen_addr2 = listen_addr1.clone();
 
-    let mut listener = listener_transport.listen_on(listen_addr1).unwrap();
+    let mut listener = listener_transport.listen_on(listen_addr1).unwrap().0;
 
     let server = async move {
         loop {
@@ -129,7 +129,7 @@ fn upgrade_pipeline() {
     };
 
     let client = async move {
-        let (peer, _mplex) = dialer_transport.dial(listen_addr2).unwrap().await.unwrap();
+        let (peer, _mplex) = dialer_transport.dialer().dial(listen_addr2).unwrap().await.unwrap();
         assert_eq!(peer, listener_id);
     };
 
