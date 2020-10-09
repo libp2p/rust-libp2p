@@ -1,4 +1,4 @@
-# 0.23.0 [unreleased]
+# 0.22.1 [unreleased]
 
 - Instead of iterating each inbound and outbound substream upgrade looking for
   one to make progress, use a `FuturesUnordered` for both pending inbound and
