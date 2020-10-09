@@ -31,7 +31,7 @@
 
 use futures::{future::{self, Ready}, prelude::*};
 use futures_timer::Delay;
-use get_if_addrs::{IfAddr, get_if_addrs};
+use if_addrs::{IfAddr, get_if_addrs};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use libp2p_core::{
     Transport,
