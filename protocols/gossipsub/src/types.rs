@@ -37,33 +37,43 @@ pub enum MessageAcceptance {
     Ignore,
 }
 
-/// A type for gossipsub message ids.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MessageId(pub Vec<u8>);
+/// Macro for declaring message id types
+macro_rules! declare_message_id_type {
+    ($name: ident, $name_string: expr) => {
+        #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub struct $name(pub Vec<u8>);
 
-impl MessageId {
-    pub fn new(value: &[u8]) -> Self {
-        Self(value.to_vec())
-    }
+        impl $name {
+            pub fn new(value: &[u8]) -> Self {
+                Self(value.to_vec())
+            }
+        }
+
+        impl<T: Into<Vec<u8>>> From<T> for $name {
+            fn from(value: T) -> Self {
+                Self(value.into())
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", hex_fmt::HexFmt(&self.0))
+            }
+        }
+
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}({})", $name_string, hex_fmt::HexFmt(&self.0))
+            }
+        }
+    };
 }
 
-impl<T: Into<Vec<u8>>> From<T> for MessageId {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
+// A type for gossipsub message ids.
+declare_message_id_type!(MessageId, "MessageId");
 
-impl std::fmt::Display for MessageId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex_fmt::HexFmt(&self.0))
-    }
-}
-
-impl std::fmt::Debug for MessageId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MessageId({})", hex_fmt::HexFmt(&self.0))
-    }
-}
+// A type for gossipsub fast messsage ids, not to confuse with "real" message ids.
+declare_message_id_type!(FastMessageId, "FastMessageId");
 
 #[derive(Debug, Clone, PartialEq)]
 /// Describes the types of peers that can exist in the gossipsub context.

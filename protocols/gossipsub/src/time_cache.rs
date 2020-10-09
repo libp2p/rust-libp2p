@@ -173,6 +173,10 @@ where
     pub fn contains_key(&mut self, key: &Key) -> bool {
         self.map.contains_key(key)
     }
+
+    pub fn get(&self, key: &Key) -> Option<&Value> {
+        self.map.get(key).map(|e| &e.element)
+    }
 }
 
 pub struct DuplicateCache<Key>(TimeCache<Key, ()>);

@@ -23,7 +23,8 @@ use std::time::Duration;
 
 use libp2p_core::PeerId;
 
-use crate::types::{GenericGossipsubMessage, MessageId};
+use crate::types::{FastMessageId, GenericGossipsubMessage, MessageId};
+use crate::RawGossipsubMessage;
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -136,6 +137,16 @@ pub struct GenericGossipsubConfig<T> {
     /// The function takes a `GenericGossipsubMessage` as input and outputs a String to be
     /// interpreted as the message id.
     message_id_fn: fn(&GenericGossipsubMessage<T>) -> MessageId,
+
+    /// A user-defined optional function that computes fast ids from raw messages. This can be used
+    /// to avoid possibly expensive transformations from `RawGossipsubMessage` to
+    /// `GenericGossipsubMessage<T>` for duplicates. Two semantically different messages must always
+    /// have different fast message ids, but it is allowed that two semantically identical messages
+    /// have different fast message ids as long as the message_id_fn produces the same id for them.
+    ///
+    /// The function takes a `RawGossipsubMessage` as input and outputs a String to be
+    /// interpreted as the fast message id. Default is None.
+    fast_message_id_fn: Option<fn(&RawGossipsubMessage) -> FastMessageId>,
 
     /// By default, gossipsub will reject messages that are sent to us that has the same message
     /// source as we have specified locally. Enabling this, allows these messages and prevents
@@ -351,6 +362,19 @@ impl<T> GenericGossipsubConfig<T> {
         (self.message_id_fn)(message)
     }
 
+    /// A user-defined optional function that computes fast ids from raw messages. This can be used
+    /// to avoid possibly expensive transformations from `RawGossipsubMessage` to
+    /// `GenericGossipsubMessage<T>` for duplicates. Two semantically different messages must always
+    /// have different fast message ids, but it is allowed that two semantically identical messages
+    /// have different fast message ids as long as the message_id_fn produces the same id for them.
+    ///
+    /// The function takes a `RawGossipsubMessage` as input and outputs a String to be
+    /// interpreted as the fast message id. Default is None.
+    pub fn fast_message_id(&self, message: &RawGossipsubMessage) -> Option<FastMessageId> {
+        self.fast_message_id_fn
+            .map(|fast_message_id_fn| fast_message_id_fn(message))
+    }
+
     /// By default, gossipsub will reject messages that are sent to us that has the same message
     /// source as we have specified locally. Enabling this, allows these messages and prevents
     /// penalizing the peer that sent us the message. Default is false.
@@ -535,6 +559,7 @@ impl<T: Clone> GenericGossipsubConfigBuilder<T> {
                         .push_str(&message.sequence_number.unwrap_or_default().to_string());
                     MessageId::from(source_string)
                 },
+                fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
                 prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
@@ -684,6 +709,22 @@ impl<T: Clone> GenericGossipsubConfigBuilder<T> {
         id_fn: fn(&GenericGossipsubMessage<T>) -> MessageId,
     ) -> &mut Self {
         self.config.message_id_fn = id_fn;
+        self
+    }
+
+    /// A user-defined optional function that computes fast ids from raw messages. This can be used
+    /// to avoid possibly expensive transformations from `RawGossipsubMessage` to
+    /// `GenericGossipsubMessage<T>` for duplicates. Two semantically different messages must always
+    /// have different fast message ids, but it is allowed that two semantically identical messages
+    /// have different fast message ids as long as the message_id_fn produces the same id for them.
+    ///
+    /// The function takes a `RawGossipsubMessage` as input and outputs a String to be
+    /// interpreted as the fast message id. Default is None.
+    pub fn fast_message_id_fn(
+        &mut self,
+        fast_id_fn: fn(&RawGossipsubMessage) -> FastMessageId,
+    ) -> &mut Self {
+        self.config.fast_message_id_fn = Some(fast_id_fn);
         self
     }
 

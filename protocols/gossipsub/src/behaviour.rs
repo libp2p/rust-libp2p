@@ -55,11 +55,12 @@ use crate::handler::{GossipsubHandler, HandlerEvent};
 use crate::mcache::MessageCache;
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
-use crate::time_cache::DuplicateCache;
+use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::types::{
-    GenericGossipsubMessage, GossipsubControlAction, GossipsubMessageWithId, GossipsubSubscription,
-    GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
+    FastMessageId, GenericGossipsubMessage, GossipsubControlAction, GossipsubMessageWithId,
+    GossipsubSubscription, GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo,
+    RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
@@ -284,6 +285,9 @@ pub struct GenericGossipsub<T: AsRef<[u8]>> {
 
     /// short term cache for published messsage ids
     published_message_ids: DuplicateCache<MessageId>,
+
+    /// short term cache for fast message ids mapping them to the real message ids
+    fast_messsage_id_cache: TimeCache<FastMessageId, MessageId>,
 }
 
 // for backwards compatibility
@@ -308,6 +312,7 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplication_cache: DuplicateCache::new(config.duplicate_cache_time()),
+            fast_messsage_id_cache: TimeCache::new(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
@@ -1327,15 +1332,16 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
         }
     }
 
-    /// Handles a newly received GossipsubMessage.
-    /// Forwards the message to all peers in the mesh.
-    fn handle_received_message(&mut self, msg: RawGossipsubMessage, propagation_source: &PeerId) {
-        let msg = GenericGossipsubMessage::from(msg);
-        let msg_id = self.config.message_id(&msg);
-        let mut msg = GossipsubMessageWithId::new(msg, msg_id.clone());
+    /// Applies some basic checks to whether this message is valid. Does not apply user validation
+    /// checks.
+    fn mesage_with_id_is_valid<S>(
+        &mut self,
+        msg: &mut GossipsubMessageWithId<S>,
+        propagation_source: &PeerId,
+    ) -> bool {
         debug!(
             "Handling message: {:?} from peer: {}",
-            msg_id,
+            msg.message_id(),
             propagation_source.to_string()
         );
 
@@ -1347,9 +1353,9 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
             );
             if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
                 peer_score.reject_message(propagation_source, &msg, RejectReason::BlackListedPeer);
-                gossip_promises.reject_message(&msg_id, &RejectReason::BlackListedPeer);
+                gossip_promises.reject_message(msg.message_id(), &RejectReason::BlackListedPeer);
             }
-            return;
+            return false;
         }
 
         // Also reject any message that originated from a blacklisted peer
@@ -1365,9 +1371,10 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
                         &msg,
                         RejectReason::BlackListedSource,
                     );
-                    gossip_promises.reject_message(&msg_id, &RejectReason::BlackListedSource);
+                    gossip_promises
+                        .reject_message(msg.message_id(), &RejectReason::BlackListedSource);
                 }
-                return;
+                return false;
             }
         }
 
@@ -1384,24 +1391,59 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
                 && own_id != propagation_source
                 && msg.source.as_ref().map_or(false, |s| s == own_id)
         } else {
-            self.published_message_ids.contains(&msg_id)
+            self.published_message_ids.contains(msg.message_id())
         };
 
         if self_published {
             debug!(
                 "Dropping message {} claiming to be from self but forwarded from {}",
-                msg_id, propagation_source
+                msg.message_id(),
+                propagation_source
             );
             if let Some((peer_score, _, _, gossip_promises)) = &mut self.peer_score {
                 peer_score.reject_message(propagation_source, &msg, RejectReason::SelfOrigin);
-                gossip_promises.reject_message(&msg_id, &RejectReason::SelfOrigin);
+                gossip_promises.reject_message(msg.message_id(), &RejectReason::SelfOrigin);
             }
+            return false;
+        }
+
+        true
+    }
+
+    /// Handles a newly received GossipsubMessage.
+    /// Forwards the message to all peers in the mesh.
+    fn handle_received_message(&mut self, msg: RawGossipsubMessage, propagation_source: &PeerId) {
+        let fast_message_id = self.config.fast_message_id(&msg);
+        if let Some(fast_message_id) = fast_message_id.as_ref() {
+            if let Some(msg_id) = self.fast_messsage_id_cache.get(fast_message_id) {
+                let mut msg = GossipsubMessageWithId::new(msg, msg_id.clone());
+                self.mesage_with_id_is_valid(&mut msg, propagation_source);
+                if let Some((peer_score, ..)) = &mut self.peer_score {
+                    peer_score.duplicated_message(propagation_source, &msg);
+                }
+                return;
+            }
+        }
+        let msg = GenericGossipsubMessage::from(msg);
+        let msg_id = self.config.message_id(&msg);
+        let mut msg = GossipsubMessageWithId::new(msg, msg_id);
+
+        if !self.mesage_with_id_is_valid(&mut msg, propagation_source) {
             return;
         }
 
-        // Add the message to the duplication cache and memcache.
-        if !self.duplication_cache.insert(msg_id.clone()) {
-            debug!("Message already received, ignoring. Message: {}", msg_id);
+        // Add the message to the duplication caches and memcache.
+        if let Some(fast_message_id) = fast_message_id {
+            //add id to cache
+            self.fast_messsage_id_cache
+                .entry(fast_message_id)
+                .or_insert_with(|| msg.message_id().clone());
+        }
+        if !self.duplication_cache.insert(msg.message_id().clone()) {
+            debug!(
+                "Message already received, ignoring. Message: {}",
+                msg.message_id()
+            );
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.duplicated_message(propagation_source, &msg);
             }
@@ -1409,14 +1451,14 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
         }
         debug!(
             "Put message {:?} in duplication_cache and resolve promises",
-            &msg_id
+            msg.message_id()
         );
 
         // Tells score that message arrived (but is maybe not fully validated yet)
         // Consider message as delivered for gossip promises
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             peer_score.validate_message(propagation_source, &msg);
-            gossip_promises.deliver_message(&msg_id);
+            gossip_promises.deliver_message(msg.message_id());
         }
 
         // Add the message to our memcache
@@ -1428,7 +1470,7 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                 GenericGossipsubEvent::Message {
                     propagation_source: propagation_source.clone(),
-                    message_id: msg_id.clone(),
+                    message_id: msg.message_id().clone(),
                     message: msg.clone(),
                 },
             ));
@@ -1442,6 +1484,7 @@ impl<T: Clone + Into<Vec<u8>> + From<Vec<u8>> + AsRef<[u8]>> GenericGossipsub<T>
 
         // forward the message to mesh peers, if no validation is required
         if !self.config.validate_messages() {
+            let msg_id = msg.message_id().clone();
             if let Err(_) = self.forward_msg(msg, Some(propagation_source)) {
                 error!("Failed to forward message. Too large");
             }
@@ -2798,11 +2841,22 @@ where
                 if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
                     for (message, validation_error) in invalid_messages {
                         let reason = RejectReason::ValidationError(validation_error);
-                        let message = GenericGossipsubMessage::from(message);
-                        let id = self.config.message_id(&message);
-                        let message = GossipsubMessageWithId::new(message, id);
-                        peer_score.reject_message(&propagation_source, &message, reason);
-                        gossip_promises.reject_message(&message.message_id(), &reason);
+                        let fast_message_id_cache = &self.fast_messsage_id_cache;
+                        if let Some(msg_id) = self
+                            .config
+                            .fast_message_id(&message)
+                            .and_then(|id| fast_message_id_cache.get(&id))
+                        {
+                            let message = GossipsubMessageWithId::new(message, msg_id.clone());
+                            peer_score.reject_message(&propagation_source, &message, reason);
+                            gossip_promises.reject_message(msg_id, &reason);
+                        } else {
+                            let message = GenericGossipsubMessage::from(message);
+                            let id = self.config.message_id(&message);
+                            let message = GossipsubMessageWithId::new(message, id);
+                            peer_score.reject_message(&propagation_source, &message, reason);
+                            gossip_promises.reject_message(message.message_id(), &reason);
+                        }
                     }
                 } else {
                     // log the invalid messages
