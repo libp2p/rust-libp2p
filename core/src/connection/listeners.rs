@@ -20,7 +20,7 @@
 
 //! Manage listening on multiple multiaddresses at once.
 
-use crate::{Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
+use crate::{address_translation, Dialer, Multiaddr, Transport, transport::{TransportError, ListenerEvent}};
 use futures::{prelude::*, task::Context, task::Poll};
 use log::debug;
 use smallvec::SmallVec;
@@ -230,6 +230,42 @@ where
     /// Returns an iterator that produces the list of addresses we're listening on.
     pub fn listen_addrs(&self) -> impl Iterator<Item = &Multiaddr> {
         self.listeners.iter().flat_map(|l| l.addresses.iter())
+    }
+
+    /// Perform address translation.
+    pub fn address_translation(&self, observed_addr: &Multiaddr) -> Vec<Multiaddr> {
+        let mut addrs = Vec::with_capacity(4 * self.listeners.len());
+        for listener in &self.listeners {
+            if listener.dialer.requires_address_translation() {
+                for addr in &listener.addresses {
+                    if let Some(new_addr) = address_translation(addr, observed_addr) {
+                        if addrs.iter().find(|addr| *addr == &new_addr).is_none() {
+                            addrs.push(new_addr);
+                        }
+                    }
+                }
+            } else {
+                if addrs.iter().find(|addr| *addr == observed_addr).is_none() {
+                    addrs.push(observed_addr.clone());
+                }
+            }
+        }
+        addrs
+    }
+
+    /// Returns a dialer for an address.
+    pub fn dialer_for_addr(&self, addr: &Multiaddr) -> TTrans::Dialer {
+        if self.listen_addrs().find(|addr2| *addr2 == addr).is_some() {
+            return self.transport.dialer();
+        }
+
+        self.listeners.iter().filter_map(|listener| {
+            listener.addresses.iter().find(|address| {
+                address.can_dial(addr)
+            }).map(|_| listener.dialer.clone())
+        })
+        .next()
+        .unwrap_or_else(|| self.transport.dialer())
     }
 
     /// Provides an API similar to `Stream`, except that it cannot end.

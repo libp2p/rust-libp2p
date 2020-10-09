@@ -29,7 +29,6 @@ use crate::{
     Executor,
     Multiaddr,
     PeerId,
-    address_translation,
     connection::{
         ConnectionId,
         ConnectionLimit,
@@ -199,21 +198,8 @@ where
     /// * `observed_addr` - should be an address a remote observes you as, which can be obtained for
     /// example with the identify protocol.
     ///
-    pub fn address_translation<'a>(&'a self, observed_addr: &'a Multiaddr)
-        -> impl Iterator<Item = Multiaddr> + 'a
-    where
-        TMuxer: 'a,
-        THandler: 'a,
-    {
-        let mut addrs: Vec<_> = self.listen_addrs()
-            .filter_map(move |server| address_translation(server, observed_addr))
-            .collect();
-
-        // remove duplicates
-        addrs.sort_unstable();
-        addrs.dedup();
-
-        addrs.into_iter()
+    pub fn address_translation(&self, observed_addr: &Multiaddr) -> Vec<Multiaddr> {
+        self.listeners.address_translation(observed_addr)
     }
 
     /// Returns the peer id of the local node.
@@ -240,7 +226,7 @@ where
         TPeerId: Send + 'static,
     {
         let info = OutgoingInfo { address, peer_id: None };
-        match self.transport().dialer().dial(address.clone()) {
+        match self.listeners.dialer_for_addr(address).dial(address.clone()) {
             Ok(f) => {
                 let f = f.map_err(|err| PendingConnectionError::Transport(TransportError::Other(err)));
                 self.pool.add_outgoing(f, handler, info)
@@ -435,8 +421,8 @@ where
                 let dialing = &mut self.dialing;
                 let (next, event) = on_connection_failed(dialing, id, endpoint, error, handler);
                 if let Some(dial) = next {
-                    let transport = self.listeners.transport().clone();
-                    if let Err(e) = dial_peer_impl(transport, pool, dialing, dial) {
+                    let dialer = self.listeners.dialer_for_addr(&dial.address);
+                    if let Err(e) = dial_peer_impl(dialer, pool, dialing, dial) {
                         log::warn!("Dialing aborted: {:?}", e);
                     }
                 }
@@ -481,7 +467,8 @@ where
         TOutEvent: Send + 'static,
         TPeerId: Send + 'static,
     {
-        dial_peer_impl(self.transport().clone(), &mut self.pool, &mut self.dialing, opts)
+        let dialer = self.listeners.dialer_for_addr(&opts.address);
+        dial_peer_impl(dialer, &mut self.pool, &mut self.dialing, opts)
     }
 }
 
@@ -495,9 +482,9 @@ struct DialingOpts<TPeerId, THandler> {
 }
 
 /// Standalone implementation of `Network::dial_peer` for more granular borrowing.
-fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TTrans, TConnInfo, TPeerId>(
-    transport: TTrans,
-    pool: &mut Pool<TInEvent, TOutEvent, THandler, TTrans::Error,
+fn dial_peer_impl<TMuxer, TInEvent, TOutEvent, THandler, TDialer, TConnInfo, TPeerId>(
+    dialer: TDialer,
+    pool: &mut Pool<TInEvent, TOutEvent, THandler, TDialer::Error,
         <THandler::Handler as ConnectionHandler>::Error, TConnInfo, TPeerId>,
     dialing: &mut FnvHashMap<TPeerId, SmallVec<[peer::DialingState; 10]>>,
     opts: DialingOpts<TPeerId, THandler>
@@ -511,9 +498,9 @@ where
         InEvent = TInEvent,
         OutEvent = TOutEvent,
     > + Send + 'static,
-    TTrans: Transport<Output = (TConnInfo, TMuxer)>,
-    TTrans::Dial: Send + 'static,
-    TTrans::Error: error::Error + Send + 'static,
+    TDialer: Dialer<Output = (TConnInfo, TMuxer)>,
+    TDialer::Dial: Send + 'static,
+    TDialer::Error: error::Error + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send + 'static,
     TInEvent: Send + 'static,
@@ -521,7 +508,7 @@ where
     TPeerId: Eq + Hash + Send + Clone + 'static,
     TConnInfo: ConnectionInfo<PeerId = TPeerId> + Send + 'static,
 {
-    let result = match transport.dialer().dial(opts.address.clone()) {
+    let result = match dialer.dial(opts.address.clone()) {
         Ok(fut) => {
             let fut = fut.map_err(|e| PendingConnectionError::Transport(TransportError::Other(e)));
             let info = OutgoingInfo { address: &opts.address, peer_id: Some(&opts.peer) };

@@ -49,7 +49,7 @@ pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
-pub trait Dialer {
+pub trait Dialer: Clone {
     /// The result of a connection setup process, including protocol upgrades.
     ///
     /// Typically the output contains at least a handle to a data stream (i.e. a
@@ -71,6 +71,8 @@ pub trait Dialer {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized;
+
+    fn requires_address_translation(&self) -> bool { false }
 }
 
 /// A transport provides connection-oriented communication between two peers

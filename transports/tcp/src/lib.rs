@@ -243,6 +243,10 @@ impl Dialer for TcpDialer {
 
         Ok(Box::pin(self.do_dial(socket_addr)))
     }
+
+    fn requires_address_translation(&self) -> bool {
+        self.local_socket_addr.is_none()
+    }
 }
 
 impl Transport for TcpConfig {

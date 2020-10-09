@@ -303,6 +303,7 @@ mod tests {
             }
         }
 
+        #[derive(Clone)]
         struct CustomDialer;
 
         impl Dialer for CustomDialer {

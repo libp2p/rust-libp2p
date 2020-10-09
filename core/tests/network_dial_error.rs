@@ -60,6 +60,85 @@ fn new_network(cfg: NetworkConfig) -> TestNetwork {
 }
 
 #[test]
+fn port_reuse() {
+    // Checks whether reusing a port on a swarm works.
+
+    let mut swarm1 = new_network(NetworkConfig::default());
+    let mut swarm2 = new_network(NetworkConfig::default());
+
+    swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+    swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+
+    let address1 = async_std::task::block_on(future::poll_fn(|cx| {
+        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm1.poll(cx) {
+            Poll::Ready(listen_addr)
+        } else {
+            panic!("Was expecting the listen address to be reported")
+        }
+    }));
+
+    let address2 = async_std::task::block_on(future::poll_fn(|cx| {
+        if let Poll::Ready(NetworkEvent::NewListenerAddress { listen_addr, .. }) = swarm2.poll(cx) {
+            Poll::Ready(listen_addr)
+        } else {
+            panic!("Was expecting the listen address to be reported")
+        }
+    }));
+
+    swarm2
+        .peer(swarm1.local_peer_id().clone())
+        .dial(address1.clone(), Vec::new(), TestHandler())
+        .unwrap();
+
+    let mut got_incoming = false;
+    let mut got_outgoing = false;
+    async_std::task::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
+        loop {
+            match swarm1.poll(cx) {
+                Poll::Ready(NetworkEvent::IncomingConnection { connection, .. }) => {
+                    assert_eq!(&connection.local_addr, &address1);
+                    assert_eq!(&connection.send_back_addr, &address2);
+                    swarm1.accept(connection, TestHandler()).unwrap();
+                },
+                Poll::Ready(NetworkEvent::ConnectionEstablished {
+                    connection,
+                    ..
+                }) => {
+                    assert_eq!(connection.peer_id(), swarm2.local_peer_id());
+                    got_incoming = true;
+                    if got_outgoing {
+                        return Poll::Ready(Ok(()));
+                    }
+                },
+                Poll::Ready(NetworkEvent::ConnectionClosed { .. }) => continue,
+                Poll::Ready(e) => panic!("{:?}", e),
+                Poll::Pending => break,
+            }
+        }
+
+        loop {
+            match swarm2.poll(cx) {
+                Poll::Ready(NetworkEvent::ConnectionEstablished {
+                    connection,
+                    ..
+                }) => {
+                    assert_eq!(connection.peer_id(), swarm1.local_peer_id());
+                    got_outgoing = true;
+                    if got_incoming {
+                        return Poll::Ready(Ok(()));
+                    }
+                },
+                Poll::Ready(NetworkEvent::ConnectionClosed { .. }) => continue,
+                Poll::Ready(e) => panic!("{:?}", e),
+                Poll::Pending => break,
+            }
+        }
+
+        Poll::Pending
+    })).unwrap();
+}
+
+#[test]
 fn deny_incoming_connec() {
     // Checks whether refusing an incoming connection on a swarm triggers the correct events.
 
