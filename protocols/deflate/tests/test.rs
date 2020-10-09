@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future, prelude::*};
-use libp2p_core::{transport::Transport, upgrade};
+use libp2p_core::{Dialer, Transport, upgrade};
 use libp2p_deflate::DeflateConfig;
 use libp2p_tcp::TcpConfig;
 use quickcheck::{QuickCheck, RngCore, TestResult};
@@ -51,7 +51,7 @@ async fn run(message1: Vec<u8>) {
 
     let mut listener = transport.clone()
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
-        .expect("listener");
+        .expect("listener").0;
 
     let listen_addr = listener.by_ref().next().await
         .expect("some event")
@@ -82,7 +82,7 @@ async fn run(message1: Vec<u8>) {
         conn.close().await.expect("close")
     });
 
-    let mut conn = transport.dial(listen_addr).expect("dialer").await.expect("connection");
+    let mut conn = transport.dialer().dial(listen_addr).expect("dialer").await.expect("connection");
     conn.write_all(&message1).await.expect("write_all");
     conn.close().await.expect("close");
 

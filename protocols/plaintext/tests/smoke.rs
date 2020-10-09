@@ -23,7 +23,7 @@ use futures::stream::TryStreamExt;
 use libp2p_core::{
     identity,
     multiaddr::Multiaddr,
-    transport::{Transport, ListenerEvent},
+    transport::{Dialer, Transport, ListenerEvent},
     upgrade,
 };
 use libp2p_plaintext::PlainText2Config;
@@ -73,7 +73,7 @@ fn variable_msg_length() {
                 std::cmp::Ord::max(1, rand::random::<u64>())
             ).parse().unwrap();
 
-            let mut server = server_transport.listen_on(server_address.clone()).unwrap();
+            let mut server = server_transport.listen_on(server_address.clone()).unwrap().0;
 
             // Ignore server listen address event.
             let _ = server.try_next()
@@ -85,7 +85,7 @@ fn variable_msg_length() {
 
             let client_fut = async {
                 debug!("dialing {:?}", server_address);
-                let (received_server_id, mut client_channel) = client_transport.dial(server_address).unwrap().await.unwrap();
+                let (received_server_id, mut client_channel) = client_transport.dialer().dial(server_address).unwrap().await.unwrap();
                 assert_eq!(received_server_id, server_id.public().into_peer_id());
 
                 debug!("Client: writing message.");

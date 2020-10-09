@@ -288,6 +288,7 @@ mod tests {
         Listener = impl Send,
         ListenerUpgrade = impl Send,
         Dial = impl Send,
+        Dialer = impl Send + Clone,
         Error = impl fmt::Debug
     > + Clone) {
         let id_keys = identity::Keypair::generate_ed25519();

@@ -119,6 +119,7 @@ mod tests {
     use libp2p_core::{
         multiaddr::multiaddr,
         transport::{
+            Dialer,
             Transport,
             ListenerEvent,
             memory::MemoryTransport
@@ -130,7 +131,7 @@ mod tests {
     #[test]
     fn ping_pong() {
         let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
-        let mut listener = MemoryTransport.listen_on(mem_addr).unwrap();
+        let mut listener = MemoryTransport.listen_on(mem_addr).unwrap().0;
 
         let listener_addr =
             if let Some(Some(Ok(ListenerEvent::NewAddress(a)))) = listener.next().now_or_never() {
@@ -147,7 +148,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let c = MemoryTransport.dial(listener_addr).unwrap().await.unwrap();
+            let c = MemoryTransport.dialer().dial(listener_addr).unwrap().await.unwrap();
             let (_, rtt) = send_ping(c).await.unwrap();
             assert!(rtt > Duration::from_secs(0));
         });

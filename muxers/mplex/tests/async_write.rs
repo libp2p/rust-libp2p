@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{muxing, upgrade, Transport};
+use libp2p_core::{muxing, upgrade, Dialer, Transport};
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::oneshot};
 use std::sync::Arc;
@@ -37,7 +37,7 @@ fn async_write() {
 
         let mut listener = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-            .unwrap();
+            .unwrap().0;
 
         let addr = listener.next().await
             .expect("some event")
@@ -65,7 +65,7 @@ fn async_write() {
         let transport = TcpConfig::new().and_then(move |c, e|
             upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let client = Arc::new(transport.dialer().dial(rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = loop {
             if let Some(s) = muxing::event_from_ref_and_wrap(client.clone()).await.unwrap()
                 .into_inbound_substream() {
