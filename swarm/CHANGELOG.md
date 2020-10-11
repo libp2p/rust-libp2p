@@ -1,3 +1,16 @@
+# 0.22.1 [unreleased]
+
+- Instead of iterating each inbound and outbound substream upgrade looking for
+  one to make progress, use a `FuturesUnordered` for both pending inbound and
+  pending outbound upgrades. As a result only those upgrades are polled that are
+  ready to progress.
+
+  Implementors of `InboundUpgrade` and `OutboundUpgrade` need to ensure to wake
+  up the underlying task once they are ready to make progress as they won't be
+  polled otherwise.
+
+  [PR 1775](https://github.com/libp2p/rust-libp2p/pull/1775)
+
 # 0.22.0 [2020-09-09]
 
 - Bump `libp2p-core` dependency.
