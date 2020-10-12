@@ -382,7 +382,7 @@ where
             if let Some(blocked_id) = &self.blocked_stream {
                 // We have a blocked stream and cannot continue reading
                 // new frames for any stream, until frames are taken from
-                // the blocked stream's buffer. Try to wake pending readers
+                // the blocked stream's buffer. Try to wake a pending reader
                 // of the blocked stream.
                 if !self.notifier_read.wake_read_stream(*blocked_id) {
                     // No task dedicated to the blocked stream woken, so schedule
