@@ -105,7 +105,7 @@ impl Default for MplexConfig {
     fn default() -> MplexConfig {
         MplexConfig {
             max_substreams: 128,
-            max_buffer_len: 4096,
+            max_buffer_len: 32,
             max_buffer_behaviour: MaxBufferBehaviour::ResetStream,
             split_send_size: 1024,
         }
