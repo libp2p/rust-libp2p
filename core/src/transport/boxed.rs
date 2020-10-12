@@ -24,7 +24,6 @@ use multiaddr::Multiaddr;
 use std::{error, fmt, pin::Pin, sync::Arc};
 
 /// See the `Transport::boxed` method.
-#[inline]
 pub fn boxed<T>(transport: T) -> Boxed<T::Output, T::Error>
 where
     T: Transport + Clone + Send + Sync + 'static,
@@ -37,9 +36,14 @@ where
     }
 }
 
-pub type Dial<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
-pub type Listener<O, E> = Pin<Box<dyn Stream<Item = Result<ListenerEvent<ListenerUpgrade<O, E>, E>, E>> + Send>>;
-pub type ListenerUpgrade<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
+/// See the `Transport::boxed` method.
+pub struct Boxed<O, E> {
+    inner: Arc<dyn Abstract<O, E> + Send + Sync>,
+}
+
+type Dial<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
+type Listener<O, E> = Pin<Box<dyn Stream<Item = Result<ListenerEvent<ListenerUpgrade<O, E>, E>, E>> + Send>>;
+type ListenerUpgrade<O, E> = Pin<Box<dyn Future<Output = Result<O, E>> + Send>>;
 
 trait Abstract<O, E> {
     fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>>;
@@ -66,11 +70,6 @@ where
         let fut = Transport::dial(self.clone(), addr)?;
         Ok(Box::pin(fut) as Dial<_, _>)
     }
-}
-
-/// See the `Transport::boxed` method.
-pub struct Boxed<O, E> {
-    inner: Arc<dyn Abstract<O, E> + Send + Sync>,
 }
 
 impl<O, E> fmt::Debug for Boxed<O, E> {
