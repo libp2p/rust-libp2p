@@ -50,7 +50,7 @@ pub struct Multiplexed<C> {
     /// The stream that currently blocks reading for all streams
     /// due to a full buffer, if any. Only applicable for use
     /// with [`MaxBufferBehaviour::Block`].
-    blocked_stream: Option<LocalStreamId>,
+    blocking_stream: Option<LocalStreamId>,
     /// Pending frames to send at the next opportunity.
     ///
     /// An opportunity for sending pending frames is every flush
@@ -100,7 +100,7 @@ where
             substreams: Default::default(),
             pending_flush_open: false,
             pending_frames: Default::default(),
-            blocked_stream: None,
+            blocking_stream: None,
             next_outbound_stream_id: LocalStreamId::dialer(0),
             notifier_read: Arc::new(NotifierRead {
                 read_stream: Mutex::new(Default::default()),
@@ -355,9 +355,9 @@ where
         if let Some(state) = self.substreams.get_mut(&id) {
             let buf = state.recv_buf();
             if !buf.is_empty() {
-                if self.blocked_stream == Some(id) {
+                if self.blocking_stream == Some(id) {
                     // Unblock reading new frames.
-                    self.blocked_stream = None;
+                    self.blocking_stream = None;
                     ArcWake::wake_by_ref(&self.notifier_read);
                 }
                 let data = buf.remove(0);
@@ -379,7 +379,7 @@ where
             }
 
             // Check if there is a blocked stream.
-            if let Some(blocked_id) = &self.blocked_stream {
+            if let Some(blocked_id) = &self.blocking_stream {
                 // We have a blocked stream and cannot continue reading
                 // new frames for any stream, until frames are taken from
                 // the blocked stream's buffer. Try to wake a pending reader
@@ -425,7 +425,7 @@ where
                                         });
                                     }
                                     MaxBufferBehaviour::Block => {
-                                        self.blocked_stream = Some(id);
+                                        self.blocking_stream = Some(id);
                                     }
                                 }
                             }
