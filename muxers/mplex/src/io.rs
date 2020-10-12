@@ -42,7 +42,8 @@ pub struct Multiplexed<C> {
     /// The configuration.
     config: MplexConfig,
     /// The buffer of new inbound substreams that have not yet
-    /// been drained by `poll_next_stream`.
+    /// been drained by `poll_next_stream`. This buffer is
+    /// effectively bounded by `max_substreams - substreams.len()`.
     open_buffer: VecDeque<LocalStreamId>,
     /// Whether a flush is pending due to one or more new outbound
     /// `Open` frames, before reading frames can proceed.
@@ -169,6 +170,18 @@ where
     }
 
     /// Waits for a new inbound substream, returning the corresponding `LocalStreamId`.
+    ///
+    /// If the number of already used substreams (i.e. substreams that have not
+    /// yet been dropped via `drop_substream`) reaches the configured
+    /// `max_substreams`, any further inbound substreams are immediately reset
+    /// until existing substreams are dropped.
+    ///
+    /// Data frames read for existing substreams in the context of this
+    /// method call are buffered and tasks interested in reading from
+    /// these substreams are woken. If a substream buffer is full and
+    /// [`MaxBufferBehaviour::Block`] is used, this method is blocked
+    /// (i.e. `Pending`) on some task reading from the substream whose
+    /// buffer is full.
     pub fn poll_next_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
@@ -188,18 +201,7 @@ where
                     }
                 }
                 Frame::Data { stream_id, data } => {
-                    let id = stream_id.into_local();
-                    if let Some(state) = self.substreams.get_mut(&id) {
-                        if let Some(buf) = state.recv_buf_open() {
-                            trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
-                            buf.push(data);
-                            self.notifier_read.wake_read_stream(id);
-                        } else {
-                            trace!("Dropping data {:?} for closed or reset substream {}", data, id);
-                        }
-                    } else {
-                        trace!("Dropping data {:?} for unknown substream {}", data, id);
-                    }
+                    self.buffer(stream_id.into_local(), data)?;
                 }
                 Frame::Close { stream_id } => {
                     self.on_close(stream_id.into_local())?;
@@ -346,6 +348,19 @@ where
     }
 
     /// Reads data from a substream.
+    ///
+    /// Data frames read for substreams other than `id` in the context
+    /// of this method call are buffered and tasks interested in reading
+    /// from these substreams are woken. If a substream buffer is full
+    /// and [`MaxBufferBehaviour::Block`] is used, reading the next data
+    /// frame for `id` is blocked on some task reading from the blocking
+    /// stream's full buffer first.
+    ///
+    /// New inbound substreams (i.e. `Open` frames) read in the context of
+    /// this method call are buffered up to the configured `max_substreams`
+    /// and under consideration of the number of already used substreams,
+    /// thereby waking the task that last called `poll_next_stream`, if any.
+    /// Inbound substreams received in excess of that limit are immediately reset.
     pub fn poll_read_stream(&mut self, cx: &mut Context<'_>, id: LocalStreamId)
         -> Poll<io::Result<Option<Bytes>>>
     {
@@ -378,24 +393,6 @@ where
                 return Poll::Ready(Ok(None))
             }
 
-            // Check if there is a blocked stream.
-            if let Some(blocked_id) = &self.blocking_stream {
-                // We have a blocked stream and cannot continue reading
-                // new frames for any stream, until frames are taken from
-                // the blocked stream's buffer. Try to wake a pending reader
-                // of the blocked stream.
-                if !self.notifier_read.wake_read_stream(*blocked_id) {
-                    // No task dedicated to the blocked stream woken, so schedule
-                    // this task again to have a chance at progress.
-                    cx.waker().clone().wake();
-                } else if blocked_id != &id {
-                    // We woke some other task, but are still interested in
-                    // reading from the current stream.
-                    let _ = NotifierRead::register_read_stream(&self.notifier_read, cx.waker(), id);
-                }
-                return Poll::Pending
-            }
-
             // Read the next frame.
             match ready!(self.poll_read_frame(cx, Some(id)))? {
                 Frame::Data { data, stream_id } if stream_id.into_local() == id => {
@@ -405,36 +402,7 @@ where
                     // The data frame is for a different stream than the one
                     // currently being polled, so it needs to be buffered and
                     // the interested tasks notified.
-                    let id = stream_id.into_local();
-                    if let Some(state) = self.substreams.get_mut(&id) {
-                        if let Some(buf) = state.recv_buf_open() {
-                            debug_assert!(buf.len() <= self.config.max_buffer_len);
-                            trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
-                            buf.push(data);
-                            self.notifier_read.wake_read_stream(id);
-                            if buf.len() > self.config.max_buffer_len {
-                                debug!("Frame buffer of stream {} is full.", id);
-                                match self.config.max_buffer_behaviour {
-                                    MaxBufferBehaviour::ResetStream => {
-                                        let buf = buf.clone();
-                                        self.check_max_pending_frames()?;
-                                        self.substreams.insert(id, SubstreamState::Reset { buf });
-                                        debug!("Pending reset for stream {}", id);
-                                        self.pending_frames.push_front(Frame::Reset {
-                                            stream_id: id
-                                        });
-                                    }
-                                    MaxBufferBehaviour::Block => {
-                                        self.blocking_stream = Some(id);
-                                    }
-                                }
-                            }
-                        } else {
-                            trace!("Dropping data {:?} for closed substream {}", data, id);
-                        }
-                    } else {
-                        trace!("Dropping data {:?} for unknown substream {}", data, id);
-                    }
+                    self.buffer(stream_id.into_local(), data)?;
                 }
                 frame @ Frame::Open { .. } => {
                     if let Some(id) = self.on_open(frame.remote_id())? {
@@ -564,6 +532,34 @@ where
             trace!("Executing pending flush.");
             ready!(self.poll_flush(cx))?;
             debug_assert!(!self.pending_flush_open);
+        }
+
+        // Check if there is a blocked stream.
+        if let Some(blocked_id) = &self.blocking_stream {
+            // We have a blocked stream and cannot continue reading
+            // new frames until frames are taken from the blocked stream's
+            // buffer.
+
+            // Try to wake a pending reader of the blocked stream.
+            if !self.notifier_read.wake_read_stream(*blocked_id) {
+                // No task dedicated to the blocked stream woken, so schedule
+                // this task again to have a chance at progress.
+                cx.waker().clone().wake();
+            } else {
+                if let Some(id) = stream_id {
+                    // We woke some other task, but are still interested in
+                    // reading `Data` frames from the current stream when unblocked.
+                    debug_assert!(blocked_id != &id, "Unexpected attempt at reading a new \
+                        frame from a substream with a full buffer.");
+                    let _ = NotifierRead::register_read_stream(&self.notifier_read, cx.waker(), id);
+                } else {
+                    // We woke some other task but are still interested in
+                    // reading new `Open` frames when unblocked.
+                    let _ = NotifierRead::register_next_stream(&self.notifier_read, cx.waker());
+                }
+            }
+
+            return Poll::Pending
         }
 
         // Try to read another frame from the underlying I/O stream.
@@ -725,6 +721,49 @@ where
             return self.on_error(io::Error::new(io::ErrorKind::Other,
                 "Too many pending frames."));
         }
+        Ok(())
+    }
+
+    /// Buffers a data frame for a particular substream, if possible.
+    ///
+    /// If the new data frame exceeds the `max_buffer_len` for the buffer
+    /// of the substream, the behaviour depends on the configured
+    /// [`MaxBufferBehaviour`]. Note that the excess frame is still
+    /// buffered in that case (but no further frames will be).
+    ///
+    /// Fails the entire multiplexed stream if too many pending `Reset`
+    /// frames accumulate when using [`MaxBufferBehaviour::ResetStream`].
+    fn buffer(&mut self, id: LocalStreamId, data: Bytes) -> io::Result<()> {
+        if let Some(state) = self.substreams.get_mut(&id) {
+            if let Some(buf) = state.recv_buf_open() {
+                debug_assert!(buf.len() <= self.config.max_buffer_len);
+                trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
+                buf.push(data);
+                self.notifier_read.wake_read_stream(id);
+                if buf.len() > self.config.max_buffer_len {
+                    debug!("Frame buffer of stream {} is full.", id);
+                    match self.config.max_buffer_behaviour {
+                        MaxBufferBehaviour::ResetStream => {
+                            let buf = buf.clone();
+                            self.check_max_pending_frames()?;
+                            self.substreams.insert(id, SubstreamState::Reset { buf });
+                            debug!("Pending reset for stream {}", id);
+                            self.pending_frames.push_front(Frame::Reset {
+                                stream_id: id
+                            });
+                        }
+                        MaxBufferBehaviour::Block => {
+                            self.blocking_stream = Some(id);
+                        }
+                    }
+                }
+            } else {
+                trace!("Dropping data {:?} for closed or reset substream {}", data, id);
+            }
+        } else {
+            trace!("Dropping data {:?} for unknown substream {}", data, id);
+        }
+
         Ok(())
     }
 }
