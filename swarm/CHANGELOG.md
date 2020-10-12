@@ -1,5 +1,8 @@
 # 0.22.1 [unreleased]
 
+- Respect inbound timeouts and upgrade versions in the `MultiHandler`.
+  [PR 1786](https://github.com/libp2p/rust-libp2p/pull/1786).
+
 - Instead of iterating each inbound and outbound substream upgrade looking for
   one to make progress, use a `FuturesUnordered` for both pending inbound and
   pending outbound upgrades. As a result only those upgrades are polled that are
