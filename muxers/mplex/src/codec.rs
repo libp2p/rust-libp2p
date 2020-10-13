@@ -77,10 +77,23 @@ impl LocalStreamId {
         Self { num, role: Endpoint::Dialer }
     }
 
+    #[cfg(test)]
+    pub fn listener(num: u32) -> Self {
+        Self { num, role: Endpoint::Listener }
+    }
+
     pub fn next(self) -> Self {
         Self {
             num: self.num.checked_add(1).expect("Mplex substream ID overflowed"),
             .. self
+        }
+    }
+
+    #[cfg(test)]
+    pub fn into_remote(self) -> RemoteStreamId {
+        RemoteStreamId {
+            num: self.num,
+            role: !self.role,
         }
     }
 }
@@ -105,7 +118,7 @@ impl RemoteStreamId {
 }
 
 /// An Mplex protocol frame.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame<T> {
     Open { stream_id: T },
     Data { stream_id: T, data: Bytes },
@@ -114,19 +127,13 @@ pub enum Frame<T> {
 }
 
 impl Frame<RemoteStreamId> {
-    fn remote_id(&self) -> RemoteStreamId {
+    pub fn remote_id(&self) -> RemoteStreamId {
         match *self {
             Frame::Open { stream_id } => stream_id,
             Frame::Data { stream_id, .. } => stream_id,
             Frame::Close { stream_id, .. } => stream_id,
             Frame::Reset { stream_id, .. } => stream_id,
         }
-    }
-
-    /// Gets the `LocalStreamId` corresponding to the `RemoteStreamId`
-    /// received with this frame.
-    pub fn local_id(&self) -> LocalStreamId {
-        self.remote_id().into_local()
     }
 }
 
