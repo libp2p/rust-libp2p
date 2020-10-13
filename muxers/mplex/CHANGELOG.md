@@ -1,5 +1,8 @@
 # 0.23.0 [unreleased]
 
+- Split receive buffers per substream.
+  [PR 1784](https://github.com/libp2p/rust-libp2p/pull/1784).
+
 - Address a potential stall when reading from substreams.
 
 - Send a `Reset` or `Close` to the remote when a substream is dropped,
