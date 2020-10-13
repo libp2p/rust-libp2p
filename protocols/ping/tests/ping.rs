@@ -37,7 +37,7 @@ use libp2p_yamux as yamux;
 use futures::{prelude::*, channel::mpsc};
 use quickcheck::*;
 use rand::prelude::*;
-use std::{io, num::NonZeroU8, time::Duration};
+use std::{num::NonZeroU8, time::Duration};
 
 #[test]
 fn ping_pong() {
@@ -196,10 +196,7 @@ fn max_failures() {
 
 fn mk_transport(muxer: MuxerChoice) -> (
     PeerId,
-    transport::Boxed<
-        (PeerId, StreamMuxerBox),
-        io::Error
-    >
+    transport::Boxed<(PeerId, StreamMuxerBox)>
 ) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().into_peer_id();

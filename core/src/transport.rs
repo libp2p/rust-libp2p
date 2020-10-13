@@ -25,11 +25,10 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::{ConnectedPoint, ConnectionInfo, muxing::{StreamMuxer, StreamMuxerBox}};
+use crate::ConnectedPoint;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error::Error, fmt};
-use std::time::Duration;
 
 pub mod and_then;
 pub mod choice;
@@ -129,24 +128,16 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// Boxes an authenticated, multiplexed transport, including the
-    /// `StreamMuxer` and transport errors.
-    fn boxed<I, M>(self) -> boxed::Boxed<(I, StreamMuxerBox), std::io::Error>
+    /// Boxes the transport, including custom transport errors.
+    fn boxed(self) -> boxed::Boxed<Self::Output>
     where
-        Self: Transport<Output = (I, M)> + Sized + Clone + Send + Sync + 'static,
+        Self: Transport + Sized + Clone + Send + Sync + 'static,
         Self::Dial: Send + 'static,
         Self::Listener: Send + 'static,
         Self::ListenerUpgrade: Send + 'static,
         Self::Error: Send + Sync,
-        I: ConnectionInfo,
-        M: StreamMuxer + Send + Sync + 'static,
-        M::Substream: Send + 'static,
-        M::OutboundSubstream: Send + 'static
-
     {
-        boxed::boxed(
-            self.map(|(i, m), _| (i, StreamMuxerBox::new(m)))
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)))
+        boxed::boxed(self)
     }
 
     /// Applies a function on the connections created by the transport.
@@ -196,33 +187,6 @@ pub trait Transport {
         <F as TryFuture>::Error: Error + 'static
     {
         and_then::AndThen::new(self, f)
-    }
-
-    /// Adds a timeout to the connection setup (including upgrades) for all
-    /// inbound and outbound connections established through the transport.
-    fn timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
-    where
-        Self: Sized
-    {
-        timeout::TransportTimeout::new(self, timeout)
-    }
-
-    /// Adds a timeout to the connection setup (including upgrades) for all outbound
-    /// connections established through the transport.
-    fn outbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
-    where
-        Self: Sized
-    {
-        timeout::TransportTimeout::with_outgoing_timeout(self, timeout)
-    }
-
-    /// Adds a timeout to the connection setup (including upgrades) for all inbound
-    /// connections established through the transport.
-    fn inbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
-    where
-        Self: Sized
-    {
-        timeout::TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 
     /// Begins a series of protocol upgrades via an

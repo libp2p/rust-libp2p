@@ -37,7 +37,7 @@ use futures::{channel::oneshot, ready, prelude::*};
 use rand::random;
 use std::{io, task::{Context, Poll}};
 
-type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox), io::Error>;
+type TestTransport = transport::Boxed<(PeerId, StreamMuxerBox)>;
 type TestNetwork = Network<TestTransport, (), (), TestHandler>;
 
 fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
