@@ -11,12 +11,13 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "0.5"
-fnv = "1.0"
 futures = "0.3.1"
 futures_codec = "0.4"
 libp2p-core = { version = "0.22.0", path = "../../core" }
 log = "0.4"
+nohash-hasher = "0.2"
 parking_lot = "0.11"
+rand = "0.7"
 smallvec = "1.4"
 unsigned-varint = { version = "0.5", features = ["futures-codec"] }
 
