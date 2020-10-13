@@ -544,6 +544,7 @@ where
             if !self.notifier_read.wake_read_stream(*blocked_id) {
                 // No task dedicated to the blocked stream woken, so schedule
                 // this task again to have a chance at progress.
+                trace!("No task to read from blocked stream. Waking current task.");
                 cx.waker().clone().wake();
             } else {
                 if let Some(id) = stream_id {
@@ -734,34 +735,40 @@ where
     /// Fails the entire multiplexed stream if too many pending `Reset`
     /// frames accumulate when using [`MaxBufferBehaviour::ResetStream`].
     fn buffer(&mut self, id: LocalStreamId, data: Bytes) -> io::Result<()> {
-        if let Some(state) = self.substreams.get_mut(&id) {
-            if let Some(buf) = state.recv_buf_open() {
-                debug_assert!(buf.len() <= self.config.max_buffer_len);
-                trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
-                buf.push(data);
-                self.notifier_read.wake_read_stream(id);
-                if buf.len() > self.config.max_buffer_len {
-                    debug!("Frame buffer of stream {} is full.", id);
-                    match self.config.max_buffer_behaviour {
-                        MaxBufferBehaviour::ResetStream => {
-                            let buf = buf.clone();
-                            self.check_max_pending_frames()?;
-                            self.substreams.insert(id, SubstreamState::Reset { buf });
-                            debug!("Pending reset for stream {}", id);
-                            self.pending_frames.push_front(Frame::Reset {
-                                stream_id: id
-                            });
-                        }
-                        MaxBufferBehaviour::Block => {
-                            self.blocking_stream = Some(id);
-                        }
-                    }
-                }
-            } else {
-                trace!("Dropping data {:?} for closed or reset substream {}", data, id);
-            }
+        let state = if let Some(state) = self.substreams.get_mut(&id) {
+            state
         } else {
             trace!("Dropping data {:?} for unknown substream {}", data, id);
+            return Ok(())
+        };
+
+        let buf = if let Some(buf) = state.recv_buf_open() {
+            buf
+        } else {
+            trace!("Dropping data {:?} for closed or reset substream {}", data, id);
+            return Ok(())
+        };
+
+        debug_assert!(buf.len() <= self.config.max_buffer_len);
+        trace!("Buffering {:?} for stream {} (total: {})", data, id, buf.len() + 1);
+        buf.push(data);
+        self.notifier_read.wake_read_stream(id);
+        if buf.len() > self.config.max_buffer_len {
+            debug!("Frame buffer of stream {} is full.", id);
+            match self.config.max_buffer_behaviour {
+                MaxBufferBehaviour::ResetStream => {
+                    let buf = buf.clone();
+                    self.check_max_pending_frames()?;
+                    self.substreams.insert(id, SubstreamState::Reset { buf });
+                    debug!("Pending reset for stream {}", id);
+                    self.pending_frames.push_front(Frame::Reset {
+                        stream_id: id
+                    });
+                }
+                MaxBufferBehaviour::Block => {
+                    self.blocking_stream = Some(id);
+                }
+            }
         }
 
         Ok(())
@@ -938,3 +945,192 @@ impl NotifierOpen {
 /// If too many pending frames accumulate, the multiplexed stream is
 /// considered unhealthy and terminates with an error.
 const EXTRA_PENDING_FRAMES: usize = 1000;
+
+#[cfg(test)]
+mod tests {
+    use async_std::task;
+    use bytes::BytesMut;
+    use futures::prelude::*;
+    use futures_codec::{Decoder, Encoder};
+    use quickcheck::*;
+    use rand::prelude::*;
+    use std::num::NonZeroU8;
+    use std::ops::DerefMut;
+    use std::pin::Pin;
+    use super::*;
+
+    impl Arbitrary for MaxBufferBehaviour {
+        fn arbitrary<G: Gen>(g: &mut G) -> MaxBufferBehaviour {
+            *[MaxBufferBehaviour::Block, MaxBufferBehaviour::ResetStream].choose(g).unwrap()
+        }
+    }
+
+    impl Arbitrary for MplexConfig {
+        fn arbitrary<G: Gen>(g: &mut G) -> MplexConfig {
+            MplexConfig {
+                max_substreams: g.gen_range(1, 100),
+                max_buffer_len: g.gen_range(1, 1000),
+                max_buffer_behaviour: MaxBufferBehaviour::arbitrary(g),
+                split_send_size: g.gen_range(1, 10000),
+            }
+        }
+    }
+
+    /// Memory-backed "connection".
+    struct Connection {
+        /// The buffer that the `Multiplexed` stream reads from.
+        r_buf: BytesMut,
+        /// The buffer that the `Multiplexed` stream writes to.
+        w_buf: BytesMut,
+    }
+
+    impl AsyncRead for Connection {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &mut [u8]
+        ) -> Poll<io::Result<usize>> {
+            let n = std::cmp::min(buf.len(), self.r_buf.len());
+            let data = self.r_buf.split_to(n);
+            buf[..n].copy_from_slice(&data[..]);
+            if n == 0 {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(n))
+            }
+        }
+    }
+
+    impl AsyncWrite for Connection {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &[u8]
+        ) -> Poll<io::Result<usize>> {
+            self.w_buf.extend_from_slice(buf);
+            Poll::Ready(Ok(buf.len()))
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>
+        ) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>
+        ) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    #[test]
+    fn max_buffer_behaviour() {
+        let _ = env_logger::try_init();
+
+        fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
+            let mut r_buf = BytesMut::new();
+            let mut codec = Codec::new();
+
+            // Open the maximum number of inbound streams.
+            for i in 0 .. cfg.max_substreams {
+                let stream_id = LocalStreamId::dialer(i as u32);
+                codec.encode(Frame::Open { stream_id  }, &mut r_buf).unwrap();
+            }
+
+            // Send more data on stream 0 than the buffer permits.
+            let stream_id = LocalStreamId::dialer(0);
+            let data = Bytes::from("Hello world");
+            for _ in 0 .. cfg.max_buffer_len + overflow.get() as usize {
+                codec.encode(Frame::Data { stream_id, data: data.clone() }, &mut r_buf).unwrap();
+            }
+
+            // Setup the multiplexed connection.
+            let conn = Connection { r_buf, w_buf: BytesMut::new() };
+            let mut m = Multiplexed::new(conn, cfg.clone());
+
+            task::block_on(future::poll_fn(move |cx| {
+                // Receive all inbound streams.
+                for i in 0 .. cfg.max_substreams {
+                    match m.poll_next_stream(cx) {
+                        Poll::Pending => panic!("Expected new inbound stream."),
+                        Poll::Ready(Err(e)) => panic!("{:?}", e),
+                        Poll::Ready(Ok(id)) => {
+                            assert_eq!(id, LocalStreamId::listener(i as u32));
+                        }
+                    };
+                }
+
+                // Polling again for an inbound stream should yield `Pending`
+                // after reading and buffering data frames up to the limit.
+                let id = LocalStreamId::listener(0);
+                match m.poll_next_stream(cx) {
+                    Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                    Poll::Pending => {}
+                }
+
+                // Expect the buffer for stream 0 to be just 1 over the limit.
+                assert_eq!(
+                    m.substreams.get_mut(&id).unwrap().recv_buf().len(),
+                    cfg.max_buffer_len + 1
+                );
+
+                // Expect either a `Reset` to be sent or all reads to be
+                // blocked `Pending`, depending on the `MaxBufferBehaviour`.
+                match cfg.max_buffer_behaviour {
+                    MaxBufferBehaviour::ResetStream => {
+                        let _ = m.poll_flush_stream(cx, id);
+                        let w_buf = &mut m.io.get_mut().deref_mut().w_buf;
+                        let frame = codec.decode(w_buf).unwrap();
+                        let stream_id = stream_id.into_remote();
+                        assert_eq!(frame, Some(Frame::Reset { stream_id }));
+                    }
+                    MaxBufferBehaviour::Block => {
+                        assert!(m.poll_next_stream(cx).is_pending());
+                        for i in 1 .. cfg.max_substreams {
+                            let id = LocalStreamId::listener(i as u32);
+                            assert!(m.poll_read_stream(cx, id).is_pending());
+                        }
+                    }
+                }
+
+                // Drain the buffer by reading from the stream.
+                for _ in 0 .. cfg.max_buffer_len + 1 {
+                    match m.poll_read_stream(cx, id) {
+                        Poll::Ready(Ok(Some(bytes))) => {
+                            assert_eq!(bytes, data);
+                        }
+                        x => panic!("Unexpected: {:?}", x)
+                    }
+                }
+
+                // Read from the stream after the buffer has been drained,
+                // expecting either EOF or further data, depending on
+                // the `MaxBufferBehaviour`.
+                match cfg.max_buffer_behaviour {
+                    MaxBufferBehaviour::ResetStream => {
+                        // Expect to read EOF
+                        match m.poll_read_stream(cx, id) {
+                            Poll::Ready(Ok(None)) => {},
+                            poll => panic!("Unexpected: {:?}", poll)
+                        }
+                    }
+                    MaxBufferBehaviour::Block => {
+                        // Expect to be able to continue reading.
+                        match m.poll_read_stream(cx, id) {
+                            Poll::Ready(Ok(Some(bytes))) => assert_eq!(bytes, data),
+                            Poll::Pending => assert_eq!(overflow.get(), 1),
+                            poll => panic!("Unexpected: {:?}", poll)
+                        }
+                    }
+                }
+
+                Poll::Ready(())
+            }));
+        }
+
+        quickcheck(prop as fn(_,_))
+    }
+}
