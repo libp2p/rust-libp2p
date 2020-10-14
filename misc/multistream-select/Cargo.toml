@@ -13,7 +13,7 @@ edition = "2018"
 bytes = "0.5"
 futures = "0.3"
 log = "0.4"
-pin-project = "0.4.17"
+pin-project = "1.0.0"
 smallvec = "1.0"
 unsigned-varint = "0.5"
 
